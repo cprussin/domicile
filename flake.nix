@@ -11,8 +11,9 @@
       pkgs = import nixpkgs { inherit system; };
 
       # Toolchain needed to build & test the pure-logic Rust crates
-      # (domicile-config, domicile-scene, domicile-protocol). No graphics/GPU deps required
-      # for these — keeps `nix develop` fast and the test loop tight.
+      # (domicile-config, domicile-scene, domicile-protocol) and the whole
+      # TypeScript workspace. No graphics/GPU deps required for these — keeps
+      # `nix develop` fast and the test loop tight.
       coreTools = with pkgs; [
         cargo
         rustc
@@ -20,9 +21,13 @@
         clippy
         rust-analyzer
         pkg-config
-        # Node is needed for chrome-sdk + the chrome shells (custom elements,
-        # bridge client) and their vitest suites.
-        nodejs_22
+        # The TypeScript side: bun is the package manager and test runner,
+        # biome the linter/formatter, turbo the task orchestrator (installed
+        # from the lockfile by `bun install`). Node is pinned to match
+        # package.json's `engines.node` (>=24).
+        bun
+        biome
+        nodejs_24
       ];
 
       # Native libraries the Wayland host (domicile-host, Smithay) and the CEF
@@ -57,8 +62,12 @@
         default = pkgs.mkShell {
           packages = coreTools;
           RUST_BACKTRACE = "1";
+          FORCE_COLOR = 1;
+          # biome resolves its platform binary from here instead of downloading
+          # one, so the nix-pinned version is the one turbo runs.
+          BIOME_BINARY = pkgs.lib.getExe pkgs.biome;
           shellHook = ''
-            echo "domicile dev shell (core) — cargo $(cargo --version 2>/dev/null | cut -d' ' -f2)"
+            echo "domicile dev shell (core) — cargo $(cargo --version 2>/dev/null | cut -d' ' -f2), bun $(bun --version 2>/dev/null)"
           '';
         };
 
@@ -66,6 +75,11 @@
         full = pkgs.mkShell {
           packages = coreTools ++ hostLibs;
           RUST_BACKTRACE = "1";
+          FORCE_COLOR = 1;
+          BIOME_BINARY = pkgs.lib.getExe pkgs.biome;
+          # Use the nix-provided electron rather than downloading one.
+          ELECTRON_OVERRIDE_DIST_PATH = "${pkgs.electron}/bin";
+          ELECTRON_SKIP_BINARY_DOWNLOAD = 1;
           shellHook = ''
             echo "domicile dev shell (full: +wayland +drm +gl)"
           '';

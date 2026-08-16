@@ -1,0 +1,28 @@
+{
+  "dependencies": {
+    "@domicile/chrome-sdk": "workspace:*"
+  },
+  "description": "Headless chrome stand-ins that drive the repo's end-to-end scripts.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./chrome-socket": "./src/chrome-socket.ts",
+    "./input-injector": "./src/input-injector.ts",
+    "./mock-chrome": "./src/mock-chrome.ts",
+    "./spawn-probe": "./src/spawn-probe.ts"
+  },
+  "files": [
+    "src/**/*"
+  ],
+  "name": "@domicile/e2e-harness",
+  "private": true,
+  "scripts": {
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

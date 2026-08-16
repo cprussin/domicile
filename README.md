@@ -6,7 +6,9 @@ the web engine as texture-backed DOM elements — so `<app>` supports the same
 CSS as `<div>`/`<webview>` (rounding, opacity, blur, transforms, z-index).
 
 > Think "the compositor *is* the browser," not "an Electron app that wraps a
-> compositor." See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the why.
+> compositor." See
+> [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for
+> the why.
 
 ## Status
 
@@ -16,7 +18,7 @@ pixels — as a styled `<app>` element in the web chrome**. The compositor copie
 each client buffer to RGBA and streams it to the chrome, which draws it into the
 `<domicile-app>` canvas (clients keep animating via frame callbacks). The remaining
 work is making that zero-copy via engine external textures / CEF
-([docs/CEF-SPIKE.md](docs/CEF-SPIKE.md)). See [ROADMAP.md](ROADMAP.md).
+([docs/architecture/CEF-SPIKE.md](docs/architecture/CEF-SPIKE.md)). See [ROADMAP.md](ROADMAP.md).
 
 ## Run the prototype
 
@@ -63,30 +65,47 @@ when a real Wayland client maps a window.
 
 ## Develop
 
-Nothing needs to be installed globally — Nix pins the toolchain.
+Nothing needs to be installed globally — Nix pins both toolchains.
 
 ```sh
-# Core shell: build & test the pure-logic crates (fast, no GPU needed)
+# Core shell: the pure-logic crates plus the whole TypeScript workspace
 nix develop
-cargo test
 
-# Full shell: adds Wayland/DRM/GL libs for the host + CEF bridge
+cargo test                     # Rust: the crates in `default-members`
+bun run turbo test             # TypeScript: lint, types, unit tests, shell build
+
+# Full shell: adds Wayland/DRM/GL libs for the compositor + CEF bridge
 nix develop .#full
 ```
+
+Before opening a PR, run both, plus `cargo fmt --all --check` and
+`cargo clippy --all-targets -- -D warnings`. `bun run turbo fix` applies the
+auto-fixable half of the TypeScript checks. See
+[docs/guidelines/WORKSPACE.md](docs/guidelines/WORKSPACE.md) and
+[docs/guidelines/RUST.md](docs/guidelines/RUST.md) for the full workflow, and
+[AGENTS.md](AGENTS.md) for the code guidelines every change is held to.
 
 ## Layout
 
 | Path | What | Build |
 |------|------|-------|
-| `crates/domicile-config`   | config schema, parsing, hot-reload, chrome-package resolution | core |
-| `crates/domicile-scene`    | portal registry, hit-testing, input routing | core |
-| `crates/domicile-protocol` | host ↔ in-page bridge messages | core |
-| `crates/domicile-host`     | orchestrator brain + host↔chrome IPC seam | core |
-| `crates/domicile`        | host daemon: boots from config, serves the chrome protocol | core |
-| `crates/domicile-bridge`   | AppTextureBridge bookkeeping (app → engine texture) | core |
-| `crates/domicile-compositor` | headless Smithay Wayland server driving the brain | `.#full` |
-| `chrome-sdk`         | `<domicile-app>` / `<domicile-webview>` custom elements + bridge client | node |
-| `shells/simple`      | minimal reference chrome | node |
+| `packages/domicile-config`   | config schema, parsing, hot-reload, chrome-package resolution | core |
+| `packages/domicile-scene`    | portal registry, hit-testing, input routing | core |
+| `packages/domicile-protocol` | host ↔ in-page bridge messages | core |
+| `packages/domicile-host`     | orchestrator brain + host↔chrome IPC seam | core |
+| `packages/domicile`        | host daemon: boots from config, serves the chrome protocol | core |
+| `packages/domicile-bridge`   | AppTextureBridge bookkeeping (app → engine texture) | core |
+| `packages/domicile-compositor` | headless Smithay Wayland server driving the brain | `.#full` |
+| `packages/chrome-sdk` | `<domicile-app>` / `<domicile-webview>` custom elements + bridge client | bun |
+| `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers) | bun |
+| `packages/e2e-harness` | headless chrome stand-ins driving the `scripts/e2e-*.sh` checks | bun |
+| `apps/shell`         | the bundled reference chrome (Electron host + Vite-built renderer) | bun |
+
+Both languages share one package tree: a package under `packages/` is a cargo
+crate when it carries a `Cargo.toml` and a bun workspace when it carries a
+`package.json`. The TypeScript half is orchestrated by turbo, linted by biome,
+and typed against the `@cprussin/tsconfig` presets — the same setup as the
+sibling `argo-browser` repo.
 
 The Smithay backend is excluded from the default workspace build; build/run it in
 the full shell:
@@ -97,4 +116,4 @@ nix develop .#full -c ./scripts/smoke-compositor.sh   # boots it; a real client 
 ```
 
 The GPU-dependent AppTextureBridge proof (one rounded/blurred/rotated `<app>`)
-is a runbook you execute on your hardware: [docs/CEF-SPIKE.md](docs/CEF-SPIKE.md).
+is a runbook you execute on your hardware: [docs/architecture/CEF-SPIKE.md](docs/architecture/CEF-SPIKE.md).

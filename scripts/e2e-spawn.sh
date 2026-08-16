@@ -17,15 +17,7 @@ COMP=$!
 trap 'kill -9 "$COMP" 2>/dev/null; rm -f "$LOG"' EXIT
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 
-node -e '
-const net = require("net");
-const c = net.connect(process.env.SOCK, () => {
-  c.write(JSON.stringify({ type: "hello", protocol_version: 1 }) + "\n");
-  c.write(JSON.stringify({ type: "spawn", command: ["true"] }) + "\n");
-  setTimeout(() => process.exit(0), 500);
-});
-c.on("error", () => {});
-'
+DOMICILE_CHROME_SOCK="$SOCK" bun "$ROOT/packages/e2e-harness/src/spawn-probe.ts"
 for _ in $(seq 1 50); do grep -q "spawning client" "$LOG" && break; sleep 0.1; done
 
 if grep -q "spawning client" "$LOG"; then

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["NODE_ENV"],
+  "globalPassThroughEnv": [
+    "BIOME_BINARY",
+    "DOMICILE_CHROME_SOCKET",
+    "ELECTRON_OVERRIDE_DIST_PATH",
+    "ELECTRON_SKIP_BINARY_DOWNLOAD",
+    "FORCE_COLOR",
+    "WAYLAND_DISPLAY",
+    "XDG_RUNTIME_DIR",
+    "XDG_SESSION_TYPE"
+  ],
+  "tasks": {
+    "//#build": {
+      "dependsOn": ["//#build:install-modules"]
+    },
+    "//#build:install-modules": {
+      "inputs": ["**/package.json", "bunfig.toml", "!**/dist/**"],
+      "outputs": ["bun.lock"]
+    },
+
+    "//#fix": {
+      "with": ["//#fix:lint"]
+    },
+    "//#fix:lint": {
+      "cache": false,
+      "dependsOn": ["//#build"]
+    },
+
+    "//#test": {
+      "with": ["//#test:dependencies", "//#test:lint"]
+    },
+    "//#test:dependencies": {
+      "cache": false,
+      "dependsOn": ["//#build"]
+    },
+    "//#test:lint": {
+      "dependsOn": ["//#build"]
+    },
+
+    "build:vite": {
+      "dependsOn": ["//#build", "^build:vite"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md", "!**/*.test.*"],
+      "outputs": [".vite/**"]
+    },
+
+    "start:dev": {
+      "cache": false,
+      "dependsOn": ["//#build"],
+      "persistent": true
+    },
+
+    "test": {
+      "with": ["test:types", "test:unit", "build:vite"]
+    },
+    "test:types": {
+      "dependsOn": ["//#build"]
+    },
+    "test:unit": {
+      "dependsOn": ["//#build"]
+    }
+  },
+  "ui": "tui"
+}

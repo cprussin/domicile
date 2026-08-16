@@ -1,25 +1,25 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/domicile-config",
-    "crates/domicile-scene",
-    "crates/domicile-protocol",
-    "crates/domicile-host",
-    "crates/domicile",
-    "crates/domicile-bridge",
-    "crates/domicile-compositor",
+    "packages/domicile-config",
+    "packages/domicile-scene",
+    "packages/domicile-protocol",
+    "packages/domicile-host",
+    "packages/domicile",
+    "packages/domicile-bridge",
+    "packages/domicile-compositor",
 ]
 
 # domicile-compositor pulls Smithay + native Wayland libs, so it is excluded from the
 # default set: plain `cargo test` (core shell) stays fast and Smithay-free.
 # Build it explicitly in the full shell: `nix develop .#full -c cargo build -p domicile-compositor`.
 default-members = [
-    "crates/domicile-config",
-    "crates/domicile-scene",
-    "crates/domicile-protocol",
-    "crates/domicile-host",
-    "crates/domicile",
-    "crates/domicile-bridge",
+    "packages/domicile-config",
+    "packages/domicile-scene",
+    "packages/domicile-protocol",
+    "packages/domicile-host",
+    "packages/domicile",
+    "packages/domicile-bridge",
 ]
 
 # domicile-host's default build (the orchestrator) is pure logic and lives in the

@@ -1,0 +1,26 @@
+{
+  "dependencies": {
+    "@domicile/chrome-sdk": "workspace:*"
+  },
+  "description": "The bundled reference Domicile chrome: a top bar and a stage that mounts app portals.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile/test-support": "workspace:*",
+    "@types/bun": "catalog:",
+    "electron": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "main": ".vite/build/main.js",
+  "name": "@domicile/shell",
+  "private": true,
+  "productName": "domicile-shell",
+  "scripts": {
+    "build:vite": "vite build -c vite.main.config.ts && vite build -c vite.preload.config.ts && vite build -c vite.renderer.config.ts",
+    "start:dev": "vite",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

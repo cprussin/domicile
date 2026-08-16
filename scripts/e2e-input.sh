@@ -22,7 +22,7 @@ trap cleanup EXIT
 for _ in $(seq 1 200); do { [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && [ -S "$SOCK" ]; } && break; sleep 0.05; done
 
 # Connect the injector first so it's subscribed before the app appears.
-DOMICILE_CHROME_SOCK="$SOCK" node "$ROOT/scripts/input-injector.cjs" &
+DOMICILE_CHROME_SOCK="$SOCK" bun "$ROOT/packages/e2e-harness/src/input-injector.ts" &
 INJ=$!
 sleep 0.5
 

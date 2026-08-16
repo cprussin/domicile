@@ -1,0 +1,36 @@
+{
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "description": "Domicile chrome SDK: <domicile-app>/<domicile-webview> custom elements and the host bridge client",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile/test-support": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./app-element": "./src/app-element.ts",
+    "./bridge": "./src/bridge.ts",
+    "./chrome-message": "./src/chrome-message.ts",
+    "./frame": "./src/frame.ts",
+    "./input": "./src/input.ts",
+    "./matrix": "./src/matrix.ts",
+    "./measure": "./src/measure.ts",
+    "./newline-frames": "./src/newline-frames.ts",
+    "./protocol": "./src/protocol.ts",
+    "./register-elements": "./src/register-elements.ts",
+    "./webview-element": "./src/webview-element.ts"
+  },
+  "files": [
+    "src/**/*"
+  ],
+  "name": "@domicile/chrome-sdk",
+  "private": true,
+  "scripts": {
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

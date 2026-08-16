@@ -28,9 +28,12 @@ trap 'kill "$COMP" "$CHROME" 2>/dev/null' EXIT
 for _ in $(seq 1 200); do [ -S "$CHROME_SOCK" ] && break; sleep 0.05; done
 [ -S "$CHROME_SOCK" ] || { echo "compositor did not come up"; exit 1; }
 
+echo "domicile: building the chrome shell..."
+( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell ) || { echo "shell build failed"; exit 1; }
+
 echo "domicile: starting Electron chrome window..."
 # Electron runs in YOUR session (uses your display); it only needs the socket.
-DOMICILE_CHROME_SOCKET="$CHROME_SOCK" electron --no-sandbox "$ROOT/shells/simple" &
+DOMICILE_CHROME_SOCKET="$CHROME_SOCK" electron --no-sandbox "$ROOT/apps/shell" &
 CHROME=$!
 
 cat <<EOF

@@ -1,0 +1,163 @@
+import { beforeEach, describe, expect, it } from "bun:test";
+
+import type { DomicileAppElement } from "./app-element";
+import type { BridgeClient } from "./bridge";
+import { BTN_LEFT } from "./input";
+import type { Measure } from "./measure";
+import { APP_TAG_NAME, registerElements } from "./register-elements";
+
+type Call = readonly [kind: string, ...args: unknown[]];
+
+// A double for the bridge, capturing the portal lifecycle and input calls the
+// elements make. Only the surface the elements use is implemented.
+class FakeBridge {
+  readonly calls: Call[] = [];
+
+  placePortal(placement: { appId: string; size: readonly number[] }): void {
+    this.calls.push(["place", placement]);
+  }
+  removePortal(appId: string): void {
+    this.calls.push(["remove", appId]);
+  }
+  focusApp(appId: string): void {
+    this.calls.push(["focusApp", appId]);
+  }
+  focusChrome(): void {
+    this.calls.push(["focusChrome"]);
+  }
+  pointerMotion(appId: string, x: number, y: number): void {
+    this.calls.push(["motion", appId, x, y]);
+  }
+  pointerButton(appId: string, button: number, pressed: boolean): void {
+    this.calls.push(["button", appId, button, pressed]);
+  }
+  pointerLeave(appId: string): void {
+    this.calls.push(["leave", appId]);
+  }
+  pointerAxis(appId: string, dx: number, dy: number): void {
+    this.calls.push(["axis", appId, dx, dy]);
+  }
+  key(appId: string, keycode: number, pressed: boolean): void {
+    this.calls.push(["key", appId, keycode, pressed]);
+  }
+}
+
+// The test DOM performs no layout, so measurement is injected.
+const stubMeasure: Measure = () => ({
+  size: [10, 20],
+  transform: [1, 0, 0, 1, 0, 0],
+  visible: true,
+  zIndex: 0,
+});
+
+const mountApp = (appId?: string): DomicileAppElement => {
+  const element = document.createElement(APP_TAG_NAME) as DomicileAppElement;
+  if (appId !== undefined) {
+    element.setAttribute("app-id", appId);
+  }
+  document.body.append(element);
+  return element;
+};
+
+describe("<domicile-app>", () => {
+  let bridge: FakeBridge;
+
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    bridge = new FakeBridge();
+    registerElements(bridge as unknown as BridgeClient, {
+      measure: stubMeasure,
+    });
+  });
+
+  it("places a portal when connected with an app-id", () => {
+    mountApp("term");
+    expect(bridge.calls).toEqual([
+      [
+        "place",
+        {
+          appId: "term",
+          size: [10, 20],
+          transform: [1, 0, 0, 1, 0, 0],
+          visible: true,
+          zIndex: 0,
+        },
+      ],
+    ]);
+  });
+
+  it("removes the portal when disconnected", () => {
+    mountApp("term").remove();
+    expect(bridge.calls).toContainEqual(["remove", "term"]);
+  });
+
+  it("does nothing without an app-id", () => {
+    mountApp();
+    expect(bridge.calls).toHaveLength(0);
+  });
+
+  it("re-places when the app-id changes", () => {
+    const element = mountApp("term");
+    bridge.calls.length = 0;
+
+    element.setAttribute("app-id", "editor");
+    expect(bridge.calls).toContainEqual(["remove", "term"]);
+    expect(bridge.calls).toContainEqual([
+      "place",
+      {
+        appId: "editor",
+        size: [10, 20],
+        transform: [1, 0, 0, 1, 0, 0],
+        visible: true,
+        zIndex: 0,
+      },
+    ]);
+  });
+
+  it("exposes appId as a property", () => {
+    const element = document.createElement(APP_TAG_NAME) as DomicileAppElement;
+    element.setAttribute("app-id", "term");
+    expect(element.appId).toBe("term");
+  });
+
+  it("drawFrame creates a canvas surface", () => {
+    const element = mountApp("term");
+    // The test DOM has no 2d context, so this exercises the canvas-creation
+    // path and must not throw even when drawing is unavailable.
+    element.drawFrame(2, 1, "AAECAwQFBgc=");
+    expect(element.querySelector("canvas")).not.toBeNull();
+  });
+
+  it("clicking an app focuses it and forwards subsequent keystrokes", () => {
+    const element = mountApp("term");
+
+    element.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    expect(bridge.calls).toContainEqual(["focusApp", "term"]);
+    expect(bridge.calls).toContainEqual(["button", "term", BTN_LEFT, true]);
+
+    // A global keystroke now reaches the focused app (KeyA -> evdev 30).
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, code: "KeyA" }),
+    );
+    expect(bridge.calls).toContainEqual(["key", "term", 30, true]);
+    document.dispatchEvent(
+      new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
+    );
+    expect(bridge.calls).toContainEqual(["key", "term", 30, false]);
+  });
+
+  it("clicking off every app returns keyboard focus to the chrome", () => {
+    const element = mountApp("term");
+    element.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    bridge.calls.length = 0;
+
+    document.body.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    expect(bridge.calls).toContainEqual(["focusChrome"]);
+  });
+});

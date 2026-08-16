@@ -20,9 +20,14 @@ wait_for() { local file="$1" pat="$2" n="${3:-150}"; for _ in $(seq 1 "$n"); do 
 
 RUST_LOG="info,domicile_compositor=debug" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
-cleanup() { kill -9 "$COMP" "$EL" "$XVFB" "$FLOWER" 2>/dev/null; pkill -9 -f "shells/simple" 2>/dev/null; rm -f "$LOG" "$ELOG"; }
+cleanup() { kill -9 "$COMP" "$EL" "$XVFB" "$FLOWER" 2>/dev/null; pkill -9 -f "apps/shell" 2>/dev/null; rm -f "$LOG" "$ELOG"; }
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
+
+# The chrome is a TypeScript app now: build its Vite bundles before Electron
+# resolves package.json's `main` (.vite/build/main.js).
+( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell ) \
+  || { echo "shell build failed"; exit 1; }
 
 # Headless X for Electron.
 Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 &
@@ -30,7 +35,7 @@ XVFB=$!
 export DISPLAY=:99
 sleep 0.8
 
-DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/shells/simple" >"$ELOG" 2>&1 &
+DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/apps/shell" >"$ELOG" 2>&1 &
 EL=$!
 
 # 1) Wait for the Electron *renderer* to be up (it sends hello after loading).
