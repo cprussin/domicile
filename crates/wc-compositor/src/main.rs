@@ -227,7 +227,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         |_, display, data: &mut CalloopData| {
             // Safety: the display is not dropped for the loop's lifetime.
             unsafe {
-                display.get_mut().dispatch_clients(&mut data.state).unwrap();
+                let display = display.get_mut();
+                display.dispatch_clients(&mut data.state).unwrap();
+                // Flush queued events (registry globals, configures, ...) back
+                // to clients, otherwise they hang waiting for our replies.
+                display.flush_clients().unwrap();
             }
             Ok(PostAction::Continue)
         },

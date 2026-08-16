@@ -28,12 +28,25 @@ nix develop .#full
 
 ## Layout
 
-| Path | What |
-|------|------|
-| `crates/wc-config`   | config schema, parsing, hot-reload, chrome-package resolution |
-| `crates/wc-scene`    | portal registry, hit-testing, input routing |
-| `crates/wc-protocol` | host ↔ in-page bridge messages |
-| `crates/wc-host`     | Smithay Wayland server (later) |
-| `crates/wc-bridge`   | CEF embedding + AppTextureBridge (later) |
-| `chrome-sdk`         | `<app>` / `<webview>` custom elements (later) |
-| `shells/simple`      | minimal reference chrome (later) |
+| Path | What | Build |
+|------|------|-------|
+| `crates/wc-config`   | config schema, parsing, hot-reload, chrome-package resolution | core |
+| `crates/wc-scene`    | portal registry, hit-testing, input routing | core |
+| `crates/wc-protocol` | host ↔ in-page bridge messages | core |
+| `crates/wc-host`     | orchestrator brain + host↔chrome IPC seam | core |
+| `crates/loom`        | host daemon: boots from config, serves the chrome protocol | core |
+| `crates/wc-bridge`   | AppTextureBridge bookkeeping (app → engine texture) | core |
+| `crates/wc-compositor` | headless Smithay Wayland server driving the brain | `.#full` |
+| `chrome-sdk`         | `<loom-app>` / `<loom-webview>` custom elements + bridge client | node |
+| `shells/simple`      | minimal reference chrome | node |
+
+The Smithay backend is excluded from the default workspace build; build/run it in
+the full shell:
+
+```sh
+nix develop .#full -c cargo build -p wc-compositor
+nix develop .#full -c ./scripts/smoke-compositor.sh   # boots it; a real client binds our globals
+```
+
+The GPU-dependent AppTextureBridge proof (one rounded/blurred/rotated `<app>`)
+is a runbook you execute on your hardware: [docs/CEF-SPIKE.md](docs/CEF-SPIKE.md).

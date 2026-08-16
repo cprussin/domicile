@@ -1033,6 +1033,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "wc-bridge"
+version = "0.0.0"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "wc-compositor"
 version = "0.0.0"
 dependencies = [

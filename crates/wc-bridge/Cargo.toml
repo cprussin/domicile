@@ -1,0 +1,16 @@
+[package]
+name = "wc-bridge"
+description = "Loom AppTextureBridge: bookkeeping that maps app surfaces to engine external-image textures"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+# The actual CEF/Chromium embedding lives behind a `cef` feature (not built by
+# default: it needs the prebuilt CEF distribution + a GPU). See docs/CEF-SPIKE.md.
+[features]
+default = []
+cef = []

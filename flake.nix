@@ -38,6 +38,10 @@
         mesa
         libGL
         seatd
+        # Minimal Wayland clients for exercising the compositor in tests
+        # (weston ships weston-simple-shm, a toplevel-mapping shm client).
+        weston
+        wayland-utils
       ];
     in
     {
