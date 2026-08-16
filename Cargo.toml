@@ -5,6 +5,7 @@ members = [
     "crates/wc-scene",
     "crates/wc-protocol",
     "crates/wc-host",
+    "crates/loom",
 ]
 
 # wc-host's default build (the orchestrator) is pure logic and lives in the

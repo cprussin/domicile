@@ -22,7 +22,12 @@ as a CSS-styled (rounded + blurred + rotated) `<app>` element.
 - [ ] Round-trip input to that client with transform-correct coordinates
 
 ## Phase 3 — Wayland host (`wc-host`, Smithay)
-- [ ] xdg-shell, seat/input, output; nested `winit` backend for dev
+- [x] Host orchestrator brain (app lifecycle, placement, input routing) — TDD
+- [x] Host <-> chrome IPC seam (newline-JSON, handshake) — TDD, real socket
+- [x] `loom` daemon: boots from config, serves the chrome protocol (control
+      plane) — TDD, real end-to-end binary test
+- [ ] Smithay Wayland server behind `smithay-backend`: xdg-shell, seat/input,
+      output; nested `winit` backend for dev  *(needs `.#full` + a display)*
 - [ ] Export client surfaces to the bridge; present the engine's frame
 - [ ] DRM/KMS backend for real hardware
 

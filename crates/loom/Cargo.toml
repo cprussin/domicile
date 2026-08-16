@@ -1,0 +1,22 @@
+[package]
+name = "loom"
+description = "The Loom host daemon: boots from config and serves the chrome protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "loom"
+path = "src/main.rs"
+
+[lib]
+name = "loom"
+path = "src/lib.rs"
+
+[dependencies]
+wc-host = { path = "../wc-host" }
+wc-config = { path = "../wc-config" }
+
+[dev-dependencies]
+tempfile.workspace = true
