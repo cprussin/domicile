@@ -41,6 +41,20 @@ pub enum ChromeMessage {
     /// the compositor's environment, so it connects to Loom's Wayland display.
     /// Used by chrome keybindings/launchers.
     Spawn { command: Vec<String> },
+
+    // --- input forwarding: the chrome captures input over an <app> element and
+    // forwards it here so the compositor can inject it into the client. ---
+    /// Pointer moved to a surface-local coordinate `(x, y)` over an app.
+    PointerMotion { app_id: String, x: f64, y: f64 },
+    /// Pointer left an app (focus returns to the chrome).
+    PointerLeave { app_id: String },
+    /// Pointer button changed over an app. `button` is a Linux input event code
+    /// (e.g. `0x110` = left, `0x111` = right, `0x112` = middle).
+    PointerButton { app_id: String, button: u32, pressed: bool },
+    /// Scroll over an app, in surface-logical units.
+    PointerAxis { app_id: String, dx: f64, dy: f64 },
+    /// Key event destined for the focused app. `keycode` is a Linux evdev code.
+    Key { app_id: String, keycode: u32, pressed: bool },
 }
 
 /// Messages sent from the host to the chrome (in-page bridge).

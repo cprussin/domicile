@@ -41,7 +41,7 @@
         # Minimal Wayland clients for exercising the compositor in tests.
         weston
         wayland-utils
-        # A terminal to launch via the demo shell's Meta+Enter keybinding.
+        # A terminal to launch via the demo shell's Alt+Enter keybinding.
         kitty
         # Electron hosts the chrome shell as a visible window for the prototype
         # (the eventual target embeds CEF; Electron gets us a testable UI now).

@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { registerElements } from "../src/elements.js";
 
-// Fake bridge capturing portal lifecycle calls.
+// Fake bridge capturing portal lifecycle + input calls.
 class FakeBridge {
   constructor() {
     this.calls = [];
@@ -12,6 +12,27 @@ class FakeBridge {
   }
   removePortal(id) {
     this.calls.push(["remove", id]);
+  }
+  focusApp(id) {
+    this.calls.push(["focusApp", id]);
+  }
+  focusChrome() {
+    this.calls.push(["focusChrome"]);
+  }
+  pointerMotion(id, x, y) {
+    this.calls.push(["motion", id, x, y]);
+  }
+  pointerButton(id, b, pressed) {
+    this.calls.push(["button", id, b, pressed]);
+  }
+  pointerLeave(id) {
+    this.calls.push(["leave", id]);
+  }
+  pointerAxis(id, dx, dy) {
+    this.calls.push(["axis", id, dx, dy]);
+  }
+  key(id, code, pressed) {
+    this.calls.push(["key", id, code, pressed]);
   }
 }
 
@@ -80,6 +101,23 @@ describe("<loom-app> custom element", () => {
     // must not throw even when drawing is unavailable.
     expect(() => el.drawFrame(2, 1, "AAECAwQFBgc=")).not.toThrow();
     expect(el.querySelector("canvas")).not.toBeNull();
+  });
+
+  it("clicking an app focuses it and forwards subsequent keystrokes", () => {
+    const el = document.createElement("loom-app");
+    el.setAttribute("app-id", "term");
+    document.body.appendChild(el);
+
+    // Click the app: focuses it and presses the left button.
+    el.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    expect(bridge.calls).toContainEqual(["focusApp", "term"]);
+    expect(bridge.calls).toContainEqual(["button", "term", 0x110, true]);
+
+    // Now a global keystroke is forwarded to the focused app (KeyA -> evdev 30).
+    document.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyA", bubbles: true }));
+    expect(bridge.calls).toContainEqual(["key", "term", 30, true]);
+    document.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyA", bubbles: true }));
+    expect(bridge.calls).toContainEqual(["key", "term", 30, false]);
   });
 });
 

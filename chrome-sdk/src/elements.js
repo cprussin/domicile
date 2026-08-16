@@ -14,9 +14,13 @@
 
 import { accumulate } from "./matrix.js";
 import { decodeBase64ToBytes } from "./frame.js";
+import { buttonCodeFromJs, evdevFromCode, surfaceLocal } from "./input.js";
 
 let activeBridge = null;
 let measureFn = defaultMeasure;
+// The app currently receiving keyboard input (set when an <app> is clicked).
+let focusedAppId = null;
+let globalInputInstalled = false;
 
 /**
  * Wire the SDK to a bridge and define the custom elements. Idempotent: safe to
@@ -26,9 +30,36 @@ let measureFn = defaultMeasure;
 export function registerElements(bridge, { measure } = {}) {
   activeBridge = bridge;
   if (measure) measureFn = measure;
+  installGlobalInput();
   if (typeof customElements === "undefined") return;
   if (!customElements.get("loom-app")) customElements.define("loom-app", LoomAppElement);
   if (!customElements.get("loom-webview")) customElements.define("loom-webview", LoomWebviewElement);
+}
+
+// Document-level keyboard forwarding + click-to-focus-chrome. Keyboard events
+// are global, so they're routed to whichever <app> was last clicked.
+function installGlobalInput() {
+  if (globalInputInstalled || typeof document === "undefined") return;
+  globalInputInstalled = true;
+
+  const onKey = (e) => {
+    if (!focusedAppId || !activeBridge) return;
+    const keycode = evdevFromCode(e.code);
+    if (keycode == null) return;
+    e.preventDefault();
+    activeBridge.key(focusedAppId, keycode, e.type === "keydown");
+  };
+  document.addEventListener("keydown", onKey);
+  document.addEventListener("keyup", onKey);
+
+  // Clicking outside any <app> returns keyboard focus to the chrome.
+  document.addEventListener("pointerdown", (e) => {
+    const onApp = e.target && e.target.closest && e.target.closest("loom-app");
+    if (!onApp && focusedAppId) {
+      focusedAppId = null;
+      activeBridge?.focusChrome();
+    }
+  });
 }
 
 export class LoomAppElement extends HTMLElement {
@@ -42,11 +73,50 @@ export class LoomAppElement extends HTMLElement {
   }
 
   connectedCallback() {
+    this._installPointer();
     this._place();
   }
 
   disconnectedCallback() {
     if (this.appId && activeBridge) activeBridge.removePortal(this.appId);
+    if (focusedAppId === this.appId) focusedAppId = null;
+  }
+
+  // Forward pointer input over this element to the client (surface-local).
+  _installPointer() {
+    if (this._pointerInstalled) return;
+    this._pointerInstalled = true;
+
+    const localOf = (e) =>
+      surfaceLocal(this.getBoundingClientRect(), e.clientX, e.clientY, this._surfaceWidth, this._surfaceHeight);
+
+    this.addEventListener("pointermove", (e) => {
+      const local = localOf(e);
+      if (local && activeBridge && this.appId) activeBridge.pointerMotion(this.appId, local.x, local.y);
+    });
+    this.addEventListener("pointerdown", (e) => {
+      if (!this.appId || !activeBridge) return;
+      focusedAppId = this.appId;
+      activeBridge.focusApp(this.appId);
+      const local = localOf(e);
+      if (local) activeBridge.pointerMotion(this.appId, local.x, local.y);
+      const button = buttonCodeFromJs(e.button);
+      if (button != null) activeBridge.pointerButton(this.appId, button, true);
+    });
+    this.addEventListener("pointerup", (e) => {
+      const button = buttonCodeFromJs(e.button);
+      if (button != null && activeBridge && this.appId) activeBridge.pointerButton(this.appId, button, false);
+    });
+    this.addEventListener("pointerleave", () => {
+      if (activeBridge && this.appId) activeBridge.pointerLeave(this.appId);
+    });
+    this.addEventListener(
+      "wheel",
+      (e) => {
+        if (activeBridge && this.appId) activeBridge.pointerAxis(this.appId, e.deltaX, e.deltaY);
+      },
+      { passive: true },
+    );
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
@@ -63,6 +133,8 @@ export class LoomAppElement extends HTMLElement {
 
   /** Draw a client frame (raw RGBA, base64) into this element's canvas. */
   drawFrame(width, height, base64) {
+    this._surfaceWidth = width;
+    this._surfaceHeight = height;
     this._ensureCanvas();
     const ctx = this._canvas.getContext("2d");
     if (!ctx) return; // e.g. jsdom has no 2d context

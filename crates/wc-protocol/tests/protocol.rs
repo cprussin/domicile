@@ -34,6 +34,11 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::FocusApp { app_id: "term".into() });
     chrome_round_trip(&ChromeMessage::FocusChrome);
     chrome_round_trip(&ChromeMessage::Spawn { command: vec!["kitty".into(), "--hold".into()] });
+    chrome_round_trip(&ChromeMessage::PointerMotion { app_id: "term".into(), x: 12.5, y: 3.0 });
+    chrome_round_trip(&ChromeMessage::PointerLeave { app_id: "term".into() });
+    chrome_round_trip(&ChromeMessage::PointerButton { app_id: "term".into(), button: 0x110, pressed: true });
+    chrome_round_trip(&ChromeMessage::PointerAxis { app_id: "term".into(), dx: 0.0, dy: -15.0 });
+    chrome_round_trip(&ChromeMessage::Key { app_id: "term".into(), keycode: 30, pressed: true });
 }
 
 #[test]

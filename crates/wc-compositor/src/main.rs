@@ -22,18 +22,27 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
+use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState};
 use smithay::reexports::{
-    calloop::{generic::Generic, EventLoop, Interest, Mode, PostAction},
+    calloop::{
+        channel::{channel, Event as ChannelEvent, Sender},
+        generic::Generic,
+        EventLoop, Interest, Mode, PostAction,
+    },
     wayland_protocols::xdg::shell::server::xdg_toplevel,
     wayland_server::{
         backend::{ClientData, ClientId, DisconnectReason},
         protocol::{wl_buffer, wl_seat, wl_shm, wl_surface::WlSurface},
-        Client, Display, DisplayHandle,
+        Client, Display,
     },
 };
-use smithay::input::{pointer::CursorImageStatus, Seat, SeatHandler, SeatState};
+use smithay::input::{
+    keyboard::{FilterResult, Keycode},
+    pointer::{AxisFrame, ButtonEvent, CursorImageStatus, MotionEvent},
+    Seat, SeatHandler, SeatState,
+};
 use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel};
-use smithay::utils::{Serial, Transform};
+use smithay::utils::{Serial, Transform, SERIAL_COUNTER};
 use smithay::wayland::{
     buffer::BufferHandler,
     compositor::{
@@ -56,25 +65,49 @@ use wc_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use wc_host::Host;
 use wc_protocol::{ChromeMessage, HostMessage};
 
-/// Data threaded through the calloop event loop.
+/// Data threaded through the calloop event loop. The `Display` lives here (not
+/// inside the wayland source) so we can flush queued events after handling input
+/// that originated off the Wayland thread.
 struct CalloopData {
+    display: Display<LoomCompositor>,
     state: LoomCompositor,
-    display_handle: DisplayHandle,
+}
+
+/// An input event forwarded from the chrome, to be injected into a client. Sent
+/// over a calloop channel so it's handled on the Wayland thread (where the seat
+/// and surfaces live).
+enum InputEvent {
+    PointerMotion { app_id: String, x: f64, y: f64 },
+    PointerLeave,
+    PointerButton { button: u32, pressed: bool },
+    PointerAxis { dx: f64, dy: f64 },
+    Key { keycode: u32, pressed: bool },
+    KeyboardFocus { app_id: Option<String> },
 }
 
 /// Shared between the Wayland thread (calloop) and the chrome-connection threads.
 ///
-/// Holds the single [`Host`] brain both sides drive, plus the write-halves of
-/// connected chrome sockets so Wayland-side events (app appeared/closed) can be
-/// broadcast to the chrome.
+/// Holds the single [`Host`] brain both sides drive, the write-halves of
+/// connected chrome sockets (to broadcast app lifecycle), and a sender to push
+/// forwarded input onto the Wayland thread.
 struct ChromeHub {
     host: Mutex<Host>,
     chromes: Mutex<Vec<Arc<Mutex<UnixStream>>>>,
+    input_tx: Mutex<Sender<InputEvent>>,
 }
 
 impl ChromeHub {
-    fn new() -> Arc<Self> {
-        Arc::new(ChromeHub { host: Mutex::new(Host::new()), chromes: Mutex::new(Vec::new()) })
+    fn new(input_tx: Sender<InputEvent>) -> Arc<Self> {
+        Arc::new(ChromeHub {
+            host: Mutex::new(Host::new()),
+            chromes: Mutex::new(Vec::new()),
+            input_tx: Mutex::new(input_tx),
+        })
+    }
+
+    /// Forward an input event to the Wayland thread.
+    fn send_input(&self, event: InputEvent) {
+        let _ = self.input_tx.lock().unwrap().send(event);
     }
 
     /// Send a host message to every connected chrome, dropping dead ones.
@@ -121,11 +154,41 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
         let Ok(line) = line else { break };
         tracing::debug!(chrome_msg = %line.trim(), "chrome -> host");
         let responses = match parse_chrome(line.trim()) {
-            // Spawn is a compositor-level side effect: intercept it here so it
-            // never touches the (pure) host brain.
+            // Compositor-level side effects: intercept before the (pure) brain.
             Ok(ChromeMessage::Spawn { command }) => {
                 spawn_client(&command);
                 Vec::new()
+            }
+            Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
+                hub.send_input(InputEvent::PointerMotion { app_id, x, y });
+                Vec::new()
+            }
+            Ok(ChromeMessage::PointerLeave { .. }) => {
+                hub.send_input(InputEvent::PointerLeave);
+                Vec::new()
+            }
+            Ok(ChromeMessage::PointerButton { button, pressed, .. }) => {
+                hub.send_input(InputEvent::PointerButton { button, pressed });
+                Vec::new()
+            }
+            Ok(ChromeMessage::PointerAxis { dx, dy, .. }) => {
+                hub.send_input(InputEvent::PointerAxis { dx, dy });
+                Vec::new()
+            }
+            Ok(ChromeMessage::Key { keycode, pressed, .. }) => {
+                hub.send_input(InputEvent::Key { keycode, pressed });
+                Vec::new()
+            }
+            // Focus drives both the seat (keyboard focus) and the brain's model.
+            Ok(ChromeMessage::FocusApp { app_id }) => {
+                hub.send_input(InputEvent::KeyboardFocus { app_id: Some(app_id.clone()) });
+                let mut host = hub.host.lock().unwrap();
+                apply_chrome_message(&mut host, &mut ready, ChromeMessage::FocusApp { app_id })
+            }
+            Ok(ChromeMessage::FocusChrome) => {
+                hub.send_input(InputEvent::KeyboardFocus { app_id: None });
+                let mut host = hub.host.lock().unwrap();
+                apply_chrome_message(&mut host, &mut ready, ChromeMessage::FocusChrome)
             }
             Ok(message) => {
                 let mut host = hub.host.lock().unwrap();
@@ -149,6 +212,7 @@ struct LoomCompositor {
     xdg_shell_state: XdgShellState,
     shm_state: ShmState,
     seat_state: SeatState<LoomCompositor>,
+    seat: Seat<LoomCompositor>,
     /// Kept alive so the xdg-output manager global persists.
     #[allow(dead_code)]
     output_manager_state: OutputManagerState,
@@ -174,6 +238,81 @@ struct ClientState {
 impl ClientData for ClientState {
     fn initialized(&self, _client_id: ClientId) {}
     fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {}
+}
+
+// ---- input injection (runs on the Wayland thread via the calloop channel) ---
+
+impl LoomCompositor {
+    fn surface_for(&self, app_id: &str) -> Option<WlSurface> {
+        self.toplevels.iter().find(|(id, _)| id == app_id).map(|(_, t)| t.wl_surface().clone())
+    }
+
+    fn now_ms(&self) -> u32 {
+        self.start.elapsed().as_millis() as u32
+    }
+
+    /// Inject a forwarded input event into the appropriate client via the seat.
+    fn handle_input(&mut self, event: InputEvent) {
+        match event {
+            InputEvent::PointerMotion { app_id, x, y } => {
+                let Some(surface) = self.surface_for(&app_id) else {
+                    tracing::debug!(%app_id, "pointer motion: no surface");
+                    return;
+                };
+                tracing::debug!(%app_id, x, y, "pointer motion -> client");
+                let pointer = self.seat.get_pointer().unwrap();
+                let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+                // The chrome sends surface-local coords, so anchor the focus at
+                // the origin and treat the location as already surface-local.
+                pointer.motion(
+                    self,
+                    Some((surface, (0.0, 0.0).into())),
+                    &MotionEvent { location: (x, y).into(), serial, time },
+                );
+                pointer.frame(self);
+            }
+            InputEvent::PointerLeave => {
+                let pointer = self.seat.get_pointer().unwrap();
+                let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+                pointer.motion(self, None, &MotionEvent { location: (0.0, 0.0).into(), serial, time });
+                pointer.frame(self);
+            }
+            InputEvent::PointerButton { button, pressed } => {
+                tracing::debug!(button, pressed, "pointer button -> client");
+                let pointer = self.seat.get_pointer().unwrap();
+                let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+                let state = if pressed { ButtonState::Pressed } else { ButtonState::Released };
+                pointer.button(self, &ButtonEvent { button, state, serial, time });
+                pointer.frame(self);
+            }
+            InputEvent::PointerAxis { dx, dy } => {
+                let pointer = self.seat.get_pointer().unwrap();
+                let mut frame = AxisFrame::new(self.now_ms()).source(AxisSource::Wheel);
+                if dx != 0.0 {
+                    frame = frame.value(Axis::Horizontal, dx);
+                }
+                if dy != 0.0 {
+                    frame = frame.value(Axis::Vertical, dy);
+                }
+                pointer.axis(self, frame);
+                pointer.frame(self);
+            }
+            InputEvent::Key { keycode, pressed } => {
+                let keyboard = self.seat.get_keyboard().unwrap();
+                let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+                let state = if pressed { KeyState::Pressed } else { KeyState::Released };
+                // wl keymaps use X keycodes (evdev + 8); the chrome sends evdev.
+                let key: Keycode = (keycode + 8).into();
+                keyboard.input::<(), _>(self, key, state, serial, time, |_, _, _| FilterResult::Forward);
+            }
+            InputEvent::KeyboardFocus { app_id } => {
+                let keyboard = self.seat.get_keyboard().unwrap();
+                let serial = SERIAL_COUNTER.next_serial();
+                let surface = app_id.and_then(|id| self.surface_for(&id));
+                keyboard.set_focus(self, surface, serial);
+            }
+        }
+    }
 }
 
 // ---- compositor + shm -----------------------------------------------------
@@ -500,8 +639,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     output.change_current_state(Some(mode), Some(Transform::Normal), None, Some((0, 0).into()));
     output.set_preferred(mode);
 
+    // Forward input from the chrome onto the Wayland thread via a channel.
+    let (input_tx, input_rx) = channel::<InputEvent>();
+
     // Shared brain, driven by both the Wayland side and chrome connections.
-    let hub = ChromeHub::new();
+    let hub = ChromeHub::new(input_tx);
     {
         let hub = hub.clone();
         thread::spawn(move || serve_chrome(hub, chrome_socket));
@@ -512,6 +654,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         xdg_shell_state: XdgShellState::new::<LoomCompositor>(&dh),
         shm_state: ShmState::new::<LoomCompositor>(&dh, vec![]),
         seat_state,
+        seat,
         output_manager_state,
         _output: output,
         hub,
@@ -520,37 +663,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         last_frame: HashMap::new(),
     };
 
-    let mut data = CalloopData { state, display_handle: dh.clone() };
+    let mut data = CalloopData { display, state };
 
     // Accept clients on an auto-named Wayland socket.
     let source = ListeningSocketSource::new_auto()?;
     let socket_name = source.socket_name().to_os_string();
     let handle = event_loop.handle();
     handle.insert_source(source, move |stream, _, data: &mut CalloopData| {
-        data.display_handle
+        data.display
+            .handle()
             .insert_client(stream, Arc::new(ClientState::default()))
             .expect("failed to insert client");
     })?;
 
-    // Drive the wayland-server dispatch from the event loop.
+    // Drive wayland-server dispatch from the event loop, flushing replies after.
+    let poll_fd = data.display.backend().poll_fd().try_clone_to_owned()?;
     handle.insert_source(
-        Generic::new(display, Interest::READ, Mode::Level),
-        |_, display, data: &mut CalloopData| {
-            // Safety: the display is not dropped for the loop's lifetime.
-            unsafe {
-                let display = display.get_mut();
-                display.dispatch_clients(&mut data.state).unwrap();
-                // Flush queued events (registry globals, configures, ...) back
-                // to clients, otherwise they hang waiting for our replies.
-                display.flush_clients().unwrap();
-            }
+        Generic::new(poll_fd, Interest::READ, Mode::Level),
+        |_, _, data: &mut CalloopData| {
+            data.display.dispatch_clients(&mut data.state).unwrap();
+            data.display.flush_clients().unwrap();
             Ok(PostAction::Continue)
         },
     )?;
 
+    // Inject forwarded input (from chrome threads) on the Wayland thread.
+    handle.insert_source(input_rx, |event, _, data: &mut CalloopData| {
+        if let ChannelEvent::Msg(input) = event {
+            data.state.handle_input(input);
+        }
+    })?;
+
     info!(?socket_name, "loom-compositor: Wayland server up (WAYLAND_DISPLAY)");
     std::env::set_var("WAYLAND_DISPLAY", &socket_name);
 
-    event_loop.run(None, &mut data, |_| {})?;
+    // Flush after every loop iteration so events queued while handling input
+    // (which arrives off the wayland fd) reach clients promptly.
+    event_loop.run(None, &mut data, |data| {
+        let _ = data.display.flush_clients();
+    })?;
     Ok(())
 }

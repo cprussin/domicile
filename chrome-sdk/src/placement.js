@@ -53,3 +53,25 @@ export function spawnMessage(command) {
 export function helloMessage(protocolVersion = PROTOCOL_VERSION) {
   return { type: "hello", protocol_version: protocolVersion };
 }
+
+// ---- input forwarding (surface-local coords; evdev keycodes) --------------
+
+export function pointerMotionMessage(appId, x, y) {
+  return { type: "pointer_motion", app_id: appId, x, y };
+}
+
+export function pointerLeaveMessage(appId) {
+  return { type: "pointer_leave", app_id: appId };
+}
+
+export function pointerButtonMessage(appId, button, pressed) {
+  return { type: "pointer_button", app_id: appId, button, pressed };
+}
+
+export function pointerAxisMessage(appId, dx, dy) {
+  return { type: "pointer_axis", app_id: appId, dx, dy };
+}
+
+export function keyMessage(appId, keycode, pressed) {
+  return { type: "key", app_id: appId, keycode, pressed };
+}

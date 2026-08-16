@@ -117,10 +117,15 @@ impl Host {
             ChromeMessage::FocusChrome => {
                 self.scene.focus_chrome();
             }
-            ChromeMessage::Spawn { .. } => {
-                // Spawning a client process is a compositor-level side effect,
-                // not a brain concern; the compositor intercepts this. The brain
-                // ignores it so it stays pure and testable.
+            ChromeMessage::Spawn { .. }
+            | ChromeMessage::PointerMotion { .. }
+            | ChromeMessage::PointerLeave { .. }
+            | ChromeMessage::PointerButton { .. }
+            | ChromeMessage::PointerAxis { .. }
+            | ChromeMessage::Key { .. } => {
+                // Compositor-level side effects (spawning, input injection). The
+                // compositor intercepts these; the brain ignores them so it stays
+                // pure and testable.
             }
         }
         Ok(())

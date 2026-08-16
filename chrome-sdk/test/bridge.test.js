@@ -78,6 +78,15 @@ describe("BridgeClient", () => {
 
     bridge.spawn(["kitty"]);
     expect(transport.lastSent()).toEqual({ type: "spawn", command: ["kitty"] });
+
+    bridge.pointerMotion("term", 5, 6);
+    expect(transport.lastSent()).toEqual({ type: "pointer_motion", app_id: "term", x: 5, y: 6 });
+
+    bridge.pointerButton("term", 0x110, true);
+    expect(transport.lastSent()).toEqual({ type: "pointer_button", app_id: "term", button: 0x110, pressed: true });
+
+    bridge.key("term", 30, true);
+    expect(transport.lastSent()).toEqual({ type: "key", app_id: "term", keycode: 30, pressed: true });
   });
 
   it("ignores unknown host message types without throwing", () => {

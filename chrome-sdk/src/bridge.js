@@ -12,6 +12,11 @@ import {
   focusAppMessage,
   focusChromeMessage,
   spawnMessage,
+  pointerMotionMessage,
+  pointerLeaveMessage,
+  pointerButtonMessage,
+  pointerAxisMessage,
+  keyMessage,
   PROTOCOL_VERSION,
 } from "./placement.js";
 
@@ -68,6 +73,24 @@ export class BridgeClient {
   /** Ask the compositor to spawn a client process (argv array). */
   spawn(command) {
     this.send(spawnMessage(command));
+  }
+
+  // ---- input forwarding ---------------------------------------------------
+
+  pointerMotion(appId, x, y) {
+    this.send(pointerMotionMessage(appId, x, y));
+  }
+  pointerLeave(appId) {
+    this.send(pointerLeaveMessage(appId));
+  }
+  pointerButton(appId, button, pressed) {
+    this.send(pointerButtonMessage(appId, button, pressed));
+  }
+  pointerAxis(appId, dx, dy) {
+    this.send(pointerAxisMessage(appId, dx, dy));
+  }
+  key(appId, keycode, pressed) {
+    this.send(keyMessage(appId, keycode, pressed));
   }
 
   _handleIncoming(text) {
