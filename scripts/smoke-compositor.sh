@@ -7,7 +7,7 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/target/debug/domicile-compositor"
-[ -x "$BIN" ] || { echo "build first: cargo build -p dm-compositor"; exit 1; }
+[ -x "$BIN" ] || { echo "build first: cargo build -p domicile-compositor"; exit 1; }
 
 WORK="$(mktemp -d)"
 export XDG_RUNTIME_DIR="$WORK"; chmod 700 "$WORK"

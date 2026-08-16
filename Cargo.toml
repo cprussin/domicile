@@ -1,30 +1,30 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/dm-config",
-    "crates/dm-scene",
-    "crates/dm-protocol",
-    "crates/dm-host",
+    "crates/domicile-config",
+    "crates/domicile-scene",
+    "crates/domicile-protocol",
+    "crates/domicile-host",
     "crates/domicile",
-    "crates/dm-bridge",
-    "crates/dm-compositor",
+    "crates/domicile-bridge",
+    "crates/domicile-compositor",
 ]
 
-# dm-compositor pulls Smithay + native Wayland libs, so it is excluded from the
+# domicile-compositor pulls Smithay + native Wayland libs, so it is excluded from the
 # default set: plain `cargo test` (core shell) stays fast and Smithay-free.
-# Build it explicitly in the full shell: `nix develop .#full -c cargo build -p dm-compositor`.
+# Build it explicitly in the full shell: `nix develop .#full -c cargo build -p domicile-compositor`.
 default-members = [
-    "crates/dm-config",
-    "crates/dm-scene",
-    "crates/dm-protocol",
-    "crates/dm-host",
+    "crates/domicile-config",
+    "crates/domicile-scene",
+    "crates/domicile-protocol",
+    "crates/domicile-host",
     "crates/domicile",
-    "crates/dm-bridge",
+    "crates/domicile-bridge",
 ]
 
-# dm-host's default build (the orchestrator) is pure logic and lives in the
+# domicile-host's default build (the orchestrator) is pure logic and lives in the
 # core shell. Its Smithay Wayland-server backend sits behind the
-# `smithay-backend` feature; dm-bridge (CEF FFI) joins once the heavy native
+# `smithay-backend` feature; domicile-bridge (CEF FFI) joins once the heavy native
 # toolchain lands via `nix develop .#full`.
 
 [workspace.package]

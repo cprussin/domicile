@@ -1,6 +1,6 @@
-//! Behaviour tests for `dm-scene`, written before the implementation.
+//! Behaviour tests for `domicile-scene`, written before the implementation.
 //!
-//! `dm-scene` is the host-side model of where app windows live on screen and
+//! `domicile-scene` is the host-side model of where app windows live on screen and
 //! how pointer/keyboard input is routed between the chrome and the apps.
 //!
 //! Because `<app>` is a full CSS element, an app's placement is an affine
@@ -8,7 +8,7 @@
 //! space, plus a stacking order. Hit-testing inverts that transform to recover
 //! the local coordinate to forward to the Wayland client.
 
-use dm_scene::{KeyboardTarget, Point, PointerTarget, Portal, Scene, Transform};
+use domicile_scene::{KeyboardTarget, Point, PointerTarget, Portal, Scene, Transform};
 
 const EPS: f64 = 1e-9;
 

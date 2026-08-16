@@ -15,8 +15,8 @@ name = "domicile"
 path = "src/lib.rs"
 
 [dependencies]
-dm-host = { path = "../dm-host" }
-dm-config = { path = "../dm-config" }
+domicile-host = { path = "../domicile-host" }
+domicile-config = { path = "../domicile-config" }
 
 [dev-dependencies]
 tempfile.workspace = true

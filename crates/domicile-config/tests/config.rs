@@ -1,11 +1,11 @@
-//! Behaviour tests for `dm-config`, written before the implementation.
+//! Behaviour tests for `domicile-config`, written before the implementation.
 //!
 //! The load-bearing requirement is hot-reload safety: a bad edit to the config
 //! file on disk must NEVER take down the compositor — the last known-good
 //! config stays active and the error is surfaced.
 
 use std::path::{Path, PathBuf};
-use dm_config::{Config, ConfigError, ConfigStore, ShellRef};
+use domicile_config::{Config, ConfigError, ConfigStore, ShellRef};
 
 // ---- parsing & defaults ---------------------------------------------------
 

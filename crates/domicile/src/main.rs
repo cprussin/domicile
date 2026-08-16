@@ -11,8 +11,8 @@ use std::process::exit;
 use std::thread;
 
 use domicile::run_connection;
-use dm_config::Config;
-use dm_host::ipc::Session;
+use domicile_config::Config;
+use domicile_host::ipc::Session;
 
 struct Args {
     socket: PathBuf,

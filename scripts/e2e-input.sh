@@ -7,7 +7,7 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/target/debug/domicile-compositor"
-[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p dm-compositor"; exit 1; }
+[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p domicile-compositor"; exit 1; }
 
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-input"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"

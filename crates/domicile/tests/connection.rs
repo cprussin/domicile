@@ -3,7 +3,7 @@
 use std::io::Cursor;
 
 use domicile::run_connection;
-use dm_host::ipc::Session;
+use domicile_host::ipc::Session;
 
 #[test]
 fn connection_loop_answers_hello_and_stops_at_eof() {

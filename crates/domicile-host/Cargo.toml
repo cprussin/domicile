@@ -1,5 +1,5 @@
 [package]
-name = "dm-host"
+name = "domicile-host"
 description = "Domicile host orchestrator: ties the Wayland world to the scene model and chrome protocol"
 version.workspace = true
 edition.workspace = true
@@ -7,8 +7,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-dm-scene = { path = "../dm-scene" }
-dm-protocol = { path = "../dm-protocol" }
+domicile-scene = { path = "../domicile-scene" }
+domicile-protocol = { path = "../domicile-protocol" }
 thiserror.workspace = true
 serde.workspace = true
 serde_json = "1"

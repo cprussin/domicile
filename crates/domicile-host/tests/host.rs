@@ -2,13 +2,13 @@
 //!
 //! `Host` is the compositor's brain: it tracks connected Wayland apps, applies
 //! the placement/focus decisions the chrome makes, and routes input. It sits
-//! between `dm-protocol` (the chrome wire messages) and `dm-scene` (the on-screen
+//! between `domicile-protocol` (the chrome wire messages) and `domicile-scene` (the on-screen
 //! geometry), so these tests exercise the whole pipeline end to end without any
 //! Wayland or GPU dependency.
 
-use dm_host::{Host, InputDelivery};
-use dm_protocol::{ChromeMessage, HostMessage};
-use dm_scene::KeyboardTarget;
+use domicile_host::{Host, InputDelivery};
+use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_scene::KeyboardTarget;
 
 fn place(app_id: &str, transform: [f64; 6], size: [f64; 2], z: i32, visible: bool) -> ChromeMessage {
     ChromeMessage::PlacePortal { app_id: app_id.into(), transform, size, z_index: z, visible }

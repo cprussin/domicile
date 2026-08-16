@@ -5,7 +5,7 @@
 //! this to bind an `<app>` element's texture; here we test only the pure
 //! bookkeeping, which is what makes the un-runnable GPU glue thin.
 
-use dm_bridge::{BridgeRegistry, DmabufDescriptor, DmabufPlane};
+use domicile_bridge::{BridgeRegistry, DmabufDescriptor, DmabufPlane};
 
 fn frame(w: u32, h: u32) -> DmabufDescriptor {
     DmabufDescriptor {

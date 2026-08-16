@@ -13,11 +13,11 @@ Built test-first, from the pure-logic core outward to the hardware/engine glue.
 
 ### Current state (working prototype)
 A runnable end-to-end prototype exists and is verified headlessly:
-real Wayland client → `dm-compositor` (Smithay, headless) → shared `Host` brain
+real Wayland client → `domicile-compositor` (Smithay, headless) → shared `Host` brain
 → Electron chrome, which mounts a styled `<domicile-app>`, **draws the client's live
 pixels** (shm path), and **forwards keyboard + pointer input back to the client**.
 `kitty` (Alt+Enter) and a Google `<webview>` (Alt+Shift+Enter) launch from the
-demo shell. **72 Rust tests (68 core + 4 in dm-compositor) + 42 JS tests, clippy
+demo shell. **72 Rust tests (68 core + 4 in domicile-compositor) + 42 JS tests, clippy
 clean.** ~14 commits, each a green TDD increment.
 
 ### How to run / test
@@ -27,8 +27,8 @@ cargo test                      # 68 core Rust tests
 npm test                        # 42 JS tests (vitest + jsdom)
 
 nix develop .#full              # adds wayland, mesa, weston, electron, xvfb, kitty
-cargo build -p dm-compositor    # the Smithay server (EXCLUDED from default build)
-cargo test -p dm-compositor     # 4 unit tests (BGRA->RGBA conversion)
+cargo build -p domicile-compositor    # the Smithay server (EXCLUDED from default build)
+cargo test -p domicile-compositor     # 4 unit tests (BGRA->RGBA conversion)
 
 # End-to-end, headless (no display needed; use these to verify changes):
 nix develop .#full -c ./scripts/smoke-compositor.sh   # a real client binds our globals
@@ -56,7 +56,7 @@ nix develop .#full -c ./scripts/run-prototype.sh
   is too long — use a **short** `XDG_RUNTIME_DIR` like `/tmp/domicile-rt` for anything
   that binds a wayland/chrome socket. (`wayland-1` squeaked under; `domicile-chrome.sock`
   did not — this cost real debugging time.)
-- **`dm-compositor` is excluded from `default-members`** (it pulls Smithay +
+- **`domicile-compositor` is excluded from `default-members`** (it pulls Smithay +
   native libs). Plain `cargo test`/`cargo build` in the core shell skip it; build
   it explicitly in `.#full`.
 - Reference material for Smithay: fetch from `github.com/Smithay/smithay` tag
@@ -90,13 +90,13 @@ nix develop .#full -c ./scripts/run-prototype.sh
 ### Repo layout
 | Path | What | Build |
 |---|---|---|
-| `crates/dm-config` | config schema/parse/validate, hot-reload (keep last-good), chrome-package resolution | core |
-| `crates/dm-scene` | affine transforms + inverse, hit-testing, input routing, z-order (pure math) | core |
-| `crates/dm-protocol` | host↔chrome wire messages (JSON), versioning | core |
-| `crates/dm-host` | orchestrator `Host` brain + `ipc` (handshake, `handle_chrome_line`/`apply_chrome_message`) | core |
+| `crates/domicile-config` | config schema/parse/validate, hot-reload (keep last-good), chrome-package resolution | core |
+| `crates/domicile-scene` | affine transforms + inverse, hit-testing, input routing, z-order (pure math) | core |
+| `crates/domicile-protocol` | host↔chrome wire messages (JSON), versioning | core |
+| `crates/domicile-host` | orchestrator `Host` brain + `ipc` (handshake, `handle_chrome_line`/`apply_chrome_message`) | core |
 | `crates/domicile` | host daemon / control plane (config → serve chrome protocol) | core |
-| `crates/dm-bridge` | AppTextureBridge bookkeeping (app → external-image id + latest dmabuf) — pure, unused by the prototype yet | core |
-| `crates/dm-compositor` | **the running compositor**: Smithay server + chrome socket + shm pixel capture + input injection | `.#full` |
+| `crates/domicile-bridge` | AppTextureBridge bookkeeping (app → external-image id + latest dmabuf) — pure, unused by the prototype yet | core |
+| `crates/domicile-compositor` | **the running compositor**: Smithay server + chrome socket + shm pixel capture + input injection | `.#full` |
 | `chrome-sdk` | `<domicile-app>`/`<domicile-webview>` elements, `BridgeClient`, matrix/frame/input helpers | node |
 | `shells/simple` | reference chrome: bar + stage; `ShellController`; Electron host (`electron-main.cjs`/`preload.cjs`) | node |
 | `scripts/` | e2e + smoke + prototype launcher | — |
@@ -107,7 +107,7 @@ JS note: Electron main/preload are **CommonJS `.cjs`** (root `package.json` has
 hyphenated (`domicile-app`/`domicile-webview`); bare `<app>`/`<webview>` aliasing is a TODO.
 
 ### How input & pixels actually flow (mental model)
-- **Pixels**: `dm-compositor` `commit()` → read shm buffer → `bgra_to_rgba` →
+- **Pixels**: `domicile-compositor` `commit()` → read shm buffer → `bgra_to_rgba` →
   base64 → `HostMessage::AppFrame` broadcast → chrome-sdk `<domicile-app>.drawFrame`
   → `<canvas>`. Throttled ~30fps; frame callbacks answered so clients animate.
 - **Input**: real events hit the Electron window → `<domicile-app>` / document
@@ -122,10 +122,10 @@ hyphenated (`domicile-app`/`domicile-webview`); bare `<app>`/`<webview>` aliasin
 
 ### Phase 0 — Foundation ✅
 ### Phase 1 — Pure-logic core (TDD) ✅
-`dm-config`, `dm-scene`, `dm-protocol` — all green.
+`domicile-config`, `domicile-scene`, `domicile-protocol` — all green.
 
 ### Phase 3 — Wayland host ✅ (prototype complete)
-`Host` brain, IPC seam, `domicile` daemon, `dm-compositor` (compositor + shm +
+`Host` brain, IPC seam, `domicile` daemon, `domicile-compositor` (compositor + shm +
 xdg-shell + seat + output), unified process, real pixels (shm), and keyboard +
 pointer input injection — all done and verified headlessly.
 
@@ -150,11 +150,11 @@ Alt+Shift+Enter → Google webview).
    surface-local using `getBoundingClientRect` (axis-aligned). The demo `.app`
    has `transform: rotate(-1.2deg)`, which skews pointer coords. Either drop the
    demo rotation or do a proper inverse-transform in the chrome (the Rust side
-   `dm-scene` has the math but the chrome currently maps on its own).
-5. **Config hot-reload into the live process** — `dm-config` has the watcher
-   (`watch()`), not yet wired into the running `domicile`/`dm-compositor` to hot-swap
+   `domicile-scene` has the math but the chrome currently maps on its own).
+5. **Config hot-reload into the live process** — `domicile-config` has the watcher
+   (`watch()`), not yet wired into the running `domicile`/`domicile-compositor` to hot-swap
    config/shell without restart.
-6. **Multi-app focus / z-order / stacking** — `dm-scene` models it; the
+6. **Multi-app focus / z-order / stacking** — `domicile-scene` models it; the
    compositor currently targets by `app_id` and keyboard focus is last-clicked.
 7. **Keymap + axis coverage** — `chrome-sdk/src/input.js` covers common keys;
    extend (numpad, media, intl). Axis is wired (source Wheel); may need v120.

@@ -11,7 +11,7 @@
       pkgs = import nixpkgs { inherit system; };
 
       # Toolchain needed to build & test the pure-logic Rust crates
-      # (dm-config, dm-scene, dm-protocol). No graphics/GPU deps required
+      # (domicile-config, domicile-scene, domicile-protocol). No graphics/GPU deps required
       # for these — keeps `nix develop` fast and the test loop tight.
       coreTools = with pkgs; [
         cargo
@@ -25,8 +25,8 @@
         nodejs_22
       ];
 
-      # Native libraries the Wayland host (dm-host, Smithay) and the CEF
-      # bridge (dm-bridge) will need. Split out so the core shell stays
+      # Native libraries the Wayland host (domicile-host, Smithay) and the CEF
+      # bridge (domicile-bridge) will need. Split out so the core shell stays
       # lean; enter with `nix develop .#full` once we start on those.
       hostLibs = with pkgs; [
         wayland
@@ -62,7 +62,7 @@
           '';
         };
 
-        # Full shell: adds Wayland/DRM/GPU libraries for dm-host + dm-bridge.
+        # Full shell: adds Wayland/DRM/GPU libraries for domicile-host + domicile-bridge.
         full = pkgs.mkShell {
           packages = coreTools ++ hostLibs;
           RUST_BACKTRACE = "1";

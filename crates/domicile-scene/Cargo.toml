@@ -1,5 +1,5 @@
 [package]
-name = "dm-scene"
+name = "domicile-scene"
 description = "Domicile scene model: portal registry, hit-testing, and input routing"
 version.workspace = true
 edition.workspace = true

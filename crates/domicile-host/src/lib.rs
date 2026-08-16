@@ -13,10 +13,10 @@
 
 use std::collections::HashMap;
 
-use dm_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{ChromeMessage, HostMessage};
 
 pub mod ipc;
-use dm_scene::{KeyboardTarget, PointerTarget, Portal, Scene, Transform};
+use domicile_scene::{KeyboardTarget, PointerTarget, Portal, Scene, Transform};
 
 /// Identifier for a connected app (Wayland toplevel), assigned by the host.
 pub type AppId = String;
@@ -133,7 +133,7 @@ impl Host {
 
     /// Decide where a pointer event at screen `(x, y)` should be delivered.
     pub fn route_pointer(&self, x: f64, y: f64) -> InputDelivery {
-        match self.scene.route_pointer(dm_scene::Point::new(x, y)) {
+        match self.scene.route_pointer(domicile_scene::Point::new(x, y)) {
             PointerTarget::App { app_id, local } => {
                 InputDelivery::App { app_id, local: (local.x, local.y) }
             }

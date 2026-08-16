@@ -76,16 +76,16 @@ but C/C++ and no advantage over CEF for our purposes).
 ## Crate layout
 
 Pure-logic crates (built & tested now, no GPU/engine needed):
-- `dm-config`  — config schema, parsing, hot-reload semantics, chrome-package
+- `domicile-config`  — config schema, parsing, hot-reload semantics, chrome-package
   resolution.
-- `dm-scene`   — portal registry (app_id → geometry/transform), hit-testing,
+- `domicile-scene`   — portal registry (app_id → geometry/transform), hit-testing,
   input routing. Pure geometry/logic.
-- `dm-protocol`— message types shared between the host and the in-page bridge
+- `domicile-protocol`— message types shared between the host and the in-page bridge
   client (portal geometry, input, lifecycle).
 
 Hardware/engine crates (join via `nix develop .#full`):
-- `dm-host`    — Smithay Wayland server, output, input, presentation.
-- `dm-bridge`  — CEF embedding + AppTextureBridge (the load-bearing spike:
+- `domicile-host`    — Smithay Wayland server, output, input, presentation.
+- `domicile-bridge`  — CEF embedding + AppTextureBridge (the load-bearing spike:
   prove one Wayland client rendering as a CSS-styled element, zero-copy).
 
 Web side:
@@ -95,12 +95,12 @@ Web side:
 ## Testing strategy (TDD)
 
 Value concentrates in the pure-logic core, so that's where tests lead:
-- **dm-config**: parsing (valid/invalid), defaults, chrome-ref resolution,
+- **domicile-config**: parsing (valid/invalid), defaults, chrome-ref resolution,
   and the hot-reload rule *"on parse error, keep last-good config and surface
   the error"* (never crash the compositor on a bad edit).
-- **dm-scene**: hit-testing under transforms, z-order resolution, input
+- **domicile-scene**: hit-testing under transforms, z-order resolution, input
   routing between chrome and apps.
-- **dm-protocol**: round-trip (de)serialization and version negotiation.
+- **domicile-protocol**: round-trip (de)serialization and version negotiation.
 
 Hardware-facing glue (DRM/KMS, CEF FFI) is kept thin and validated with
 nested/integration runs rather than unit tests.

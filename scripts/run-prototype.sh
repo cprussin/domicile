@@ -18,7 +18,7 @@ rm -f "$DOMICILE_RT"/wayland-* "$DOMICILE_RT"/domicile-chrome.sock
 CHROME_SOCK="$DOMICILE_RT/domicile-chrome.sock"
 
 echo "domicile: building compositor..."
-( cd "$ROOT" && cargo build -p dm-compositor ) || { echo "build failed"; exit 1; }
+( cd "$ROOT" && cargo build -p domicile-compositor ) || { echo "build failed"; exit 1; }
 
 echo "domicile: starting headless Wayland compositor..."
 XDG_RUNTIME_DIR="$DOMICILE_RT" "$ROOT/target/debug/domicile-compositor" --chrome-socket "$CHROME_SOCK" &

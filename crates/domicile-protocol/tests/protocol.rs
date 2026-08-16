@@ -1,4 +1,4 @@
-//! Behaviour tests for `dm-protocol`, written before the implementation.
+//! Behaviour tests for `domicile-protocol`, written before the implementation.
 //!
 //! This crate defines the wire contract between the Rust host and the in-page
 //! bridge client (JS). Two things matter and are tested here:
@@ -6,7 +6,7 @@
 //!  2. The on-the-wire shape is stable (the JS side hard-codes these strings),
 //!     so we pin the tag/field names explicitly.
 
-use dm_protocol::{negotiate, ChromeMessage, HostMessage, PROTOCOL_VERSION};
+use domicile_protocol::{negotiate, ChromeMessage, HostMessage, PROTOCOL_VERSION};
 
 fn chrome_round_trip(msg: &ChromeMessage) {
     let json = serde_json::to_string(msg).unwrap();

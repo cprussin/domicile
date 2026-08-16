@@ -164,26 +164,35 @@ dependencies = [
 ]
 
 [[package]]
-name = "dm-bridge"
+name = "domicile"
+version = "0.0.0"
+dependencies = [
+ "domicile-config",
+ "domicile-host",
+ "tempfile",
+]
+
+[[package]]
+name = "domicile-bridge"
 version = "0.0.0"
 dependencies = [
  "thiserror 1.0.69",
 ]
 
 [[package]]
-name = "dm-compositor"
+name = "domicile-compositor"
 version = "0.0.0"
 dependencies = [
  "base64",
- "dm-host",
- "dm-protocol",
+ "domicile-host",
+ "domicile-protocol",
  "smithay",
  "tracing",
  "tracing-subscriber",
 ]
 
 [[package]]
-name = "dm-config"
+name = "domicile-config"
 version = "0.0.0"
 dependencies = [
  "notify",
@@ -194,18 +203,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "dm-host"
+name = "domicile-host"
 version = "0.0.0"
 dependencies = [
- "dm-protocol",
- "dm-scene",
+ "domicile-protocol",
+ "domicile-scene",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
 ]
 
 [[package]]
-name = "dm-protocol"
+name = "domicile-protocol"
 version = "0.0.0"
 dependencies = [
  "serde",
@@ -214,17 +223,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "dm-scene"
+name = "domicile-scene"
 version = "0.0.0"
-
-[[package]]
-name = "domicile"
-version = "0.0.0"
-dependencies = [
- "dm-config",
- "dm-host",
- "tempfile",
-]
 
 [[package]]
 name = "downcast-rs"

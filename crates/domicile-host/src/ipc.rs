@@ -8,7 +8,7 @@
 //! in-memory string or a real `UnixStream` alike.
 
 use serde::Serialize;
-use dm_protocol::{negotiate, ChromeMessage, HostMessage};
+use domicile_protocol::{negotiate, ChromeMessage, HostMessage};
 
 use crate::Host;
 

@@ -78,13 +78,13 @@ nix develop .#full
 
 | Path | What | Build |
 |------|------|-------|
-| `crates/dm-config`   | config schema, parsing, hot-reload, chrome-package resolution | core |
-| `crates/dm-scene`    | portal registry, hit-testing, input routing | core |
-| `crates/dm-protocol` | host ↔ in-page bridge messages | core |
-| `crates/dm-host`     | orchestrator brain + host↔chrome IPC seam | core |
+| `crates/domicile-config`   | config schema, parsing, hot-reload, chrome-package resolution | core |
+| `crates/domicile-scene`    | portal registry, hit-testing, input routing | core |
+| `crates/domicile-protocol` | host ↔ in-page bridge messages | core |
+| `crates/domicile-host`     | orchestrator brain + host↔chrome IPC seam | core |
 | `crates/domicile`        | host daemon: boots from config, serves the chrome protocol | core |
-| `crates/dm-bridge`   | AppTextureBridge bookkeeping (app → engine texture) | core |
-| `crates/dm-compositor` | headless Smithay Wayland server driving the brain | `.#full` |
+| `crates/domicile-bridge`   | AppTextureBridge bookkeeping (app → engine texture) | core |
+| `crates/domicile-compositor` | headless Smithay Wayland server driving the brain | `.#full` |
 | `chrome-sdk`         | `<domicile-app>` / `<domicile-webview>` custom elements + bridge client | node |
 | `shells/simple`      | minimal reference chrome | node |
 
@@ -92,7 +92,7 @@ The Smithay backend is excluded from the default workspace build; build/run it i
 the full shell:
 
 ```sh
-nix develop .#full -c cargo build -p dm-compositor
+nix develop .#full -c cargo build -p domicile-compositor
 nix develop .#full -c ./scripts/smoke-compositor.sh   # boots it; a real client binds our globals
 ```
 

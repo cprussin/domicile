@@ -1,5 +1,5 @@
 [package]
-name = "dm-compositor"
+name = "domicile-compositor"
 description = "Domicile Smithay backend: a Wayland protocol frontend that drives the host brain"
 version.workspace = true
 edition.workspace = true
@@ -11,8 +11,8 @@ name = "domicile-compositor"
 path = "src/main.rs"
 
 [dependencies]
-dm-host = { path = "../dm-host" }
-dm-protocol = { path = "../dm-protocol" }
+domicile-host = { path = "../domicile-host" }
+domicile-protocol = { path = "../domicile-protocol" }
 base64 = "0.22"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

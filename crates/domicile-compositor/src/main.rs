@@ -5,7 +5,7 @@
 //! the Wayland protocol frontend and surface/buffer management. This binary
 //! stands up the protocol globals a client needs (compositor, shm, xdg-shell),
 //! accepts clients on a Wayland socket, and — the whole point — drives the
-//! tested [`dm_host::Host`] brain: when a client maps a toplevel we call
+//! tested [`domicile_host::Host`] brain: when a client maps a toplevel we call
 //! [`Host::app_appeared`]; when it goes away we call [`Host::app_closed`].
 //!
 //! What's intentionally missing (next steps, all needing a GPU/display):
@@ -61,9 +61,9 @@ use smithay::wayland::{
 use smithay::{delegate_compositor, delegate_output, delegate_seat, delegate_shm, delegate_xdg_shell};
 use tracing::info;
 
-use dm_host::ipc::{apply_chrome_message, parse_chrome, to_line};
-use dm_host::Host;
-use dm_protocol::{ChromeMessage, HostMessage};
+use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
+use domicile_host::Host;
+use domicile_protocol::{ChromeMessage, HostMessage};
 
 /// Data threaded through the calloop event loop. The `Display` lives here (not
 /// inside the wayland source) so we can flush queued events after handling input

@@ -8,7 +8,7 @@
 
 use std::io::{BufRead, Write};
 
-use dm_host::ipc::{to_line, Session};
+use domicile_host::ipc::{to_line, Session};
 
 /// Drive one chrome connection to completion.
 ///

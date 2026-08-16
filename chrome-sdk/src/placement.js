@@ -1,4 +1,4 @@
-// Builders for the chrome->host messages defined in dm-protocol. These produce
+// Builders for the chrome->host messages defined in domicile-protocol. These produce
 // plain JSON objects in the exact wire shape the Rust host expects (snake_case
 // keys, `type` discriminant). Kept as pure functions so they are trivially
 // testable and reusable by the bridge and the custom elements.

@@ -9,8 +9,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::thread;
 
-use dm_host::ipc::{parse_chrome, to_line, Session};
-use dm_protocol::{ChromeMessage, HostMessage};
+use domicile_host::ipc::{parse_chrome, to_line, Session};
+use domicile_protocol::{ChromeMessage, HostMessage};
 
 #[test]
 fn hello_completes_the_handshake_with_a_welcome() {

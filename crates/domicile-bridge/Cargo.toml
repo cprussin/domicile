@@ -1,5 +1,5 @@
 [package]
-name = "dm-bridge"
+name = "domicile-bridge"
 description = "Domicile AppTextureBridge: bookkeeping that maps app surfaces to engine external-image textures"
 version.workspace = true
 edition.workspace = true
