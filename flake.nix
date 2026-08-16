@@ -55,8 +55,61 @@
         # (provides the `Xvfb` binary used by scripts/e2e-electron.sh).
         xvfb
       ];
+
+      # The scripts under `scripts/` each drive Domicile out of a checkout:
+      # they build in-tree (cargo's `target/`, bun's `node_modules/`) and run
+      # what they built. `nix run github:cprussin/domicile#<app>` has no
+      # checkout — it hands the scripts the flake source read-only in the
+      # store — so each app below stages that source in the user's cache and
+      # runs the script there, inside the full shell, exactly as the
+      # checkout-based commands in the README do. The staging dir is keyed by
+      # the source's store path, so re-running one revision reuses its build
+      # artifacts and a new revision never inherits stale ones.
+      runInFullShell = name: script:
+        pkgs.writeShellApplication {
+          name = "domicile-${name}";
+          runtimeInputs = [ pkgs.nix ];
+          text = ''
+            work="''${DOMICILE_RUN_DIR:-''${XDG_CACHE_HOME:-$HOME/.cache}/domicile/${builtins.baseNameOf self}}"
+            if [ ! -e "$work/.domicile-staged" ]; then
+              echo "domicile: staging the source in $work" >&2
+              mkdir -p "$work"
+              # Modes are preserved (the scripts must stay executable), so the
+              # copy inherits the store's read-only bits and needs +w.
+              cp -RT "${self}" "$work"
+              chmod -R u+w "$work"
+              touch "$work/.domicile-staged"
+            fi
+            cd "$work"
+            # The e2e and smoke scripts expect target/debug/domicile-compositor
+            # to exist already; run-prototype.sh builds it itself, so the build
+            # below is a no-op there.
+            exec nix develop "${self}#full" --command bash -c \
+              "cargo build -p domicile-compositor && exec ./scripts/${script}"
+          '';
+        };
+
+      # `nix run .#<attr>` → `scripts/<script>.sh`. `prototype` is also the
+      # default app, so a bare `nix run github:cprussin/domicile` boots the
+      # prototype.
+      scriptApps = pkgs.lib.mapAttrs
+        (name: script: {
+          type = "app";
+          program = pkgs.lib.getExe (runInFullShell name script);
+          meta.description = "Run scripts/${script} with no checkout";
+        })
+        {
+          prototype = "run-prototype.sh";
+          e2e-chrome = "e2e-chrome.sh";
+          e2e-electron = "e2e-electron.sh";
+          e2e-spawn = "e2e-spawn.sh";
+          e2e-input = "e2e-input.sh";
+          smoke-compositor = "smoke-compositor.sh";
+        };
     in
     {
+      apps.${system} = scriptApps // { default = scriptApps.prototype; };
+
       devShells.${system} = {
         # Default shell: everything needed for the TDD pure-logic core.
         default = pkgs.mkShell {
