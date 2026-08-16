@@ -34,7 +34,11 @@ pub enum HostError {
 pub struct App {
     pub app_id: AppId,
     pub title: Option<String>,
+    /// The client's own content size, as of its latest committed buffer.
     pub size: (f64, f64),
+    /// The size the chrome last laid its `<app>` element out at, which the
+    /// compositor configures the client to. `None` until the chrome resizes it.
+    pub requested_size: Option<(f64, f64)>,
 }
 
 /// Where an input event should be delivered.
@@ -75,6 +79,7 @@ impl Host {
                 app_id: app_id.clone(),
                 title: title.clone(),
                 size,
+                requested_size: None,
             },
         );
         let message = HostMessage::AppAppeared {
@@ -137,7 +142,15 @@ impl Host {
             ChromeMessage::RemovePortal { app_id } => {
                 self.scene.remove(&app_id);
             }
+            ChromeMessage::ResizeApp { app_id, size } => match self.apps.get_mut(&app_id) {
+                Some(app) => app.requested_size = Some((size[0], size[1])),
+                None => return Err(HostError::UnknownApp(app_id)),
+            },
             ChromeMessage::FocusApp { app_id } => {
+                // Focus is what a click means, so it raises the app too:
+                // otherwise a click on the lower of two overlapping apps would
+                // type into it while the other still takes the pointer.
+                self.scene.raise(&app_id);
                 self.scene.focus_app(&app_id);
             }
             ChromeMessage::FocusChrome => {

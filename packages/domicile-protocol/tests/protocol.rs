@@ -6,7 +6,7 @@
 //!  2. The on-the-wire shape is stable (the JS side hard-codes these strings),
 //!     so we pin the tag/field names explicitly.
 
-use domicile_protocol::{negotiate, ChromeMessage, HostMessage, PROTOCOL_VERSION};
+use domicile_protocol::{negotiate, ChromeMessage, CursorShape, HostMessage, PROTOCOL_VERSION};
 
 fn chrome_round_trip(msg: &ChromeMessage) {
     let json = serde_json::to_string(msg).unwrap();
@@ -59,6 +59,12 @@ fn chrome_messages_round_trip() {
         app_id: "term".into(),
         dx: 0.0,
         dy: -15.0,
+        v120_x: 0,
+        v120_y: -120,
+    });
+    chrome_round_trip(&ChromeMessage::ResizeApp {
+        app_id: "term".into(),
+        size: [800.0, 600.0],
     });
     chrome_round_trip(&ChromeMessage::Key {
         app_id: "term".into(),
@@ -106,6 +112,23 @@ fn host_messages_round_trip() {
     host_round_trip(&HostMessage::AppClosed {
         app_id: "term".into(),
     });
+    host_round_trip(&HostMessage::AppCursor {
+        app_id: "term".into(),
+        cursor: CursorShape::Text,
+    });
+}
+
+/// The chrome assigns the cursor straight to CSS `cursor`, so every shape must
+/// serialise to a valid CSS keyword.
+#[test]
+fn cursor_shapes_are_css_keywords() {
+    let shape = |shape: CursorShape| serde_json::to_value(shape).unwrap();
+    assert_eq!(shape(CursorShape::None), "none");
+    assert_eq!(shape(CursorShape::Default), "default");
+    assert_eq!(shape(CursorShape::Text), "text");
+    assert_eq!(shape(CursorShape::NotAllowed), "not-allowed");
+    assert_eq!(shape(CursorShape::NwseResize), "nwse-resize");
+    assert_eq!(shape(CursorShape::ZoomIn), "zoom-in");
 }
 
 #[test]
@@ -131,6 +154,22 @@ fn wire_shape_is_pinned() {
     })
     .unwrap();
     assert_eq!(v["type"], "app_appeared");
+
+    let v = serde_json::to_value(ChromeMessage::ResizeApp {
+        app_id: "term".into(),
+        size: [800.0, 600.0],
+    })
+    .unwrap();
+    assert_eq!(v["type"], "resize_app");
+    assert_eq!(v["size"][1], 600.0);
+
+    let v = serde_json::to_value(HostMessage::AppCursor {
+        app_id: "term".into(),
+        cursor: CursorShape::Pointer,
+    })
+    .unwrap();
+    assert_eq!(v["type"], "app_cursor");
+    assert_eq!(v["cursor"], "pointer");
 }
 
 #[test]

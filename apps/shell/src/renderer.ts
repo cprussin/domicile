@@ -2,7 +2,9 @@
 // index.html, injects a transport at `window.domicileTransport`, and this wires
 // the SDK to it.
 
+import { aliasTag } from "@domicile/chrome-sdk/alias-tags";
 import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { APP_TAG_NAME } from "@domicile/chrome-sdk/register-elements";
 
 import { installClock } from "./clock";
 import { ShellController } from "./shell-controller";
@@ -26,6 +28,10 @@ const shell = new ShellController(bridge, { root: stage });
 shell.installKeybindings(); // Alt+Enter -> kitty, Alt+Shift+Enter -> webview
 
 installClock(clock);
+
+// Let shell markup say `<app>`; the SDK registers the hyphenated name a custom
+// element requires. `<webview>` keeps its long name — Electron owns that tag.
+aliasTag(document.body, "app", APP_TAG_NAME);
 
 // The compositor watches this attribute to know the chrome finished its
 // handshake; a failed handshake must surface rather than leave it unset

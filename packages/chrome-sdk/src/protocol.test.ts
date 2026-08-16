@@ -1,15 +1,35 @@
 import { describe, expect, it } from "bun:test";
 
-import { parseHostMessage } from "./protocol";
+import { PROTOCOL_VERSION, parseHostMessage } from "./protocol";
 
 describe("parseHostMessage", () => {
   it("decodes a welcome frame", () => {
-    expect(parseHostMessage('{"type":"welcome","protocol_version":1}')).toEqual(
-      {
-        protocol_version: 1,
-        type: "welcome",
-      },
-    );
+    expect(
+      parseHostMessage(
+        `{"type":"welcome","protocol_version":${PROTOCOL_VERSION.toString()}}`,
+      ),
+    ).toEqual({
+      protocol_version: PROTOCOL_VERSION,
+      type: "welcome",
+    });
+  });
+
+  it("decodes a cursor frame", () => {
+    expect(
+      parseHostMessage('{"type":"app_cursor","app_id":"term","cursor":"text"}'),
+    ).toEqual({
+      app_id: "term",
+      cursor: "text",
+      type: "app_cursor",
+    });
+  });
+
+  it("throws on a cursor that is not a CSS keyword the chrome knows", () => {
+    expect(() =>
+      parseHostMessage(
+        '{"type":"app_cursor","app_id":"term","cursor":"wiggle"}',
+      ),
+    ).toThrow();
   });
 
   it("normalises a missing app title to undefined", () => {

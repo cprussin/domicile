@@ -34,6 +34,9 @@ class FakeBridge {
   removePortal(appId: string): void {
     this.calls.push(["remove", appId]);
   }
+  resizeApp(appId: string, size: readonly number[]): void {
+    this.calls.push(["resize", appId, size]);
+  }
   spawn(command: readonly string[]): void {
     this.calls.push(["spawn", command]);
   }
@@ -148,6 +151,35 @@ describe("ShellController", () => {
           height: 1,
           width: 1,
         });
+      }).not.toThrow();
+    });
+  });
+
+  describe("client-driven appearance", () => {
+    it("tracks a client's new content size on its element", () => {
+      bridge.emit("app_appeared", { app_id: "term" });
+      const element = root.querySelector(APP_TAG_NAME) as DomicileAppElement;
+      const sizes: unknown[] = [];
+      element.setSurfaceSize = (width, height) => {
+        sizes.push([width, height]);
+      };
+
+      bridge.emit("app_resized", { app_id: "term", size: [800, 600] });
+      expect(sizes).toEqual([[800, 600]]);
+    });
+
+    it("applies a cursor the client asked for", () => {
+      bridge.emit("app_appeared", { app_id: "term" });
+      bridge.emit("app_cursor", { app_id: "term", cursor: "text" });
+
+      const element = root.querySelector(APP_TAG_NAME) as DomicileAppElement;
+      expect(element.style.cursor).toBe("text");
+    });
+
+    it("ignores appearance messages for an app it never mounted", () => {
+      expect(() => {
+        bridge.emit("app_resized", { app_id: "ghost", size: [1, 1] });
+        bridge.emit("app_cursor", { app_id: "ghost", cursor: "wait" });
       }).not.toThrow();
     });
   });

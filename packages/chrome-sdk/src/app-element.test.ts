@@ -4,6 +4,7 @@ import type { DomicileAppElement } from "./app-element";
 import type { BridgeClient } from "./bridge";
 import { BTN_LEFT } from "./input";
 import type { Measure } from "./measure";
+import type { ObserveResize } from "./observe-resize";
 import { APP_TAG_NAME, registerElements } from "./register-elements";
 
 type Call = readonly [kind: string, ...args: unknown[]];
@@ -18,6 +19,9 @@ class FakeBridge {
   }
   removePortal(appId: string): void {
     this.calls.push(["remove", appId]);
+  }
+  resizeApp(appId: string, size: readonly number[]): void {
+    this.calls.push(["resize", appId, size]);
   }
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
@@ -34,8 +38,11 @@ class FakeBridge {
   pointerLeave(appId: string): void {
     this.calls.push(["leave", appId]);
   }
-  pointerAxis(appId: string, dx: number, dy: number): void {
-    this.calls.push(["axis", appId, dx, dy]);
+  pointerAxis(
+    appId: string,
+    delta: { dx: number; dy: number; v120X: number; v120Y: number },
+  ): void {
+    this.calls.push(["axis", appId, delta]);
   }
   key(appId: string, keycode: number, pressed: boolean): void {
     this.calls.push(["key", appId, keycode, pressed]);
@@ -50,6 +57,30 @@ const stubMeasure: Measure = () => ({
   zIndex: 0,
 });
 
+// The test DOM lays nothing out, so its ResizeObserver never fires; the
+// observer is injected instead and driven by hand.
+class FakeResizeObserver {
+  #callbacks: (() => void)[] = [];
+
+  readonly observe: ObserveResize = (_element, onResize) => {
+    this.#callbacks.push(onResize);
+    return () => {
+      this.#callbacks = this.#callbacks.filter((entry) => entry !== onResize);
+    };
+  };
+
+  /** Simulate the browser reporting a new box for every watched element. */
+  resize(): void {
+    for (const callback of this.#callbacks) {
+      callback();
+    }
+  }
+
+  get watching(): number {
+    return this.#callbacks.length;
+  }
+}
+
 const mountApp = (appId?: string): DomicileAppElement => {
   const element = document.createElement(APP_TAG_NAME) as DomicileAppElement;
   if (appId !== undefined) {
@@ -61,28 +92,80 @@ const mountApp = (appId?: string): DomicileAppElement => {
 
 describe("<domicile-app>", () => {
   let bridge: FakeBridge;
+  let resizes: FakeResizeObserver;
 
   beforeEach(() => {
     document.body.innerHTML = "";
     bridge = new FakeBridge();
+    resizes = new FakeResizeObserver();
     registerElements(bridge as unknown as BridgeClient, {
       measure: stubMeasure,
+      observeResize: resizes.observe,
     });
   });
 
   it("places a portal when connected with an app-id", () => {
     mountApp("term");
-    expect(bridge.calls).toEqual([
-      [
-        "place",
-        {
-          appId: "term",
-          size: [10, 20],
-          transform: [1, 0, 0, 1, 0, 0],
-          visible: true,
-          zIndex: 0,
-        },
-      ],
+    expect(bridge.calls).toContainEqual([
+      "place",
+      {
+        appId: "term",
+        size: [10, 20],
+        transform: [1, 0, 0, 1, 0, 0],
+        visible: true,
+        zIndex: 0,
+      },
+    ]);
+  });
+
+  it("asks the compositor to render the client at the element's size", () => {
+    mountApp("term");
+    expect(bridge.calls).toContainEqual(["resize", "term", [10, 20]]);
+  });
+
+  it("re-reports geometry when the element's box changes", () => {
+    mountApp("term");
+    bridge.calls.length = 0;
+
+    resizes.resize();
+    expect(bridge.calls).toContainEqual([
+      "place",
+      {
+        appId: "term",
+        size: [10, 20],
+        transform: [1, 0, 0, 1, 0, 0],
+        visible: true,
+        zIndex: 0,
+      },
+    ]);
+    expect(bridge.calls).toContainEqual(["resize", "term", [10, 20]]);
+  });
+
+  it("stops watching the box once disconnected", () => {
+    mountApp("term").remove();
+    expect(resizes.watching).toBe(0);
+  });
+
+  it("applies a client's requested cursor to the element", () => {
+    const element = mountApp("term");
+    element.applyCursor("text");
+    expect(element.style.cursor).toBe("text");
+  });
+
+  it("normalises a line-mode wheel before forwarding it", () => {
+    const element = mountApp("term");
+    element.dispatchEvent(
+      new WheelEvent("wheel", {
+        bubbles: true,
+        deltaMode: 1,
+        deltaX: 0,
+        deltaY: 3,
+      }),
+    );
+    expect(bridge.calls).toContainEqual([
+      "axis",
+      "term",
+      { dx: 0, dy: 100, v120X: 0, v120Y: 120 },
     ]);
   });
 

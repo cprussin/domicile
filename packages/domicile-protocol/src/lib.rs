@@ -8,7 +8,11 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
-pub const PROTOCOL_VERSION: u32 = 1;
+///
+/// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
+/// on `pointer_axis` — the last of which a v1 chrome does not send, so the
+/// versions are not interchangeable.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Messages sent from the chrome (in-page bridge) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -30,6 +34,11 @@ pub enum ChromeMessage {
 
     /// An `<app>` element was unmounted; the host should stop compositing it.
     RemovePortal { app_id: String },
+
+    /// The chrome laid an `<app>` element out at a new size. The compositor
+    /// configures the client to match so it re-renders at that resolution,
+    /// rather than having its old buffer stretched into the new box.
+    ResizeApp { app_id: String, size: [f64; 2] },
 
     /// Request keyboard focus for an app.
     FocusApp { app_id: String },
@@ -55,8 +64,16 @@ pub enum ChromeMessage {
         button: u32,
         pressed: bool,
     },
-    /// Scroll over an app, in surface-logical units.
-    PointerAxis { app_id: String, dx: f64, dy: f64 },
+    /// Scroll over an app. `dx`/`dy` are the continuous distance in
+    /// surface-logical units; `v120_x`/`v120_y` are the same scroll as
+    /// `wl_pointer`'s high-resolution discrete steps, 120 per wheel detent.
+    PointerAxis {
+        app_id: String,
+        dx: f64,
+        dy: f64,
+        v120_x: i32,
+        v120_y: i32,
+    },
     /// Key event destined for the focused app. `keycode` is a Linux evdev code.
     Key {
         app_id: String,
@@ -96,6 +113,54 @@ pub enum HostMessage {
 
     /// A client went away; the chrome should unmount its `<app>` element.
     AppClosed { app_id: String },
+
+    /// A client asked for a particular cursor over its surface. The chrome
+    /// applies it to the app's element, so the pointer changes shape over an
+    /// `<app>` exactly as it would over any other web content.
+    AppCursor { app_id: String, cursor: CursorShape },
+}
+
+/// A cursor a client can ask for, named as the CSS `cursor` keyword the chrome
+/// applies. These are the shapes `wp_cursor_shape_v1` defines, plus
+/// [`CursorShape::None`] for a client that hides the cursor entirely.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CursorShape {
+    None,
+    Default,
+    ContextMenu,
+    Help,
+    Pointer,
+    Progress,
+    Wait,
+    Cell,
+    Crosshair,
+    Text,
+    VerticalText,
+    Alias,
+    Copy,
+    Move,
+    NoDrop,
+    NotAllowed,
+    Grab,
+    Grabbing,
+    EResize,
+    NResize,
+    NeResize,
+    NwResize,
+    SResize,
+    SeResize,
+    SwResize,
+    WResize,
+    EwResize,
+    NsResize,
+    NeswResize,
+    NwseResize,
+    ColResize,
+    RowResize,
+    AllScroll,
+    ZoomIn,
+    ZoomOut,
 }
 
 /// Version negotiation failed.

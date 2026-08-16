@@ -10,6 +10,8 @@ use std::io::{BufRead, Write};
 
 use domicile_host::ipc::{to_line, Session};
 
+pub mod config_reload;
+
 /// Drive one chrome connection to completion.
 ///
 /// Reads newline-delimited chrome messages from `reader`, feeds each into the

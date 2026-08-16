@@ -10,9 +10,51 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
+
+// The shapes `wp_cursor_shape_v1` defines, named as the CSS `cursor` keyword
+// the chrome assigns, plus `none` for a client that hides the cursor. Mirrors
+// `domicile_protocol::CursorShape`; a value outside this set is a host bug, so
+// the schema rejects it rather than letting an invalid keyword reach CSS.
+const cursorShapeSchema = z.enum([
+  "none",
+  "default",
+  "context-menu",
+  "help",
+  "pointer",
+  "progress",
+  "wait",
+  "cell",
+  "crosshair",
+  "text",
+  "vertical-text",
+  "alias",
+  "copy",
+  "move",
+  "no-drop",
+  "not-allowed",
+  "grab",
+  "grabbing",
+  "e-resize",
+  "n-resize",
+  "ne-resize",
+  "nw-resize",
+  "s-resize",
+  "se-resize",
+  "sw-resize",
+  "w-resize",
+  "ew-resize",
+  "ns-resize",
+  "nesw-resize",
+  "nwse-resize",
+  "col-resize",
+  "row-resize",
+  "all-scroll",
+  "zoom-in",
+  "zoom-out",
+]);
 
 const welcomeSchema = z.looseObject({
   protocol_version: z.number(),
@@ -51,6 +93,12 @@ const appClosedSchema = z.looseObject({
   type: z.literal("app_closed"),
 });
 
+const appCursorSchema = z.looseObject({
+  app_id: z.string(),
+  cursor: cursorShapeSchema,
+  type: z.literal("app_cursor"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -62,6 +110,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appResizedSchema,
   appFrameSchema,
   appClosedSchema,
+  appCursorSchema,
 ]);
 
 export type HostMessage = z.infer<typeof hostMessageSchema>;
@@ -70,6 +119,10 @@ export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
 export type AppResizedMessage = z.infer<typeof appResizedSchema>;
 export type AppFrameMessage = z.infer<typeof appFrameSchema>;
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
+export type AppCursorMessage = z.infer<typeof appCursorSchema>;
+
+/** A CSS `cursor` keyword a client can ask the chrome to show over its app. */
+export type CursorShape = z.infer<typeof cursorShapeSchema>;
 
 /** The `type` tag of every host message this build knows how to decode. */
 export type HostMessageType = HostMessage["type"];

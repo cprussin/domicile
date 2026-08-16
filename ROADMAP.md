@@ -17,8 +17,16 @@ real Wayland client → `domicile-compositor` (Smithay, headless) → shared `Ho
 → Electron chrome, which mounts a styled `<domicile-app>`, **draws the client's live
 pixels** (shm path), and **forwards keyboard + pointer input back to the client**.
 `kitty` (Alt+Enter) and a Google `<webview>` (Alt+Shift+Enter) launch from the
-demo shell. **72 Rust tests (68 core + 4 in domicile-compositor) + 42 JS tests, clippy
-clean.** ~14 commits, each a green TDD increment.
+demo shell. **84 Rust tests (78 core + 6 in domicile-compositor) + 95 JS tests, clippy
+clean.**
+
+Since the first prototype, most of Phase 2 has landed (see the phase list below):
+a client's requested **cursor** reaches the chrome as a CSS keyword, the chrome's
+element size **configures** the client and the client's own size flows back,
+pointer coordinates are **inverse-transformed** so a rotated `<app>` maps
+correctly, the keymap and scroll axis are filled out, an app **raises** when
+focused, `<app>` works as an alias for `<domicile-app>`, and the daemon
+**hot-reloads** its config. The wire protocol is at `PROTOCOL_VERSION = 2`.
 
 ### How to run / test
 ```sh
@@ -35,7 +43,7 @@ nix develop .#full -c ./scripts/smoke-compositor.sh   # a real client binds our 
 nix develop .#full -c ./scripts/e2e-chrome.sh         # client -> host -> mock chrome (app_appeared)
 nix develop .#full -c ./scripts/e2e-electron.sh       # real Electron renderer under Xvfb; pixels flow
 nix develop .#full -c ./scripts/e2e-spawn.sh          # a chrome `spawn` message launches a client
-nix develop .#full -c ./scripts/e2e-input.sh          # keyboard + pointer reach a client (WAYLAND_DEBUG)
+nix develop .#full -c ./scripts/e2e-input.sh          # keyboard + pointer reach a client, and its cursor request reaches the chrome
 
 # Full visible prototype (needs a real display — run on the user's machine):
 nix develop .#full -c ./scripts/run-prototype.sh
@@ -59,6 +67,11 @@ nix develop .#full -c ./scripts/run-prototype.sh
 - **`domicile-compositor` is excluded from `default-members`** (it pulls Smithay +
   native libs). Plain `cargo test`/`cargo build` in the core shell skip it; build
   it explicitly in `.#full`.
+- **Verifying without nix**: the headless scripts need `libxkbcommon-dev` (to
+  link `domicile-compositor`), `weston` (demo clients) and `wayland-utils`
+  (`wayland-info`). With those, `cargo test -p domicile-compositor` and every
+  `scripts/*.sh` except `e2e-electron.sh` run outside the nix shell;
+  `e2e-electron.sh` additionally needs `electron` on `PATH`.
 - Reference material for Smithay: fetch from `github.com/Smithay/smithay` tag
   **`v0.7.0`** (smallvil + anvil examples, `src/input/*`, `src/wayland/*`). This
   was invaluable for getting the 0.7 API exactly right.
@@ -137,32 +150,67 @@ pointer input injection — all done and verified headlessly.
 `packages/chrome-sdk`, `apps/shell`, Electron host, keybindings (Alt+Enter → kitty,
 Alt+Shift+Enter → Google webview).
 
+### Phase 2 — mostly done
+Numbered as the original list was, so the items map one-to-one; item 1 is the
+one still open and leads the next-work list below.
+
+2. **Cursor rendering** ✅ — the compositor advertises `wp_cursor_shape_v1` and
+   forwards `SeatHandler::cursor_image` to the chrome as
+   `HostMessage::AppCursor`, carrying the CSS `cursor` keyword the chrome
+   assigns to the app's element (`domicile_protocol::CursorShape`). Proven
+   end-to-end by `scripts/e2e-input.sh`. *Remaining:* a client that draws its
+   own cursor **surface** gets `default` — mirroring those pixels is texture-bridge
+   work, so it belongs with item 1.
+3. **Resize / configure** ✅ — `<domicile-app>` watches its own box
+   (`ResizeObserver`) and sends `resize_app`; the compositor turns that into an
+   `xdg_toplevel` configure. The reverse is wired too: a client committing a
+   buffer of a new size drives `Host::app_resized`, so `app_resized` now reaches
+   the chrome (visible in `scripts/e2e-chrome.sh` output).
+4. **Pointer mapping vs CSS transforms** ✅ — the chrome recovers the exact
+   element→screen affine (`element-transform.ts`: the element's own transform
+   about its `transform-origin`, anchored by its bounding box) and inverts it
+   (`surface-coordinates.ts`). The demo's `rotate(-1.2deg)` no longer skews
+   pointer coordinates. *Known limit:* an **ancestor** that rotates or skews is
+   still missed — `getBoundingClientRect` gives only an axis-aligned box, so
+   there is nothing left to recover it from. The engine integration, which knows
+   each layer's transform outright, is what closes that.
+5. **Config hot-reload into the live process** ✅ (the wiring) — `domicile` now
+   watches its config file and keeps the last known-good config live
+   (`domicile::config_reload`), logging what each edit changed. *Remaining:*
+   actually hot-*swapping* the shell needs the daemon to own the shell process,
+   which it does not yet — today `scripts/run-prototype.sh` launches Electron.
+6. **Multi-app focus / z-order / stacking** ✅ — `Scene::upsert` keeps a
+   re-placed app's position in the stack (the chrome re-places on every resize,
+   which used to reshuffle it), and `Scene::raise` moves an app to the top of
+   its z-index tier; `FocusApp` raises as well as focuses, so clicking the lower
+   of two overlapping apps gives it both keyboard and pointer.
+7. **Keymap + axis coverage** ✅ — numpad, media/browser, international and IME
+   keys, F13–F24 and the system keys. Scroll normalises through wheel detents
+   (`wheel-axis.ts`), so line- and page-mode wheels convert correctly, and
+   `wl_pointer.axis_value120` is populated alongside the continuous axis.
+8. **Bare `<app>` tag aliasing** ✅ — `aliasTag` upgrades `<app>` elements (and
+   ones added later) to the registered `<domicile-app>`; the shell installs it in
+   `renderer.ts`. `<webview>` deliberately keeps its long name: Electron owns
+   that tag and `<domicile-webview>` renders one internally, so aliasing it
+   would recurse. That one waits for the engine.
+
 ### Phase 2 / Next work — prioritized for the next agent
-1. **Zero-copy dmabuf import (BIGGEST)** — so GPU clients (kitty, most modern
-   apps) actually render. Add `zwp_linux_dmabuf`; to get pixels to the chrome
-   you either import the dmabuf into a GL/EGL context in the compositor and read
-   it (heavy) or hand the fd to the renderer (WebGL/WebGPU import). This is also
-   the on-ramp to the CEF external-texture path — see `docs/architecture/CEF-SPIKE.md`.
-2. **Cursor rendering** — clients call `set_cursor`; `SeatHandler::cursor_image`
-   is currently a no-op, so no cursor shows over apps. The chrome should render
-   the client's requested cursor (or a CSS cursor) over the `<app>`.
-3. **Resize / configure** — the compositor only sends a fixed initial configure.
-   When the chrome resizes an `<app>`, send an `xdg_toplevel` configure with the
-   new size so the client re-renders. (`HostMessage::AppResized` exists but isn't
-   wired from real size changes; and the shell doesn't report app resizes yet.)
-4. **Pointer mapping vs CSS transforms** — chrome-sdk maps element-box →
-   surface-local using `getBoundingClientRect` (axis-aligned). The demo `.app`
-   has `transform: rotate(-1.2deg)`, which skews pointer coords. Either drop the
-   demo rotation or do a proper inverse-transform in the chrome (the Rust side
-   `domicile-scene` has the math but the chrome currently maps on its own).
-5. **Config hot-reload into the live process** — `domicile-config` has the watcher
-   (`watch()`), not yet wired into the running `domicile`/`domicile-compositor` to hot-swap
-   config/shell without restart.
-6. **Multi-app focus / z-order / stacking** — `domicile-scene` models it; the
-   compositor currently targets by `app_id` and keyboard focus is last-clicked.
-7. **Keymap + axis coverage** — `packages/chrome-sdk/src/input.ts` covers common keys;
-   extend (numpad, media, intl). Axis is wired (source Wheel); may need v120.
-8. **Bare `<app>`/`<webview>` tag aliasing**, **hot-swap shells via config**.
+
+1. **Zero-copy dmabuf import (BIGGEST, still open)** — so GPU clients (kitty,
+   most modern apps) actually render. Add `zwp_linux_dmabuf`; to get pixels to
+   the chrome you either import the dmabuf into a GL/EGL context in the
+   compositor and read it (heavy) or hand the fd to the renderer (WebGL/WebGPU
+   import). This is also the on-ramp to the CEF external-texture path — see
+   `docs/architecture/CEF-SPIKE.md`. It needs real GPU hardware, so it could not
+   be done or verified in the headless container the rest of this work was built
+   in.
+2. **Hot-swap shells via config** — the watcher is wired (item 5 above); the
+   missing half is the daemon owning the shell process so a `shell.package`
+   change can restart it.
+3. **Client cursor surfaces** — mirror the pixels of a client-drawn cursor
+   rather than falling back to `default`. Rides on item 1.
+4. **Full transform chain in the chrome** — see the known limit under item 4
+   above.
 
 ### Phase 5 — Hardening (later)
 DRM/KMS backend for real hardware, multi-output, HiDPI, damage tracking,

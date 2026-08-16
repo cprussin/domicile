@@ -5,6 +5,7 @@
 
 import type { Matrix } from "./matrix";
 import { PROTOCOL_VERSION } from "./protocol";
+import type { AxisDelta } from "./wheel-axis";
 
 /** The on-screen geometry of an `<domicile-app>`, as the host needs it. */
 export type Placement = {
@@ -19,6 +20,7 @@ export type ChromeMessage =
   | ReturnType<typeof helloMessage>
   | ReturnType<typeof placePortalMessage>
   | ReturnType<typeof removePortalMessage>
+  | ReturnType<typeof resizeAppMessage>
   | ReturnType<typeof focusAppMessage>
   | ReturnType<typeof focusChromeMessage>
   | ReturnType<typeof spawnMessage>
@@ -55,6 +57,20 @@ export const placePortalMessage = ({
 export const removePortalMessage = (appId: string) =>
   ({ app_id: appId, type: "remove_portal" }) as const;
 
+/**
+ * Report an `<domicile-app>` element's new laid-out size, so the compositor can
+ * configure the client to render at that resolution.
+ */
+export const resizeAppMessage = (
+  appId: string,
+  size: readonly [width: number, height: number],
+) => {
+  if (appId.length === 0) {
+    throw new TypeError("resizeApp: appId must be a non-empty string");
+  }
+  return { app_id: appId, size, type: "resize_app" } as const;
+};
+
 export const focusAppMessage = (appId: string) =>
   ({ app_id: appId, type: "focus_app" }) as const;
 
@@ -82,8 +98,18 @@ export const pointerButtonMessage = (
   pressed: boolean,
 ) => ({ app_id: appId, button, pressed, type: "pointer_button" }) as const;
 
-export const pointerAxisMessage = (appId: string, dx: number, dy: number) =>
-  ({ app_id: appId, dx, dy, type: "pointer_axis" }) as const;
+export const pointerAxisMessage = (
+  appId: string,
+  { dx, dy, v120X, v120Y }: AxisDelta,
+) =>
+  ({
+    app_id: appId,
+    dx,
+    dy,
+    type: "pointer_axis",
+    v120_x: v120X,
+    v120_y: v120Y,
+  }) as const;
 
 export const keyMessage = (appId: string, keycode: number, pressed: boolean) =>
   ({ app_id: appId, keycode, pressed, type: "key" }) as const;

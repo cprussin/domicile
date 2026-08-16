@@ -169,6 +169,7 @@ version = "0.0.0"
 dependencies = [
  "domicile-config",
  "domicile-host",
+ "domicile-protocol",
  "tempfile",
 ]
 

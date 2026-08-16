@@ -14,9 +14,10 @@ import { connectChromeSocket, requireSocketPath } from "./chrome-socket";
 
 const EVDEV_KEY_A = 30;
 
-// The sequence is sent immediately and again after a delay, because a one-shot
-// pointer enter can be missed before the client has a mapped buffer (in real
-// use the mouse moves after the window is up).
+// The sequence waits for the client's first frame: pointer focus is only
+// delivered to a client that has bound its `wl_pointer`, which happens while it
+// brings its window up. In real use the mouse moves long after that. It is sent
+// a second time as well, so a dropped first wave does not fail the run.
 const SECOND_WAVE_MS = 1500;
 const RUN_MS = 5000;
 
@@ -34,7 +35,13 @@ let started = false;
 
 const chrome: ChromeSocket = connectChromeSocket(requireSocketPath(Bun.env), {
   onMessage: (message) => {
-    if (message.type === "app_appeared" && !started) {
+    // Frames are megabytes of base64; everything else is a line the script can
+    // assert on — notably the `app_cursor` a client asks for on pointer enter.
+    if (message.type !== "app_frame") {
+      // biome-ignore lint/suspicious/noConsole: this harness reports over stdout
+      console.log(JSON.stringify(message));
+    }
+    if (message.type === "app_frame" && !started) {
       started = true;
       forward(chrome, message.app_id);
       setTimeout(() => {

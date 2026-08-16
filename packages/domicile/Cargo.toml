@@ -19,4 +19,5 @@ domicile-host = { path = "../domicile-host" }
 domicile-config = { path = "../domicile-config" }
 
 [dev-dependencies]
+domicile-protocol = { path = "../domicile-protocol" }
 tempfile.workspace = true

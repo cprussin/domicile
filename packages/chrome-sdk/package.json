@@ -10,16 +10,21 @@
     "typescript": "catalog:"
   },
   "exports": {
+    "./alias-tags": "./src/alias-tags.ts",
     "./app-element": "./src/app-element.ts",
     "./bridge": "./src/bridge.ts",
     "./chrome-message": "./src/chrome-message.ts",
+    "./element-transform": "./src/element-transform.ts",
     "./frame": "./src/frame.ts",
     "./input": "./src/input.ts",
     "./matrix": "./src/matrix.ts",
     "./measure": "./src/measure.ts",
     "./newline-frames": "./src/newline-frames.ts",
+    "./observe-resize": "./src/observe-resize.ts",
     "./protocol": "./src/protocol.ts",
     "./register-elements": "./src/register-elements.ts",
+    "./surface-coordinates": "./src/surface-coordinates.ts",
+    "./transform-origin": "./src/transform-origin.ts",
     "./webview-element": "./src/webview-element.ts"
   },
   "files": [

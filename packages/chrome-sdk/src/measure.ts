@@ -1,7 +1,9 @@
 // How the chrome reports an `<domicile-app>`'s on-screen box to the host.
 
-import type { Matrix } from "./matrix";
-import { accumulate, IDENTITY } from "./matrix";
+import { elementToScreen } from "./element-transform";
+import type { Matrix, Point } from "./matrix";
+import { IDENTITY } from "./matrix";
+import { parseTransformOrigin } from "./transform-origin";
 
 /** An element's geometry in the form `place_portal` needs it. */
 export type Measurement = {
@@ -16,26 +18,33 @@ export type Measure = (element: HTMLElement) => Measurement;
 /**
  * Default DOM measurement: element-local size plus an element->screen affine.
  *
- * This first cut reports size + translation (via `getBoundingClientRect`) and
- * the element's own computed linear transform. Precise full-chain transform
- * capture (ancestor rotation/scale, transform-origin, 3D) is provided by the
- * engine integration, which already knows each layer's transform; that path
- * replaces this when running inside the compositor.
+ * The affine composes the element's own CSS transform (about its
+ * `transform-origin`) with where `getBoundingClientRect` puts the result, so a
+ * rotated or scaled app maps correctly in both directions. An *ancestor* that
+ * rotates or skews is still missed — `getBoundingClientRect` only reports an
+ * axis-aligned box, so there is nothing left to recover it from. The engine
+ * integration, which knows each layer's transform outright, replaces this when
+ * running inside the compositor.
  */
 export const defaultMeasure: Measure = (element) => {
   const box = element.getBoundingClientRect();
+  const style = getComputedStyle(element);
   const size = [
     firstNonZero(element.offsetWidth, box.width),
     firstNonZero(element.offsetHeight, box.height),
   ] as const;
   return {
     size,
-    transform: accumulate([
-      readLinearTransform(element),
-      [1, 0, 0, 1, box.left, box.top],
-    ]),
+    transform: elementToScreen({
+      box,
+      linear: readElementTransform(style),
+      // An uncomputed origin means a DOM implementation that resolves no
+      // style, where the CSS initial value (the element's centre) applies.
+      origin: parseTransformOrigin(style.transformOrigin) ?? centreOf(size),
+      size,
+    }),
     visible: size[0] > 0 && size[1] > 0,
-    zIndex: readZIndex(element),
+    zIndex: readZIndex(style),
   };
 };
 
@@ -44,12 +53,11 @@ export const defaultMeasure: Measure = (element) => {
 const firstNonZero = (preferred: number, fallback: number): number =>
   preferred > 0 ? preferred : fallback;
 
-// The linear (non-translating) part of the element's own CSS transform.
-// `DOMMatrix` is absent in some non-browser DOM implementations, where an
-// identity linear part is the correct answer — those environments do no layout
-// and so apply no transform either.
-const readLinearTransform = (element: HTMLElement): Matrix => {
-  const transform = getComputedStyle(element).transform;
+// The element's own CSS transform. `DOMMatrix` is absent in some non-browser
+// DOM implementations, where an identity transform is the correct answer —
+// those environments do no layout and so apply no transform either.
+const readElementTransform = (style: CSSStyleDeclaration): Matrix => {
+  const transform = style.transform;
   if (
     transform === "" ||
     transform === "none" ||
@@ -58,11 +66,13 @@ const readLinearTransform = (element: HTMLElement): Matrix => {
     return IDENTITY;
   }
   const matrix = new DOMMatrix(transform);
-  return [matrix.a, matrix.b, matrix.c, matrix.d, 0, 0];
+  return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
 };
 
+const centreOf = ([width, height]: Point): Point => [width / 2, height / 2];
+
 // `z-index: auto` parses to NaN, which the host reads as the default layer.
-const readZIndex = (element: HTMLElement): number => {
-  const zIndex = Number.parseInt(getComputedStyle(element).zIndex, 10);
+const readZIndex = (style: CSSStyleDeclaration): number => {
+  const zIndex = Number.parseInt(style.zIndex, 10);
   return Number.isFinite(zIndex) ? zIndex : 0;
 };

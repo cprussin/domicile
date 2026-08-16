@@ -6,7 +6,7 @@
 //! geometry), so these tests exercise the whole pipeline end to end without any
 //! Wayland or GPU dependency.
 
-use domicile_host::{Host, InputDelivery};
+use domicile_host::{Host, HostError, InputDelivery};
 use domicile_protocol::{ChromeMessage, HostMessage};
 use domicile_scene::KeyboardTarget;
 
@@ -29,6 +29,62 @@ fn place(
 const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
 
 // ---- app lifecycle --------------------------------------------------------
+
+#[test]
+fn chrome_resize_records_the_size_to_configure_the_client_to() {
+    let mut host = Host::new();
+    let (id, _) = host.app_appeared(None, (640.0, 480.0));
+    assert_eq!(host.app(&id).unwrap().requested_size, None);
+
+    host.handle_chrome_message(ChromeMessage::ResizeApp {
+        app_id: id.clone(),
+        size: [800.0, 600.0],
+    })
+    .unwrap();
+
+    // The request is recorded separately from the client's own content size,
+    // which only changes once the client has actually redrawn.
+    assert_eq!(host.app(&id).unwrap().requested_size, Some((800.0, 600.0)));
+    assert_eq!(host.app(&id).unwrap().size, (640.0, 480.0));
+}
+
+#[test]
+fn focusing_an_app_raises_it_above_the_apps_it_ties_with() {
+    let mut host = Host::new();
+    let (first, _) = host.app_appeared(None, (100.0, 100.0));
+    let (second, _) = host.app_appeared(None, (100.0, 100.0));
+    host.handle_chrome_message(place(&first, IDENTITY, [100.0, 100.0], 0, true))
+        .unwrap();
+    host.handle_chrome_message(place(&second, IDENTITY, [100.0, 100.0], 0, true))
+        .unwrap();
+
+    host.handle_chrome_message(ChromeMessage::FocusApp {
+        app_id: first.clone(),
+    })
+    .unwrap();
+
+    // Clicking an app both focuses it and brings it to the front, so the next
+    // pointer event over the overlap goes to the app the user just picked.
+    assert_eq!(
+        host.route_pointer(50.0, 50.0),
+        InputDelivery::App {
+            app_id: first,
+            local: (50.0, 50.0)
+        }
+    );
+}
+
+#[test]
+fn chrome_resize_of_an_unknown_app_is_an_error() {
+    let mut host = Host::new();
+    assert_eq!(
+        host.handle_chrome_message(ChromeMessage::ResizeApp {
+            app_id: "ghost".into(),
+            size: [800.0, 600.0],
+        }),
+        Err(HostError::UnknownApp("ghost".into()))
+    );
+}
 
 #[test]
 fn app_appeared_assigns_ids_and_announces_to_chrome() {

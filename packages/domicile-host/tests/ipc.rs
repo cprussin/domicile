@@ -10,7 +10,7 @@ use std::os::unix::net::UnixStream;
 use std::thread;
 
 use domicile_host::ipc::{parse_chrome, to_line, Session};
-use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{ChromeMessage, HostMessage, PROTOCOL_VERSION};
 
 #[test]
 fn hello_completes_the_handshake_with_a_welcome() {
@@ -18,13 +18,13 @@ fn hello_completes_the_handshake_with_a_welcome() {
     assert!(!session.is_ready());
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
-        protocol_version: 1,
+        protocol_version: PROTOCOL_VERSION,
     }));
     assert!(session.is_ready());
     assert_eq!(
         out,
         vec![HostMessage::Welcome {
-            protocol_version: 1
+            protocol_version: PROTOCOL_VERSION
         }]
     );
 }
@@ -59,7 +59,7 @@ fn placement_after_handshake_reaches_the_host() {
     let mut session = Session::new();
     let (id, _) = session.host_mut().app_appeared(None, (100.0, 100.0));
     session.ingest(&to_line(&ChromeMessage::Hello {
-        protocol_version: 1,
+        protocol_version: PROTOCOL_VERSION,
     }));
 
     session.ingest(&to_line(&ChromeMessage::PlacePortal {
@@ -76,7 +76,7 @@ fn placement_after_handshake_reaches_the_host() {
 fn malformed_lines_are_ignored() {
     let mut session = Session::new();
     session.ingest(&to_line(&ChromeMessage::Hello {
-        protocol_version: 1,
+        protocol_version: PROTOCOL_VERSION,
     }));
     // Should not panic.
     let out = session.ingest("{ this is not valid json");
@@ -121,7 +121,7 @@ fn handshake_works_over_a_real_unix_socket() {
     client_writer
         .write_all(
             to_line(&ChromeMessage::Hello {
-                protocol_version: 1,
+                protocol_version: PROTOCOL_VERSION,
             })
             .as_bytes(),
         )
@@ -135,7 +135,7 @@ fn handshake_works_over_a_real_unix_socket() {
     assert_eq!(
         welcome,
         HostMessage::Welcome {
-            protocol_version: 1
+            protocol_version: PROTOCOL_VERSION
         }
     );
     assert!(

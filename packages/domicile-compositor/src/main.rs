@@ -25,7 +25,7 @@ use base64::Engine as _;
 use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState};
 use smithay::input::{
     keyboard::{FilterResult, Keycode},
-    pointer::{AxisFrame, ButtonEvent, CursorImageStatus, MotionEvent},
+    pointer::{AxisFrame, ButtonEvent, CursorIcon, CursorImageStatus, MotionEvent},
     Seat, SeatHandler, SeatState,
 };
 use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel};
@@ -49,6 +49,7 @@ use smithay::wayland::{
         with_states, BufferAssignment, CompositorClientState, CompositorHandler, CompositorState,
         SurfaceAttributes,
     },
+    cursor_shape::CursorShapeManagerState,
     output::{OutputHandler, OutputManagerState},
     shell::xdg::{
         PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
@@ -57,15 +58,17 @@ use smithay::wayland::{
     shm::with_buffer_contents,
     shm::{ShmHandler, ShmState},
     socket::ListeningSocketSource,
+    tablet_manager::TabletSeatHandler,
 };
 use smithay::{
-    delegate_compositor, delegate_output, delegate_seat, delegate_shm, delegate_xdg_shell,
+    delegate_compositor, delegate_cursor_shape, delegate_output, delegate_seat, delegate_shm,
+    delegate_xdg_shell,
 };
 use tracing::info;
 
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
-use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
 
 /// Data threaded through the calloop event loop. The `Display` lives here (not
 /// inside the wayland source) so we can flush queued events after handling input
@@ -75,16 +78,40 @@ struct CalloopData {
     state: DomicileCompositor,
 }
 
-/// An input event forwarded from the chrome, to be injected into a client. Sent
-/// over a calloop channel so it's handled on the Wayland thread (where the seat
-/// and surfaces live).
-enum InputEvent {
-    PointerMotion { app_id: String, x: f64, y: f64 },
+/// Something the chrome asked us to do to a client — inject an input event, or
+/// reconfigure its toplevel. Sent over a calloop channel so it is handled on
+/// the Wayland thread (where the seat and surfaces live).
+enum ClientRequest {
+    PointerMotion {
+        app_id: String,
+        x: f64,
+        y: f64,
+    },
     PointerLeave,
-    PointerButton { button: u32, pressed: bool },
-    PointerAxis { dx: f64, dy: f64 },
-    Key { keycode: u32, pressed: bool },
-    KeyboardFocus { app_id: Option<String> },
+    PointerButton {
+        button: u32,
+        pressed: bool,
+    },
+    PointerAxis {
+        dx: f64,
+        dy: f64,
+        v120_x: i32,
+        v120_y: i32,
+    },
+    Key {
+        keycode: u32,
+        pressed: bool,
+    },
+    KeyboardFocus {
+        app_id: Option<String>,
+    },
+    /// The chrome laid an app's element out at a new size; configure the client
+    /// to match so it redraws at that resolution.
+    ConfigureApp {
+        app_id: String,
+        width: i32,
+        height: i32,
+    },
 }
 
 /// Shared between the Wayland thread (calloop) and the chrome-connection threads.
@@ -95,21 +122,21 @@ enum InputEvent {
 struct ChromeHub {
     host: Mutex<Host>,
     chromes: Mutex<Vec<Arc<Mutex<UnixStream>>>>,
-    input_tx: Mutex<Sender<InputEvent>>,
+    request_tx: Mutex<Sender<ClientRequest>>,
 }
 
 impl ChromeHub {
-    fn new(input_tx: Sender<InputEvent>) -> Arc<Self> {
+    fn new(request_tx: Sender<ClientRequest>) -> Arc<Self> {
         Arc::new(ChromeHub {
             host: Mutex::new(Host::new()),
             chromes: Mutex::new(Vec::new()),
-            input_tx: Mutex::new(input_tx),
+            request_tx: Mutex::new(request_tx),
         })
     }
 
     /// Forward an input event to the Wayland thread.
-    fn send_input(&self, event: InputEvent) {
-        let _ = self.input_tx.lock().unwrap().send(event);
+    fn send_request(&self, event: ClientRequest) {
+        let _ = self.request_tx.lock().unwrap().send(event);
     }
 
     /// Send a host message to every connected chrome, dropping dead ones.
@@ -165,39 +192,64 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
                 Vec::new()
             }
             Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
-                hub.send_input(InputEvent::PointerMotion { app_id, x, y });
+                hub.send_request(ClientRequest::PointerMotion { app_id, x, y });
                 Vec::new()
             }
             Ok(ChromeMessage::PointerLeave { .. }) => {
-                hub.send_input(InputEvent::PointerLeave);
+                hub.send_request(ClientRequest::PointerLeave);
                 Vec::new()
             }
             Ok(ChromeMessage::PointerButton {
                 button, pressed, ..
             }) => {
-                hub.send_input(InputEvent::PointerButton { button, pressed });
+                hub.send_request(ClientRequest::PointerButton { button, pressed });
                 Vec::new()
             }
-            Ok(ChromeMessage::PointerAxis { dx, dy, .. }) => {
-                hub.send_input(InputEvent::PointerAxis { dx, dy });
+            Ok(ChromeMessage::PointerAxis {
+                dx,
+                dy,
+                v120_x,
+                v120_y,
+                ..
+            }) => {
+                hub.send_request(ClientRequest::PointerAxis {
+                    dx,
+                    dy,
+                    v120_x,
+                    v120_y,
+                });
                 Vec::new()
             }
             Ok(ChromeMessage::Key {
                 keycode, pressed, ..
             }) => {
-                hub.send_input(InputEvent::Key { keycode, pressed });
+                hub.send_request(ClientRequest::Key { keycode, pressed });
                 Vec::new()
+            }
+            // A resize drives both the client's configure and the brain's model.
+            Ok(ChromeMessage::ResizeApp { app_id, size }) => {
+                hub.send_request(ClientRequest::ConfigureApp {
+                    app_id: app_id.clone(),
+                    width: size[0].round() as i32,
+                    height: size[1].round() as i32,
+                });
+                let mut host = hub.host.lock().unwrap();
+                apply_chrome_message(
+                    &mut host,
+                    &mut ready,
+                    ChromeMessage::ResizeApp { app_id, size },
+                )
             }
             // Focus drives both the seat (keyboard focus) and the brain's model.
             Ok(ChromeMessage::FocusApp { app_id }) => {
-                hub.send_input(InputEvent::KeyboardFocus {
+                hub.send_request(ClientRequest::KeyboardFocus {
                     app_id: Some(app_id.clone()),
                 });
                 let mut host = hub.host.lock().unwrap();
                 apply_chrome_message(&mut host, &mut ready, ChromeMessage::FocusApp { app_id })
             }
             Ok(ChromeMessage::FocusChrome) => {
-                hub.send_input(InputEvent::KeyboardFocus { app_id: None });
+                hub.send_request(ClientRequest::KeyboardFocus { app_id: None });
                 let mut host = hub.host.lock().unwrap();
                 apply_chrome_message(&mut host, &mut ready, ChromeMessage::FocusChrome)
             }
@@ -229,11 +281,17 @@ struct DomicileCompositor {
     output_manager_state: OutputManagerState,
     /// Kept alive so the wl_output global persists.
     _output: Output,
+    /// Kept alive so the wp_cursor_shape_v1 global persists.
+    #[allow(dead_code)]
+    cursor_shape_state: CursorShapeManagerState,
 
     /// Shared brain + connected chrome clients.
     hub: Arc<ChromeHub>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
+    /// The app the pointer is currently over, so a `set_cursor` request can be
+    /// attributed to the element the chrome should restyle.
+    pointer_app: Option<String>,
     /// For frame-callback timestamps.
     start: Instant,
     /// Last time a frame was broadcast per app, to throttle to ~30fps.
@@ -254,26 +312,44 @@ impl ClientData for ClientState {
 // ---- input injection (runs on the Wayland thread via the calloop channel) ---
 
 impl DomicileCompositor {
-    fn surface_for(&self, app_id: &str) -> Option<WlSurface> {
+    fn toplevel_for(&self, app_id: &str) -> Option<ToplevelSurface> {
         self.toplevels
             .iter()
             .find(|(id, _)| id == app_id)
-            .map(|(_, t)| t.wl_surface().clone())
+            .map(|(_, toplevel)| toplevel.clone())
+    }
+
+    fn surface_for(&self, app_id: &str) -> Option<WlSurface> {
+        self.toplevel_for(app_id)
+            .map(|toplevel| toplevel.wl_surface().clone())
     }
 
     fn now_ms(&self) -> u32 {
         self.start.elapsed().as_millis() as u32
     }
 
+    /// Record a client's committed content size in the brain, returning the
+    /// chrome notification when it differs from what the brain already had.
+    fn note_content_size(&self, app_id: &str, width: u32, height: u32) -> Option<HostMessage> {
+        let size = (f64::from(width), f64::from(height));
+        let mut host = self.hub.host.lock().unwrap();
+        if host.app(app_id).map(|app| app.size) == Some(size) {
+            None
+        } else {
+            host.app_resized(app_id, size)
+        }
+    }
+
     /// Inject a forwarded input event into the appropriate client via the seat.
-    fn handle_input(&mut self, event: InputEvent) {
+    fn handle_client_request(&mut self, event: ClientRequest) {
         match event {
-            InputEvent::PointerMotion { app_id, x, y } => {
+            ClientRequest::PointerMotion { app_id, x, y } => {
                 let Some(surface) = self.surface_for(&app_id) else {
                     tracing::debug!(%app_id, "pointer motion: no surface");
                     return;
                 };
                 tracing::debug!(%app_id, x, y, "pointer motion -> client");
+                self.pointer_app = Some(app_id);
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
                 // The chrome sends surface-local coords, so anchor the focus at
@@ -289,7 +365,8 @@ impl DomicileCompositor {
                 );
                 pointer.frame(self);
             }
-            InputEvent::PointerLeave => {
+            ClientRequest::PointerLeave => {
+                self.pointer_app = None;
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
                 pointer.motion(
@@ -303,7 +380,7 @@ impl DomicileCompositor {
                 );
                 pointer.frame(self);
             }
-            InputEvent::PointerButton { button, pressed } => {
+            ClientRequest::PointerButton { button, pressed } => {
                 tracing::debug!(button, pressed, "pointer button -> client");
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
@@ -323,19 +400,26 @@ impl DomicileCompositor {
                 );
                 pointer.frame(self);
             }
-            InputEvent::PointerAxis { dx, dy } => {
+            ClientRequest::PointerAxis {
+                dx,
+                dy,
+                v120_x,
+                v120_y,
+            } => {
                 let pointer = self.seat.get_pointer().unwrap();
                 let mut frame = AxisFrame::new(self.now_ms()).source(AxisSource::Wheel);
                 if dx != 0.0 {
-                    frame = frame.value(Axis::Horizontal, dx);
+                    frame = frame
+                        .value(Axis::Horizontal, dx)
+                        .v120(Axis::Horizontal, v120_x);
                 }
                 if dy != 0.0 {
-                    frame = frame.value(Axis::Vertical, dy);
+                    frame = frame.value(Axis::Vertical, dy).v120(Axis::Vertical, v120_y);
                 }
                 pointer.axis(self, frame);
                 pointer.frame(self);
             }
-            InputEvent::Key { keycode, pressed } => {
+            ClientRequest::Key { keycode, pressed } => {
                 let keyboard = self.seat.get_keyboard().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
                 let state = if pressed {
@@ -349,11 +433,28 @@ impl DomicileCompositor {
                     FilterResult::Forward
                 });
             }
-            InputEvent::KeyboardFocus { app_id } => {
+            ClientRequest::KeyboardFocus { app_id } => {
                 let keyboard = self.seat.get_keyboard().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 let surface = app_id.and_then(|id| self.surface_for(&id));
                 keyboard.set_focus(self, surface, serial);
+            }
+            ClientRequest::ConfigureApp {
+                app_id,
+                width,
+                height,
+            } => {
+                let Some(toplevel) = self.toplevel_for(&app_id) else {
+                    tracing::debug!(%app_id, "configure: no toplevel");
+                    return;
+                };
+                tracing::debug!(%app_id, width, height, "configure -> client");
+                toplevel.with_pending_state(|state| {
+                    state.size = Some((width, height).into());
+                });
+                // Only sends when the size actually differs from the last
+                // configure the client acknowledged.
+                toplevel.send_pending_configure();
             }
         }
     }
@@ -414,6 +515,13 @@ impl CompositorHandler for DomicileCompositor {
 
         // Broadcast the pixels to the chrome, throttled to ~30fps per app.
         if let Some((width, height, rgba)) = frame {
+            // A buffer of a new size is the client answering a configure (or
+            // resizing itself); tell the chrome so its element and its pointer
+            // mapping follow the client's real resolution.
+            if let Some(resized) = self.note_content_size(&app_id, width, height) {
+                self.hub.broadcast(&resized);
+            }
+
             let now = Instant::now();
             let due = self.last_frame.get(&app_id).map_or(true, |t| {
                 now.duration_since(*t) >= Duration::from_millis(33)
@@ -458,11 +566,31 @@ impl SeatHandler for DomicileCompositor {
         &mut self.seat_state
     }
 
-    fn cursor_image(&mut self, _seat: &Seat<Self>, _image: CursorImageStatus) {}
+    // A client asking for a cursor is really asking the *chrome* for one: the
+    // pointer the user sees belongs to the web engine, so the request is
+    // forwarded as a CSS cursor for the element the pointer is over.
+    fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
+        if let Some(app_id) = self.pointer_app.clone() {
+            let cursor = match image {
+                CursorImageStatus::Hidden => CursorShape::None,
+                CursorImageStatus::Named(icon) => cursor_shape(icon),
+                // The client drew its own cursor into a surface. Mirroring
+                // those pixels needs the texture bridge (see CEF-SPIKE.md), so
+                // until then the pointer keeps its ordinary arrow.
+                CursorImageStatus::Surface(_) => CursorShape::Default,
+            };
+            self.hub
+                .broadcast(&HostMessage::AppCursor { app_id, cursor });
+        }
+    }
+
     fn focus_changed(&mut self, _seat: &Seat<Self>, _focused: Option<&WlSurface>) {}
 }
 
+impl TabletSeatHandler for DomicileCompositor {}
+
 delegate_seat!(DomicileCompositor);
+delegate_cursor_shape!(DomicileCompositor);
 
 // ---- output (clients wait for a wl_output before mapping) -----------------
 
@@ -619,6 +747,53 @@ fn bgra_to_rgba(
     Some(out)
 }
 
+/// Translate a client's requested cursor into the CSS keyword the chrome
+/// assigns to its `<app>` element.
+///
+/// `wp_cursor_shape_v1` is modelled on the CSS cursor keywords, so almost every
+/// shape maps across by name. The two that predate that alignment — and any
+/// shape a future revision of the protocol adds — resolve to the nearest
+/// keyword rather than something the chrome cannot use.
+fn cursor_shape(icon: CursorIcon) -> CursorShape {
+    match icon {
+        CursorIcon::Default => CursorShape::Default,
+        CursorIcon::ContextMenu => CursorShape::ContextMenu,
+        CursorIcon::Help => CursorShape::Help,
+        CursorIcon::Pointer => CursorShape::Pointer,
+        CursorIcon::Progress => CursorShape::Progress,
+        CursorIcon::Wait => CursorShape::Wait,
+        CursorIcon::Cell => CursorShape::Cell,
+        CursorIcon::Crosshair => CursorShape::Crosshair,
+        CursorIcon::Text => CursorShape::Text,
+        CursorIcon::VerticalText => CursorShape::VerticalText,
+        CursorIcon::Alias => CursorShape::Alias,
+        CursorIcon::Copy => CursorShape::Copy,
+        CursorIcon::Move | CursorIcon::AllResize => CursorShape::Move,
+        CursorIcon::NoDrop => CursorShape::NoDrop,
+        CursorIcon::NotAllowed => CursorShape::NotAllowed,
+        CursorIcon::Grab => CursorShape::Grab,
+        CursorIcon::Grabbing => CursorShape::Grabbing,
+        CursorIcon::EResize => CursorShape::EResize,
+        CursorIcon::NResize => CursorShape::NResize,
+        CursorIcon::NeResize => CursorShape::NeResize,
+        CursorIcon::NwResize => CursorShape::NwResize,
+        CursorIcon::SResize => CursorShape::SResize,
+        CursorIcon::SeResize => CursorShape::SeResize,
+        CursorIcon::SwResize => CursorShape::SwResize,
+        CursorIcon::WResize => CursorShape::WResize,
+        CursorIcon::EwResize => CursorShape::EwResize,
+        CursorIcon::NsResize => CursorShape::NsResize,
+        CursorIcon::NeswResize => CursorShape::NeswResize,
+        CursorIcon::NwseResize => CursorShape::NwseResize,
+        CursorIcon::ColResize => CursorShape::ColResize,
+        CursorIcon::RowResize => CursorShape::RowResize,
+        CursorIcon::AllScroll => CursorShape::AllScroll,
+        CursorIcon::ZoomIn => CursorShape::ZoomIn,
+        CursorIcon::ZoomOut => CursorShape::ZoomOut,
+        _ => CursorShape::Default,
+    }
+}
+
 /// Resolve where the chrome protocol socket lives.
 fn chrome_socket_path() -> PathBuf {
     // --chrome-socket PATH wins, then $DOMICILE_CHROME_SOCKET, then a default under
@@ -687,10 +862,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     output.set_preferred(mode);
 
     // Forward input from the chrome onto the Wayland thread via a channel.
-    let (input_tx, input_rx) = channel::<InputEvent>();
+    let (request_tx, request_rx) = channel::<ClientRequest>();
 
     // Shared brain, driven by both the Wayland side and chrome connections.
-    let hub = ChromeHub::new(input_tx);
+    let hub = ChromeHub::new(request_tx);
     {
         let hub = hub.clone();
         thread::spawn(move || serve_chrome(hub, chrome_socket));
@@ -704,8 +879,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         seat,
         output_manager_state,
         _output: output,
+        // Modern toolkits ask for cursors by name through this global, which
+        // maps straight onto CSS cursor keywords.
+        cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
         hub,
         toplevels: Vec::new(),
+        pointer_app: None,
         start: Instant::now(),
         last_frame: HashMap::new(),
     };
@@ -735,9 +914,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // Inject forwarded input (from chrome threads) on the Wayland thread.
-    handle.insert_source(input_rx, |event, _, data: &mut CalloopData| {
+    handle.insert_source(request_rx, |event, _, data: &mut CalloopData| {
         if let ChannelEvent::Msg(input) = event {
-            data.state.handle_input(input);
+            data.state.handle_client_request(input);
         }
     })?;
 
@@ -757,7 +936,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod tests {
-    use super::bgra_to_rgba;
+    use smithay::input::pointer::CursorIcon;
+
+    use domicile_protocol::CursorShape;
+
+    use super::{bgra_to_rgba, cursor_shape};
+
+    #[test]
+    fn cursor_icons_map_to_css_keywords() {
+        assert_eq!(cursor_shape(CursorIcon::Default), CursorShape::Default);
+        assert_eq!(cursor_shape(CursorIcon::Text), CursorShape::Text);
+        assert_eq!(cursor_shape(CursorIcon::Grabbing), CursorShape::Grabbing);
+        assert_eq!(
+            cursor_shape(CursorIcon::NwseResize),
+            CursorShape::NwseResize
+        );
+    }
+
+    #[test]
+    fn cursor_icons_without_a_css_keyword_fall_back() {
+        // `wp_cursor_shape_v1` carries two shapes CSS has no keyword for; they
+        // must still resolve to something the chrome can assign.
+        assert_eq!(cursor_shape(CursorIcon::DndAsk), CursorShape::Default);
+        assert_eq!(cursor_shape(CursorIcon::AllResize), CursorShape::Move);
+    }
 
     #[test]
     fn swaps_b_and_r_and_keeps_alpha() {

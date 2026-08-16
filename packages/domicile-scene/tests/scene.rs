@@ -164,6 +164,45 @@ fn upsert_replaces_an_existing_app_rather_than_duplicating() {
 }
 
 #[test]
+fn re_placing_an_app_keeps_its_place_in_the_stack() {
+    let mut scene = Scene::new();
+    scene.upsert(portal("first", 100.0, 100.0, Transform::identity(), 0));
+    scene.upsert(portal("second", 100.0, 100.0, Transform::identity(), 0));
+    // The chrome re-places an app whenever its element moves or resizes; that
+    // must not reshuffle the stack under the user.
+    scene.upsert(portal("first", 200.0, 200.0, Transform::identity(), 0));
+    assert_eq!(
+        scene.hit_test(Point::new(50.0, 50.0)).unwrap().app_id,
+        "second"
+    );
+}
+
+#[test]
+fn raising_an_app_puts_it_above_its_tie_mates() {
+    let mut scene = Scene::new();
+    scene.upsert(portal("first", 100.0, 100.0, Transform::identity(), 0));
+    scene.upsert(portal("second", 100.0, 100.0, Transform::identity(), 0));
+
+    assert!(scene.raise("first"));
+    assert_eq!(
+        scene.hit_test(Point::new(50.0, 50.0)).unwrap().app_id,
+        "first"
+    );
+    // A higher z-index still wins: raising only settles ties.
+    scene.upsert(portal("second", 100.0, 100.0, Transform::identity(), 1));
+    assert_eq!(
+        scene.hit_test(Point::new(50.0, 50.0)).unwrap().app_id,
+        "second"
+    );
+}
+
+#[test]
+fn raising_an_unplaced_app_is_a_no_op() {
+    let mut scene = Scene::new();
+    assert!(!scene.raise("ghost"));
+}
+
+#[test]
 fn remove_deletes_a_portal() {
     let mut scene = Scene::new();
     scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 0));
