@@ -17,10 +17,12 @@ import {
   pointerLeaveMessage,
   pointerMotionMessage,
   removePortalMessage,
+  resizeAppMessage,
   spawnMessage,
 } from "./chrome-message";
 import type { HostMessageOf, HostMessageType } from "./protocol";
 import { PROTOCOL_VERSION, parseHostMessage } from "./protocol";
+import type { AxisDelta } from "./wheel-axis";
 
 /** The message pipe the host exposes to the page. */
 export type Transport = {
@@ -93,6 +95,13 @@ export class BridgeClient {
     this.send(removePortalMessage(appId));
   }
 
+  resizeApp(
+    appId: string,
+    size: readonly [width: number, height: number],
+  ): void {
+    this.send(resizeAppMessage(appId, size));
+  }
+
   focusApp(appId: string): void {
     this.send(focusAppMessage(appId));
   }
@@ -120,8 +129,8 @@ export class BridgeClient {
     this.send(pointerButtonMessage(appId, button, pressed));
   }
 
-  pointerAxis(appId: string, dx: number, dy: number): void {
-    this.send(pointerAxisMessage(appId, dx, dy));
+  pointerAxis(appId: string, delta: AxisDelta): void {
+    this.send(pointerAxisMessage(appId, delta));
   }
 
   key(appId: string, keycode: number, pressed: boolean): void {

@@ -206,10 +206,28 @@ impl Scene {
     }
 
     /// Insert a portal, or replace the existing one with the same `app_id`.
-    /// A replacement keeps the newest as most-recently-inserted (top of ties).
+    ///
+    /// A replacement keeps its place in the stack: the chrome re-places an app
+    /// every time its element moves or resizes, and that must not reorder apps
+    /// that share a z-index. Use [`raise`](Scene::raise) to change the order.
     pub fn upsert(&mut self, portal: Portal) {
-        self.remove_portal(&portal.app_id);
-        self.portals.push(portal);
+        match self.portals.iter_mut().find(|p| p.app_id == portal.app_id) {
+            Some(existing) => *existing = portal,
+            None => self.portals.push(portal),
+        }
+    }
+
+    /// Move a portal to the top of its z-index tier, returning whether one was
+    /// found. This is how a click raises an app above the others it ties with.
+    pub fn raise(&mut self, app_id: &str) -> bool {
+        match self.portals.iter().position(|p| p.app_id == app_id) {
+            Some(index) => {
+                let portal = self.portals.remove(index);
+                self.portals.push(portal);
+                true
+            }
+            None => false,
+        }
     }
 
     /// Remove a portal by app id, returning whether one was removed.

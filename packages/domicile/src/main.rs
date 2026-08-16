@@ -10,8 +10,9 @@ use std::path::PathBuf;
 use std::process::exit;
 use std::thread;
 
+use domicile::config_reload::{apply_reload, Reload};
 use domicile::run_connection;
-use domicile_config::Config;
+use domicile_config::{Config, ConfigStore};
 use domicile_host::ipc::Session;
 
 struct Args {
@@ -47,6 +48,40 @@ fn parse_args() -> Args {
     }
 }
 
+/// Keep the live configuration in step with the config file.
+///
+/// The store keeps the last known-good config live, so a typo mid-session
+/// changes nothing but the reported error. Swapping the chrome package for a
+/// running shell still needs the daemon to own the shell process; until then a
+/// change is reported, and whatever reads the store next sees the new value.
+fn watch_config(mut store: ConfigStore, config_path: PathBuf, shells_dir: PathBuf) {
+    let watcher = match domicile_config::watch(&config_path) {
+        Ok(watcher) => watcher,
+        Err(err) => {
+            // Hot-reload is an enhancement over the boot-time config the
+            // daemon is already serving with, so losing it degrades rather
+            // than fails — but it must say so, not go quiet.
+            eprintln!("domicile: hot-reload off, serving the boot config ({err})");
+            return;
+        }
+    };
+    eprintln!("domicile: watching {}", config_path.display());
+
+    thread::spawn(move || {
+        for result in watcher.rx {
+            match apply_reload(&mut store, &shells_dir, result) {
+                Reload::ShellChanged(path) => {
+                    eprintln!("domicile: chrome package -> {}", path.display());
+                }
+                Reload::Applied => eprintln!("domicile: config reloaded"),
+                Reload::Rejected(err) => {
+                    eprintln!("domicile: config rejected, keeping the last good one ({err})");
+                }
+            }
+        }
+    });
+}
+
 fn main() {
     let args = parse_args();
 
@@ -65,6 +100,8 @@ fn main() {
         "domicile: active chrome package -> {}",
         shell_path.display()
     );
+
+    watch_config(ConfigStore::new(config), args.config, args.shells_dir);
 
     // Fresh socket each boot.
     let _ = std::fs::remove_file(&args.socket);

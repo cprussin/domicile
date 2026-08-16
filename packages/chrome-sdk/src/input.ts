@@ -3,22 +3,35 @@
 // Map a JS KeyboardEvent.code to a Linux evdev keycode (from
 // input-event-codes.h). The compositor adds the +8 xkb offset.
 const EVDEV_BY_CODE: Readonly<Record<string, number>> = {
+  Again: 129,
   AltLeft: 56,
   AltRight: 100,
   ArrowDown: 108,
   ArrowLeft: 105,
   ArrowRight: 106,
   ArrowUp: 103,
+  AudioVolumeDown: 114,
+  AudioVolumeMute: 113,
+  AudioVolumeUp: 115,
   Backquote: 41,
   Backslash: 43,
   Backspace: 14,
   BracketLeft: 26,
   BracketRight: 27,
+  BrowserBack: 158,
+  BrowserFavorites: 156,
+  BrowserForward: 159,
+  BrowserHome: 172,
+  BrowserRefresh: 173,
+  BrowserSearch: 217,
   CapsLock: 58,
   Comma: 51,
   ContextMenu: 127,
   ControlLeft: 29,
   ControlRight: 97,
+  Convert: 92,
+  Copy: 133,
+  Cut: 137,
   Delete: 111,
   Digit0: 11,
   Digit1: 2,
@@ -30,6 +43,7 @@ const EVDEV_BY_CODE: Readonly<Record<string, number>> = {
   Digit7: 8,
   Digit8: 9,
   Digit9: 10,
+  Eject: 161,
   End: 107,
   Enter: 28,
   Equal: 13,
@@ -46,8 +60,27 @@ const EVDEV_BY_CODE: Readonly<Record<string, number>> = {
   F10: 68,
   F11: 87,
   F12: 88,
+  F13: 183,
+  F14: 184,
+  F15: 185,
+  F16: 186,
+  F17: 187,
+  F18: 188,
+  F19: 189,
+  F20: 190,
+  F21: 191,
+  F22: 192,
+  F23: 193,
+  F24: 194,
+  Find: 136,
+  Fn: 464,
+  Help: 138,
   Home: 102,
   Insert: 110,
+  IntlBackslash: 86,
+  IntlRo: 89,
+  IntlYen: 124,
+  KanaMode: 93,
   KeyA: 30,
   KeyB: 48,
   KeyC: 46,
@@ -74,22 +107,59 @@ const EVDEV_BY_CODE: Readonly<Record<string, number>> = {
   KeyX: 45,
   KeyY: 21,
   KeyZ: 44,
+  Lang1: 122,
+  Lang2: 123,
+  LaunchApp1: 157,
+  LaunchApp2: 140,
+  LaunchMail: 155,
+  MediaPlayPause: 164,
+  MediaSelect: 226,
+  MediaStop: 166,
+  MediaTrackNext: 163,
+  MediaTrackPrevious: 165,
   MetaLeft: 125,
   MetaRight: 126,
   Minus: 12,
+  NonConvert: 94,
   NumLock: 69,
+  Numpad0: 82,
+  Numpad1: 79,
+  Numpad2: 80,
+  Numpad3: 81,
+  Numpad4: 75,
+  Numpad5: 76,
+  Numpad6: 77,
+  Numpad7: 71,
+  Numpad8: 72,
+  Numpad9: 73,
+  NumpadAdd: 78,
+  NumpadComma: 121,
+  NumpadDecimal: 83,
+  NumpadDivide: 98,
+  NumpadEnter: 96,
+  NumpadEqual: 117,
   NumpadMultiply: 55,
+  NumpadSubtract: 74,
+  Open: 134,
   PageDown: 109,
   PageUp: 104,
+  Paste: 135,
+  Pause: 119,
   Period: 52,
+  Power: 116,
+  PrintScreen: 99,
+  Props: 130,
   Quote: 40,
   ScrollLock: 70,
   Semicolon: 39,
   ShiftLeft: 42,
   ShiftRight: 54,
   Slash: 53,
+  Sleep: 142,
   Space: 57,
   Tab: 15,
+  Undo: 131,
+  WakeUp: 143,
 };
 
 /** Linux evdev keycode for a KeyboardEvent.code, or `undefined` if unmapped. */
@@ -114,40 +184,3 @@ const BUTTON_CODE_BY_JS: Readonly<Record<number, number>> = {
 /** Linux button code for a JS MouseEvent.button, or `undefined` if unmapped. */
 export const buttonCodeFromJs = (button: number): number | undefined =>
   BUTTON_CODE_BY_JS[button];
-
-/** An element's on-screen box, as much of `DOMRect` as the mapping needs. */
-export type ElementBox = {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-};
-
-export type SurfacePoint = { x: number; y: number };
-
-/**
- * Map a client pointer position to surface-local coordinates, scaling the
- * element's on-screen box to the surface's pixel size.
- *
- * @param surfaceWidth - The client surface's pixel width; `0` (no frame drawn
- *   yet) falls back to the element's own box, which is a 1:1 mapping.
- * @returns `undefined` when the element has no layout box yet, so there is no
- *   meaningful coordinate to report.
- */
-export const surfaceLocal = (
-  box: ElementBox,
-  clientX: number,
-  clientY: number,
-  surfaceWidth: number,
-  surfaceHeight: number,
-): SurfacePoint | undefined => {
-  if (box.width <= 0 || box.height <= 0) {
-    return undefined;
-  }
-  const scaleX = surfaceWidth > 0 ? surfaceWidth : box.width;
-  const scaleY = surfaceHeight > 0 ? surfaceHeight : box.height;
-  return {
-    x: ((clientX - box.left) / box.width) * scaleX,
-    y: ((clientY - box.top) / box.height) * scaleY,
-  };
-};

@@ -11,6 +11,7 @@ import {
 } from "./element-context";
 import { evdevFromCode } from "./input";
 import type { Measure } from "./measure";
+import type { ObserveResize } from "./observe-resize";
 import { DomicileWebviewElement } from "./webview-element";
 
 export const APP_TAG_NAME = "domicile-app";
@@ -19,6 +20,8 @@ export const WEBVIEW_TAG_NAME = "domicile-webview";
 export type RegisterOptions = {
   /** Injected by tests, whose DOM implementation performs no layout. */
   measure?: Measure;
+  /** Injected by tests, whose `ResizeObserver` therefore never fires. */
+  observeResize?: ObserveResize;
 };
 
 let globalInputInstalled = false;
@@ -30,9 +33,9 @@ let globalInputInstalled = false;
  */
 export const registerElements = (
   bridge: BridgeClient,
-  { measure }: RegisterOptions = {},
+  { measure, observeResize }: RegisterOptions = {},
 ): void => {
-  bindElementContext(bridge, measure);
+  bindElementContext(bridge, measure, observeResize);
   installGlobalInput();
   defineElements();
 };

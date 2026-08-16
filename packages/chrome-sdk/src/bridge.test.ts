@@ -108,6 +108,23 @@ describe("BridgeClient", () => {
       type: "pointer_button",
     });
 
+    bridge.resizeApp("term", [800, 600]);
+    expect(transport.lastSent()).toEqual({
+      app_id: "term",
+      size: [800, 600],
+      type: "resize_app",
+    });
+
+    bridge.pointerAxis("term", { dx: 0, dy: 100, v120X: 0, v120Y: 120 });
+    expect(transport.lastSent()).toEqual({
+      app_id: "term",
+      dx: 0,
+      dy: 100,
+      type: "pointer_axis",
+      v120_x: 0,
+      v120_y: 120,
+    });
+
     bridge.key("term", 30, true);
     expect(transport.lastSent()).toEqual({
       app_id: "term",

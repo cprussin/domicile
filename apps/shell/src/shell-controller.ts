@@ -10,7 +10,9 @@ import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import type {
   AppAppearedMessage,
   AppClosedMessage,
+  AppCursorMessage,
   AppFrameMessage,
+  AppResizedMessage,
 } from "@domicile/chrome-sdk/protocol";
 import {
   APP_TAG_NAME,
@@ -57,6 +59,12 @@ export class ShellController {
     });
     bridge.on("app_frame", (message) => {
       this.drawFrame(message);
+    });
+    bridge.on("app_resized", (message) => {
+      this.resizeApp(message);
+    });
+    bridge.on("app_cursor", (message) => {
+      this.applyCursor(message);
     });
   }
 
@@ -110,6 +118,22 @@ export class ShellController {
       element.remove();
       this.#apps.delete(app_id);
     }
+  }
+
+  // The client redrew at a new resolution; the element needs it to scale
+  // pointer coordinates even before the first frame at that size arrives.
+  resizeApp({
+    app_id,
+    size,
+  }: Pick<AppResizedMessage, "app_id" | "size">): void {
+    this.#apps.get(app_id)?.setSurfaceSize(size[0], size[1]);
+  }
+
+  applyCursor({
+    app_id,
+    cursor,
+  }: Pick<AppCursorMessage, "app_id" | "cursor">): void {
+    this.#apps.get(app_id)?.applyCursor(cursor);
   }
 
   // A frame for an app the shell never mounted is a no-op: the host may still

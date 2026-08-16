@@ -9,6 +9,8 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+use domicile_protocol::PROTOCOL_VERSION;
+
 fn wait_for_socket(path: &Path, timeout: Duration) -> bool {
     let start = Instant::now();
     while start.elapsed() < timeout {
@@ -42,21 +44,28 @@ fn daemon_boots_from_config_and_completes_handshake() {
     );
 
     let stream = UnixStream::connect(&socket).expect("connect to daemon");
+    // A daemon that never answers must fail the test rather than hang it.
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
     let mut writer = stream.try_clone().unwrap();
     writer
-        .write_all(b"{\"type\":\"hello\",\"protocol_version\":1}\n")
+        .write_all(
+            format!("{{\"type\":\"hello\",\"protocol_version\":{PROTOCOL_VERSION}}}\n").as_bytes(),
+        )
         .unwrap();
 
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
-    reader.read_line(&mut line).unwrap();
+    let read = reader.read_line(&mut line);
 
     child.kill().ok();
     child.wait().ok();
+    read.expect("daemon should answer the handshake");
 
     assert!(
         line.contains("\"welcome\""),
         "expected a welcome, got: {line}"
     );
-    assert!(line.contains("\"protocol_version\":1"));
+    assert!(line.contains(&format!("\"protocol_version\":{PROTOCOL_VERSION}")));
 }

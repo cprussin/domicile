@@ -6,18 +6,22 @@
 // CSS — that is the whole point of Domicile.
 //
 // Custom element tag names must contain a hyphen, so the SDK registers
-// `domicile-app`. The engine integration layer aliases the bare `<app>` name
-// the compositor exposes (we control the engine).
+// `domicile-app`. A chrome that prefers the bare `<app>` the compositor exposes
+// gets it from `aliasTag` until the engine makes the short name real.
 
 import type { BridgeClient } from "./bridge";
 import {
   activeBridge,
   activeMeasure,
+  activeObserveResize,
   focusedApp,
   setFocusedApp,
 } from "./element-context";
 import { decodeBase64ToBytes } from "./frame";
-import { buttonCodeFromJs, surfaceLocal } from "./input";
+import { buttonCodeFromJs } from "./input";
+import type { CursorShape } from "./protocol";
+import { surfaceLocal } from "./surface-coordinates";
+import { axisFromWheel } from "./wheel-axis";
 
 const BYTES_PER_PIXEL = 4;
 
@@ -30,6 +34,7 @@ export class DomicileAppElement extends HTMLElement {
   #canvas: HTMLCanvasElement | undefined;
   #surfaceWidth = 0;
   #surfaceHeight = 0;
+  #unobserve: (() => void) | undefined;
 
   constructor() {
     super();
@@ -46,9 +51,16 @@ export class DomicileAppElement extends HTMLElement {
 
   connectedCallback(): void {
     this.#place();
+    // CSS moves and resizes the element without any of this code running, so
+    // the portal has to follow the box rather than be reported once.
+    this.#unobserve = activeObserveResize()(this, () => {
+      this.#place();
+    });
   }
 
   disconnectedCallback(): void {
+    this.#unobserve?.();
+    this.#unobserve = undefined;
     const appId = this.appId;
     if (appId !== undefined) {
       activeBridge()?.removePortal(appId);
@@ -73,10 +85,24 @@ export class DomicileAppElement extends HTMLElement {
     }
   }
 
-  /** Draw a client frame (raw RGBA, base64) into this element's canvas. */
-  drawFrame(width: number, height: number, base64: string): void {
+  /**
+   * Record the client's own content size, which pointer coordinates are scaled
+   * to. Frames carry it, but so does an `app_resized` the client sends before
+   * it has redrawn.
+   */
+  setSurfaceSize(width: number, height: number): void {
     this.#surfaceWidth = width;
     this.#surfaceHeight = height;
+  }
+
+  /** Show the cursor a client asked for while the pointer is over this app. */
+  applyCursor(cursor: CursorShape): void {
+    this.style.cursor = cursor;
+  }
+
+  /** Draw a client frame (raw RGBA, base64) into this element's canvas. */
+  drawFrame(width: number, height: number, base64: string): void {
+    this.setSurfaceSize(width, height);
     const canvas = this.#ensureCanvas();
     const context = canvas.getContext("2d");
     // A DOM implementation without a 2d context (test environments) still
@@ -114,6 +140,9 @@ export class DomicileAppElement extends HTMLElement {
     if (appId !== undefined && bridge !== undefined) {
       const { size, transform, zIndex, visible } = activeMeasure()(this);
       bridge.placePortal({ appId, size, transform, visible, zIndex });
+      // The client renders at its own resolution: without this it would keep
+      // drawing at the old size and be stretched into the new box.
+      bridge.resizeApp(appId, size);
     }
   }
 
@@ -163,7 +192,7 @@ export class DomicileAppElement extends HTMLElement {
       "wheel",
       (event) => {
         this.#withTarget((bridge, appId) => {
-          bridge.pointerAxis(appId, event.deltaX, event.deltaY);
+          bridge.pointerAxis(appId, axisFromWheel(event));
         });
       },
       { passive: true },
@@ -172,18 +201,20 @@ export class DomicileAppElement extends HTMLElement {
 
   // Motion is the one forward that needs a layout box: without one there is no
   // surface-local coordinate to report, while focus and button state still are
-  // meaningful.
+  // meaningful. The same measurement that placed the portal inverts back to
+  // surface coordinates, so any CSS transform on the element is undone here
+  // rather than approximated by its axis-aligned box.
   #forwardMotion(
     bridge: BridgeClient,
     appId: string,
     event: PointerEvent,
   ): void {
+    const { size, transform } = activeMeasure()(this);
     const local = surfaceLocal(
-      this.getBoundingClientRect(),
-      event.clientX,
-      event.clientY,
-      this.#surfaceWidth,
-      this.#surfaceHeight,
+      transform,
+      size,
+      [this.#surfaceWidth, this.#surfaceHeight],
+      [event.clientX, event.clientY],
     );
     if (local !== undefined) {
       bridge.pointerMotion(appId, local.x, local.y);

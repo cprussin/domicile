@@ -10,23 +10,30 @@
 import type { BridgeClient } from "./bridge";
 import type { Measure } from "./measure";
 import { defaultMeasure } from "./measure";
+import type { ObserveResize } from "./observe-resize";
+import { defaultObserveResize } from "./observe-resize";
 
 let bridge: BridgeClient | undefined;
 let measure: Measure = defaultMeasure;
+let observeResize: ObserveResize = defaultObserveResize;
 let focusedAppId: string | undefined;
 
 export const bindElementContext = (
   nextBridge: BridgeClient,
   nextMeasure: Measure = defaultMeasure,
+  nextObserveResize: ObserveResize = defaultObserveResize,
 ): void => {
   bridge = nextBridge;
   measure = nextMeasure;
+  observeResize = nextObserveResize;
 };
 
 /** The bound bridge, or `undefined` before `registerElements` has run. */
 export const activeBridge = (): BridgeClient | undefined => bridge;
 
 export const activeMeasure = (): Measure => measure;
+
+export const activeObserveResize = (): ObserveResize => observeResize;
 
 /**
  * The app currently receiving keyboard input. Keyboard events are delivered to

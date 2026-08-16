@@ -4,15 +4,15 @@ use std::io::Cursor;
 
 use domicile::run_connection;
 use domicile_host::ipc::Session;
+use domicile_protocol::PROTOCOL_VERSION;
 
 #[test]
 fn connection_loop_answers_hello_and_stops_at_eof() {
     // Two lines: a handshake and a follow-up focus message, then EOF.
-    let input = concat!(
-        "{\"type\":\"hello\",\"protocol_version\":1}\n",
-        "{\"type\":\"focus_chrome\"}\n",
+    let input = format!(
+        "{{\"type\":\"hello\",\"protocol_version\":{PROTOCOL_VERSION}}}\n{{\"type\":\"focus_chrome\"}}\n"
     );
-    let reader = Cursor::new(input.as_bytes().to_vec());
+    let reader = Cursor::new(input.into_bytes());
     let mut output: Vec<u8> = Vec::new();
     let mut session = Session::new();
 
