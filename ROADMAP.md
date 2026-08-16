@@ -26,9 +26,11 @@ as a CSS-styled (rounded + blurred + rotated) `<app>` element.
 - [x] Host <-> chrome IPC seam (newline-JSON, handshake) — TDD, real socket
 - [x] `loom` daemon: boots from config, serves the chrome protocol (control
       plane) — TDD, real end-to-end binary test
-- [ ] Smithay Wayland server behind `smithay-backend`: xdg-shell, seat/input,
-      output; nested `winit` backend for dev  *(needs `.#full` + a display)*
-- [ ] Export client surfaces to the bridge; present the engine's frame
+- [x] `wc-compositor`: headless Smithay Wayland server (compositor + shm +
+      xdg-shell + seat) — compiles AND runs, creating a Wayland socket; maps
+      toplevel/destroy onto `Host::app_appeared`/`app_closed`
+- [ ] Export client surfaces (dmabuf) to the web engine (AppTextureBridge)
+- [ ] Present the engine's composited frame (needs the CEF bridge + a display)
 - [ ] DRM/KMS backend for real hardware
 
 ## Phase 4 — Chrome SDK + simple shell (mostly done)

@@ -6,6 +6,18 @@ members = [
     "crates/wc-protocol",
     "crates/wc-host",
     "crates/loom",
+    "crates/wc-compositor",
+]
+
+# wc-compositor pulls Smithay + native Wayland libs, so it is excluded from the
+# default set: plain `cargo test` (core shell) stays fast and Smithay-free.
+# Build it explicitly in the full shell: `nix develop .#full -c cargo build -p wc-compositor`.
+default-members = [
+    "crates/wc-config",
+    "crates/wc-scene",
+    "crates/wc-protocol",
+    "crates/wc-host",
+    "crates/loom",
 ]
 
 # wc-host's default build (the orchestrator) is pure logic and lives in the
