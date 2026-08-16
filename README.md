@@ -10,8 +10,35 @@ CSS as `<div>`/`<webview>` (rounding, opacity, blur, transforms, z-index).
 
 ## Status
 
-Early. The pure-logic core is being built test-first; the graphics/engine
-bridge is the next spike. See [ROADMAP.md](ROADMAP.md).
+A runnable end-to-end prototype exists: a headless Wayland compositor + an
+Electron chrome window, wired so a **real Wayland client appears as a styled
+`<app>` element in the web chrome**. The one remaining piece is compositing the
+client's actual pixels (the CEF/dmabuf AppTextureBridge — [docs/CEF-SPIKE.md](docs/CEF-SPIKE.md)),
+so app windows currently show as styled placeholders. See [ROADMAP.md](ROADMAP.md).
+
+## Run the prototype
+
+Needs a display (for the Electron window) + the full shell:
+
+```sh
+nix develop .#full -c ./scripts/run-prototype.sh
+```
+
+That starts Loom's headless Wayland compositor and the Electron chrome window.
+Then, in another terminal, put an app onto Loom's display:
+
+```sh
+nix develop .#full
+XDG_RUNTIME_DIR=/tmp/loom-rt WAYLAND_DISPLAY=wayland-1 weston-flower
+```
+
+A rounded/blurred `<app>` portal appears in the chrome window. The message plane
+(Wayland client → compositor → host brain → chrome) is also covered by a
+headless, reproducible check that runs without a display:
+
+```sh
+nix develop .#full -c ./scripts/e2e-chrome.sh   # PASS: ... -> chrome
+```
 
 ## Develop
 

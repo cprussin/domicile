@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Loom — simple shell</title>
     <link rel="stylesheet" href="style.css" />
+    <!-- No bundler: resolve the SDK's bare specifier to its source. -->
+    <script type="importmap">
+      { "imports": { "@loom/chrome-sdk": "../../chrome-sdk/src/index.js" } }
+    </script>
   </head>
   <body>
     <!-- All of this is ordinary web content rendered by the compositor. -->

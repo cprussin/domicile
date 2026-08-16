@@ -27,10 +27,16 @@ as a CSS-styled (rounded + blurred + rotated) `<app>` element.
 - [x] `loom` daemon: boots from config, serves the chrome protocol (control
       plane) — TDD, real end-to-end binary test
 - [x] `wc-compositor`: headless Smithay Wayland server (compositor + shm +
-      xdg-shell + seat) — compiles AND runs, creating a Wayland socket; maps
-      toplevel/destroy onto `Host::app_appeared`/`app_closed`
+      xdg-shell + seat + output) — runs; maps toplevel/destroy onto
+      `Host::app_appeared`/`app_closed`
+- [x] Unified process: compositor also serves the chrome protocol socket and
+      shares one `Host`; app lifecycle broadcast to connected chrome
+- [x] **End-to-end prototype**: real Wayland client → compositor → host → chrome
+      proven headlessly (`scripts/e2e-chrome.sh`); Electron chrome window shows
+      a styled `<app>` portal (`scripts/run-prototype.sh`)
 - [ ] Export client surfaces (dmabuf) to the web engine (AppTextureBridge)
-- [ ] Present the engine's composited frame (needs the CEF bridge + a display)
+- [ ] Present the engine's composited frame — replaces the `<app>` placeholder
+      with real pixels (needs the CEF bridge + a display; see docs/CEF-SPIKE.md)
 - [ ] DRM/KMS backend for real hardware
 
 ## Phase 4 — Chrome SDK + simple shell (mostly done)

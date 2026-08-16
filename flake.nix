@@ -38,10 +38,12 @@
         mesa
         libGL
         seatd
-        # Minimal Wayland clients for exercising the compositor in tests
-        # (weston ships weston-simple-shm, a toplevel-mapping shm client).
+        # Minimal Wayland clients for exercising the compositor in tests.
         weston
         wayland-utils
+        # Electron hosts the chrome shell as a visible window for the prototype
+        # (the eventual target embeds CEF; Electron gets us a testable UI now).
+        electron
       ];
     in
     {

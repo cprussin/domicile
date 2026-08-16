@@ -51,31 +51,38 @@ impl Session {
     }
 
     /// Process one inbound line from the chrome. Returns messages to send back.
-    ///
-    /// Before the handshake, only `Hello` is honoured; everything else is
-    /// dropped. Malformed lines and version mismatches are ignored rather than
-    /// tearing anything down.
     pub fn ingest(&mut self, line: &str) -> Vec<HostMessage> {
-        let message = match parse_chrome(line.trim()) {
-            Ok(message) => message,
-            Err(_) => return Vec::new(),
-        };
+        handle_chrome_line(&mut self.host, &mut self.ready, line)
+    }
+}
 
-        match message {
-            ChromeMessage::Hello { protocol_version } => match negotiate(protocol_version) {
-                Ok(agreed) => {
-                    self.ready = true;
-                    vec![HostMessage::Welcome { protocol_version: agreed }]
-                }
-                Err(_) => Vec::new(),
-            },
-            other if self.ready => {
-                // Placement/focus errors (e.g. an unknown app) are non-fatal:
-                // log-and-continue territory, so we swallow them here.
-                let _ = self.host.handle_chrome_message(other);
-                Vec::new()
+/// Apply one inbound chrome line to a (possibly shared) [`Host`], driving the
+/// handshake via the caller-owned `ready` flag. Returns messages to send back.
+///
+/// This is the reusable core behind [`Session::ingest`]. The compositor uses it
+/// directly so a single shared `Host` can be driven by both the Wayland side
+/// and any number of chrome connections. Before the handshake only `Hello` is
+/// honoured; malformed lines and version mismatches are ignored rather than
+/// tearing anything down.
+pub fn handle_chrome_line(host: &mut Host, ready: &mut bool, line: &str) -> Vec<HostMessage> {
+    let message = match parse_chrome(line.trim()) {
+        Ok(message) => message,
+        Err(_) => return Vec::new(),
+    };
+
+    match message {
+        ChromeMessage::Hello { protocol_version } => match negotiate(protocol_version) {
+            Ok(agreed) => {
+                *ready = true;
+                vec![HostMessage::Welcome { protocol_version: agreed }]
             }
-            _ => Vec::new(),
+            Err(_) => Vec::new(),
+        },
+        other if *ready => {
+            // Placement/focus errors (e.g. an unknown app) are non-fatal.
+            let _ = host.handle_chrome_message(other);
+            Vec::new()
         }
+        _ => Vec::new(),
     }
 }

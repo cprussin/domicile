@@ -1047,6 +1047,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wc-host",
+ "wc-protocol",
 ]
 
 [[package]]

@@ -13,7 +13,11 @@
 //! presenting the engine's composited frame. This skeleton proves the
 //! server<->brain seam compiles and runs headlessly.
 
-use std::sync::Arc;
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use smithay::reexports::{
     calloop::{generic::Generic, EventLoop, Interest, Mode, PostAction},
@@ -25,10 +29,12 @@ use smithay::reexports::{
     },
 };
 use smithay::input::{pointer::CursorImageStatus, Seat, SeatHandler, SeatState};
-use smithay::utils::Serial;
+use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel};
+use smithay::utils::{Serial, Transform};
 use smithay::wayland::{
     buffer::BufferHandler,
     compositor::{with_states, CompositorClientState, CompositorHandler, CompositorState},
+    output::{OutputHandler, OutputManagerState},
     shell::xdg::{
         PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
         XdgToplevelSurfaceData,
@@ -36,15 +42,87 @@ use smithay::wayland::{
     shm::{ShmHandler, ShmState},
     socket::ListeningSocketSource,
 };
-use smithay::{delegate_compositor, delegate_seat, delegate_shm, delegate_xdg_shell};
+use smithay::{delegate_compositor, delegate_output, delegate_seat, delegate_shm, delegate_xdg_shell};
 use tracing::info;
 
+use wc_host::ipc::{handle_chrome_line, to_line};
 use wc_host::Host;
+use wc_protocol::HostMessage;
 
 /// Data threaded through the calloop event loop.
 struct CalloopData {
     state: LoomCompositor,
     display_handle: DisplayHandle,
+}
+
+/// Shared between the Wayland thread (calloop) and the chrome-connection threads.
+///
+/// Holds the single [`Host`] brain both sides drive, plus the write-halves of
+/// connected chrome sockets so Wayland-side events (app appeared/closed) can be
+/// broadcast to the chrome.
+struct ChromeHub {
+    host: Mutex<Host>,
+    chromes: Mutex<Vec<Arc<Mutex<UnixStream>>>>,
+}
+
+impl ChromeHub {
+    fn new() -> Arc<Self> {
+        Arc::new(ChromeHub { host: Mutex::new(Host::new()), chromes: Mutex::new(Vec::new()) })
+    }
+
+    /// Send a host message to every connected chrome, dropping dead ones.
+    fn broadcast(&self, message: &HostMessage) {
+        let line = to_line(message);
+        let mut chromes = self.chromes.lock().unwrap();
+        chromes.retain(|writer| {
+            let mut stream = writer.lock().unwrap();
+            stream.write_all(line.as_bytes()).and_then(|_| stream.flush()).is_ok()
+        });
+    }
+}
+
+/// Serve the chrome protocol on a Unix socket: one thread per connection, all
+/// sharing the same [`Host`] via the hub. Runs on its own thread so it never
+/// blocks the Wayland event loop.
+fn serve_chrome(hub: Arc<ChromeHub>, path: PathBuf) {
+    let _ = std::fs::remove_file(&path);
+    let listener = match UnixListener::bind(&path) {
+        Ok(listener) => listener,
+        Err(err) => {
+            tracing::error!(?path, %err, "cannot bind chrome socket");
+            return;
+        }
+    };
+    info!(?path, "chrome protocol socket up");
+
+    for stream in listener.incoming().flatten() {
+        let writer = Arc::new(Mutex::new(match stream.try_clone() {
+            Ok(w) => w,
+            Err(_) => continue,
+        }));
+        hub.chromes.lock().unwrap().push(writer.clone());
+        let hub = hub.clone();
+        thread::spawn(move || chrome_connection(hub, stream, writer));
+    }
+}
+
+fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<UnixStream>>) {
+    let reader = BufReader::new(stream);
+    let mut ready = false;
+    for line in reader.lines() {
+        let Ok(line) = line else { break };
+        let responses = {
+            let mut host = hub.host.lock().unwrap();
+            handle_chrome_line(&mut host, &mut ready, &line)
+        };
+        let mut writer = writer.lock().unwrap();
+        for message in responses {
+            if writer.write_all(to_line(&message).as_bytes()).is_err() {
+                return;
+            }
+            let _ = writer.flush();
+        }
+    }
 }
 
 /// The compositor state: Wayland protocol globals + the host brain.
@@ -53,10 +131,15 @@ struct LoomCompositor {
     xdg_shell_state: XdgShellState,
     shm_state: ShmState,
     seat_state: SeatState<LoomCompositor>,
+    /// Kept alive so the xdg-output manager global persists.
+    #[allow(dead_code)]
+    output_manager_state: OutputManagerState,
+    /// Kept alive so the wl_output global persists.
+    _output: Output,
 
-    /// The tested decision core. The backend is thin glue over this.
-    host: Host,
-    /// Mapped toplevels, paired with the host-assigned app id.
+    /// Shared brain + connected chrome clients.
+    hub: Arc<ChromeHub>,
+    /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
 }
 
@@ -131,6 +214,11 @@ impl SeatHandler for LoomCompositor {
 
 delegate_seat!(LoomCompositor);
 
+// ---- output (clients wait for a wl_output before mapping) -----------------
+
+impl OutputHandler for LoomCompositor {}
+delegate_output!(LoomCompositor);
+
 // ---- xdg-shell: the seam into the host brain ------------------------------
 
 impl XdgShellHandler for LoomCompositor {
@@ -139,19 +227,27 @@ impl XdgShellHandler for LoomCompositor {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        // A client mapped a window. Register it with the host brain, which
-        // assigns an app id and (in the full system) tells the chrome to mount
-        // an <app> element. Title/size arrive on later commits.
-        let (app_id, _announce) = self.host.app_appeared(None, (0.0, 0.0));
-        info!(%app_id, "toplevel mapped -> Host::app_appeared");
-        self.toplevels.push((app_id, surface));
+        // A client mapped a window. Register it with the shared brain (which
+        // assigns an app id) and announce it to every connected chrome so it can
+        // mount an <app> element. Title/size arrive on later commits.
+        let announce = {
+            let mut host = self.hub.host.lock().unwrap();
+            let (app_id, announce) = host.app_appeared(None, (0.0, 0.0));
+            info!(%app_id, "toplevel mapped -> Host::app_appeared");
+            self.toplevels.push((app_id, surface));
+            announce
+        };
+        self.hub.broadcast(&announce);
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
         if let Some(pos) = self.toplevels.iter().position(|(_, t)| t.wl_surface() == surface.wl_surface()) {
             let (app_id, _) = self.toplevels.remove(pos);
-            self.host.app_closed(&app_id);
+            let closed = self.hub.host.lock().unwrap().app_closed(&app_id);
             info!(%app_id, "toplevel destroyed -> Host::app_closed");
+            if let Some(closed) = closed {
+                self.hub.broadcast(&closed);
+            }
         }
     }
 
@@ -183,12 +279,35 @@ delegate_xdg_shell!(LoomCompositor);
 
 // ---- boot -----------------------------------------------------------------
 
+/// Resolve where the chrome protocol socket lives.
+fn chrome_socket_path() -> PathBuf {
+    // --chrome-socket PATH wins, then $LOOM_CHROME_SOCKET, then a default under
+    // $XDG_RUNTIME_DIR (falling back to the current directory).
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--chrome-socket" {
+            if let Some(path) = args.next() {
+                return PathBuf::from(path);
+            }
+        }
+    }
+    if let Some(path) = std::env::var_os("LOOM_CHROME_SOCKET") {
+        return PathBuf::from(path);
+    }
+    let dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    dir.join("loom-chrome.sock")
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
         tracing_subscriber::fmt().with_env_filter(filter).init();
     } else {
         tracing_subscriber::fmt().init();
     }
+
+    // The chrome protocol socket: where a chrome shell connects. Overridable via
+    // --chrome-socket or LOOM_CHROME_SOCKET; defaults under XDG_RUNTIME_DIR.
+    let chrome_socket = chrome_socket_path();
 
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
     let display: Display<LoomCompositor> = Display::new()?;
@@ -200,12 +319,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     seat.add_keyboard(Default::default(), 200, 25)?;
     seat.add_pointer();
 
+    // Advertise one virtual output. Many clients (e.g. weston-terminal) wait for
+    // a wl_output before they will map a toplevel.
+    let output_manager_state = OutputManagerState::new_with_xdg_output::<LoomCompositor>(&dh);
+    let output = Output::new(
+        "loom-0".to_string(),
+        PhysicalProperties {
+            size: (300, 200).into(),
+            subpixel: Subpixel::Unknown,
+            make: "Loom".into(),
+            model: "Virtual".into(),
+        },
+    );
+    output.create_global::<LoomCompositor>(&dh);
+    let mode = OutputMode { size: (1280, 800).into(), refresh: 60_000 };
+    output.change_current_state(Some(mode), Some(Transform::Normal), None, Some((0, 0).into()));
+    output.set_preferred(mode);
+
+    // Shared brain, driven by both the Wayland side and chrome connections.
+    let hub = ChromeHub::new();
+    {
+        let hub = hub.clone();
+        thread::spawn(move || serve_chrome(hub, chrome_socket));
+    }
+
     let state = LoomCompositor {
         compositor_state: CompositorState::new::<LoomCompositor>(&dh),
         xdg_shell_state: XdgShellState::new::<LoomCompositor>(&dh),
         shm_state: ShmState::new::<LoomCompositor>(&dh, vec![]),
         seat_state,
-        host: Host::new(),
+        output_manager_state,
+        _output: output,
+        hub,
         toplevels: Vec::new(),
     };
 

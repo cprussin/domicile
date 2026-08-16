@@ -58,16 +58,37 @@ body {
    Rounded corners, a drop shadow, and a subtle entrance animation — all applied
    to a live Wayland client's surface. */
 .app {
+  display: block;
   position: absolute;
-  top: 5%;
-  left: 5%;
-  width: 90%;
-  height: 90%;
+  top: 6%;
+  left: 6%;
+  width: 88%;
+  height: 88%;
   border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
-  outline: 1px solid rgba(255, 255, 255, 0.08);
+  outline: 1px solid rgba(255, 255, 255, 0.12);
+  /* Full CSS on a live app window — including a slight rotation, to make the
+     point that <app> is a first-class element. Replace the placeholder fill
+     with the client's real surface once the AppTextureBridge lands. */
+  transform: rotate(-1.2deg);
+  background: linear-gradient(135deg, rgba(110, 231, 255, 0.14), rgba(110, 231, 255, 0.03)),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.03) 0 12px, transparent 12px 24px);
   animation: app-in 160ms ease-out;
+}
+
+/* Placeholder label until the real surface is composited in. */
+.app::after {
+  content: "⬚  app surface: " attr(app-id) "\A (live Wayland client — CEF texture bridge is the next step)";
+  white-space: pre;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: rgba(232, 234, 240, 0.75);
+  font-size: 14px;
+  backdrop-filter: blur(2px);
 }
 
 @keyframes app-in {

@@ -2,7 +2,7 @@
 // transport at `window.loomTransport`, and this wires the SDK to it.
 
 import { BridgeClient } from "@loom/chrome-sdk";
-import { ShellController } from "./shell.js";
+import { ShellController } from "./src/shell.js";
 
 // The host exposes a transport (send/onMessage) to the page. Fall back to a
 // no-op so the shell can be opened in a plain browser for styling work.
