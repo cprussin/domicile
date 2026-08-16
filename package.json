@@ -1,8 +1,8 @@
 {
-  "name": "loom-js",
+  "name": "domicile-js",
   "private": true,
   "type": "module",
-  "description": "JS side of Loom: chrome-sdk custom elements + reference chrome shells",
+  "description": "JS side of Domicile: chrome-sdk custom elements + reference chrome shells",
   "workspaces": [
     "chrome-sdk",
     "shells/*"

@@ -1,5 +1,5 @@
 {
-  description = "Loom — a Wayland compositor whose renderer is a web engine";
+  description = "Domicile — a Wayland compositor whose renderer is a web engine";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -11,7 +11,7 @@
       pkgs = import nixpkgs { inherit system; };
 
       # Toolchain needed to build & test the pure-logic Rust crates
-      # (wc-config, wc-scene, wc-protocol). No graphics/GPU deps required
+      # (dm-config, dm-scene, dm-protocol). No graphics/GPU deps required
       # for these — keeps `nix develop` fast and the test loop tight.
       coreTools = with pkgs; [
         cargo
@@ -25,8 +25,8 @@
         nodejs_22
       ];
 
-      # Native libraries the Wayland host (wc-host, Smithay) and the CEF
-      # bridge (wc-bridge) will need. Split out so the core shell stays
+      # Native libraries the Wayland host (dm-host, Smithay) and the CEF
+      # bridge (dm-bridge) will need. Split out so the core shell stays
       # lean; enter with `nix develop .#full` once we start on those.
       hostLibs = with pkgs; [
         wayland
@@ -58,16 +58,16 @@
           packages = coreTools;
           RUST_BACKTRACE = "1";
           shellHook = ''
-            echo "loom dev shell (core) — cargo $(cargo --version 2>/dev/null | cut -d' ' -f2)"
+            echo "domicile dev shell (core) — cargo $(cargo --version 2>/dev/null | cut -d' ' -f2)"
           '';
         };
 
-        # Full shell: adds Wayland/DRM/GPU libraries for wc-host + wc-bridge.
+        # Full shell: adds Wayland/DRM/GPU libraries for dm-host + dm-bridge.
         full = pkgs.mkShell {
           packages = coreTools ++ hostLibs;
           RUST_BACKTRACE = "1";
           shellHook = ''
-            echo "loom dev shell (full: +wayland +drm +gl)"
+            echo "domicile dev shell (full: +wayland +drm +gl)"
           '';
         };
       };

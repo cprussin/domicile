@@ -39,7 +39,7 @@ class FakeBridge {
 // jsdom does no layout, so measurement is injected in tests.
 const stubMeasure = () => ({ size: [10, 20], transform: [1, 0, 0, 1, 0, 0], zIndex: 0, visible: true });
 
-describe("<loom-app> custom element", () => {
+describe("<domicile-app> custom element", () => {
   let bridge;
 
   beforeEach(() => {
@@ -50,7 +50,7 @@ describe("<loom-app> custom element", () => {
   });
 
   it("places a portal when connected with an app-id", () => {
-    const el = document.createElement("loom-app");
+    const el = document.createElement("domicile-app");
     el.setAttribute("app-id", "term");
     document.body.appendChild(el);
 
@@ -61,7 +61,7 @@ describe("<loom-app> custom element", () => {
   });
 
   it("removes the portal when disconnected", () => {
-    const el = document.createElement("loom-app");
+    const el = document.createElement("domicile-app");
     el.setAttribute("app-id", "term");
     document.body.appendChild(el);
     el.remove();
@@ -70,13 +70,13 @@ describe("<loom-app> custom element", () => {
   });
 
   it("does nothing without an app-id", () => {
-    const el = document.createElement("loom-app");
+    const el = document.createElement("domicile-app");
     document.body.appendChild(el);
     expect(bridge.calls).toHaveLength(0);
   });
 
   it("re-places when the app-id changes", () => {
-    const el = document.createElement("loom-app");
+    const el = document.createElement("domicile-app");
     el.setAttribute("app-id", "term");
     document.body.appendChild(el);
     bridge.calls.length = 0;
@@ -88,13 +88,13 @@ describe("<loom-app> custom element", () => {
   });
 
   it("exposes appId as a property", () => {
-    const el = document.createElement("loom-app");
+    const el = document.createElement("domicile-app");
     el.setAttribute("app-id", "term");
     expect(el.appId).toBe("term");
   });
 
   it("drawFrame creates a canvas surface without throwing", () => {
-    const el = document.createElement("loom-app");
+    const el = document.createElement("domicile-app");
     el.setAttribute("app-id", "term");
     document.body.appendChild(el);
     // jsdom has no 2d context, so this exercises the canvas-creation path and
@@ -104,7 +104,7 @@ describe("<loom-app> custom element", () => {
   });
 
   it("clicking an app focuses it and forwards subsequent keystrokes", () => {
-    const el = document.createElement("loom-app");
+    const el = document.createElement("domicile-app");
     el.setAttribute("app-id", "term");
     document.body.appendChild(el);
 
@@ -121,17 +121,17 @@ describe("<loom-app> custom element", () => {
   });
 });
 
-describe("<loom-webview> custom element", () => {
+describe("<domicile-webview> custom element", () => {
   beforeEach(() => {
     registerElements(new FakeBridge(), { measure: stubMeasure });
   });
 
   it("reflects src and embeds an inner view when connected", () => {
-    const el = document.createElement("loom-webview");
+    const el = document.createElement("domicile-webview");
     el.setAttribute("src", "https://example.com");
     document.body.appendChild(el);
     expect(el.src).toBe("https://example.com");
-    const view = el.querySelector(".loom-webview-frame");
+    const view = el.querySelector(".domicile-webview-frame");
     expect(view).not.toBeNull();
     expect(view.getAttribute("src")).toBe("https://example.com");
   });

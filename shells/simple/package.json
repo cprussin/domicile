@@ -1,10 +1,10 @@
 {
-  "name": "@loom/shell-simple",
+  "name": "@domicile/shell-simple",
   "version": "0.0.0",
   "type": "module",
-  "description": "A minimal reference Loom chrome: a top bar and a stage that mounts app portals",
+  "description": "A minimal reference Domicile chrome: a top bar and a stage that mounts app portals",
   "main": "electron-main.cjs",
   "dependencies": {
-    "@loom/chrome-sdk": "*"
+    "@domicile/chrome-sdk": "*"
   }
 }

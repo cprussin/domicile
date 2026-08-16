@@ -1,4 +1,4 @@
-// The in-page client that talks to the Loom host.
+// The in-page client that talks to the Domicile host.
 //
 // The host injects a `transport` — an object with `send(text)` and
 // `onMessage(cb)` — which in the real compositor is backed by a message pipe

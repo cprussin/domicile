@@ -6,7 +6,7 @@
 // one-shot pointer enter can be missed before the client has a mapped buffer
 // (in real use the mouse moves after the window is up).
 const net = require("net");
-const sock = process.env.LOOM_CHROME_SOCK;
+const sock = process.env.DOMICILE_CHROME_SOCK;
 
 const c = net.connect(sock, () => c.write(JSON.stringify({ type: "hello", protocol_version: 1 }) + "\n"));
 const send = (m) => c.write(JSON.stringify(m) + "\n");

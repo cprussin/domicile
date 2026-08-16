@@ -1,0 +1,104 @@
+//! Behaviour tests for `dm-protocol`, written before the implementation.
+//!
+//! This crate defines the wire contract between the Rust host and the in-page
+//! bridge client (JS). Two things matter and are tested here:
+//!  1. Every message round-trips through JSON unchanged.
+//!  2. The on-the-wire shape is stable (the JS side hard-codes these strings),
+//!     so we pin the tag/field names explicitly.
+
+use dm_protocol::{negotiate, ChromeMessage, HostMessage, PROTOCOL_VERSION};
+
+fn chrome_round_trip(msg: &ChromeMessage) {
+    let json = serde_json::to_string(msg).unwrap();
+    let back: ChromeMessage = serde_json::from_str(&json).unwrap();
+    assert_eq!(*msg, back, "round-trip changed the message (json: {json})");
+}
+
+fn host_round_trip(msg: &HostMessage) {
+    let json = serde_json::to_string(msg).unwrap();
+    let back: HostMessage = serde_json::from_str(&json).unwrap();
+    assert_eq!(*msg, back, "round-trip changed the message (json: {json})");
+}
+
+#[test]
+fn chrome_messages_round_trip() {
+    chrome_round_trip(&ChromeMessage::Hello { protocol_version: PROTOCOL_VERSION });
+    chrome_round_trip(&ChromeMessage::PlacePortal {
+        app_id: "term".into(),
+        transform: [2.0, 0.0, 0.0, 2.0, 50.0, 60.0],
+        size: [640.0, 480.0],
+        z_index: 3,
+        visible: true,
+    });
+    chrome_round_trip(&ChromeMessage::RemovePortal { app_id: "term".into() });
+    chrome_round_trip(&ChromeMessage::FocusApp { app_id: "term".into() });
+    chrome_round_trip(&ChromeMessage::FocusChrome);
+    chrome_round_trip(&ChromeMessage::Spawn { command: vec!["kitty".into(), "--hold".into()] });
+    chrome_round_trip(&ChromeMessage::PointerMotion { app_id: "term".into(), x: 12.5, y: 3.0 });
+    chrome_round_trip(&ChromeMessage::PointerLeave { app_id: "term".into() });
+    chrome_round_trip(&ChromeMessage::PointerButton { app_id: "term".into(), button: 0x110, pressed: true });
+    chrome_round_trip(&ChromeMessage::PointerAxis { app_id: "term".into(), dx: 0.0, dy: -15.0 });
+    chrome_round_trip(&ChromeMessage::Key { app_id: "term".into(), keycode: 30, pressed: true });
+}
+
+#[test]
+fn spawn_wire_shape_is_pinned() {
+    let v = serde_json::to_value(ChromeMessage::Spawn { command: vec!["kitty".into()] }).unwrap();
+    assert_eq!(v["type"], "spawn");
+    assert_eq!(v["command"][0], "kitty");
+}
+
+#[test]
+fn host_messages_round_trip() {
+    host_round_trip(&HostMessage::Welcome { protocol_version: PROTOCOL_VERSION });
+    host_round_trip(&HostMessage::AppAppeared {
+        app_id: "term".into(),
+        title: Some("Terminal".into()),
+        size: [640.0, 480.0],
+    });
+    host_round_trip(&HostMessage::AppAppeared { app_id: "x".into(), title: None, size: [1.0, 1.0] });
+    host_round_trip(&HostMessage::AppResized { app_id: "term".into(), size: [800.0, 600.0] });
+    host_round_trip(&HostMessage::AppFrame {
+        app_id: "term".into(),
+        width: 2,
+        height: 1,
+        format: "rgba".into(),
+        data: "AAECAwQFBgc=".into(),
+    });
+    host_round_trip(&HostMessage::AppClosed { app_id: "term".into() });
+}
+
+#[test]
+fn wire_shape_is_pinned() {
+    // The JS bridge depends on these exact strings — lock them.
+    let v = serde_json::to_value(ChromeMessage::PlacePortal {
+        app_id: "term".into(),
+        transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        size: [10.0, 20.0],
+        z_index: 0,
+        visible: true,
+    })
+    .unwrap();
+    assert_eq!(v["type"], "place_portal");
+    assert_eq!(v["app_id"], "term");
+    assert_eq!(v["z_index"], 0);
+    assert_eq!(v["size"][0], 10.0);
+
+    let v = serde_json::to_value(HostMessage::AppAppeared {
+        app_id: "term".into(),
+        title: None,
+        size: [1.0, 1.0],
+    })
+    .unwrap();
+    assert_eq!(v["type"], "app_appeared");
+}
+
+#[test]
+fn version_negotiation_accepts_matching_version() {
+    assert_eq!(negotiate(PROTOCOL_VERSION).unwrap(), PROTOCOL_VERSION);
+}
+
+#[test]
+fn version_negotiation_rejects_mismatch() {
+    assert!(negotiate(PROTOCOL_VERSION + 1).is_err());
+}

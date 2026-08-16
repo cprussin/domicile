@@ -1,15 +1,15 @@
 // The controller for the simple reference chrome.
 //
 // Responsibilities kept deliberately tiny and DOM-testable: when the host
-// announces an app, mount an `<loom-app>` onto the stage; when it closes,
+// announces an app, mount an `<domicile-app>` onto the stage; when it closes,
 // unmount it. Everything about *how* the app looks (rounding, blur, layout) is
-// plain CSS in the shell's stylesheet — that is the whole point of Loom.
+// plain CSS in the shell's stylesheet — that is the whole point of Domicile.
 
-import { registerElements } from "@loom/chrome-sdk";
+import { registerElements } from "@domicile/chrome-sdk";
 
 export class ShellController {
   /**
-   * @param {import("@loom/chrome-sdk").BridgeClient} bridge
+   * @param {import("@domicile/chrome-sdk").BridgeClient} bridge
    * @param {{root: Element, register?: (bridge: any) => void}} opts
    */
   constructor(bridge, { root, register = registerElements } = {}) {
@@ -46,7 +46,7 @@ export class ShellController {
 
   /** Mount a webview portal onto the stage. */
   openWebview(src) {
-    const el = document.createElement("loom-webview");
+    const el = document.createElement("domicile-webview");
     el.className = "app";
     el.setAttribute("src", src);
     this.root.appendChild(el);
@@ -55,7 +55,7 @@ export class ShellController {
 
   mountApp({ app_id }) {
     if (this.apps.has(app_id)) return this.apps.get(app_id);
-    const el = document.createElement("loom-app");
+    const el = document.createElement("domicile-app");
     el.setAttribute("app-id", app_id);
     el.className = "app";
     this.root.appendChild(el);

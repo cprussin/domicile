@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 # Reproducible proof of the full GUI path, headlessly (Electron under Xvfb):
-#   Wayland client -> compositor -> host -> Electron chrome -> <loom-app> mounted
+#   Wayland client -> compositor -> host -> Electron chrome -> <domicile-app> mounted
 #   -> geometry reported back (place_portal).
 #
 #   nix develop .#full -c ./scripts/e2e-electron.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/target/debug/loom-compositor"
-[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p wc-compositor"; exit 1; }
+BIN="$ROOT/target/debug/domicile-compositor"
+[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p dm-compositor"; exit 1; }
 
-export XDG_RUNTIME_DIR="/tmp/loom-rt-xvfb"      # short: Unix socket path limit
+export XDG_RUNTIME_DIR="/tmp/domicile-rt-xvfb"      # short: Unix socket path limit
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
-rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/loom-chrome.sock
-SOCK="$XDG_RUNTIME_DIR/loom-chrome.sock"
+rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/domicile-chrome.sock
+SOCK="$XDG_RUNTIME_DIR/domicile-chrome.sock"
 LOG="$(mktemp)"; ELOG="$(mktemp)"
 
 # Wait until $2 appears in file $1 (or time out). $3 = max 0.2s ticks.
 wait_for() { local file="$1" pat="$2" n="${3:-150}"; for _ in $(seq 1 "$n"); do grep -q "$pat" "$file" && return 0; sleep 0.2; done; return 1; }
 
-RUST_LOG="info,loom_compositor=debug" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+RUST_LOG="info,domicile_compositor=debug" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 cleanup() { kill -9 "$COMP" "$EL" "$XVFB" "$FLOWER" 2>/dev/null; pkill -9 -f "shells/simple" 2>/dev/null; rm -f "$LOG" "$ELOG"; }
 trap cleanup EXIT
@@ -30,7 +30,7 @@ XVFB=$!
 export DISPLAY=:99
 sleep 0.8
 
-LOOM_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/shells/simple" >"$ELOG" 2>&1 &
+DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/shells/simple" >"$ELOG" 2>&1 &
 EL=$!
 
 # 1) Wait for the Electron *renderer* to be up (it sends hello after loading).
@@ -43,9 +43,9 @@ FLOWER=$!
 if ! wait_for "$LOG" "toplevel mapped" 50; then echo "FAIL: client never mapped a toplevel"; exit 1; fi
 echo "OK: Wayland client mapped a toplevel (Host::app_appeared)"
 
-# 3) The chrome should mount <loom-app> and report its placement back.
+# 3) The chrome should mount <domicile-app> and report its placement back.
 if wait_for "$LOG" "place_portal" 50; then
-  echo "OK: Electron chrome mounted <loom-app> and reported a portal"
+  echo "OK: Electron chrome mounted <domicile-app> and reported a portal"
 else
   echo "FAIL: chrome did not report a portal"; exit 1
 fi

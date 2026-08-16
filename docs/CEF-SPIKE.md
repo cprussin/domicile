@@ -1,16 +1,16 @@
 # The AppTextureBridge spike (runbook)
 
-This is the one load-bearing risk in Loom: getting a live Wayland client's GPU
+This is the one load-bearing risk in Domicile: getting a live Wayland client's GPU
 surface to render **inside the web page** as an `<app>` element with full CSS
 (rounded, blurred, rotated). It needs a prebuilt CEF (Chromium) distribution and
 a **GPU + display**, so it runs on your hardware, not in CI. Everything it plugs
 into is already built and tested:
 
-- `wc-bridge::BridgeRegistry` — maps each app to a stable `ExternalImageId` and
+- `dm-bridge::BridgeRegistry` — maps each app to a stable `ExternalImageId` and
   its latest `DmabufDescriptor` (tested).
-- `wc-compositor` — the Wayland server that will export each client's dmabuf.
-- `wc-host` — assigns the app id and routes input to app-local coordinates (tested).
-- `chrome-sdk` `<loom-app>` — reports the element's screen transform (tested).
+- `dm-compositor` — the Wayland server that will export each client's dmabuf.
+- `dm-host` — assigns the app id and routes input to app-local coordinates (tested).
+- `chrome-sdk` `<domicile-app>` — reports the element's screen transform (tested).
 
 ## Goal / success criteria
 
@@ -26,21 +26,21 @@ window is a first-class CSS element.
    - Download the Linux64 "Minimal" distribution from
      `https://cef-builds.spotifycdn.com/` (reachable from this machine) into
      `vendor/cef/` (already gitignored).
-   - Add the `cef` Rust crate as an optional dep behind `wc-bridge`'s `cef`
+   - Add the `cef` Rust crate as an optional dep behind `dm-bridge`'s `cef`
      feature; point it at the extracted distribution.
 
 2. **Off-screen render the chrome** with CEF OSR:
    - Enable `windowless_rendering_enabled`; load the resolved shell package's
-     `index.html` (from `wc-config`).
+     `index.html` (from `dm-config`).
    - Use `OnAcceleratedPaint` (GPU path) to get the page as a shared texture /
      dmabuf on Linux — validate this path early; it's CEF's rougher edge.
 
 3. **Bridge app surfaces into the page** (the crux). Try least-invasive first:
    - **A — media source:** expose each app surface as a video frame source the
-     page consumes via a `<video>` inside `<loom-app>`. `<video>` already
+     page consumes via a `<video>` inside `<domicile-app>`. `<video>` already
      composites external GPU frames with full CSS. No engine patch.
    - **B — WebGPU external texture:** import the app dmabuf as a
-     `GPUExternalTexture` and draw it into a canvas inside `<loom-app>`. Needs a
+     `GPUExternalTexture` and draw it into a canvas inside `<domicile-app>`. Needs a
      small privileged bind exposed to the page.
    - Keep `BridgeRegistry` as the source of truth: `register(app_id)` on
      `Host::app_appeared`, `update_frame` per client commit, `remove` on close.
@@ -50,7 +50,7 @@ window is a first-class CSS element.
 
 5. **Input round-trip**: feed libinput events to `Host::route_pointer`; for an
    `App { app_id, local }` result, forward to that client at `local`; otherwise
-   deliver to the page. `wc-scene` already inverts the element transform, so a
+   deliver to the page. `dm-scene` already inverts the element transform, so a
    click on the *rotated* window maps to the right app pixel.
 
 ## Why this is a layer, not a fork

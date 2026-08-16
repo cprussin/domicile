@@ -1,15 +1,15 @@
 // The <app> and <webview> custom elements.
 //
 // Custom element tag names must contain a hyphen, so the SDK registers
-// `loom-app` and `loom-webview`. The engine integration layer aliases the bare
+// `domicile-app` and `domicile-webview`. The engine integration layer aliases the bare
 // `<app>` / `<webview>` names the compositor exposes (we control the engine).
 //
-// An `<loom-app>` is a placeholder for a real Wayland client. On connect it
+// An `<domicile-app>` is a placeholder for a real Wayland client. On connect it
 // measures its on-screen box and tells the host to composite the client there;
 // on disconnect it tells the host to stop. The host draws the client's actual
 // surface into that transformed box, so the app inherits full CSS.
 //
-// A `<loom-webview>` is rendered by the engine directly (a nested browsing
+// A `<domicile-webview>` is rendered by the engine directly (a nested browsing
 // context), so the element itself is just a typed marker.
 
 import { accumulate } from "./matrix.js";
@@ -32,8 +32,8 @@ export function registerElements(bridge, { measure } = {}) {
   if (measure) measureFn = measure;
   installGlobalInput();
   if (typeof customElements === "undefined") return;
-  if (!customElements.get("loom-app")) customElements.define("loom-app", LoomAppElement);
-  if (!customElements.get("loom-webview")) customElements.define("loom-webview", LoomWebviewElement);
+  if (!customElements.get("domicile-app")) customElements.define("domicile-app", DomicileAppElement);
+  if (!customElements.get("domicile-webview")) customElements.define("domicile-webview", DomicileWebviewElement);
 }
 
 // Document-level keyboard forwarding + click-to-focus-chrome. Keyboard events
@@ -54,7 +54,7 @@ function installGlobalInput() {
 
   // Clicking outside any <app> returns keyboard focus to the chrome.
   document.addEventListener("pointerdown", (e) => {
-    const onApp = e.target && e.target.closest && e.target.closest("loom-app");
+    const onApp = e.target && e.target.closest && e.target.closest("domicile-app");
     if (!onApp && focusedAppId) {
       focusedAppId = null;
       activeBridge?.focusChrome();
@@ -62,7 +62,7 @@ function installGlobalInput() {
   });
 }
 
-export class LoomAppElement extends HTMLElement {
+export class DomicileAppElement extends HTMLElement {
   static observedAttributes = ["app-id"];
 
   get appId() {
@@ -149,13 +149,13 @@ export class LoomAppElement extends HTMLElement {
   _ensureCanvas() {
     if (!this._canvas) {
       this._canvas = document.createElement("canvas");
-      this._canvas.className = "loom-app-surface";
+      this._canvas.className = "domicile-app-surface";
       this.appendChild(this._canvas);
     }
   }
 }
 
-export class LoomWebviewElement extends HTMLElement {
+export class DomicileWebviewElement extends HTMLElement {
   static observedAttributes = ["src"];
 
   get src() {
@@ -175,11 +175,11 @@ export class LoomWebviewElement extends HTMLElement {
 
   // Embed the content. In the Electron host this is a real <webview> (a separate
   // browsing context, so it can load sites that forbid <iframe> embedding); the
-  // eventual engine maps <loom-webview> to a native CEF browsing context.
+  // eventual engine maps <domicile-webview> to a native CEF browsing context.
   _ensureView() {
     if (!this._view) {
       this._view = document.createElement("webview");
-      this._view.className = "loom-webview-frame";
+      this._view.className = "domicile-webview-frame";
       this.appendChild(this._view);
     }
     if (this.src) this._view.setAttribute("src", this.src);

@@ -2,7 +2,7 @@
 //
 // This is the prototype's window: Electron renders the chrome (full CSS/JS) and
 // this main process owns the Unix socket to the compositor, bridging it to the
-// renderer as `window.loomTransport`. (The eventual target embeds CEF directly;
+// renderer as `window.domicileTransport`. (The eventual target embeds CEF directly;
 // Electron gets us a visible, testable chrome now.)
 
 const { app, BrowserWindow, ipcMain } = require("electron");
@@ -10,8 +10,8 @@ const net = require("net");
 const path = require("path");
 
 const SOCKET =
-  process.env.LOOM_CHROME_SOCKET ||
-  path.join(process.env.XDG_RUNTIME_DIR || ".", "loom-chrome.sock");
+  process.env.DOMICILE_CHROME_SOCKET ||
+  path.join(process.env.XDG_RUNTIME_DIR || ".", "domicile-chrome.sock");
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -22,7 +22,7 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      webviewTag: true, // enables <loom-webview>'s inner <webview>
+      webviewTag: true, // enables <domicile-webview>'s inner <webview>
     },
   });
   win.loadFile(path.join(__dirname, "index.html"));
@@ -32,19 +32,19 @@ function createWindow() {
   // JSON strings, so we add/strip the newlines here.
   let buf = "";
   const sock = net.connect(SOCKET);
-  sock.on("connect", () => console.log("loom chrome: connected to", SOCKET));
+  sock.on("connect", () => console.log("domicile chrome: connected to", SOCKET));
   sock.on("data", (chunk) => {
     buf += chunk.toString();
     let i;
     while ((i = buf.indexOf("\n")) >= 0) {
       const line = buf.slice(0, i);
       buf = buf.slice(i + 1);
-      if (line.trim() && !win.isDestroyed()) win.webContents.send("loom:message", line);
+      if (line.trim() && !win.isDestroyed()) win.webContents.send("domicile:message", line);
     }
   });
-  sock.on("error", (err) => console.error("loom chrome: socket error:", err.message));
+  sock.on("error", (err) => console.error("domicile chrome: socket error:", err.message));
 
-  ipcMain.on("loom:send", (_event, text) => {
+  ipcMain.on("domicile:send", (_event, text) => {
     sock.write(text.endsWith("\n") ? text : text + "\n");
   });
 }

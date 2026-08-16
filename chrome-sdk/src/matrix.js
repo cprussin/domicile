@@ -1,8 +1,8 @@
 // 2D affine transforms as a 6-tuple [a, b, c, d, e, f], matching CSS
-// `matrix(a,b,c,d,e,f)` and the `transform` field of wc-protocol. A matrix maps
+// `matrix(a,b,c,d,e,f)` and the `transform` field of dm-protocol. A matrix maps
 // a local point to screen space: screen = (a*x + c*y + e, b*x + d*y + f).
 //
-// This mirrors the Rust `wc-scene::Transform`; the chrome computes the
+// This mirrors the Rust `dm-scene::Transform`; the chrome computes the
 // element->screen matrix here and ships it to the host, which inverts it to
 // route input. Keeping the math identical on both sides avoids drift.
 

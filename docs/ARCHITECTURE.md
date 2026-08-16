@@ -1,6 +1,6 @@
-# Loom architecture
+# Domicile architecture
 
-Loom is a Wayland compositor whose **renderer is a web engine**. All user
+Domicile is a Wayland compositor whose **renderer is a web engine**. All user
 chrome (panels, launchers, window decorations, overlays — everything that
 isn't an application window) is rendered as web content. Application windows
 are real Wayland clients whose surfaces are composited *inside the web engine*
@@ -76,16 +76,16 @@ but C/C++ and no advantage over CEF for our purposes).
 ## Crate layout
 
 Pure-logic crates (built & tested now, no GPU/engine needed):
-- `wc-config`  — config schema, parsing, hot-reload semantics, chrome-package
+- `dm-config`  — config schema, parsing, hot-reload semantics, chrome-package
   resolution.
-- `wc-scene`   — portal registry (app_id → geometry/transform), hit-testing,
+- `dm-scene`   — portal registry (app_id → geometry/transform), hit-testing,
   input routing. Pure geometry/logic.
-- `wc-protocol`— message types shared between the host and the in-page bridge
+- `dm-protocol`— message types shared between the host and the in-page bridge
   client (portal geometry, input, lifecycle).
 
 Hardware/engine crates (join via `nix develop .#full`):
-- `wc-host`    — Smithay Wayland server, output, input, presentation.
-- `wc-bridge`  — CEF embedding + AppTextureBridge (the load-bearing spike:
+- `dm-host`    — Smithay Wayland server, output, input, presentation.
+- `dm-bridge`  — CEF embedding + AppTextureBridge (the load-bearing spike:
   prove one Wayland client rendering as a CSS-styled element, zero-copy).
 
 Web side:
@@ -95,12 +95,12 @@ Web side:
 ## Testing strategy (TDD)
 
 Value concentrates in the pure-logic core, so that's where tests lead:
-- **wc-config**: parsing (valid/invalid), defaults, chrome-ref resolution,
+- **dm-config**: parsing (valid/invalid), defaults, chrome-ref resolution,
   and the hot-reload rule *"on parse error, keep last-good config and surface
   the error"* (never crash the compositor on a bad edit).
-- **wc-scene**: hit-testing under transforms, z-order resolution, input
+- **dm-scene**: hit-testing under transforms, z-order resolution, input
   routing between chrome and apps.
-- **wc-protocol**: round-trip (de)serialization and version negotiation.
+- **dm-protocol**: round-trip (de)serialization and version negotiation.
 
 Hardware-facing glue (DRM/KMS, CEF FFI) is kept thin and validated with
 nested/integration runs rather than unit tests.

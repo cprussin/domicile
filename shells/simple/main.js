@@ -1,13 +1,13 @@
 // Entry point for the simple shell. The compositor loads index.html, injects a
-// transport at `window.loomTransport`, and this wires the SDK to it.
+// transport at `window.domicileTransport`, and this wires the SDK to it.
 
-import { BridgeClient } from "@loom/chrome-sdk";
+import { BridgeClient } from "@domicile/chrome-sdk";
 import { ShellController } from "./src/shell.js";
 
 // The host exposes a transport (send/onMessage) to the page. Fall back to a
 // no-op so the shell can be opened in a plain browser for styling work.
 const transport =
-  window.loomTransport ?? {
+  window.domicileTransport ?? {
     send() {},
     onMessage() {},
   };
@@ -19,10 +19,10 @@ shell.installKeybindings(); // Alt+Enter -> kitty, Alt+Shift+Enter -> Google web
 bridge
   .connect()
   .then(() => {
-    document.body.dataset.loomConnected = "true";
+    document.body.dataset.domicileConnected = "true";
   })
   .catch((err) => {
-    console.error("loom: bridge handshake failed", err);
+    console.error("domicile: bridge handshake failed", err);
   });
 
 // A tiny bit of live chrome to prove CSS/JS work.

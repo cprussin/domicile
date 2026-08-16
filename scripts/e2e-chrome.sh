@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reproducible end-to-end proof of Loom's message plane:
+# Reproducible end-to-end proof of Domicile's message plane:
 #   real Wayland client -> compositor -> Host brain -> chrome
 #
 #   nix develop .#full -c ./scripts/e2e-chrome.sh
@@ -8,13 +8,13 @@
 # (weston-flower), and asserts the chrome receives app_appeared.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/target/debug/loom-compositor"
-[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p wc-compositor"; exit 1; }
+BIN="$ROOT/target/debug/domicile-compositor"
+[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p dm-compositor"; exit 1; }
 
-export XDG_RUNTIME_DIR="/tmp/loom-rt-e2e"   # short: Unix socket path limit
+export XDG_RUNTIME_DIR="/tmp/domicile-rt-e2e"   # short: Unix socket path limit
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
-rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/loom-chrome.sock
-SOCK="$XDG_RUNTIME_DIR/loom-chrome.sock"
+rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/domicile-chrome.sock
+SOCK="$XDG_RUNTIME_DIR/domicile-chrome.sock"
 OUT="$(mktemp)"
 
 "$BIN" --chrome-socket "$SOCK" >/dev/null 2>&1 &
@@ -22,7 +22,7 @@ COMP=$!
 trap 'kill -9 "$COMP" "$MOCK" 2>/dev/null; rm -f "$OUT"' EXIT
 for _ in $(seq 1 200); do { [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && [ -S "$SOCK" ]; } && break; sleep 0.05; done
 
-LOOM_CHROME_SOCK="$SOCK" node "$ROOT/scripts/mock-chrome.cjs" >"$OUT" 2>&1 &
+DOMICILE_CHROME_SOCK="$SOCK" node "$ROOT/scripts/mock-chrome.cjs" >"$OUT" 2>&1 &
 MOCK=$!
 sleep 0.6
 WAYLAND_DISPLAY=wayland-1 timeout 2 weston-flower >/dev/null 2>&1

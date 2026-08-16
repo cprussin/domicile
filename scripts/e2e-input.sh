@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Prove forwarded input reaches a real client, keyboard AND pointer. Runs
-# `weston-eventdemo` on Loom with WAYLAND_DEBUG so we can see the exact protocol
+# `weston-eventdemo` on Domicile with WAYLAND_DEBUG so we can see the exact protocol
 # events it receives, and forwards a focus+pointer+key sequence via the chrome
 # protocol.
 #   nix develop .#full -c ./scripts/e2e-input.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/target/debug/loom-compositor"
-[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p wc-compositor"; exit 1; }
+BIN="$ROOT/target/debug/domicile-compositor"
+[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p dm-compositor"; exit 1; }
 
-export XDG_RUNTIME_DIR="/tmp/loom-rt-input"
+export XDG_RUNTIME_DIR="/tmp/domicile-rt-input"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 export SOCK="$XDG_RUNTIME_DIR/c.sock"
@@ -22,7 +22,7 @@ trap cleanup EXIT
 for _ in $(seq 1 200); do { [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && [ -S "$SOCK" ]; } && break; sleep 0.05; done
 
 # Connect the injector first so it's subscribed before the app appears.
-LOOM_CHROME_SOCK="$SOCK" node "$ROOT/scripts/input-injector.cjs" &
+DOMICILE_CHROME_SOCK="$SOCK" node "$ROOT/scripts/input-injector.cjs" &
 INJ=$!
 sleep 0.5
 

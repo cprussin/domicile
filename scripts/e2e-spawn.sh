@@ -3,10 +3,10 @@
 #   nix develop .#full -c ./scripts/e2e-spawn.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/target/debug/loom-compositor"
-[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p wc-compositor"; exit 1; }
+BIN="$ROOT/target/debug/domicile-compositor"
+[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p dm-compositor"; exit 1; }
 
-export XDG_RUNTIME_DIR="/tmp/loom-rt-spawn"
+export XDG_RUNTIME_DIR="/tmp/domicile-rt-spawn"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 export SOCK="$XDG_RUNTIME_DIR/c.sock"

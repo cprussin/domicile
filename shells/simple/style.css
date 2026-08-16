@@ -54,7 +54,7 @@ body {
   inset: var(--bar-height) 0 0 0;
 }
 
-/* THE POINT OF LOOM: an app window is a real element, so it takes ordinary CSS.
+/* THE POINT OF DOMICILE: an app window is a real element, so it takes ordinary CSS.
    Rounded corners, a drop shadow, and a subtle entrance animation — all applied
    to a live Wayland client's surface. */
 .app {
@@ -78,8 +78,8 @@ body {
 }
 
 /* The live client's pixels / embedded webview fill the element. */
-.loom-app-surface,
-.loom-webview-frame {
+.domicile-app-surface,
+.domicile-webview-frame {
   display: block;
   width: 100%;
   height: 100%;
@@ -88,12 +88,12 @@ body {
 }
 
 /* Hide the placeholder once real pixels are present. */
-loom-app.app.has-surface::after {
+domicile-app.app.has-surface::after {
   display: none;
 }
 
 /* Placeholder label until the real surface is composited in (apps only). */
-loom-app.app::after {
+domicile-app.app::after {
   content: "⬚  app surface: " attr(app-id) "\A (live Wayland client — CEF texture bridge is the next step)";
   white-space: pre;
   position: absolute;

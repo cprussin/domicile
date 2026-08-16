@@ -9,7 +9,7 @@ import {
 } from "../src/placement.js";
 
 describe("placement messages", () => {
-  it("place_portal matches the wc-protocol wire shape", () => {
+  it("place_portal matches the dm-protocol wire shape", () => {
     const msg = placePortalMessage({
       appId: "term",
       size: [10, 20],

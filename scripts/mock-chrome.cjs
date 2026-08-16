@@ -2,7 +2,7 @@
 // connect to the compositor's chrome socket, do the handshake, and print every
 // message the host pushes to us. (The real chrome is the Electron app.)
 const net = require("net");
-const sock = process.env.LOOM_CHROME_SOCK;
+const sock = process.env.DOMICILE_CHROME_SOCK;
 
 const c = net.connect(sock, () => c.write('{"type":"hello","protocol_version":1}\n'));
 let buf = "";

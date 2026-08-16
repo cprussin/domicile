@@ -3,23 +3,23 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Loom — simple shell</title>
+    <title>Domicile — simple shell</title>
     <link rel="stylesheet" href="style.css" />
     <!-- No bundler: resolve the SDK's bare specifier to its source. -->
     <script type="importmap">
-      { "imports": { "@loom/chrome-sdk": "../../chrome-sdk/src/index.js" } }
+      { "imports": { "@domicile/chrome-sdk": "../../chrome-sdk/src/index.js" } }
     </script>
   </head>
   <body>
     <!-- All of this is ordinary web content rendered by the compositor. -->
     <header id="bar">
-      <span class="brand">loom</span>
+      <span class="brand">domicile</span>
       <span class="spacer"></span>
       <span id="clock">--:--:--</span>
     </header>
 
     <!-- The stage is where app portals mount. Each app becomes a real
-         <loom-app> element here, styled entirely with CSS (see style.css). -->
+         <domicile-app> element here, styled entirely with CSS (see style.css). -->
     <main id="stage"></main>
 
     <div id="empty-hint">No apps yet — launch a Wayland client.</div>

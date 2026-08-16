@@ -1,4 +1,4 @@
-# Loom
+# Domicile
 
 A Wayland compositor whose **renderer is a web engine**. All user chrome is
 web content; application windows are real Wayland clients composited *inside*
@@ -14,7 +14,7 @@ A runnable end-to-end prototype exists: a headless Wayland compositor + an
 Electron chrome window, wired so a **real Wayland client appears — with its live
 pixels — as a styled `<app>` element in the web chrome**. The compositor copies
 each client buffer to RGBA and streams it to the chrome, which draws it into the
-`<loom-app>` canvas (clients keep animating via frame callbacks). The remaining
+`<domicile-app>` canvas (clients keep animating via frame callbacks). The remaining
 work is making that zero-copy via engine external textures / CEF
 ([docs/CEF-SPIKE.md](docs/CEF-SPIKE.md)). See [ROADMAP.md](ROADMAP.md).
 
@@ -26,12 +26,12 @@ Needs a display (for the Electron window) + the full shell:
 nix develop .#full -c ./scripts/run-prototype.sh
 ```
 
-That starts Loom's headless Wayland compositor and the Electron chrome window.
-Then, in another terminal, put an app onto Loom's display:
+That starts Domicile's headless Wayland compositor and the Electron chrome window.
+Then, in another terminal, put an app onto Domicile's display:
 
 ```sh
 nix develop .#full
-XDG_RUNTIME_DIR=/tmp/loom-rt WAYLAND_DISPLAY=wayland-1 weston-flower
+XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 weston-flower
 ```
 
 A rounded/blurred `<app>` portal appears in the chrome window.
@@ -41,7 +41,7 @@ pointer input over it are forwarded to the Wayland client (surface-local coords,
 evdev keycodes).
 
 **Keybindings** (in the demo shell, with the chrome window focused):
-- **Alt+Enter** — launch a terminal (`kitty`) onto Loom. GPU/dmabuf-only clients
+- **Alt+Enter** — launch a terminal (`kitty`) onto Domicile. GPU/dmabuf-only clients
   may not show pixels until the dmabuf path lands, but input works for any client
   that runs; `wl_shm` clients (e.g. `weston-flower`) show pixels today.
 - **Alt+Shift+Enter** — open a `<webview>` pointing at Google (rendered by the
@@ -58,7 +58,7 @@ nix develop .#full -c ./scripts/e2e-input.sh       # forwarded keyboard + pointe
 ```
 
 `e2e-electron.sh` runs the actual Electron chrome headlessly and confirms it
-connects, handshakes, and mounts a `<loom-app>` (reporting its geometry back)
+connects, handshakes, and mounts a `<domicile-app>` (reporting its geometry back)
 when a real Wayland client maps a window.
 
 ## Develop
@@ -78,21 +78,21 @@ nix develop .#full
 
 | Path | What | Build |
 |------|------|-------|
-| `crates/wc-config`   | config schema, parsing, hot-reload, chrome-package resolution | core |
-| `crates/wc-scene`    | portal registry, hit-testing, input routing | core |
-| `crates/wc-protocol` | host ↔ in-page bridge messages | core |
-| `crates/wc-host`     | orchestrator brain + host↔chrome IPC seam | core |
-| `crates/loom`        | host daemon: boots from config, serves the chrome protocol | core |
-| `crates/wc-bridge`   | AppTextureBridge bookkeeping (app → engine texture) | core |
-| `crates/wc-compositor` | headless Smithay Wayland server driving the brain | `.#full` |
-| `chrome-sdk`         | `<loom-app>` / `<loom-webview>` custom elements + bridge client | node |
+| `crates/dm-config`   | config schema, parsing, hot-reload, chrome-package resolution | core |
+| `crates/dm-scene`    | portal registry, hit-testing, input routing | core |
+| `crates/dm-protocol` | host ↔ in-page bridge messages | core |
+| `crates/dm-host`     | orchestrator brain + host↔chrome IPC seam | core |
+| `crates/domicile`        | host daemon: boots from config, serves the chrome protocol | core |
+| `crates/dm-bridge`   | AppTextureBridge bookkeeping (app → engine texture) | core |
+| `crates/dm-compositor` | headless Smithay Wayland server driving the brain | `.#full` |
+| `chrome-sdk`         | `<domicile-app>` / `<domicile-webview>` custom elements + bridge client | node |
 | `shells/simple`      | minimal reference chrome | node |
 
 The Smithay backend is excluded from the default workspace build; build/run it in
 the full shell:
 
 ```sh
-nix develop .#full -c cargo build -p wc-compositor
+nix develop .#full -c cargo build -p dm-compositor
 nix develop .#full -c ./scripts/smoke-compositor.sh   # boots it; a real client binds our globals
 ```
 

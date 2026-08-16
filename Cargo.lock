@@ -164,6 +164,69 @@ dependencies = [
 ]
 
 [[package]]
+name = "dm-bridge"
+version = "0.0.0"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "dm-compositor"
+version = "0.0.0"
+dependencies = [
+ "base64",
+ "dm-host",
+ "dm-protocol",
+ "smithay",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "dm-config"
+version = "0.0.0"
+dependencies = [
+ "notify",
+ "serde",
+ "tempfile",
+ "thiserror 1.0.69",
+ "toml",
+]
+
+[[package]]
+name = "dm-host"
+version = "0.0.0"
+dependencies = [
+ "dm-protocol",
+ "dm-scene",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "dm-protocol"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "dm-scene"
+version = "0.0.0"
+
+[[package]]
+name = "domicile"
+version = "0.0.0"
+dependencies = [
+ "dm-config",
+ "dm-host",
+ "tempfile",
+]
+
+[[package]]
 name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -346,15 +409,6 @@ name = "log"
 version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
-
-[[package]]
-name = "loom"
-version = "0.0.0"
-dependencies = [
- "tempfile",
- "wc-config",
- "wc-host",
-]
 
 [[package]]
 name = "matchers"
@@ -1037,60 +1091,6 @@ checksum = "d8eab23fefc9e41f8e841df4a9c707e8a8c4ed26e944ef69297184de2785e3be"
 dependencies = [
  "pkg-config",
 ]
-
-[[package]]
-name = "wc-bridge"
-version = "0.0.0"
-dependencies = [
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "wc-compositor"
-version = "0.0.0"
-dependencies = [
- "base64",
- "smithay",
- "tracing",
- "tracing-subscriber",
- "wc-host",
- "wc-protocol",
-]
-
-[[package]]
-name = "wc-config"
-version = "0.0.0"
-dependencies = [
- "notify",
- "serde",
- "tempfile",
- "thiserror 1.0.69",
- "toml",
-]
-
-[[package]]
-name = "wc-host"
-version = "0.0.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "wc-protocol",
- "wc-scene",
-]
-
-[[package]]
-name = "wc-protocol"
-version = "0.0.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "wc-scene"
-version = "0.0.0"
 
 [[package]]
 name = "winapi-util"

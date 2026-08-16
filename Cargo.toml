@@ -1,30 +1,30 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/wc-config",
-    "crates/wc-scene",
-    "crates/wc-protocol",
-    "crates/wc-host",
-    "crates/loom",
-    "crates/wc-bridge",
-    "crates/wc-compositor",
+    "crates/dm-config",
+    "crates/dm-scene",
+    "crates/dm-protocol",
+    "crates/dm-host",
+    "crates/domicile",
+    "crates/dm-bridge",
+    "crates/dm-compositor",
 ]
 
-# wc-compositor pulls Smithay + native Wayland libs, so it is excluded from the
+# dm-compositor pulls Smithay + native Wayland libs, so it is excluded from the
 # default set: plain `cargo test` (core shell) stays fast and Smithay-free.
-# Build it explicitly in the full shell: `nix develop .#full -c cargo build -p wc-compositor`.
+# Build it explicitly in the full shell: `nix develop .#full -c cargo build -p dm-compositor`.
 default-members = [
-    "crates/wc-config",
-    "crates/wc-scene",
-    "crates/wc-protocol",
-    "crates/wc-host",
-    "crates/loom",
-    "crates/wc-bridge",
+    "crates/dm-config",
+    "crates/dm-scene",
+    "crates/dm-protocol",
+    "crates/dm-host",
+    "crates/domicile",
+    "crates/dm-bridge",
 ]
 
-# wc-host's default build (the orchestrator) is pure logic and lives in the
+# dm-host's default build (the orchestrator) is pure logic and lives in the
 # core shell. Its Smithay Wayland-server backend sits behind the
-# `smithay-backend` feature; wc-bridge (CEF FFI) joins once the heavy native
+# `smithay-backend` feature; dm-bridge (CEF FFI) joins once the heavy native
 # toolchain lands via `nix develop .#full`.
 
 [workspace.package]

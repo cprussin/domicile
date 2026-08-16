@@ -1,6 +1,6 @@
-# Loom roadmap & handoff
+# Domicile roadmap & handoff
 
-Loom is a Wayland compositor whose **renderer is a web engine**: all chrome is
+Domicile is a Wayland compositor whose **renderer is a web engine**: all chrome is
 web content, and app windows composite inside the engine as texture-backed DOM
 elements so `<app>` gets full CSS. Read `docs/ARCHITECTURE.md` (the why) and
 `docs/CEF-SPIKE.md` (the long-term zero-copy engine plan) first.
@@ -13,11 +13,11 @@ Built test-first, from the pure-logic core outward to the hardware/engine glue.
 
 ### Current state (working prototype)
 A runnable end-to-end prototype exists and is verified headlessly:
-real Wayland client → `wc-compositor` (Smithay, headless) → shared `Host` brain
-→ Electron chrome, which mounts a styled `<loom-app>`, **draws the client's live
+real Wayland client → `dm-compositor` (Smithay, headless) → shared `Host` brain
+→ Electron chrome, which mounts a styled `<domicile-app>`, **draws the client's live
 pixels** (shm path), and **forwards keyboard + pointer input back to the client**.
 `kitty` (Alt+Enter) and a Google `<webview>` (Alt+Shift+Enter) launch from the
-demo shell. **72 Rust tests (68 core + 4 in wc-compositor) + 42 JS tests, clippy
+demo shell. **72 Rust tests (68 core + 4 in dm-compositor) + 42 JS tests, clippy
 clean.** ~14 commits, each a green TDD increment.
 
 ### How to run / test
@@ -27,8 +27,8 @@ cargo test                      # 68 core Rust tests
 npm test                        # 42 JS tests (vitest + jsdom)
 
 nix develop .#full              # adds wayland, mesa, weston, electron, xvfb, kitty
-cargo build -p wc-compositor    # the Smithay server (EXCLUDED from default build)
-cargo test -p wc-compositor     # 4 unit tests (BGRA->RGBA conversion)
+cargo build -p dm-compositor    # the Smithay server (EXCLUDED from default build)
+cargo test -p dm-compositor     # 4 unit tests (BGRA->RGBA conversion)
 
 # End-to-end, headless (no display needed; use these to verify changes):
 nix develop .#full -c ./scripts/smoke-compositor.sh   # a real client binds our globals
@@ -39,8 +39,8 @@ nix develop .#full -c ./scripts/e2e-input.sh          # keyboard + pointer reach
 
 # Full visible prototype (needs a real display — run on the user's machine):
 nix develop .#full -c ./scripts/run-prototype.sh
-#   then, in another terminal on Loom's display:
-#   XDG_RUNTIME_DIR=/tmp/loom-rt WAYLAND_DISPLAY=wayland-1 weston-flower
+#   then, in another terminal on Domicile's display:
+#   XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 weston-flower
 ```
 
 ### Environment gotchas (these will bite you — read them)
@@ -53,10 +53,10 @@ nix develop .#full -c ./scripts/run-prototype.sh
   untracked file makes the flake error with "not tracked by Git" — `git add` it
   first (staging is enough; a dirty tree is fine, just warns).
 - **Unix socket path length ≤ ~108 chars (SUN_LEN)**. The session scratchpad path
-  is too long — use a **short** `XDG_RUNTIME_DIR` like `/tmp/loom-rt` for anything
-  that binds a wayland/chrome socket. (`wayland-1` squeaked under; `loom-chrome.sock`
+  is too long — use a **short** `XDG_RUNTIME_DIR` like `/tmp/domicile-rt` for anything
+  that binds a wayland/chrome socket. (`wayland-1` squeaked under; `domicile-chrome.sock`
   did not — this cost real debugging time.)
-- **`wc-compositor` is excluded from `default-members`** (it pulls Smithay +
+- **`dm-compositor` is excluded from `default-members`** (it pulls Smithay +
   native libs). Plain `cargo test`/`cargo build` in the core shell skip it; build
   it explicitly in `.#full`.
 - Reference material for Smithay: fetch from `github.com/Smithay/smithay` tag
@@ -90,30 +90,30 @@ nix develop .#full -c ./scripts/run-prototype.sh
 ### Repo layout
 | Path | What | Build |
 |---|---|---|
-| `crates/wc-config` | config schema/parse/validate, hot-reload (keep last-good), chrome-package resolution | core |
-| `crates/wc-scene` | affine transforms + inverse, hit-testing, input routing, z-order (pure math) | core |
-| `crates/wc-protocol` | host↔chrome wire messages (JSON), versioning | core |
-| `crates/wc-host` | orchestrator `Host` brain + `ipc` (handshake, `handle_chrome_line`/`apply_chrome_message`) | core |
-| `crates/loom` | host daemon / control plane (config → serve chrome protocol) | core |
-| `crates/wc-bridge` | AppTextureBridge bookkeeping (app → external-image id + latest dmabuf) — pure, unused by the prototype yet | core |
-| `crates/wc-compositor` | **the running compositor**: Smithay server + chrome socket + shm pixel capture + input injection | `.#full` |
-| `chrome-sdk` | `<loom-app>`/`<loom-webview>` elements, `BridgeClient`, matrix/frame/input helpers | node |
+| `crates/dm-config` | config schema/parse/validate, hot-reload (keep last-good), chrome-package resolution | core |
+| `crates/dm-scene` | affine transforms + inverse, hit-testing, input routing, z-order (pure math) | core |
+| `crates/dm-protocol` | host↔chrome wire messages (JSON), versioning | core |
+| `crates/dm-host` | orchestrator `Host` brain + `ipc` (handshake, `handle_chrome_line`/`apply_chrome_message`) | core |
+| `crates/domicile` | host daemon / control plane (config → serve chrome protocol) | core |
+| `crates/dm-bridge` | AppTextureBridge bookkeeping (app → external-image id + latest dmabuf) — pure, unused by the prototype yet | core |
+| `crates/dm-compositor` | **the running compositor**: Smithay server + chrome socket + shm pixel capture + input injection | `.#full` |
+| `chrome-sdk` | `<domicile-app>`/`<domicile-webview>` elements, `BridgeClient`, matrix/frame/input helpers | node |
 | `shells/simple` | reference chrome: bar + stage; `ShellController`; Electron host (`electron-main.cjs`/`preload.cjs`) | node |
 | `scripts/` | e2e + smoke + prototype launcher | — |
 
 JS note: Electron main/preload are **CommonJS `.cjs`** (root `package.json` has
-`type: module`); the renderer is ESM and resolves `@loom/chrome-sdk` via an
+`type: module`); the renderer is ESM and resolves `@domicile/chrome-sdk` via an
 **import map** in `index.html` (no bundler). Custom element tag names are
-hyphenated (`loom-app`/`loom-webview`); bare `<app>`/`<webview>` aliasing is a TODO.
+hyphenated (`domicile-app`/`domicile-webview`); bare `<app>`/`<webview>` aliasing is a TODO.
 
 ### How input & pixels actually flow (mental model)
-- **Pixels**: `wc-compositor` `commit()` → read shm buffer → `bgra_to_rgba` →
-  base64 → `HostMessage::AppFrame` broadcast → chrome-sdk `<loom-app>.drawFrame`
+- **Pixels**: `dm-compositor` `commit()` → read shm buffer → `bgra_to_rgba` →
+  base64 → `HostMessage::AppFrame` broadcast → chrome-sdk `<domicile-app>.drawFrame`
   → `<canvas>`. Throttled ~30fps; frame callbacks answered so clients animate.
-- **Input**: real events hit the Electron window → `<loom-app>` / document
+- **Input**: real events hit the Electron window → `<domicile-app>` / document
   listeners in chrome-sdk → `ChromeMessage::{PointerMotion,PointerButton,Key,…}`
   over the socket → compositor intercepts (before the pure brain) → `InputEvent`
-  over calloop channel → `LoomCompositor::handle_input` → seat inject. Click
+  over calloop channel → `DomicileCompositor::handle_input` → seat inject. Click
   focuses an app (`FocusApp` → `keyboard.set_focus`); click on chrome unfocuses.
 
 ---
@@ -122,10 +122,10 @@ hyphenated (`loom-app`/`loom-webview`); bare `<app>`/`<webview>` aliasing is a T
 
 ### Phase 0 — Foundation ✅
 ### Phase 1 — Pure-logic core (TDD) ✅
-`wc-config`, `wc-scene`, `wc-protocol` — all green.
+`dm-config`, `dm-scene`, `dm-protocol` — all green.
 
 ### Phase 3 — Wayland host ✅ (prototype complete)
-`Host` brain, IPC seam, `loom` daemon, `wc-compositor` (compositor + shm +
+`Host` brain, IPC seam, `domicile` daemon, `dm-compositor` (compositor + shm +
 xdg-shell + seat + output), unified process, real pixels (shm), and keyboard +
 pointer input injection — all done and verified headlessly.
 
@@ -150,11 +150,11 @@ Alt+Shift+Enter → Google webview).
    surface-local using `getBoundingClientRect` (axis-aligned). The demo `.app`
    has `transform: rotate(-1.2deg)`, which skews pointer coords. Either drop the
    demo rotation or do a proper inverse-transform in the chrome (the Rust side
-   `wc-scene` has the math but the chrome currently maps on its own).
-5. **Config hot-reload into the live process** — `wc-config` has the watcher
-   (`watch()`), not yet wired into the running `loom`/`wc-compositor` to hot-swap
+   `dm-scene` has the math but the chrome currently maps on its own).
+5. **Config hot-reload into the live process** — `dm-config` has the watcher
+   (`watch()`), not yet wired into the running `domicile`/`dm-compositor` to hot-swap
    config/shell without restart.
-6. **Multi-app focus / z-order / stacking** — `wc-scene` models it; the
+6. **Multi-app focus / z-order / stacking** — `dm-scene` models it; the
    compositor currently targets by `app_id` and keyboard focus is last-clicked.
 7. **Keymap + axis coverage** — `chrome-sdk/src/input.js` covers common keys;
    extend (numpad, media, intl). Axis is wired (source Wheel); may need v120.

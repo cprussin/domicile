@@ -1,8 +1,8 @@
 {
-  "name": "@loom/chrome-sdk",
+  "name": "@domicile/chrome-sdk",
   "version": "0.0.0",
   "type": "module",
-  "description": "Loom chrome SDK: <app>/<webview> custom elements and the host bridge client",
+  "description": "Domicile chrome SDK: <app>/<webview> custom elements and the host bridge client",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js"
