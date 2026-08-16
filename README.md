@@ -34,13 +34,23 @@ nix develop .#full
 XDG_RUNTIME_DIR=/tmp/loom-rt WAYLAND_DISPLAY=wayland-1 weston-flower
 ```
 
-A rounded/blurred `<app>` portal appears in the chrome window. The message plane
-(Wayland client → compositor → host brain → chrome) is also covered by a
-headless, reproducible check that runs without a display:
+A rounded/blurred `<app>` portal appears in the chrome window.
+
+**Keybindings** (in the demo shell, with the chrome window focused):
+- **Meta+Enter** — launch a terminal (`kitty`) onto Loom. Note: `kitty` renders
+  via GPU/dmabuf, which the compositor doesn't import yet, so it appears as a
+  portal but shows pixels only once the dmabuf path lands. `wl_shm` clients
+  (e.g. `weston-flower`) show pixels today.
+- **Meta+Shift+Enter** — open a `<webview>` pointing at Google (rendered by the
+  engine directly; works today).
+
+The message plane (Wayland client → compositor → host brain → chrome) is also
+covered by headless, reproducible checks that run without a display:
 
 ```sh
 nix develop .#full -c ./scripts/e2e-chrome.sh      # message plane (mock chrome)
 nix develop .#full -c ./scripts/e2e-electron.sh    # full path incl. the real Electron renderer, under Xvfb
+nix develop .#full -c ./scripts/e2e-spawn.sh       # a chrome `spawn` message launches a client
 ```
 
 `e2e-electron.sh` runs the actual Electron chrome headlessly and confirms it

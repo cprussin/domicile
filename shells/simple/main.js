@@ -13,7 +13,8 @@ const transport =
   };
 
 const bridge = new BridgeClient(transport);
-new ShellController(bridge, { root: document.getElementById("stage") });
+const shell = new ShellController(bridge, { root: document.getElementById("stage") });
+shell.installKeybindings(); // Meta+Enter -> kitty, Meta+Shift+Enter -> Google webview
 
 bridge
   .connect()

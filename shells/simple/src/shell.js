@@ -28,6 +28,31 @@ export class ShellController {
     if (el && typeof el.drawFrame === "function") el.drawFrame(width, height, data);
   }
 
+  /** Install the shell's keybindings on an event target (default: document). */
+  installKeybindings(target = document) {
+    target.addEventListener("keydown", (e) => this.handleKeydown(e));
+  }
+
+  handleKeydown(e) {
+    // Meta (Super) + Enter -> a terminal; add Shift for a Google webview.
+    if (!(e.metaKey && e.key === "Enter")) return;
+    e.preventDefault();
+    if (e.shiftKey) {
+      this.openWebview("https://www.google.com");
+    } else {
+      this.bridge.spawn(["kitty"]);
+    }
+  }
+
+  /** Mount a webview portal onto the stage. */
+  openWebview(src) {
+    const el = document.createElement("loom-webview");
+    el.className = "app";
+    el.setAttribute("src", src);
+    this.root.appendChild(el);
+    return el;
+  }
+
   mountApp({ app_id }) {
     if (this.apps.has(app_id)) return this.apps.get(app_id);
     const el = document.createElement("loom-app");

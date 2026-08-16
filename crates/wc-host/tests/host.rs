@@ -155,3 +155,12 @@ fn pointer_over_empty_space_goes_to_chrome() {
     let host = Host::new();
     assert!(matches!(host.route_pointer(10.0, 10.0), InputDelivery::Chrome { .. }));
 }
+
+#[test]
+fn spawn_is_a_no_op_in_the_brain() {
+    // The compositor intercepts Spawn; the brain must just ignore it.
+    let mut host = Host::new();
+    host.handle_chrome_message(ChromeMessage::Spawn { command: vec!["kitty".into()] }).unwrap();
+    assert_eq!(host.scene().len(), 0);
+    assert_eq!(host.app_count(), 0);
+}

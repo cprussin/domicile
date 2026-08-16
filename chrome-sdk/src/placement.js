@@ -42,6 +42,14 @@ export function focusChromeMessage() {
   return { type: "focus_chrome" };
 }
 
+/** Ask the compositor to spawn a client process (argv). */
+export function spawnMessage(command) {
+  if (!Array.isArray(command) || command.length === 0) {
+    throw new TypeError("spawn: command must be a non-empty argv array");
+  }
+  return { type: "spawn", command };
+}
+
 export function helloMessage(protocolVersion = PROTOCOL_VERSION) {
   return { type: "hello", protocol_version: protocolVersion };
 }

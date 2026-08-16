@@ -11,6 +11,7 @@ import {
   removePortalMessage,
   focusAppMessage,
   focusChromeMessage,
+  spawnMessage,
   PROTOCOL_VERSION,
 } from "./placement.js";
 
@@ -62,6 +63,11 @@ export class BridgeClient {
 
   focusChrome() {
     this.send(focusChromeMessage());
+  }
+
+  /** Ask the compositor to spawn a client process (argv array). */
+  spawn(command) {
+    this.send(spawnMessage(command));
   }
 
   _handleIncoming(text) {

@@ -22,6 +22,7 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      webviewTag: true, // enables <loom-webview>'s inner <webview>
     },
   });
   win.loadFile(path.join(__dirname, "index.html"));

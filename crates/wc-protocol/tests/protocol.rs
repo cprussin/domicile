@@ -33,6 +33,14 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::RemovePortal { app_id: "term".into() });
     chrome_round_trip(&ChromeMessage::FocusApp { app_id: "term".into() });
     chrome_round_trip(&ChromeMessage::FocusChrome);
+    chrome_round_trip(&ChromeMessage::Spawn { command: vec!["kitty".into(), "--hold".into()] });
+}
+
+#[test]
+fn spawn_wire_shape_is_pinned() {
+    let v = serde_json::to_value(ChromeMessage::Spawn { command: vec!["kitty".into()] }).unwrap();
+    assert_eq!(v["type"], "spawn");
+    assert_eq!(v["command"][0], "kitty");
 }
 
 #[test]

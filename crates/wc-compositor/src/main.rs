@@ -52,9 +52,9 @@ use smithay::wayland::{
 use smithay::{delegate_compositor, delegate_output, delegate_seat, delegate_shm, delegate_xdg_shell};
 use tracing::info;
 
-use wc_host::ipc::{handle_chrome_line, to_line};
+use wc_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use wc_host::Host;
-use wc_protocol::HostMessage;
+use wc_protocol::{ChromeMessage, HostMessage};
 
 /// Data threaded through the calloop event loop.
 struct CalloopData {
@@ -120,9 +120,18 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
     for line in reader.lines() {
         let Ok(line) = line else { break };
         tracing::debug!(chrome_msg = %line.trim(), "chrome -> host");
-        let responses = {
-            let mut host = hub.host.lock().unwrap();
-            handle_chrome_line(&mut host, &mut ready, &line)
+        let responses = match parse_chrome(line.trim()) {
+            // Spawn is a compositor-level side effect: intercept it here so it
+            // never touches the (pure) host brain.
+            Ok(ChromeMessage::Spawn { command }) => {
+                spawn_client(&command);
+                Vec::new()
+            }
+            Ok(message) => {
+                let mut host = hub.host.lock().unwrap();
+                apply_chrome_message(&mut host, &mut ready, message)
+            }
+            Err(_) => Vec::new(),
         };
         let mut writer = writer.lock().unwrap();
         for message in responses {
@@ -329,6 +338,25 @@ impl XdgShellHandler for LoomCompositor {
 delegate_xdg_shell!(LoomCompositor);
 
 // ---- boot -----------------------------------------------------------------
+
+/// Spawn a client process. It inherits the compositor's environment — including
+/// the `WAYLAND_DISPLAY` we set — so it connects to Loom. `DISPLAY` is removed so
+/// GUI toolkits prefer Loom's Wayland display over any outer X server. A reaper
+/// thread waits on the child so it doesn't become a zombie.
+fn spawn_client(command: &[String]) {
+    let Some((program, args)) = command.split_first() else {
+        return;
+    };
+    info!(?command, "spawning client");
+    match std::process::Command::new(program).args(args).env_remove("DISPLAY").spawn() {
+        Ok(mut child) => {
+            thread::spawn(move || {
+                let _ = child.wait();
+            });
+        }
+        Err(err) => tracing::error!(%err, ?command, "failed to spawn client"),
+    }
+}
 
 /// Copy a wl_shm buffer into row-major RGBA bytes.
 ///

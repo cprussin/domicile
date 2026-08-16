@@ -65,11 +65,17 @@ impl Session {
 /// honoured; malformed lines and version mismatches are ignored rather than
 /// tearing anything down.
 pub fn handle_chrome_line(host: &mut Host, ready: &mut bool, line: &str) -> Vec<HostMessage> {
-    let message = match parse_chrome(line.trim()) {
-        Ok(message) => message,
-        Err(_) => return Vec::new(),
-    };
+    match parse_chrome(line.trim()) {
+        Ok(message) => apply_chrome_message(host, ready, message),
+        Err(_) => Vec::new(),
+    }
+}
 
+/// Apply an already-parsed chrome message to the host, driving the handshake.
+///
+/// Split out so callers that must peek at the message first (e.g. the compositor
+/// intercepting `Spawn`) can parse once and dispatch the rest here.
+pub fn apply_chrome_message(host: &mut Host, ready: &mut bool, message: ChromeMessage) -> Vec<HostMessage> {
     match message {
         ChromeMessage::Hello { protocol_version } => match negotiate(protocol_version) {
             Ok(agreed) => {

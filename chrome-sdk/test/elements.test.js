@@ -88,12 +88,13 @@ describe("<loom-webview> custom element", () => {
     registerElements(new FakeBridge(), { measure: stubMeasure });
   });
 
-  it("registers and reflects its src", () => {
+  it("reflects src and embeds an inner view when connected", () => {
     const el = document.createElement("loom-webview");
     el.setAttribute("src", "https://example.com");
     document.body.appendChild(el);
     expect(el.src).toBe("https://example.com");
-    // A webview is rendered by the engine directly; it is a real element.
-    expect(el instanceof HTMLElement).toBe(true);
+    const view = el.querySelector(".loom-webview-frame");
+    expect(view).not.toBeNull();
+    expect(view.getAttribute("src")).toBe("https://example.com");
   });
 });

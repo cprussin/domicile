@@ -75,6 +75,9 @@ describe("BridgeClient", () => {
 
     bridge.focusApp("term");
     expect(transport.lastSent()).toEqual({ type: "focus_app", app_id: "term" });
+
+    bridge.spawn(["kitty"]);
+    expect(transport.lastSent()).toEqual({ type: "spawn", command: ["kitty"] });
   });
 
   it("ignores unknown host message types without throwing", () => {

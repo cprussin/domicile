@@ -84,11 +84,33 @@ export class LoomAppElement extends HTMLElement {
 }
 
 export class LoomWebviewElement extends HTMLElement {
+  static observedAttributes = ["src"];
+
   get src() {
     return this.getAttribute("src");
   }
   set src(value) {
     this.setAttribute("src", value);
+  }
+
+  connectedCallback() {
+    this._ensureView();
+  }
+
+  attributeChangedCallback(name) {
+    if (name === "src") this._ensureView();
+  }
+
+  // Embed the content. In the Electron host this is a real <webview> (a separate
+  // browsing context, so it can load sites that forbid <iframe> embedding); the
+  // eventual engine maps <loom-webview> to a native CEF browsing context.
+  _ensureView() {
+    if (!this._view) {
+      this._view = document.createElement("webview");
+      this._view.className = "loom-webview-frame";
+      this.appendChild(this._view);
+    }
+    if (this.src) this._view.setAttribute("src", this.src);
   }
 }
 

@@ -36,6 +36,11 @@ pub enum ChromeMessage {
 
     /// Return keyboard focus to the chrome.
     FocusChrome,
+
+    /// Ask the compositor to spawn a client process (argv). The child inherits
+    /// the compositor's environment, so it connects to Loom's Wayland display.
+    /// Used by chrome keybindings/launchers.
+    Spawn { command: Vec<String> },
 }
 
 /// Messages sent from the host to the chrome (in-page bridge).

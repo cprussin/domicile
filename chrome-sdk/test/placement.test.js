@@ -5,6 +5,7 @@ import {
   focusAppMessage,
   focusChromeMessage,
   helloMessage,
+  spawnMessage,
 } from "../src/placement.js";
 
 describe("placement messages", () => {
@@ -47,5 +48,12 @@ describe("placement messages", () => {
     expect(focusAppMessage("term")).toEqual({ type: "focus_app", app_id: "term" });
     expect(focusChromeMessage()).toEqual({ type: "focus_chrome" });
     expect(helloMessage(1)).toEqual({ type: "hello", protocol_version: 1 });
+  });
+
+  it("builds and validates spawn messages", () => {
+    expect(spawnMessage(["kitty"])).toEqual({ type: "spawn", command: ["kitty"] });
+    expect(spawnMessage(["kitty", "--hold"]).command).toEqual(["kitty", "--hold"]);
+    expect(() => spawnMessage([])).toThrow();
+    expect(() => spawnMessage("kitty")).toThrow();
   });
 });
