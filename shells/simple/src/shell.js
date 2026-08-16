@@ -34,8 +34,8 @@ export class ShellController {
   }
 
   handleKeydown(e) {
-    // Meta (Super) + Enter -> a terminal; add Shift for a Google webview.
-    if (!(e.metaKey && e.key === "Enter")) return;
+    // Alt + Enter -> a terminal; add Shift for a Google webview.
+    if (!(e.altKey && e.key === "Enter")) return;
     e.preventDefault();
     if (e.shiftKey) {
       this.openWebview("https://www.google.com");

@@ -28,7 +28,7 @@ class FakeBridge {
 }
 
 function keydown(props) {
-  return { preventDefault() {}, metaKey: false, shiftKey: false, key: "", ...props };
+  return { preventDefault() {}, altKey: false, shiftKey: false, key: "", ...props };
 }
 
 const stubMeasure = () => ({ size: [100, 100], transform: [1, 0, 0, 1, 0, 0], zIndex: 0, visible: true });
@@ -96,15 +96,15 @@ describe("ShellController", () => {
     expect(() => bridge.emit("app_frame", { app_id: "ghost", width: 1, height: 1, data: "AA==" })).not.toThrow();
   });
 
-  it("Meta+Enter spawns a terminal", () => {
+  it("Alt+Enter spawns a terminal", () => {
     const controller = new ShellController(bridge, { root, register: () => {} });
-    controller.handleKeydown(keydown({ metaKey: true, key: "Enter" }));
+    controller.handleKeydown(keydown({ altKey: true, key: "Enter" }));
     expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
   });
 
-  it("Meta+Shift+Enter opens a Google webview on the stage", () => {
+  it("Alt+Shift+Enter opens a Google webview on the stage", () => {
     const controller = new ShellController(bridge, { root, register: () => {} });
-    controller.handleKeydown(keydown({ metaKey: true, shiftKey: true, key: "Enter" }));
+    controller.handleKeydown(keydown({ altKey: true, shiftKey: true, key: "Enter" }));
     const view = root.querySelector("loom-webview");
     expect(view).not.toBeNull();
     expect(view.getAttribute("src")).toContain("google.com");
@@ -112,7 +112,7 @@ describe("ShellController", () => {
     expect(bridge.calls.some(([k]) => k === "spawn")).toBe(false);
   });
 
-  it("ignores Enter without Meta", () => {
+  it("ignores Enter without Alt", () => {
     const controller = new ShellController(bridge, { root, register: () => {} });
     controller.handleKeydown(keydown({ key: "Enter" }));
     expect(bridge.calls.some(([k]) => k === "spawn")).toBe(false);
