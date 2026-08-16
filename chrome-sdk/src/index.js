@@ -9,6 +9,7 @@
 
 export { BridgeClient } from "./bridge.js";
 export { registerElements, LoomAppElement, LoomWebviewElement } from "./elements.js";
+export { decodeBase64ToBytes } from "./frame.js";
 export * as matrix from "./matrix.js";
 export {
   placePortalMessage,

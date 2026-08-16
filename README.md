@@ -11,10 +11,12 @@ CSS as `<div>`/`<webview>` (rounding, opacity, blur, transforms, z-index).
 ## Status
 
 A runnable end-to-end prototype exists: a headless Wayland compositor + an
-Electron chrome window, wired so a **real Wayland client appears as a styled
-`<app>` element in the web chrome**. The one remaining piece is compositing the
-client's actual pixels (the CEF/dmabuf AppTextureBridge — [docs/CEF-SPIKE.md](docs/CEF-SPIKE.md)),
-so app windows currently show as styled placeholders. See [ROADMAP.md](ROADMAP.md).
+Electron chrome window, wired so a **real Wayland client appears — with its live
+pixels — as a styled `<app>` element in the web chrome**. The compositor copies
+each client buffer to RGBA and streams it to the chrome, which draws it into the
+`<loom-app>` canvas (clients keep animating via frame callbacks). The remaining
+work is making that zero-copy via engine external textures / CEF
+([docs/CEF-SPIKE.md](docs/CEF-SPIKE.md)). See [ROADMAP.md](ROADMAP.md).
 
 ## Run the prototype
 

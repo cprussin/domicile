@@ -20,6 +20,12 @@ export class ShellController {
     register(bridge);
     bridge.on("app_appeared", (m) => this.mountApp(m));
     bridge.on("app_closed", (m) => this.unmountApp(m));
+    bridge.on("app_frame", (m) => this.drawFrame(m));
+  }
+
+  drawFrame({ app_id, width, height, data }) {
+    const el = this.apps.get(app_id);
+    if (el && typeof el.drawFrame === "function") el.drawFrame(width, height, data);
   }
 
   mountApp({ app_id }) {

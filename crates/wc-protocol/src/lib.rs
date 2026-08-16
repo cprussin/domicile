@@ -52,6 +52,11 @@ pub enum HostMessage {
     /// A client's content size changed.
     AppResized { app_id: String, size: [f64; 2] },
 
+    /// A new pixel frame for an app surface, to draw into its `<app>` element.
+    /// `data` is base64-encoded, row-major RGBA (`width * height * 4` bytes).
+    /// This is the copy-based stopgap until the zero-copy dmabuf/CEF bridge lands.
+    AppFrame { app_id: String, width: u32, height: u32, format: String, data: String },
+
     /// A client went away; the chrome should unmount its `<app>` element.
     AppClosed { app_id: String },
 }

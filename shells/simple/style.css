@@ -77,6 +77,19 @@ body {
   animation: app-in 160ms ease-out;
 }
 
+/* The live client's pixels, drawn into a canvas that fills the element. */
+.loom-app-surface {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: auto;
+}
+
+/* Hide the placeholder once real pixels are present. */
+.app.has-surface::after {
+  display: none;
+}
+
 /* Placeholder label until the real surface is composited in. */
 .app::after {
   content: "⬚  app surface: " attr(app-id) "\A (live Wayland client — CEF texture bridge is the next step)";

@@ -75,4 +75,17 @@ describe("ShellController", () => {
     // Appending a connected element triggers the SDK's place-portal path.
     expect(bridge.calls.some(([kind, p]) => kind === "place" && p.appId === "term")).toBe(true);
   });
+
+  it("routes app_frame to the matching app element", () => {
+    bridge.emit("app_appeared", { app_id: "term", size: [1, 1] });
+    const el = root.querySelector("loom-app");
+    const drawn = [];
+    el.drawFrame = (w, h, data) => drawn.push([w, h, data]);
+
+    bridge.emit("app_frame", { app_id: "term", width: 2, height: 1, format: "rgba", data: "AAECAwQFBgc=" });
+    expect(drawn).toEqual([[2, 1, "AAECAwQFBgc="]]);
+
+    // A frame for an unknown app is a no-op (no throw).
+    expect(() => bridge.emit("app_frame", { app_id: "ghost", width: 1, height: 1, data: "AA==" })).not.toThrow();
+  });
 });

@@ -13,18 +13,21 @@
 //! presenting the engine's composited frame. This skeleton proves the
 //! server<->brain seam compiles and runs headlessly.
 
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
+use base64::Engine as _;
 use smithay::reexports::{
     calloop::{generic::Generic, EventLoop, Interest, Mode, PostAction},
     wayland_protocols::xdg::shell::server::xdg_toplevel,
     wayland_server::{
         backend::{ClientData, ClientId, DisconnectReason},
-        protocol::{wl_buffer, wl_seat, wl_surface::WlSurface},
+        protocol::{wl_buffer, wl_seat, wl_shm, wl_surface::WlSurface},
         Client, Display, DisplayHandle,
     },
 };
@@ -33,8 +36,12 @@ use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel};
 use smithay::utils::{Serial, Transform};
 use smithay::wayland::{
     buffer::BufferHandler,
-    compositor::{with_states, CompositorClientState, CompositorHandler, CompositorState},
+    compositor::{
+        with_states, BufferAssignment, CompositorClientState, CompositorHandler, CompositorState,
+        SurfaceAttributes,
+    },
     output::{OutputHandler, OutputManagerState},
+    shm::with_buffer_contents,
     shell::xdg::{
         PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
         XdgToplevelSurfaceData,
@@ -143,6 +150,10 @@ struct LoomCompositor {
     hub: Arc<ChromeHub>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
+    /// For frame-callback timestamps.
+    start: Instant,
+    /// Last time a frame was broadcast per app, to throttle to ~30fps.
+    last_frame: HashMap<String, Instant>,
 }
 
 /// Per-client state required by the compositor global.
@@ -168,19 +179,56 @@ impl CompositorHandler for LoomCompositor {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        let Some((app_id, toplevel)) =
+            self.toplevels.iter().find(|(_, t)| t.wl_surface() == surface).cloned()
+        else {
+            return;
+        };
+
         // Send the initial configure once, so the client can map its buffer.
-        if let Some((_, toplevel)) = self.toplevels.iter().find(|(_, t)| t.wl_surface() == surface) {
-            let initial_configure_sent = with_states(surface, |states| {
-                states
-                    .data_map
-                    .get::<XdgToplevelSurfaceData>()
-                    .unwrap()
-                    .lock()
-                    .unwrap()
-                    .initial_configure_sent
-            });
-            if !initial_configure_sent {
-                toplevel.send_configure();
+        let initial_configure_sent = with_states(surface, |states| {
+            states.data_map.get::<XdgToplevelSurfaceData>().unwrap().lock().unwrap().initial_configure_sent
+        });
+        if !initial_configure_sent {
+            toplevel.send_configure();
+        }
+
+        // Grab the newly-committed buffer's pixels and drain the frame callbacks.
+        let (frame, callbacks) = with_states(surface, |states| {
+            let mut guard = states.cached_state.get::<SurfaceAttributes>();
+            let attrs = guard.current();
+            let frame = match &attrs.buffer {
+                Some(BufferAssignment::NewBuffer(buffer)) => shm_buffer_to_rgba(buffer),
+                _ => None,
+            };
+            let callbacks = std::mem::take(&mut attrs.frame_callbacks);
+            (frame, callbacks)
+        });
+
+        // Ask the client to draw its next frame (keeps it animating).
+        let time = self.start.elapsed().as_millis() as u32;
+        for callback in callbacks {
+            callback.done(time);
+        }
+
+        // Broadcast the pixels to the chrome, throttled to ~30fps per app.
+        if let Some((width, height, rgba)) = frame {
+            let now = Instant::now();
+            let due = self
+                .last_frame
+                .get(&app_id)
+                .map_or(true, |t| now.duration_since(*t) >= Duration::from_millis(33));
+            if due {
+                self.last_frame.insert(app_id.clone(), now);
+                let data = base64::engine::general_purpose::STANDARD.encode(&rgba);
+                tracing::debug!(%app_id, width, height, "broadcast app frame");
+                self.hub.broadcast(&HostMessage::AppFrame {
+                    app_id,
+                    width,
+                    height,
+                    format: "rgba".to_string(),
+                    data,
+                });
             }
         }
     }
@@ -245,6 +293,7 @@ impl XdgShellHandler for LoomCompositor {
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
         if let Some(pos) = self.toplevels.iter().position(|(_, t)| t.wl_surface() == surface.wl_surface()) {
             let (app_id, _) = self.toplevels.remove(pos);
+            self.last_frame.remove(&app_id);
             let closed = self.hub.host.lock().unwrap().app_closed(&app_id);
             info!(%app_id, "toplevel destroyed -> Host::app_closed");
             if let Some(closed) = closed {
@@ -280,6 +329,91 @@ impl XdgShellHandler for LoomCompositor {
 delegate_xdg_shell!(LoomCompositor);
 
 // ---- boot -----------------------------------------------------------------
+
+/// Copy a wl_shm buffer into row-major RGBA bytes.
+///
+/// wl_shm ARGB/XRGB8888 are stored little-endian, so a pixel is `[B, G, R, A]`
+/// in memory; we swap to `[R, G, B, A]` for a browser canvas. Only these two
+/// formats are handled (what typical toolkits use); others are skipped.
+fn shm_buffer_to_rgba(buffer: &wl_buffer::WlBuffer) -> Option<(u32, u32, Vec<u8>)> {
+    with_buffer_contents(buffer, |ptr, len, data| {
+        let has_alpha = match data.format {
+            wl_shm::Format::Argb8888 => true,
+            wl_shm::Format::Xrgb8888 => false,
+            _ => return None,
+        };
+        let (w, h) = (data.width.max(0) as usize, data.height.max(0) as usize);
+        let stride = data.stride.max(0) as usize;
+        let offset = data.offset.max(0) as usize;
+        // Safety: valid for the duration of this callback (per with_buffer_contents).
+        let src = unsafe { std::slice::from_raw_parts(ptr, len) };
+        bgra_to_rgba(src, w, h, stride, offset, has_alpha).map(|rgba| (w as u32, h as u32, rgba))
+    })
+    .ok()
+    .flatten()
+}
+
+/// Convert an ARGB/XRGB8888 buffer (`[B, G, R, A]` per pixel in memory) into
+/// tightly-packed RGBA, honouring `stride` padding. Returns `None` if the source
+/// is too small for the described geometry.
+fn bgra_to_rgba(
+    src: &[u8],
+    width: usize,
+    height: usize,
+    stride: usize,
+    offset: usize,
+    has_alpha: bool,
+) -> Option<Vec<u8>> {
+    if width == 0 || height == 0 || stride < width * 4 || offset + (height - 1) * stride + width * 4 > src.len() {
+        return None;
+    }
+    let mut out = vec![0u8; width * height * 4];
+    for y in 0..height {
+        let row = offset + y * stride;
+        for x in 0..width {
+            let i = row + x * 4;
+            let o = (y * width + x) * 4;
+            out[o] = src[i + 2]; // R
+            out[o + 1] = src[i + 1]; // G
+            out[o + 2] = src[i]; // B
+            out[o + 3] = if has_alpha { src[i + 3] } else { 255 };
+        }
+    }
+    Some(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bgra_to_rgba;
+
+    #[test]
+    fn swaps_b_and_r_and_keeps_alpha() {
+        // two pixels: [B,G,R,A] = [10,20,30,40], [50,60,70,80]
+        let src = [10, 20, 30, 40, 50, 60, 70, 80];
+        let out = bgra_to_rgba(&src, 2, 1, 8, 0, true).unwrap();
+        assert_eq!(out, vec![30, 20, 10, 40, 70, 60, 50, 80]);
+    }
+
+    #[test]
+    fn xrgb_forces_opaque_alpha() {
+        let src = [10, 20, 30, 0];
+        let out = bgra_to_rgba(&src, 1, 1, 4, 0, false).unwrap();
+        assert_eq!(out, vec![30, 20, 10, 255]);
+    }
+
+    #[test]
+    fn honours_stride_padding() {
+        // 1px wide, 2 rows, stride 8 (4 bytes pixel + 4 bytes padding).
+        let src = [1, 2, 3, 4, 0, 0, 0, 0, 5, 6, 7, 8, 0, 0, 0, 0];
+        let out = bgra_to_rgba(&src, 1, 2, 8, 0, true).unwrap();
+        assert_eq!(out, vec![3, 2, 1, 4, 7, 6, 5, 8]);
+    }
+
+    #[test]
+    fn rejects_undersized_buffers() {
+        assert!(bgra_to_rgba(&[0, 0, 0], 2, 2, 8, 0, true).is_none());
+    }
+}
 
 /// Resolve where the chrome protocol socket lives.
 fn chrome_socket_path() -> PathBuf {
@@ -354,6 +488,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         _output: output,
         hub,
         toplevels: Vec::new(),
+        start: Instant::now(),
+        last_frame: HashMap::new(),
     };
 
     let mut data = CalloopData { state, display_handle: dh.clone() };

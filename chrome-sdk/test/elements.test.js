@@ -71,6 +71,16 @@ describe("<loom-app> custom element", () => {
     el.setAttribute("app-id", "term");
     expect(el.appId).toBe("term");
   });
+
+  it("drawFrame creates a canvas surface without throwing", () => {
+    const el = document.createElement("loom-app");
+    el.setAttribute("app-id", "term");
+    document.body.appendChild(el);
+    // jsdom has no 2d context, so this exercises the canvas-creation path and
+    // must not throw even when drawing is unavailable.
+    expect(() => el.drawFrame(2, 1, "AAECAwQFBgc=")).not.toThrow();
+    expect(el.querySelector("canvas")).not.toBeNull();
+  });
 });
 
 describe("<loom-webview> custom element", () => {

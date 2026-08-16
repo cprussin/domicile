@@ -13,6 +13,7 @@
 // context), so the element itself is just a typed marker.
 
 import { accumulate } from "./matrix.js";
+import { decodeBase64ToBytes } from "./frame.js";
 
 let activeBridge = null;
 let measureFn = defaultMeasure;
@@ -58,6 +59,27 @@ export class LoomAppElement extends HTMLElement {
     if (!this.appId || !activeBridge) return;
     const { size, transform, zIndex, visible } = measureFn(this);
     activeBridge.placePortal({ appId: this.appId, size, transform, zIndex, visible });
+  }
+
+  /** Draw a client frame (raw RGBA, base64) into this element's canvas. */
+  drawFrame(width, height, base64) {
+    this._ensureCanvas();
+    const ctx = this._canvas.getContext("2d");
+    if (!ctx) return; // e.g. jsdom has no 2d context
+    if (this._canvas.width !== width) this._canvas.width = width;
+    if (this._canvas.height !== height) this._canvas.height = height;
+    const bytes = decodeBase64ToBytes(base64);
+    const image = new ImageData(new Uint8ClampedArray(bytes.buffer, bytes.byteOffset, width * height * 4), width, height);
+    ctx.putImageData(image, 0, 0);
+    this.classList.add("has-surface");
+  }
+
+  _ensureCanvas() {
+    if (!this._canvas) {
+      this._canvas = document.createElement("canvas");
+      this._canvas.className = "loom-app-surface";
+      this.appendChild(this._canvas);
+    }
   }
 }
 

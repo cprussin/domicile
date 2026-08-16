@@ -34,9 +34,12 @@ as a CSS-styled (rounded + blurred + rotated) `<app>` element.
 - [x] **End-to-end prototype**: real Wayland client → compositor → host → chrome
       proven headlessly (`scripts/e2e-chrome.sh`); Electron chrome window shows
       a styled `<app>` portal (`scripts/run-prototype.sh`)
-- [ ] Export client surfaces (dmabuf) to the web engine (AppTextureBridge)
-- [ ] Present the engine's composited frame — replaces the `<app>` placeholder
-      with real pixels (needs the CEF bridge + a display; see docs/CEF-SPIKE.md)
+- [x] **Real pixels**: the compositor copies each shm buffer to RGBA and streams
+      `app_frame`s to the chrome, which draws them into the `<loom-app>` canvas;
+      clients keep animating via frame callbacks. Proven headlessly
+      (`scripts/e2e-electron.sh` asserts frames flow); BGRA→RGBA conversion unit-tested.
+- [ ] Zero-copy path: import client dmabufs as engine external textures (CEF),
+      replacing the per-frame copy (see docs/CEF-SPIKE.md)
 - [ ] DRM/KMS backend for real hardware
 
 ## Phase 4 — Chrome SDK + simple shell (done for the prototype)

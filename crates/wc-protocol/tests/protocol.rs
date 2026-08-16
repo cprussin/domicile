@@ -45,6 +45,13 @@ fn host_messages_round_trip() {
     });
     host_round_trip(&HostMessage::AppAppeared { app_id: "x".into(), title: None, size: [1.0, 1.0] });
     host_round_trip(&HostMessage::AppResized { app_id: "term".into(), size: [800.0, 600.0] });
+    host_round_trip(&HostMessage::AppFrame {
+        app_id: "term".into(),
+        width: 2,
+        height: 1,
+        format: "rgba".into(),
+        data: "AAECAwQFBgc=".into(),
+    });
     host_round_trip(&HostMessage::AppClosed { app_id: "term".into() });
 }
 

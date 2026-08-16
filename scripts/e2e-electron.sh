@@ -45,7 +45,14 @@ echo "OK: Wayland client mapped a toplevel (Host::app_appeared)"
 
 # 3) The chrome should mount <loom-app> and report its placement back.
 if wait_for "$LOG" "place_portal" 50; then
-  echo "PASS: Electron chrome mounted <loom-app> for the live client and reported a portal"
+  echo "OK: Electron chrome mounted <loom-app> and reported a portal"
 else
   echo "FAIL: chrome did not report a portal"; exit 1
+fi
+
+# 4) The compositor should extract the client's pixels and broadcast frames.
+if wait_for "$LOG" "broadcast app frame" 50; then
+  echo "PASS: real client pixels extracted (shm -> RGBA) and pushed to the chrome"
+else
+  echo "FAIL: no app frames were broadcast"; exit 1
 fi
