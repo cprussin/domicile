@@ -14,6 +14,8 @@
 use std::collections::HashMap;
 
 use wc_protocol::{ChromeMessage, HostMessage};
+
+pub mod ipc;
 use wc_scene::{KeyboardTarget, PointerTarget, Portal, Scene, Transform};
 
 /// Identifier for a connected app (Wayland toplevel), assigned by the host.

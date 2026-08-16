@@ -10,6 +10,8 @@ rust-version.workspace = true
 wc-scene = { path = "../wc-scene" }
 wc-protocol = { path = "../wc-protocol" }
 thiserror.workspace = true
+serde.workspace = true
+serde_json = "1"
 
 # The Smithay Wayland-server backend lives behind this feature so the
 # orchestrator (this crate's default build) stays testable in the core shell
