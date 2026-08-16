@@ -39,11 +39,14 @@ as a CSS-styled (rounded + blurred + rotated) `<app>` element.
       with real pixels (needs the CEF bridge + a display; see docs/CEF-SPIKE.md)
 - [ ] DRM/KMS backend for real hardware
 
-## Phase 4 — Chrome SDK + simple shell (mostly done)
+## Phase 4 — Chrome SDK + simple shell (done for the prototype)
 - [x] `chrome-sdk`: `<loom-app>` / `<loom-webview>` custom elements + bridge
       client + affine matrix helpers (TDD, 22 tests)
 - [x] `shells/simple`: minimal reference chrome (a bar + a stage mounting app
       portals), with `ShellController` app lifecycle (TDD, 5 tests)
+- [x] Electron host for the shell; full GUI path proven headlessly under Xvfb
+      (`scripts/e2e-electron.sh`): the real renderer mounts `<loom-app>` for a
+      live Wayland client and reports its geometry back
 - [ ] Engine aliasing of bare `<app>` / `<webview>` tag names
 - [ ] Hot-swap the active shell via config with no restart
 

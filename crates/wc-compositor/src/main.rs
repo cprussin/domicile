@@ -101,6 +101,7 @@ fn serve_chrome(hub: Arc<ChromeHub>, path: PathBuf) {
             Err(_) => continue,
         }));
         hub.chromes.lock().unwrap().push(writer.clone());
+        info!("chrome client connected");
         let hub = hub.clone();
         thread::spawn(move || chrome_connection(hub, stream, writer));
     }
@@ -111,6 +112,7 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
     let mut ready = false;
     for line in reader.lines() {
         let Ok(line) = line else { break };
+        tracing::debug!(chrome_msg = %line.trim(), "chrome -> host");
         let responses = {
             let mut host = hub.host.lock().unwrap();
             handle_chrome_line(&mut host, &mut ready, &line)

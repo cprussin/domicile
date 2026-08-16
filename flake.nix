@@ -44,6 +44,9 @@
         # Electron hosts the chrome shell as a visible window for the prototype
         # (the eventual target embeds CEF; Electron gets us a testable UI now).
         electron
+        # Xvfb lets us exercise the Electron chrome headlessly in tests
+        # (provides the `Xvfb` binary used by scripts/e2e-electron.sh).
+        xvfb
       ];
     in
     {

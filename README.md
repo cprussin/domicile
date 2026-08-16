@@ -37,8 +37,13 @@ A rounded/blurred `<app>` portal appears in the chrome window. The message plane
 headless, reproducible check that runs without a display:
 
 ```sh
-nix develop .#full -c ./scripts/e2e-chrome.sh   # PASS: ... -> chrome
+nix develop .#full -c ./scripts/e2e-chrome.sh      # message plane (mock chrome)
+nix develop .#full -c ./scripts/e2e-electron.sh    # full path incl. the real Electron renderer, under Xvfb
 ```
+
+`e2e-electron.sh` runs the actual Electron chrome headlessly and confirms it
+connects, handshakes, and mounts a `<loom-app>` (reporting its geometry back)
+when a real Wayland client maps a window.
 
 ## Develop
 
