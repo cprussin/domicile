@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/wc-config",
+    "crates/wc-scene",
+    "crates/wc-protocol",
+]
+
+# wc-host (Smithay Wayland server) and wc-bridge (CEF FFI) join the
+# workspace once their heavy native toolchain lands via `nix develop .#full`.
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.75"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+thiserror = "1"
+notify = "6"
+tempfile = "3"

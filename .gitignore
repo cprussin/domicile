@@ -1,0 +1,25 @@
+# Rust
+/target
+**/target
+Cargo.lock.orig
+
+# Nix
+result
+result-*
+.direnv
+
+# Node / chrome shells
+node_modules
+dist
+.cache
+
+# CEF binary distribution (large, fetched separately)
+/vendor/cef
+*.tar.bz2
+
+# Editor / OS
+*.swp
+.DS_Store
+
+# Local tool state
+.claude/

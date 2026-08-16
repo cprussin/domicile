@@ -1,0 +1,11 @@
+[package]
+name = "wc-scene"
+description = "Loom scene model: portal registry, hit-testing, and input routing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
