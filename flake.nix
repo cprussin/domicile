@@ -20,6 +20,9 @@
         clippy
         rust-analyzer
         pkg-config
+        # Node is needed for chrome-sdk + the chrome shells (custom elements,
+        # bridge client) and their vitest suites.
+        nodejs_22
       ];
 
       # Native libraries the Wayland host (wc-host, Smithay) and the CEF

@@ -1,0 +1,17 @@
+{
+  "name": "loom-js",
+  "private": true,
+  "type": "module",
+  "description": "JS side of Loom: chrome-sdk custom elements + reference chrome shells",
+  "workspaces": [
+    "chrome-sdk",
+    "shells/*"
+  ],
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.0",
+    "vitest": "^2.1.0"
+  }
+}

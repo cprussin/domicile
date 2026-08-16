@@ -1,0 +1,5 @@
+{
+  "name": "simple",
+  "description": "Minimal reference chrome: a top bar and a stage that mounts app portals",
+  "entry": "index.html"
+}
