@@ -4,10 +4,13 @@ members = [
     "crates/wc-config",
     "crates/wc-scene",
     "crates/wc-protocol",
+    "crates/wc-host",
 ]
 
-# wc-host (Smithay Wayland server) and wc-bridge (CEF FFI) join the
-# workspace once their heavy native toolchain lands via `nix develop .#full`.
+# wc-host's default build (the orchestrator) is pure logic and lives in the
+# core shell. Its Smithay Wayland-server backend sits behind the
+# `smithay-backend` feature; wc-bridge (CEF FFI) joins once the heavy native
+# toolchain lands via `nix develop .#full`.
 
 [workspace.package]
 version = "0.0.0"

@@ -438,6 +438,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "wc-host"
+version = "0.0.0"
+dependencies = [
+ "thiserror",
+ "wc-protocol",
+ "wc-scene",
+]
+
+[[package]]
 name = "wc-protocol"
 version = "0.0.0"
 dependencies = [

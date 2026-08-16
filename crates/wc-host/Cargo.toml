@@ -1,0 +1,19 @@
+[package]
+name = "wc-host"
+description = "Loom host orchestrator: ties the Wayland world to the scene model and chrome protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+wc-scene = { path = "../wc-scene" }
+wc-protocol = { path = "../wc-protocol" }
+thiserror.workspace = true
+
+# The Smithay Wayland-server backend lives behind this feature so the
+# orchestrator (this crate's default build) stays testable in the core shell
+# without the heavy graphics toolchain.
+[features]
+default = []
+smithay-backend = []
