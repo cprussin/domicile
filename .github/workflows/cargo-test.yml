@@ -1,0 +1,48 @@
+name: Cargo test
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Superseded pushes shouldn't keep a full build running.
+concurrency:
+  group: cargo-test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  # The pure-logic crates: everything in the cargo workspace's `default-members`.
+  # No graphics or Wayland stack needed, so this stays fast.
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      # Formatting is checked once, here, for the whole workspace — including
+      # the crates the compositor job builds.
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  # domicile-compositor is excluded from `default-members` because it pulls
+  # Smithay; it gets its own job so a failure here is distinguishable from a
+  # core-logic failure. Only libxkbcommon is needed to link — Domicile
+  # deliberately does not build Smithay's GL/DRM/winit backends, since the web
+  # engine is the renderer.
+  compositor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev
+      - run: cargo clippy -p domicile-compositor --all-targets -- -D warnings
+      - run: cargo test -p domicile-compositor

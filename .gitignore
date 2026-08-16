@@ -8,10 +8,16 @@ result
 result-*
 .direnv
 
-# Node / chrome shells
-node_modules
-dist
-.cache
+# Node / TypeScript
+node_modules/
+.turbo/
+dist/
+.vite/
+out/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
 
 # CEF binary distribution (large, fetched separately)
 /vendor/cef

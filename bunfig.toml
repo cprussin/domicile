@@ -1,0 +1,5 @@
+[install]
+# Supply-chain hardening: refuse npm package versions published less than this
+# many seconds ago (7 days), giving the community time to flag malicious
+# releases before they reach our installs.
+minimumReleaseAge = 604800

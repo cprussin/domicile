@@ -1,0 +1,39 @@
+name: Turbo test
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Superseded pushes shouldn't keep a full test+build running.
+concurrency:
+  group: turbo-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      # Persist turbo's local cache across runs via the GitHub Actions cache.
+      # `restore-keys` lets a run fall back to main's cache, so unchanged
+      # packages are a cache hit instead of a rebuild.
+      - name: Restore turbo cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+      - run: bun run turbo test --cache-dir=.turbo/cache
+      # Only main writes cache entries. PR runs restore from main's lineage but
+      # never save, so the shared cache pool isn't churned by a fresh superset
+      # per PR commit — which evicts still-useful entries under the 10GB limit
+      # and drags hit rates down. main keeps the cache fresh; every PR rides its
+      # warm restore.
+      - name: Save turbo cache
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}

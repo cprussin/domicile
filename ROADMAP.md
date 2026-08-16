@@ -2,8 +2,8 @@
 
 Domicile is a Wayland compositor whose **renderer is a web engine**: all chrome is
 web content, and app windows composite inside the engine as texture-backed DOM
-elements so `<app>` gets full CSS. Read `docs/ARCHITECTURE.md` (the why) and
-`docs/CEF-SPIKE.md` (the long-term zero-copy engine plan) first.
+elements so `<app>` gets full CSS. Read `docs/architecture/ARCHITECTURE.md` (the why) and
+`docs/architecture/CEF-SPIKE.md` (the long-term zero-copy engine plan) first.
 
 Built test-first, from the pure-logic core outward to the hardware/engine glue.
 
@@ -23,8 +23,8 @@ clean.** ~14 commits, each a green TDD increment.
 ### How to run / test
 ```sh
 nix develop                     # core shell: rust + node
-cargo test                      # 68 core Rust tests
-npm test                        # 42 JS tests (vitest + jsdom)
+cargo test                      # core Rust tests
+bun run turbo test              # TypeScript: lint, types, unit tests, shell build
 
 nix develop .#full              # adds wayland, mesa, weston, electron, xvfb, kitty
 cargo build -p domicile-compositor    # the Smithay server (EXCLUDED from default build)
@@ -90,19 +90,23 @@ nix develop .#full -c ./scripts/run-prototype.sh
 ### Repo layout
 | Path | What | Build |
 |---|---|---|
-| `crates/domicile-config` | config schema/parse/validate, hot-reload (keep last-good), chrome-package resolution | core |
-| `crates/domicile-scene` | affine transforms + inverse, hit-testing, input routing, z-order (pure math) | core |
-| `crates/domicile-protocol` | host↔chrome wire messages (JSON), versioning | core |
-| `crates/domicile-host` | orchestrator `Host` brain + `ipc` (handshake, `handle_chrome_line`/`apply_chrome_message`) | core |
-| `crates/domicile` | host daemon / control plane (config → serve chrome protocol) | core |
-| `crates/domicile-bridge` | AppTextureBridge bookkeeping (app → external-image id + latest dmabuf) — pure, unused by the prototype yet | core |
-| `crates/domicile-compositor` | **the running compositor**: Smithay server + chrome socket + shm pixel capture + input injection | `.#full` |
-| `chrome-sdk` | `<domicile-app>`/`<domicile-webview>` elements, `BridgeClient`, matrix/frame/input helpers | node |
-| `shells/simple` | reference chrome: bar + stage; `ShellController`; Electron host (`electron-main.cjs`/`preload.cjs`) | node |
+| `packages/domicile-config` | config schema/parse/validate, hot-reload (keep last-good), chrome-package resolution | core |
+| `packages/domicile-scene` | affine transforms + inverse, hit-testing, input routing, z-order (pure math) | core |
+| `packages/domicile-protocol` | host↔chrome wire messages (JSON), versioning | core |
+| `packages/domicile-host` | orchestrator `Host` brain + `ipc` (handshake, `handle_chrome_line`/`apply_chrome_message`) | core |
+| `packages/domicile` | host daemon / control plane (config → serve chrome protocol) | core |
+| `packages/domicile-bridge` | AppTextureBridge bookkeeping (app → external-image id + latest dmabuf) — pure, unused by the prototype yet | core |
+| `packages/domicile-compositor` | **the running compositor**: Smithay server + chrome socket + shm pixel capture + input injection | `.#full` |
+| `packages/chrome-sdk` | `<domicile-app>`/`<domicile-webview>` elements, `BridgeClient`, matrix/frame/input/protocol helpers | bun |
+| `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers) | bun |
+| `packages/e2e-harness` | headless chrome stand-ins for the `scripts/e2e-*.sh` checks | bun |
+| `apps/shell` | reference chrome: bar + stage; `ShellController`; Electron host (`src/main.ts`/`src/preload.ts`) | bun |
 | `scripts/` | e2e + smoke + prototype launcher | — |
 
-JS note: Electron main/preload are **CommonJS `.cjs`** (root `package.json` has
-`type: module`); the renderer is ESM and resolves `@domicile/chrome-sdk` via an
+TS note: the chrome is TypeScript built by Vite — the Electron main process to
+`.vite/build/main.js` (ESM) and the preload to `.vite/build/preload.cjs` (CJS,
+as Electron's isolated world requires). The renderer bundle resolves
+`@domicile/chrome-sdk` as an
 **import map** in `index.html` (no bundler). Custom element tag names are
 hyphenated (`domicile-app`/`domicile-webview`); bare `<app>`/`<webview>` aliasing is a TODO.
 
@@ -130,7 +134,7 @@ xdg-shell + seat + output), unified process, real pixels (shm), and keyboard +
 pointer input injection — all done and verified headlessly.
 
 ### Phase 4 — Chrome SDK + simple shell ✅ (prototype complete)
-`chrome-sdk`, `shells/simple`, Electron host, keybindings (Alt+Enter → kitty,
+`packages/chrome-sdk`, `apps/shell`, Electron host, keybindings (Alt+Enter → kitty,
 Alt+Shift+Enter → Google webview).
 
 ### Phase 2 / Next work — prioritized for the next agent
@@ -138,7 +142,7 @@ Alt+Shift+Enter → Google webview).
    apps) actually render. Add `zwp_linux_dmabuf`; to get pixels to the chrome
    you either import the dmabuf into a GL/EGL context in the compositor and read
    it (heavy) or hand the fd to the renderer (WebGL/WebGPU import). This is also
-   the on-ramp to the CEF external-texture path — see `docs/CEF-SPIKE.md`.
+   the on-ramp to the CEF external-texture path — see `docs/architecture/CEF-SPIKE.md`.
 2. **Cursor rendering** — clients call `set_cursor`; `SeatHandler::cursor_image`
    is currently a no-op, so no cursor shows over apps. The chrome should render
    the client's requested cursor (or a CSS cursor) over the `<app>`.
@@ -156,7 +160,7 @@ Alt+Shift+Enter → Google webview).
    config/shell without restart.
 6. **Multi-app focus / z-order / stacking** — `domicile-scene` models it; the
    compositor currently targets by `app_id` and keyboard focus is last-clicked.
-7. **Keymap + axis coverage** — `chrome-sdk/src/input.js` covers common keys;
+7. **Keymap + axis coverage** — `packages/chrome-sdk/src/input.ts` covers common keys;
    extend (numpad, media, intl). Axis is wired (source Wheel); may need v120.
 8. **Bare `<app>`/`<webview>` tag aliasing**, **hot-swap shells via config**.
 

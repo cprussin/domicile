@@ -22,7 +22,7 @@ COMP=$!
 trap 'kill -9 "$COMP" "$MOCK" 2>/dev/null; rm -f "$OUT"' EXIT
 for _ in $(seq 1 200); do { [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && [ -S "$SOCK" ]; } && break; sleep 0.05; done
 
-DOMICILE_CHROME_SOCK="$SOCK" node "$ROOT/scripts/mock-chrome.cjs" >"$OUT" 2>&1 &
+DOMICILE_CHROME_SOCK="$SOCK" bun "$ROOT/packages/e2e-harness/src/mock-chrome.ts" >"$OUT" 2>&1 &
 MOCK=$!
 sleep 0.6
 WAYLAND_DISPLAY=wayland-1 timeout 2 weston-flower >/dev/null 2>&1
