@@ -6,10 +6,15 @@ import { contextBridge, ipcRenderer } from "electron";
 import { CHROME_TO_HOST_CHANNEL, HOST_TO_CHROME_CHANNEL } from "./ipc-channels";
 
 contextBridge.exposeInMainWorld("domicileTransport", {
-  onMessage: (callback: (text: string) => void) => {
-    ipcRenderer.on(HOST_TO_CHROME_CHANNEL, (_event, frame: string) => {
-      callback(frame);
-    });
+  onMessage: (
+    callback: (text: string, pixels?: Uint8Array<ArrayBuffer>) => void,
+  ) => {
+    ipcRenderer.on(
+      HOST_TO_CHROME_CHANNEL,
+      (_event, text: string, pixels?: Uint8Array<ArrayBuffer>) => {
+        callback(text, pixels);
+      },
+    );
   },
   send: (text: string) => {
     ipcRenderer.send(CHROME_TO_HOST_CHANNEL, text);

@@ -17,7 +17,6 @@ import {
   focusedApp,
   setFocusedApp,
 } from "./element-context";
-import { decodeBase64ToBytes } from "./frame";
 import { buttonCodeFromJs } from "./input";
 import type { CursorShape } from "./protocol";
 import { surfaceLocal } from "./surface-coordinates";
@@ -112,8 +111,12 @@ export class DomicileAppElement extends HTMLElement {
     this.style.cursor = cursor;
   }
 
-  /** Draw a client frame (raw RGBA, base64) into this element's canvas. */
-  drawFrame(width: number, height: number, base64: string): void {
+  /** Draw a client frame (raw row-major RGBA) into this element's canvas. */
+  drawFrame(
+    width: number,
+    height: number,
+    pixels: Uint8Array<ArrayBuffer>,
+  ): void {
     this.setSurfaceSize(width, height);
     const canvas = this.#ensureCanvas();
     const context = canvas.getContext("2d");
@@ -128,12 +131,11 @@ export class DomicileAppElement extends HTMLElement {
       if (canvas.height !== height) {
         canvas.height = height;
       }
-      const bytes = decodeBase64ToBytes(base64);
       context.putImageData(
         new ImageData(
           new Uint8ClampedArray(
-            bytes.buffer,
-            bytes.byteOffset,
+            pixels.buffer,
+            pixels.byteOffset,
             width * height * BYTES_PER_PIXEL,
           ),
           width,

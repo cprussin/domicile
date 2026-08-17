@@ -235,7 +235,7 @@ describe("<domicile-app>", () => {
     const element = mountApp("term");
     // The test DOM has no 2d context, so this exercises the canvas-creation
     // path and must not throw even when drawing is unavailable.
-    element.drawFrame(2, 1, "AAECAwQFBgc=");
+    element.drawFrame(2, 1, new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]));
     expect(element.querySelector("canvas")).not.toBeNull();
   });
 

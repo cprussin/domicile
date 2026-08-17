@@ -9,10 +9,14 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v3 moved an app's pixels out of the JSON: `app_frame` now carries a byte
+/// count and the pixels follow the header line as raw bytes. A v2 chrome would
+/// read those bytes as messages, so the versions are not interchangeable.
+///
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// Messages sent from the chrome (in-page bridge) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -101,14 +105,21 @@ pub enum HostMessage {
     AppResized { app_id: String, size: [f64; 2] },
 
     /// A new pixel frame for an app surface, to draw into its `<app>` element.
-    /// `data` is base64-encoded, row-major RGBA (`width * height * 4` bytes).
-    /// This is the copy-based stopgap until the zero-copy dmabuf/CEF bridge lands.
+    ///
+    /// The pixels are **not** in this message: `bytes` says how many follow the
+    /// header line, as raw row-major RGBA (`width * height * 4`). They travel
+    /// outside the JSON because base64 is the most expensive step in the frame
+    /// path — encoding, escaping and decoding one full-window frame costs ~50ms
+    /// between the two processes, ~31ms of it on the renderer thread that also
+    /// handles the keyboard.
+    ///
+    /// This is still the copy-based stopgap until the dmabuf/CEF bridge lands.
     AppFrame {
         app_id: String,
         width: u32,
         height: u32,
         format: String,
-        data: String,
+        bytes: u32,
     },
 
     /// A client went away; the chrome should unmount its `<app>` element.

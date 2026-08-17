@@ -26,7 +26,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use base64::Engine as _;
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
 use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState};
@@ -181,20 +180,26 @@ impl ChromeHub {
 /// every client on the compositor.
 fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
     while let Some(item) = outbound.recv() {
-        let message = match item {
-            Outbound::Message(message) => message,
+        // A frame is a header line followed by its pixels; everything else is
+        // just the line. The pixels go out as bytes rather than base64 inside
+        // the JSON — see `HostMessage::AppFrame` for why that matters.
+        let (message, pixels) = match item {
+            Outbound::Message(message) => (message, Vec::new()),
             Outbound::Frame {
                 app_id,
                 width,
                 height,
                 rgba,
-            } => HostMessage::AppFrame {
-                app_id,
-                width,
-                height,
-                format: "rgba".to_string(),
-                data: base64::engine::general_purpose::STANDARD.encode(&rgba),
-            },
+            } => (
+                HostMessage::AppFrame {
+                    app_id,
+                    width,
+                    height,
+                    format: "rgba".to_string(),
+                    bytes: rgba.len() as u32,
+                },
+                rgba,
+            ),
         };
         let line = to_line(&message);
         let mut chromes = hub.chromes.lock().unwrap();
@@ -202,11 +207,12 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
             let mut stream = writer.lock().unwrap();
             stream
                 .write_all(line.as_bytes())
+                .and_then(|_| stream.write_all(&pixels))
                 .and_then(|_| stream.flush())
                 .is_ok()
         });
         tracing::debug!(
-            bytes = line.len(),
+            bytes = line.len() + pixels.len(),
             chromes = chromes.len(),
             "outbound: sent"
         );
