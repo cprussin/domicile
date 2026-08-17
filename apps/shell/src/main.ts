@@ -11,7 +11,11 @@ import { fileURLToPath } from "node:url";
 import { createHostStreamReader } from "@domicile/chrome-sdk/host-stream";
 import { withFrameDelimiter } from "@domicile/chrome-sdk/newline-frames";
 import { app, BrowserWindow, ipcMain } from "electron";
-import { CHROME_TO_HOST_CHANNEL, HOST_TO_CHROME_CHANNEL } from "./ipc-channels";
+import {
+  CHROME_DIAGNOSTIC_CHANNEL,
+  CHROME_TO_HOST_CHANNEL,
+  HOST_TO_CHROME_CHANNEL,
+} from "./ipc-channels";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,13 +63,33 @@ const connectHost = (win: BrowserWindow): void => {
     const items = readHost(chunk);
     if (!win.isDestroyed()) {
       for (const item of items) {
-        win.webContents.send(HOST_TO_CHROME_CHANNEL, item.text, item.pixels);
+        // The send timestamp rides along so the preload can price the hop
+        // itself: a frame's pixels are structured-cloned across the process
+        // boundary, which for a full window is megabytes per frame and the
+        // largest copy in the chrome's half of the path. `Date.now()` because
+        // it is the one clock both processes read the same way.
+        win.webContents.send(
+          HOST_TO_CHROME_CHANNEL,
+          item.text,
+          item.pixels,
+          Date.now(),
+        );
       }
     }
   });
 
   ipcMain.on(CHROME_TO_HOST_CHANNEL, (_event, text: string) => {
     socket.write(withFrameDelimiter(text));
+  });
+};
+
+// The renderer's own console goes to devtools, which nobody has open while
+// driving the prototype from a terminal. This puts the chrome's half of the
+// frame timing on the same stdout as the compositor's, which is the only place
+// the two can be read against each other.
+const printDiagnostics = (): void => {
+  ipcMain.on(CHROME_DIAGNOSTIC_CHANNEL, (_event, line: string) => {
+    process.stdout.write(`chrome: ${line}\n`);
   });
 };
 
@@ -76,6 +100,7 @@ const main = (): void => {
   app
     .whenReady()
     .then(() => {
+      printDiagnostics();
       connectHost(createWindow());
     })
     .catch((error: unknown) => {

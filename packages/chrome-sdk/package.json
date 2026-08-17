@@ -23,6 +23,8 @@
     "./observe-resize": "./src/observe-resize.ts",
     "./protocol": "./src/protocol.ts",
     "./register-elements": "./src/register-elements.ts",
+    "./round-trip": "./src/round-trip.ts",
+    "./sample-window": "./src/sample-window.ts",
     "./surface-coordinates": "./src/surface-coordinates.ts",
     "./transform-origin": "./src/transform-origin.ts",
     "./webview-element": "./src/webview-element.ts"

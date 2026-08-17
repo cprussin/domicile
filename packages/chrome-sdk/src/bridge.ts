@@ -22,7 +22,11 @@ import {
 } from "./chrome-message";
 import type { HostMessageOf, HostMessageType } from "./protocol";
 import { PROTOCOL_VERSION, parseHostMessage } from "./protocol";
+import { RoundTripWindow } from "./round-trip";
 import type { AxisDelta } from "./wheel-axis";
+
+/** The clock the round-trip timing reads; a parameter so tests can hold it. */
+const monotonicNow = (): number => performance.now();
 
 /** The message pipe the host exposes to the page. */
 export type Transport = {
@@ -34,6 +38,7 @@ export type Transport = {
 
 export type BridgeOptions = {
   protocolVersion?: number;
+  now?: typeof monotonicNow;
 };
 
 type Handler = (message: never) => void;
@@ -45,17 +50,29 @@ type Handler = (message: never) => void;
 export class BridgeClient {
   readonly protocolVersion: number;
 
+  /**
+   * How long keystrokes are taking to become pixels. The bridge is the only
+   * place that sees both ends of that loop, so it is where the measurement is
+   * taken; whoever wants to report it reads it from here.
+   */
+  readonly roundTrip = new RoundTripWindow();
+
   readonly #transport: Transport;
   readonly #handlers = new Map<HostMessageType, Handler>();
+  readonly #now: typeof monotonicNow;
   #welcome:
     | { resolve: (version: number) => void; reject: (error: Error) => void }
     | undefined;
 
   constructor(
     transport: Transport,
-    { protocolVersion = PROTOCOL_VERSION }: BridgeOptions = {},
+    {
+      protocolVersion = PROTOCOL_VERSION,
+      now = monotonicNow,
+    }: BridgeOptions = {},
   ) {
     this.protocolVersion = protocolVersion;
+    this.#now = now;
     this.#transport = transport;
     this.#transport.onMessage((text, pixels) => {
       this.#handleIncoming(text, pixels);
@@ -136,6 +153,14 @@ export class BridgeClient {
   }
 
   key(appId: string, keycode: number, pressed: boolean): void {
+    // Presses only. Releasing a key changes nothing on screen, so the next
+    // frame to arrive is some unrelated redraw — a terminal's blinking cursor,
+    // half a second later — and timing to that reports the blink interval as
+    // input latency. Since every press is followed by a release, counting them
+    // would contaminate half of every sample.
+    if (pressed) {
+      this.roundTrip.keyed(appId, this.#now());
+    }
     this.send(keyMessage(appId, keycode, pressed));
   }
 
@@ -157,6 +182,10 @@ export class BridgeClient {
           );
         }
         this.#handlers.get(message.type)?.({ ...message, pixels } as never);
+        // After the handler, not before: the handler is what puts the pixels
+        // on the canvas, and `putImageData` for a full window is a real cost —
+        // measuring before it would leave the most suspect step out.
+        this.roundTrip.drew(message.app_id, this.#now());
       } else {
         this.#handlers.get(message.type)?.(message as never);
       }

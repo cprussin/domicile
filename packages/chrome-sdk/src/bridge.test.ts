@@ -7,19 +7,23 @@ import { BTN_LEFT } from "./input";
 class FakeTransport implements Transport {
   readonly sent: unknown[] = [];
 
-  #onMessage: ((text: string) => void) | undefined;
+  #onMessage:
+    | ((text: string, pixels?: Uint8Array<ArrayBuffer>) => void)
+    | undefined;
 
   send(text: string): void {
     this.sent.push(JSON.parse(text));
   }
 
-  onMessage(callback: (text: string) => void): void {
+  onMessage(
+    callback: (text: string, pixels?: Uint8Array<ArrayBuffer>) => void,
+  ): void {
     this.#onMessage = callback;
   }
 
   /** Simulate a message arriving from the host. */
-  push(message: unknown): void {
-    this.#onMessage?.(JSON.stringify(message));
+  push(message: unknown, pixels?: Uint8Array<ArrayBuffer>): void {
+    this.#onMessage?.(JSON.stringify(message), pixels);
   }
 
   lastSent(): unknown {
@@ -138,5 +142,79 @@ describe("BridgeClient", () => {
     expect(() => {
       transport.push({ data: 1, type: "who_knows" });
     }).not.toThrow();
+  });
+
+  describe("round-trip timing", () => {
+    // The bridge is the only place that sees both ends of the loop — the
+    // keystroke going out and the pixels that answer it coming back — so it is
+    // where the number a user calls "sluggish" can be taken.
+    const frame = (appId: string): [unknown, Uint8Array<ArrayBuffer>] => [
+      {
+        app_id: appId,
+        bytes: 4,
+        format: "rgba",
+        height: 1,
+        type: "app_frame",
+        width: 1,
+      },
+      new Uint8Array(4),
+    ];
+
+    it("times a keystroke to the frame that answered it", () => {
+      let clock = 0;
+      const timed = new BridgeClient(transport, {
+        now: () => clock,
+        protocolVersion: 1,
+      });
+
+      timed.key("term", 30, true);
+      clock = 120;
+      transport.push(...frame("term"));
+
+      expect(timed.roundTrip.take()).toEqual({
+        averageMs: 120,
+        count: 1,
+        worstMs: 120,
+      });
+    });
+
+    it("does not start a round trip on a key release", () => {
+      // Releasing a key changes nothing on screen, so the next frame to arrive
+      // is some unrelated redraw — a terminal's blinking cursor, half a second
+      // later. Timing to that reports the blink interval as input latency, and
+      // since every press is followed by a release it would contaminate half of
+      // every sample.
+      let clock = 0;
+      const timed = new BridgeClient(transport, {
+        now: () => clock,
+        protocolVersion: 1,
+      });
+
+      timed.key("term", 30, false);
+      clock = 500;
+      transport.push(...frame("term"));
+
+      expect(timed.roundTrip.take()).toBeUndefined();
+    });
+
+    it("takes the measurement after the frame is drawn, not before", () => {
+      // The handler is what puts the pixels on the canvas, and `putImageData`
+      // for a full-window frame is a real cost. A measurement taken before the
+      // handler runs would leave the most suspect step out of the number.
+      let clock = 0;
+      const timed = new BridgeClient(transport, {
+        now: () => clock,
+        protocolVersion: 1,
+      });
+      timed.on("app_frame", () => {
+        clock += 40;
+      });
+
+      timed.key("term", 30, true);
+      clock = 10;
+      transport.push(...frame("term"));
+
+      expect(timed.roundTrip.take()?.worstMs).toBe(50);
+    });
   });
 });
