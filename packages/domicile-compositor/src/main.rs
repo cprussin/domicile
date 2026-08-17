@@ -78,10 +78,12 @@ use tracing::info;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod outbound;
+mod timing_window;
 
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::DmabufImporter;
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
+use crate::timing_window::TimingWindow;
 use domicile_bridge::BridgeRegistry;
 use domicile_config::Config;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
@@ -142,6 +144,7 @@ struct ChromeHub {
     chromes: Mutex<Vec<Arc<Mutex<UnixStream>>>>,
     request_tx: Mutex<Sender<ClientRequest>>,
     outbound: OutboundSender,
+    timings: Mutex<FrameTimings>,
 }
 
 impl ChromeHub {
@@ -152,6 +155,7 @@ impl ChromeHub {
             chromes: Mutex::new(Vec::new()),
             request_tx: Mutex::new(request_tx),
             outbound,
+            timings: Mutex::new(FrameTimings::default()),
         });
         (hub, outbound_rx)
     }
@@ -180,6 +184,7 @@ impl ChromeHub {
 /// slow chrome blocked `commit()`, which stopped frame callbacks, which stopped
 /// every client on the compositor.
 fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
+    let mut window = FrameWindow::default();
     while let Some(item) = outbound.recv() {
         // A frame is a header line followed by its pixels; everything else is
         // just the line. The pixels go out as bytes rather than base64 inside
@@ -203,6 +208,8 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
             ),
         };
         let line = to_line(&message);
+        let is_frame = !pixels.is_empty();
+        let started = Instant::now();
         let mut chromes = hub.chromes.lock().unwrap();
         chromes.retain(|writer| {
             let mut stream = writer.lock().unwrap();
@@ -212,11 +219,125 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
                 .and_then(|_| stream.flush())
                 .is_ok()
         });
-        tracing::debug!(
-            bytes = line.len() + pixels.len(),
-            chromes = chromes.len(),
-            "outbound: sent"
-        );
+        let attached = chromes.len();
+        drop(chromes);
+
+        if is_frame {
+            window.sent += 1;
+            window.bytes += line.len() + pixels.len();
+            window.writing += started.elapsed();
+        }
+        if let Some(report) = window.due(&outbound, &hub) {
+            info!(
+                sent = report.sent,
+                dropped = report.dropped,
+                fps = report.fps,
+                mb_per_s = report.mb_per_s,
+                write_ms = report.write_ms,
+                readback_ms = report.readback_ms,
+                readback_worst_ms = report.readback_worst_ms,
+                commit_ms = report.commit_ms,
+                idle_ms = report.idle_ms,
+                chromes = attached,
+                "frames"
+            );
+        }
+    }
+}
+
+/// The Wayland thread's half of the frame path, recorded there and read by the
+/// writer thread when it reports.
+///
+/// The writer thread already knows its own half — how many frames it sent and
+/// how long the socket took — and that half alone cannot say why the rate is
+/// what it is. A compositor spending every millisecond in the GPU readback and
+/// one sitting idle between a client's commits look identical from there.
+#[derive(Default)]
+struct FrameTimings {
+    /// Time inside the GPU readback: the copy the CEF bridge deletes.
+    readback: TimingWindow,
+    /// Time handling one commit end to end — the readback plus everything the
+    /// Wayland thread does around it.
+    commit: TimingWindow,
+    /// Time between one commit finishing and the next arriving: the client's
+    /// half, and the throttle's. Large here means we are waiting, not working.
+    idle: TimingWindow,
+}
+
+/// What the writer thread has done since it last said so.
+///
+/// Its own half: how many frames went out and how long the sockets took.
+/// `dropped` climbing while `fps` stays flat means pixels are being made faster
+/// than the chrome can drink them; a high `write_ms` means the socket itself is
+/// what backs up. [`FrameTimings`] carries the Wayland thread's half, and the
+/// report joins the two.
+#[derive(Default)]
+struct FrameWindow {
+    since: Option<Instant>,
+    sent: usize,
+    bytes: usize,
+    writing: Duration,
+}
+
+/// One window's worth of numbers, rounded for reading.
+struct FrameReport {
+    sent: usize,
+    dropped: usize,
+    fps: u32,
+    mb_per_s: u32,
+    write_ms: u32,
+    readback_ms: u32,
+    readback_worst_ms: u32,
+    commit_ms: u32,
+    idle_ms: u32,
+}
+
+/// How often the writer thread reports. Long enough that the line is not noise,
+/// short enough to watch while typing.
+const REPORT_EVERY: Duration = Duration::from_secs(5);
+
+impl FrameWindow {
+    fn due(&mut self, outbound: &OutboundReceiver, hub: &ChromeHub) -> Option<FrameReport> {
+        let since = *self.since.get_or_insert_with(Instant::now);
+        let elapsed = since.elapsed();
+        if elapsed < REPORT_EVERY {
+            None
+        } else {
+            let dropped = outbound.take_dropped();
+            // Nothing to say when nothing is being composited; an idle desktop
+            // should not fill the log. The Wayland thread's windows are taken
+            // inside the closure so a silent window leaves them accumulating
+            // rather than discarding what they hold.
+            let report = (self.sent > 0 || dropped > 0).then(|| {
+                let mut timings = hub.timings.lock().unwrap();
+                // A path that recorded nothing reads as zero: "did not run" and
+                // "took no time" are the same claim in a log line.
+                let (readback, commit, idle) = (
+                    timings.readback.take().unwrap_or_default(),
+                    timings.commit.take().unwrap_or_default(),
+                    timings.idle.take().unwrap_or_default(),
+                );
+                FrameReport {
+                    sent: self.sent,
+                    dropped,
+                    fps: (self.sent as f64 / elapsed.as_secs_f64()).round() as u32,
+                    mb_per_s: (self.bytes as f64 / 1e6 / elapsed.as_secs_f64()).round() as u32,
+                    write_ms: self
+                        .writing
+                        .checked_div(self.sent.max(1) as u32)
+                        .map_or(0, |per| per.as_millis() as u32),
+                    readback_ms: readback.average.as_millis() as u32,
+                    readback_worst_ms: readback.worst.as_millis() as u32,
+                    commit_ms: commit.average.as_millis() as u32,
+                    idle_ms: idle.average.as_millis() as u32,
+                }
+            });
+            *self = FrameWindow {
+                since: Some(Instant::now()),
+                ..FrameWindow::default()
+            };
+            report
+        }
     }
 }
 
@@ -378,6 +499,9 @@ struct DomicileCompositor {
     start: Instant,
     /// Last time a frame was broadcast per app, to throttle to ~30fps.
     last_frame: HashMap<String, Instant>,
+    /// When the last buffer commit finished, so the gap to the next one can be
+    /// timed. Not per-app: what it measures is whether *this thread* was busy.
+    last_commit: Option<Instant>,
 }
 
 /// Per-client state required by the compositor global.
@@ -466,9 +590,16 @@ impl DomicileCompositor {
         // Every dmabuf was imported once already, when the client created it
         // (`DmabufHandler::dmabuf_imported`), so a failure here is not a client
         // handing us something unsupported — it is the renderer breaking.
+        let started = Instant::now();
         let rgba = importer
             .read_rgba(&dmabuf)
             .expect("a dmabuf the importer accepted reads back");
+        self.hub
+            .timings
+            .lock()
+            .unwrap()
+            .readback
+            .record(started.elapsed());
         self.bridge
             .update_frame(app_id, descriptor_from(&dmabuf))
             .expect("every mapped toplevel is registered with the bridge");
@@ -675,6 +806,12 @@ impl CompositorHandler for DomicileCompositor {
         }
 
         if let Some(buffer) = attached {
+            // The gap since the last buffer commit is time the compositor was
+            // not composing: a client drawing, or the throttle holding it back.
+            let started = Instant::now();
+            if let Some(waited) = self.last_commit.map(|done| started.duration_since(done)) {
+                self.hub.timings.lock().unwrap().idle.record(waited);
+            }
             self.publish_frame(&app_id, &buffer);
             // The client may redraw into this buffer the instant it is
             // released, so the release comes after the pixels are out of it —
@@ -682,6 +819,14 @@ impl CompositorHandler for DomicileCompositor {
             // single-buffered client never draws again.
             buffer.release();
             tracing::debug!(%app_id, "buffer released");
+            let done = Instant::now();
+            self.hub
+                .timings
+                .lock()
+                .unwrap()
+                .commit
+                .record(done - started);
+            self.last_commit = Some(done);
         }
     }
 }
@@ -1188,6 +1333,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pointer_app: None,
         start: Instant::now(),
         last_frame: HashMap::new(),
+        last_commit: None,
     };
 
     let mut data = CalloopData { display, state };

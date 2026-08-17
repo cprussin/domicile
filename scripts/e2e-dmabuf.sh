@@ -137,7 +137,9 @@ echo "== driving ${GPU_CLIENT[0]} =="
 
 # WAYLAND_DEBUG puts the whole protocol conversation on the client's stderr,
 # which is the only way to see what a mapped-but-blank client is waiting for.
-WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 60 "${GPU_CLIENT[@]}" >"$CLILOG" 2>&1 &
+# NO_COLOR because current libwayland writes SGR escapes between the interface
+# name and the event, and the handshake tally below reads the log as plain text.
+NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 60 "${GPU_CLIENT[@]}" >"$CLILOG" 2>&1 &
 CLI=$!
 disown "$CLI" 2>/dev/null || true
 

@@ -27,8 +27,12 @@ DOMICILE_CHROME_SOCK="$SOCK" bun "$ROOT/packages/e2e-harness/src/mock-chrome.ts"
 MOCK=$!
 sleep 0.6
 # WAYLAND_DEBUG logs every event the client receives, which is the only place
-# a buffer release is visible — it produces no output of its own.
-WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 2 weston-flower >"$CLIENT" 2>&1
+# a buffer release is visible — it produces no output of its own. NO_COLOR
+# because libwayland otherwise writes SGR escapes *between* the interface name
+# and the event (`wl_surface` ESC `#12` ESC `.enter`), and every check below
+# reads the log as plain text — a coloured log matches nothing and passes
+# nothing, which is a guard that silently guards.
+NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 2 weston-flower >"$CLIENT" 2>&1
 sleep 0.4
 kill -9 "$MOCK" 2>/dev/null
 
