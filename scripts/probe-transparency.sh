@@ -45,7 +45,10 @@ cat >"$APPDIR/package.json" <<'JSON'
 JSON
 cat >"$APPDIR/main.js" <<'JS'
 const { app, BrowserWindow } = require("electron");
-app.disableHardwareAcceleration();
+// Hardware acceleration is deliberately *left on*. An earlier draft disabled
+// it for a steadier alpha reading and then reported the shm buffer that
+// caused as though it were Chromium's own choice — the probe answered a
+// question it had itself decided.
 app.whenReady().then(() => {
   const win = new BrowserWindow({
     width: 200,
@@ -137,7 +140,12 @@ elif plain | grep -aq "client dmabuf accepted"; then
   echo "GPU: the engine committed a dmabuf — its buffer imports with no copy,"
   echo "     which is the same path a Wayland client's frames take."
 else
-  echo "SHM: the engine committed shared memory despite a render node being"
-  echo "     present, so compositing its surface costs an upload per frame."
-  echo "     Tolerable — the chrome is nearly static — but worth knowing."
+  echo "SHM: a render node is present and hardware acceleration is enabled, and"
+  echo "     the engine still committed shared memory. Compositing its surface"
+  echo "     costs an upload per frame — bounded by damage, on a surface that"
+  echo "     changes as little as a chrome does, so tolerable. What it rules out"
+  echo "     is scanning the chrome out directly."
+  echo "  --- what the engine said about its GPU, which is where a reason shows:"
+  grep -aiE "gpu|gl |egl|dmabuf|software|swiftshader" "$APPLOG" \
+    | cut -c1-160 | tail -8 | sed 's/^/  /'
 fi
