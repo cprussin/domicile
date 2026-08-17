@@ -132,6 +132,10 @@ nix develop .#full -c ./scripts/run-prototype.sh
   input — past the 200ms repeat delay, so a key the user tapped starts
   repeating. Frames and lifecycle messages need opposite policies, in
   `outbound.rs`: drop frames past a shallow cap, never drop or wait on messages.
+- **Run the prototype in release.** The frame path is where an unoptimised
+  build shows: base64 + JSON for one 1494x994 frame costs 264ms in debug against
+  20ms in release, a 4fps ceiling against 50fps. `run-prototype.sh` builds
+  `--release`; the e2e scripts stay on debug, where only correctness matters.
 - **Two input bugs hid behind the blank window.** Nobody typed into an app
   until GPU clients rendered, so both only surfaced then. (1) The chrome
   forwarded the browser's auto-repeat `keydown`s as fresh Wayland presses; a

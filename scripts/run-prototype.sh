@@ -17,11 +17,15 @@ mkdir -p "$DOMICILE_RT"; chmod 700 "$DOMICILE_RT"
 rm -f "$DOMICILE_RT"/wayland-* "$DOMICILE_RT"/domicile-chrome.sock
 CHROME_SOCK="$DOMICILE_RT/domicile-chrome.sock"
 
-echo "domicile: building compositor..."
-( cd "$ROOT" && cargo build -p domicile-compositor ) || { echo "build failed"; exit 1; }
+# Release, unlike the e2e checks: this is the interactive prototype, and the
+# frame path is where the difference lands. Encoding one 1494x994 frame costs
+# 264ms unoptimised against 20ms optimised — the gap between a compositor that
+# drops most frames and one that keeps up.
+echo "domicile: building compositor (release)..."
+( cd "$ROOT" && cargo build --release -p domicile-compositor ) || { echo "build failed"; exit 1; }
 
 echo "domicile: starting headless Wayland compositor..."
-XDG_RUNTIME_DIR="$DOMICILE_RT" "$ROOT/target/debug/domicile-compositor" --chrome-socket "$CHROME_SOCK" &
+XDG_RUNTIME_DIR="$DOMICILE_RT" "$ROOT/target/release/domicile-compositor" --chrome-socket "$CHROME_SOCK" &
 COMP=$!
 trap 'kill "$COMP" "$CHROME" 2>/dev/null' EXIT
 
