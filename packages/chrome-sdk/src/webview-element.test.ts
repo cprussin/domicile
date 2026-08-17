@@ -76,6 +76,17 @@ describe("<domicile-webview>", () => {
       expect(element.src).toBe("https://example.com/page");
     });
 
+    it("hands the keyboard to the embedded view", () => {
+      const element = mountWebview("https://example.com");
+      const focused: string[] = [];
+      Object.assign(embedOf(element), {
+        focus: () => focused.push("embed"),
+      });
+
+      element.focus();
+      expect(focused).toEqual(["embed"]);
+    });
+
     it("does not re-load a page the embedded view navigated to itself", () => {
       const element = mountWebview("https://example.com");
       const view = embedOf(element);

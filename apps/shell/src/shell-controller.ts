@@ -33,6 +33,16 @@ const HOME_PAGE = "https://www.google.com";
 /** What the terminal launcher asks the compositor to run. */
 const TERMINAL_COMMAND = ["kitty"] as const;
 
+/**
+ * A window on the stage. Taking the stage also means taking the keyboard, and
+ * where that goes differs per window kind — a client's keyboard lives with the
+ * host, a browser window's with the page — so each window carries its own.
+ */
+type ShellWindow = {
+  element: HTMLElement;
+  focus: () => void;
+};
+
 export type ShellOptions = {
   root: Element;
   tabs: Element;
@@ -48,7 +58,7 @@ export class ShellController {
   readonly #root: Element;
   readonly #tabs: TabBar;
   readonly #apps = new Map<string, DomicileAppElement>();
-  readonly #windows = new Map<string, HTMLElement>();
+  readonly #windows = new Map<string, ShellWindow>();
   #shown: string | undefined;
   #browsersOpened = 0;
 
@@ -108,17 +118,19 @@ export class ShellController {
   }
 
   /** Open a browser window on the stage and give it the stage. */
-  openBrowser(src: string = HOME_PAGE): Element {
+  openBrowser(src: string = HOME_PAGE): void {
     this.#browsersOpened += 1;
     const id = `browser:${this.#browsersOpened.toString()}`;
-    const element = createBrowserWindow({
-      onNavigate: (url) => {
-        this.#tabs.rename(id, siteOf(url));
-      },
-      src,
-    });
-    this.#openWindow(id, siteOf(src), element);
-    return element;
+    this.#openWindow(
+      id,
+      siteOf(src),
+      createBrowserWindow({
+        onNavigate: (url) => {
+          this.#tabs.rename(id, siteOf(url));
+        },
+        src,
+      }),
+    );
   }
 
   mountApp({
@@ -133,7 +145,12 @@ export class ShellController {
       element.setAttribute("app-id", app_id);
       element.className = APP_WINDOW_CLASS;
       this.#apps.set(app_id, element);
-      this.#openWindow(appWindowId(app_id), title ?? app_id, element);
+      this.#openWindow(appWindowId(app_id), title ?? app_id, {
+        element,
+        focus: () => {
+          element.focusApp();
+        },
+      });
       return element;
     } else {
       return existing;
@@ -176,9 +193,9 @@ export class ShellController {
   }
 
   // A window that opens takes the stage; whatever had it is a tab away.
-  #openWindow(id: string, label: string, element: HTMLElement): void {
-    this.#windows.set(id, element);
-    this.#root.append(element);
+  #openWindow(id: string, label: string, window: ShellWindow): void {
+    this.#windows.set(id, window);
+    this.#root.append(window.element);
     this.#tabs.open(id, label);
     this.#show(id);
   }
@@ -199,13 +216,21 @@ export class ShellController {
   }
 
   // Hiding is what takes an app's portal off the stage: a hidden element has no
-  // box, so the SDK reports it to the host as no longer composited.
+  // box, so the SDK reports it to the host as no longer composited. The window
+  // that lands on the stage takes the keyboard with it, so the user can type
+  // into what they just opened or switched to without clicking it first.
   #show(id: string): void {
-    for (const [windowId, element] of this.#windows) {
-      element.hidden = windowId !== id;
+    const shown = this.#windows.get(id);
+    if (shown === undefined) {
+      throw new Error(`shell: no window ${id} to show`);
+    } else {
+      for (const [windowId, { element }] of this.#windows) {
+        element.hidden = windowId !== id;
+      }
+      this.#tabs.activate(id);
+      this.#shown = id;
+      shown.focus();
     }
-    this.#tabs.activate(id);
-    this.#shown = id;
   }
 }
 

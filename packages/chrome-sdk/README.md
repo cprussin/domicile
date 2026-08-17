@@ -13,11 +13,13 @@ It provides three things:
 - **Custom elements** (`./register-elements`) — `<domicile-app>` and
   `<domicile-webview>`. An `<domicile-app>` reports its on-screen box to the
   host, forwards pointer and keyboard input to the client underneath it, and
-  draws the frames the host pushes back. A `<domicile-webview>` embeds a nested
-  browsing context the engine renders directly: its `src` is the address on
-  screen (it follows the page wherever the content navigates, and fires
-  `domicile-navigate` when it lands), and `goBack` / `goForward` / `stop` /
-  `reload` are what a chrome's address bar drives it with.
+  draws the frames the host pushes back; `focusApp` routes the keyboard to it
+  without a click, for a chrome that shows a window the user did not click.
+  A `<domicile-webview>` embeds a nested browsing context the engine renders
+  directly: its `src` is the address on screen (it follows the page wherever the
+  content navigates, and fires `domicile-navigate` when it lands), `goBack` /
+  `goForward` / `stop` / `reload` are what a chrome's address bar drives it
+  with, and `focus` puts the keyboard on the embedded page.
 - **Pure helpers** — affine `./matrix` math mirroring the Rust
   `domicile-scene::Transform`, `./chrome-message` builders for the wire format,
   `./protocol` schemas for decoding host frames, `./input` keycode mapping, and

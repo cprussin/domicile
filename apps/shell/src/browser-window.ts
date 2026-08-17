@@ -17,16 +17,22 @@ export type BrowserWindowOptions = {
   onNavigate: (url: string) => void;
 };
 
+export type BrowserWindow = {
+  element: HTMLElement;
+  /** Put the keyboard on the page, not on the chrome around it. */
+  focus: () => void;
+};
+
 /** Build a browser window pointed at `src`. */
 export const createBrowserWindow = ({
   src,
   onNavigate,
-}: BrowserWindowOptions): HTMLElement => {
+}: BrowserWindowOptions): BrowserWindow => {
   const view = createWebview(src);
   const address = createAddressField(src);
-  const window = document.createElement("section");
-  window.className = "window browser";
-  window.append(createAddressBar(view, address), view);
+  const element = document.createElement("section");
+  element.className = "window browser";
+  element.append(createAddressBar(view, address), view);
 
   view.addEventListener(WEBVIEW_NAVIGATE_EVENT, (event) => {
     const { url } = (event as CustomEvent<{ url: string }>).detail;
@@ -34,7 +40,12 @@ export const createBrowserWindow = ({
     onNavigate(url);
   });
 
-  return window;
+  return {
+    element,
+    focus: () => {
+      view.focus();
+    },
+  };
 };
 
 const createWebview = (src: string): DomicileWebviewElement => {

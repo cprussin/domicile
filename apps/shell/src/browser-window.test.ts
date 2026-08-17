@@ -7,16 +7,16 @@ import { WEBVIEW_NAVIGATE_EVENT } from "@domicile/chrome-sdk/webview-element";
 
 import { createBrowserWindow } from "./browser-window";
 
-const viewOf = (window: Element): DomicileWebviewElement => {
-  const view = window.querySelector("domicile-webview");
+const viewOf = (element: Element): DomicileWebviewElement => {
+  const view = element.querySelector("domicile-webview");
   if (view === null) {
     throw new Error("test setup: the browser window embedded no webview");
   }
   return view as DomicileWebviewElement;
 };
 
-const addressOf = (window: Element): HTMLInputElement => {
-  const address = window.querySelector<HTMLInputElement>(
+const addressOf = (element: Element): HTMLInputElement => {
+  const address = element.querySelector<HTMLInputElement>(
     'input[aria-label="Address"]',
   );
   if (address === null) {
@@ -25,8 +25,8 @@ const addressOf = (window: Element): HTMLInputElement => {
   return address;
 };
 
-const click = (window: Element, label: string): void => {
-  const button = window.querySelector<HTMLButtonElement>(
+const click = (element: Element, label: string): void => {
+  const button = element.querySelector<HTMLButtonElement>(
     `button[aria-label="${label}"]`,
   );
   if (button === null) {
@@ -35,9 +35,9 @@ const click = (window: Element, label: string): void => {
   button.click();
 };
 
-const submitAddress = (window: Element, url: string): void => {
-  addressOf(window).value = url;
-  window
+const submitAddress = (element: Element, url: string): void => {
+  addressOf(element).value = url;
+  element
     .querySelector("form")
     ?.dispatchEvent(new Event("submit", { cancelable: true }));
 };
@@ -56,69 +56,84 @@ describe("createBrowserWindow", () => {
   });
 
   it("opens the requested page with its address on show", () => {
-    const window = createBrowserWindow({
+    const { element } = createBrowserWindow({
       onNavigate: () => undefined,
       src: "https://example.com",
     });
-    document.body.append(window);
+    document.body.append(element);
 
-    expect(viewOf(window).src).toBe("https://example.com");
-    expect(addressOf(window).value).toBe("https://example.com");
+    expect(viewOf(element).src).toBe("https://example.com");
+    expect(addressOf(element).value).toBe("https://example.com");
   });
 
   it("drives the page from the navigation controls", () => {
-    const window = createBrowserWindow({
+    const { element } = createBrowserWindow({
       onNavigate: () => undefined,
       src: "https://example.com",
     });
-    document.body.append(window);
+    document.body.append(element);
     const calls: string[] = [];
-    Object.assign(viewOf(window), {
+    Object.assign(viewOf(element), {
       goBack: () => calls.push("goBack"),
       goForward: () => calls.push("goForward"),
       reload: () => calls.push("reload"),
       stop: () => calls.push("stop"),
     });
 
-    click(window, "Back");
-    click(window, "Forward");
-    click(window, "Stop");
-    click(window, "Reload");
+    click(element, "Back");
+    click(element, "Forward");
+    click(element, "Stop");
+    click(element, "Reload");
     expect(calls).toEqual(["goBack", "goForward", "stop", "reload"]);
   });
 
   it("loads the address the user submits", () => {
-    const window = createBrowserWindow({
+    const { element } = createBrowserWindow({
       onNavigate: () => undefined,
       src: "https://example.com",
     });
-    document.body.append(window);
+    document.body.append(element);
 
-    submitAddress(window, "https://other.example/docs");
-    expect(viewOf(window).src).toBe("https://other.example/docs");
+    submitAddress(element, "https://other.example/docs");
+    expect(viewOf(element).src).toBe("https://other.example/docs");
   });
 
   it("assumes https for an address typed without a scheme", () => {
-    const window = createBrowserWindow({
+    const { element } = createBrowserWindow({
       onNavigate: () => undefined,
       src: "https://example.com",
     });
-    document.body.append(window);
+    document.body.append(element);
 
-    submitAddress(window, "other.example");
-    expect(viewOf(window).src).toBe("https://other.example");
+    submitAddress(element, "other.example");
+    expect(viewOf(element).src).toBe("https://other.example");
+  });
+
+  it("hands the keyboard to the page when focused", () => {
+    const { element, focus } = createBrowserWindow({
+      onNavigate: () => undefined,
+      src: "https://example.com",
+    });
+    document.body.append(element);
+    const focused: string[] = [];
+    Object.assign(viewOf(element), {
+      focus: () => focused.push("page"),
+    });
+
+    focus();
+    expect(focused).toEqual(["page"]);
   });
 
   it("follows the page wherever it navigates", async () => {
     const reported = await new Promise((resolve) => {
-      const window = createBrowserWindow({
+      const { element } = createBrowserWindow({
         onNavigate: resolve,
         src: "https://example.com",
       });
-      document.body.append(window);
-      navigate(viewOf(window), "https://example.com/docs");
+      document.body.append(element);
+      navigate(viewOf(element), "https://example.com/docs");
 
-      expect(addressOf(window).value).toBe("https://example.com/docs");
+      expect(addressOf(element).value).toBe("https://example.com/docs");
     });
 
     expect(reported).toBe("https://example.com/docs");

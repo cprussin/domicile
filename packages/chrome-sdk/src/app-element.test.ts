@@ -259,6 +259,18 @@ describe("<domicile-app>", () => {
     expect(bridge.calls).toContainEqual(["key", "term", 30, false]);
   });
 
+  it("focusApp gives the client the keyboard without a click", () => {
+    const element = mountApp("term");
+
+    element.focusApp();
+    expect(bridge.calls).toContainEqual(["focusApp", "term"]);
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, code: "KeyA" }),
+    );
+    expect(bridge.calls).toContainEqual(["key", "term", 30, true]);
+  });
+
   it("ignores the browser's auto-repeat while a key is held", () => {
     // Wayland sends one press and one release; the client synthesises repeat
     // itself from `wl_keyboard.repeat_info`. Forwarding the browser's repeats

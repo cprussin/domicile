@@ -53,6 +53,15 @@ export class DomicileWebviewElement extends HTMLElement {
     }
   }
 
+  /**
+   * Keyboard focus belongs to the page, not to this wrapper: the embed is the
+   * browsing context that renders it, so a chrome showing this window focuses
+   * it the way it would any other control.
+   */
+  override focus(): void {
+    this.#ensureView().focus();
+  }
+
   goBack(): void {
     this.#ensureView().goBack();
   }

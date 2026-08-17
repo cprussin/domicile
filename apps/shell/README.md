@@ -1,14 +1,17 @@
 # @domicile/shell
 
-The bundled reference chrome: a top bar, a clock, a tab strip, and a stage that
-shows one window at a time. It is the app Domicile ships to prove the model end
-to end — every pixel of it is ordinary web content, and each Wayland client on
-the stage is a real `<domicile-app>` element that takes ordinary CSS.
+The bundled reference chrome: a top bar carrying the tabs, the launchers and a
+clock, over a stage that shows one window at a time. It is the app Domicile
+ships to prove the model end to end — every pixel of it is ordinary web content,
+and each Wayland client on the stage is a real `<domicile-app>` element that
+takes ordinary CSS.
 
 A window is either a Wayland client the host announced or a browser window the
 shell opened itself; both get a tab, and the tab bar is what switches between
 them. Only the window on the stage has a box, so the SDK reports the rest to the
-host as no longer composited.
+host as no longer composited. The window that takes the stage takes the keyboard
+with it, so what the user just opened or switched to is typeable without a
+click: a client's keyboard goes to the host, a browser window's to its page.
 
 ## Layout
 
