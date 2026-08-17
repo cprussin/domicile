@@ -3,7 +3,7 @@
 Domicile is a Wayland compositor whose **renderer is a web engine**: all chrome is
 web content, and app windows composite inside the engine as texture-backed DOM
 elements so `<app>` gets full CSS. Read `docs/architecture/ARCHITECTURE.md` (the why) and
-`docs/architecture/CEF-SPIKE.md` (the long-term zero-copy engine plan) first.
+`docs/architecture/WINDOW-COMPOSITING.md` (how native windows reach parity) first.
 
 Built test-first, from the pure-logic core outward to the hardware/engine glue.
 
@@ -409,7 +409,7 @@ one with work left in it and leads the next-work list below.
    external-image id. *Remaining:* the frame still reaches the chrome as
    `AppFrame` pixels, because a `<canvas>` in Electron has no way to take the fd.
    Deleting that readback is the CEF external-texture work in
-   `docs/architecture/CEF-SPIKE.md` — the descriptor it needs is already live.
+   `docs/architecture/WINDOW-COMPOSITING.md` — the descriptor it needs is already live.
 2. **Hot-swap shells via config** — the watcher is wired (item 5 above); the
    missing half is the daemon owning the shell process so a `shell.package`
    change can restart it.

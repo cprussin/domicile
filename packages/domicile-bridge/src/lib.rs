@@ -7,7 +7,7 @@
 //! is a [`DmabufDescriptor`] handed to that texture. This crate holds only the
 //! pure bookkeeping; the actual CEF/Chromium binding (importing the dmabuf and
 //! feeding it to the compositor) lives behind the `cef` feature and is spelled
-//! out in `docs/CEF-SPIKE.md` — it needs the prebuilt CEF distribution and a GPU.
+//! out in `docs/architecture/WINDOW-COMPOSITING.md` — it needs a GPU and a display.
 //!
 //! Keeping the bookkeeping here, testable, is what keeps that GPU glue thin.
 

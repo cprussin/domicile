@@ -112,7 +112,7 @@ working in its area; it is context, not compliance.
 | Doc | Covers |
 |---|---|
 | [/docs/architecture/ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md) | Why Domicile is a compositor whose renderer is a web engine: the portal model, the host brain, the chrome protocol, and how a Wayland client becomes a styleable `<app>` element. |
-| [/docs/architecture/CEF-SPIKE.md](/docs/architecture/CEF-SPIKE.md) | The long-term zero-copy plan: replacing the copy-based frame path with engine external textures via CEF, and the runbook that proves it on real hardware. |
+| [/docs/architecture/WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) | How native windows reach parity with an ordinary Wayland compositor: composite client dmabufs in the compositor and punch a transparent hole in the page, rather than pushing pixels through the engine. |
 
 [`/ROADMAP.md`](/ROADMAP.md) carries the current state and the ordered plan;
 read it before starting anything substantial.

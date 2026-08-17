@@ -4,10 +4,11 @@
 //! Domicile's renderer is a web engine, so this is deliberately *not* a scene
 //! renderer — it draws exactly one texture into an offscreen buffer and copies
 //! it out. That copy is the stopgap the roadmap calls out: the dmabuf reaches
-//! the engine as `AppFrame` pixels today and as an external texture once the
-//! CEF bridge lands (`docs/architecture/CEF-SPIKE.md`). What matters now is
-//! that a GPU client's frames arrive at all — `wl_shm` is the only path a
-//! modern toolkit will not take.
+//! the engine as `AppFrame` pixels today, and stops being copied at all once
+//! the compositor composites it directly
+//! (`docs/architecture/WINDOW-COMPOSITING.md`). What matters now is that a GPU
+//! client's frames arrive at all — `wl_shm` is the only path a modern toolkit
+//! will not take.
 //!
 //! Everything but the device policy is glue over EGL/GLES that cannot run
 //! without a GPU, so it is deliberately thin: the buffer bookkeeping lives in
