@@ -238,6 +238,9 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
                 readback_worst_ms = report.readback_worst_ms,
                 commit_ms = report.commit_ms,
                 idle_ms = report.idle_ms,
+                response_ms = report.response_ms,
+                response_worst_ms = report.response_worst_ms,
+                throttled = report.throttled,
                 chromes = attached,
                 "frames"
             );
@@ -262,6 +265,20 @@ struct FrameTimings {
     /// Time between one commit finishing and the next arriving: the client's
     /// half, and the throttle's. Large here means we are waiting, not working.
     idle: TimingWindow,
+    /// Time from injecting a keystroke into a client to that client's next
+    /// commit — the client's own think-and-redraw, isolated.
+    ///
+    /// This is the piece the chrome's round trip cannot separate: subtract
+    /// this and the stages either side of it from `rt_ms` and what remains is
+    /// how long the keystroke took to *reach* the client, which is entirely
+    /// ours. Measured the same way as the chrome's, from the oldest keystroke
+    /// still unanswered, so the two numbers compare.
+    response: TimingWindow,
+    /// Commits the ~30fps throttle refused. Every one is a redraw the client
+    /// made and the chrome never saw, so if the client then goes idle the
+    /// screen holds stale pixels until it happens to redraw again — which for
+    /// a terminal answering a keystroke is latency the user feels directly.
+    throttled: usize,
 }
 
 /// What the writer thread has done since it last said so.
@@ -290,6 +307,9 @@ struct FrameReport {
     readback_worst_ms: u32,
     commit_ms: u32,
     idle_ms: u32,
+    response_ms: u32,
+    response_worst_ms: u32,
+    throttled: usize,
 }
 
 /// How often the writer thread reports. Long enough that the line is not noise,
@@ -304,18 +324,19 @@ impl FrameWindow {
             None
         } else {
             let dropped = outbound.take_dropped();
+            let mut timings = hub.timings.lock().unwrap();
             // Nothing to say when nothing is being composited; an idle desktop
-            // should not fill the log. The Wayland thread's windows are taken
-            // inside the closure so a silent window leaves them accumulating
-            // rather than discarding what they hold.
-            let report = (self.sent > 0 || dropped > 0).then(|| {
-                let mut timings = hub.timings.lock().unwrap();
+            // should not fill the log. Throttled commits count as something
+            // happening: a window where every frame was refused is exactly the
+            // one worth seeing, and it has no `sent` to announce itself with.
+            let report = (self.sent > 0 || dropped > 0 || timings.throttled > 0).then(|| {
                 // A path that recorded nothing reads as zero: "did not run" and
                 // "took no time" are the same claim in a log line.
-                let (readback, commit, idle) = (
+                let (readback, commit, idle, response) = (
                     timings.readback.take().unwrap_or_default(),
                     timings.commit.take().unwrap_or_default(),
                     timings.idle.take().unwrap_or_default(),
+                    timings.response.take().unwrap_or_default(),
                 );
                 FrameReport {
                     sent: self.sent,
@@ -330,8 +351,12 @@ impl FrameWindow {
                     readback_worst_ms: readback.worst.as_millis() as u32,
                     commit_ms: commit.average.as_millis() as u32,
                     idle_ms: idle.average.as_millis() as u32,
+                    response_ms: response.average.as_millis() as u32,
+                    response_worst_ms: response.worst.as_millis() as u32,
+                    throttled: std::mem::take(&mut timings.throttled),
                 }
             });
+            drop(timings);
             *self = FrameWindow {
                 since: Some(Instant::now()),
                 ..FrameWindow::default()
@@ -502,6 +527,10 @@ struct DomicileCompositor {
     /// When the last buffer commit finished, so the gap to the next one can be
     /// timed. Not per-app: what it measures is whether *this thread* was busy.
     last_commit: Option<Instant>,
+    /// When the oldest keystroke no client has answered yet was injected.
+    /// Only the oldest is kept, for the reason the chrome keeps the oldest: a
+    /// burst answered by one frame is felt as how long its first key waited.
+    pending_key: Option<Instant>,
 }
 
 /// Per-client state required by the compositor global.
@@ -575,6 +604,8 @@ impl DomicileCompositor {
             };
             tracing::debug!(%app_id, width, height, bytes = rgba.len(), "broadcast app frame");
             self.hub.send_frame(app_id, width, height, rgba);
+        } else {
+            self.hub.timings.lock().unwrap().throttled += 1;
         }
     }
 
@@ -687,6 +718,16 @@ impl DomicileCompositor {
                 pointer.frame(self);
             }
             ClientRequest::Key { keycode, pressed } => {
+                // Started here rather than where the key arrived off the socket:
+                // what this isolates is the client's think-and-redraw, so the
+                // clock starts the moment the client can possibly know.
+                //
+                // Presses only, for the reason the chrome counts presses only:
+                // a release changes nothing on screen, so it would time to some
+                // unrelated redraw — a blinking cursor, half a second later.
+                if pressed {
+                    self.pending_key.get_or_insert_with(Instant::now);
+                }
                 let keyboard = self.seat.get_keyboard().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
                 let state = if pressed {
@@ -809,8 +850,17 @@ impl CompositorHandler for DomicileCompositor {
             // The gap since the last buffer commit is time the compositor was
             // not composing: a client drawing, or the throttle holding it back.
             let started = Instant::now();
-            if let Some(waited) = self.last_commit.map(|done| started.duration_since(done)) {
-                self.hub.timings.lock().unwrap().idle.record(waited);
+            {
+                let mut timings = self.hub.timings.lock().unwrap();
+                if let Some(waited) = self.last_commit.map(|done| started.duration_since(done)) {
+                    timings.idle.record(waited);
+                }
+                // A commit with no keystroke behind it is not a response to
+                // one — a terminal redraws its blinking cursor unprompted, and
+                // counting that would report the blink interval as think time.
+                if let Some(keyed) = self.pending_key.take() {
+                    timings.response.record(started.duration_since(keyed));
+                }
             }
             self.publish_frame(&app_id, &buffer);
             // The client may redraw into this buffer the instant it is
@@ -1334,6 +1384,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         start: Instant::now(),
         last_frame: HashMap::new(),
         last_commit: None,
+        pending_key: None,
     };
 
     let mut data = CalloopData { display, state };

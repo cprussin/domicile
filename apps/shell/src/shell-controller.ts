@@ -20,9 +20,13 @@ import {
   APP_TAG_NAME,
   registerElements,
 } from "@domicile/chrome-sdk/register-elements";
+import { SampleWindow } from "@domicile/chrome-sdk/sample-window";
 
 import { createBrowserWindow } from "./browser-window";
 import { TabBar } from "./tab-bar";
+
+/** The clock the draw timing reads; a parameter so tests can hold it. */
+const monotonicNow = (): number => performance.now();
 
 /** The classes the stylesheet hangs an app window's appearance off. */
 const APP_WINDOW_CLASS = "window app";
@@ -51,22 +55,36 @@ export type ShellOptions = {
    * double. Defaults to the real registration.
    */
   register?: (bridge: BridgeClient) => void;
+  now?: typeof monotonicNow;
 };
 
 export class ShellController {
+  /**
+   * How long the canvas draw is taking — the last stage of the round trip, and
+   * one of the two the compositor cannot see. Read by whoever reports.
+   */
+  readonly drawTiming = new SampleWindow();
+
   readonly #bridge: BridgeClient;
   readonly #root: Element;
   readonly #tabs: TabBar;
   readonly #apps = new Map<string, DomicileAppElement>();
   readonly #windows = new Map<string, ShellWindow>();
+  readonly #now: typeof monotonicNow;
   #shown: string | undefined;
   #browsersOpened = 0;
 
   constructor(
     bridge: BridgeClient,
-    { root, tabs, register = registerElements }: ShellOptions,
+    {
+      root,
+      tabs,
+      register = registerElements,
+      now = monotonicNow,
+    }: ShellOptions,
   ) {
     this.#bridge = bridge;
+    this.#now = now;
     this.#root = root;
     this.#tabs = new TabBar({
       onSelect: (id) => {
@@ -189,7 +207,14 @@ export class ShellController {
     height,
     pixels,
   }: Pick<AppFrameMessage, "app_id" | "width" | "height" | "pixels">): void {
-    this.#apps.get(app_id)?.drawFrame(width, height, pixels);
+    const element = this.#apps.get(app_id);
+    // Only a draw that happened is priced: recording a zero for a frame that
+    // hit no element would pull the average down with work never done.
+    if (element !== undefined) {
+      const started = this.#now();
+      element.drawFrame(width, height, pixels);
+      this.drawTiming.record(this.#now() - started);
+    }
   }
 
   // A window that opens takes the stage; whatever had it is a tab away.

@@ -169,6 +169,54 @@ describe("ShellController", () => {
       expect(drawn).toEqual([[2, 1, pixels]]);
     });
 
+    it("times how long putting a frame on the canvas took", () => {
+      // The canvas draw is the last stage of the round trip and the one the
+      // compositor cannot see, so it is priced here — where the whole of it,
+      // not just `putImageData`, is inside the measurement.
+      let clock = 0;
+      const timed = new ShellController(bridge as unknown as BridgeClient, {
+        now: () => clock,
+        register: () => undefined,
+        root,
+        tabs: document.querySelector("#tabs") as Element,
+      });
+      timed.mountApp({ app_id: "term", title: undefined });
+      const element = root.querySelector(APP_TAG_NAME) as DomicileAppElement;
+      element.drawFrame = () => {
+        clock += 12;
+      };
+
+      bridge.emit("app_frame", {
+        app_id: "term",
+        bytes: 4,
+        format: "rgba",
+        height: 1,
+        pixels: new Uint8Array(4),
+        width: 1,
+      });
+
+      expect(timed.drawTiming.take()).toEqual({
+        averageMs: 12,
+        count: 1,
+        worstMs: 12,
+      });
+    });
+
+    it("does not time a frame for an app it never mounted", () => {
+      // Nothing was drawn, so there is no draw to price; recording a zero
+      // would pull the average down with work that never happened.
+      bridge.emit("app_frame", {
+        app_id: "ghost",
+        bytes: 1,
+        format: "rgba",
+        height: 1,
+        pixels: new Uint8Array([0]),
+        width: 1,
+      });
+
+      expect(controller.drawTiming.take()).toBeUndefined();
+    });
+
     it("drops a frame for an app it never mounted", () => {
       expect(() => {
         bridge.emit("app_frame", {

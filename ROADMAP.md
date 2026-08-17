@@ -168,8 +168,69 @@ nix develop .#full -c ./scripts/run-prototype.sh
     faster than the chrome can take them; a high `write_ms` means the chrome's
     socket is what is backing up.
 
-  What it cannot see is the renderer half — IPC, `putImageData` — so a low
-  `dropped` with a small `readback_ms` and sluggish typing points there.
+  - `response_ms` — from injecting a keystroke into a client to that client's
+    next commit: the client's own think-and-redraw, isolated. Not ours to fix,
+    which is exactly why it has to be separable from what is.
+  - `throttled` — commits the ~30fps throttle refused. Each one is a redraw the
+    client made and the chrome never saw, so if the client then goes idle the
+    screen holds stale pixels until it happens to redraw again.
+- **The chrome reports the round trip.** On the same 5s cadence and the same
+  stdout, so the two lines can be read against each other:
+
+  ```
+  chrome: round trip keys=N rt_ms=R rt_worst_ms=RW \
+          frames=F ipc_ms=I ipc_worst_ms=IW draw_ms=D draw_worst_ms=DW
+  ```
+
+  `rt_ms` is the number behind "sluggish": everything from pressing a key to
+  those pixels being on the canvas, including the client's own redraw, the
+  socket, the Electron IPC hop and `putImageData`. It is taken in
+  `BridgeClient`, the one place that sees both ends of the loop, and *after*
+  the frame handler runs so the canvas draw is inside it. Frames nobody was
+  waiting on — a terminal's blinking cursor — are not round trips and are not
+  counted; counting them would report the blink interval as input latency. A
+  burst is measured from its oldest keystroke, since the felt lag is how long
+  the first character waited.
+
+  **Key presses only, never releases** — the same rule in `response_ms`. A
+  release changes nothing on screen, so the next frame to arrive is some
+  unrelated redraw (that blinking cursor, half a second later), and every press
+  is followed by a release: counting them contaminated half of every sample and
+  put a fake ~500ms tail on both numbers. This was a real bug in the first cut
+  of the instrumentation, and it cost two rounds of blaming the client for it.
+  If a latency number grows a tail at suspiciously exactly some client's idle
+  redraw period, suspect the measurement before the client.
+
+  `ipc_ms` and `draw_ms` are the two stages inside `rt_ms` that the compositor
+  cannot see, so a large total can be attributed rather than merely observed:
+  the main-process → renderer hop (where a frame's megabytes are
+  structured-cloned across a process boundary) and putting them on the canvas.
+  `ipc_ms` is measured in the *preload*, the first code in the renderer process
+  to see a message, so none of the page's own work is inside it.
+
+  Together with the compositor's line the whole loop accounts for itself:
+
+  ```
+  rt_ms  =  (key delivery)  +  response_ms  +  readback_ms  +  write_ms
+            +  ipc_ms  +  draw_ms
+  ```
+
+  Every term but the first is measured, so **key delivery is what is left
+  over** — and it is entirely ours. Measured on an AMD 890M with kitty at
+  ~1500x1000: `rt_ms≈100`, `ipc_ms≈19`, `draw_ms≈1`, compositor ≈11. The
+  canvas is free; the Electron IPC hop is ~19% and is where a frame's
+  megabytes are copied between processes.
+- **A renderer has no stdout.** Its `console` goes to devtools, which nobody has
+  open while driving the prototype from a terminal, so the shell's preload
+  exposes `window.domicileDiagnostics.report(line)` and the Electron main
+  process prints it. Deliberately not on `domicileTransport`: that object is the
+  host protocol, whose shape the SDK's `Transport` type fixes.
+- **Throughput and latency are different questions, and only one of them was
+  ever measured.** A run showing `fps=2` on an idle kitty is not slow — an idle
+  terminal redraws once per cursor blink (~500ms), which is exactly what
+  `idle_ms` clusters at. A keystroke taking 300ms to appear looks identical in
+  that line. Do not read a low `fps` as a bottleneck without checking whether
+  anything was asking the client to draw.
 - **Pixels are bytes on the wire, so the stream is not text.** `app_frame`
   carries a byte count and the pixels follow the header line raw. A reader that
   scans for newlines inside a payload will cut a frame in half — a pixel is as
