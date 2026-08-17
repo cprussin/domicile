@@ -18,7 +18,7 @@ pixels — as a styled `<app>` element in the web chrome**. The compositor copie
 each client buffer to RGBA and streams it to the chrome, which draws it into the
 `<domicile-app>` canvas (clients keep animating via frame callbacks). The remaining
 work is making that zero-copy via engine external textures / CEF
-([docs/architecture/CEF-SPIKE.md](docs/architecture/CEF-SPIKE.md)). See [ROADMAP.md](ROADMAP.md).
+([docs/architecture/WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md)). See [ROADMAP.md](ROADMAP.md).
 
 ## Run the prototype
 
@@ -162,4 +162,4 @@ nix develop .#full -c ./scripts/smoke-compositor.sh   # boots it; a real client 
 Without a checkout, the smoke test is `nix run github:cprussin/domicile#smoke-compositor`.
 
 The GPU-dependent AppTextureBridge proof (one rounded/blurred/rotated `<app>`)
-is a runbook you execute on your hardware: [docs/architecture/CEF-SPIKE.md](docs/architecture/CEF-SPIKE.md).
+is a plan you execute on your hardware: [docs/architecture/WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md).

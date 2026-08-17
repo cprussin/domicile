@@ -1012,7 +1012,7 @@ impl SeatHandler for DomicileCompositor {
                 CursorImageStatus::Hidden => CursorShape::None,
                 CursorImageStatus::Named(icon) => cursor_shape(icon),
                 // The client drew its own cursor into a surface. Mirroring
-                // those pixels needs the texture bridge (see CEF-SPIKE.md), so
+                // those pixels needs native compositing (see WINDOW-COMPOSITING.md), so
                 // until then the pointer keeps its ordinary arrow.
                 CursorImageStatus::Surface(_) => CursorShape::Default,
             };
