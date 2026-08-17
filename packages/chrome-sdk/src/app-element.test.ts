@@ -231,6 +231,39 @@ describe("<domicile-app>", () => {
     expect(bridge.calls).toContainEqual(["key", "term", 30, false]);
   });
 
+  it("ignores the browser's auto-repeat while a key is held", () => {
+    // Wayland sends one press and one release; the client synthesises repeat
+    // itself from `wl_keyboard.repeat_info`. Forwarding the browser's repeats
+    // as fresh presses gives the client two repeat sources at once, which it
+    // renders as the same character over and over.
+    const element = mountApp("term");
+    element.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    bridge.calls.length = 0;
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, code: "KeyA" }),
+    );
+    for (let held = 0; held < 5; held++) {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          code: "KeyA",
+          repeat: true,
+        }),
+      );
+    }
+    document.dispatchEvent(
+      new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
+    );
+
+    expect(bridge.calls.filter(([kind]) => kind === "key")).toEqual([
+      ["key", "term", 30, true],
+      ["key", "term", 30, false],
+    ]);
+  });
+
   it("clicking off every app returns keyboard focus to the chrome", () => {
     const element = mountApp("term");
     element.dispatchEvent(
