@@ -82,7 +82,7 @@ mod scale;
 mod timing_window;
 
 use crate::dmabuf_descriptor::descriptor_from;
-use crate::dmabuf_import::DmabufImporter;
+use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::scale::{logical_size, output_scale};
 use crate::timing_window::TimingWindow;
@@ -91,6 +91,22 @@ use domicile_config::Config;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
+use smithay::backend::renderer::gles::GlesRenderer;
+
+/// The renderer client buffers are imported on, and the policy that chose it.
+///
+/// One renderer serves both importing and — once the compositor presents —
+/// drawing, because a texture belongs to the EGL context that created it.
+struct Gpu {
+    renderer: GlesRenderer,
+    importer: DmabufImporter,
+}
+
+impl Gpu {
+    fn renderer(&mut self) -> &mut GlesRenderer {
+        &mut self.renderer
+    }
+}
 
 /// Data threaded through the calloop event loop. The `Display` lives here (not
 /// inside the wayland source) so we can flush queued events after handling input
@@ -534,9 +550,13 @@ struct DomicileCompositor {
     /// gave us no renderer, in which case the global was never advertised.
     #[allow(dead_code)]
     dmabuf_global: Option<DmabufGlobal>,
-    /// The GLES context client buffers are imported into. Present exactly when
-    /// the dmabuf global is, so a committed dmabuf always has one.
-    dmabuf_importer: Option<DmabufImporter>,
+    /// Where client buffers are imported and, when presenting, drawn.
+    ///
+    /// One renderer, not two: a texture belongs to the EGL context that made
+    /// it, so importing on one context and drawing on another would not work.
+    /// Present exactly when the dmabuf global is, so a committed dmabuf always
+    /// has somewhere to go.
+    gpu: Option<Gpu>,
 
     /// Shared brain + connected chrome clients.
     hub: Arc<ChromeHub>,
@@ -652,15 +672,14 @@ impl DomicileCompositor {
     /// The readback is the part the CEF bridge deletes: the descriptor stored
     /// here already names the very buffer the engine will sample directly.
     fn import_gpu_frame(&mut self, app_id: &str, dmabuf: Dmabuf) -> Vec<u8> {
-        let importer = self.dmabuf_importer.as_mut().expect(
-            "a dmabuf can only be committed where the global — and so the importer — exists",
+        let gpu = self.gpu.as_mut().expect(
+            "a dmabuf can only be committed where the global — and so the renderer — exists",
         );
         // Every dmabuf was imported once already, when the client created it
         // (`DmabufHandler::dmabuf_imported`), so a failure here is not a client
         // handing us something unsupported — it is the renderer breaking.
         let started = Instant::now();
-        let rgba = importer
-            .read_rgba(&dmabuf)
+        let rgba = DmabufImporter::read_rgba(gpu.renderer(), &dmabuf)
             .expect("a dmabuf the importer accepted reads back");
         self.hub
             .timings
@@ -972,11 +991,11 @@ impl DmabufHandler for DomicileCompositor {
         dmabuf: Dmabuf,
         notifier: ImportNotifier,
     ) {
-        let importer = self
-            .dmabuf_importer
+        let gpu = self
+            .gpu
             .as_mut()
-            .expect("the dmabuf global is only advertised alongside an importer");
-        if importer.accepts(&dmabuf) {
+            .expect("the dmabuf global is only advertised alongside a renderer");
+        if DmabufImporter::accepts(gpu.renderer(), &dmabuf) {
             tracing::debug!(format = ?dmabuf.format(), "client dmabuf accepted");
             if let Err(err) = notifier.successful::<DomicileCompositor>() {
                 tracing::debug!(?err, "client went away before its dmabuf was acknowledged");
@@ -1149,8 +1168,9 @@ fn advertise_dmabuf(
     state: &mut DmabufState,
     display: &DisplayHandle,
     importer: &DmabufImporter,
+    renderer: &GlesRenderer,
 ) -> DmabufGlobal {
-    let formats: Vec<_> = importer.formats().into_iter().collect();
+    let formats: Vec<_> = DmabufImporter::formats(renderer).into_iter().collect();
     let feedback = importer.main_device().and_then(|device| {
         match DmabufFeedbackBuilder::new(device, formats.clone()).build() {
             Ok(feedback) => Some(feedback),
@@ -1417,17 +1437,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // nothing to render on — a container, a machine with no DRM device — the
     // global is simply not advertised, and clients fall back to wl_shm rather
     // than allocating buffers we would then have to reject.
-    let dmabuf_importer = match DmabufImporter::new() {
-        Ok(importer) => Some(importer),
+    let gpu = match headless_renderer() {
+        Ok((renderer, importer)) => Some(Gpu { renderer, importer }),
         Err(err) => {
             tracing::warn!(%err, "no EGL renderer: serving wl_shm clients only");
             None
         }
     };
     let mut dmabuf_state = DmabufState::new();
-    let dmabuf_global = dmabuf_importer
+    let dmabuf_global = gpu
         .as_ref()
-        .map(|importer| advertise_dmabuf(&mut dmabuf_state, &dh, importer));
+        .map(|gpu| advertise_dmabuf(&mut dmabuf_state, &dh, &gpu.importer, &gpu.renderer));
 
     let state = DomicileCompositor {
         compositor_state: CompositorState::new::<DomicileCompositor>(&dh),
@@ -1442,7 +1462,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
         dmabuf_state,
         dmabuf_global,
-        dmabuf_importer,
+        gpu,
         hub,
         bridge: BridgeRegistry::new(),
         latest_dmabufs: HashMap::new(),

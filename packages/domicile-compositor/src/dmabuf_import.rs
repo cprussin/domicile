@@ -29,9 +29,14 @@ use std::os::unix::fs::MetadataExt as _;
 /// "this machine has no GPU stack" from a crash into an answer.
 const EGL_LIBRARY: &str = "libEGL.so.1";
 
-/// A GLES renderer used for one thing: turning a client's dmabuf into pixels.
+/// The renderer, and the DRM node whoever created it is on.
+///
+/// The renderer is not owned here. A texture belongs to the EGL context that
+/// made it, so the compositor must import client buffers on the *same*
+/// renderer it draws with — which, once it presents, is the one the window
+/// owns. Keeping these as operations over a borrowed renderer is what lets the
+/// same code serve a headless compositor and a presenting one.
 pub struct DmabufImporter {
-    renderer: GlesRenderer,
     main_device: Option<u64>,
 }
 
@@ -48,40 +53,37 @@ pub enum ImportError {
     Gles(#[from] smithay::backend::renderer::gles::GlesError),
 }
 
-impl DmabufImporter {
-    /// Bring up an offscreen GLES renderer on the best device EGL offers.
-    ///
-    /// Fails on a machine with no working EGL at all; the compositor treats
-    /// that as "no dmabuf global", so `wl_shm` clients keep working.
-    pub fn new() -> Result<Self, ImportError> {
-        // Smithay dlopens EGL lazily and treats a missing library as fatal, so
-        // the load has to be attempted here — where it is an error value —
-        // before any Smithay EGL call can panic on it.
-        // SAFETY: this opens the very library Smithay opens a moment later,
-        // running the same initialisers it would have run itself.
-        unsafe { libloading::Library::new(EGL_LIBRARY) }?;
-        let devices = EGLDevice::enumerate()?;
-        let device =
-            preferred_device(devices, EGLDevice::is_software).ok_or(ImportError::NoDevice)?;
-        let main_device = drm_node(&device);
-        tracing::info!(
-            device = ?device.render_device_path().or_else(|_| device.drm_device_path()),
-            main_device,
-            "dmabuf import device"
-        );
-        // SAFETY: the device handle comes straight out of EGL's own enumeration
-        // and outlives the display, which owns it from here on.
-        let display = unsafe { EGLDisplay::new(device) }?;
-        let context = EGLContext::new(&display)?;
-        // SAFETY: the renderer is created, used and dropped on the Wayland
-        // thread, which is where the context is made current.
-        let renderer = unsafe { GlesRenderer::new(context) }?;
-        Ok(DmabufImporter {
-            renderer,
-            main_device,
-        })
-    }
+/// Bring up an offscreen GLES renderer on the best device EGL offers, for a
+/// compositor that is not presenting.
+///
+/// Fails on a machine with no working EGL at all; the compositor treats that
+/// as "no dmabuf global", so `wl_shm` clients keep working.
+pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError> {
+    // Smithay dlopens EGL lazily and treats a missing library as fatal, so
+    // the load has to be attempted here — where it is an error value —
+    // before any Smithay EGL call can panic on it.
+    // SAFETY: this opens the very library Smithay opens a moment later,
+    // running the same initialisers it would have run itself.
+    unsafe { libloading::Library::new(EGL_LIBRARY) }?;
+    let devices = EGLDevice::enumerate()?;
+    let device = preferred_device(devices, EGLDevice::is_software).ok_or(ImportError::NoDevice)?;
+    let main_device = drm_node(&device);
+    tracing::info!(
+        device = ?device.render_device_path().or_else(|_| device.drm_device_path()),
+        main_device,
+        "dmabuf import device"
+    );
+    // SAFETY: the device handle comes straight out of EGL's own enumeration
+    // and outlives the display, which owns it from here on.
+    let display = unsafe { EGLDisplay::new(device) }?;
+    let context = EGLContext::new(&display)?;
+    // SAFETY: the renderer is created, used and dropped on the Wayland
+    // thread, which is where the context is made current.
+    let renderer = unsafe { GlesRenderer::new(context) }?;
+    Ok((renderer, DmabufImporter { main_device }))
+}
 
+impl DmabufImporter {
     /// The DRM node clients should allocate on, if this renderer has one.
     ///
     /// `zwp_linux_dmabuf_v1` feedback carries this, and it is the only way a
@@ -95,14 +97,14 @@ impl DmabufImporter {
     /// The formats to advertise on `zwp_linux_dmabuf_v1` — exactly the ones
     /// this renderer can turn into a texture, so a client never allocates a
     /// buffer we would have to reject.
-    pub fn formats(&self) -> FormatSet {
-        self.renderer.dmabuf_formats()
+    pub fn formats(renderer: &GlesRenderer) -> FormatSet {
+        renderer.dmabuf_formats()
     }
 
     /// Whether a client's buffer really imports, answering the protocol's
     /// import notifier before the client can commit it.
-    pub fn accepts(&mut self, dmabuf: &Dmabuf) -> bool {
-        self.renderer.import_dmabuf(dmabuf, None).is_ok()
+    pub fn accepts(renderer: &mut GlesRenderer, dmabuf: &Dmabuf) -> bool {
+        renderer.import_dmabuf(dmabuf, None).is_ok()
     }
 
     /// Import `dmabuf` and copy it out as tightly-packed, top-down RGBA — the
@@ -111,23 +113,20 @@ impl DmabufImporter {
     /// Entry and exit are logged because this is the one path no test can
     /// reach: it needs a GPU and a client that allocates on it, so the log is
     /// the only account of whether a frame made it through.
-    pub fn read_rgba(&mut self, dmabuf: &Dmabuf) -> Result<Vec<u8>, ImportError> {
+    pub fn read_rgba(renderer: &mut GlesRenderer, dmabuf: &Dmabuf) -> Result<Vec<u8>, ImportError> {
         tracing::debug!("readback: import");
-        let texture = self.renderer.import_dmabuf(dmabuf, None)?;
+        let texture = renderer.import_dmabuf(dmabuf, None)?;
         let size = dmabuf.size();
         let buffer_area = Rectangle::from_size(size);
         // The blit is what makes the copy format-agnostic: whatever the client
         // allocated (tiled, compressed, BGR, Y-inverted) is resolved by the
         // sampler into one plain RGBA8 surface we can read straight out.
-        let mut offscreen: GlesTexture = self.renderer.create_buffer(Fourcc::Abgr8888, size)?;
-        let mut framebuffer = self.renderer.bind(&mut offscreen)?;
+        let mut offscreen: GlesTexture = renderer.create_buffer(Fourcc::Abgr8888, size)?;
+        let mut framebuffer = renderer.bind(&mut offscreen)?;
         let render_area = Rectangle::from_size((size.w, size.h).into());
         let drawn = {
-            let mut frame = self.renderer.render(
-                &mut framebuffer,
-                (size.w, size.h).into(),
-                Transform::Normal,
-            )?;
+            let mut frame =
+                renderer.render(&mut framebuffer, (size.w, size.h).into(), Transform::Normal)?;
             Frame::render_texture_from_to(
                 &mut frame,
                 &texture,
@@ -140,11 +139,9 @@ impl DmabufImporter {
             )?;
             frame.finish()?
         };
-        self.renderer.wait(&drawn)?;
-        let mapping =
-            self.renderer
-                .copy_framebuffer(&framebuffer, buffer_area, Fourcc::Abgr8888)?;
-        let pixels = self.renderer.map_texture(&mapping)?.to_vec();
+        renderer.wait(&drawn)?;
+        let mapping = renderer.copy_framebuffer(&framebuffer, buffer_area, Fourcc::Abgr8888)?;
+        let pixels = renderer.map_texture(&mapping)?.to_vec();
         tracing::debug!(bytes = pixels.len(), "readback: done");
         Ok(pixels)
     }
