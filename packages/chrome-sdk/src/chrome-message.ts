@@ -21,6 +21,7 @@ export type ChromeMessage =
   | ReturnType<typeof placePortalMessage>
   | ReturnType<typeof removePortalMessage>
   | ReturnType<typeof resizeAppMessage>
+  | ReturnType<typeof setDevicePixelRatioMessage>
   | ReturnType<typeof focusAppMessage>
   | ReturnType<typeof focusChromeMessage>
   | ReturnType<typeof spawnMessage>
@@ -70,6 +71,14 @@ export const resizeAppMessage = (
   }
   return { app_id: appId, size, type: "resize_app" } as const;
 };
+
+/**
+ * Report how many physical pixels the chrome paints per CSS pixel. The
+ * compositor advertises it as the output scale, which is what makes a client
+ * draw at the display's real resolution rather than be stretched over it.
+ */
+export const setDevicePixelRatioMessage = (ratio: number) =>
+  ({ ratio, type: "set_device_pixel_ratio" }) as const;
 
 export const focusAppMessage = (appId: string) =>
   ({ app_id: appId, type: "focus_app" }) as const;

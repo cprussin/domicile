@@ -9,6 +9,13 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v4 made the frame path scale-aware: the chrome reports its
+/// `device_pixel_ratio`, and `app_frame` says at what `scale` its pixels were
+/// drawn so the chrome can size a canvas backing store in device pixels while
+/// laying the element out in logical ones. A v3 chrome would take a scaled
+/// frame's pixel dimensions for logical ones and mis-map every pointer event,
+/// so the versions are not interchangeable.
+///
 /// v3 moved an app's pixels out of the JSON: `app_frame` now carries a byte
 /// count and the pixels follow the header line as raw bytes. A v2 chrome would
 /// read those bytes as messages, so the versions are not interchangeable.
@@ -16,7 +23,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 3;
+pub const PROTOCOL_VERSION: u32 = 4;
 
 /// Messages sent from the chrome (in-page bridge) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -43,6 +50,16 @@ pub enum ChromeMessage {
     /// configures the client to match so it re-renders at that resolution,
     /// rather than having its old buffer stretched into the new box.
     ResizeApp { app_id: String, size: [f64; 2] },
+
+    /// How many physical pixels the chrome paints per CSS pixel — its
+    /// `devicePixelRatio`. The compositor advertises this as the `wl_output`
+    /// scale, which is what makes a client render at the display's real
+    /// resolution instead of drawing one pixel per CSS pixel and being
+    /// stretched over the rest.
+    ///
+    /// Sent on connect and whenever it changes (moving a window between
+    /// displays, or a browser zoom).
+    SetDevicePixelRatio { ratio: f64 },
 
     /// Request keyboard focus for an app.
     FocusApp { app_id: String },
@@ -101,7 +118,9 @@ pub enum HostMessage {
         size: [f64; 2],
     },
 
-    /// A client's content size changed.
+    /// A client's content size changed, in **logical** units — the CSS pixels
+    /// the chrome lays out in and the coordinates `wl_pointer` speaks, not the
+    /// buffer's own pixels, which at scale > 1 are more numerous.
     AppResized { app_id: String, size: [f64; 2] },
 
     /// A new pixel frame for an app surface, to draw into its `<app>` element.
@@ -116,8 +135,15 @@ pub enum HostMessage {
     /// This is still the copy-based stopgap until the dmabuf/CEF bridge lands.
     AppFrame {
         app_id: String,
+        /// The buffer's own dimensions, in device pixels. This is the size of
+        /// the pixel data and so of the canvas backing store; divide by
+        /// `scale` for the logical size the element is laid out at.
         width: u32,
         height: u32,
+        /// How many device pixels the client drew per logical unit. 1 for a
+        /// client that does not scale, which is the graceful floor: its frame
+        /// is then exactly as sharp as it was before any of this existed.
+        scale: u32,
         format: String,
         bytes: u32,
     },

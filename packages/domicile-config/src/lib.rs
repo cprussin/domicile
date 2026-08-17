@@ -187,6 +187,41 @@ pub struct InputConfig {
     pub keyboard: KeyboardConfig,
 }
 
+/// Output settings.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct OutputConfig {
+    /// The highest `wl_output` scale to advertise, whatever the chrome's
+    /// display actually is.
+    ///
+    /// This is a cost dial, not a preference. A client asked to draw at scale
+    /// N produces N² times the pixels, and every one of them is read back off
+    /// the GPU, written down a socket and copied across the Electron process
+    /// boundary — so sharpness is bought with latency, in the square. `1`
+    /// turns scaling off entirely and restores the old behaviour.
+    pub max_scale: u32,
+}
+
+impl Default for OutputConfig {
+    fn default() -> Self {
+        // 2 covers the ordinary retina laptop, which is the display that makes
+        // unscaled text look wrong; past that the frame gets expensive faster
+        // than it gets better.
+        OutputConfig { max_scale: 2 }
+    }
+}
+
+impl OutputConfig {
+    fn validate(&self) -> Result<(), ConfigError> {
+        if self.max_scale == 0 {
+            return Err(ConfigError::Validation(
+                "output.max_scale must be at least 1".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// The full compositor configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -194,6 +229,7 @@ pub struct Config {
     pub shell: ShellConfig,
     pub compositor: CompositorConfig,
     pub input: InputConfig,
+    pub output: OutputConfig,
 }
 
 impl Config {
@@ -223,7 +259,8 @@ impl Config {
                 "compositor.nested_size must be non-zero, got {w}x{h}"
             )));
         }
-        self.input.keyboard.validate()
+        self.input.keyboard.validate()?;
+        self.output.validate()
     }
 }
 

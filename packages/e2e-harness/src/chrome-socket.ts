@@ -88,6 +88,30 @@ export const listenWindowMs = (
 /** Long enough for the message-plane checks, which drive an shm client. */
 const DEFAULT_LISTEN_MS = 6000;
 
+/**
+ * The display density the calling script wants this harness to claim, or
+ * `undefined` to claim none.
+ *
+ * Read from the environment rather than assumed, because a headless harness
+ * has no display: reporting a made-up ratio would have the compositor scale
+ * every client for a screen nobody is looking at.
+ */
+export const devicePixelRatio = (
+  environment: Record<string, string | undefined>,
+): number | undefined => {
+  const configured = environment.DOMICILE_CHROME_DPR;
+  if (configured === undefined) {
+    return undefined;
+  }
+  const ratio = Number(configured);
+  if (!Number.isFinite(ratio) || ratio <= 0) {
+    throw new Error(
+      `DOMICILE_CHROME_DPR must be a positive device pixel ratio, got: ${configured}`,
+    );
+  }
+  return ratio;
+};
+
 /** The socket path the e2e scripts hand their harnesses. */
 export const requireSocketPath = (
   environment: Record<string, string | undefined>,

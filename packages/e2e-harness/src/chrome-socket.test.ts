@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { listenWindowMs, requireSocketPath } from "./chrome-socket";
+import {
+  devicePixelRatio,
+  listenWindowMs,
+  requireSocketPath,
+} from "./chrome-socket";
 
 describe("requireSocketPath", () => {
   it("returns the configured socket path", () => {
@@ -37,6 +41,31 @@ describe("listenWindowMs", () => {
     );
     expect(() => listenWindowMs({ DOMICILE_CHROME_LISTEN_MS: "0" })).toThrow(
       /DOMICILE_CHROME_LISTEN_MS/,
+    );
+  });
+});
+
+describe("devicePixelRatio", () => {
+  it("reports nothing when the caller did not ask for a density", () => {
+    // A headless harness honestly has no display, and sending a ratio it made
+    // up would make the compositor scale for a screen nobody is looking at.
+    expect(devicePixelRatio({})).toBeUndefined();
+  });
+
+  it("reads the ratio the calling script set", () => {
+    expect(devicePixelRatio({ DOMICILE_CHROME_DPR: "2" })).toBe(2);
+  });
+
+  it("accepts a fractional ratio, which is what most displays report", () => {
+    expect(devicePixelRatio({ DOMICILE_CHROME_DPR: "1.5" })).toBe(1.5);
+  });
+
+  it("rejects a ratio that is not a usable number", () => {
+    expect(() => devicePixelRatio({ DOMICILE_CHROME_DPR: "retina" })).toThrow(
+      /DOMICILE_CHROME_DPR/,
+    );
+    expect(() => devicePixelRatio({ DOMICILE_CHROME_DPR: "0" })).toThrow(
+      /DOMICILE_CHROME_DPR/,
     );
   });
 });

@@ -34,6 +34,8 @@ pub enum Outbound {
         app_id: String,
         width: u32,
         height: u32,
+        /// Device pixels per logical unit the client drew at.
+        scale: u32,
         rgba: Vec<u8>,
     },
 }
@@ -78,7 +80,7 @@ impl OutboundSender {
     }
 
     /// Queue an app's pixels, returning whether they were taken. Never waits.
-    pub fn frame(&self, app_id: &str, width: u32, height: u32, rgba: Vec<u8>) -> bool {
+    pub fn frame(&self, app_id: &str, width: u32, height: u32, scale: u32, rgba: Vec<u8>) -> bool {
         if self.waiting_frames.load(Ordering::SeqCst) >= FRAME_DEPTH {
             self.dropped.fetch_add(1, Ordering::SeqCst);
             false
@@ -89,6 +91,7 @@ impl OutboundSender {
                     app_id: app_id.to_string(),
                     width,
                     height,
+                    scale,
                     rgba,
                 })
                 .is_ok()
@@ -126,7 +129,7 @@ mod tests {
     use super::{outbound, Outbound};
 
     fn frame_bytes(sender: &super::OutboundSender) -> bool {
-        sender.frame("app-1", 2, 2, vec![0; 16])
+        sender.frame("app-1", 2, 2, 1, vec![0; 16])
     }
 
     fn closed(app_id: &str) -> HostMessage {

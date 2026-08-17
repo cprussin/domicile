@@ -4,8 +4,11 @@
 // the compositor's chrome socket, complete the handshake, and print every frame
 // the host pushes so the calling script can assert on them.
 
+import { setDevicePixelRatioMessage } from "@domicile/chrome-sdk/chrome-message";
+
 import {
   connectChromeSocket,
+  devicePixelRatio,
   listenWindowMs,
   requireSocketPath,
 } from "./chrome-socket";
@@ -19,6 +22,14 @@ const chrome = connectChromeSocket(requireSocketPath(Bun.env), {
     console.log(frame);
   },
 });
+
+// A real chrome reports the density of the display it is painting on; this one
+// reports whatever the calling script wants to test with, and nothing at all
+// otherwise — a headless harness has no display to be honest about.
+const ratio = devicePixelRatio(Bun.env);
+if (ratio !== undefined) {
+  chrome.send(setDevicePixelRatioMessage(ratio));
+}
 
 setTimeout(() => {
   chrome.close();

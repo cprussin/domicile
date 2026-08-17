@@ -18,6 +18,7 @@ import {
   pointerMotionMessage,
   removePortalMessage,
   resizeAppMessage,
+  setDevicePixelRatioMessage,
   spawnMessage,
 } from "./chrome-message";
 import type { HostMessageOf, HostMessageType } from "./protocol";
@@ -119,6 +120,11 @@ export class BridgeClient {
     size: readonly [width: number, height: number],
   ): void {
     this.send(resizeAppMessage(appId, size));
+  }
+
+  /** Tell the host the display density it should advertise to clients. */
+  setDevicePixelRatio(ratio: number): void {
+    this.send(setDevicePixelRatioMessage(ratio));
   }
 
   focusApp(appId: string): void {

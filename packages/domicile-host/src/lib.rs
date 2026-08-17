@@ -117,6 +117,12 @@ impl Host {
             ChromeMessage::Hello { .. } => {
                 // The handshake is handled by the connection layer; nothing to do here.
             }
+            ChromeMessage::SetDevicePixelRatio { .. } => {
+                // The scene is described in logical units, which do not change
+                // when the display's pixel density does. This is the
+                // compositor's business — it becomes the `wl_output` scale —
+                // and it is intercepted there before reaching the brain.
+            }
             ChromeMessage::PlacePortal {
                 app_id,
                 transform,

@@ -54,6 +54,7 @@ nix develop .#full -c ./scripts/e2e-spawn.sh          # a chrome `spawn` message
 nix develop .#full -c ./scripts/e2e-input.sh          # keyboard + pointer reach a client, and its cursor request reaches the chrome
 nix develop .#full -c ./scripts/e2e-dmabuf.sh         # the dmabuf global is advertised; with a GPU, a real GPU client's frames arrive
 nix develop .#full -c ./scripts/e2e-slow-chrome.sh    # a chrome that stops reading does not freeze the compositor
+nix develop .#full -c ./scripts/e2e-hidpi.sh          # a 2x chrome makes a client draw at 2x, and the frame says so
 
 # Full visible prototype (needs a real display — run on the user's machine):
 nix develop .#full -c ./scripts/run-prototype.sh
@@ -418,26 +419,43 @@ one with work left in it and leads the next-work list below.
    above.
 
 ### Phase 5 — Hardening (later)
-DRM/KMS backend for real hardware, multi-output, HiDPI, damage tracking,
+DRM/KMS backend for real hardware, multi-output, damage tracking,
 security/sandbox review, clipboard/data-device, touch.
 
-**HiDPI is the one users see first.** `devicePixelRatio`, `set_buffer_scale` and
-the output scale appear nowhere yet: the chrome measures an `<app>` in CSS
-pixels, `resize_app` sends those, the compositor advertises no output scale, so
-a client renders one device pixel per CSS pixel and the canvas is then stretched
-over the display's real pixels. Text in a client looks soft on any display that
-is not 1x. The fix is a chain — the chrome reports its ratio, the compositor
-advertises it as the `wl_output` scale so clients render at that scale *and*
-size their UI to match, the compositor honours `set_buffer_scale` when reporting
-content size, and the canvas backing store becomes the buffer size while its CSS
-size stays logical. Non-integer ratios additionally need
-`wp_fractional_scale_v1`.
+**HiDPI is done ✅** — the chain is: the chrome reports `devicePixelRatio`
+(`set_device_pixel_ratio`), the compositor advertises it as the `wl_output`
+scale, a scale-aware client redraws at that scale and says so with
+`set_buffer_scale`, and `app_frame` carries the scale so the canvas backing
+store is the buffer's device pixels while CSS keeps the element its logical
+size. `scripts/e2e-hidpi.sh` asserts all four links, because a break in any of
+them looks identical from a screenshot — slightly soft text.
 
-Note it costs pixels squared: at 2x a 1494x994 frame goes from 5.9MB to 23.8MB,
-quadrupling the readback, the socket, the IPC hop and `putImageData`. On the
-copy path that is likely unaffordable — which is what the frame report above is
-for. It is free on the CEF external-texture path, which is the argument for
-doing that first.
+Two things it is easy to get wrong, both guarded:
+
+- **Logical vs device pixels are now different numbers.** `app_resized` and
+  every pointer coordinate are *logical*; `app_frame`'s `width`/`height` are
+  the buffer's own device pixels. Mixing them puts the pointer at half the
+  position it should be on a 2x display, which no screenshot shows.
+- **A `wl_output` mode is physical**, so it is multiplied by the scale
+  (`OUTPUT_LOGICAL_SIZE`). Leaving it fixed would halve the logical desktop
+  every time the density doubled — a client feels that as a smaller screen.
+
+Non-integer ratios round *up* to the next integer scale: a client drawing more
+pixels than the display has is downscaled by the canvas and stays sharp, while
+one drawing fewer is stretched, which is the blurriness this removes. Matching
+a fractional ratio exactly needs `wp_fractional_scale_v1`, which is a separate
+protocol and not done.
+
+It costs pixels squared — at 2x a frame quadruples, and with it the readback,
+the socket write, the IPC hop and `putImageData`. `ipc_ms` in particular is
+*unfixable* on Electron (every main→renderer path types its transfer list as
+`MessagePortMain[]`, so the bytes are structured-cloned, never transferred), so
+that term grows with the pixel count and nothing can be done about it short of
+CEF. Hence the escape hatch: `[output] max_scale = 1` in the config turns
+scaling off without a rebuild, and the default cap of 2 stops an unusually
+dense display from asking for more than the copy path can carry. Watch `rt_ms`
+against `max_scale` to decide which side of that trade you want; it is free on
+the CEF external-texture path, which is the argument for doing that next.
 
 ---
 

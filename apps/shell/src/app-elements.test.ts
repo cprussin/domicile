@@ -12,8 +12,8 @@ const fakeElement = (calls: Call[]): DomicileAppElement =>
     applyCursor: (cursor: string) => {
       calls.push(["cursor", cursor]);
     },
-    drawFrame: (width: number, height: number) => {
-      calls.push(["draw", width, height]);
+    drawFrame: (width: number, height: number, scale: number) => {
+      calls.push(["draw", width, height, scale]);
     },
     focusApp: () => {
       calls.push(["focus"]);
@@ -31,8 +31,16 @@ describe("AppElements", () => {
       const calls: Call[] = [];
       const elements = new AppElements();
       elements.register("term", fakeElement(calls));
-      elements.drawFrame({ app_id: "term", height: 1, pixels, width: 1 });
-      expect(calls).toStrictEqual([["draw", 1, 1]]);
+      elements.drawFrame({
+        app_id: "term",
+        height: 1,
+        pixels,
+        scale: 1,
+        width: 1,
+      });
+      // The scale rides along: the element needs it to tell the buffer's
+      // device pixels from the logical size it maps the pointer through.
+      expect(calls).toStrictEqual([["draw", 1, 1, 1]]);
     });
 
     it("carries a resize to the element so it can scale pointer coordinates", () => {
@@ -56,7 +64,13 @@ describe("AppElements", () => {
       const elements = new AppElements();
       elements.register("term", fakeElement(calls));
       elements.unregister("term");
-      elements.drawFrame({ app_id: "term", height: 1, pixels, width: 1 });
+      elements.drawFrame({
+        app_id: "term",
+        height: 1,
+        pixels,
+        scale: 1,
+        width: 1,
+      });
       expect(calls).toStrictEqual([]);
     });
   });
@@ -66,8 +80,20 @@ describe("AppElements", () => {
       const clock = [10, 17];
       const elements = new AppElements(() => clock.shift() ?? 0);
       elements.register("term", fakeElement([]));
-      elements.drawFrame({ app_id: "term", height: 1, pixels, width: 1 });
-      elements.drawFrame({ app_id: "ghost", height: 1, pixels, width: 1 });
+      elements.drawFrame({
+        app_id: "term",
+        height: 1,
+        pixels,
+        scale: 1,
+        width: 1,
+      });
+      elements.drawFrame({
+        app_id: "ghost",
+        height: 1,
+        pixels,
+        scale: 1,
+        width: 1,
+      });
       expect(elements.drawTiming.take()).toMatchObject({
         averageMs: 7,
         count: 1,
