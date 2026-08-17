@@ -156,6 +156,23 @@ impl Portal {
         }
     }
 
+    /// The transform a renderer draws this portal's surface with: the unit
+    /// square onto the output, in output pixels.
+    ///
+    /// Renderers draw a textured quad from the unit square rather than from
+    /// the surface's own pixel dimensions, so the surface's size belongs in
+    /// the matrix. Output pixels rather than clip space because the projection
+    /// is the renderer's to apply and it already knows the output — baking it
+    /// in here would make this depend on a size it has no reason to know.
+    ///
+    /// This is the drawing half of [`Scene::hit_test`]: the same transform,
+    /// applied forwards. A compositor that draws a window through one and
+    /// routes clicks through the other has to keep them in step, which is why
+    /// they live together.
+    pub fn surface_to_output(&self) -> Transform {
+        Transform::scale(self.size.0, self.size.1).then(self.transform)
+    }
+
     /// If `screen` falls within this portal, return the app-local coordinate.
     fn local_hit(&self, screen: Point) -> Option<Point> {
         let local = self.transform.inverse()?.apply(screen);
@@ -255,6 +272,18 @@ impl Scene {
 
     pub fn is_empty(&self) -> bool {
         self.portals.is_empty()
+    }
+
+    /// The portals bottom-to-top, which is the order to paint them in.
+    ///
+    /// Sorted by the same key [`hit_test`](Scene::hit_test) picks a winner
+    /// with — z-index, then arrival — so the portal painted last is exactly
+    /// the one a click reaches. Keeping the two orders in one place is what
+    /// stops a compositor from looking right and behaving wrong.
+    pub fn draw_order(&self) -> Vec<&Portal> {
+        let mut ordered: Vec<_> = self.portals.iter().enumerate().collect();
+        ordered.sort_by_key(|(index, portal)| (portal.z_index, *index));
+        ordered.into_iter().map(|(_, portal)| portal).collect()
     }
 
     /// Find the topmost app portal under `screen`.

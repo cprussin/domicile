@@ -111,6 +111,7 @@ than a rewrite: the copy path already works and stays as the slow path.
 
 Phase 1 — prove parity for one window, nested:
 
+- [x] scene: `Portal::surface_to_output` and `Scene::draw_order` — the drawing half of `hit_test`, tested against it so the two cannot drift
 - [ ] compositor: composite an imported client dmabuf into a `winit` window through the portal matrix
 - [ ] `<domicile-app>`: render an empty transparent box behind a `domicile-native` attribute, keeping the canvas path as the default
 - [ ] measure: `rt_ms` for the native path against the copy path on the same client, same window size
