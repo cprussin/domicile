@@ -7,7 +7,7 @@ import net from "node:net";
 
 import { helloMessage } from "@domicile/chrome-sdk/chrome-message";
 import {
-  takeFrames,
+  createFrameReader,
   withFrameDelimiter,
 } from "@domicile/chrome-sdk/newline-frames";
 import type { HostMessage } from "@domicile/chrome-sdk/protocol";
@@ -43,11 +43,9 @@ export const connectChromeSocket = (
     socket.write(withFrameDelimiter(JSON.stringify(message)));
   };
 
-  let buffered = "";
+  const readFrames = createFrameReader();
   socket.on("data", (chunk: Buffer) => {
-    const { frames, rest } = takeFrames(buffered + chunk.toString());
-    buffered = rest;
-    for (const frame of frames) {
+    for (const frame of readFrames(chunk.toString())) {
       onFrame?.(frame);
       const message = parseHostMessage(frame);
       if (message !== undefined) {
@@ -68,6 +66,26 @@ export const connectChromeSocket = (
     send,
   };
 };
+
+/** How long a harness stays connected, in milliseconds. */
+export const listenWindowMs = (
+  environment: Record<string, string | undefined>,
+): number => {
+  const configured = environment.DOMICILE_CHROME_LISTEN_MS;
+  if (configured === undefined) {
+    return DEFAULT_LISTEN_MS;
+  }
+  const window = Number(configured);
+  if (!Number.isFinite(window) || window <= 0) {
+    throw new Error(
+      `DOMICILE_CHROME_LISTEN_MS must be a positive number of milliseconds, got: ${configured}`,
+    );
+  }
+  return window;
+};
+
+/** Long enough for the message-plane checks, which drive an shm client. */
+const DEFAULT_LISTEN_MS = 6000;
 
 /** The socket path the e2e scripts hand their harnesses. */
 export const requireSocketPath = (

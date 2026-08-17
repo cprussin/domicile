@@ -4,9 +4,15 @@
 // the compositor's chrome socket, complete the handshake, and print every frame
 // the host pushes so the calling script can assert on them.
 
-import { connectChromeSocket, requireSocketPath } from "./chrome-socket";
+import {
+  connectChromeSocket,
+  listenWindowMs,
+  requireSocketPath,
+} from "./chrome-socket";
 
-const LISTEN_MS = 6000;
+// A GPU client can be many seconds from launch to its first frame, so the
+// window is the caller's to set.
+const LISTEN_MS = listenWindowMs(Bun.env);
 
 const chrome = connectChromeSocket(requireSocketPath(Bun.env), {
   onFrame: (frame) => {

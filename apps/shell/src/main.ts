@@ -9,7 +9,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  takeFrames,
+  createFrameReader,
   withFrameDelimiter,
 } from "@domicile/chrome-sdk/newline-frames";
 import { app, BrowserWindow, ipcMain } from "electron";
@@ -53,11 +53,10 @@ const createWindow = (): BrowserWindow => {
 // are added and stripped here.
 const connectHost = (win: BrowserWindow): void => {
   const socket = net.connect(socketPath);
-  let buffered = "";
+  const readFrames = createFrameReader();
 
   socket.on("data", (chunk: Buffer) => {
-    const { frames, rest } = takeFrames(buffered + chunk.toString());
-    buffered = rest;
+    const frames = readFrames(chunk.toString());
     if (!win.isDestroyed()) {
       for (const frame of frames) {
         win.webContents.send(HOST_TO_CHROME_CHANNEL, frame);

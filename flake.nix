@@ -81,11 +81,17 @@
               touch "$work/.domicile-staged"
             fi
             cd "$work"
+            # The staged copy is the *git* source, so it has no node_modules —
+            # and the harnesses the e2e scripts drive are bun programs that
+            # import the workspace packages. Without this they die on their
+            # first import, which from the script's side looks like a chrome
+            # that simply never connected.
+            #
             # The e2e and smoke scripts expect target/debug/domicile-compositor
             # to exist already; run-prototype.sh builds it itself, so the build
             # below is a no-op there.
             exec nix develop "${self}#full" --command bash -c \
-              "cargo build -p domicile-compositor && exec ./scripts/${script}"
+              "bun install --frozen-lockfile && cargo build -p domicile-compositor && exec ./scripts/${script}"
           '';
         };
 
@@ -104,6 +110,8 @@
           e2e-electron = "e2e-electron.sh";
           e2e-spawn = "e2e-spawn.sh";
           e2e-input = "e2e-input.sh";
+          e2e-dmabuf = "e2e-dmabuf.sh";
+          e2e-slow-chrome = "e2e-slow-chrome.sh";
           smoke-compositor = "smoke-compositor.sh";
         };
     in
@@ -133,6 +141,13 @@
           # Use the nix-provided electron rather than downloading one.
           ELECTRON_OVERRIDE_DIST_PATH = "${pkgs.electron}/bin";
           ELECTRON_SKIP_BINARY_DOWNLOAD = 1;
+          # The compositor `dlopen`s libEGL to import client dmabufs, and
+          # `mkShell` only wires build-time linkage — a package in `packages`
+          # is not on the runtime loader path. `/run/opengl-driver/lib` comes
+          # first because on NixOS that is the EGL vendor matching the running
+          # kernel driver; the nixpkgs copies behind it cover a non-NixOS host.
+          LD_LIBRARY_PATH =
+            "/run/opengl-driver/lib:${pkgs.lib.makeLibraryPath [ pkgs.libGL pkgs.mesa pkgs.libgbm ]}";
           shellHook = ''
             echo "domicile dev shell (full: +wayland +drm +gl)"
           '';

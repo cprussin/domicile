@@ -8,20 +8,28 @@
 //! tested [`domicile_host::Host`] brain: when a client maps a toplevel we call
 //! [`Host::app_appeared`]; when it goes away we call [`Host::app_closed`].
 //!
-//! What's intentionally missing (next steps, all needing a GPU/display):
-//! exporting each client's dmabuf to the web engine (the AppTextureBridge) and
-//! presenting the engine's composited frame. This skeleton proves the
-//! server<->brain seam compiles and runs headlessly.
+//! GPU clients get a `zwp_linux_dmabuf_v1` global: their buffer is imported
+//! into an offscreen GLES context (`dmabuf_import`) and recorded in the
+//! [`BridgeRegistry`], which is what the engine will bind as an external
+//! texture once the CEF path lands. Until then the imported frame is read back
+//! and broadcast down the same `AppFrame` route as `wl_shm` — a copy, but the
+//! copy is the only part the engine swap removes.
+//!
+//! What's intentionally missing (needs a GPU/display): presenting the engine's
+//! composited frame.
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
+use smithay::backend::allocator::dmabuf::Dmabuf;
+use smithay::backend::allocator::Buffer as _;
 use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState};
 use smithay::input::{
     keyboard::{FilterResult, Keycode},
@@ -39,7 +47,7 @@ use smithay::reexports::{
     wayland_server::{
         backend::{ClientData, ClientId, DisconnectReason},
         protocol::{wl_buffer, wl_seat, wl_shm, wl_surface::WlSurface},
-        Client, Display,
+        Client, Display, DisplayHandle,
     },
 };
 use smithay::utils::{Serial, Transform, SERIAL_COUNTER};
@@ -50,6 +58,9 @@ use smithay::wayland::{
         SurfaceAttributes,
     },
     cursor_shape::CursorShapeManagerState,
+    dmabuf::{
+        get_dmabuf, DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier,
+    },
     output::{OutputHandler, OutputManagerState},
     shell::xdg::{
         PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
@@ -61,11 +72,17 @@ use smithay::wayland::{
     tablet_manager::TabletSeatHandler,
 };
 use smithay::{
-    delegate_compositor, delegate_cursor_shape, delegate_output, delegate_seat, delegate_shm,
-    delegate_xdg_shell,
+    delegate_compositor, delegate_cursor_shape, delegate_dmabuf, delegate_output, delegate_seat,
+    delegate_shm, delegate_xdg_shell,
 };
 use tracing::info;
 
+mod dmabuf_descriptor;
+mod dmabuf_import;
+
+use crate::dmabuf_descriptor::descriptor_from;
+use crate::dmabuf_import::DmabufImporter;
+use domicile_bridge::BridgeRegistry;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
@@ -114,24 +131,48 @@ enum ClientRequest {
     },
 }
 
+/// Something on its way to the chrome.
+///
+/// A frame is carried as raw pixels rather than a finished [`HostMessage`] so
+/// that the base64 and JSON encoding — tens of milliseconds for a large window —
+/// happen on the writer thread instead of the one driving Wayland.
+enum Outbound {
+    Message(HostMessage),
+    Frame {
+        app_id: String,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    },
+}
+
+/// How many outbound items may be in flight before the chrome is judged behind.
+/// Small on purpose: a backlog of stale frames is worth nothing to a chrome that
+/// only ever draws the newest one.
+const OUTBOUND_DEPTH: usize = 2;
+
 /// Shared between the Wayland thread (calloop) and the chrome-connection threads.
 ///
 /// Holds the single [`Host`] brain both sides drive, the write-halves of
-/// connected chrome sockets (to broadcast app lifecycle), and a sender to push
-/// forwarded input onto the Wayland thread.
+/// connected chrome sockets (to broadcast app lifecycle), and senders to push
+/// forwarded input onto the Wayland thread and pixels onto the writer thread.
 struct ChromeHub {
     host: Mutex<Host>,
     chromes: Mutex<Vec<Arc<Mutex<UnixStream>>>>,
     request_tx: Mutex<Sender<ClientRequest>>,
+    outbound: SyncSender<Outbound>,
 }
 
 impl ChromeHub {
-    fn new(request_tx: Sender<ClientRequest>) -> Arc<Self> {
-        Arc::new(ChromeHub {
+    fn new(request_tx: Sender<ClientRequest>) -> (Arc<Self>, Receiver<Outbound>) {
+        let (outbound, outbound_rx) = sync_channel(OUTBOUND_DEPTH);
+        let hub = Arc::new(ChromeHub {
             host: Mutex::new(Host::new()),
             chromes: Mutex::new(Vec::new()),
             request_tx: Mutex::new(request_tx),
-        })
+            outbound,
+        });
+        (hub, outbound_rx)
     }
 
     /// Forward an input event to the Wayland thread.
@@ -139,10 +180,60 @@ impl ChromeHub {
         let _ = self.request_tx.lock().unwrap().send(event);
     }
 
-    /// Send a host message to every connected chrome, dropping dead ones.
-    fn broadcast(&self, message: &HostMessage) {
-        let line = to_line(message);
-        let mut chromes = self.chromes.lock().unwrap();
+    /// Queue a host message for every connected chrome.
+    ///
+    /// Lifecycle messages are the chrome's model of the world, so a full queue
+    /// waits rather than losing one. They are also tiny and rare, which is what
+    /// makes waiting safe.
+    fn broadcast(&self, message: HostMessage) {
+        if let Err(TrySendError::Full(message)) = self.outbound.try_send(Outbound::Message(message))
+        {
+            let _ = self.outbound.send(message);
+        }
+    }
+
+    /// Queue an app's pixels, dropping them if the chrome has not kept up.
+    ///
+    /// Dropping is the correct answer rather than a lossy compromise: the next
+    /// frame supersedes this one, and waiting would stall the Wayland loop —
+    /// freezing every client, not just the slow chrome.
+    fn send_frame(&self, app_id: &str, width: u32, height: u32, rgba: Vec<u8>) {
+        let frame = Outbound::Frame {
+            app_id: app_id.to_string(),
+            width,
+            height,
+            rgba,
+        };
+        if let Err(TrySendError::Full(_)) = self.outbound.try_send(frame) {
+            tracing::debug!(%app_id, "chrome is behind; dropped a frame");
+        }
+    }
+}
+
+/// Encode and write everything bound for the chrome, off the Wayland thread.
+///
+/// This is the only place that blocks on a chrome socket. Before it existed a
+/// slow chrome blocked `commit()`, which stopped frame callbacks, which stopped
+/// every client on the compositor.
+fn serve_outbound(hub: Arc<ChromeHub>, outbound: Receiver<Outbound>) {
+    for item in outbound {
+        let message = match item {
+            Outbound::Message(message) => message,
+            Outbound::Frame {
+                app_id,
+                width,
+                height,
+                rgba,
+            } => HostMessage::AppFrame {
+                app_id,
+                width,
+                height,
+                format: "rgba".to_string(),
+                data: base64::engine::general_purpose::STANDARD.encode(&rgba),
+            },
+        };
+        let line = to_line(&message);
+        let mut chromes = hub.chromes.lock().unwrap();
         chromes.retain(|writer| {
             let mut stream = writer.lock().unwrap();
             stream
@@ -150,6 +241,11 @@ impl ChromeHub {
                 .and_then(|_| stream.flush())
                 .is_ok()
         });
+        tracing::debug!(
+            bytes = line.len(),
+            chromes = chromes.len(),
+            "outbound: sent"
+        );
     }
 }
 
@@ -279,14 +375,29 @@ struct DomicileCompositor {
     /// Kept alive so the xdg-output manager global persists.
     #[allow(dead_code)]
     output_manager_state: OutputManagerState,
-    /// Kept alive so the wl_output global persists.
-    _output: Output,
+    /// The single virtual output. Every app surface is on it — a client asks
+    /// which output it is on to learn its scale, and blocks until told.
+    output: Output,
     /// Kept alive so the wp_cursor_shape_v1 global persists.
     #[allow(dead_code)]
     cursor_shape_state: CursorShapeManagerState,
+    dmabuf_state: DmabufState,
+    /// Kept alive so the zwp_linux_dmabuf_v1 global persists. `None` where EGL
+    /// gave us no renderer, in which case the global was never advertised.
+    #[allow(dead_code)]
+    dmabuf_global: Option<DmabufGlobal>,
+    /// The GLES context client buffers are imported into. Present exactly when
+    /// the dmabuf global is, so a committed dmabuf always has one.
+    dmabuf_importer: Option<DmabufImporter>,
 
     /// Shared brain + connected chrome clients.
     hub: Arc<ChromeHub>,
+    /// Each app's engine texture and the dmabuf behind its latest frame — what
+    /// the CEF external-texture path binds instead of copying pixels.
+    bridge: BridgeRegistry,
+    /// The buffers those descriptors point into, held so their plane fds stay
+    /// open for as long as the descriptor names them.
+    latest_dmabufs: HashMap<String, Dmabuf>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
     /// The app the pointer is currently over, so a `set_cursor` request can be
@@ -338,6 +449,60 @@ impl DomicileCompositor {
         } else {
             host.app_resized(app_id, size)
         }
+    }
+
+    /// Turn a client's newly-attached buffer into pixels for the chrome,
+    /// throttled to ~30fps per app.
+    fn publish_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer) {
+        let Some(committed) = committed_buffer(buffer) else {
+            return;
+        };
+        let (width, height) = committed.size();
+        // A buffer of a new size is the client answering a configure (or
+        // resizing itself); tell the chrome so its element and its pointer
+        // mapping follow the client's real resolution.
+        if let Some(resized) = self.note_content_size(app_id, width, height) {
+            self.hub.broadcast(resized);
+        }
+
+        let now = Instant::now();
+        let due = self.last_frame.get(app_id).map_or(true, |t| {
+            now.duration_since(*t) >= Duration::from_millis(33)
+        });
+        if due {
+            self.last_frame.insert(app_id.to_string(), now);
+            // The GPU readback happens here rather than during classification:
+            // it costs a pipeline stall, so a frame the throttle is about to
+            // drop is never imported at all.
+            let rgba = match committed {
+                CommittedBuffer::Pixels { rgba, .. } => rgba,
+                CommittedBuffer::Gpu(dmabuf) => self.import_gpu_frame(app_id, dmabuf),
+            };
+            tracing::debug!(%app_id, width, height, bytes = rgba.len(), "broadcast app frame");
+            self.hub.send_frame(app_id, width, height, rgba);
+        }
+    }
+
+    /// Read a client's GPU frame back as RGBA, recording the buffer it came
+    /// from against the app's engine texture.
+    ///
+    /// The readback is the part the CEF bridge deletes: the descriptor stored
+    /// here already names the very buffer the engine will sample directly.
+    fn import_gpu_frame(&mut self, app_id: &str, dmabuf: Dmabuf) -> Vec<u8> {
+        let importer = self.dmabuf_importer.as_mut().expect(
+            "a dmabuf can only be committed where the global — and so the importer — exists",
+        );
+        // Every dmabuf was imported once already, when the client created it
+        // (`DmabufHandler::dmabuf_imported`), so a failure here is not a client
+        // handing us something unsupported — it is the renderer breaking.
+        let rgba = importer
+            .read_rgba(&dmabuf)
+            .expect("a dmabuf the importer accepted reads back");
+        self.bridge
+            .update_frame(app_id, descriptor_from(&dmabuf))
+            .expect("every mapped toplevel is registered with the bridge");
+        self.latest_dmabufs.insert(app_id.to_string(), dmabuf);
+        rgba
     }
 
     /// Inject a forwarded input event into the appropriate client via the seat.
@@ -460,7 +625,29 @@ impl DomicileCompositor {
     }
 }
 
-// ---- compositor + shm -----------------------------------------------------
+// ---- compositor + shm + dmabuf --------------------------------------------
+
+/// What a client just attached: pixels we can already read (`wl_shm`), or a
+/// GPU buffer that has to go through the renderer first (`zwp_linux_dmabuf`).
+enum CommittedBuffer {
+    Pixels {
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    },
+    Gpu(Dmabuf),
+}
+
+impl CommittedBuffer {
+    /// The client's content size, known before any pixels are read — which is
+    /// what lets the frame throttle run ahead of the GPU import.
+    fn size(&self) -> (u32, u32) {
+        match self {
+            CommittedBuffer::Pixels { width, height, .. } => (*width, *height),
+            CommittedBuffer::Gpu(dmabuf) => (dmabuf.width(), dmabuf.height()),
+        }
+    }
+}
 
 impl CompositorHandler for DomicileCompositor {
     fn compositor_state(&mut self) -> &mut CompositorState {
@@ -495,16 +682,19 @@ impl CompositorHandler for DomicileCompositor {
             toplevel.send_configure();
         }
 
-        // Grab the newly-committed buffer's pixels and drain the frame callbacks.
-        let (frame, callbacks) = with_states(surface, |states| {
+        // Take the newly-attached buffer and drain the frame callbacks. Taking
+        // it (rather than borrowing) hands us the release: Smithay would
+        // otherwise hold it until the *next* buffer arrives, which is a buffer
+        // the client cannot draw without the release it is waiting for.
+        let (attached, callbacks) = with_states(surface, |states| {
             let mut guard = states.cached_state.get::<SurfaceAttributes>();
             let attrs = guard.current();
-            let frame = match &attrs.buffer {
-                Some(BufferAssignment::NewBuffer(buffer)) => shm_buffer_to_rgba(buffer),
-                _ => None,
+            let attached = match attrs.buffer.take() {
+                Some(BufferAssignment::NewBuffer(buffer)) => Some(buffer),
+                Some(BufferAssignment::Removed) | None => None,
             };
             let callbacks = std::mem::take(&mut attrs.frame_callbacks);
-            (frame, callbacks)
+            (attached, callbacks)
         });
 
         // Ask the client to draw its next frame (keeps it animating).
@@ -513,31 +703,14 @@ impl CompositorHandler for DomicileCompositor {
             callback.done(time);
         }
 
-        // Broadcast the pixels to the chrome, throttled to ~30fps per app.
-        if let Some((width, height, rgba)) = frame {
-            // A buffer of a new size is the client answering a configure (or
-            // resizing itself); tell the chrome so its element and its pointer
-            // mapping follow the client's real resolution.
-            if let Some(resized) = self.note_content_size(&app_id, width, height) {
-                self.hub.broadcast(&resized);
-            }
-
-            let now = Instant::now();
-            let due = self.last_frame.get(&app_id).map_or(true, |t| {
-                now.duration_since(*t) >= Duration::from_millis(33)
-            });
-            if due {
-                self.last_frame.insert(app_id.clone(), now);
-                let data = base64::engine::general_purpose::STANDARD.encode(&rgba);
-                tracing::debug!(%app_id, width, height, "broadcast app frame");
-                self.hub.broadcast(&HostMessage::AppFrame {
-                    app_id,
-                    width,
-                    height,
-                    format: "rgba".to_string(),
-                    data,
-                });
-            }
+        if let Some(buffer) = attached {
+            self.publish_frame(&app_id, &buffer);
+            // The client may redraw into this buffer the instant it is
+            // released, so the release comes after the pixels are out of it —
+            // and it happens even for a frame the throttle dropped, or a
+            // single-buffered client never draws again.
+            buffer.release();
+            tracing::debug!(%app_id, "buffer released");
         }
     }
 }
@@ -552,8 +725,39 @@ impl ShmHandler for DomicileCompositor {
     }
 }
 
+impl DmabufHandler for DomicileCompositor {
+    fn dmabuf_state(&mut self) -> &mut DmabufState {
+        &mut self.dmabuf_state
+    }
+
+    // A client is asking whether we can use the GPU buffer it just allocated.
+    // Answering by actually importing it is the only honest answer — and it
+    // warms the renderer's cache, so the commit that follows is a lookup.
+    fn dmabuf_imported(
+        &mut self,
+        _global: &DmabufGlobal,
+        dmabuf: Dmabuf,
+        notifier: ImportNotifier,
+    ) {
+        let importer = self
+            .dmabuf_importer
+            .as_mut()
+            .expect("the dmabuf global is only advertised alongside an importer");
+        if importer.accepts(&dmabuf) {
+            tracing::debug!(format = ?dmabuf.format(), "client dmabuf accepted");
+            if let Err(err) = notifier.successful::<DomicileCompositor>() {
+                tracing::debug!(?err, "client went away before its dmabuf was acknowledged");
+            }
+        } else {
+            tracing::warn!(format = ?dmabuf.format(), "rejecting a dmabuf the renderer cannot import");
+            notifier.failed();
+        }
+    }
+}
+
 delegate_compositor!(DomicileCompositor);
 delegate_shm!(DomicileCompositor);
+delegate_dmabuf!(DomicileCompositor);
 
 // ---- seat (required by xdg-shell delegation) ------------------------------
 
@@ -580,7 +784,7 @@ impl SeatHandler for DomicileCompositor {
                 CursorImageStatus::Surface(_) => CursorShape::Default,
             };
             self.hub
-                .broadcast(&HostMessage::AppCursor { app_id, cursor });
+                .broadcast(HostMessage::AppCursor { app_id, cursor });
         }
     }
 
@@ -612,10 +816,17 @@ impl XdgShellHandler for DomicileCompositor {
             let mut host = self.hub.host.lock().unwrap();
             let (app_id, announce) = host.app_appeared(None, (0.0, 0.0));
             info!(%app_id, "toplevel mapped -> Host::app_appeared");
+            // Tell the client which output it is on. Toolkits that scale their
+            // content (GLFW, and so kitty) wait for this before drawing their
+            // first frame, so without it the window maps and stays blank.
+            self.output.enter(surface.wl_surface());
+            // The engine texture id is stable for the element's whole life, so
+            // it is claimed here rather than on the app's first GPU frame.
+            self.bridge.register(&app_id);
             self.toplevels.push((app_id, surface));
             announce
         };
-        self.hub.broadcast(&announce);
+        self.hub.broadcast(announce);
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
@@ -626,10 +837,12 @@ impl XdgShellHandler for DomicileCompositor {
         {
             let (app_id, _) = self.toplevels.remove(pos);
             self.last_frame.remove(&app_id);
+            self.bridge.remove(&app_id);
+            self.latest_dmabufs.remove(&app_id);
             let closed = self.hub.host.lock().unwrap().app_closed(&app_id);
             info!(%app_id, "toplevel destroyed -> Host::app_closed");
             if let Some(closed) = closed {
-                self.hub.broadcast(&closed);
+                self.hub.broadcast(closed);
             }
         }
     }
@@ -688,6 +901,55 @@ fn spawn_client(command: &[String]) {
             });
         }
         Err(err) => tracing::error!(%err, ?command, "failed to spawn client"),
+    }
+}
+
+/// Advertise `zwp_linux_dmabuf_v1`, with feedback whenever we can name the DRM
+/// node we import on.
+///
+/// The feedback (protocol v4) is what tells a client *which* device to allocate
+/// on. Mesa has no other source for that here — Domicile advertises no
+/// `wl_drm` — so against a v3-only global it sees a format list, cannot resolve
+/// a GPU, and never allocates a buffer at all. v3 remains the fallback for a
+/// software renderer, which has no DRM node to name.
+fn advertise_dmabuf(
+    state: &mut DmabufState,
+    display: &DisplayHandle,
+    importer: &DmabufImporter,
+) -> DmabufGlobal {
+    let formats: Vec<_> = importer.formats().into_iter().collect();
+    let feedback = importer.main_device().and_then(|device| {
+        match DmabufFeedbackBuilder::new(device, formats.clone()).build() {
+            Ok(feedback) => Some(feedback),
+            Err(err) => {
+                tracing::warn!(%err, "cannot build dmabuf feedback; falling back to v3");
+                None
+            }
+        }
+    });
+    info!(
+        count = formats.len(),
+        feedback = feedback.is_some(),
+        "advertising zwp_linux_dmabuf_v1"
+    );
+    match feedback {
+        Some(feedback) => {
+            state.create_global_with_default_feedback::<DomicileCompositor>(display, &feedback)
+        }
+        None => state.create_global::<DomicileCompositor>(display, formats),
+    }
+}
+
+/// Classify a newly-attached buffer. A dmabuf carries its `Dmabuf` as the
+/// `wl_buffer`'s user data, which is what tells the two kinds apart.
+fn committed_buffer(buffer: &wl_buffer::WlBuffer) -> Option<CommittedBuffer> {
+    match get_dmabuf(buffer) {
+        Ok(dmabuf) => Some(CommittedBuffer::Gpu(dmabuf.clone())),
+        Err(_) => shm_buffer_to_rgba(buffer).map(|(width, height, rgba)| CommittedBuffer::Pixels {
+            width,
+            height,
+            rgba,
+        }),
     }
 }
 
@@ -865,11 +1127,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (request_tx, request_rx) = channel::<ClientRequest>();
 
     // Shared brain, driven by both the Wayland side and chrome connections.
-    let hub = ChromeHub::new(request_tx);
+    let (hub, outbound_rx) = ChromeHub::new(request_tx);
     {
         let hub = hub.clone();
         thread::spawn(move || serve_chrome(hub, chrome_socket));
     }
+    {
+        let hub = hub.clone();
+        thread::spawn(move || serve_outbound(hub, outbound_rx));
+    }
+
+    // GPU clients need somewhere for their buffers to land. Where EGL gives us
+    // nothing to render on — a container, a machine with no DRM device — the
+    // global is simply not advertised, and clients fall back to wl_shm rather
+    // than allocating buffers we would then have to reject.
+    let dmabuf_importer = match DmabufImporter::new() {
+        Ok(importer) => Some(importer),
+        Err(err) => {
+            tracing::warn!(%err, "no EGL renderer: serving wl_shm clients only");
+            None
+        }
+    };
+    let mut dmabuf_state = DmabufState::new();
+    let dmabuf_global = dmabuf_importer
+        .as_ref()
+        .map(|importer| advertise_dmabuf(&mut dmabuf_state, &dh, importer));
 
     let state = DomicileCompositor {
         compositor_state: CompositorState::new::<DomicileCompositor>(&dh),
@@ -878,11 +1160,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         seat_state,
         seat,
         output_manager_state,
-        _output: output,
+        output,
         // Modern toolkits ask for cursors by name through this global, which
         // maps straight onto CSS cursor keywords.
         cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
+        dmabuf_state,
+        dmabuf_global,
+        dmabuf_importer,
         hub,
+        bridge: BridgeRegistry::new(),
+        latest_dmabufs: HashMap::new(),
         toplevels: Vec::new(),
         pointer_app: None,
         start: Instant::now(),

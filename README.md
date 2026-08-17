@@ -57,9 +57,9 @@ pointer input over it are forwarded to the Wayland client (surface-local coords,
 evdev keycodes).
 
 **Keybindings** (in the demo shell, with the chrome window focused):
-- **Alt+Enter** — launch a terminal (`kitty`) onto Domicile. GPU/dmabuf-only clients
-  may not show pixels until the dmabuf path lands, but input works for any client
-  that runs; `wl_shm` clients (e.g. `weston-flower`) show pixels today.
+- **Alt+Enter** — launch a terminal (`kitty`) onto Domicile. GPU clients render
+  through the `zwp_linux_dmabuf_v1` path (their buffer is imported into an
+  offscreen GLES context), `wl_shm` clients through the shared-memory one.
 - **Alt+Shift+Enter** — open a `<webview>` pointing at Google (rendered by the
   engine directly; works today).
 
@@ -71,11 +71,28 @@ nix run github:cprussin/domicile#e2e-chrome      # message plane (mock chrome)
 nix run github:cprussin/domicile#e2e-electron    # full path incl. the real Electron renderer, under Xvfb
 nix run github:cprussin/domicile#e2e-spawn       # a chrome `spawn` message launches a client
 nix run github:cprussin/domicile#e2e-input       # forwarded keyboard + pointer input reaches a client
+nix run github:cprussin/domicile#e2e-dmabuf      # the dmabuf global; with a GPU, a real GPU client's frames
+nix run github:cprussin/domicile#e2e-slow-chrome # a chrome that stops reading must not freeze the compositor
+```
+
+`e2e-dmabuf` is the one that wants real hardware: without a DRM render node it
+checks that the global is advertised and stops there, since no client can
+allocate a GPU buffer to import. Like the other checks it is headless — no
+window appears, because there is no chrome and no output; `prototype` is the
+one that opens a window.
+
+To run an *unmerged branch* this way, name it with `?ref=` (branch names contain
+slashes, which the `owner/repo/ref` form cannot express) and pass `--refresh`.
+Without it Nix re-resolves a branch ref only once an hour, so a branch that was
+just force-pushed silently runs the revision you already had:
+
+```sh
+nix run --refresh 'github:cprussin/domicile?ref=some/branch#e2e-dmabuf'
 ```
 
 Each is one of the flake's apps — `prototype` (the default), `e2e-chrome`,
-`e2e-electron`, `e2e-spawn`, `e2e-input`, `smoke-compositor` — and each runs the
-matching script under `scripts/`. From a checkout, run that script yourself:
+`e2e-electron`, `e2e-spawn`, `e2e-input`, `e2e-dmabuf`, `e2e-slow-chrome`,
+`smoke-compositor` — and each runs the matching script under `scripts/`. From a checkout, run that script yourself:
 `nix develop .#full -c ./scripts/e2e-chrome.sh`, and so on.
 
 `e2e-electron.sh` runs the actual Electron chrome headlessly and confirms it

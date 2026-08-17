@@ -11,16 +11,25 @@ name = "domicile-compositor"
 path = "src/main.rs"
 
 [dependencies]
+domicile-bridge = { path = "../domicile-bridge" }
 domicile-host = { path = "../domicile-host" }
 domicile-protocol = { path = "../domicile-protocol" }
 base64 = "0.22"
+# Same dlopen crate Smithay uses for EGL, so libEGL can be probed for before
+# Smithay loads it (it treats a missing library as fatal).
+libloading = "0.8"
+thiserror.workspace = true
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# Only the Wayland protocol frontend is needed: in Domicile the web engine is the
-# renderer, so we deliberately do NOT pull Smithay's GL renderer, winit, or DRM
-# backends. Smithay's job here is accepting clients and managing their surfaces.
+# In Domicile the web engine is the renderer, so we deliberately do NOT pull
+# Smithay's winit, DRM or udev backends. Smithay's job here is accepting clients
+# and managing their surfaces — plus, for GPU clients, importing the dmabuf they
+# hand us. That import is what `backend_egl` + `renderer_gl` are for: they add
+# only Rust build-time codegen and a runtime `dlopen` of libEGL/libGLESv2, so the
+# crate still links against nothing but libxkbcommon and still builds where there
+# is no GPU (the dmabuf global is simply not advertised there).
 [dependencies.smithay]
 version = "0.7"
 default-features = false
-features = ["wayland_frontend"]
+features = ["wayland_frontend", "backend_egl", "renderer_gl"]
