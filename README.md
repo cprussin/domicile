@@ -50,18 +50,23 @@ nix shell nixpkgs#weston -c \
 
 (from a checkout, `nix develop .#full` already has `weston-flower` on `PATH`).
 
-A rounded/blurred `<app>` portal appears in the chrome window.
+An `<app>` portal appears in the chrome window, with a tab for it in the shell's
+tab strip.
 
 App windows are **interactive**: clicking an `<app>` focuses it, and keyboard +
 pointer input over it are forwarded to the Wayland client (surface-local coords,
 evdev keycodes).
 
-**Keybindings** (in the demo shell, with the chrome window focused):
-- **Alt+Enter** — launch a terminal (`kitty`) onto Domicile. GPU clients render
-  through the `zwp_linux_dmabuf_v1` path (their buffer is imported into an
-  offscreen GLES context), `wl_shm` clients through the shared-memory one.
-- **Alt+Shift+Enter** — open a `<webview>` pointing at Google (rendered by the
-  engine directly; works today).
+The demo shell shows one window at a time and switches between them from the tab
+bar. The top bar launches new ones:
+
+- **+ Terminal** (or **Alt+Enter**) — launch a terminal (`kitty`) onto Domicile.
+  GPU clients render through the `zwp_linux_dmabuf_v1` path (their buffer is
+  imported into an offscreen GLES context), `wl_shm` clients through the
+  shared-memory one.
+- **+ Browser** (or **Alt+Shift+Enter**) — open a browser window: a
+  `<webview>` the engine renders directly, under an address bar with
+  back / forward / stop / reload.
 
 The message plane (Wayland client → compositor → host brain → chrome) is also
 covered by headless, reproducible checks that run without a display:

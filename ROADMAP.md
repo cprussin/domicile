@@ -16,9 +16,11 @@ A runnable end-to-end prototype exists and is verified headlessly:
 real Wayland client → `domicile-compositor` (Smithay, headless) → shared `Host` brain
 → Electron chrome, which mounts a styled `<domicile-app>`, **draws the client's live
 pixels** (both the shm and the dmabuf path), and **forwards keyboard + pointer input
-back to the client**. `kitty` (Alt+Enter) and a Google `<webview>` (Alt+Shift+Enter)
-launch from the demo shell. **89 Rust tests (78 core + 11 in domicile-compositor) +
-95 JS tests, clippy clean.**
+back to the client**. The demo shell tabs its windows — one on the stage at a
+time — and launches them from its bar: `kitty` (or Alt+Enter) and a browser
+window with an address bar (or Alt+Shift+Enter).
+**89 Rust tests (78 core + 11 in domicile-compositor) +
+126 JS tests, clippy clean.**
 
 Since the first prototype, most of Phase 2 has landed (see the phase list below):
 GPU clients get a **`zwp_linux_dmabuf_v1`** global and their buffers are imported
@@ -201,7 +203,7 @@ nix develop .#full -c ./scripts/run-prototype.sh
 | `packages/chrome-sdk` | `<domicile-app>`/`<domicile-webview>` elements, `BridgeClient`, matrix/frame/input/protocol helpers | bun |
 | `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers) | bun |
 | `packages/e2e-harness` | headless chrome stand-ins for the `scripts/e2e-*.sh` checks | bun |
-| `apps/shell` | reference chrome: bar + stage; `ShellController`; Electron host (`src/main.ts`/`src/preload.ts`) | bun |
+| `apps/shell` | reference chrome: bar + tabs + stage; `ShellController`, `TabBar`, browser windows; Electron host (`src/main.ts`/`src/preload.ts`) | bun |
 | `scripts/` | e2e + smoke + prototype launcher | — |
 
 TS note: the chrome is TypeScript built by Vite — the Electron main process to
@@ -240,8 +242,10 @@ pointer input injection — all done and verified headlessly (the dmabuf import
 apart; see item 1 below).
 
 ### Phase 4 — Chrome SDK + simple shell ✅ (prototype complete)
-`packages/chrome-sdk`, `apps/shell`, Electron host, keybindings (Alt+Enter → kitty,
-Alt+Shift+Enter → Google webview).
+`packages/chrome-sdk`, `apps/shell`, Electron host, a tab bar over the windows
+(apps and browser windows alike, one shown at a time), bar launchers and
+keybindings (Alt+Enter → kitty, Alt+Shift+Enter → a browser window), and an
+address bar with back / forward / stop / reload on browser windows.
 
 ### Phase 2 — mostly done
 Numbered as the original list was, so the items map one-to-one; item 1 is the

@@ -8,6 +8,7 @@ import {
   registerElements,
   WEBVIEW_TAG_NAME,
 } from "@domicile/chrome-sdk/register-elements";
+import { WEBVIEW_NAVIGATE_EVENT } from "@domicile/chrome-sdk/webview-element";
 
 import { ShellController } from "./shell-controller";
 
@@ -53,16 +54,32 @@ const stubMeasure: Measure = () => ({
 const keydown = (props: Partial<KeyboardEventInit>): KeyboardEvent =>
   new KeyboardEvent("keydown", { key: "", ...props });
 
+const tabs = (): HTMLButtonElement[] => [
+  ...document.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+];
+
+const tabLabels = (): (string | null)[] => tabs().map((tab) => tab.textContent);
+
+const activeTab = (): string | null | undefined =>
+  tabs().find((tab) => tab.getAttribute("aria-selected") === "true")
+    ?.textContent;
+
+const shownWindows = (root: Element): (string | null)[] =>
+  [...root.children]
+    .filter((element) => !element.hasAttribute("hidden"))
+    .map((element) => element.getAttribute("app-id") ?? element.className);
+
 describe("ShellController", () => {
   let bridge: FakeBridge;
   let root: HTMLElement;
   let controller: ShellController;
 
   beforeEach(() => {
-    document.body.innerHTML = '<div id="stage"></div>';
+    document.body.innerHTML = '<div id="tabs"></div><div id="stage"></div>';
     const stage = document.querySelector("#stage");
-    if (stage === null) {
-      throw new Error("test setup: #stage is missing");
+    const tabBar = document.querySelector("#tabs");
+    if (stage === null || tabBar === null) {
+      throw new Error("test setup: #stage or #tabs is missing");
     }
     root = stage as HTMLElement;
     bridge = new FakeBridge();
@@ -71,6 +88,7 @@ describe("ShellController", () => {
         registerElements(bound, { measure: stubMeasure });
       },
       root,
+      tabs: tabBar,
     });
   });
 
@@ -181,6 +199,87 @@ describe("ShellController", () => {
         bridge.emit("app_resized", { app_id: "ghost", size: [1, 1] });
         bridge.emit("app_cursor", { app_id: "ghost", cursor: "wait" });
       }).not.toThrow();
+    });
+  });
+
+  describe("windows and tabs", () => {
+    it("shows the window that just opened and hides the others", () => {
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      bridge.emit("app_appeared", { app_id: "editor", title: "Editor" });
+
+      expect(tabLabels()).toEqual(["Terminal", "Editor"]);
+      expect(activeTab()).toBe("Editor");
+      expect(shownWindows(root)).toEqual(["editor"]);
+    });
+
+    it("falls back to the app id when a client offers no title", () => {
+      bridge.emit("app_appeared", { app_id: "term" });
+      expect(tabLabels()).toEqual(["term"]);
+    });
+
+    it("shows the window whose tab is clicked", () => {
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      bridge.emit("app_appeared", { app_id: "editor", title: "Editor" });
+
+      tabs()[0]?.click();
+      expect(activeTab()).toBe("Terminal");
+      expect(shownWindows(root)).toEqual(["term"]);
+    });
+
+    it("hands the stage to another window when the shown one closes", () => {
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      bridge.emit("app_appeared", { app_id: "editor", title: "Editor" });
+
+      bridge.emit("app_closed", { app_id: "editor" });
+      expect(tabLabels()).toEqual(["Terminal"]);
+      expect(activeTab()).toBe("Terminal");
+      expect(shownWindows(root)).toEqual(["term"]);
+    });
+
+    it("leaves the stage empty once the last window closes", () => {
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      bridge.emit("app_closed", { app_id: "term" });
+
+      expect(tabLabels()).toEqual([]);
+      expect(root.children).toHaveLength(0);
+    });
+
+    it("keeps the shown window when a background one closes", () => {
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      bridge.emit("app_appeared", { app_id: "editor", title: "Editor" });
+
+      bridge.emit("app_closed", { app_id: "term" });
+      expect(activeTab()).toBe("Editor");
+      expect(shownWindows(root)).toEqual(["editor"]);
+    });
+  });
+
+  describe("launchers", () => {
+    it("opens a terminal on the compositor", () => {
+      controller.openTerminal();
+      expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
+    });
+
+    it("opens a browser window with an address bar, tabbed by site", () => {
+      controller.openBrowser("https://example.com/docs");
+
+      expect(tabLabels()).toEqual(["example.com"]);
+      expect(activeTab()).toBe("example.com");
+      const view = root.querySelector(WEBVIEW_TAG_NAME);
+      expect(view?.getAttribute("src")).toBe("https://example.com/docs");
+      expect(root.querySelector('input[aria-label="Address"]')).not.toBeNull();
+    });
+
+    it("retitles a browser tab as its page navigates", () => {
+      controller.openBrowser("https://example.com");
+      const view = root.querySelector(WEBVIEW_TAG_NAME);
+
+      view?.dispatchEvent(
+        new CustomEvent(WEBVIEW_NAVIGATE_EVENT, {
+          detail: { url: "https://docs.example.com/page" },
+        }),
+      );
+      expect(tabLabels()).toEqual(["docs.example.com"]);
     });
   });
 

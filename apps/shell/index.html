@@ -10,14 +10,23 @@
     <header id="bar">
       <span class="brand">domicile</span>
       <span class="spacer"></span>
+      <button class="launcher" id="launch-browser" type="button">
+        + Browser
+      </button>
+      <button class="launcher" id="launch-terminal" type="button">
+        + Terminal
+      </button>
       <span id="clock">--:--:--</span>
     </header>
 
-    <!-- The stage is where app portals mount. Each app becomes a real
+    <!-- One tab per open window: Wayland clients and browser windows alike. -->
+    <div aria-label="Open windows" id="tabs" role="tablist"></div>
+
+    <!-- The stage shows one window at a time. Each Wayland client is a real
          <domicile-app> element here, styled entirely with CSS (see style.css). -->
     <main id="stage"></main>
 
-    <div id="empty-hint">No apps yet — launch a Wayland client.</div>
+    <div id="empty-hint">No windows yet — open one from the bar.</div>
 
     <script src="/src/renderer.ts" type="module"></script>
   </body>

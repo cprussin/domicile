@@ -17,17 +17,33 @@ const transport = window.domicileTransport ?? {
   send: () => undefined,
 };
 
-const stage = document.getElementById("stage");
-const clock = document.getElementById("clock");
-if (stage === null || clock === null) {
-  throw new Error("shell: index.html is missing #stage or #clock");
-}
+// The markup this entry point wires up is its own file, so a missing id is a
+// mismatch between the two rather than a condition to handle. It is declared
+// here, above its callers, because they run as the module loads.
+const required = (id: string): HTMLElement => {
+  const element = document.getElementById(id);
+  if (element === null) {
+    throw new Error(`shell: index.html is missing #${id}`);
+  } else {
+    return element;
+  }
+};
 
 const bridge = new BridgeClient(transport);
-const shell = new ShellController(bridge, { root: stage });
-shell.installKeybindings(); // Alt+Enter -> kitty, Alt+Shift+Enter -> webview
+const shell = new ShellController(bridge, {
+  root: required("stage"),
+  tabs: required("tabs"),
+});
+shell.installKeybindings(); // Alt+Enter -> kitty, Alt+Shift+Enter -> a browser
 
-installClock(clock);
+required("launch-browser").addEventListener("click", () => {
+  shell.openBrowser();
+});
+required("launch-terminal").addEventListener("click", () => {
+  shell.openTerminal();
+});
+
+installClock(required("clock"));
 
 // Let shell markup say `<app>`; the SDK registers the hyphenated name a custom
 // element requires. `<webview>` keeps its long name — Electron owns that tag.
