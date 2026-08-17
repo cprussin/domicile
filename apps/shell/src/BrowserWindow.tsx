@@ -11,7 +11,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
-import { hstack } from "../styled-system/patterns";
+import { flex, hstack } from "../styled-system/patterns";
 import { windowStyles } from "./window-styles";
 import { withScheme } from "./with-scheme";
 
@@ -151,9 +151,8 @@ export const BrowserWindow = ({ active, onNavigate, src }: Props) => {
   );
 };
 
-const browserStyles = css({
-  display: "flex",
-  flexDirection: "column",
+const browserStyles = flex({
+  direction: "column",
 });
 
 const addressBarStyles = hstack({
@@ -173,16 +172,21 @@ const addressFieldStyles = css({
 });
 
 // The page takes the height the address bar leaves, and gives it to the embed
-// inside it rather than making the embed resolve a percentage against it.
-// `display` is left alone on purpose: Electron ships `<webview>` as
-// `display: flex` so the browsing context inside fills the tag, and overriding
-// it collapses the page to nothing.
-const viewStyles = css({
+// inside it rather than making the embed resolve a percentage against it — so
+// the view is a column, which is what the embed's `flex` below grows into. The
+// embed has no height of its own: Electron's `<webview>` is a shell around an
+// iframe, and an iframe left to itself is 150px tall.
+//
+// The embed's own `display` is left alone on purpose: Electron ships
+// `<webview>` as `display: flex` so the browsing context inside fills the tag,
+// and overriding it collapses the page to nothing.
+const viewStyles = flex({
   "& .domicile-webview-frame": {
     borderStyle: "none",
     flex: 1,
     minInlineSize: 0,
   },
+  direction: "column",
   flex: 1,
   minBlockSize: 0,
 });
