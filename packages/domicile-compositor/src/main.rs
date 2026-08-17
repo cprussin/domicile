@@ -30,7 +30,7 @@ use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
 use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState};
 use smithay::input::{
-    keyboard::{FilterResult, Keycode},
+    keyboard::{FilterResult, Keycode, XkbConfig},
     pointer::{AxisFrame, ButtonEvent, CursorIcon, CursorImageStatus, MotionEvent},
     Seat, SeatHandler, SeatState,
 };
@@ -83,6 +83,7 @@ use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::DmabufImporter;
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use domicile_bridge::BridgeRegistry;
+use domicile_config::Config;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
@@ -1026,6 +1027,24 @@ fn cursor_shape(icon: CursorIcon) -> CursorShape {
     }
 }
 
+/// Resolve where the config file lives.
+///
+/// Mirrors [`chrome_socket_path`]: `--config PATH` wins, then
+/// `$DOMICILE_CONFIG`, then `domicile.toml` in the working directory.
+fn config_path() -> PathBuf {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--config" {
+            if let Some(path) = args.next() {
+                return PathBuf::from(path);
+            }
+        }
+    }
+    std::env::var_os("DOMICILE_CONFIG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("domicile.toml"))
+}
+
 /// Resolve where the chrome protocol socket lives.
 fn chrome_socket_path() -> PathBuf {
     // --chrome-socket PATH wins, then $DOMICILE_CHROME_SOCKET, then a default under
@@ -1058,6 +1077,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --chrome-socket or DOMICILE_CHROME_SOCKET; defaults under XDG_RUNTIME_DIR.
     let chrome_socket = chrome_socket_path();
 
+    // Config is optional: a missing/invalid file means run with defaults rather
+    // than refuse to boot, the same call the daemon makes.
+    let config = match Config::load(config_path()) {
+        Ok(config) => config,
+        Err(err) => {
+            tracing::warn!(%err, "using the default config");
+            Config::default()
+        }
+    };
+
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
     let display: Display<DomicileCompositor> = Display::new()?;
     let dh = display.handle();
@@ -1065,7 +1094,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut seat_state = SeatState::new();
     // Advertise a keyboard and pointer; a real compositor would track hotplug.
     let mut seat: Seat<DomicileCompositor> = seat_state.new_wl_seat(&dh, "domicile");
-    seat.add_keyboard(Default::default(), 200, 25)?;
+    // The keymap the seat compiles is what every Wayland client is handed, so
+    // the config's keyboard section lands here and nowhere else. A keymap xkb
+    // cannot compile (a layout or variant that does not exist) fails the boot
+    // rather than silently handing clients a keymap they did not ask for.
+    let keyboard = &config.input.keyboard;
+    seat.add_keyboard(
+        XkbConfig {
+            rules: &keyboard.xkb_rules,
+            model: &keyboard.xkb_model,
+            layout: &keyboard.xkb_layout,
+            variant: &keyboard.xkb_variant,
+            options: Some(keyboard.xkb_options_string()),
+        },
+        200,
+        25,
+    )?;
     seat.add_pointer();
 
     // Advertise one virtual output. Many clients (e.g. weston-terminal) wait for

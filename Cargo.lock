@@ -179,6 +179,7 @@ name = "domicile-compositor"
 version = "0.0.0"
 dependencies = [
  "domicile-bridge",
+ "domicile-config",
  "domicile-host",
  "domicile-protocol",
  "libloading",

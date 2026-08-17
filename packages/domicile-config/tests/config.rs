@@ -17,6 +17,17 @@ fn empty_config_uses_defaults() {
 }
 
 #[test]
+fn default_keymap_is_programmers_dvorak_with_caps_swapped() {
+    let keyboard = Config::parse("").unwrap().input.keyboard;
+    assert_eq!(keyboard.xkb_layout, "us");
+    assert_eq!(keyboard.xkb_variant, "dvp");
+    assert_eq!(keyboard.xkb_options, vec!["caps:swapescape".to_string()]);
+    // Empty rules/model mean "whatever libxkbcommon defaults to".
+    assert_eq!(keyboard.xkb_rules, "");
+    assert_eq!(keyboard.xkb_model, "");
+}
+
+#[test]
 fn default_matches_parsed_empty() {
     assert_eq!(
         Config::default().shell.package,
@@ -55,6 +66,74 @@ fn parses_a_full_config() {
             .and_then(|v| v.as_bool()),
         Some(true)
     );
+}
+
+// ---- keyboard / keymap ------------------------------------------------------
+
+#[test]
+fn parses_keyboard_settings() {
+    let text = r##"
+        [input.keyboard]
+        xkb_rules = "evdev"
+        xkb_model = "pc105"
+        xkb_layout = "us,de"
+        xkb_variant = "dvp,"
+        xkb_options = ["caps:swapescape", "grp:alt_shift_toggle"]
+    "##;
+    let keyboard = Config::parse(text)
+        .expect("valid keyboard config should parse")
+        .input
+        .keyboard;
+    assert_eq!(keyboard.xkb_rules, "evdev");
+    assert_eq!(keyboard.xkb_model, "pc105");
+    // Layout and variant are passed to xkb verbatim, so sway's comma-separated
+    // multi-layout form works as-is.
+    assert_eq!(keyboard.xkb_layout, "us,de");
+    assert_eq!(keyboard.xkb_variant, "dvp,");
+    assert_eq!(
+        keyboard.xkb_options,
+        vec![
+            "caps:swapescape".to_string(),
+            "grp:alt_shift_toggle".to_string()
+        ]
+    );
+}
+
+#[test]
+fn joins_xkb_options_for_xkb() {
+    let keyboard =
+        Config::parse("[input.keyboard]\nxkb_options = [\"caps:swapescape\", \"compose:ralt\"]\n")
+            .unwrap()
+            .input
+            .keyboard;
+    assert_eq!(
+        keyboard.xkb_options_string(),
+        "caps:swapescape,compose:ralt"
+    );
+}
+
+#[test]
+fn empty_xkb_options_disable_every_option() {
+    // An explicitly empty list means "no options", not "use xkb's defaults".
+    let keyboard = Config::parse("[input.keyboard]\nxkb_options = []\n")
+        .unwrap()
+        .input
+        .keyboard;
+    assert_eq!(keyboard.xkb_options_string(), "");
+}
+
+#[test]
+fn rejects_empty_keyboard_layout() {
+    let err = Config::parse("[input.keyboard]\nxkb_layout = \"\"\n").unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
+#[test]
+fn rejects_blank_keyboard_option() {
+    // A stray comma in a hand-edited list would otherwise reach xkb as junk.
+    let err =
+        Config::parse("[input.keyboard]\nxkb_options = [\"caps:swapescape\", \"\"]\n").unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
 }
 
 #[test]

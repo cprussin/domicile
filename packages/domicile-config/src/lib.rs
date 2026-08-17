@@ -125,12 +125,75 @@ impl Default for CompositorConfig {
     }
 }
 
+/// Keyboard settings, named after the `xkb_*` options SwayWM accepts.
+///
+/// `xkb_rules`, `xkb_model`, `xkb_layout` and `xkb_variant` are handed to xkb
+/// verbatim, so sway's comma-separated multi-layout form (`xkb_layout =
+/// "us,de"` with `xkb_variant = "dvp,"`) works here too. Empty `xkb_rules` /
+/// `xkb_model` mean "whatever libxkbcommon defaults to". `xkb_options` is a
+/// list rather than a comma-separated string because TOML has one; it carries
+/// the common keyswaps (`caps:swapescape`, `compose:ralt`, …).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct KeyboardConfig {
+    pub xkb_rules: String,
+    pub xkb_model: String,
+    pub xkb_layout: String,
+    pub xkb_variant: String,
+    pub xkb_options: Vec<String>,
+}
+
+impl Default for KeyboardConfig {
+    fn default() -> Self {
+        KeyboardConfig {
+            xkb_rules: String::new(),
+            xkb_model: String::new(),
+            xkb_layout: "us".into(),
+            // Programmer's Dvorak, with Caps Lock and Escape swapped.
+            xkb_variant: "dvp".into(),
+            xkb_options: vec!["caps:swapescape".into()],
+        }
+    }
+}
+
+impl KeyboardConfig {
+    /// The options in the comma-separated form xkb wants.
+    ///
+    /// An empty list yields `""`, which xkb reads as "no options at all" —
+    /// distinct from leaving the option string unset.
+    pub fn xkb_options_string(&self) -> String {
+        self.xkb_options.join(",")
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        if self.xkb_layout.trim().is_empty() {
+            return Err(ConfigError::Validation(
+                "input.keyboard.xkb_layout must not be empty".into(),
+            ));
+        }
+        if self.xkb_options.iter().any(|o| o.trim().is_empty()) {
+            return Err(ConfigError::Validation(
+                "input.keyboard.xkb_options must not contain an empty option".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Input-device settings.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct InputConfig {
+    pub keyboard: KeyboardConfig,
+}
+
 /// The full compositor configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub shell: ShellConfig,
     pub compositor: CompositorConfig,
+    pub input: InputConfig,
 }
 
 impl Config {
@@ -160,7 +223,7 @@ impl Config {
                 "compositor.nested_size must be non-zero, got {w}x{h}"
             )));
         }
-        Ok(())
+        self.input.keyboard.validate()
     }
 }
 

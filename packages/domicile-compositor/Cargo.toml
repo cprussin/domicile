@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 domicile-bridge = { path = "../domicile-bridge" }
+domicile-config = { path = "../domicile-config" }
 domicile-host = { path = "../domicile-host" }
 domicile-protocol = { path = "../domicile-protocol" }
 # Same dlopen crate Smithay uses for EGL, so libEGL can be probed for before
