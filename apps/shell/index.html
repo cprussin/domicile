@@ -8,8 +8,11 @@
   <body>
     <!-- All of this is ordinary web content rendered by the compositor. -->
     <header id="bar">
-      <span class="brand">domicile</span>
-      <span class="spacer"></span>
+      <!-- One tab per open window: Wayland clients and browser windows alike.
+           The strip runs the length of the bar, so with nothing open it is also
+           what holds the launchers and the clock at the end of it. -->
+      <div aria-label="Open windows" id="tabs" role="tablist"></div>
+
       <button class="launcher" id="launch-browser" type="button">
         + Browser
       </button>
@@ -18,9 +21,6 @@
       </button>
       <span id="clock">--:--:--</span>
     </header>
-
-    <!-- One tab per open window: Wayland clients and browser windows alike. -->
-    <div aria-label="Open windows" id="tabs" role="tablist"></div>
 
     <!-- The stage shows one window at a time. Each Wayland client is a real
          <domicile-app> element here, styled entirely with CSS (see style.css). -->

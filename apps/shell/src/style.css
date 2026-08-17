@@ -1,6 +1,5 @@
 :root {
   --bar-height: 40px;
-  --accent: #6ee7ff;
   --chrome: rgba(18, 22, 34, 0.6);
   --edge: rgba(255, 255, 255, 0.08);
 }
@@ -21,8 +20,7 @@ body {
   overflow: hidden;
 }
 
-/* The bar, the tab strip, and the stage stack; the stage takes what is left, so
-   the tab strip can come and go without anyone recomputing an offset. */
+/* The bar and the stage stack; the stage takes whatever the bar leaves. */
 body {
   display: flex;
   flex-direction: column;
@@ -38,17 +36,6 @@ body {
   background: var(--chrome);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--edge);
-}
-
-.brand {
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.spacer {
-  flex: 1;
 }
 
 .launcher {
@@ -71,19 +58,14 @@ body {
   opacity: 0.85;
 }
 
-/* One tab per open window. The strip disappears when nothing is open. */
+/* One tab per open window, filling the bar; empty, it is the bar's spacer. */
 #tabs {
-  flex: none;
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 4px;
-  padding: 4px 8px 0;
-  background: var(--chrome);
-  border-bottom: 1px solid var(--edge);
-}
-
-#tabs:empty {
-  display: none;
+  overflow: hidden;
 }
 
 .tab {
@@ -94,10 +76,9 @@ body {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  padding: 5px 12px;
+  padding: 4px 12px;
   border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
   opacity: 0.7;
   cursor: pointer;
@@ -174,19 +155,31 @@ body {
   background: rgba(0, 0, 0, 0.35);
 }
 
+/* The page takes the height the address bar leaves, and gives it to the embed
+   inside it rather than making the embed resolve a percentage against it. */
 .surface {
   flex: 1;
   min-height: 0;
+  display: flex;
 }
 
-/* The live client's pixels / embedded webview fill the element. */
-.domicile-app-surface,
-.domicile-webview-frame {
+/* The live client's pixels fill the element. */
+.domicile-app-surface {
   display: block;
   width: 100%;
   height: 100%;
   border: 0;
   image-rendering: auto;
+}
+
+/* The embedded page fills its element by growing inside it. `display` is left
+   alone on purpose: Electron ships `<webview>` as `display: flex` so the
+   browsing context inside fills the tag, and overriding it collapses the page
+   to nothing. */
+.domicile-webview-frame {
+  flex: 1;
+  min-width: 0;
+  border: 0;
 }
 
 /* Hide the placeholder once real pixels are present. */

@@ -41,6 +41,12 @@ class FakeBridge {
   spawn(command: readonly string[]): void {
     this.calls.push(["spawn", command]);
   }
+  focusApp(appId: string): void {
+    this.calls.push(["focusApp", appId]);
+  }
+  focusChrome(): void {
+    this.calls.push(["focusChrome"]);
+  }
 }
 
 // The test DOM performs no layout, so measurement is injected.
@@ -224,6 +230,30 @@ describe("ShellController", () => {
       tabs()[0]?.click();
       expect(activeTab()).toBe("Terminal");
       expect(shownWindows(root)).toEqual(["term"]);
+    });
+
+    it("hands the keyboard to the client whose window takes the stage", () => {
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      bridge.emit("app_appeared", { app_id: "editor", title: "Editor" });
+      expect(bridge.calls).toContainEqual(["focusApp", "editor"]);
+
+      bridge.calls.length = 0;
+      tabs()[0]?.click();
+      expect(bridge.calls).toContainEqual(["focusApp", "term"]);
+    });
+
+    it("hands the keyboard to a browser window's page", () => {
+      controller.openBrowser("https://example.com");
+      const view = root.querySelector(WEBVIEW_TAG_NAME);
+      if (view === null) {
+        throw new Error("test setup: the browser window embedded no webview");
+      }
+      const focused: string[] = [];
+      Object.assign(view, { focus: () => focused.push("page") });
+
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      tabs()[0]?.click();
+      expect(focused).toEqual(["page"]);
     });
 
     it("hands the stage to another window when the shown one closes", () => {

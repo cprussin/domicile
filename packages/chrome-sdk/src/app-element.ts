@@ -95,6 +95,18 @@ export class DomicileAppElement extends HTMLElement {
     this.#surfaceHeight = height;
   }
 
+  /**
+   * Route the keyboard to this app's client. Clicking the element does this
+   * too; a chrome calls it directly when it puts the window on screen without
+   * a click — opening it, or switching to its tab.
+   */
+  focusApp(): void {
+    this.#withTarget((bridge, appId) => {
+      setFocusedApp(appId);
+      bridge.focusApp(appId);
+    });
+  }
+
   /** Show the cursor a client asked for while the pointer is over this app. */
   applyCursor(cursor: CursorShape): void {
     this.style.cursor = cursor;
@@ -166,9 +178,8 @@ export class DomicileAppElement extends HTMLElement {
     });
 
     this.addEventListener("pointerdown", (event) => {
+      this.focusApp();
       this.#withTarget((bridge, appId) => {
-        setFocusedApp(appId);
-        bridge.focusApp(appId);
         this.#forwardMotion(bridge, appId, event);
         const button = buttonCodeFromJs(event.button);
         if (button !== undefined) {
