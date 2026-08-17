@@ -22,7 +22,6 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -79,9 +78,11 @@ use tracing::info;
 
 mod dmabuf_descriptor;
 mod dmabuf_import;
+mod outbound;
 
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::DmabufImporter;
+use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use domicile_bridge::BridgeRegistry;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
@@ -131,26 +132,6 @@ enum ClientRequest {
     },
 }
 
-/// Something on its way to the chrome.
-///
-/// A frame is carried as raw pixels rather than a finished [`HostMessage`] so
-/// that the base64 and JSON encoding — tens of milliseconds for a large window —
-/// happen on the writer thread instead of the one driving Wayland.
-enum Outbound {
-    Message(HostMessage),
-    Frame {
-        app_id: String,
-        width: u32,
-        height: u32,
-        rgba: Vec<u8>,
-    },
-}
-
-/// How many outbound items may be in flight before the chrome is judged behind.
-/// Small on purpose: a backlog of stale frames is worth nothing to a chrome that
-/// only ever draws the newest one.
-const OUTBOUND_DEPTH: usize = 2;
-
 /// Shared between the Wayland thread (calloop) and the chrome-connection threads.
 ///
 /// Holds the single [`Host`] brain both sides drive, the write-halves of
@@ -160,12 +141,12 @@ struct ChromeHub {
     host: Mutex<Host>,
     chromes: Mutex<Vec<Arc<Mutex<UnixStream>>>>,
     request_tx: Mutex<Sender<ClientRequest>>,
-    outbound: SyncSender<Outbound>,
+    outbound: OutboundSender,
 }
 
 impl ChromeHub {
-    fn new(request_tx: Sender<ClientRequest>) -> (Arc<Self>, Receiver<Outbound>) {
-        let (outbound, outbound_rx) = sync_channel(OUTBOUND_DEPTH);
+    fn new(request_tx: Sender<ClientRequest>) -> (Arc<Self>, OutboundReceiver) {
+        let (outbound, outbound_rx) = outbound();
         let hub = Arc::new(ChromeHub {
             host: Mutex::new(Host::new()),
             chromes: Mutex::new(Vec::new()),
@@ -181,30 +162,13 @@ impl ChromeHub {
     }
 
     /// Queue a host message for every connected chrome.
-    ///
-    /// Lifecycle messages are the chrome's model of the world, so a full queue
-    /// waits rather than losing one. They are also tiny and rare, which is what
-    /// makes waiting safe.
     fn broadcast(&self, message: HostMessage) {
-        if let Err(TrySendError::Full(message)) = self.outbound.try_send(Outbound::Message(message))
-        {
-            let _ = self.outbound.send(message);
-        }
+        self.outbound.message(message);
     }
 
-    /// Queue an app's pixels, dropping them if the chrome has not kept up.
-    ///
-    /// Dropping is the correct answer rather than a lossy compromise: the next
-    /// frame supersedes this one, and waiting would stall the Wayland loop —
-    /// freezing every client, not just the slow chrome.
+    /// Queue an app's pixels, which are dropped if the chrome has not kept up.
     fn send_frame(&self, app_id: &str, width: u32, height: u32, rgba: Vec<u8>) {
-        let frame = Outbound::Frame {
-            app_id: app_id.to_string(),
-            width,
-            height,
-            rgba,
-        };
-        if let Err(TrySendError::Full(_)) = self.outbound.try_send(frame) {
+        if !self.outbound.frame(app_id, width, height, rgba) {
             tracing::debug!(%app_id, "chrome is behind; dropped a frame");
         }
     }
@@ -215,8 +179,8 @@ impl ChromeHub {
 /// This is the only place that blocks on a chrome socket. Before it existed a
 /// slow chrome blocked `commit()`, which stopped frame callbacks, which stopped
 /// every client on the compositor.
-fn serve_outbound(hub: Arc<ChromeHub>, outbound: Receiver<Outbound>) {
-    for item in outbound {
+fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
+    while let Some(item) = outbound.recv() {
         let message = match item {
             Outbound::Message(message) => message,
             Outbound::Frame {

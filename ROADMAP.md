@@ -124,6 +124,14 @@ nix develop .#full -c ./scripts/run-prototype.sh
   like a chrome receiving nothing. `createFrameReader` keeps the tail as pieces
   and joins once a delimiter arrives. Small geometry messages never showed this;
   GPU frames at native resolution did.
+- **Never *wait* on a chrome from the Wayland loop either.** Moving the writes
+  off that thread is not enough if queueing them can block: a bounded queue with
+  a blocking fallback stalls the Wayland thread whenever the chrome is behind,
+  which under a steady frame load is always. That thread also injects input, so
+  a few hundred milliseconds of waiting is a few hundred milliseconds of frozen
+  input — past the 200ms repeat delay, so a key the user tapped starts
+  repeating. Frames and lifecycle messages need opposite policies, in
+  `outbound.rs`: drop frames past a shallow cap, never drop or wait on messages.
 - **Never write to a chrome from the Wayland loop.** Frames are big — a
   1753x1753 window is 12MB read back and 16MB of base64 — so a chrome that reads
   slowly fills the socket buffer within a frame or two. A blocking `write_all`
