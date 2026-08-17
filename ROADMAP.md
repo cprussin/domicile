@@ -30,7 +30,11 @@ the client's own size flows back,
 pointer coordinates are **inverse-transformed** so a rotated `<app>` maps
 correctly, the keymap and scroll axis are filled out, an app **raises** when
 focused, `<app>` works as an alias for `<domicile-app>`, and the daemon
-**hot-reloads** its config. The wire protocol is at `PROTOCOL_VERSION = 3`.
+**hot-reloads** its config. The **keymap is configurable** — `[input.keyboard]`
+takes sway's `xkb_rules` / `xkb_model` / `xkb_layout` / `xkb_variant` /
+`xkb_options`, defaulting to Programmer's Dvorak with Caps Lock and Escape
+swapped; the compositor compiles it into the seat at boot (a config edit needs a
+restart to take). The wire protocol is at `PROTOCOL_VERSION = 3`.
 
 ### How to run / test
 ```sh
