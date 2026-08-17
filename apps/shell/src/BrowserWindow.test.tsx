@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import type { Measure } from "@domicile/chrome-sdk/measure";
 import {
@@ -46,6 +47,29 @@ const navigateTo = (element: DomicileWebviewElement, url: string): void => {
 
 const address = (): HTMLInputElement =>
   screen.getByRole("textbox", { name: "Address" });
+
+const browser = (): HTMLElement =>
+  screen.getByRole("region", { name: "Browser" });
+
+// What a window's box resolves to is decided by the emitted stylesheet, not by
+// any one `css(...)` call: Panda's atomic classes all carry the same
+// specificity, so a window's own `display` survives only if nothing later in
+// the bundle declares one for the same element. Loading the real sheet is what
+// makes that observable — a className on its own says nothing about which of
+// two competing declarations wins.
+//
+// The layers come off first: happy-dom drops `@layer` blocks whole, and Panda
+// emits everything inside them. `@media all` keeps the braces balanced and
+// matches unconditionally, and the layers are emitted weakest-first, so plain
+// source order lands on the same winner the cascade would.
+const stylesheet = document.createElement("style");
+stylesheet.textContent = readFileSync(
+  new URL("../styled-system/styles.css", import.meta.url),
+  "utf8",
+)
+  .replaceAll(/@layer [^;{]+;/g, "")
+  .replaceAll(/@layer [^{]+\{/g, "@media all{");
+document.head.append(stylesheet);
 
 beforeEach(() => {
   registerElements(silentBridge, { measure: stubMeasure });
@@ -105,6 +129,29 @@ describe("BrowserWindow", () => {
       );
       navigateTo(view(container), "https://docs.example.com/");
       expect(seen).toStrictEqual(["https://docs.example.com/"]);
+    });
+  });
+
+  describe("the page", () => {
+    it("takes the whole stage under the address bar", () => {
+      const { container } = render(
+        <BrowserWindow
+          active
+          onNavigate={() => undefined}
+          src="https://example.com"
+        />,
+      );
+      // The window stacks the bar over the page and hands the page whatever
+      // height the bar leaves...
+      expect(globalThis.getComputedStyle(browser()).display).toBe("flex");
+      expect(globalThis.getComputedStyle(browser()).flexDirection).toBe(
+        "column",
+      );
+      // ...and the view passes that height straight through to the embed
+      // inside it, which has no height of its own to fall back on.
+      const embed = globalThis.getComputedStyle(view(container));
+      expect(embed.display).toBe("flex");
+      expect(embed.flexDirection).toBe("column");
     });
   });
 
