@@ -4,30 +4,31 @@
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1" name="viewport" />
     <title>Domicile — shell</title>
+    <script>
+      // Mirror loadPreference/applyPreference so the persisted (or system)
+      // theme is applied before the bundle paints — without this a light-mode
+      // user sees the default dark background flash to light when the React
+      // bundle sets the attribute. Keep the key and the `data-theme` attribute
+      // in sync with the component library's ThemeProvider.
+      const stored = localStorage.getItem("theme:v1");
+      const preference =
+        stored === "light" || stored === "dark" || stored === "system"
+          ? stored
+          : "system";
+      const systemTheme = matchMedia("(prefers-color-scheme: light)").matches
+        ? "light"
+        : "dark";
+      const resolved = preference === "system" ? systemTheme : preference;
+      if (resolved === "light") {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    </script>
   </head>
   <body>
-    <!-- All of this is ordinary web content rendered by the compositor. -->
-    <header id="bar">
-      <!-- One tab per open window: Wayland clients and browser windows alike.
-           The strip runs the length of the bar, so with nothing open it is also
-           what holds the launchers and the clock at the end of it. -->
-      <div aria-label="Open windows" id="tabs" role="tablist"></div>
-
-      <button class="launcher" id="launch-browser" type="button">
-        + Browser
-      </button>
-      <button class="launcher" id="launch-terminal" type="button">
-        + Terminal
-      </button>
-      <span id="clock">--:--:--</span>
-    </header>
-
-    <!-- The stage shows one window at a time. Each Wayland client is a real
-         <domicile-app> element here, styled entirely with CSS (see style.css). -->
-    <main id="stage"></main>
-
-    <div id="empty-hint">No windows yet — open one from the bar.</div>
-
-    <script src="/src/renderer.ts" type="module"></script>
+    <!-- All of this is ordinary web content rendered by the compositor: the
+         chrome is a React tree, and each Wayland client on the stage is a real
+         <domicile-app> element that takes ordinary CSS. -->
+    <div id="root"></div>
+    <script src="/src/renderer.tsx" type="module"></script>
   </body>
 </html>

@@ -1,0 +1,67 @@
+{
+  "dependencies": {
+    "@base-ui/react": "catalog:",
+    "@phosphor-icons/react": "catalog:"
+  },
+  "description": "The React UI primitives and Panda CSS design system every Domicile package builds on.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile/test-support": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@pandacss/preset-panda": "catalog:",
+    "@storybook/addon-docs": "catalog:",
+    "@storybook/addon-themes": "catalog:",
+    "@storybook/react-vite": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "http-server": "catalog:",
+    "postcss": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "storybook": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "exports": {
+    "./Avatar": "./src/Avatar/Avatar.tsx",
+    "./Button": "./src/Button/Button.tsx",
+    "./Card": "./src/Card/Card.tsx",
+    "./control-sizes": "./src/control-sizes.ts",
+    "./Field": "./src/Field/Field.tsx",
+    "./Input": "./src/Input/Input.tsx",
+    "./Kbd": "./src/Kbd/Kbd.tsx",
+    "./ModalDialog": "./src/ModalDialog/ModalDialog.tsx",
+    "./Provider": "./src/Provider/Provider.tsx",
+    "./pandacss-preset": "./src/pandacss-preset.ts",
+    "./Select": "./src/Select/Select.tsx",
+    "./SlideOver": "./src/SlideOver/SlideOver.tsx",
+    "./spacing": "./src/spacing.ts",
+    "./TabRail": "./src/TabRail/TabRail.tsx",
+    "./Tabs": "./src/Tabs/Tabs.tsx",
+    "./Textarea": "./src/Textarea/Textarea.tsx",
+    "./ThemeProvider": "./src/ThemeSwitch/ThemeProvider.tsx",
+    "./ThemeSwitch": "./src/ThemeSwitch/ThemeSwitch.tsx"
+  },
+  "files": [
+    "src/**/**",
+    "styled-system/**/**"
+  ],
+  "name": "@domicile/component-library",
+  "peerDependencies": {
+    "react": "catalog:"
+  },
+  "private": true,
+  "scripts": {
+    "build:storybook": "storybook build",
+    "prepare": "panda codegen --silent",
+    "start:dev": "storybook dev -p 4000",
+    "start:prod": "http-server storybook-static -p 4000",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

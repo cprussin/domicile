@@ -3,15 +3,6 @@
 The styling system, conventions, and mandates that apply to every package
 in this repo.
 
-> **Status.** `@domicile/component-library` and its Panda preset do not exist
-> yet; `apps/shell` still styles its chrome with a plain stylesheet, which is
-> the one grandfathered exception. This doc is the spec that UI work must meet
-> from here: the first package to build real UI creates the component library
-> and its preset as described below, and the shell migrates onto it. Token
-> names and values below are inherited from the sibling `argo-browser` repo and
-> are the starting point for that preset, not a description of tokens already
-> defined here.
-
 ## Mandates
 
 - **All packages building UI MUST use [Panda CSS](https://panda-css.com).**
@@ -42,6 +33,7 @@ in this repo.
 
    export default defineConfig({
      exclude: [],
+     hash: true,
      include: ["./src/**/*.{ts,tsx}"],
      jsxFramework: "react",
      outdir: "styled-system",
@@ -49,6 +41,21 @@ in this repo.
      presets: [domicilePreset],
    });
    ```
+   An **app** — the package that actually ships a CSS bundle — must also
+   `include` the sources of every package it renders, the component library
+   first among them:
+   ```ts
+   include: [
+     "./src/**/*.{ts,tsx}",
+     "../../packages/component-library/src/**/*.{ts,tsx}",
+   ],
+   ```
+   `css()` only produces class names; the build that *scans* a call site is
+   what emits the matching rule, so a library component rendered by an app
+   whose config never scanned it comes out styled by nothing. `hash: true` is
+   what makes this safe: hashing is deterministic for a given preset, so the
+   class names the library's own `styled-system` produces at runtime are the
+   same ones the app's build emitted rules for. Keep it on in every config.
 3. Wire the PostCSS plugin to your bundler. For Vite-based apps, add the
    plugin in `vite.<entry>.config.ts`:
    ```ts
