@@ -14,7 +14,10 @@ It provides three things:
   `<domicile-webview>`. An `<domicile-app>` reports its on-screen box to the
   host, forwards pointer and keyboard input to the client underneath it, and
   draws the frames the host pushes back. A `<domicile-webview>` embeds a nested
-  browsing context the engine renders directly.
+  browsing context the engine renders directly: its `src` is the address on
+  screen (it follows the page wherever the content navigates, and fires
+  `domicile-navigate` when it lands), and `goBack` / `goForward` / `stop` /
+  `reload` are what a chrome's address bar drives it with.
 - **Pure helpers** — affine `./matrix` math mirroring the Rust
   `domicile-scene::Transform`, `./chrome-message` builders for the wire format,
   `./protocol` schemas for decoding host frames, `./input` keycode mapping, and

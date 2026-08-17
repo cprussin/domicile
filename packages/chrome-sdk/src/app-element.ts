@@ -141,8 +141,12 @@ export class DomicileAppElement extends HTMLElement {
       const { size, transform, zIndex, visible } = activeMeasure()(this);
       bridge.placePortal({ appId, size, transform, visible, zIndex });
       // The client renders at its own resolution: without this it would keep
-      // drawing at the old size and be stretched into the new box.
-      bridge.resizeApp(appId, size);
+      // drawing at the old size and be stretched into the new box. An element
+      // with no box (a hidden tab) has no size to render at, and configuring
+      // the client to nothing would make it redraw on every tab switch.
+      if (visible) {
+        bridge.resizeApp(appId, size);
+      }
     }
   }
 

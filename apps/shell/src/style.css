@@ -1,6 +1,8 @@
 :root {
   --bar-height: 40px;
   --accent: #6ee7ff;
+  --chrome: rgba(18, 22, 34, 0.6);
+  --edge: rgba(255, 255, 255, 0.08);
 }
 
 * {
@@ -19,18 +21,23 @@ body {
   overflow: hidden;
 }
 
+/* The bar, the tab strip, and the stage stack; the stage takes what is left, so
+   the tab strip can come and go without anyone recomputing an offset. */
+body {
+  display: flex;
+  flex-direction: column;
+}
+
 #bar {
-  position: fixed;
-  inset: 0 0 auto 0;
+  flex: none;
   height: var(--bar-height);
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 14px;
-  background: rgba(18, 22, 34, 0.6);
+  background: var(--chrome);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  z-index: 1000;
+  border-bottom: 1px solid var(--edge);
 }
 
 .brand {
@@ -44,46 +51,132 @@ body {
   flex: 1;
 }
 
+.launcher {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  padding: 4px 10px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.launcher:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 #clock {
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
 }
 
-#stage {
-  position: fixed;
-  inset: var(--bar-height) 0 0 0;
+/* One tab per open window. The strip disappears when nothing is open. */
+#tabs {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px 8px 0;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--edge);
 }
 
-/* THE POINT OF DOMICILE: an app window is a real element, so it takes ordinary CSS.
-   Rounded corners, a drop shadow, and a subtle entrance animation — all applied
-   to a live Wayland client's surface. */
-.app {
+#tabs:empty {
+  display: none;
+}
+
+.tab {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: rgba(255, 255, 255, 0.04);
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.tab[aria-selected="true"] {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--edge);
+  opacity: 1;
+}
+
+#stage {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+/* THE POINT OF DOMICILE: an app window is a real element, so it takes ordinary
+   CSS. A window fills the stage; the tab bar is what switches between them. */
+.window {
   display: block;
   position: absolute;
-  top: 6%;
-  left: 6%;
-  width: 88%;
-  height: 88%;
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
-  outline: 1px solid rgba(255, 255, 255, 0.12);
-  /* Full CSS on a live app window — including a slight rotation, to make the
-     point that <app> is a first-class element. Replace the placeholder fill
-     with the client's real surface once the AppTextureBridge lands. */
-  transform: rotate(-1.2deg);
-  background:
-    linear-gradient(
-      135deg,
-      rgba(110, 231, 255, 0.14),
-      rgba(110, 231, 255, 0.03)
-    ),
-    repeating-linear-gradient(
-      45deg,
-      rgba(255, 255, 255, 0.03) 0 12px,
-      transparent 12px 24px
-    );
-  animation: app-in 160ms ease-out;
+  inset: 0;
+  background: #10141f;
+}
+
+/* `display` above would otherwise beat the `hidden` attribute's UA rule. */
+.window[hidden] {
+  display: none;
+}
+
+/* A browser window stacks its address bar over the page it is showing. */
+.browser {
+  display: flex;
+  flex-direction: column;
+}
+
+.address-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--edge);
+}
+
+.control {
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  color: inherit;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.control:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.address {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  padding: 5px 10px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.surface {
+  flex: 1;
+  min-height: 0;
 }
 
 /* The live client's pixels / embedded webview fill the element. */
@@ -113,18 +206,6 @@ domicile-app.app::after {
   text-align: center;
   color: rgba(232, 234, 240, 0.75);
   font-size: 14px;
-  backdrop-filter: blur(2px);
-}
-
-@keyframes app-in {
-  from {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 
 #empty-hint {
@@ -136,7 +217,7 @@ domicile-app.app::after {
   pointer-events: none;
 }
 
-/* Hide the hint once an app is present. */
-#stage:has(.app) ~ #empty-hint {
+/* Hide the hint once a window is present. */
+#stage:has(.window) ~ #empty-hint {
   display: none;
 }

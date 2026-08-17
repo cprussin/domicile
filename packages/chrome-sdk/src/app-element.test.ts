@@ -123,6 +123,34 @@ describe("<domicile-app>", () => {
     expect(bridge.calls).toContainEqual(["resize", "term", [10, 20]]);
   });
 
+  it("leaves a client's size alone while its element has no box", () => {
+    // A tabbed chrome hides every inactive window, and a hidden element
+    // measures as nothing: reporting that as a resize would configure the
+    // client to 0x0 and make it redraw on every tab switch.
+    registerElements(bridge as unknown as BridgeClient, {
+      measure: () => ({
+        size: [0, 0],
+        transform: [1, 0, 0, 1, 0, 0],
+        visible: false,
+        zIndex: 0,
+      }),
+      observeResize: resizes.observe,
+    });
+    mountApp("term");
+
+    expect(bridge.calls).toContainEqual([
+      "place",
+      {
+        appId: "term",
+        size: [0, 0],
+        transform: [1, 0, 0, 1, 0, 0],
+        visible: false,
+        zIndex: 0,
+      },
+    ]);
+    expect(bridge.calls.some(([kind]) => kind === "resize")).toBe(false);
+  });
+
   it("re-reports geometry when the element's box changes", () => {
     mountApp("term");
     bridge.calls.length = 0;
