@@ -173,8 +173,9 @@ Phase 1 — prove one window composites at all:
   than expected: as a client of Domicile its window *is* a `wl_surface` we
   import like any other. `OnAcceleratedPaint` and CEF are only needed if that
   turns out not to hold.
-- **What happens to the page's own compositing while a client of a nested
-  compositor?** Chromium may or may not keep GPU compositing when its Wayland
-  socket is a nested compositor with no `zwp_linux_dmabuf` acceleration path it
-  recognises. Falling back to shm for the *chrome* would be tolerable — the
-  chrome is nearly static — but it should be measured, not assumed.
+- **Does the engine keep GPU compositing as our client?**
+  `probe-transparency.sh` reports which it used, and needs a machine with a
+  render node to say anything — this container has none, so the alpha result
+  above comes from the software path. Either answer is workable: shm for the
+  *chrome* costs an upload per frame on a surface that is nearly static, which
+  is the asymmetry this design leans on. Worth knowing, not worth blocking on.

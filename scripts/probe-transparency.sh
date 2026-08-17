@@ -122,3 +122,22 @@ echo "PASS: opaque and clear pixels in one buffer (min=$MIN, max=$MAX, $CLEAR cl
 echo
 echo "So the chrome's own content stays solid while the region over an app stays"
 echo "see-through — which is exactly what an app composited underneath needs."
+
+# The other half of the question, and the half that needs a GPU. A chrome that
+# commits shm still hole-punches correctly — it just costs a readback we would
+# rather not pay for a surface that changes as little as the chrome does. Not a
+# pass/fail: shm is tolerable, and on a machine with no render node it is the
+# only thing on offer.
+echo
+echo "== how the engine hands its buffer over =="
+if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
+  echo "UNKNOWN: no DRM render node here, so the engine could only use software."
+  echo "  Run this on a machine with a GPU to learn whether it commits dmabufs."
+elif plain | grep -aq "client dmabuf accepted"; then
+  echo "GPU: the engine committed a dmabuf — its buffer imports with no copy,"
+  echo "     which is the same path a Wayland client's frames take."
+else
+  echo "SHM: the engine committed shared memory despite a render node being"
+  echo "     present, so compositing its surface costs an upload per frame."
+  echo "     Tolerable — the chrome is nearly static — but worth knowing."
+fi
