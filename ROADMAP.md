@@ -55,6 +55,7 @@ nix develop .#full -c ./scripts/e2e-input.sh          # keyboard + pointer reach
 nix develop .#full -c ./scripts/e2e-dmabuf.sh         # the dmabuf global is advertised; with a GPU, a real GPU client's frames arrive
 nix develop .#full -c ./scripts/e2e-slow-chrome.sh    # a chrome that stops reading does not freeze the compositor
 nix develop .#full -c ./scripts/e2e-hidpi.sh          # a 2x chrome makes a client draw at 2x, and the frame says so
+nix develop .#full -c ./scripts/probe-transparency.sh # the engine, as our client, commits real alpha (hole-punching's premise)
 
 # Full visible prototype (needs a real display — run on the user's machine):
 nix develop .#full -c ./scripts/run-prototype.sh

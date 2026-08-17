@@ -107,37 +107,74 @@ than a rewrite: the copy path already works and stays as the slow path.
   therefore affordable long before `OnAcceleratedPaint` is — the exact inverse
   of today's cost model, where the chrome is cheap and apps are ruinous.
 
+## What has to change structurally
+
+Electron is currently a client of the *host's* compositor — `run-prototype.sh`
+lets it inherit `WAYLAND_DISPLAY` — and talks to Domicile only over a Unix
+socket. Domicile is headless: no window, no presentation, no access to the
+page's pixels. Compositing app windows under the page inverts that:
+
+| | Today | After |
+|---|---|---|
+| Electron's `WAYLAND_DISPLAY` | the host's | Domicile's |
+| Electron's window | a surface the host composites | a `wl_surface` Domicile owns |
+| Domicile's output | none (headless) | a `winit` window, later DRM/KMS |
+| Chrome pixels | never leave Electron | a texture Domicile composites |
+
+Both halves of that are verified — `scripts/probe-transparency.sh` runs a
+transparent Electron window against Domicile's own socket and reads the alpha
+channel of what it commits:
+
+```
+PASS: the engine connected to Domicile and mapped a toplevel
+alpha app_id=app-1 200x200 frames=2 pixels=40000 min=0 max=255 clear=20000
+PASS: opaque and clear pixels in one buffer (min=0, max=255, 20000 clear)
+```
+
+Half the page painted a solid band and half painted nothing, and that is
+exactly what arrives: 20000 fully-clear pixels beside fully-opaque ones. The
+chrome's own content stays solid while the region over an app stays
+see-through.
+
+Two consequences, both good:
+
+- **The page's alpha is an ordinary Wayland buffer.** A transparent
+  `BrowserWindow` commits ARGB8888; the hole is real alpha in a surface we
+  already know how to import, not an engine feature we have to find. The
+  open question becomes "does Electron commit real alpha", which is cheap to
+  answer.
+- **Chrome-over-app comes free.** Draw apps in `draw_order`, then the page on
+  top with blending: wherever the page is transparent the app shows through,
+  and wherever it has a panel the panel wins. Only chrome *below* an app —
+  wallpaper, say — needs a second layer.
+
+This is why `renderer_gl`/`backend_egl` were already the only Smithay backends
+enabled: `winit` now has to join them, which the crate deliberately excluded
+while the engine was the only thing presenting.
+
 ## Plan
 
-Phase 1 — prove parity for one window, nested:
+Phase 1 — prove one window composites at all:
 
 - [x] scene: `Portal::surface_to_output` and `Scene::draw_order` — the drawing half of `hit_test`, tested against it so the two cannot drift
-- [ ] compositor: composite an imported client dmabuf into a `winit` window through the portal matrix
-- [ ] `<domicile-app>`: render an empty transparent box behind a `domicile-native` attribute, keeping the canvas path as the default
-- [ ] measure: `rt_ms` for the native path against the copy path on the same client, same window size
-- [ ] decide on the number, not the impression — parity means `readback_ms` and `ipc_ms` gone, not merely smaller
-
-Phase 2 — the effects that make an app a CSS element:
-
-- [ ] rounded corners, opacity and shadow in the compositor shader
-- [ ] the rotated + rounded + shadowed window from the old spike's success criterion, at native cost
-- [ ] chrome above/below as two engine layers
-- [ ] per-window fallback to the copy path when the element's computed style needs an unsupported effect
-
-Phase 3 — own the display:
-
-- [ ] chrome as a texture: CPU capture first, `OnAcceleratedPaint` (CEF) after
-- [ ] DRM/KMS backend, direct scanout for a fullscreen app
+- [ ] compositor: the CSS matrix as the renderer's — `cgmath::Matrix3::new` takes its arguments column by column, so the six values do not go in in the order they are written
+- [x] **probe first**: does a transparent Electron `BrowserWindow` commit a buffer with real alpha when it is a client of Domicile? Yes — `scripts/probe-transparency.sh`
+- [ ] compositor: a `winit` output, and Electron launched against Domicile's own socket
+- [ ] compositor: draw `draw_order` through `surface_to_output`, then the page's surface over it
+- [ ] measure: `rt_ms` for the native path against the copy path, same client, same size
+- [ ] decide on the number — parity means `readback_ms` and `ipc_ms` *gone*, not smaller
 
 ## Open questions
 
 - **How does the chrome declare "this window is native"?** Recommend a computed
   style probe in `<domicile-app>` rather than an author-set attribute — the
   fallback should be automatic, not something a shell author must remember.
-- **Can Electron give the chrome as a texture at all, or does Phase 3 force
-  CEF?** Recommend assuming it forces CEF and deferring the question; Phases 1
-  and 2 do not depend on it.
-- **Does hole-punching survive the engine compositing the page into a single
-  layer with its own effects applied?** Unknown until Phase 1 runs on hardware.
-  This is the one that could invalidate the approach, so Phase 1 exists to
-  answer it before anything is built on top.
+- **Can Electron give the chrome as a texture at all?** Answered, and better
+  than expected: as a client of Domicile its window *is* a `wl_surface` we
+  import like any other. `OnAcceleratedPaint` and CEF are only needed if that
+  turns out not to hold.
+- **What happens to the page's own compositing while a client of a nested
+  compositor?** Chromium may or may not keep GPU compositing when its Wayland
+  socket is a nested compositor with no `zwp_linux_dmabuf` acceleration path it
+  recognises. Falling back to shm for the *chrome* would be tolerable — the
+  chrome is nearly static — but it should be measured, not assumed.
