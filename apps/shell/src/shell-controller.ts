@@ -170,9 +170,9 @@ export class ShellController {
     app_id,
     width,
     height,
-    data,
-  }: Pick<AppFrameMessage, "app_id" | "width" | "height" | "data">): void {
-    this.#apps.get(app_id)?.drawFrame(width, height, data);
+    pixels,
+  }: Pick<AppFrameMessage, "app_id" | "width" | "height" | "pixels">): void {
+    this.#apps.get(app_id)?.drawFrame(width, height, pixels);
   }
 
   // A window that opens takes the stage; whatever had it is a tab away.

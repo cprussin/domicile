@@ -151,22 +151,25 @@ describe("ShellController", () => {
         drawn.push([width, height, data]);
       };
 
+      const pixels = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
       bridge.emit("app_frame", {
         app_id: "term",
-        data: "AAECAwQFBgc=",
+        bytes: pixels.length,
         format: "rgba",
         height: 1,
+        pixels,
         width: 2,
       });
-      expect(drawn).toEqual([[2, 1, "AAECAwQFBgc="]]);
+      expect(drawn).toEqual([[2, 1, pixels]]);
     });
 
     it("drops a frame for an app it never mounted", () => {
       expect(() => {
         bridge.emit("app_frame", {
           app_id: "ghost",
-          data: "AA==",
+          bytes: 1,
           height: 1,
+          pixels: new Uint8Array([0]),
           width: 1,
         });
       }).not.toThrow();

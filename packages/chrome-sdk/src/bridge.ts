@@ -27,7 +27,9 @@ import type { AxisDelta } from "./wheel-axis";
 /** The message pipe the host exposes to the page. */
 export type Transport = {
   send: (text: string) => void;
-  onMessage: (callback: (text: string) => void) => void;
+  onMessage: (
+    callback: (text: string, pixels?: Uint8Array<ArrayBuffer>) => void,
+  ) => void;
 };
 
 export type BridgeOptions = {
@@ -55,8 +57,8 @@ export class BridgeClient {
   ) {
     this.protocolVersion = protocolVersion;
     this.#transport = transport;
-    this.#transport.onMessage((text) => {
-      this.#handleIncoming(text);
+    this.#transport.onMessage((text, pixels) => {
+      this.#handleIncoming(text, pixels);
     });
   }
 
@@ -140,11 +142,21 @@ export class BridgeClient {
   // Unknown message types are dropped rather than raised, so a newer host can
   // add messages an older chrome has no handler for. Malformed frames are not
   // in that category: `parseHostMessage` throws on those.
-  #handleIncoming(text: string): void {
+  #handleIncoming(text: string, pixels?: Uint8Array<ArrayBuffer>): void {
     const message = parseHostMessage(text);
     if (message !== undefined) {
       if (message.type === "welcome") {
         this.#settleWelcome(message.protocol_version);
+      } else if (message.type === "app_frame") {
+        // The pixels never went through JSON, so they are joined to the
+        // message here rather than coming out of the schema. A frame header
+        // without them is a transport that lost the bytes it promised.
+        if (pixels === undefined) {
+          throw new Error(
+            `app_frame for ${message.app_id} arrived without its ${message.bytes} bytes`,
+          );
+        }
+        this.#handlers.get(message.type)?.({ ...message, pixels } as never);
       } else {
         this.#handlers.get(message.type)?.(message as never);
       }

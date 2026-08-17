@@ -15,7 +15,7 @@
     "./bridge": "./src/bridge.ts",
     "./chrome-message": "./src/chrome-message.ts",
     "./element-transform": "./src/element-transform.ts",
-    "./frame": "./src/frame.ts",
+    "./host-stream": "./src/host-stream.ts",
     "./input": "./src/input.ts",
     "./matrix": "./src/matrix.ts",
     "./measure": "./src/measure.ts",

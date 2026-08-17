@@ -30,7 +30,7 @@ the client's own size flows back,
 pointer coordinates are **inverse-transformed** so a rotated `<app>` maps
 correctly, the keymap and scroll axis are filled out, an app **raises** when
 focused, `<app>` works as an alias for `<domicile-app>`, and the daemon
-**hot-reloads** its config. The wire protocol is at `PROTOCOL_VERSION = 2`.
+**hot-reloads** its config. The wire protocol is at `PROTOCOL_VERSION = 3`.
 
 ### How to run / test
 ```sh
@@ -134,6 +134,13 @@ nix develop .#full -c ./scripts/run-prototype.sh
   input — past the 200ms repeat delay, so a key the user tapped starts
   repeating. Frames and lifecycle messages need opposite policies, in
   `outbound.rs`: drop frames past a shallow cap, never drop or wait on messages.
+- **Pixels are bytes on the wire, so the stream is not text.** `app_frame`
+  carries a byte count and the pixels follow the header line raw. A reader that
+  scans for newlines inside a payload will cut a frame in half — a pixel is as
+  likely to be `0x0a` as anything else — so the host→chrome direction is read by
+  `host-stream.ts` over bytes, by count. Base64 was the single most expensive
+  step in the frame path: ~9ms to encode, ~11ms to escape into JSON and ~31ms to
+  `atob` back, the last on the renderer thread that also handles the keyboard.
 - **Run the prototype in release.** The frame path is where an unoptimised
   build shows: base64 + JSON for one 1494x994 frame costs 264ms in debug against
   20ms in release, a 4fps ceiling against 50fps. `run-prototype.sh` builds
@@ -220,7 +227,8 @@ hyphenated (`domicile-app`/`domicile-webview`); bare `<app>`/`<webview>` aliasin
   → chrome-sdk `<domicile-app>.drawFrame` → `<canvas>`. Throttled ~30fps; frame
   callbacks answered so clients animate. Each dmabuf is also recorded in
   `BridgeRegistry`, which is what the engine will bind as an external texture
-  once the readback goes away.
+  once the readback goes away. Pixels leave the compositor as **raw bytes after
+  the `app_frame` header line**, not base64 inside it — see the note below.
 - **Input**: real events hit the Electron window → `<domicile-app>` / document
   listeners in chrome-sdk → `ChromeMessage::{PointerMotion,PointerButton,Key,…}`
   over the socket → compositor intercepts (before the pure brain) → `InputEvent`

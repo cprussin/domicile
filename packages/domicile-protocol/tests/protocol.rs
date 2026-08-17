@@ -107,7 +107,7 @@ fn host_messages_round_trip() {
         width: 2,
         height: 1,
         format: "rgba".into(),
-        data: "AAECAwQFBgc=".into(),
+        bytes: 8,
     });
     host_round_trip(&HostMessage::AppClosed {
         app_id: "term".into(),

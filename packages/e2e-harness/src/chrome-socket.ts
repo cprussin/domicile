@@ -6,11 +6,9 @@
 import net from "node:net";
 
 import { helloMessage } from "@domicile/chrome-sdk/chrome-message";
-import {
-  createFrameReader,
-  withFrameDelimiter,
-} from "@domicile/chrome-sdk/newline-frames";
-import type { HostMessage } from "@domicile/chrome-sdk/protocol";
+import { createHostStreamReader } from "@domicile/chrome-sdk/host-stream";
+import { withFrameDelimiter } from "@domicile/chrome-sdk/newline-frames";
+import type { HostMessageJson } from "@domicile/chrome-sdk/protocol";
 import { parseHostMessage } from "@domicile/chrome-sdk/protocol";
 
 export type ChromeSocket = {
@@ -22,7 +20,7 @@ export type ChromeSocketOptions = {
   /** Called for each frame the host pushes, as the raw JSON text. */
   onFrame?: (text: string) => void;
   /** Called for each frame that decodes to a message this build understands. */
-  onMessage?: (message: HostMessage) => void;
+  onMessage?: (message: HostMessageJson) => void;
 };
 
 /**
@@ -43,11 +41,14 @@ export const connectChromeSocket = (
     socket.write(withFrameDelimiter(JSON.stringify(message)));
   };
 
-  const readFrames = createFrameReader();
+  // Read as bytes: an app frame's pixels follow its header raw, and treating
+  // them as text would cut the frame at the first pixel that happens to be a
+  // newline. The harnesses only assert on the JSON, so the pixels are dropped.
+  const readHost = createHostStreamReader();
   socket.on("data", (chunk: Buffer) => {
-    for (const frame of readFrames(chunk.toString())) {
-      onFrame?.(frame);
-      const message = parseHostMessage(frame);
+    for (const item of readHost(chunk)) {
+      onFrame?.(item.text);
+      const message = parseHostMessage(item.text);
       if (message !== undefined) {
         onMessage?.(message);
       }

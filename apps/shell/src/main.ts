@@ -8,10 +8,8 @@
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  createFrameReader,
-  withFrameDelimiter,
-} from "@domicile/chrome-sdk/newline-frames";
+import { createHostStreamReader } from "@domicile/chrome-sdk/host-stream";
+import { withFrameDelimiter } from "@domicile/chrome-sdk/newline-frames";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { CHROME_TO_HOST_CHANNEL, HOST_TO_CHROME_CHANNEL } from "./ipc-channels";
 
@@ -48,18 +46,20 @@ const createWindow = (): BrowserWindow => {
   return win;
 };
 
-// Bridge the compositor socket to the renderer. Framing is newline-delimited
-// JSON; the in-page BridgeClient deals in whole JSON strings, so the newlines
-// are added and stripped here.
+// Bridge the compositor socket to the renderer. The stream is newline
+// delimited JSON except for an app frame's pixels, which follow their header
+// as raw bytes — so it is read as bytes, never as text (a pixel is as likely to
+// be a newline as anything else). The pixels cross to the renderer as a
+// Uint8Array rather than a string, which is the point of sending them this way.
 const connectHost = (win: BrowserWindow): void => {
   const socket = net.connect(socketPath);
-  const readFrames = createFrameReader();
+  const readHost = createHostStreamReader();
 
   socket.on("data", (chunk: Buffer) => {
-    const frames = readFrames(chunk.toString());
+    const items = readHost(chunk);
     if (!win.isDestroyed()) {
-      for (const frame of frames) {
-        win.webContents.send(HOST_TO_CHROME_CHANNEL, frame);
+      for (const item of items) {
+        win.webContents.send(HOST_TO_CHROME_CHANNEL, item.text, item.pixels);
       }
     }
   });

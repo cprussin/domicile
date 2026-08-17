@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
@@ -79,9 +79,11 @@ const appResizedSchema = z.looseObject({
   type: z.literal("app_resized"),
 });
 
+// The pixels are not in this message; `bytes` counts the raw bytes that follow
+// the header line on the socket. See `host-stream.ts`.
 const appFrameSchema = z.looseObject({
   app_id: z.string(),
-  data: z.string(),
+  bytes: z.number(),
   format: z.string(),
   height: z.number(),
   type: z.literal("app_frame"),
@@ -113,11 +115,27 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appCursorSchema,
 ]);
 
-export type HostMessage = z.infer<typeof hostMessageSchema>;
+/**
+ * A decoded host message. `app_frame` is the schema's shape plus the pixels the
+ * transport read off the socket after the header — they never went through
+ * JSON, so the schema cannot describe them.
+ */
+export type HostMessage =
+  | Exclude<z.infer<typeof hostMessageSchema>, { type: "app_frame" }>
+  | AppFrameMessage;
+
+/** A host message exactly as it decodes from JSON, before pixels are joined. */
+export type HostMessageJson = z.infer<typeof hostMessageSchema>;
 export type WelcomeMessage = z.infer<typeof welcomeSchema>;
 export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
 export type AppResizedMessage = z.infer<typeof appResizedSchema>;
-export type AppFrameMessage = z.infer<typeof appFrameSchema>;
+/**
+ * The header, plus the pixels that followed it on the socket. `bytes` is what
+ * the header promised; `pixels` is what arrived, attached by the transport.
+ */
+export type AppFrameMessage = z.infer<typeof appFrameSchema> & {
+  pixels: Uint8Array<ArrayBuffer>;
+};
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
 
@@ -150,7 +168,7 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set(
  *   not match its schema — all of which are host bugs, not forward
  *   compatibility.
  */
-export const parseHostMessage = (text: string): HostMessage | undefined => {
+export const parseHostMessage = (text: string): HostMessageJson | undefined => {
   const envelope = envelopeSchema.parse(JSON.parse(text));
   return KNOWN_TYPES.has(envelope.type)
     ? hostMessageSchema.parse(envelope)
