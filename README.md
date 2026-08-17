@@ -51,22 +51,22 @@ nix shell nixpkgs#weston -c \
 (from a checkout, `nix develop .#full` already has `weston-flower` on `PATH`).
 
 An `<app>` portal appears in the chrome window, with a tab for it in the shell's
-tab strip.
+tab rail.
 
 App windows are **interactive**: clicking an `<app>` focuses it, and keyboard +
 pointer input over it are forwarded to the Wayland client (surface-local coords,
 evdev keycodes).
 
-The demo shell shows one window at a time and switches between them from the tab
-bar. The top bar launches new ones:
+The demo shell shows one window at a time and switches between them from the
+rail of tabs down its left edge. The rail launches new ones:
 
-- **+ Terminal** (or **Alt+Enter**) — launch a terminal (`kitty`) onto Domicile.
+- **Terminal** (or **Alt+Enter**) — launch a terminal (`kitty`) onto Domicile.
   GPU clients render through the `zwp_linux_dmabuf_v1` path (their buffer is
   imported into an offscreen GLES context), `wl_shm` clients through the
   shared-memory one.
-- **+ Browser** (or **Alt+Shift+Enter**) — open a browser window: a
-  `<webview>` the engine renders directly, under an address bar with
-  back / forward / stop / reload.
+- **+** (or **Alt+Shift+Enter**) — open a browser window: a `<webview>` the
+  engine renders directly, under an address bar with back / forward / stop /
+  reload.
 
 The message plane (Wayland client → compositor → host brain → chrome) is also
 covered by headless, reproducible checks that run without a display:
@@ -140,7 +140,8 @@ auto-fixable half of the TypeScript checks. See
 | `packages/domicile-bridge`   | AppTextureBridge bookkeeping (app → engine texture) | core |
 | `packages/domicile-compositor` | headless Smithay Wayland server driving the brain | `.#full` |
 | `packages/chrome-sdk` | `<domicile-app>` / `<domicile-webview>` custom elements + bridge client | bun |
-| `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers) | bun |
+| `packages/component-library` | React UI primitives + the Panda CSS design system every chrome package extends | bun |
+| `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers + RTL cleanup) | bun |
 | `packages/e2e-harness` | headless chrome stand-ins driving the `scripts/e2e-*.sh` checks | bun |
 | `apps/shell`         | the bundled reference chrome (Electron host + Vite-built renderer) | bun |
 

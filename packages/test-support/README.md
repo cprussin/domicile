@@ -8,8 +8,9 @@ place so it doesn't drift across the monorepo.
 - `@domicile/test-support/preload` — the one setup module: registers
   happy-dom's globals (giving the test a `document`/`window` to render into)
   *before* extending bun's `expect` with jest-dom matchers
-  (`toBeInTheDocument`, …). The two always go together, so they ship as a
-  single preload.
+  (`toBeInTheDocument`, …) and installing Testing Library's `cleanup` as an
+  `afterEach`, so a component test's tree never leaks into the next one. They
+  always go together, so they ship as a single preload.
 - `matchers.d.ts` (the package's root `types` entry) — the ambient module
   augmentation that teaches `bun:test`'s `expect` about those matchers, so the
   type checker knows about them too.

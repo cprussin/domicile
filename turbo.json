@@ -39,15 +39,33 @@
       "dependsOn": ["//#build"]
     },
 
+    "build:storybook": {
+      "dependsOn": ["//#build", "^prepare", "prepare"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md", "!**/*.test.*"],
+      "outputs": ["storybook-static/**"]
+    },
+
     "build:vite": {
-      "dependsOn": ["//#build", "^build:vite"],
+      "dependsOn": ["//#build", "^build:vite", "^prepare", "prepare"],
       "inputs": ["$TURBO_DEFAULT$", "!README.md", "!**/*.test.*"],
       "outputs": [".vite/**"]
     },
 
+    "prepare": {
+      "dependsOn": ["//#build"],
+      "inputs": ["panda.config.ts", "src/**/*.{ts,tsx}", "package.json"],
+      "outputs": ["styled-system/**"]
+    },
+
     "start:dev": {
       "cache": false,
-      "dependsOn": ["//#build"],
+      "dependsOn": ["//#build", "^prepare", "prepare"],
+      "persistent": true
+    },
+
+    "start:prod": {
+      "cache": false,
+      "dependsOn": ["build:storybook"],
       "persistent": true
     },
 
@@ -55,10 +73,10 @@
       "with": ["test:types", "test:unit", "build:vite"]
     },
     "test:types": {
-      "dependsOn": ["//#build"]
+      "dependsOn": ["//#build", "^prepare", "prepare"]
     },
     "test:unit": {
-      "dependsOn": ["//#build"]
+      "dependsOn": ["//#build", "^prepare", "prepare"]
     }
   },
   "ui": "tui"

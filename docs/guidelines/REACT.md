@@ -2,13 +2,6 @@
 
 Applies to every React component, hook, and JSX file across the repo.
 
-> **Status.** The chrome in `apps/shell` is not yet a React app and
-> `@domicile/component-library` does not exist yet. This doc is in force from
-> the first component: it is the contract the shell's UI build-out is expected
-> to meet, not a description of code that is already here. References to the
-> component library below describe what that package must provide when it
-> lands; if you are the one creating it, these rules are its spec.
-
 This doc covers the cross-cutting React rules. Styling (Panda tokens, `data-*`
 hooks) is in [/docs/guidelines/STYLING.md](/docs/guidelines/STYLING.md); the
 full Phosphor icon rules are in

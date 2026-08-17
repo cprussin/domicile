@@ -1,12 +1,16 @@
 {
   "dependencies": {
     "@happy-dom/global-registrator": "catalog:",
-    "@testing-library/jest-dom": "catalog:"
+    "@testing-library/jest-dom": "catalog:",
+    "@testing-library/react": "catalog:"
   },
-  "description": "Shared bun test setup: happy-dom globals plus jest-dom matchers.",
+  "description": "Shared bun test setup: happy-dom globals, jest-dom matchers, and Testing Library cleanup.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "react": "catalog:",
     "typescript": "catalog:"
   },
   "exports": {
@@ -20,6 +24,9 @@
     "src/**/*"
   ],
   "name": "@domicile/test-support",
+  "peerDependencies": {
+    "react": "catalog:"
+  },
   "private": true,
   "scripts": {
     "test:types": "tsc --noEmit"

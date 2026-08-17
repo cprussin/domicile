@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["bun", "@domicile/test-support"]
+  },
+  "extends": "@cprussin/tsconfig/react.json"
+}
