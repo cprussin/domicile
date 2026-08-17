@@ -34,7 +34,7 @@ use smithay::input::{
     pointer::{AxisFrame, ButtonEvent, CursorIcon, CursorImageStatus, MotionEvent},
     Seat, SeatHandler, SeatState,
 };
-use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel};
+use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Scale, Subpixel};
 use smithay::reexports::{
     calloop::{
         channel::{channel, Event as ChannelEvent, Sender},
@@ -78,11 +78,13 @@ use tracing::info;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod outbound;
+mod scale;
 mod timing_window;
 
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::DmabufImporter;
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
+use crate::scale::{logical_size, output_scale};
 use crate::timing_window::TimingWindow;
 use domicile_bridge::BridgeRegistry;
 use domicile_config::Config;
@@ -125,6 +127,11 @@ enum ClientRequest {
     KeyboardFocus {
         app_id: Option<String>,
     },
+    /// The chrome's display density changed; re-advertise the output scale so
+    /// clients redraw at the resolution the screen actually has.
+    SetOutputScale {
+        scale: i32,
+    },
     /// The chrome laid an app's element out at a new size; configure the client
     /// to match so it redraws at that resolution.
     ConfigureApp {
@@ -145,10 +152,14 @@ struct ChromeHub {
     request_tx: Mutex<Sender<ClientRequest>>,
     outbound: OutboundSender,
     timings: Mutex<FrameTimings>,
+    /// The highest output scale to advertise, whatever the chrome reports.
+    /// Read-only config, held here because it is the chrome connections that
+    /// receive the density and have to bound it.
+    max_scale: u32,
 }
 
 impl ChromeHub {
-    fn new(request_tx: Sender<ClientRequest>) -> (Arc<Self>, OutboundReceiver) {
+    fn new(request_tx: Sender<ClientRequest>, max_scale: u32) -> (Arc<Self>, OutboundReceiver) {
         let (outbound, outbound_rx) = outbound();
         let hub = Arc::new(ChromeHub {
             host: Mutex::new(Host::new()),
@@ -156,6 +167,7 @@ impl ChromeHub {
             request_tx: Mutex::new(request_tx),
             outbound,
             timings: Mutex::new(FrameTimings::default()),
+            max_scale,
         });
         (hub, outbound_rx)
     }
@@ -171,8 +183,8 @@ impl ChromeHub {
     }
 
     /// Queue an app's pixels, which are dropped if the chrome has not kept up.
-    fn send_frame(&self, app_id: &str, width: u32, height: u32, rgba: Vec<u8>) {
-        if !self.outbound.frame(app_id, width, height, rgba) {
+    fn send_frame(&self, app_id: &str, width: u32, height: u32, scale: u32, rgba: Vec<u8>) {
+        if !self.outbound.frame(app_id, width, height, scale, rgba) {
             tracing::debug!(%app_id, "chrome is behind; dropped a frame");
         }
     }
@@ -195,12 +207,14 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
                 app_id,
                 width,
                 height,
+                scale,
                 rgba,
             } => (
                 HostMessage::AppFrame {
                     app_id,
                     width,
                     height,
+                    scale,
                     format: "rgba".to_string(),
                     bytes: rgba.len() as u32,
                 },
@@ -311,6 +325,14 @@ struct FrameReport {
     response_worst_ms: u32,
     throttled: usize,
 }
+
+/// The virtual output's size in *logical* units — what a client that sizes
+/// itself to the screen gets, and what stays fixed as the scale changes.
+///
+/// A `wl_output` mode is in physical pixels, so the mode is this multiplied by
+/// the scale. Advertising a fixed mode instead would shrink the desktop every
+/// time the density went up, which a client feels as a smaller screen.
+const OUTPUT_LOGICAL_SIZE: (i32, i32) = (1280, 800);
 
 /// How often the writer thread reports. Long enough that the line is not noise,
 /// short enough to watch while typing.
@@ -437,6 +459,15 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
                 keycode, pressed, ..
             }) => {
                 hub.send_request(ClientRequest::Key { keycode, pressed });
+                Vec::new()
+            }
+            // Compositor-level: the chrome's pixel density is the output's
+            // scale, which is Wayland state rather than anything the brain
+            // models — the scene is described in logical units either way.
+            Ok(ChromeMessage::SetDevicePixelRatio { ratio }) => {
+                hub.send_request(ClientRequest::SetOutputScale {
+                    scale: output_scale(ratio, hub.max_scale),
+                });
                 Vec::new()
             }
             // A resize drives both the client's configure and the brain's model.
@@ -577,15 +608,20 @@ impl DomicileCompositor {
 
     /// Turn a client's newly-attached buffer into pixels for the chrome,
     /// throttled to ~30fps per app.
-    fn publish_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer) {
+    fn publish_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer, buffer_scale: i32) {
         let Some(committed) = committed_buffer(buffer) else {
             return;
         };
+        // Two sizes from here on, and they are not the same one at scale > 1:
+        // the buffer's own device pixels, which are the pixel data and so the
+        // canvas backing store, and the logical size the chrome lays out in
+        // and `wl_pointer` speaks.
         let (width, height) = committed.size();
+        let (logical_width, logical_height) = logical_size((width, height), buffer_scale);
         // A buffer of a new size is the client answering a configure (or
         // resizing itself); tell the chrome so its element and its pointer
         // mapping follow the client's real resolution.
-        if let Some(resized) = self.note_content_size(app_id, width, height) {
+        if let Some(resized) = self.note_content_size(app_id, logical_width, logical_height) {
             self.hub.broadcast(resized);
         }
 
@@ -603,7 +639,8 @@ impl DomicileCompositor {
                 CommittedBuffer::Gpu(dmabuf) => self.import_gpu_frame(app_id, dmabuf),
             };
             tracing::debug!(%app_id, width, height, bytes = rgba.len(), "broadcast app frame");
-            self.hub.send_frame(app_id, width, height, rgba);
+            let scale = u32::try_from(buffer_scale).unwrap_or(1).max(1);
+            self.hub.send_frame(app_id, width, height, scale, rgba);
         } else {
             self.hub.timings.lock().unwrap().throttled += 1;
         }
@@ -747,6 +784,31 @@ impl DomicileCompositor {
                 let surface = app_id.and_then(|id| self.surface_for(&id));
                 keyboard.set_focus(self, surface, serial);
             }
+            ClientRequest::SetOutputScale { scale } => {
+                if self.output.current_scale().integer_scale() != scale {
+                    info!(scale, "advertising output scale");
+                    // The mode is physical pixels, so it grows with the scale to
+                    // hold the logical size still: a denser display is a sharper
+                    // desktop, not a smaller one.
+                    let mode = OutputMode {
+                        size: (OUTPUT_LOGICAL_SIZE.0 * scale, OUTPUT_LOGICAL_SIZE.1 * scale).into(),
+                        refresh: 60_000,
+                    };
+                    self.output.change_current_state(
+                        Some(mode),
+                        None,
+                        Some(Scale::Integer(scale)),
+                        None,
+                    );
+                    self.output.set_preferred(mode);
+                    // A client only redraws at the new scale once something
+                    // asks it to, and its own size is unchanged — so re-send
+                    // the configure it already has to prompt one.
+                    for (_, toplevel) in &self.toplevels {
+                        toplevel.send_configure();
+                    }
+                }
+            }
             ClientRequest::ConfigureApp {
                 app_id,
                 width,
@@ -829,7 +891,7 @@ impl CompositorHandler for DomicileCompositor {
         // it (rather than borrowing) hands us the release: Smithay would
         // otherwise hold it until the *next* buffer arrives, which is a buffer
         // the client cannot draw without the release it is waiting for.
-        let (attached, callbacks) = with_states(surface, |states| {
+        let (attached, callbacks, buffer_scale) = with_states(surface, |states| {
             let mut guard = states.cached_state.get::<SurfaceAttributes>();
             let attrs = guard.current();
             let attached = match attrs.buffer.take() {
@@ -837,7 +899,12 @@ impl CompositorHandler for DomicileCompositor {
                 Some(BufferAssignment::Removed) | None => None,
             };
             let callbacks = std::mem::take(&mut attrs.frame_callbacks);
-            (attached, callbacks)
+            // How many buffer pixels the client drew per logical unit. Taken
+            // here with the buffer rather than looked up later: it is the
+            // scale *this* buffer was drawn at, and a client that is mid-way
+            // through answering a scale change will commit the next one at a
+            // different number.
+            (attached, callbacks, attrs.buffer_scale)
         });
 
         // Ask the client to draw its next frame (keeps it animating).
@@ -862,7 +929,7 @@ impl CompositorHandler for DomicileCompositor {
                     timings.response.record(started.duration_since(keyed));
                 }
             }
-            self.publish_frame(&app_id, &buffer);
+            self.publish_frame(&app_id, &buffer, buffer_scale);
             // The client may redraw into this buffer the instant it is
             // released, so the release comes after the pixels are out of it —
             // and it happens even for a frame the throttle dropped, or a
@@ -1321,7 +1388,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     output.create_global::<DomicileCompositor>(&dh);
     let mode = OutputMode {
-        size: (1280, 800).into(),
+        size: OUTPUT_LOGICAL_SIZE.into(),
         refresh: 60_000,
     };
     output.change_current_state(
@@ -1336,7 +1403,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (request_tx, request_rx) = channel::<ClientRequest>();
 
     // Shared brain, driven by both the Wayland side and chrome connections.
-    let (hub, outbound_rx) = ChromeHub::new(request_tx);
+    let (hub, outbound_rx) = ChromeHub::new(request_tx, config.output.max_scale);
     {
         let hub = hub.clone();
         thread::spawn(move || serve_chrome(hub, chrome_socket));

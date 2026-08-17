@@ -63,7 +63,13 @@ describe("AppWindow", () => {
       const { container } = render(
         <AppWindow active appElements={appElements} appId="term" />,
       );
-      appElements.drawFrame({ app_id: "term", height: 1, pixels, width: 1 });
+      appElements.drawFrame({
+        app_id: "term",
+        height: 1,
+        pixels,
+        scale: 1,
+        width: 1,
+      });
       expect(portal(container).querySelector("canvas")).not.toBeNull();
     });
 
@@ -73,7 +79,13 @@ describe("AppWindow", () => {
         <AppWindow active appElements={appElements} appId="term" />,
       );
       unmount();
-      appElements.drawFrame({ app_id: "term", height: 1, pixels, width: 1 });
+      appElements.drawFrame({
+        app_id: "term",
+        height: 1,
+        pixels,
+        scale: 1,
+        width: 1,
+      });
       expect(appElements.drawTiming.take()).toBeUndefined();
     });
   });

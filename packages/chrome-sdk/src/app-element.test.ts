@@ -235,8 +235,36 @@ describe("<domicile-app>", () => {
     const element = mountApp("term");
     // The test DOM has no 2d context, so this exercises the canvas-creation
     // path and must not throw even when drawing is unavailable.
-    element.drawFrame(2, 1, new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]));
+    element.drawFrame(2, 1, 1, new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]));
     expect(element.querySelector("canvas")).not.toBeNull();
+  });
+
+  it("sizes the canvas backing store in device pixels", () => {
+    // The whole point of scaling: the element stays the same size in CSS while
+    // the canvas holds every pixel the client drew. A backing store sized in
+    // logical units would be stretched over the display's real pixels, which
+    // is exactly the blurriness this exists to remove.
+    const element = mountApp("term");
+
+    element.drawFrame(64, 32, 2, new Uint8Array(64 * 32 * 4));
+
+    const canvas = element.querySelector("canvas");
+    expect([canvas?.width, canvas?.height]).toEqual([64, 32]);
+  });
+
+  it("maps the pointer through the logical size, not the pixel one", () => {
+    // `wl_pointer` speaks surface-local *logical* coordinates. Dividing the
+    // element's box by the buffer's pixel dimensions instead would put the
+    // pointer at half the position it should be on a 2x display.
+    const element = mountApp("term");
+    // stubMeasure lays the element out at 10x20, and the client answers at 2x.
+    element.drawFrame(20, 40, 2, new Uint8Array(20 * 40 * 4));
+
+    element.dispatchEvent(
+      new MouseEvent("pointermove", { bubbles: true, clientX: 5, clientY: 10 }),
+    );
+
+    expect(bridge.calls).toContainEqual(["motion", "term", 5, 10]);
   });
 
   it("clicking an app focuses it and forwards subsequent keystrokes", () => {

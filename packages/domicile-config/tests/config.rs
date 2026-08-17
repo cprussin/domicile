@@ -278,3 +278,35 @@ fn store_reload_from_path_keeps_last_good_on_bad_file() {
     assert!(store.reload_from_path(&path).is_err());
     assert_eq!(store.current().compositor.nested_size, (1024, 768));
 }
+
+// ---- output ---------------------------------------------------------------
+
+#[test]
+fn output_scaling_is_on_by_default_up_to_a_retina_display() {
+    // A 2x display is the common case the default has to cover; beyond that a
+    // frame costs more than the copy path can carry, so the default stops.
+    assert_eq!(Config::parse("").unwrap().output.max_scale, 2);
+}
+
+#[test]
+fn max_scale_one_turns_hidpi_off() {
+    // The escape hatch: every pixel costs the readback, the socket and the IPC
+    // hop squared, so a user who would rather have the latency than the
+    // sharpness needs a way to say so without a rebuild.
+    assert_eq!(
+        Config::parse("[output]\nmax_scale = 1\n")
+            .unwrap()
+            .output
+            .max_scale,
+        1
+    );
+}
+
+#[test]
+fn max_scale_must_leave_a_usable_scale() {
+    let err = Config::parse("[output]\nmax_scale = 0\n").unwrap_err();
+    assert!(
+        format!("{err}").contains("output.max_scale"),
+        "the message should name the setting: {err}"
+    );
+}

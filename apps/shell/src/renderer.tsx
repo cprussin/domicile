@@ -86,10 +86,24 @@ if (diagnostics !== undefined) {
 // The compositor watches this attribute to know the chrome finished its
 // handshake; a failed handshake must surface rather than leave it unset
 // silently, so the rejection is rethrown out of the microtask.
+// A client can only draw at the display's real resolution if the compositor
+// knows what that is, and the page is the only part of Domicile that does.
+// `resolution:` matches at exactly the current ratio, so the listener fires on
+// any change — moving the window to another display, or a browser zoom — and
+// is re-armed against the new one.
+const reportDevicePixelRatio = (): void => {
+  bridge.setDevicePixelRatio(window.devicePixelRatio);
+  window
+    .matchMedia(`(resolution: ${window.devicePixelRatio.toString()}dppx)`)
+    .addEventListener("change", reportDevicePixelRatio, { once: true });
+};
+
 bridge
   .connect()
   .then(() => {
     document.body.dataset.domicileConnected = "true";
+    // After the handshake: the host ignores everything sent before it.
+    reportDevicePixelRatio();
   })
   .catch((error: unknown) => {
     throw new Error("domicile: bridge handshake failed", { cause: error });

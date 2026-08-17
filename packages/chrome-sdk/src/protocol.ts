@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
@@ -85,7 +85,10 @@ const appFrameSchema = z.looseObject({
   app_id: z.string(),
   bytes: z.number(),
   format: z.string(),
+  // Device pixels, so the canvas backing store; divide by `scale` for the
+  // logical size the element is laid out at.
   height: z.number(),
+  scale: z.number(),
   type: z.literal("app_frame"),
   width: z.number(),
 });

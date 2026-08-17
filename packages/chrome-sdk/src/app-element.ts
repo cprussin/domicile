@@ -111,26 +111,41 @@ export class DomicileAppElement extends HTMLElement {
     this.style.cursor = cursor;
   }
 
-  /** Draw a client frame (raw row-major RGBA) into this element's canvas. */
+  /**
+   * Draw a client frame (raw row-major RGBA) into this element's canvas.
+   *
+   * `width` and `height` are the buffer's own device pixels and `scale` says
+   * how many of those the client drew per logical unit. The two are only the
+   * same number at scale 1: the canvas backing store takes the pixels, while
+   * the surface size — what pointer coordinates are mapped through — is
+   * logical.
+   */
   drawFrame(
     width: number,
     height: number,
+    scale: number,
     pixels: Uint8Array<ArrayBuffer>,
   ): void {
-    this.setSurfaceSize(width, height);
+    // A scale of zero would divide the surface out of existence; it can only
+    // arrive from a host that disagrees with this build about the protocol.
+    const logical = Math.max(1, Math.trunc(scale));
+    this.setSurfaceSize(width / logical, height / logical);
     const canvas = this.#ensureCanvas();
+    // The backing store is the buffer's device pixels while CSS keeps the
+    // element its logical size, which is what puts one canvas pixel on one
+    // display pixel. Assigning either dimension resets the canvas, so only do
+    // it when the surface actually changed size.
+    if (canvas.width !== width) {
+      canvas.width = width;
+    }
+    if (canvas.height !== height) {
+      canvas.height = height;
+    }
     const context = canvas.getContext("2d");
     // A DOM implementation without a 2d context (test environments) still
-    // exercises the canvas-creation path above; there is nothing to draw into.
+    // exercises the canvas-creation and sizing paths above; there is nothing
+    // to draw into.
     if (context !== null) {
-      // Assigning either dimension resets the canvas, so only do it when the
-      // surface actually changed size.
-      if (canvas.width !== width) {
-        canvas.width = width;
-      }
-      if (canvas.height !== height) {
-        canvas.height = height;
-      }
       context.putImageData(
         new ImageData(
           new Uint8ClampedArray(

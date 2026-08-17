@@ -154,6 +154,7 @@ describe("BridgeClient", () => {
         bytes: 4,
         format: "rgba",
         height: 1,
+        scale: 1,
         type: "app_frame",
         width: 1,
       },

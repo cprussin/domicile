@@ -111,6 +111,7 @@
           e2e-spawn = "e2e-spawn.sh";
           e2e-input = "e2e-input.sh";
           e2e-dmabuf = "e2e-dmabuf.sh";
+          e2e-hidpi = "e2e-hidpi.sh";
           e2e-slow-chrome = "e2e-slow-chrome.sh";
           smoke-compositor = "smoke-compositor.sh";
         };
