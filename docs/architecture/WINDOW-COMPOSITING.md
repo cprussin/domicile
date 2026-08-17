@@ -99,13 +99,12 @@ than a rewrite: the copy path already works and stays as the slow path.
 - **The engine is still the renderer.** It lays out, styles, hit-tests and
   draws all chrome. It stops rasterising app content, which was never its
   strength — that is a compositor's job and we already are one.
-- **Electron stays for now.** The engine choice only matters for how the chrome
-  reaches the compositor as a texture, which is the *last* phase. Nothing below
-  depends on CEF.
-- **Presentation phasing exploits an asymmetry**: the chrome is nearly static
-  while app windows change every frame. A CPU capture of the chrome is
-  therefore affordable long before `OnAcceleratedPaint` is — the exact inverse
-  of today's cost model, where the chrome is cheap and apps are ruinous.
+- **Electron stays.** The engine reaches the compositor as an ordinary Wayland
+  surface, so the engine choice no longer gates anything. CEF becomes a
+  question of which engine to embed rather than of whether this can work.
+- **The engine is a Wayland client, not a special case.** It commits dmabufs
+  like anything else, so there is one import path rather than one for apps and
+  another for the chrome — and no capture API to depend on.
 
 ## What has to change structurally
 
@@ -129,6 +128,8 @@ channel of what it commits:
 PASS: the engine connected to Domicile and mapped a toplevel
 alpha app_id=app-1 200x200 frames=2 pixels=40000 min=0 max=255 clear=20000
 PASS: opaque and clear pixels in one buffer (min=0, max=255, 20000 clear)
+GPU: the engine committed a dmabuf — its buffer imports with no copy,
+     which is the same path a Wayland client's frames take.
 ```
 
 Half the page painted a solid band and half painted nothing, and that is
@@ -136,13 +137,14 @@ exactly what arrives: 20000 fully-clear pixels beside fully-opaque ones. The
 chrome's own content stays solid while the region over an app stays
 see-through.
 
-Two consequences, both good:
+Three consequences, all good:
 
 - **The page's alpha is an ordinary Wayland buffer.** A transparent
   `BrowserWindow` commits ARGB8888; the hole is real alpha in a surface we
-  already know how to import, not an engine feature we have to find. The
-  open question becomes "does Electron commit real alpha", which is cheap to
-  answer.
+  already know how to import, not an engine feature we have to find.
+- **The chrome costs no copy either.** With a render node present the engine
+  commits a *dmabuf*, so its surface imports exactly like a client's. Nothing
+  in the frame path is copied by the CPU any more, which was the whole target.
 - **Chrome-over-app comes free.** Draw apps in `draw_order`, then the page on
   top with blending: wherever the page is transparent the app shows through,
   and wherever it has a panel the panel wins. Only chrome *below* an app —
@@ -164,18 +166,26 @@ Phase 1 — prove one window composites at all:
 - [ ] measure: `rt_ms` for the native path against the copy path, same client, same size
 - [ ] decide on the number — parity means `readback_ms` and `ipc_ms` *gone*, not smaller
 
+Phase 2 — the effects that make an app a CSS element:
+
+- [ ] rounded corners, opacity and shadow in the compositor shader
+- [ ] the rotated + rounded + shadowed window from the old spike's success criterion, at native cost
+- [ ] chrome above/below as two engine layers
+- [ ] per-window fallback to the copy path when the element's computed style needs an unsupported effect
+
+Phase 3 — own the display:
+
+- [ ] DRM/KMS backend, direct scanout for a fullscreen app
+
+The chrome-as-a-texture step this phase used to carry is gone: the engine
+commits dmabufs as our client, so its surface needs no capture path of its own.
+
 ## Open questions
 
 - **How does the chrome declare "this window is native"?** Recommend a computed
   style probe in `<domicile-app>` rather than an author-set attribute — the
   fallback should be automatic, not something a shell author must remember.
-- **Can Electron give the chrome as a texture at all?** Answered, and better
-  than expected: as a client of Domicile its window *is* a `wl_surface` we
-  import like any other. `OnAcceleratedPaint` and CEF are only needed if that
-  turns out not to hold.
-- **Does the engine keep GPU compositing as our client?**
-  `probe-transparency.sh` reports which it used, and needs a machine with a
-  render node to say anything — this container has none, so the alpha result
-  above comes from the software path. Either answer is workable: shm for the
-  *chrome* costs an upload per frame on a surface that is nearly static, which
-  is the asymmetry this design leans on. Worth knowing, not worth blocking on.
+- **Whether the compositor can present its own output at all.** Everything
+  verified so far is about what *arrives*; nothing has yet drawn a pixel. That
+  is Phase 1's remaining work rather than an unknown, but it is the first thing
+  that has to survive contact with a display.
