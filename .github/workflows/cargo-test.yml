@@ -43,6 +43,13 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev
+      # libxkbcommon links the seat; the wayland and X11 client libraries are
+      # for Smithay's winit backend, which is how the compositor presents.
+      # No GL stack here on purpose — the tests needing one are `#[ignore]`d
+      # and run from `scripts/e2e-compose.sh`.
+      - run: >
+          sudo apt-get update && sudo apt-get install -y
+          libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev
+          libxrandr-dev libxi-dev
       - run: cargo clippy -p domicile-compositor --all-targets -- -D warnings
       - run: cargo test -p domicile-compositor

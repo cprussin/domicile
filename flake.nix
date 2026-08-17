@@ -106,6 +106,7 @@
         })
         {
           prototype = "run-prototype.sh";
+          native = "run-native.sh";
           e2e-chrome = "e2e-chrome.sh";
           e2e-electron = "e2e-electron.sh";
           e2e-spawn = "e2e-spawn.sh";
