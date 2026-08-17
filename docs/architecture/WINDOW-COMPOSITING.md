@@ -159,10 +159,10 @@ while the engine was the only thing presenting.
 Phase 1 — prove one window composites at all:
 
 - [x] scene: `Portal::surface_to_output` and `Scene::draw_order` — the drawing half of `hit_test`, tested against it so the two cannot drift
-- [ ] compositor: the CSS matrix as the renderer's — `cgmath::Matrix3::new` takes its arguments column by column, so the six values do not go in in the order they are written
+- [x] compositor: `compose::draw_layers` — portals drawn through `surface_to_output`, verified in real pixels offscreen (`scripts/e2e-compose.sh`). The trap it pins down: `cgmath::Matrix3::new` takes its arguments column by column, so the six CSS values do not go in in the order they are written
 - [x] **probe first**: does a transparent Electron `BrowserWindow` commit a buffer with real alpha when it is a client of Domicile? Yes — `scripts/probe-transparency.sh`
 - [ ] compositor: a `winit` output, and Electron launched against Domicile's own socket
-- [ ] compositor: draw `draw_order` through `surface_to_output`, then the page's surface over it
+- [ ] compositor: draw the page's surface over the apps, and present
 - [ ] measure: `rt_ms` for the native path against the copy path, same client, same size
 - [ ] decide on the number — parity means `readback_ms` and `ipc_ms` *gone*, not smaller
 

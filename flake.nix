@@ -113,6 +113,7 @@
           e2e-dmabuf = "e2e-dmabuf.sh";
           e2e-hidpi = "e2e-hidpi.sh";
           probe-transparency = "probe-transparency.sh";
+          e2e-compose = "e2e-compose.sh";
           e2e-slow-chrome = "e2e-slow-chrome.sh";
           smoke-compositor = "smoke-compositor.sh";
         };

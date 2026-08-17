@@ -75,6 +75,7 @@ use smithay::{
 };
 use tracing::info;
 
+mod compose;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod outbound;

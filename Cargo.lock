@@ -178,10 +178,12 @@ dependencies = [
 name = "domicile-compositor"
 version = "0.0.0"
 dependencies = [
+ "cgmath",
  "domicile-bridge",
  "domicile-config",
  "domicile-host",
  "domicile-protocol",
+ "domicile-scene",
  "libloading",
  "smithay",
  "thiserror 1.0.69",

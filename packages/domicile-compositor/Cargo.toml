@@ -11,10 +11,13 @@ name = "domicile-compositor"
 path = "src/main.rs"
 
 [dependencies]
+# The renderer's matrix type, at the version Smithay's own API speaks.
+cgmath = "0.18"
 domicile-bridge = { path = "../domicile-bridge" }
 domicile-config = { path = "../domicile-config" }
 domicile-host = { path = "../domicile-host" }
 domicile-protocol = { path = "../domicile-protocol" }
+domicile-scene = { path = "../domicile-scene" }
 # Same dlopen crate Smithay uses for EGL, so libEGL can be probed for before
 # Smithay loads it (it treats a missing library as fatal).
 libloading = "0.8"
