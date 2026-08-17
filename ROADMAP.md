@@ -86,6 +86,14 @@ nix develop .#full -c ./scripts/run-prototype.sh
   matches the running kernel driver). Without it the compositor logs
   `no EGL renderer: serving wl_shm clients only` and never advertises the
   dmabuf global.
+- **`WAYLAND_DEBUG=1` output is ANSI-coloured**, even into a file, and the
+  escapes land *between* the interface name and the event — `wl_surface` ESC
+  `#12` ESC `.enter`. Every `scripts/*.sh` grep over a client log reads plain
+  text, so a coloured log matches nothing and the check passes nothing: it
+  reports the compositor's *own* bug rather than finding one. The scripts now
+  set `NO_COLOR=1` alongside `WAYLAND_DEBUG=1`; keep doing that. (The `.#full`
+  shell sets `FORCE_COLOR=1` for turbo/biome, which is what libwayland picks
+  up — so this bites in the dev shell and not necessarily outside it.)
 - **`domicile-compositor` is excluded from `default-members`** (it pulls Smithay +
   native libs). Plain `cargo test`/`cargo build` in the core shell skip it; build
   it explicitly in `.#full`.
@@ -138,6 +146,30 @@ nix develop .#full -c ./scripts/run-prototype.sh
   input — past the 200ms repeat delay, so a key the user tapped starts
   repeating. Frames and lifecycle messages need opposite policies, in
   `outbound.rs`: drop frames past a shallow cap, never drop or wait on messages.
+- **The compositor reports its own frame rate.** Every 5s while compositing it
+  logs one INFO line, so "is it faster" is a number rather than an impression:
+
+  ```
+  frames sent=N dropped=M fps=F mb_per_s=B write_ms=W \
+         readback_ms=R readback_worst_ms=RW commit_ms=C idle_ms=I chromes=K
+  ```
+
+  It is the only place that sees the whole path, and each field indicts a
+  different half of it:
+  - `readback_ms` — the GPU copy (`dmabuf_import::read_rgba`). Our own cost, and
+    the one the CEF external-texture path deletes outright.
+  - `commit_ms` — the whole Wayland-thread commit; `commit_ms - readback_ms` is
+    everything around the copy (format conversion, queueing, the release).
+  - `idle_ms` — the gap between one commit finishing and the next arriving.
+    Large here means the compositor was *waiting*, not working: a slow client,
+    or the 33ms throttle holding it back. `idle + commit ≈ 1000/fps` is the
+    self-check that the three account for the whole frame.
+  - `dropped` climbing while `fps` stays flat means pixels are being produced
+    faster than the chrome can take them; a high `write_ms` means the chrome's
+    socket is what is backing up.
+
+  What it cannot see is the renderer half — IPC, `putImageData` — so a low
+  `dropped` with a small `readback_ms` and sluggish typing points there.
 - **Pixels are bytes on the wire, so the stream is not text.** `app_frame`
   carries a byte count and the pixels follow the header line raw. A reader that
   scans for newlines inside a payload will cut a frame in half — a pixel is as
@@ -327,6 +359,24 @@ one with work left in it and leads the next-work list below.
 ### Phase 5 — Hardening (later)
 DRM/KMS backend for real hardware, multi-output, HiDPI, damage tracking,
 security/sandbox review, clipboard/data-device, touch.
+
+**HiDPI is the one users see first.** `devicePixelRatio`, `set_buffer_scale` and
+the output scale appear nowhere yet: the chrome measures an `<app>` in CSS
+pixels, `resize_app` sends those, the compositor advertises no output scale, so
+a client renders one device pixel per CSS pixel and the canvas is then stretched
+over the display's real pixels. Text in a client looks soft on any display that
+is not 1x. The fix is a chain — the chrome reports its ratio, the compositor
+advertises it as the `wl_output` scale so clients render at that scale *and*
+size their UI to match, the compositor honours `set_buffer_scale` when reporting
+content size, and the canvas backing store becomes the buffer size while its CSS
+size stays logical. Non-integer ratios additionally need
+`wp_fractional_scale_v1`.
+
+Note it costs pixels squared: at 2x a 1494x994 frame goes from 5.9MB to 23.8MB,
+quadrupling the readback, the socket, the IPC hop and `putImageData`. On the
+copy path that is likely unaffordable — which is what the frame report above is
+for. It is free on the CEF external-texture path, which is the argument for
+doing that first.
 
 ---
 

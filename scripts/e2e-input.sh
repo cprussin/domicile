@@ -29,8 +29,10 @@ sleep 0.5
 
 # WAYLAND_DEBUG makes the client log every protocol event it receives. It names
 # objects `wl_keyboard@14` on current libwayland and `wl_keyboard#14` on older
-# releases, so the greps below accept either.
-WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 6 weston-eventdemo >"$APP" 2>&1 &
+# releases, so the greps below accept either. NO_COLOR because current
+# libwayland also writes SGR escapes between the interface name and the event,
+# which no plain-text grep can match.
+NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 6 weston-eventdemo >"$APP" 2>&1 &
 CLI=$!
 # Wait for a real key event: `.key(` and not `.keymap`, which arrives at once
 # and would end the wait before any input had been forwarded.

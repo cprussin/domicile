@@ -42,26 +42,31 @@ pub enum Outbound {
 pub struct OutboundSender {
     sender: Sender<Outbound>,
     waiting_frames: Arc<AtomicUsize>,
+    dropped: Arc<AtomicUsize>,
 }
 
 /// The receiving half, held by the writer thread.
 pub struct OutboundReceiver {
     receiver: Receiver<Outbound>,
     waiting_frames: Arc<AtomicUsize>,
+    dropped: Arc<AtomicUsize>,
 }
 
 /// Create the queue.
 pub fn outbound() -> (OutboundSender, OutboundReceiver) {
     let (sender, receiver) = channel();
     let waiting_frames = Arc::new(AtomicUsize::new(0));
+    let dropped = Arc::new(AtomicUsize::new(0));
     (
         OutboundSender {
             sender,
             waiting_frames: waiting_frames.clone(),
+            dropped: dropped.clone(),
         },
         OutboundReceiver {
             receiver,
             waiting_frames,
+            dropped,
         },
     )
 }
@@ -75,6 +80,7 @@ impl OutboundSender {
     /// Queue an app's pixels, returning whether they were taken. Never waits.
     pub fn frame(&self, app_id: &str, width: u32, height: u32, rgba: Vec<u8>) -> bool {
         if self.waiting_frames.load(Ordering::SeqCst) >= FRAME_DEPTH {
+            self.dropped.fetch_add(1, Ordering::SeqCst);
             false
         } else {
             self.waiting_frames.fetch_add(1, Ordering::SeqCst);
@@ -91,6 +97,14 @@ impl OutboundSender {
 }
 
 impl OutboundReceiver {
+    /// Frames refused since this was last asked, and reset.
+    ///
+    /// This is the number that says whether the chrome is keeping up: a drop
+    /// means pixels were produced that nobody could take.
+    pub fn take_dropped(&self) -> usize {
+        self.dropped.swap(0, Ordering::SeqCst)
+    }
+
     /// Block until the next item, or `None` once the sender is gone.
     pub fn recv(&self) -> Option<Outbound> {
         let item = self.receiver.recv().ok()?;
@@ -174,6 +188,23 @@ mod tests {
         assert!(
             done_rx.recv_timeout(Duration::from_secs(5)).is_ok(),
             "queueing blocked with nothing draining the queue"
+        );
+    }
+
+    #[test]
+    fn drops_are_counted_and_reset_when_reported() {
+        // How many frames the chrome could not keep up with is the number that
+        // says whether the copy path is the limit, so it has to survive until
+        // something reports it — and start clean for the next window.
+        let (sender, receiver) = outbound();
+        assert!(frame_bytes(&sender));
+        assert!(!frame_bytes(&sender));
+        assert!(!frame_bytes(&sender));
+        assert_eq!(receiver.take_dropped(), 2);
+        assert_eq!(
+            receiver.take_dropped(),
+            0,
+            "a window reports each drop once"
         );
     }
 
