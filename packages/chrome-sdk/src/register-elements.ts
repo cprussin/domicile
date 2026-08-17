@@ -58,7 +58,13 @@ const forwardKey = (event: KeyboardEvent): void => {
   const keycode = evdevFromCode(event.code);
   if (appId !== undefined && bridge !== undefined && keycode !== undefined) {
     event.preventDefault();
-    bridge.key(appId, keycode, event.type === "keydown");
+    // The browser repeats a held key; Wayland does not. A client synthesises
+    // repeat itself from `wl_keyboard.repeat_info`, so forwarding these as
+    // fresh presses would give it two repeat sources at once — which it draws
+    // as the same character over and over.
+    if (!event.repeat) {
+      bridge.key(appId, keycode, event.type === "keydown");
+    }
   }
 };
 

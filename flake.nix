@@ -88,8 +88,8 @@
             # that simply never connected.
             #
             # The e2e and smoke scripts expect target/debug/domicile-compositor
-            # to exist already; run-prototype.sh builds it itself, so the build
-            # below is a no-op there.
+            # to exist already; run-prototype.sh builds its own release binary,
+            # so the debug build below is only for the checks.
             exec nix develop "${self}#full" --command bash -c \
               "bun install --frozen-lockfile && cargo build -p domicile-compositor && exec ./scripts/${script}"
           '';
