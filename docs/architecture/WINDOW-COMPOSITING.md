@@ -213,7 +213,8 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
 - **What the number actually is.** Everything through the draw is in place and
   tested, but the only measurement so far is of the copy path. Phase 1 is not
   done until `rt_ms` says what this costs against it.
-- **The output is one fixed logical size.** `OUTPUT_LOGICAL_SIZE` is what the
-  chrome is configured to and what the scene is drawn through; the window is
-  scaled to it rather than the other way round. A resizable output means
-  reconfiguring the chrome and re-advertising the mode, which nothing needs yet.
+- **The desktop is only as resizable as one window.** The output's logical size
+  follows Domicile's window and the chrome is reconfigured to match, which is
+  what a nested compositor can do. A real display is fixed until the DRM/KMS
+  backend of Phase 3, and more than one output is not modelled at all: the
+  scene has a single `surface_to_output`.
