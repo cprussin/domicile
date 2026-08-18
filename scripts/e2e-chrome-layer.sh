@@ -60,9 +60,11 @@ else
   cat "$LOG"; exit 1
 fi
 
-# The chrome holds its own seat's keyboard, which is how the window's input
-# reaches it. Without a seat of its own it would be taking focus from whichever
-# app the chrome had focused, and losing it again on the next click.
+# The chrome holds the keyboard until a window is focused, which is how the
+# window's input reaches it. It shares the one seat with the apps and they take
+# turns: a seat of its own would let both hold a focus at once, but a client
+# does not have to bind more than one, and Electron drops the connection when
+# there are two.
 if wait_for "the chrome has the window's keyboard"; then
   echo "PASS: the chrome took its seat's keyboard focus"
 else
