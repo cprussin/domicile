@@ -88,6 +88,15 @@ nix develop .#full -c ./scripts/run-prototype.sh
   everything headless keeps working — so it looks like a compositing bug and is
   a packaging one. `NoCompositor` is the different failure: the library loaded
   and there was no session to nest in.
+- **Presenting means the compositor is itself a Wayland client**, so it must
+  keep the session's `WAYLAND_DISPLAY` and cannot have a runtime directory to
+  itself the way `run-prototype.sh` does — its socket lands in the host's
+  `XDG_RUNTIME_DIR`, beside the host compositor's. A client we spawn therefore
+  gets `WAYLAND_DISPLAY` set **explicitly** (`client_command`) rather than
+  inheriting ours; inheriting it opens the app on the host desktop, which reads
+  as "the compositor isn't compositing". `scripts/e2e-spawn.sh` guards this by
+  running the compositor under a decoy display and reading back what the child
+  actually got.
 - **libEGL is `dlopen`ed, not linked.** The dmabuf import loads `libEGL.so.1`
   at runtime, and `mkShell` only wires *build-time* linkage — a package in
   `packages` is not on the loader path. The `.#full` shell therefore sets
