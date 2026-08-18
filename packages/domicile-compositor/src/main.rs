@@ -43,6 +43,7 @@ use smithay::input::{
     Seat, SeatHandler, SeatState,
 };
 use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Scale, Subpixel};
+use smithay::reexports::winit::window::Cursor;
 use smithay::reexports::{
     calloop::{
         channel::{channel, Event as ChannelEvent, Sender},
@@ -1049,6 +1050,32 @@ impl DomicileCompositor {
         }
     }
 
+    /// Ask the session Domicile's window is in for the cursor a client wants.
+    ///
+    /// `CursorIcon` is `cursor-icon`'s, which is the type winit takes as well,
+    /// so a named shape passes straight through — the two agree on the names
+    /// because they are the same names.
+    fn apply_window_cursor(&mut self, image: &CursorImageStatus) {
+        let Some(backend) = self.gpu.as_mut().and_then(Gpu::window) else {
+            return;
+        };
+        let window = backend.window();
+        match image {
+            CursorImageStatus::Hidden => window.set_cursor_visible(false),
+            CursorImageStatus::Named(icon) => {
+                window.set_cursor_visible(true);
+                window.set_cursor(Cursor::Icon(*icon));
+            }
+            // A client that drew its own pointer into a surface. Compositing
+            // that surface is the eventual answer; an arrow is the honest
+            // stand-in until then, and hiding it instead would lose the pointer.
+            CursorImageStatus::Surface(_) => {
+                window.set_cursor_visible(true);
+                window.set_cursor(Cursor::Icon(CursorIcon::Default));
+            }
+        }
+    }
+
     /// Give the chrome the keyboard.
     ///
     /// There is one seat, and the chrome and the apps take turns on it: the
@@ -1305,20 +1332,30 @@ impl DomicileCompositor {
                 });
             }
             ClientRequest::KeyboardFocus { app_id } => {
-                let surface = match app_id {
-                    Some(id) => {
-                        info!(app_id = %id, "keyboard focus -> client");
-                        self.surface_for(&id)
-                    }
-                    // No window focused means the chrome itself has the
-                    // keyboard, which is what its own fields and shortcuts
-                    // need. Where the chrome is not our client there is
-                    // nothing to give it to, and this stays a defocus.
-                    None => self
-                        .chrome_toplevel
-                        .as_ref()
-                        .map(|toplevel| toplevel.wl_surface().clone()),
+                let requested = match &app_id {
+                    Some(id) => self.surface_for(id),
+                    None => None,
                 };
+                if let Some(id) = &app_id {
+                    if requested.is_some() {
+                        info!(app_id = %id, "keyboard focus -> client");
+                    } else {
+                        // The chrome asked for a window that has no surface —
+                        // one that closed while the message was in flight, or
+                        // has not mapped yet. Handing the keyboard to nothing
+                        // here is what makes a desktop go permanently deaf,
+                        // because nothing afterwards takes it back.
+                        info!(app_id = %id, "keyboard focus -> a window with no surface; the chrome keeps it");
+                    }
+                }
+                // The chrome is the fallback for every case: no window asked
+                // for, or one that cannot have it. The keyboard belongs
+                // somewhere as long as there is a desktop to hold it.
+                let surface = requested.or_else(|| {
+                    self.chrome_toplevel
+                        .as_ref()
+                        .map(|toplevel| toplevel.wl_surface().clone())
+                });
                 let keyboard = self.seat.get_keyboard().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 keyboard.set_focus(self, surface, serial);
@@ -1564,6 +1601,14 @@ impl SeatHandler for DomicileCompositor {
     // pointer the user sees belongs to the web engine, so the request is
     // forwarded as a CSS cursor for the element the pointer is over.
     fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
+        // Where Domicile has a window it is a client of the session it is
+        // running in, and the pointer the user sees is that session's. Asking
+        // for it is the only way the cursor ever changes: a client of ours
+        // setting one is a request we have to pass on, not something the user
+        // can see by itself.
+        self.apply_window_cursor(&image);
+
+        // And the chrome, which draws the pointer itself on the copy path.
         if let Some(app_id) = self.pointer_app.clone() {
             let cursor = match image {
                 CursorImageStatus::Hidden => CursorShape::None,

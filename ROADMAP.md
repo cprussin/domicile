@@ -94,6 +94,11 @@ nix develop .#full -c ./scripts/run-prototype.sh
   as-is the desktop is upside down. Reading a buffer back, all a machine with
   no display can do, is consistent either way, so the offscreen pixel tests
   pass under both. Settled on hardware; do not "simplify" it back to `Normal`.
+- **Never leave the keyboard focused on nothing.** A chrome that focuses a
+  window which has already closed — the race it loses whenever a window goes
+  away while its own focus message is in flight — used to hand the keyboard to
+  `None`, and nothing afterwards took it back: the desktop went deaf until it
+  was restarted. Every focus path falls back to the chrome now.
 - **A client does not have to bind more than one `wl_seat`.** Giving the chrome
   a seat of its own so that it and the apps could hold a focus each looked
   clean and broke Electron: `Gdk: gdk_seat_get_keyboard: assertion

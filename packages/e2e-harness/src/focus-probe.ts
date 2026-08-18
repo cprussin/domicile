@@ -24,6 +24,13 @@ const chrome: ChromeSocket = connectChromeSocket(requireSocketPath(Bun.env), {
       focused = true;
       chrome.send(focusAppMessage(message.app_id));
     }
+    // And once it is gone, focus it again — which is the race a real chrome
+    // loses when a window closes while its focus message is in flight. The
+    // keyboard must not be handed to a window that no longer exists, because
+    // nothing afterwards takes it back.
+    if (message.type === "app_closed") {
+      chrome.send(focusAppMessage(message.app_id));
+    }
   },
 });
 
