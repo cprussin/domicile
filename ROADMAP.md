@@ -1,538 +1,380 @@
 # Domicile roadmap & handoff
 
-Domicile is a Wayland compositor whose **renderer is a web engine**: all chrome is
-web content, and app windows composite inside the engine as texture-backed DOM
-elements so `<app>` gets full CSS. Read `docs/architecture/ARCHITECTURE.md` (the why) and
-`docs/architecture/WINDOW-COMPOSITING.md` (how native windows reach parity) first.
+Domicile is a Wayland compositor whose **chrome is a web page**: the desktop —
+panels, launchers, window furniture — is web content with full CSS, and app
+windows are real elements in it. Read `docs/architecture/ARCHITECTURE.md` (the
+why) and `docs/architecture/WINDOW-COMPOSITING.md` (how app windows reach native
+cost) before changing anything here.
 
-Built test-first, from the pure-logic core outward to the hardware/engine glue.
+Built test-first, from the pure-logic core outward to the hardware glue.
 
 ---
 
-## Handoff: start here (context for the next agent)
+## Handoff: start here
 
-### Current state (working prototype)
-A runnable end-to-end prototype exists and is verified headlessly:
-real Wayland client → `domicile-compositor` (Smithay, headless) → shared `Host` brain
-→ Electron chrome, which mounts a styled `<domicile-app>`, **draws the client's live
-pixels** (both the shm and the dmabuf path), and **forwards keyboard + pointer input
-back to the client**. The demo shell tabs its windows — one on the stage at a
-time — and launches them from its bar: `kitty` (or Alt+Enter) and a browser
-window with an address bar (or Alt+Shift+Enter).
-**89 Rust tests (78 core + 11 in domicile-compositor) +
-126 JS tests, clippy clean.**
+### Current state
 
-Since the first prototype, most of Phase 2 has landed (see the phase list below):
-GPU clients get a **`zwp_linux_dmabuf_v1`** global and their buffers are imported
-through an offscreen GLES context, a client's requested **cursor** reaches the
-chrome as a CSS keyword, the chrome's element size **configures** the client and
-the client's own size flows back,
-pointer coordinates are **inverse-transformed** so a rotated `<app>` maps
-correctly, the keymap and scroll axis are filled out, an app **raises** when
-focused, `<app>` works as an alias for `<domicile-app>`, and the daemon
-**hot-reloads** its config. The **keymap is configurable** — `[input.keyboard]`
-takes sway's `xkb_rules` / `xkb_model` / `xkb_layout` / `xkb_variant` /
-`xkb_options`, defaulting to Programmer's Dvorak with Caps Lock and Escape
-swapped; the compositor compiles it into the seat at boot (a config edit needs a
-restart to take). The wire protocol is at `PROTOCOL_VERSION = 3`.
+There are **two paths**, and both work. Which one runs is decided by whether the
+compositor was given a window (`--present`).
+
+**The native path** — what the architecture is for. The compositor opens a
+`winit` window, the chrome connects as an ordinary Wayland client on a socket of
+its own, and the compositor draws the desktop itself: each app's dmabuf through
+the CSS matrix the chrome reported for its `<app>` element, then the chrome's own
+surface over the top. The chrome's page is transparent where an `<app>` is, so
+the client shows through the hole. No pixel is copied by the CPU anywhere in
+that path. Verified on real hardware (AMD Radeon 890M): the desktop renders, a
+terminal opens into it, and input reaches both.
+
+**The copy path** — the original prototype, still the fallback and still what
+every headless check drives. The compositor is headless, reads each client's
+frame back off the GPU, and sends the pixels to the chrome over a Unix socket to
+be drawn into a `<canvas>`. Correct everywhere, and four full-frame copies per
+frame.
+
+The wire protocol is at `PROTOCOL_VERSION = 4`.
+
+**Tests:** 96 core Rust + 46 in `domicile-compositor` (5 more behind `--ignored`,
+run by `e2e-compose.sh`) + 353 TypeScript. Clippy clean, `cargo fmt` clean.
 
 ### How to run / test
+
 ```sh
 nix develop                     # core shell: rust + node
 cargo test                      # core Rust tests
-bun run turbo test              # TypeScript: lint, types, unit tests, shell build
+bun run turbo test              # TypeScript: lint, types, unit tests
 
 nix develop .#full              # adds wayland, mesa, weston, electron, xvfb, kitty
 cargo build -p domicile-compositor    # the Smithay server (EXCLUDED from default build)
-cargo test -p domicile-compositor     # 4 unit tests (BGRA->RGBA conversion)
+cargo test -p domicile-compositor
 
-# End-to-end, headless (no display needed; use these to verify changes):
-nix develop .#full -c ./scripts/smoke-compositor.sh   # a real client binds our globals
-nix develop .#full -c ./scripts/e2e-chrome.sh         # client -> host -> mock chrome (app_appeared)
-nix develop .#full -c ./scripts/e2e-electron.sh       # real Electron renderer under Xvfb; pixels flow
-nix develop .#full -c ./scripts/e2e-spawn.sh          # a chrome `spawn` message launches a client
-nix develop .#full -c ./scripts/e2e-input.sh          # keyboard + pointer reach a client, and its cursor request reaches the chrome
-nix develop .#full -c ./scripts/e2e-dmabuf.sh         # the dmabuf global is advertised; with a GPU, a real GPU client's frames arrive
-nix develop .#full -c ./scripts/e2e-slow-chrome.sh    # a chrome that stops reading does not freeze the compositor
-nix develop .#full -c ./scripts/e2e-hidpi.sh          # a 2x chrome makes a client draw at 2x, and the frame says so
-nix develop .#full -c ./scripts/probe-transparency.sh # the engine, as our client, commits real alpha (hole-punching's premise)
+# Headless end-to-end. No display needed — use these to verify changes.
+# Each builds the compositor first (e2e-compose drives cargo test directly);
+# `nix run .#<name>` runs any of them against a fresh checkout.
+./scripts/smoke-compositor.sh    # a real client binds our globals
+./scripts/e2e-chrome.sh          # client -> host -> mock chrome, and the buffer release
+./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow
+./scripts/e2e-spawn.sh           # a spawned client is aimed at *our* display
+./scripts/e2e-input.sh           # keyboard + pointer reach a client (copy path)
+./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
+./scripts/e2e-slow-chrome.sh     # a chrome that stops reading does not freeze the compositor
+./scripts/e2e-hidpi.sh           # a 2x chrome makes a client draw at 2x, and the frame says so
+./scripts/e2e-chrome-layer.sh    # the chrome is told from the apps, and keeps the keyboard
+./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel
+./scripts/probe-transparency.sh  # the engine, as our client, commits real alpha
 
-# Full visible prototype (needs a real display — run on the user's machine):
-nix develop .#full -c ./scripts/run-prototype.sh
-#   then, in another terminal on Domicile's display:
-#   XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 weston-flower
+# Needs a real display — run on the user's machine.
+nix run 'github:cprussin/domicile#native'      # the native path: a window, composited
+nix run 'github:cprussin/domicile#prototype'   # the copy path, for comparison
 ```
 
+`e2e-compose.sh` needs a GL stack (it gets a software rasteriser where there is
+no GPU) but no display: it composites into an offscreen buffer and reads the
+pixels back. Presentation is the part it cannot cover — see the transform gotcha
+below.
+
 ### Environment gotchas (these will bite you — read them)
+
 - **Shell is bash**, despite any env note saying nushell.
 - **Commits**: gpg signing fails here. Commit with
   `git -c commit.gpgsign=false -c user.name="Claude" -c user.email="noreply@anthropic.com" commit …`
-  and end the message with the `Co-Authored-By: Claude …` trailer. Commit freely
-  (the user said "you own it").
+  and end the message with the `Co-Authored-By: Claude …` trailer.
 - **Nix + git**: `nix develop` only sees **git-tracked** files. A brand-new
   untracked file makes the flake error with "not tracked by Git" — `git add` it
   first (staging is enough; a dirty tree is fine, just warns).
 - **Unix socket path length ≤ ~108 chars (SUN_LEN)**. The session scratchpad path
-  is too long — use a **short** `XDG_RUNTIME_DIR` like `/tmp/domicile-rt` for anything
-  that binds a wayland/chrome socket. (`wayland-1` squeaked under; `domicile-chrome.sock`
-  did not — this cost real debugging time.)
-- **`nix run github:...?ref=<branch>` caches the branch for an hour.** Nix
-  re-resolves a mutable ref only after `tarball-ttl`, so a `nix run` right after
-  a force-push re-runs the *old* revision — with a stale staged copy and its
-  already-built binary, which reads exactly like "my fix did nothing". Pass
+  is too long — use a **short** `XDG_RUNTIME_DIR` like `/tmp/domicile-rt` for
+  anything that binds a wayland/chrome socket.
+- **`nix run github:...?ref=<branch>` caches the branch for an hour.** A `nix run`
+  right after a push re-runs the *old* revision, with a stale staged copy and its
+  already-built binary — which reads exactly like "my fix did nothing". Pass
   `--refresh` whenever the branch is moving.
-- **winit `dlopen`s the Wayland and X11 client libraries**, exactly as libEGL
-  is, and for the same reason the `.#full` shell has to name them in
-  `LD_LIBRARY_PATH` rather than merely install them. Without them `--present`
-  reports `WaylandError(Connection(NoWaylandLib))` and opens no window, while
-  everything headless keeps working — so it looks like a compositing bug and is
-  a packaging one. `NoCompositor` is the different failure: the library loaded
-  and there was no session to nest in.
-- **The window is drawn with `Transform::Flipped180`, and no test here can
-  say why.** Smithay's projection sends output-y=0 to NDC -1, which is GL's
-  *bottom*, and on a window that is the bottom of what the user sees — so drawn
-  as-is the desktop is upside down. Reading a buffer back, all a machine with
-  no display can do, is consistent either way, so the offscreen pixel tests
-  pass under both. Settled on hardware; do not "simplify" it back to `Normal`.
-- **One seat has one pointer focus, so only one thing may drive it.** The
-  copy path has the chrome route the pointer and forward what belongs to a
-  client; where Domicile presents, it routes from the window's own events with
-  `Scene::route_pointer` instead. Running both means whichever moved the focus
-  last gets the next click — a window that tracks the mouse perfectly and never
-  receives a press, so it cannot be focused by clicking it. The chrome's
-  forwarded pointer is ignored while presenting for exactly this reason.
-- **Never leave the keyboard focused on nothing.** A chrome that focuses a
-  window which has already closed — the race it loses whenever a window goes
-  away while its own focus message is in flight — used to hand the keyboard to
-  `None`, and nothing afterwards took it back: the desktop went deaf until it
-  was restarted. Every focus path falls back to the chrome now.
-- **A client does not have to bind more than one `wl_seat`.** Giving the chrome
-  a seat of its own so that it and the apps could hold a focus each looked
-  clean and broke Electron: `Gdk: gdk_seat_get_keyboard: assertion
-  'GDK_IS_SEAT (seat)' failed`, then `Fatal Wayland communication error: Broken
-  pipe` and the chrome was gone. One seat, taking turns.
-- **The e2e scripts used to run whatever binary was already built.** They
-  checked `target/debug/domicile-compositor` existed and never rebuilt, so a
-  source change that broke a check could pass on the previous build — every
-  assertion running, every assertion reporting on code that is not in the tree.
-  Renaming a log line the scripts grep for went to main exactly this way. They
-  build now; it costs nothing when there is nothing to do.
-- **Log messages the scripts grep for are an interface.** `e2e-hidpi.sh` matches
-  `advertising output scale scale=2`, so a word added to that message between
-  the text and the field breaks it. Grep the scripts before rewording a line.
-- **`winit::init` hands back an event loop, and dropping it is silent.** The
-  window still opens and still draws; it just never hears a pointer or a key,
-  which reads as a compositor that has hung rather than as a wire-up that is
-  missing. It goes into calloop like any other source.
-- **The chrome needs a seat of its own.** One seat cannot serve both: an app
-  holds the keyboard focus (that is how a forwarded keystroke reaches a
-  terminal) while the chrome needs the window's input at the same time, and they
-  would take focus from each other on every event. Two seats give each a focus
-  that stays put, and no client hears from the one it is not focused on.
-- **A client's buffer may be upside down, and the types do not say so.** A
-  client that renders with GL hands the buffer over the way GL made it and sets
-  `Y_INVERT` on the dmabuf; Smithay records that on the texture but does not
-  expose it, so `Layer::y_inverted` carries it from the import instead. Drawing
-  without it turns the whole desktop over. Smithay's own `render_texture_from_to`
-  flips by *negating* the texture coordinate rather than reflecting it, which
-  needs a repeating wrap mode to land back in range — against a clamping one it
-  samples the buffer's first row for the whole quad. `compose::texture_matrix`
-  reflects (`1 - v`) so it does not depend on the wrap mode, which is also why
-  that case is tested directly rather than against Smithay.
+- **Which way up an output is drawn cannot be tested without a screen.** Smithay's
+  projection sends output-y=0 to NDC -1, which is GL's *bottom*, and on a window
+  that is the bottom of what the user sees. Reading a buffer back — all a machine
+  with no display can do — is consistent either way, so the offscreen pixel tests
+  pass under both. The window is drawn with `Transform::Flipped180`; that was
+  settled on hardware, so do not "simplify" it back to `Normal`.
 - **A solid-colour texture cannot test a texture matrix.** It looks the same
-  however it is mapped onto the quad, so a comparison against Smithay with one
-  checks only where the quad landed. The fixtures in `compose::pixels` are
-  patterned for this reason — the y-inversion bug above passed a solid-texture
-  comparison unchanged.
-- **Presenting means the compositor is itself a Wayland client**, so it must
-  keep the session's `WAYLAND_DISPLAY` and cannot have a runtime directory to
-  itself the way `run-prototype.sh` does — its socket lands in the host's
-  `XDG_RUNTIME_DIR`, beside the host compositor's. A client we spawn therefore
-  gets `WAYLAND_DISPLAY` set **explicitly** (`client_command`) rather than
-  inheriting ours; inheriting it opens the app on the host desktop, which reads
-  as "the compositor isn't compositing". `scripts/e2e-spawn.sh` guards this by
-  running the compositor under a decoy display and reading back what the child
-  actually got.
-- **libEGL is `dlopen`ed, not linked.** The dmabuf import loads `libEGL.so.1`
-  at runtime, and `mkShell` only wires *build-time* linkage — a package in
-  `packages` is not on the loader path. The `.#full` shell therefore sets
-  `LD_LIBRARY_PATH` (`/run/opengl-driver/lib` first, so NixOS's EGL vendor
-  matches the running kernel driver). Without it the compositor logs
-  `no EGL renderer: serving wl_shm clients only` and never advertises the
-  dmabuf global.
-- **`WAYLAND_DEBUG=1` output is ANSI-coloured**, even into a file, and the
-  escapes land *between* the interface name and the event — `wl_surface` ESC
-  `#12` ESC `.enter`. Every `scripts/*.sh` grep over a client log reads plain
-  text, so a coloured log matches nothing and the check passes nothing: it
-  reports the compositor's *own* bug rather than finding one. The scripts now
-  set `NO_COLOR=1` alongside `WAYLAND_DEBUG=1`; keep doing that. (The `.#full`
-  shell sets `FORCE_COLOR=1` for turbo/biome, which is what libwayland picks
-  up — so this bites in the dev shell and not necessarily outside it.)
+  however it is mapped onto the quad, so a comparison against Smithay's own
+  drawing with one checks only where the quad landed. The fixtures in
+  `compose::pixels` are patterned for this reason — a y-inversion bug passed a
+  solid-texture comparison unchanged.
+- **A client's buffer may be upside down, and the types do not say so.** A client
+  that renders with GL sets `Y_INVERT` on the dmabuf; Smithay records it on the
+  texture but does not expose it, so `Layer::y_inverted` carries it from the
+  import. `compose::texture_matrix` reflects (`1 - v`) rather than negating,
+  because Smithay's own flip needs a repeating wrap mode to land back in range
+  and samples the first row for the whole quad against a clamping one.
+- **One seat has one pointer focus, so only one thing may drive it.** The copy
+  path has the chrome route the pointer and forward what belongs to a client;
+  where Domicile presents, it routes from the window's own events with
+  `Scene::route_pointer`. Running both means whichever moved the focus last gets
+  the next click — a window that tracks the mouse perfectly and never receives a
+  press, so it cannot be focused by clicking it.
+- **Never leave the keyboard focused on nothing.** Focusing a window that has
+  already closed — the race the chrome loses whenever one goes away while its
+  focus message is in flight — used to hand the keyboard to `None`, and nothing
+  took it back: the desktop went deaf until restarted. Every focus path falls
+  back to the chrome.
+- **A client does not have to bind more than one `wl_seat`.** Giving the chrome a
+  seat of its own, so it and the apps could hold a focus each, broke Electron:
+  `Gdk: gdk_seat_get_keyboard: assertion 'GDK_IS_SEAT (seat)' failed`, then
+  `Fatal Wayland communication error: Broken pipe`. One seat, taken in turns.
+- **Presenting means the compositor is itself a Wayland client**, so it keeps the
+  session's `WAYLAND_DISPLAY` and cannot have a runtime directory to itself the
+  way the headless path does — its socket lands in the host's `XDG_RUNTIME_DIR`
+  beside the host compositor's. A client we spawn is therefore given
+  `WAYLAND_DISPLAY` **explicitly** (`client_command`); inheriting ours opens the
+  app on the host desktop, which reads as "the compositor isn't compositing".
+  `e2e-spawn.sh` guards this with a decoy display.
+- **The cursor the user sees belongs to the session Domicile's window is in.** A
+  client asking for a shape is a request to pass on to winit; nothing about it is
+  visible otherwise.
+- **winit `dlopen`s the Wayland and X11 client libraries**, exactly as libEGL is,
+  so `.#full` names them in `LD_LIBRARY_PATH` rather than merely installing them.
+  Without them `--present` reports `NoWaylandLib` and opens no window while
+  everything headless keeps working — it looks like a compositing bug and is a
+  packaging one. `NoCompositor` is the different failure: the library loaded and
+  there was no session to nest in.
+- **libEGL is `dlopen`ed, not linked.** `mkShell` only wires *build-time* linkage,
+  so `.#full` sets `LD_LIBRARY_PATH` (`/run/opengl-driver/lib` first, so NixOS's
+  EGL vendor matches the running kernel driver). Without it the compositor logs
+  `no EGL renderer: serving wl_shm clients only` and never advertises dmabuf.
+- **`WAYLAND_DEBUG=1` output is ANSI-coloured**, even into a file, and the escapes
+  land *between* the interface name and the event. Every script that greps a
+  client log sets `NO_COLOR=1`; without it the grep matches nothing and the check
+  passes nothing.
+- **Do not match a log line by its exact rendering.** `e2e-hidpi.sh` matched
+  `advertising output scale scale=2`; adding a field to that line broke the check
+  silently. Match the field, not the sentence.
+- **The e2e scripts build the compositor themselves.** They used to only check the
+  binary existed, so a reworded log line could break a check and still pass
+  against a stale binary — which is exactly what happened once. Keep the build.
 - **`domicile-compositor` is excluded from `default-members`** (it pulls Smithay +
-  native libs). Plain `cargo test`/`cargo build` in the core shell skip it; build
-  it explicitly in `.#full`.
-- **Verifying without nix**: the headless scripts need `libxkbcommon-dev` (to
-  link `domicile-compositor`), `weston` (demo clients) and `wayland-utils`
-  (`wayland-info`). With those, `cargo test -p domicile-compositor` and every
-  `scripts/*.sh` except `e2e-electron.sh` run outside the nix shell;
-  `e2e-electron.sh` additionally needs `electron` on `PATH`.
+  native libs). Plain `cargo test`/`cargo build` skip it; build it explicitly.
+- **Verifying without nix**: the headless scripts need `libxkbcommon-dev`,
+  `weston` and `wayland-utils`. With those, everything except `e2e-electron.sh`
+  runs outside the nix shell; that one also needs `electron` on `PATH`.
 - Reference material for Smithay: fetch from `github.com/Smithay/smithay` tag
-  **`v0.7.0`** (smallvil + anvil examples, `src/input/*`, `src/wayland/*`). This
-  was invaluable for getting the 0.7 API exactly right.
+  **`v0.7.0`** (smallvil + anvil examples, `src/input/*`, `src/wayland/*`).
 
 ### Smithay 0.7 specifics we learned
-- **Keycodes need `+8`** (evdev → xkb): the libinput backend does
-  `(key()+8).into()`, so `KeyboardHandle::input` wants X keycodes. The chrome
-  sends evdev; the compositor adds 8. (In `handle_input`.)
+
+- **Keycodes need `+8`** (evdev → xkb) — but only from the chrome, which sends
+  evdev. The winit backend has already added it, so a key from the window is
+  passed through as it arrives.
 - **Must flush clients** after dispatch *and* after off-thread input, or clients
   hang. The `Display` lives in `CalloopData` and we `flush_clients()` in the
-  `event_loop.run` callback (fires every iteration, including after channel input).
+  `event_loop.run` callback.
 - **Need a `wl_output` global** or many clients won't map a toplevel
   (weston-terminal, kitty wait for it). `weston-flower` / `weston-smoke` /
   `weston-eventdemo` map fine and are good shm test clients.
+- **Send `wl_surface.enter`.** A toolkit that scales its content asks which output
+  a surface is on before drawing anything — GLFW (and so kitty) blocks on exactly
+  this, mapping a window that stays blank.
+- **A v3 dmabuf global is not enough for Mesa.** The format list says *what* a
+  client may allocate, never *which GPU*. Mesa learns that from `wl_drm` (not
+  advertised) or v4 feedback's `main_device`, so a v3-only global leaves it
+  unable to pick a device. Feedback is built from the `dev_t` of the EGL device's
+  render node; a software rasteriser has none and falls back to v3.
+- **Buffers must be released.** Smithay only releases the *previous* buffer when
+  the next is committed — which is the buffer the client cannot draw. The
+  compositor takes the buffer out of the surface state and releases it once the
+  pixels are out of it. `e2e-chrome.sh` asserts it.
+- **`winit::init` hands back an event loop, and dropping it is silent.** The
+  window still opens and draws; it just never hears a pointer or a key, which
+  reads as a compositor that has hung rather than a wire-up that is missing.
 - Input from the chrome is injected on the **Wayland thread** via a
   `calloop::channel` (seat + surfaces aren't `Send`). Chrome connections run on
-  their own threads and push `InputEvent`s onto that channel.
+  their own threads and push onto that channel.
 
 ### Client quirks (for testing)
-- **`weston-eventdemo` does NOT print pointer events to stdout** (it handles them
-  silently — e.g. `set_cursor`). Use `WAYLAND_DEBUG=1` and grep the stderr for
-  `wl_pointer#N.button` / `wl_keyboard#N.key` to verify input delivery. This
-  wasted time once — `scripts/e2e-input.sh` now uses WAYLAND_DEBUG.
+
+- **`weston-eventdemo` does NOT print pointer events to stdout.** Use
+  `WAYLAND_DEBUG=1` and grep for `wl_pointer#N.button` / `wl_keyboard#N.key`.
 - **`wev` segfaults** on our minimal compositor — don't use it.
-- **`nix run` stages the git source, so there is no `node_modules`.** Every
-  e2e script drives a bun harness that imports the workspace packages, so
-  without `bun install` the harness dies on its first import — and a harness
-  that never starts is indistinguishable from a chrome that received nothing.
-  The flake's runner installs before running; `e2e-dmabuf.sh` also fails loudly
-  when no chrome connects rather than reporting zero frames.
-- **Reassembling a frame chunk-by-chunk must not re-join the buffer.** The
-  socket reader used to do `buffered + chunk` per chunk, which is quadratic: a
-  16MB base64 frame arriving in 64KB pieces took ~12s to reassemble and looked
-  like a chrome receiving nothing. `createFrameReader` keeps the tail as pieces
-  and joins once a delimiter arrives. Small geometry messages never showed this;
-  GPU frames at native resolution did.
-- **Never *wait* on a chrome from the Wayland loop either.** Moving the writes
-  off that thread is not enough if queueing them can block: a bounded queue with
-  a blocking fallback stalls the Wayland thread whenever the chrome is behind,
-  which under a steady frame load is always. That thread also injects input, so
-  a few hundred milliseconds of waiting is a few hundred milliseconds of frozen
-  input — past the 200ms repeat delay, so a key the user tapped starts
-  repeating. Frames and lifecycle messages need opposite policies, in
-  `outbound.rs`: drop frames past a shallow cap, never drop or wait on messages.
-- **The compositor reports its own frame rate.** Every 5s while compositing it
-  logs one INFO line, so "is it faster" is a number rather than an impression:
+- **`weston-flower` is not an animating client here.** It commits twice and stops,
+  under real weston too — don't read a frozen flower as a compositor bug.
+  `weston-simple-shm` animates properly and is the better shm client for
+  frame-rate work.
+- **`kitty`** is GPU/dmabuf, verified on an AMD iGPU. It takes ~7s from mapping to
+  its first frame (font cache, GPU init), and sizes itself to the output unless
+  configured. In a container it only ever reaches llvmpipe, where no client can
+  allocate a dmabuf, so `e2e-dmabuf.sh` stops after asserting the global.
+- **GPU test clients**: `weston-simple-dmabuf-egl` is the smallest, but nixpkgs
+  builds weston with `simple-clients` off, so `e2e-dmabuf.sh` falls back to kitty.
+- **A GPU client is slow between mapping and drawing.** Anything that samples "did
+  a frame arrive" off the map will read zero and blame the compositor.
+- **`nix run` stages the git source, so there is no `node_modules`.** Every e2e
+  script drives a bun harness that imports the workspace packages; the flake's
+  runner installs before running.
 
-  ```
-  frames sent=N dropped=M fps=F mb_per_s=B write_ms=W \
-         readback_ms=R readback_worst_ms=RW commit_ms=C idle_ms=I chromes=K
-  ```
+### What the instrumentation says
 
-  It is the only place that sees the whole path, and each field indicts a
-  different half of it:
-  - `readback_ms` — the GPU copy (`dmabuf_import::read_rgba`). Our own cost, and
-    the one the CEF external-texture path deletes outright.
-  - `commit_ms` — the whole Wayland-thread commit; `commit_ms - readback_ms` is
-    everything around the copy (format conversion, queueing, the release).
-  - `idle_ms` — the gap between one commit finishing and the next arriving.
-    Large here means the compositor was *waiting*, not working: a slow client,
-    or the 33ms throttle holding it back. `idle + commit ≈ 1000/fps` is the
-    self-check that the three account for the whole frame.
-  - `dropped` climbing while `fps` stays flat means pixels are being produced
-    faster than the chrome can take them; a high `write_ms` means the chrome's
-    socket is what is backing up.
+The compositor logs one INFO line every 5s while compositing, so "is it faster"
+is a number rather than an impression:
 
-  - `response_ms` — from injecting a keystroke into a client to that client's
-    next commit: the client's own think-and-redraw, isolated. Not ours to fix,
-    which is exactly why it has to be separable from what is.
-  - `throttled` — commits the ~30fps throttle refused. Each one is a redraw the
-    client made and the chrome never saw, so if the client then goes idle the
-    screen holds stale pixels until it happens to redraw again.
-- **The chrome reports the round trip.** On the same 5s cadence and the same
-  stdout, so the two lines can be read against each other:
+```
+frames sent=N dropped=M fps=F mb_per_s=B write_ms=W \
+       readback_ms=R readback_worst_ms=RW commit_ms=C idle_ms=I \
+       response_ms=RS response_worst_ms=RSW throttled=T chromes=K
+```
 
-  ```
-  chrome: round trip keys=N rt_ms=R rt_worst_ms=RW \
-          frames=F ipc_ms=I ipc_worst_ms=IW draw_ms=D draw_worst_ms=DW
-  ```
+- `readback_ms` — the GPU copy. **Zero on the native path**, because it does not
+  happen: that is the whole point.
+- `commit_ms` — the whole Wayland-thread commit; minus `readback_ms` it is
+  everything around the copy.
+- `idle_ms` — the gap between one commit finishing and the next arriving. Large
+  means *waiting*, not working. `idle + commit ≈ 1000/fps` is the self-check.
+- `response_ms` — from injecting a keystroke into a client to that client's next
+  commit: the client's own think-and-redraw, isolated. It is measured entirely
+  inside the compositor, so it is the one figure directly comparable between the
+  two paths.
+- `throttled` — commits the ~30fps throttle refused (copy path only).
 
-  `rt_ms` is the number behind "sluggish": everything from pressing a key to
-  those pixels being on the canvas, including the client's own redraw, the
-  socket, the Electron IPC hop and `putImageData`. It is taken in
-  `BridgeClient`, the one place that sees both ends of the loop, and *after*
-  the frame handler runs so the canvas draw is inside it. Frames nobody was
-  waiting on — a terminal's blinking cursor — are not round trips and are not
-  counted; counting them would report the blink interval as input latency. A
-  burst is measured from its oldest keystroke, since the felt lag is how long
-  the first character waited.
+The chrome reports the round trip on the same cadence and the same stdout:
 
-  **Key presses only, never releases** — the same rule in `response_ms`. A
-  release changes nothing on screen, so the next frame to arrive is some
-  unrelated redraw (that blinking cursor, half a second later), and every press
-  is followed by a release: counting them contaminated half of every sample and
-  put a fake ~500ms tail on both numbers. This was a real bug in the first cut
-  of the instrumentation, and it cost two rounds of blaming the client for it.
-  If a latency number grows a tail at suspiciously exactly some client's idle
-  redraw period, suspect the measurement before the client.
+```
+chrome: round trip keys=N rt_ms=R rt_worst_ms=RW \
+        frames=F ipc_ms=I ipc_worst_ms=IW draw_ms=D draw_worst_ms=DW
+```
 
-  `ipc_ms` and `draw_ms` are the two stages inside `rt_ms` that the compositor
-  cannot see, so a large total can be attributed rather than merely observed:
-  the main-process → renderer hop (where a frame's megabytes are
-  structured-cloned across a process boundary) and putting them on the canvas.
-  `ipc_ms` is measured in the *preload*, the first code in the renderer process
-  to see a message, so none of the page's own work is inside it.
+`rt_ms` is the number behind "sluggish": key press to pixels on screen. Taken
+after the frame handler runs, so the draw is inside it. `ipc_ms` and `draw_ms`
+are the two stages the compositor cannot see. On the native path there are no
+frames on the socket at all, so these fall silent — which is the result, not a
+gap in the measurement.
 
-  Together with the compositor's line the whole loop accounts for itself:
+Two rules the numbers depend on, both learned the hard way:
 
-  ```
-  rt_ms  =  (key delivery)  +  response_ms  +  readback_ms  +  write_ms
-            +  ipc_ms  +  draw_ms
-  ```
+- **Key presses only, never releases.** A release changes nothing on screen, so
+  the next frame is some unrelated redraw — a terminal's blinking cursor, half a
+  second later. Counting them contaminated half of every sample and put a fake
+  ~500ms tail on both `rt_ms` and `response_ms`. If a latency number grows a tail
+  at suspiciously exactly some client's idle redraw period, suspect the
+  measurement before the client.
+- **Throughput and latency are different questions.** `fps=2` on an idle terminal
+  is not slow — it redraws once per cursor blink. A keystroke taking 300ms looks
+  identical in that line.
 
-  Every term but the first is measured, so **key delivery is what is left
-  over** — and it is entirely ours. Measured on an AMD 890M with kitty at
-  ~1500x1000: `rt_ms≈100`, `ipc_ms≈19`, `draw_ms≈1`, compositor ≈11. The
-  canvas is free; the Electron IPC hop is ~19% and is where a frame's
-  megabytes are copied between processes.
-- **A renderer has no stdout.** Its `console` goes to devtools, which nobody has
-  open while driving the prototype from a terminal, so the shell's preload
-  exposes `window.domicileDiagnostics.report(line)` and the Electron main
-  process prints it. Deliberately not on `domicileTransport`: that object is the
-  host protocol, whose shape the SDK's `Transport` type fixes.
-- **Throughput and latency are different questions, and only one of them was
-  ever measured.** A run showing `fps=2` on an idle kitty is not slow — an idle
-  terminal redraws once per cursor blink (~500ms), which is exactly what
-  `idle_ms` clusters at. A keystroke taking 300ms to appear looks identical in
-  that line. Do not read a low `fps` as a bottleneck without checking whether
-  anything was asking the client to draw.
-- **Pixels are bytes on the wire, so the stream is not text.** `app_frame`
-  carries a byte count and the pixels follow the header line raw. A reader that
-  scans for newlines inside a payload will cut a frame in half — a pixel is as
-  likely to be `0x0a` as anything else — so the host→chrome direction is read by
-  `host-stream.ts` over bytes, by count. Base64 was the single most expensive
-  step in the frame path: ~9ms to encode, ~11ms to escape into JSON and ~31ms to
-  `atob` back, the last on the renderer thread that also handles the keyboard.
-- **Run the prototype in release.** The frame path is where an unoptimised
-  build shows: base64 + JSON for one 1494x994 frame costs 264ms in debug against
-  20ms in release, a 4fps ceiling against 50fps. `run-prototype.sh` builds
-  `--release`; the e2e scripts stay on debug, where only correctness matters.
-- **Two input bugs hid behind the blank window.** Nobody typed into an app
-  until GPU clients rendered, so both only surfaced then. (1) The chrome
-  forwarded the browser's auto-repeat `keydown`s as fresh Wayland presses; a
-  client synthesises repeat itself from `wl_keyboard.repeat_info`, so it had two
-  repeat sources and drew the same character over and over. (2)
-  `decodeBase64ToBytes` used `Uint8Array.from(binary, cb)` — a callback per
-  byte, ~350ms for a 6MB frame on the renderer's only thread, which is also the
-  thread that forwards keystrokes. An indexed loop is ~30ms.
-- **Never write to a chrome from the Wayland loop.** Frames are big — a
-  1753x1753 window is 12MB read back and 16MB of base64 — so a chrome that reads
-  slowly fills the socket buffer within a frame or two. A blocking `write_all`
-  there stops frame callbacks and freezes *every* client, which reads as "the
-  GPU path imported one frame and died". Encoding and writing happen on a writer
-  thread; frames are dropped when it falls behind, because the next frame
-  supersedes them. `scripts/e2e-slow-chrome.sh` holds the line.
-- **A GPU client is slow between mapping and drawing.** kitty maps its window
-  almost at once and reaches its first frame seconds later (font cache, GPU
-  init, shader compile). Anything that samples "did a frame arrive" off the map
-  will read zero and blame the compositor. `e2e-dmabuf.sh` waits for the
-  compositor's own `broadcast app frame` line before attaching the chrome, since
-  the harness only listens for a few seconds.
-- **Send `wl_surface.enter`.** A toolkit that scales its content asks which
-  output a surface is on before it draws anything — GLFW (and so kitty) blocks
-  on exactly this, mapping a window that stays blank. `Output::enter` on the one
-  virtual output is the whole fix; `e2e-chrome.sh` asserts it.
-- **A v3 dmabuf global is not enough for Mesa.** The format list says *what*
-  a client may allocate, never *which GPU* to allocate it on. Mesa learns that
-  from `wl_drm` (which Domicile does not advertise) or from v4 feedback's
-  `main_device`, so a v3-only global leaves it unable to pick a device. The
-  compositor now builds feedback from the `dev_t` of the EGL device's render
-  node; a software rasteriser has no node, so it still falls back to v3.
-- **Buffers must be released.** A client may not touch a buffer again until
-  the compositor sends `wl_buffer.release`, and Smithay only releases the
-  *previous* buffer when the next one is committed — which is the buffer the
-  client cannot draw. The compositor now takes the buffer out of the surface
-  state and releases it once the pixels are out of it. `e2e-chrome.sh` asserts
-  the release, since nothing else makes it visible.
-- **`weston-flower` is not an animating client here.** Under real weston
-  (headless) it commits twice and stops, same as under Domicile — don't read a
-  frozen flower as a compositor bug. `weston-simple-shm` animates properly and
-  is the better shm client for frame-rate work.
-- **`kitty`** is GPU/dmabuf and goes through the dmabuf import path, verified on
-  an AMD iGPU. Note it takes ~7s from mapping its window to its first frame
-  (font cache, GPU init), and it sizes itself to the output unless the chrome
-  configures it — 1494x994 is ~6MB a frame. `scripts/e2e-dmabuf.sh` is the check;
-  in the container it only ever reaches llvmpipe (software EGL), where no client
-  can allocate a dmabuf, so it stops after asserting the global.
-- **GPU test clients**: `weston-simple-dmabuf-egl` is the smallest one, but
-  nixpkgs builds weston with `simple-clients` off, so it is absent from the full
-  shell. `scripts/e2e-dmabuf.sh` prefers it when present and falls back to
-  `kitty`, which the shell always has.
+Measured on the copy path, AMD 890M, kitty at ~1500x1000: `rt_ms≈100`,
+`ipc_ms≈19`, `draw_ms≈1`, compositor ≈11ms. `ipc_ms` is *unfixable* in Electron —
+every main→renderer path types its transfer list as `MessagePortMain[]`, so the
+bytes are structured-cloned, never transferred. Deleting it is what the native
+path is for.
 
 ### Repo layout
+
 | Path | What | Build |
 |---|---|---|
-| `packages/domicile-config` | config schema/parse/validate, hot-reload (keep last-good), chrome-package resolution | core |
-| `packages/domicile-scene` | affine transforms + inverse, hit-testing, input routing, z-order (pure math) | core |
+| `packages/domicile-config` | config schema/parse/validate, hot-reload (keep last-good) | core |
+| `packages/domicile-scene` | affine transforms + inverse, hit-testing, pointer routing, z-order, draw order (pure math) | core |
 | `packages/domicile-protocol` | host↔chrome wire messages (JSON), versioning | core |
-| `packages/domicile-host` | orchestrator `Host` brain + `ipc` (handshake, `handle_chrome_line`/`apply_chrome_message`) | core |
-| `packages/domicile` | host daemon / control plane (config → serve chrome protocol) | core |
-| `packages/domicile-bridge` | AppTextureBridge bookkeeping (app → external-image id + latest dmabuf) — pure; the compositor now keeps it current | core |
-| `packages/domicile-compositor` | **the running compositor**: Smithay server + chrome socket + shm/dmabuf pixel capture + input injection | `.#full` |
+| `packages/domicile-host` | orchestrator `Host` brain + `ipc` (handshake, `apply_chrome_message`) | core |
+| `packages/domicile` | host daemon / control plane | core |
+| `packages/domicile-bridge` | app → external-image id + latest dmabuf bookkeeping (pure) | core |
+| `packages/domicile-compositor` | **the running compositor**: Smithay server, chrome socket, dmabuf/shm import, compositing, input | `.#full` |
 | `packages/chrome-sdk` | `<domicile-app>`/`<domicile-webview>` elements, `BridgeClient`, matrix/frame/input/protocol helpers | bun |
-| `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers) | bun |
 | `packages/e2e-harness` | headless chrome stand-ins for the `scripts/e2e-*.sh` checks | bun |
-| `apps/shell` | reference chrome: bar + tabs + stage; `ShellController`, `TabBar`, browser windows; Electron host (`src/main.ts`/`src/preload.ts`) | bun |
-| `scripts/` | e2e + smoke + prototype launcher | — |
+| `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers) | bun |
+| `scripts/` | e2e + smoke + the two launchers | — |
 
-TS note: the chrome is TypeScript built by Vite — the Electron main process to
-`.vite/build/main.js` (ESM) and the preload to `.vite/build/preload.cjs` (CJS,
-as Electron's isolated world requires). The renderer bundle resolves
-`@domicile/chrome-sdk` as an
-**import map** in `index.html` (no bundler). Custom element tag names are
-hyphenated (`domicile-app`/`domicile-webview`); bare `<app>`/`<webview>` aliasing is a TODO.
+Inside `domicile-compositor`: `compose.rs` is the drawing (layers, the CSS matrix
+as the renderer's, logical↔window mapping) and is where the offscreen pixel tests
+live; `dmabuf_import.rs` is the import and the readback; `scale.rs` is the output
+scale arithmetic; `outbound.rs` is the copy path's queueing policy.
 
-### How input & pixels actually flow (mental model)
-- **Pixels**: `domicile-compositor` `commit()` → either read the shm buffer
-  (`bgra_to_rgba`) or import the client's dmabuf into an offscreen GLES context
-  and read it back (`dmabuf_import`) → base64 → `HostMessage::AppFrame` broadcast
-  → chrome-sdk `<domicile-app>.drawFrame` → `<canvas>`. Throttled ~30fps; frame
-  callbacks answered so clients animate. Each dmabuf is also recorded in
-  `BridgeRegistry`, which is what the engine will bind as an external texture
-  once the readback goes away. Pixels leave the compositor as **raw bytes after
-  the `app_frame` header line**, not base64 inside it — see the note below.
-- **Input**: real events hit the Electron window → `<domicile-app>` / document
-  listeners in chrome-sdk → `ChromeMessage::{PointerMotion,PointerButton,Key,…}`
-  over the socket → compositor intercepts (before the pure brain) → `InputEvent`
-  over calloop channel → `DomicileCompositor::handle_input` → seat inject. Click
-  focuses an app (`FocusApp` → `keyboard.set_focus`); click on chrome unfocuses.
+### How input & pixels actually flow
+
+**Native path.** A client commits a dmabuf → the compositor imports it as a
+texture and keeps it → on every commit it draws the whole desktop: apps in
+`Scene::draw_order` through `Portal::surface_to_output`, then the chrome's own
+surface over them, blended, so its transparent regions are the holes the apps show
+through. Nothing is copied by the CPU. The chrome is told from an app by which
+Wayland socket it connected on (`<display>-chrome`).
+
+Input: the window's events → the seat. The pointer is routed by the compositor
+through `Scene::route_pointer`, and a press focuses what is under it. The keyboard
+goes to whatever holds focus — the chrome until it says a window has been focused.
+
+**Copy path.** A client commits → the compositor reads the buffer back (shm
+directly, dmabuf via `read_rgba`) → `HostMessage::AppFrame` over the socket, raw
+bytes after the header line → `<domicile-app>.drawFrame` → `<canvas>`. Throttled
+~30fps. Input arrives as chrome messages and is injected into the seat.
+
+Two rules the copy path is built around, both from freezes:
+
+- **Never write to a chrome from the Wayland loop.** Frames are big; a chrome that
+  reads slowly fills the socket buffer within a frame or two, and a blocking write
+  there stops frame callbacks and freezes *every* client.
+- **Never *wait* on a chrome either.** A bounded queue with a blocking fallback
+  stalls the same thread, which also injects input — past the 200ms repeat delay,
+  so a key the user tapped starts repeating. Frames and lifecycle messages need
+  opposite policies (`outbound.rs`): drop frames past a shallow cap, never drop or
+  wait on messages. `e2e-slow-chrome.sh` holds the line.
 
 ---
 
-## Phases
+## Where this is going
 
-### Phase 0 — Foundation ✅
-### Phase 1 — Pure-logic core (TDD) ✅
-`domicile-config`, `domicile-scene`, `domicile-protocol` — all green.
+The plan lives in `docs/architecture/WINDOW-COMPOSITING.md`; this is the summary.
 
-### Phase 3 — Wayland host ✅ (prototype complete)
-`Host` brain, IPC seam, `domicile` daemon, `domicile-compositor` (compositor + shm
-+ dmabuf + xdg-shell + seat + output), unified process, real pixels, and keyboard +
-pointer input injection — all done and verified headlessly (the dmabuf import
-apart; see item 1 below).
+### Phase 1 — one window composites natively — one item left
 
-### Phase 4 — Chrome SDK + simple shell ✅ (prototype complete)
-`packages/chrome-sdk`, `apps/shell`, Electron host, a tab bar over the windows
-(apps and browser windows alike, one shown at a time), bar launchers and
-keybindings (Alt+Enter → kitty, Alt+Shift+Enter → a browser window), and an
-address bar with back / forward / stop / reload on browser windows.
+Everything is built and works on hardware. What remains is the measurement it was
+all for: **`rt_ms` on the native path against the copy path**, same client, same
+size, `run-native.sh` against `run-prototype.sh`. Parity means `readback_ms` and
+`ipc_ms` are *gone*, not smaller. Until that number exists, nothing downstream is
+justified — if it is not there, the shader work below is premature.
 
-### Phase 2 — mostly done
-Numbered as the original list was, so the items map one-to-one; item 1 is the
-one with work left in it and leads the next-work list below.
+### Phase 2 — the effects that make an app a CSS element
 
-2. **Cursor rendering** ✅ — the compositor advertises `wp_cursor_shape_v1` and
-   forwards `SeatHandler::cursor_image` to the chrome as
-   `HostMessage::AppCursor`, carrying the CSS `cursor` keyword the chrome
-   assigns to the app's element (`domicile_protocol::CursorShape`). Proven
-   end-to-end by `scripts/e2e-input.sh`. *Remaining:* a client that draws its
-   own cursor **surface** gets `default` — mirroring those pixels is texture-bridge
-   work, so it belongs with item 1.
-3. **Resize / configure** ✅ — `<domicile-app>` watches its own box
-   (`ResizeObserver`) and sends `resize_app`; the compositor turns that into an
-   `xdg_toplevel` configure. The reverse is wired too: a client committing a
-   buffer of a new size drives `Host::app_resized`, so `app_resized` now reaches
-   the chrome (visible in `scripts/e2e-chrome.sh` output).
-4. **Pointer mapping vs CSS transforms** ✅ — the chrome recovers the exact
-   element→screen affine (`element-transform.ts`: the element's own transform
-   about its `transform-origin`, anchored by its bounding box) and inverts it
-   (`surface-coordinates.ts`). The demo's `rotate(-1.2deg)` no longer skews
-   pointer coordinates. *Known limit:* an **ancestor** that rotates or skews is
-   still missed — `getBoundingClientRect` gives only an axis-aligned box, so
-   there is nothing left to recover it from. The engine integration, which knows
-   each layer's transform outright, is what closes that.
-5. **Config hot-reload into the live process** ✅ (the wiring) — `domicile` now
-   watches its config file and keeps the last known-good config live
-   (`domicile::config_reload`), logging what each edit changed. *Remaining:*
-   actually hot-*swapping* the shell needs the daemon to own the shell process,
-   which it does not yet — today `scripts/run-prototype.sh` launches Electron.
-6. **Multi-app focus / z-order / stacking** ✅ — `Scene::upsert` keeps a
-   re-placed app's position in the stack (the chrome re-places on every resize,
-   which used to reshuffle it), and `Scene::raise` moves an app to the top of
-   its z-index tier; `FocusApp` raises as well as focuses, so clicking the lower
-   of two overlapping apps gives it both keyboard and pointer.
-7. **Keymap + axis coverage** ✅ — numpad, media/browser, international and IME
-   keys, F13–F24 and the system keys. Scroll normalises through wheel detents
-   (`wheel-axis.ts`), so line- and page-mode wheels convert correctly, and
-   `wl_pointer.axis_value120` is populated alongside the continuous axis.
-8. **Bare `<app>` tag aliasing** ✅ — `aliasTag` upgrades `<app>` elements (and
-   ones added later) to the registered `<domicile-app>`; the shell installs it in
-   `renderer.ts`. `<webview>` deliberately keeps its long name: Electron owns
-   that tag and `<domicile-webview>` renders one internally, so aliasing it
-   would recurse. That one waits for the engine.
+- rounded corners, opacity and shadow in the compositor's shader
+- the rotated + rounded + shadowed window that was the original success criterion,
+  at native cost
+- chrome above *and* below as two engine layers (only above is free today)
+- per-window fallback to the copy path when a computed style needs an effect the
+  shader cannot do — this is what makes the native path safe to leave on: correct
+  always, fast almost always
 
-### Phase 2 / Next work — prioritized for the next agent
+### Phase 3 — own the display
 
-1. **Zero-copy dmabuf import** ✅ — the *import* half is done and **verified on
-   real hardware** (AMD Radeon 890M / radeonsi): kitty allocates GPU buffers,
-   `domicile-compositor` imports them and its frames reach the chrome.
-   It advertises `zwp_linux_dmabuf_v1` with feedback naming the render node —
-   without which Mesa cannot pick a device and never allocates — offering the
-   formats an offscreen GLES renderer can take (`dmabuf_import.rs`), imports each
-   committed buffer, and records it in `BridgeRegistry` against the app's stable
-   external-image id. *Remaining:* the frame still reaches the chrome as
-   `AppFrame` pixels, because a `<canvas>` in Electron has no way to take the fd.
-   Deleting that readback is the CEF external-texture work in
-   `docs/architecture/WINDOW-COMPOSITING.md` — the descriptor it needs is already live.
-2. **Hot-swap shells via config** — the watcher is wired (item 5 above); the
-   missing half is the daemon owning the shell process so a `shell.package`
-   change can restart it.
-3. **Client cursor surfaces** — mirror the pixels of a client-drawn cursor
-   rather than falling back to `default`. Rides on item 1.
-4. **Full transform chain in the chrome** — see the known limit under item 4
-   above.
+DRM/KMS backend and direct scanout for a fullscreen app. Multi-output, damage
+tracking, clipboard/data-device, touch and a security review all live here too.
 
-### Phase 5 — Hardening (later)
-DRM/KMS backend for real hardware, multi-output, damage tracking,
-security/sandbox review, clipboard/data-device, touch.
+### Known gaps in what is built
 
-**HiDPI is done ✅** — the chain is: the chrome reports `devicePixelRatio`
-(`set_device_pixel_ratio`), the compositor advertises it as the `wl_output`
-scale, a scale-aware client redraws at that scale and says so with
-`set_buffer_scale`, and `app_frame` carries the scale so the canvas backing
-store is the buffer's device pixels while CSS keeps the element its logical
-size. `scripts/e2e-hidpi.sh` asserts all four links, because a break in any of
-them looks identical from a screenshot — slightly soft text.
-
-Two things it is easy to get wrong, both guarded:
-
-- **Logical vs device pixels are now different numbers.** `app_resized` and
-  every pointer coordinate are *logical*; `app_frame`'s `width`/`height` are
-  the buffer's own device pixels. Mixing them puts the pointer at half the
-  position it should be on a 2x display, which no screenshot shows.
-- **A `wl_output` mode is physical**, so it is multiplied by the scale
-  (`OUTPUT_LOGICAL_SIZE`). Leaving it fixed would halve the logical desktop
-  every time the density doubled — a client feels that as a smaller screen.
-
-Non-integer ratios round *up* to the next integer scale: a client drawing more
-pixels than the display has is downscaled by the canvas and stays sharp, while
-one drawing fewer is stretched, which is the blurriness this removes. Matching
-a fractional ratio exactly needs `wp_fractional_scale_v1`, which is a separate
-protocol and not done.
-
-It costs pixels squared — at 2x a frame quadruples, and with it the readback,
-the socket write, the IPC hop and `putImageData`. `ipc_ms` in particular is
-*unfixable* on Electron (every main→renderer path types its transfer list as
-`MessagePortMain[]`, so the bytes are structured-cloned, never transferred), so
-that term grows with the pixel count and nothing can be done about it short of
-CEF. Hence the escape hatch: `[output] max_scale = 1` in the config turns
-scaling off without a rebuild, and the default cap of 2 stops an unusually
-dense display from asking for more than the copy path can carry. Watch `rt_ms`
-against `max_scale` to decide which side of that trade you want; it is free on
-the CEF external-texture path, which is the argument for doing that next.
+- **Chrome shortcuts do not reach the chrome while a window holds the keyboard.**
+  The fix is for the compositor to intercept global shortcuts rather than depend
+  on who has focus; it needs one protocol message.
+- **A client that draws its own cursor into a surface gets a plain arrow.**
+  Compositing that surface is the same work as compositing any other.
+- **The chrome is not told when a click focuses a window**, so a chrome that
+  displays focus can go stale.
+- **One output.** The scene has a single `surface_to_output`; the desktop's size
+  follows Domicile's window, which is all a nested compositor can do.
+- **Fractional scaling.** Non-integer ratios round *up* to the next integer scale:
+  a client drawing more pixels than the display has is downscaled and stays sharp,
+  while one drawing fewer is stretched. Matching a ratio exactly needs
+  `wp_fractional_scale_v1`, which is a separate protocol and not done.
+- **The full transform chain.** An *ancestor* element that rotates or skews is
+  missed on the copy path — `getBoundingClientRect` gives only an axis-aligned
+  box. The native path does not have this problem, because the matrix the chrome
+  reports is the one the compositor draws through.
+- **Hot-swapping the chrome package** needs the daemon to own that process, which
+  it does not; the config watcher half is wired.
 
 ---
 
 ## Collaboration notes
+
 The user "vibecodes": proceed autonomously, follow your own recommendations,
-don't stop to ask unless genuinely blocked on their taste/hardware. Keep strict
-TDD. Commit freely. (Also captured in the memory files loaded via `MEMORY.md`.)
+don't stop to ask unless genuinely blocked on their taste or hardware. Keep
+strict TDD. Commit freely, and open a PR for every change.
+
+A standing lesson from this project: **the checks that can run here cannot see a
+screen.** Orientation, presentation and anything about what a display does with a
+buffer are settled on the user's machine, and the honest move is to say which
+question a run would answer rather than guess between two and spend a round trip
+per guess.
