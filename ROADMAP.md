@@ -94,6 +94,13 @@ nix develop .#full -c ./scripts/run-prototype.sh
   as-is the desktop is upside down. Reading a buffer back, all a machine with
   no display can do, is consistent either way, so the offscreen pixel tests
   pass under both. Settled on hardware; do not "simplify" it back to `Normal`.
+- **One seat has one pointer focus, so only one thing may drive it.** The
+  copy path has the chrome route the pointer and forward what belongs to a
+  client; where Domicile presents, it routes from the window's own events with
+  `Scene::route_pointer` instead. Running both means whichever moved the focus
+  last gets the next click — a window that tracks the mouse perfectly and never
+  receives a press, so it cannot be focused by clicking it. The chrome's
+  forwarded pointer is ignored while presenting for exactly this reason.
 - **Never leave the keyboard focused on nothing.** A chrome that focuses a
   window which has already closed — the race it loses whenever a window goes
   away while its own focus message is in flight — used to hand the keyboard to

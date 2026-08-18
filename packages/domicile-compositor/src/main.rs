@@ -102,7 +102,7 @@ use domicile_config::Config;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
-use domicile_scene::{Point as ScenePoint, Transform as SceneTransform};
+use domicile_scene::{Point as ScenePoint, PointerTarget, Transform as SceneTransform};
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{Color32F, Frame as _, ImportMem as _, Renderer as _};
 use smithay::backend::winit::WinitGraphicsBackend;
@@ -1190,15 +1190,17 @@ impl DomicileCompositor {
                 let position = event.position_transformed(window.into());
                 let logical = window_to_logical(self.output_logical, (window.0, window.1))
                     .apply(ScenePoint::new(position.x, position.y));
+                let (focus, location) = self.pointer_target(logical, &surface);
                 let pointer = self.seat.get_pointer().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 pointer.motion(
                     self,
-                    // Anchored at the origin, so the location below is already
-                    // surface-local — the chrome's surface is the desktop.
-                    Some((surface, (0.0, 0.0).into())),
+                    // Anchored at the origin, so the location is already
+                    // surface-local: for the chrome that is the desktop's own
+                    // coordinate, and for an app the scene has converted it.
+                    Some((focus, (0.0, 0.0).into())),
                     &MotionEvent {
-                        location: (logical.x, logical.y).into(),
+                        location: (location.x, location.y).into(),
                         serial,
                         time,
                     },
@@ -1206,6 +1208,12 @@ impl DomicileCompositor {
                 pointer.frame(self);
             }
             InputEvent::PointerButton { event } => {
+                // Pressing on a window is what focuses it. The pointer's own
+                // focus was settled by the motion that got here, so the surface
+                // under the pointer is the one the seat is already pointing at.
+                if event.state() == ButtonState::Pressed {
+                    self.focus_pointed_at();
+                }
                 let pointer = self.seat.get_pointer().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 pointer.button(
@@ -1248,6 +1256,68 @@ impl DomicileCompositor {
         }
     }
 
+    /// Where a pointer at `logical` on the desktop belongs, and the coordinate
+    /// to deliver it in.
+    ///
+    /// The compositor does this itself rather than handing every motion to the
+    /// chrome and taking its word for where it landed. One seat has one pointer
+    /// focus, and two things driving it means the one that moved it last gets
+    /// the next click — which is how a window could stop being clickable while
+    /// still tracking the mouse. The scene already knows where the windows are;
+    /// `route_pointer` is the same lookup the chrome would have done.
+    fn pointer_target(&self, logical: ScenePoint, chrome: &WlSurface) -> (WlSurface, ScenePoint) {
+        let target = self.hub.host.lock().unwrap().scene().route_pointer(logical);
+        match target {
+            PointerTarget::App { app_id, local } => match self.surface_for(&app_id) {
+                Some(surface) => (surface, local),
+                // Placed but not mapped: the chrome laid out an element for a
+                // window that has not shown itself yet.
+                None => (chrome.clone(), logical),
+            },
+            PointerTarget::Chrome { screen } => (chrome.clone(), screen),
+        }
+    }
+
+    /// Give the keyboard to whatever the pointer is over.
+    fn focus_pointed_at(&mut self) {
+        let Some(surface) = self
+            .seat
+            .get_pointer()
+            .and_then(|pointer| pointer.current_focus())
+        else {
+            return;
+        };
+        let keyboard = self.seat.get_keyboard().unwrap();
+        if keyboard.current_focus().as_ref() == Some(&surface) {
+            return;
+        }
+        let app_id = self
+            .toplevels
+            .iter()
+            .find(|(_, toplevel)| toplevel.wl_surface() == &surface)
+            .map(|(app_id, _)| app_id.clone());
+        match &app_id {
+            Some(app_id) => {
+                info!(%app_id, "clicked -> the window has the keyboard");
+                // Through the brain rather than around it, so the click also
+                // raises the window — the same thing the chrome's own focus
+                // message does, because it is the same message.
+                let mut host = self.hub.host.lock().unwrap();
+                let mut ready = true;
+                let _ = apply_chrome_message(
+                    &mut host,
+                    &mut ready,
+                    ChromeMessage::FocusApp {
+                        app_id: app_id.clone(),
+                    },
+                );
+            }
+            None => info!("clicked -> the chrome has the keyboard"),
+        }
+        let serial = SERIAL_COUNTER.next_serial();
+        keyboard.set_focus(self, Some(surface), serial);
+    }
+
     /// The window's size in device pixels, or the output's logical size where
     /// there is no window — which only happens headless, where nothing asks.
     fn window_size(&mut self) -> (i32, i32) {
@@ -1263,6 +1333,22 @@ impl DomicileCompositor {
 
     /// Inject a forwarded input event into the appropriate client via the seat.
     fn handle_client_request(&mut self, event: ClientRequest) {
+        // Where Domicile presents, it routes the pointer itself from the
+        // window's own events — see `pointer_target`. The chrome's forwarded
+        // pointer is the copy path's mechanism, and a second thing driving one
+        // focus is how a window ends up tracking the mouse but never receiving
+        // the click: whichever moved the focus last got it.
+        if self.gpu.as_ref().is_some_and(Gpu::presenting)
+            && matches!(
+                event,
+                ClientRequest::PointerMotion { .. }
+                    | ClientRequest::PointerLeave
+                    | ClientRequest::PointerButton { .. }
+                    | ClientRequest::PointerAxis { .. }
+            )
+        {
+            return;
+        }
         match event {
             ClientRequest::PointerMotion { app_id, x, y } => {
                 let Some(surface) = self.surface_for(&app_id) else {
