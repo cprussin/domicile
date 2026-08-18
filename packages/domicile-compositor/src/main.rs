@@ -213,6 +213,9 @@ struct ChromeHub {
     /// The name of *our* Wayland socket, which is what a client we spawn must
     /// connect to.
     wayland_display: OsString,
+    /// Whether Domicile has a window of its own, which decides who is believed
+    /// about the output's density.
+    presenting: bool,
 }
 
 impl ChromeHub {
@@ -220,6 +223,7 @@ impl ChromeHub {
         request_tx: Sender<ClientRequest>,
         max_scale: u32,
         wayland_display: OsString,
+        presenting: bool,
     ) -> (Arc<Self>, OutboundReceiver) {
         let (outbound, outbound_rx) = outbound();
         let hub = Arc::new(ChromeHub {
@@ -230,6 +234,7 @@ impl ChromeHub {
             timings: Mutex::new(FrameTimings::default()),
             max_scale,
             wayland_display,
+            presenting,
         });
         (hub, outbound_rx)
     }
@@ -527,9 +532,14 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
             // scale, which is Wayland state rather than anything the brain
             // models — the scene is described in logical units either way.
             Ok(ChromeMessage::SetDevicePixelRatio { ratio }) => {
-                hub.send_request(ClientRequest::SetOutputScale {
-                    scale: output_scale(ratio, hub.max_scale),
-                });
+                // Ignored where the window knows better — see
+                // `set_output_scale`. The chrome would only be reporting back
+                // the density we gave it.
+                if !hub.presenting {
+                    hub.send_request(ClientRequest::SetOutputScale {
+                        scale: output_scale(ratio, hub.max_scale),
+                    });
+                }
                 Vec::new()
             }
             // A resize drives both the client's configure and the brain's model.
@@ -582,10 +592,6 @@ struct DomicileCompositor {
     shm_state: ShmState,
     seat_state: SeatState<DomicileCompositor>,
     seat: Seat<DomicileCompositor>,
-    /// The seat the chrome is focused on, carrying the window's own input.
-    /// Separate from `seat` so the two focuses do not fight — see where it is
-    /// created.
-    chrome_seat: Seat<DomicileCompositor>,
     /// Kept alive so the xdg-output manager global persists.
     #[allow(dead_code)]
     output_manager_state: OutputManagerState,
@@ -650,6 +656,8 @@ struct DomicileCompositor {
     /// What the chrome's last frame looked like, so the line describing it is
     /// printed when it changes rather than sixty times a second.
     chrome_frame_shape: Option<((f64, f64), bool, bool)>,
+    /// The highest output scale to advertise, whatever a display reports.
+    max_scale: u32,
     /// Set when the window is closed, which is the user closing the desktop.
     /// Read by the event loop, which is the only thing that can act on it.
     stop: Arc<AtomicBool>,
@@ -1002,7 +1010,53 @@ impl DomicileCompositor {
         }
     }
 
-    /// Give the chrome its seat's keyboard focus.
+    /// Take the density of the display Domicile's window is on as the output's.
+    ///
+    /// Without this the chrome renders at whatever scale it was first told —
+    /// one — and the host compositor stretches the result over a denser screen.
+    /// It does not look like the wrong scale, it looks like a blurry desktop.
+    fn adopt_window_scale(&mut self, scale_factor: f64) {
+        self.set_output_scale(output_scale(scale_factor, self.max_scale));
+    }
+
+    /// Advertise a new output scale, so clients redraw at the resolution the
+    /// screen actually has.
+    ///
+    /// Two things ask for this and they do not agree on who knows best. The
+    /// chrome reports its own density, which is the answer where Domicile has
+    /// no window of its own — but where it does, that density is a number
+    /// *we* gave the chrome, so believing it back would pin the scale at
+    /// whatever it started as. The window's is the one that comes from outside.
+    fn set_output_scale(&mut self, scale: i32) {
+        if self.output.current_scale().integer_scale() != scale {
+            info!(scale, "advertising output scale (clients redraw at it)");
+            // The mode is physical pixels, so it grows with the scale to
+            // hold the logical size still: a denser display is a sharper
+            // desktop, not a smaller one.
+            let mode = OutputMode {
+                size: (OUTPUT_LOGICAL_SIZE.0 * scale, OUTPUT_LOGICAL_SIZE.1 * scale).into(),
+                refresh: 60_000,
+            };
+            self.output
+                .change_current_state(Some(mode), None, Some(Scale::Integer(scale)), None);
+            self.output.set_preferred(mode);
+            // A client only redraws at the new scale once something
+            // asks it to, and its own size is unchanged — so re-send
+            // the configure it already has to prompt one.
+            for (_, toplevel) in &self.toplevels {
+                toplevel.send_configure();
+            }
+        }
+    }
+
+    /// Give the chrome the keyboard.
+    ///
+    /// There is one seat, and the chrome and the apps take turns on it: the
+    /// chrome holds the keyboard until it says a window has been focused, and
+    /// gets it back when it says one has not. A second seat for the chrome
+    /// would let both hold a focus at once, but a client does not have to bind
+    /// more than one — GTK asserts and Electron drops the connection outright —
+    /// so the desktop cannot depend on it.
     ///
     /// Called again when the window is focused as well as when the chrome maps,
     /// because a client that had not bound its keyboard by the time the first
@@ -1016,7 +1070,7 @@ impl DomicileCompositor {
         else {
             return;
         };
-        let keyboard = self.chrome_seat.get_keyboard().unwrap();
+        let keyboard = self.seat.get_keyboard().unwrap();
         if keyboard.current_focus().as_ref() == Some(&surface) {
             return;
         }
@@ -1057,7 +1111,7 @@ impl DomicileCompositor {
         if let Some(kind) = kind {
             if self.window_input_seen.insert(kind) {
                 let focused = self
-                    .chrome_seat
+                    .seat
                     .get_keyboard()
                     .and_then(|keyboard| keyboard.current_focus())
                     .is_some();
@@ -1076,7 +1130,7 @@ impl DomicileCompositor {
                 let position = event.position_transformed(window.into());
                 let logical = window_to_logical(OUTPUT_LOGICAL_SIZE, (window.0, window.1))
                     .apply(ScenePoint::new(position.x, position.y));
-                let pointer = self.chrome_seat.get_pointer().unwrap();
+                let pointer = self.seat.get_pointer().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 pointer.motion(
                     self,
@@ -1092,7 +1146,7 @@ impl DomicileCompositor {
                 pointer.frame(self);
             }
             InputEvent::PointerButton { event } => {
-                let pointer = self.chrome_seat.get_pointer().unwrap();
+                let pointer = self.seat.get_pointer().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 pointer.button(
                     self,
@@ -1115,12 +1169,12 @@ impl DomicileCompositor {
                         frame = frame.v120(axis, steps as i32);
                     }
                 }
-                let pointer = self.chrome_seat.get_pointer().unwrap();
+                let pointer = self.seat.get_pointer().unwrap();
                 pointer.axis(self, frame);
                 pointer.frame(self);
             }
             InputEvent::Keyboard { event } => {
-                let keyboard = self.chrome_seat.get_keyboard().unwrap();
+                let keyboard = self.seat.get_keyboard().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 // Already an X keycode: the winit backend applies the evdev +8
                 // itself, unlike the chrome, which sends evdev and has it added
@@ -1251,36 +1305,22 @@ impl DomicileCompositor {
                 });
             }
             ClientRequest::KeyboardFocus { app_id } => {
+                let surface = match app_id {
+                    Some(id) => self.surface_for(&id),
+                    // No window focused means the chrome itself has the
+                    // keyboard, which is what its own fields and shortcuts
+                    // need. Where the chrome is not our client there is
+                    // nothing to give it to, and this stays a defocus.
+                    None => self
+                        .chrome_toplevel
+                        .as_ref()
+                        .map(|toplevel| toplevel.wl_surface().clone()),
+                };
                 let keyboard = self.seat.get_keyboard().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
-                let surface = app_id.and_then(|id| self.surface_for(&id));
                 keyboard.set_focus(self, surface, serial);
             }
-            ClientRequest::SetOutputScale { scale } => {
-                if self.output.current_scale().integer_scale() != scale {
-                    info!(scale, "advertising output scale");
-                    // The mode is physical pixels, so it grows with the scale to
-                    // hold the logical size still: a denser display is a sharper
-                    // desktop, not a smaller one.
-                    let mode = OutputMode {
-                        size: (OUTPUT_LOGICAL_SIZE.0 * scale, OUTPUT_LOGICAL_SIZE.1 * scale).into(),
-                        refresh: 60_000,
-                    };
-                    self.output.change_current_state(
-                        Some(mode),
-                        None,
-                        Some(Scale::Integer(scale)),
-                        None,
-                    );
-                    self.output.set_preferred(mode);
-                    // A client only redraws at the new scale once something
-                    // asks it to, and its own size is unchanged — so re-send
-                    // the configure it already has to prompt one.
-                    for (_, toplevel) in &self.toplevels {
-                        toplevel.send_configure();
-                    }
-                }
-            }
+            ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
             ClientRequest::ConfigureApp {
                 app_id,
                 width,
@@ -1602,7 +1642,7 @@ impl XdgShellHandler for DomicileCompositor {
             info!("the chrome's toplevel went away");
             self.chrome_toplevel = None;
             self.chrome_texture = None;
-            let keyboard = self.chrome_seat.get_keyboard().unwrap();
+            let keyboard = self.seat.get_keyboard().unwrap();
             let serial = SERIAL_COUNTER.next_serial();
             keyboard.set_focus(self, None, serial);
             return;
@@ -1661,22 +1701,18 @@ delegate_xdg_shell!(DomicileCompositor);
 
 /// Which way up the window is drawn.
 ///
-/// A bring-up switch, and it exists because nothing here can answer the
-/// question it settles. Smithay's projection sends output-y=0 to NDC -1, which
-/// is GL's *bottom*; whether that reaches the screen as the top depends on what
-/// the window system does with the buffer, and reading a buffer back — the only
-/// thing a machine with no display can do — cannot tell you. The offscreen
-/// tests are consistent either way, so this is a question for a screen.
+/// Over. Smithay's projection sends output-y=0 to NDC -1, which is GL's
+/// *bottom*, and on a window that is the bottom of what the user sees — so
+/// drawn as-is the whole desktop is upside down. Settled on a display, because
+/// nothing without one can: reading a buffer back is consistent either way, and
+/// the offscreen tests pass under both.
 ///
-/// `DOMICILE_OUTPUT_TRANSFORM=flipped180` turns the output over. If that is
-/// what a display wants, it stops being a switch and becomes the default.
+/// `Flipped180` is a reflection in the horizontal axis, not a rotation, so the
+/// left of the desktop stays on the left. Pointer coordinates need no matching
+/// change: winit's y grows downward and so does the output's, which is what
+/// makes the two agree once the picture is the right way up.
 fn output_transform() -> Transform {
-    // Read per frame rather than once: it costs nothing next to a draw, and it
-    // means the answer can be changed without a rebuild.
-    match std::env::var("DOMICILE_OUTPUT_TRANSFORM").as_deref() {
-        Ok("flipped180") => Transform::Flipped180,
-        _ => Transform::Normal,
-    }
+    Transform::Flipped180
 }
 
 /// The display name the chrome connects on, given ours.
@@ -1971,28 +2007,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     seat.add_pointer();
 
-    // A second seat, which only the chrome is ever focused on.
-    //
-    // One seat cannot serve both: an app holds its focus (that is how a
-    // forwarded keystroke reaches a terminal) while the chrome needs the
-    // window's own input at the same time, and they would take the focus from
-    // each other on every event. Two seats give each a focus that stays put —
-    // the apps' follows what the chrome asks for, the chrome's is the chrome —
-    // and no client ever hears from the one it is not focused on.
-    let mut chrome_seat: Seat<DomicileCompositor> = seat_state.new_wl_seat(&dh, "domicile-chrome");
-    chrome_seat.add_keyboard(
-        XkbConfig {
-            rules: &keyboard.xkb_rules,
-            model: &keyboard.xkb_model,
-            layout: &keyboard.xkb_layout,
-            variant: &keyboard.xkb_variant,
-            options: Some(keyboard.xkb_options_string()),
-        },
-        200,
-        25,
-    )?;
-    chrome_seat.add_pointer();
-
     // Advertise one virtual output. Many clients (e.g. weston-terminal) wait for
     // a wl_output before they will map a toplevel.
     let output_manager_state = OutputManagerState::new_with_xdg_output::<DomicileCompositor>(&dh);
@@ -2047,8 +2061,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (request_tx, request_rx) = channel::<ClientRequest>();
 
     // Shared brain, driven by both the Wayland side and chrome connections.
-    let (hub, outbound_rx) =
-        ChromeHub::new(request_tx, config.output.max_scale, socket_name.clone());
+    let (hub, outbound_rx) = ChromeHub::new(
+        request_tx,
+        config.output.max_scale,
+        socket_name.clone(),
+        presenting(),
+    );
     {
         let hub = hub.clone();
         thread::spawn(move || serve_chrome(hub, chrome_socket));
@@ -2107,7 +2125,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         xdg_shell_state: XdgShellState::new::<DomicileCompositor>(&dh),
         shm_state: ShmState::new::<DomicileCompositor>(&dh, vec![]),
         seat_state,
-        chrome_seat,
         seat,
         output_manager_state,
         output,
@@ -2130,6 +2147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
+        max_scale: config.output.max_scale,
         window_input_seen: HashSet::new(),
         stop: Arc::new(AtomicBool::new(false)),
     };
@@ -2173,13 +2191,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // a chrome asked us to do. Without this the window is a picture — it draws
     // and it never hears anything, which looks exactly like a compositor that
     // has frozen.
+    // The window's density before anything is drawn, so the chrome is told the
+    // truth on its very first frame rather than after the first resize.
+    if let Some(scale_factor) = data
+        .state
+        .gpu
+        .as_mut()
+        .and_then(Gpu::window)
+        .map(|backend| backend.scale_factor())
+    {
+        data.state.adopt_window_scale(scale_factor);
+    }
+
     if let Some(events) = window_events {
         handle.insert_source(events, |event, _, data: &mut CalloopData| match event {
             WinitEvent::Input(input) => data.state.handle_window_input(input),
-            // The window changed size, so everything drawn in it is the wrong
-            // size until the next frame. Nothing else is going to ask for one:
-            // a resize is not a client commit.
-            WinitEvent::Resized { .. } | WinitEvent::Redraw => data.state.present(),
+            // The window changed size or density, so everything drawn in it
+            // is wrong until the next frame — and nothing else is going to ask
+            // for one, because a resize is not a client commit.
+            WinitEvent::Resized { scale_factor, .. } => {
+                data.state.adopt_window_scale(scale_factor);
+                data.state.present();
+            }
+            WinitEvent::Redraw => data.state.present(),
             WinitEvent::CloseRequested => data.state.stop.store(true, Ordering::SeqCst),
             // A window that has just been given the keyboard: assert the
             // chrome's focus, in case it bound its keyboard after mapping.
