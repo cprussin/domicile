@@ -152,6 +152,9 @@ export const BrowserWindow = ({ active, onNavigate, src }: Props) => {
 };
 
 const browserStyles = flex({
+  // Its own, because `windowStyles` paints none: this window draws a page
+  // rather than standing in for a client's surface, so it wants a ground.
+  backgroundColor: "background",
   direction: "column",
 });
 

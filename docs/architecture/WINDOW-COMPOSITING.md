@@ -159,12 +159,24 @@ while the engine was the only thing presenting.
 Phase 1 — prove one window composites at all:
 
 - [x] scene: `Portal::surface_to_output` and `Scene::draw_order` — the drawing half of `hit_test`, tested against it so the two cannot drift
-- [ ] compositor: the CSS matrix as the renderer's — `cgmath::Matrix3::new` takes its arguments column by column, so the six values do not go in in the order they are written
+- [x] compositor: the CSS matrix as the renderer's — `cgmath::Matrix3::new` takes its arguments column by column, so the six values do not go in in the order they are written
 - [x] **probe first**: does a transparent Electron `BrowserWindow` commit a buffer with real alpha when it is a client of Domicile? Yes — `scripts/probe-transparency.sh`
 - [x] compositor: a `winit` output behind `--present`, one renderer shared with the import path (`scripts/run-native.sh`)
-- [ ] compositor: draw `draw_order` through `surface_to_output`, then the page's surface over it
+- [x] compositor: draw `draw_order` through `surface_to_output`, then the page's surface over it
 - [ ] measure: `rt_ms` for the native path against the copy path, same client, same size
 - [ ] decide on the number — parity means `readback_ms` and `ipc_ms` *gone*, not smaller
+
+**How the chrome is told from an app.** It arrives on a Wayland socket of its
+own, `<display>-chrome`, and `ClientState::is_chrome` follows from which socket
+a client connected on. Not an `xdg_toplevel` app id: that is set by the client,
+whenever the client feels like sending it, which is not necessarily before the
+toplevel it names. A chrome mistaken for an app would be announced to itself and
+mount an `<app>` element for itself, inside itself.
+
+The chrome's toplevel is therefore kept out of `toplevels` entirely — never
+announced, never placed by a portal, drawn last over everything rather than in
+`draw_order`. `scripts/e2e-chrome-layer.sh` runs one client on each socket and
+checks that exactly one of them becomes a window.
 
 Phase 2 — the effects that make an app a CSS element:
 
@@ -185,7 +197,10 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
 - **How does the chrome declare "this window is native"?** Recommend a computed
   style probe in `<domicile-app>` rather than an author-set attribute — the
   fallback should be automatic, not something a shell author must remember.
-- **Whether the compositor can present its own output at all.** Everything
-  verified so far is about what *arrives*; nothing has yet drawn a pixel. That
-  is Phase 1's remaining work rather than an unknown, but it is the first thing
-  that has to survive contact with a display.
+- **What the number actually is.** Everything through the draw is in place and
+  tested, but the only measurement so far is of the copy path. Phase 1 is not
+  done until `rt_ms` says what this costs against it.
+- **The output is one fixed logical size.** `OUTPUT_LOGICAL_SIZE` is what the
+  chrome is configured to and what the scene is drawn through; the window is
+  scaled to it rather than the other way round. A resizable output means
+  reconfiguring the chrome and re-advertising the mode, which nothing needs yet.

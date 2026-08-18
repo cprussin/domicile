@@ -30,6 +30,7 @@ use std::time::{Duration, Instant};
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
+use smithay::backend::allocator::Fourcc;
 use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState};
 use smithay::input::{
     keyboard::{FilterResult, Keycode, XkbConfig},
@@ -47,7 +48,7 @@ use smithay::reexports::{
     wayland_server::{
         backend::{ClientData, ClientId, DisconnectReason},
         protocol::{wl_buffer, wl_seat, wl_shm, wl_surface::WlSurface},
-        Client, Display, DisplayHandle,
+        Client, Display, DisplayHandle, Resource as _,
     },
 };
 use smithay::utils::{Rectangle, Serial, Transform, SERIAL_COUNTER};
@@ -84,7 +85,7 @@ mod outbound;
 mod scale;
 mod timing_window;
 
-use crate::compose::{draw_layers, Layer};
+use crate::compose::{draw_layers, logical_to_window, Layer};
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
@@ -95,8 +96,9 @@ use domicile_config::Config;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
+use domicile_scene::Transform as SceneTransform;
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
-use smithay::backend::renderer::{Color32F, Frame as _, Renderer as _};
+use smithay::backend::renderer::{Color32F, Frame as _, ImportMem as _, Renderer as _};
 use smithay::backend::winit::WinitGraphicsBackend;
 
 /// The renderer client buffers are imported on, and the policy that chose it.
@@ -625,12 +627,45 @@ struct DomicileCompositor {
     /// Only the oldest is kept, for the reason the chrome keeps the oldest: a
     /// burst answered by one frame is felt as how long its first key waited.
     pending_key: Option<Instant>,
+    /// The chrome's own toplevel, when it is a client of ours. Kept apart from
+    /// `toplevels` because it is not an app: it is never announced, never
+    /// placed by a portal, and is drawn over everything rather than in
+    /// `draw_order`.
+    chrome_toplevel: Option<ToplevelSurface>,
+    /// The chrome's latest surface as a texture. Transparent wherever an
+    /// `<app>` element is, which is what lets the app below show through.
+    chrome_texture: Option<GlesTexture>,
 }
 
 /// Per-client state required by the compositor global.
 #[derive(Default)]
 struct ClientState {
     compositor_state: CompositorClientState,
+    /// Whether this client arrived on the chrome's own socket, and so is the
+    /// engine drawing the desktop rather than an app running on it.
+    ///
+    /// The socket is the discriminator because it is the one thing we control
+    /// and a client cannot spoof: an `xdg_toplevel` app id is set by the
+    /// client, and arrives whenever the client feels like sending it — which
+    /// is not necessarily before the toplevel it names.
+    is_chrome: bool,
+}
+
+impl ClientState {
+    fn chrome() -> Self {
+        ClientState {
+            is_chrome: true,
+            ..ClientState::default()
+        }
+    }
+}
+
+/// Whether `surface` belongs to the chrome rather than to an app.
+fn is_chrome_surface(surface: &WlSurface) -> bool {
+    surface
+        .client()
+        .and_then(|client: Client| client.get_data::<ClientState>().map(|data| data.is_chrome))
+        .unwrap_or(false)
 }
 
 impl ClientData for ClientState {
@@ -666,6 +701,67 @@ impl DomicileCompositor {
             None
         } else {
             host.app_resized(app_id, size)
+        }
+    }
+
+    /// Who committed `surface`, and the toplevel to configure — the two roles
+    /// share every step of a commit except what becomes of the buffer.
+    fn committer(&self, surface: &WlSurface) -> Option<(Committer, ToplevelSurface)> {
+        if let Some(chrome) = &self.chrome_toplevel {
+            if chrome.wl_surface() == surface {
+                return Some((Committer::Chrome, chrome.clone()));
+            }
+        }
+        self.toplevels
+            .iter()
+            .find(|(_, toplevel)| toplevel.wl_surface() == surface)
+            .map(|(app_id, toplevel)| (Committer::App(app_id.clone()), toplevel.clone()))
+    }
+
+    /// Keep the chrome's latest frame as the texture drawn over the apps.
+    ///
+    /// Unthrottled, unlike an app's: this is the desktop, and a frame of it
+    /// dropped is the whole picture going stale rather than one window's.
+    fn publish_chrome_frame(&mut self, buffer: &wl_buffer::WlBuffer) {
+        let Some(committed) = committed_buffer(buffer) else {
+            return;
+        };
+        self.chrome_texture = self.texture_from(committed);
+        self.present();
+    }
+
+    /// A committed buffer as a texture to draw, whichever kind it is.
+    ///
+    /// A dmabuf costs nothing — it *is* the client's buffer. Shared memory
+    /// costs an upload, which is still the cheap half of what the copy path
+    /// does, and is what a software-rendering client commits.
+    fn texture_from(&mut self, committed: CommittedBuffer) -> Option<GlesTexture> {
+        let gpu = self.gpu.as_mut()?;
+        match committed {
+            CommittedBuffer::Gpu(dmabuf) => Some(
+                DmabufImporter::import(gpu.renderer(), &dmabuf)
+                    .expect("a dmabuf the importer accepted imports"),
+            ),
+            CommittedBuffer::Pixels {
+                width,
+                height,
+                rgba,
+            } => {
+                let size = (
+                    i32::try_from(width).unwrap_or(i32::MAX),
+                    i32::try_from(height).unwrap_or(i32::MAX),
+                );
+                match gpu
+                    .renderer()
+                    .import_memory(&rgba, Fourcc::Abgr8888, size.into(), false)
+                {
+                    Ok(texture) => Some(texture),
+                    Err(err) => {
+                        tracing::warn!(%err, "a shm buffer would not upload");
+                        None
+                    }
+                }
+            }
         }
     }
 
@@ -753,13 +849,20 @@ impl DomicileCompositor {
         rgba
     }
 
-    /// Draw every placed app into the window, bottom to top.
+    /// Draw the desktop into the window: every placed app bottom to top, then
+    /// the chrome over all of them.
     ///
-    /// The geometry is the scene's: `draw_order` gives the stacking the chrome
-    /// asked for and `hit_test` resolves, and `surface_to_output` places each
-    /// surface exactly where a click on it would land. An app with no texture
-    /// yet is skipped rather than drawn empty — it has been announced but has
-    /// not committed.
+    /// The apps' geometry is the scene's — `draw_order` gives the stacking the
+    /// chrome asked for and `hit_test` resolves, and `surface_to_output` places
+    /// each surface exactly where a click on it would land. An app with no
+    /// texture yet is skipped rather than drawn empty: it has been announced
+    /// but has not committed.
+    ///
+    /// The chrome goes last and covers the output, and blending is what makes
+    /// that work rather than hide everything: it is transparent wherever an
+    /// `<app>` element is, so the app below shows through the hole, and opaque
+    /// wherever it has drawn a panel. Chrome *below* an app — a wallpaper —
+    /// would need a second engine surface, which nothing asks for yet.
     fn present(&mut self) {
         let Some(gpu) = self.gpu.as_mut() else {
             return;
@@ -768,7 +871,10 @@ impl DomicileCompositor {
             return;
         };
         let size = backend.window_size();
-        let layers: Vec<_> = {
+        // The scene is in the chrome's logical units and the window is in
+        // device pixels, and on a scaled display those are not the same number.
+        let to_window = logical_to_window(OUTPUT_LOGICAL_SIZE, (size.w, size.h));
+        let placements: Vec<_> = {
             let host = self.hub.host.lock().unwrap();
             host.scene()
                 .draw_order()
@@ -776,16 +882,28 @@ impl DomicileCompositor {
                 .map(|portal| (portal.app_id.clone(), portal.surface_to_output()))
                 .collect()
         };
-        let layers: Vec<_> = layers
+        let mut layers: Vec<_> = placements
             .iter()
             .filter_map(|(app_id, surface_to_output)| {
                 Some(Layer {
                     alpha: 1.0,
-                    surface_to_output: *surface_to_output,
+                    surface_to_output: surface_to_output.then(to_window),
                     texture: self.textures.get(app_id)?,
                 })
             })
             .collect();
+        if let Some(texture) = self.chrome_texture.as_ref() {
+            layers.push(Layer {
+                alpha: 1.0,
+                // The whole output, because the chrome is the desktop.
+                surface_to_output: SceneTransform::scale(
+                    f64::from(OUTPUT_LOGICAL_SIZE.0),
+                    f64::from(OUTPUT_LOGICAL_SIZE.1),
+                )
+                .then(to_window),
+                texture,
+            });
+        }
 
         let Some(backend) = self.gpu.as_mut().and_then(Gpu::window) else {
             return;
@@ -976,6 +1094,15 @@ impl DomicileCompositor {
 
 /// What a client just attached: pixels we can already read (`wl_shm`), or a
 /// GPU buffer that has to go through the renderer first (`zwp_linux_dmabuf`).
+/// Which of the two kinds of client committed a buffer.
+#[derive(Debug)]
+enum Committer {
+    /// A window on the desktop, named by the id the host gave it.
+    App(String),
+    /// The engine drawing the desktop itself.
+    Chrome,
+}
+
 enum CommittedBuffer {
     Pixels {
         width: u32,
@@ -1006,12 +1133,7 @@ impl CompositorHandler for DomicileCompositor {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
-        let Some((app_id, toplevel)) = self
-            .toplevels
-            .iter()
-            .find(|(_, t)| t.wl_surface() == surface)
-            .cloned()
-        else {
+        let Some((committer, toplevel)) = self.committer(surface) else {
             return;
         };
 
@@ -1071,13 +1193,16 @@ impl CompositorHandler for DomicileCompositor {
                     timings.response.record(started.duration_since(keyed));
                 }
             }
-            self.publish_frame(&app_id, &buffer, buffer_scale);
+            match &committer {
+                Committer::App(app_id) => self.publish_frame(app_id, &buffer, buffer_scale),
+                Committer::Chrome => self.publish_chrome_frame(&buffer),
+            }
             // The client may redraw into this buffer the instant it is
             // released, so the release comes after the pixels are out of it —
             // and it happens even for a frame the throttle dropped, or a
             // single-buffered client never draws again.
             buffer.release();
-            tracing::debug!(%app_id, "buffer released");
+            tracing::debug!(?committer, "buffer released");
             let done = Instant::now();
             self.hub
                 .timings
@@ -1184,6 +1309,22 @@ impl XdgShellHandler for DomicileCompositor {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
+        // The chrome's own window is not a window *on* the desktop, so none of
+        // the below applies to it: announcing it would have the chrome mount an
+        // <app> element for itself, inside itself.
+        if is_chrome_surface(surface.wl_surface()) {
+            info!("the chrome mapped its toplevel -> compositing it over the apps");
+            self.output.enter(surface.wl_surface());
+            // It covers the desktop, because it *is* the desktop. A size it did
+            // not ask for is exactly what a compositor gives a fullscreen
+            // window, and the portals it reports back are in these units.
+            surface.with_pending_state(|state| {
+                state.size = Some(OUTPUT_LOGICAL_SIZE.into());
+            });
+            self.chrome_toplevel = Some(surface);
+            return;
+        }
+
         // A client mapped a window. Register it with the shared brain (which
         // assigns an app id) and announce it to every connected chrome so it can
         // mount an <app> element. Title/size arrive on later commits.
@@ -1205,6 +1346,16 @@ impl XdgShellHandler for DomicileCompositor {
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
+        if self
+            .chrome_toplevel
+            .as_ref()
+            .is_some_and(|chrome| chrome.wl_surface() == surface.wl_surface())
+        {
+            info!("the chrome's toplevel went away");
+            self.chrome_toplevel = None;
+            self.chrome_texture = None;
+            return;
+        }
         if let Some(pos) = self
             .toplevels
             .iter()
@@ -1256,6 +1407,14 @@ impl XdgShellHandler for DomicileCompositor {
 delegate_xdg_shell!(DomicileCompositor);
 
 // ---- boot -----------------------------------------------------------------
+
+/// The display name the chrome connects on, given ours.
+///
+/// A separate socket rather than a flag, so that "this client is the chrome" is
+/// something the compositor knows rather than something a client claims.
+fn chrome_display(socket_name: &OsStr) -> String {
+    format!("{}-chrome", socket_name.to_string_lossy())
+}
 
 /// Spawn a client process onto Domicile's display.
 ///
@@ -1573,9 +1732,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // into the event loop happens later; binding is what reserves the name.
     let source = ListeningSocketSource::new_auto()?;
     let socket_name = source.socket_name().to_os_string();
+    // A second socket, for the chrome alone. Which socket a client arrived on
+    // is how the compositor knows the engine drawing the desktop from an app
+    // running on it — see `ClientState::is_chrome`. Naming it after the first
+    // means one lookup gives both.
+    let chrome_socket_name = chrome_display(&socket_name);
+    let chrome_source = ListeningSocketSource::with_name(&chrome_socket_name)?;
+    // One line each, and each naming only its own display: a script reading
+    // these back has to be able to tell them apart, and two values on one line
+    // are two values a pattern for either can match.
     info!(
-        ?socket_name,
-        "domicile-compositor: Wayland server up (WAYLAND_DISPLAY)"
+        display = ?socket_name,
+        "domicile-compositor: apps connect here (WAYLAND_DISPLAY)"
+    );
+    info!(
+        display = ?chrome_socket_name,
+        "domicile-compositor: the chrome connects here (WAYLAND_DISPLAY)"
     );
 
     // Forward input from the chrome onto the Wayland thread via a channel.
@@ -1659,17 +1831,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         last_frame: HashMap::new(),
         last_commit: None,
         pending_key: None,
+        chrome_toplevel: None,
+        chrome_texture: None,
     };
 
     let mut data = CalloopData { display, state };
 
-    // Start accepting on the socket bound above.
+    // Start accepting on the sockets bound above.
     let handle = event_loop.handle();
     handle.insert_source(source, move |stream, _, data: &mut CalloopData| {
         data.display
             .handle()
             .insert_client(stream, Arc::new(ClientState::default()))
             .expect("failed to insert client");
+    })?;
+    handle.insert_source(chrome_source, move |stream, _, data: &mut CalloopData| {
+        data.display
+            .handle()
+            .insert_client(stream, Arc::new(ClientState::chrome()))
+            .expect("failed to insert the chrome");
     })?;
 
     // Drive wayland-server dispatch from the event loop, flushing replies after.

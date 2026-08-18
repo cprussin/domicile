@@ -239,6 +239,18 @@ describe("<domicile-app>", () => {
     expect(element.querySelector("canvas")).not.toBeNull();
   });
 
+  it("drops the placeholder as soon as the client has a size", () => {
+    // Where the compositor draws the client's surface itself no pixels ever
+    // reach the element, so a placeholder that waited for them would stay up —
+    // and be drawn by the page *over* the window it is standing in for.
+    const element = mountApp("term");
+    expect(element.classList.contains("has-surface")).toBe(false);
+
+    element.setSurfaceSize(800, 600);
+
+    expect(element.classList.contains("has-surface")).toBe(true);
+  });
+
   it("sizes the canvas backing store in device pixels", () => {
     // The whole point of scaling: the element stays the same size in CSS while
     // the canvas holds every pixel the client drew. A backing store sized in

@@ -43,6 +43,22 @@ pub fn draw_layers(frame: &mut GlesFrame<'_, '_>, layers: &[Layer<'_>]) -> Resul
     Ok(())
 }
 
+/// Maps the chrome's logical units onto the window's device pixels.
+///
+/// The scene is laid out in the units the chrome lays out in, and the window is
+/// device pixels; on a display that is not at scale 1 those are different
+/// numbers, and drawing the one as if it were the other puts every window in a
+/// corner of the output at a quarter size.
+pub fn logical_to_window(logical: (i32, i32), window: (i32, i32)) -> Transform {
+    // A zero-sized output is a window being closed or not yet mapped. Dividing
+    // by it would put every layer at infinity, which the renderer cannot draw
+    // and which reads as a blank frame rather than as the missing output it is.
+    Transform::scale(
+        f64::from(window.0) / f64::from(logical.0.max(1)),
+        f64::from(window.1) / f64::from(logical.1.max(1)),
+    )
+}
+
 /// A CSS affine transform as the renderer's matrix.
 ///
 /// `Matrix3::new` takes its arguments **column by column**, so the six CSS
@@ -63,7 +79,7 @@ mod tests {
     use cgmath::Vector3;
     use domicile_scene::{Point, Transform};
 
-    use super::matrix3;
+    use super::{logical_to_window, matrix3};
 
     /// Where the renderer's matrix sends a point, so it can be compared with
     /// where [`Transform::apply`] says it should go.
@@ -104,6 +120,28 @@ mod tests {
         // everywhere else: it inverts the sense of the turn.
         assert_agrees(Transform::rotate(std::f64::consts::FRAC_PI_3), 10.0, 0.0);
         assert_agrees(Transform::rotate(std::f64::consts::FRAC_PI_3), 0.0, 10.0);
+    }
+
+    #[test]
+    fn an_unscaled_window_draws_the_scene_as_it_is() {
+        assert_eq!(
+            logical_to_window((1280, 800), (1280, 800)),
+            Transform::identity(),
+        );
+    }
+
+    #[test]
+    fn a_doubled_window_draws_the_scene_twice_the_size() {
+        // The far corner of the desktop is the far corner of the window: a
+        // HiDPI output is a sharper desktop, not a desktop with a margin.
+        let mapped = logical_to_window((1280, 800), (2560, 1600)).apply(Point::new(1280.0, 800.0));
+        assert!((mapped.x - 2560.0).abs() < 1e-9 && (mapped.y - 1600.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn an_output_with_no_size_yet_does_not_send_everything_to_infinity() {
+        let mapped = logical_to_window((0, 0), (1280, 800)).apply(Point::new(1.0, 1.0));
+        assert!(mapped.x.is_finite() && mapped.y.is_finite());
     }
 
     #[test]
