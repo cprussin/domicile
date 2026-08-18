@@ -150,7 +150,22 @@
           # first because on NixOS that is the EGL vendor matching the running
           # kernel driver; the nixpkgs copies behind it cover a non-NixOS host.
           LD_LIBRARY_PATH =
-            "/run/opengl-driver/lib:${pkgs.lib.makeLibraryPath [ pkgs.libGL pkgs.mesa pkgs.libgbm ]}";
+            "/run/opengl-driver/lib:${pkgs.lib.makeLibraryPath [
+              pkgs.libGL
+              pkgs.mesa
+              pkgs.libgbm
+              # winit dlopens the Wayland and X11 client libraries to decide
+              # which display server it is talking to, so both have to be here
+              # even though only one gets used. Without them it reports
+              # `NoWaylandLib` and opens no window — the same shape of failure
+              # libEGL had, for the same reason.
+              pkgs.wayland
+              pkgs.libxkbcommon
+              pkgs.libx11
+              pkgs.libxcursor
+              pkgs.libxrandr
+              pkgs.libxi
+            ]}";
           shellHook = ''
             echo "domicile dev shell (full: +wayland +drm +gl)"
           '';

@@ -40,11 +40,32 @@ bun run turbo build:vite --filter @domicile/shell >/dev/null 2>&1 || {
 
 # The compositor's own Wayland socket is auto-named; it prints which. The
 # clients it spawns inherit it, which is how the terminal below finds us.
+COMPLOG="$(mktemp)"
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=info}" \
-  ./target/debug/domicile-compositor --present --chrome-socket "$CHROME_SOCK" &
+  ./target/debug/domicile-compositor --present --chrome-socket "$CHROME_SOCK" 2>&1 \
+  | tee "$COMPLOG" &
 COMP=$!
-trap 'kill -9 "$COMP" ${CHROME:-} 2>/dev/null' EXIT
+trap 'kill -9 "$COMP" ${CHROME:-} 2>/dev/null; rm -f "$COMPLOG"' EXIT
 for _ in $(seq 1 200); do [ -S "$CHROME_SOCK" ] && break; sleep 0.05; done
+
+# A compositor that died leaves its socket behind for a moment, so waiting for
+# the socket is not the same as it being up. Say what happened rather than
+# printing instructions for a window that was never opened.
+sleep 0.5
+if ! kill -0 "$COMP" 2>/dev/null; then
+  echo
+  echo "The compositor exited instead of opening a window; its error is above."
+  if grep -q "NoWaylandLib" "$COMPLOG"; then
+    echo "  winit could not dlopen the Wayland client library. It is dlopened"
+    echo "  rather than linked, so it must be on LD_LIBRARY_PATH and not merely"
+    echo "  in the shell — the same trap libEGL has. The .#full shell puts it"
+    echo "  there; a shell that does not is the likely cause."
+  elif grep -q "NoCompositor" "$COMPLOG"; then
+    echo "  winit found the library but no compositor at \$WAYLAND_DISPLAY."
+    echo "  This one nests inside your session, so it needs a real one running."
+  fi
+  exit 1
+fi
 
 # The chrome, still over the socket: it is the source of the geometry, not yet
 # something the window draws.

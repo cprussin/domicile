@@ -81,6 +81,13 @@ nix develop .#full -c ./scripts/run-prototype.sh
   a force-push re-runs the *old* revision — with a stale staged copy and its
   already-built binary, which reads exactly like "my fix did nothing". Pass
   `--refresh` whenever the branch is moving.
+- **winit `dlopen`s the Wayland and X11 client libraries**, exactly as libEGL
+  is, and for the same reason the `.#full` shell has to name them in
+  `LD_LIBRARY_PATH` rather than merely install them. Without them `--present`
+  reports `WaylandError(Connection(NoWaylandLib))` and opens no window, while
+  everything headless keeps working — so it looks like a compositing bug and is
+  a packaging one. `NoCompositor` is the different failure: the library loaded
+  and there was no session to nest in.
 - **libEGL is `dlopen`ed, not linked.** The dmabuf import loads `libEGL.so.1`
   at runtime, and `mkShell` only wires *build-time* linkage — a package in
   `packages` is not on the loader path. The `.#full` shell therefore sets
