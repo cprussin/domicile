@@ -181,10 +181,12 @@ reaches a terminal — while the chrome needs the window's input at the same tim
 and the two would take focus from each other on every event. With a seat each,
 both focuses stay put and no client hears from the one it is not focused on.
 
-What arrives at the chrome is raw: the compositor does no hit-testing of its
-own. The chrome knows where its `<app>` elements are and already forwards what
-belongs to a client back over the socket, exactly as it did when it was a window
-in someone else's session.
+The keyboard arrives at the chrome raw, and it forwards what belongs to a client
+back over the socket exactly as it did when it was a window in someone else's
+session. The **pointer** does not: the compositor routes it, through the same
+`Scene::route_pointer` the chrome would have used. One seat has one pointer
+focus, and two things driving it means whichever moved it last gets the next
+click — a window that tracks the mouse and never receives a press.
 
 The chrome's toplevel is therefore kept out of `toplevels` entirely — never
 announced, never placed by a portal, drawn last over everything rather than in
