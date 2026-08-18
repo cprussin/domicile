@@ -19,7 +19,15 @@ export NO_COLOR=1
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/target/debug/domicile-compositor"
-[ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p domicile-compositor"; exit 1; }
+# Built here rather than merely checked for. A binary that exists but predates
+# the source is the worst of both: every check runs, and every check reports on
+# code that is not the code in the tree. Incremental and near-free when there is
+# nothing to do.
+cargo build -p domicile-compositor >/dev/null 2>&1 || {
+  echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
+  exit 1
+}
+[ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
 
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-chrome-layer"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
@@ -28,12 +36,14 @@ SOCK="$XDG_RUNTIME_DIR/c.sock"
 LOG="$(mktemp)"
 
 wait_for() { local pat="$1" n="${2:-100}"; for _ in $(seq 1 "$n"); do grep -q "$pat" "$LOG" && return 0; sleep 0.1; done; return 1; }
+# Wait for *another* occurrence beyond the count already seen.
+wait_for_more() { local pat="$1" seen="$2"; for _ in $(seq 1 100); do [ "$(grep -c "$pat" "$LOG")" -gt "$seen" ] && return 0; sleep 0.1; done; return 1; }
 
 RUST_LOG="info" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 # `wait` after the kill so bash reaps the jobs quietly; without it it reports
 # "Killed" on stderr at exit, which reads like a failure in a passing run.
-trap 'kill -9 "$COMP" ${APP:-} ${CHROME:-} 2>/dev/null; wait 2>/dev/null; rm -f "$LOG"' EXIT
+trap 'kill -9 "$COMP" ${APP:-} ${CHROME:-} ${PROBE:-} 2>/dev/null; wait 2>/dev/null; rm -f "$LOG"' EXIT
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 
 APP_DISPLAY="$(sed -n '/apps connect here/s/.*display="\([^"]*\)".*/\1/p' "$LOG" | head -1)"
@@ -43,14 +53,9 @@ if [ -z "$APP_DISPLAY" ] || [ -z "$CHROME_DISPLAY" ]; then
 fi
 echo "apps on $APP_DISPLAY, the chrome on $CHROME_DISPLAY"
 
-WAYLAND_DISPLAY="$APP_DISPLAY" weston-flower >/dev/null 2>&1 &
-APP=$!
-if wait_for "toplevel mapped"; then
-  echo "OK: a client on the app socket became a window on the desktop"
-else
-  echo "FAIL: a client on the app socket never mapped"; cat "$LOG"; exit 1
-fi
-
+# The chrome first, because it is the desktop the rest appears on — and because
+# a window taking the keyboard only means something once there is a chrome to
+# take it from.
 WAYLAND_DISPLAY="$CHROME_DISPLAY" weston-flower >/dev/null 2>&1 &
 CHROME=$!
 if wait_for "the chrome mapped its toplevel"; then
@@ -82,6 +87,39 @@ if wait_for "the chrome committed a frame"; then
 else
   echo "FAIL: the chrome's frame was never described, so it never became a"
   echo "  texture — there would be nothing drawn over the apps."
+  cat "$LOG"; exit 1
+fi
+
+# Now a window, with something connected to focus it. The probe has to be
+# connected before the window appears: the host announces one to the chromes
+# that are connected at the time and does not replay it to a late arrival.
+DOMICILE_CHROME_SOCK="$SOCK" bun "$ROOT/packages/e2e-harness/src/focus-probe.ts" >/dev/null 2>&1 &
+PROBE=$!
+sleep 0.5
+
+WAYLAND_DISPLAY="$APP_DISPLAY" weston-flower >/dev/null 2>&1 &
+APP=$!
+if wait_for "toplevel mapped"; then
+  echo "OK: a client on the app socket became a window on the desktop"
+else
+  echo "FAIL: a client on the app socket never mapped"; cat "$LOG"; exit 1
+fi
+
+# A window taking the keyboard and then going away must not leave the desktop
+# deaf. The chrome usually asks for it back, but a client that crashed never
+# told it to, so the compositor has to give it back by itself.
+if ! wait_for "keyboard focus -> client"; then
+  echo "FAIL: the probe never focused the window, so this checks nothing"
+  cat "$LOG"; exit 1
+fi
+BEFORE="$(grep -c "the chrome has the window's keyboard" "$LOG")"
+kill -9 "$APP" 2>/dev/null
+if wait_for_more "the chrome has the window's keyboard" "$BEFORE"; then
+  echo "PASS: the keyboard came back to the chrome when the window went away"
+else
+  echo "FAIL: the window took the keyboard and kept it after it was gone, so"
+  echo "  nothing the user types reaches anything — a desktop that works until"
+  echo "  you close a window."
   cat "$LOG"; exit 1
 fi
 
