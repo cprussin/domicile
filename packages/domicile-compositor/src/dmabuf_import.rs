@@ -84,6 +84,20 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
 }
 
 impl DmabufImporter {
+    /// What to report for a renderer somebody else created — the window's.
+    ///
+    /// The node is looked up the same way, from the device EGL would have
+    /// chosen; it is the client-facing half of the story and does not depend
+    /// on who owns the context.
+    pub fn for_existing_renderer() -> Self {
+        let main_device = EGLDevice::enumerate()
+            .ok()
+            .and_then(|devices| preferred_device(devices, EGLDevice::is_software))
+            .and_then(|device| drm_node(&device));
+        tracing::info!(main_device, "dmabuf import device (presenting)");
+        DmabufImporter { main_device }
+    }
+
     /// The DRM node clients should allocate on, if this renderer has one.
     ///
     /// `zwp_linux_dmabuf_v1` feedback carries this, and it is the only way a
@@ -105,6 +119,18 @@ impl DmabufImporter {
     /// import notifier before the client can commit it.
     pub fn accepts(renderer: &mut GlesRenderer, dmabuf: &Dmabuf) -> bool {
         renderer.import_dmabuf(dmabuf, None).is_ok()
+    }
+
+    /// Import `dmabuf` as a texture to be *drawn*, not copied out.
+    ///
+    /// This is the path that makes a window cost nothing: the client's own
+    /// buffer becomes the texture the compositor samples, with no readback and
+    /// no trip through the chrome.
+    pub fn import(
+        renderer: &mut GlesRenderer,
+        dmabuf: &Dmabuf,
+    ) -> Result<GlesTexture, ImportError> {
+        Ok(renderer.import_dmabuf(dmabuf, None)?)
     }
 
     /// Import `dmabuf` and copy it out as tightly-packed, top-down RGBA — the

@@ -48,7 +48,7 @@ use smithay::reexports::{
         Client, Display, DisplayHandle,
     },
 };
-use smithay::utils::{Serial, Transform, SERIAL_COUNTER};
+use smithay::utils::{Rectangle, Serial, Transform, SERIAL_COUNTER};
 use smithay::wayland::{
     buffer::BufferHandler,
     compositor::{
@@ -75,12 +75,14 @@ use smithay::{
 };
 use tracing::info;
 
+mod compose;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod outbound;
 mod scale;
 mod timing_window;
 
+use crate::compose::{draw_layers, Layer};
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
@@ -91,20 +93,47 @@ use domicile_config::Config;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
-use smithay::backend::renderer::gles::GlesRenderer;
+use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
+use smithay::backend::renderer::{Color32F, Frame as _, Renderer as _};
+use smithay::backend::winit::WinitGraphicsBackend;
 
 /// The renderer client buffers are imported on, and the policy that chose it.
 ///
 /// One renderer serves both importing and — once the compositor presents —
 /// drawing, because a texture belongs to the EGL context that created it.
 struct Gpu {
-    renderer: GlesRenderer,
+    output: GpuOutput,
     importer: DmabufImporter,
+}
+
+/// Where the renderer lives, which is whoever is presenting.
+enum GpuOutput {
+    /// No output: the renderer is ours, and frames leave as `AppFrame` pixels.
+    Headless(Box<GlesRenderer>),
+    /// A window: the renderer belongs to it, and client surfaces are drawn
+    /// into it rather than copied out.
+    Window(Box<WinitGraphicsBackend<GlesRenderer>>),
 }
 
 impl Gpu {
     fn renderer(&mut self) -> &mut GlesRenderer {
-        &mut self.renderer
+        match &mut self.output {
+            GpuOutput::Headless(renderer) => renderer,
+            GpuOutput::Window(backend) => backend.renderer(),
+        }
+    }
+
+    /// The window, when there is one. Compositing needs the backend itself —
+    /// binding and submitting are its job, not the renderer's.
+    fn window(&mut self) -> Option<&mut WinitGraphicsBackend<GlesRenderer>> {
+        match &mut self.output {
+            GpuOutput::Headless(_) => None,
+            GpuOutput::Window(backend) => Some(backend),
+        }
+    }
+
+    fn presenting(&self) -> bool {
+        matches!(self.output, GpuOutput::Window(_))
     }
 }
 
@@ -566,6 +595,10 @@ struct DomicileCompositor {
     /// The buffers those descriptors point into, held so their plane fds stay
     /// open for as long as the descriptor names them.
     latest_dmabufs: HashMap<String, Dmabuf>,
+    /// Each app's latest surface as a texture, when presenting. Kept rather
+    /// than read back and dropped: this *is* the client's buffer, and drawing
+    /// it is what costs nothing.
+    textures: HashMap<String, GlesTexture>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
     /// The app the pointer is currently over, so a `set_cursor` request can be
@@ -658,9 +691,15 @@ impl DomicileCompositor {
                 CommittedBuffer::Pixels { rgba, .. } => rgba,
                 CommittedBuffer::Gpu(dmabuf) => self.import_gpu_frame(app_id, dmabuf),
             };
-            tracing::debug!(%app_id, width, height, bytes = rgba.len(), "broadcast app frame");
-            let scale = u32::try_from(buffer_scale).unwrap_or(1).max(1);
-            self.hub.send_frame(app_id, width, height, scale, rgba);
+            if rgba.is_empty() {
+                // Presenting: the pixels never left the GPU, so there is
+                // nothing to send. The window is where this app appears.
+                self.present();
+            } else {
+                tracing::debug!(%app_id, width, height, bytes = rgba.len(), "broadcast app frame");
+                let scale = u32::try_from(buffer_scale).unwrap_or(1).max(1);
+                self.hub.send_frame(app_id, width, height, scale, rgba);
+            }
         } else {
             self.hub.timings.lock().unwrap().throttled += 1;
         }
@@ -679,8 +718,18 @@ impl DomicileCompositor {
         // (`DmabufHandler::dmabuf_imported`), so a failure here is not a client
         // handing us something unsupported — it is the renderer breaking.
         let started = Instant::now();
-        let rgba = DmabufImporter::read_rgba(gpu.renderer(), &dmabuf)
-            .expect("a dmabuf the importer accepted reads back");
+        let rgba = if gpu.presenting() {
+            // Presenting: the client's buffer becomes a texture we draw, and
+            // nothing is copied. The chrome gets no pixels for this app —
+            // there is a hole in the page where the compositor puts it.
+            let texture = DmabufImporter::import(gpu.renderer(), &dmabuf)
+                .expect("a dmabuf the importer accepted imports");
+            self.textures.insert(app_id.to_string(), texture);
+            Vec::new()
+        } else {
+            DmabufImporter::read_rgba(gpu.renderer(), &dmabuf)
+                .expect("a dmabuf the importer accepted reads back")
+        };
         self.hub
             .timings
             .lock()
@@ -692,6 +741,70 @@ impl DomicileCompositor {
             .expect("every mapped toplevel is registered with the bridge");
         self.latest_dmabufs.insert(app_id.to_string(), dmabuf);
         rgba
+    }
+
+    /// Draw every placed app into the window, bottom to top.
+    ///
+    /// The geometry is the scene's: `draw_order` gives the stacking the chrome
+    /// asked for and `hit_test` resolves, and `surface_to_output` places each
+    /// surface exactly where a click on it would land. An app with no texture
+    /// yet is skipped rather than drawn empty — it has been announced but has
+    /// not committed.
+    fn present(&mut self) {
+        let Some(gpu) = self.gpu.as_mut() else {
+            return;
+        };
+        let Some(backend) = gpu.window() else {
+            return;
+        };
+        let size = backend.window_size();
+        let layers: Vec<_> = {
+            let host = self.hub.host.lock().unwrap();
+            host.scene()
+                .draw_order()
+                .into_iter()
+                .map(|portal| (portal.app_id.clone(), portal.surface_to_output()))
+                .collect()
+        };
+        let layers: Vec<_> = layers
+            .iter()
+            .filter_map(|(app_id, surface_to_output)| {
+                Some(Layer {
+                    alpha: 1.0,
+                    surface_to_output: *surface_to_output,
+                    texture: self.textures.get(app_id)?,
+                })
+            })
+            .collect();
+
+        let Some(backend) = self.gpu.as_mut().and_then(Gpu::window) else {
+            return;
+        };
+        let Ok((renderer, mut framebuffer)) = backend.bind() else {
+            tracing::warn!("could not bind the window for drawing");
+            return;
+        };
+        let drawn = (|| {
+            let mut frame = renderer.render(&mut framebuffer, size, Transform::Normal)?;
+            frame.clear(
+                Color32F::new(0.0, 0.0, 0.0, 1.0),
+                &[Rectangle::from_size(size)],
+            )?;
+            draw_layers(&mut frame, &layers)?;
+            frame.finish()
+        })();
+        drop(framebuffer);
+        match drawn {
+            Ok(sync) => {
+                let _ = sync;
+                if let Some(backend) = self.gpu.as_mut().and_then(Gpu::window) {
+                    if let Err(err) = backend.submit(None) {
+                        tracing::warn!(%err, "could not submit the frame");
+                    }
+                }
+            }
+            Err(err) => tracing::warn!(%err, "could not draw the scene"),
+        }
     }
 
     /// Inject a forwarded input event into the appropriate client via the seat.
@@ -1091,6 +1204,7 @@ impl XdgShellHandler for DomicileCompositor {
             self.last_frame.remove(&app_id);
             self.bridge.remove(&app_id);
             self.latest_dmabufs.remove(&app_id);
+            self.textures.remove(&app_id);
             let closed = self.hub.host.lock().unwrap().app_closed(&app_id);
             info!(%app_id, "toplevel destroyed -> Host::app_closed");
             if let Some(closed) = closed {
@@ -1167,11 +1281,10 @@ fn spawn_client(command: &[String]) {
 fn advertise_dmabuf(
     state: &mut DmabufState,
     display: &DisplayHandle,
-    importer: &DmabufImporter,
-    renderer: &GlesRenderer,
+    main_device: Option<u64>,
+    formats: Vec<smithay::backend::allocator::Format>,
 ) -> DmabufGlobal {
-    let formats: Vec<_> = DmabufImporter::formats(renderer).into_iter().collect();
-    let feedback = importer.main_device().and_then(|device| {
+    let feedback = main_device.and_then(|device| {
         match DmabufFeedbackBuilder::new(device, formats.clone()).build() {
             Ok(feedback) => Some(feedback),
             Err(err) => {
@@ -1327,6 +1440,17 @@ fn config_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("domicile.toml"))
 }
 
+/// Whether to open a window and draw client surfaces into it, rather than
+/// copying them out to the chrome.
+///
+/// `--present`, or `DOMICILE_PRESENT=1`. Off by default: the headless
+/// compositor is what the e2e scripts drive and what a machine with no display
+/// can run at all.
+fn presenting() -> bool {
+    std::env::args().skip(1).any(|arg| arg == "--present")
+        || std::env::var_os("DOMICILE_PRESENT").is_some_and(|value| value == "1")
+}
+
 /// Resolve where the chrome protocol socket lives.
 fn chrome_socket_path() -> PathBuf {
     // --chrome-socket PATH wins, then $DOMICILE_CHROME_SOCKET, then a default under
@@ -1437,17 +1561,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // nothing to render on — a container, a machine with no DRM device — the
     // global is simply not advertised, and clients fall back to wl_shm rather
     // than allocating buffers we would then have to reject.
-    let gpu = match headless_renderer() {
-        Ok((renderer, importer)) => Some(Gpu { renderer, importer }),
-        Err(err) => {
-            tracing::warn!(%err, "no EGL renderer: serving wl_shm clients only");
-            None
+    // Presenting is opt-in. Headless is what every e2e script drives and what
+    // a machine with no display can run, so a window is something you ask for
+    // rather than something that happens to you.
+    let mut gpu = if presenting() {
+        match smithay::backend::winit::init::<GlesRenderer>() {
+            Ok((backend, _events)) => {
+                info!(size = ?backend.window_size(), "presenting to a window");
+                Some(Gpu {
+                    importer: DmabufImporter::for_existing_renderer(),
+                    output: GpuOutput::Window(Box::new(backend)),
+                })
+            }
+            Err(err) => {
+                tracing::error!(%err, "--present was asked for but no window could be opened");
+                return Err(err.into());
+            }
+        }
+    } else {
+        match headless_renderer() {
+            Ok((renderer, importer)) => Some(Gpu {
+                importer,
+                output: GpuOutput::Headless(Box::new(renderer)),
+            }),
+            Err(err) => {
+                tracing::warn!(%err, "no EGL renderer: serving wl_shm clients only");
+                None
+            }
         }
     };
     let mut dmabuf_state = DmabufState::new();
-    let dmabuf_global = gpu
-        .as_ref()
-        .map(|gpu| advertise_dmabuf(&mut dmabuf_state, &dh, &gpu.importer, &gpu.renderer));
+    let dmabuf_global = gpu.as_mut().map(|gpu| {
+        let importer_device = gpu.importer.main_device();
+        let formats: Vec<_> = DmabufImporter::formats(gpu.renderer())
+            .into_iter()
+            .collect();
+        advertise_dmabuf(&mut dmabuf_state, &dh, importer_device, formats)
+    });
 
     let state = DomicileCompositor {
         compositor_state: CompositorState::new::<DomicileCompositor>(&dh),
@@ -1466,6 +1616,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         hub,
         bridge: BridgeRegistry::new(),
         latest_dmabufs: HashMap::new(),
+        textures: HashMap::new(),
         toplevels: Vec::new(),
         pointer_app: None,
         start: Instant::now(),
