@@ -19,6 +19,14 @@ pub struct Layer<'a> {
     /// Maps the unit square onto the output, from `Portal::surface_to_output`.
     pub surface_to_output: Transform,
     pub alpha: f32,
+    /// Whether the texture's rows run bottom-to-top.
+    ///
+    /// A client that renders with GL hands over a buffer the way GL made it,
+    /// which is upside down relative to how a buffer is described. Smithay
+    /// records this per texture but does not expose it, so it is carried
+    /// alongside — see `DomicileCompositor::texture_from`, which is where it is
+    /// known.
+    pub y_inverted: bool,
 }
 
 /// Draw `layers` bottom-to-top into the frame.
@@ -28,11 +36,9 @@ pub struct Layer<'a> {
 /// presented and a buffer being tested.
 pub fn draw_layers(frame: &mut GlesFrame<'_, '_>, layers: &[Layer<'_>]) -> Result<(), GlesError> {
     for layer in layers {
-        // The texture matrix is identity: the whole texture fills the quad, and
-        // the surface's own size is already in `surface_to_output`.
         frame.render_texture(
             layer.texture,
-            Matrix3::from_scale(1.0),
+            texture_matrix(layer.y_inverted),
             matrix3(layer.surface_to_output),
             None::<Option<_>>,
             layer.alpha,
@@ -41,6 +47,22 @@ pub fn draw_layers(frame: &mut GlesFrame<'_, '_>, layers: &[Layer<'_>]) -> Resul
         )?;
     }
     Ok(())
+}
+
+/// How the quad samples the texture.
+///
+/// Identity for a buffer whose rows run top-to-bottom: the whole texture fills
+/// the quad, and the surface's own size is already in `surface_to_output`. A
+/// y-inverted one is sampled bottom-to-top instead, which is the difference
+/// between a window drawn the right way up and one drawn upside down.
+fn texture_matrix(y_inverted: bool) -> Matrix3<f32> {
+    if y_inverted {
+        // v -> 1 - v. Written out rather than as a negation, so it does not
+        // depend on the texture's wrap mode to bring -v back into range.
+        Matrix3::new(1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 1.0)
+    } else {
+        Matrix3::from_scale(1.0)
+    }
 }
 
 /// Maps the chrome's logical units onto the window's device pixels.
@@ -176,9 +198,9 @@ mod pixels {
     use smithay::backend::egl::{EGLContext, EGLDevice, EGLDisplay};
     use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
     use smithay::backend::renderer::{
-        Bind, Color32F, ExportMem, Frame, ImportMem, Offscreen, Renderer,
+        Bind, Color32F, ExportMem, Frame, ImportMem, Offscreen, Renderer, Texture as _,
     };
-    use smithay::utils::{Rectangle, Size, Transform as OutputTransform};
+    use smithay::utils::{Point, Rectangle, Size, Transform as OutputTransform};
 
     use super::{draw_layers, Layer};
 
@@ -212,6 +234,32 @@ mod pixels {
             .expect("a memory texture imports")
     }
 
+    /// A texture whose top half is `rgba` and bottom half is black, so which
+    /// way up it is drawn is visible in the result. `y_inverted` is what
+    /// `import_memory` records on the texture, and so what a client handing
+    /// over a GL-rendered buffer produces.
+    fn gradient(renderer: &mut GlesRenderer, rgba: [u8; 4], y_inverted: bool) -> GlesTexture {
+        const SIDE: usize = 8;
+        let mut pixels = Vec::with_capacity(SIDE * SIDE * 4);
+        for row in 0..SIDE {
+            for _ in 0..SIDE {
+                pixels.extend_from_slice(if row < SIDE / 2 {
+                    &rgba
+                } else {
+                    &[0, 0, 0, 255]
+                });
+            }
+        }
+        renderer
+            .import_memory(
+                &pixels,
+                Fourcc::Abgr8888,
+                (SIDE as i32, SIDE as i32).into(),
+                y_inverted,
+            )
+            .expect("a memory texture imports")
+    }
+
     /// Compose the layers and hand back the output as row-major RGBA.
     fn composed(renderer: &mut GlesRenderer, layers: &[Layer<'_>]) -> Vec<u8> {
         let buffer_size = Size::from(OUTPUT);
@@ -231,6 +279,57 @@ mod pixels {
                 )
                 .expect("clearing");
             draw_layers(&mut frame, layers).expect("drawing the layers");
+            let sync = frame.finish().expect("finishing");
+            renderer.wait(&sync).expect("waiting for the draw");
+        }
+        let mapping = renderer
+            .copy_framebuffer(
+                &framebuffer,
+                Rectangle::from_size(buffer_size),
+                Fourcc::Abgr8888,
+            )
+            .expect("copying the framebuffer");
+        renderer.map_texture(&mapping).expect("mapping it").to_vec()
+    }
+
+    /// The same layer drawn by Smithay itself, for comparison.
+    fn drawn_by_smithay(
+        renderer: &mut GlesRenderer,
+        texture: &GlesTexture,
+        dest: Rectangle<i32, smithay::utils::Physical>,
+    ) -> Vec<u8> {
+        // Smithay reads the inversion off the texture itself, so nothing is
+        // passed for it here — which is the point: it is the authority on what
+        // a y-inverted texture should look like drawn.
+        let buffer_size = Size::from(OUTPUT);
+        let physical = Size::from(OUTPUT);
+        let mut target: GlesTexture = renderer
+            .create_buffer(Fourcc::Abgr8888, buffer_size)
+            .expect("an offscreen buffer");
+        let mut framebuffer = renderer.bind(&mut target).expect("binding it");
+        {
+            let mut frame = renderer
+                .render(&mut framebuffer, physical, OutputTransform::Normal)
+                .expect("a frame");
+            frame
+                .clear(
+                    Color32F::new(0.0, 0.0, 0.0, 1.0),
+                    &[Rectangle::from_size(physical)],
+                )
+                .expect("clearing");
+            frame
+                .render_texture_from_to(
+                    texture,
+                    Rectangle::from_size(texture.size()).to_f64(),
+                    dest,
+                    &[Rectangle::from_size(dest.size)],
+                    &[],
+                    OutputTransform::Normal,
+                    1.0,
+                    None,
+                    &[],
+                )
+                .expect("Smithay draws it");
             let sync = frame.finish().expect("finishing");
             renderer.wait(&sync).expect("waiting for the draw");
         }
@@ -274,11 +373,13 @@ mod pixels {
                     alpha: 1.0,
                     surface_to_output: top_left.surface_to_output(),
                     texture: &red,
+                    y_inverted: false,
                 },
                 Layer {
                     alpha: 1.0,
                     surface_to_output: bottom_right.surface_to_output(),
                     texture: &blue,
+                    y_inverted: false,
                 },
             ],
         );
@@ -287,6 +388,120 @@ mod pixels {
         assert_eq!(pixel(&output, 48, 36), BLUE, "bottom-right quadrant");
         assert_eq!(pixel(&output, 48, 6), BLACK, "top-right stays cleared");
         assert_eq!(pixel(&output, 8, 36), BLACK, "bottom-left stays cleared");
+    }
+
+    /// The same placement drawn two ways: ours, and Smithay's own
+    /// `render_texture_from_to`, which is the path its example compositors use
+    /// on a window and so the one known to come out the right way up there.
+    ///
+    /// Ours has to generalise it — a portal is an arbitrary CSS matrix, and
+    /// `render_texture_from_to` takes an axis-aligned rectangle — but where the
+    /// two can express the same thing they must draw the same pixels. Anything
+    /// this catches is an orientation bug the single-path tests cannot see,
+    /// because they only ever compare us against ourselves.
+    /// Ours against Smithay's for one texture, as pixel coordinates that differ.
+    fn disagreements(
+        renderer: &mut GlesRenderer,
+        texture: &GlesTexture,
+        y_inverted: bool,
+    ) -> Vec<(i32, i32)> {
+        // Off-centre and not square, so a flip in either axis moves it.
+        let dest = Rectangle::new(Point::from((8, 6)), Size::from((24, 12)));
+        let ours = composed(
+            renderer,
+            &[Layer {
+                alpha: 1.0,
+                surface_to_output: Transform::scale(24.0, 12.0)
+                    .then(Transform::translate(8.0, 6.0)),
+                texture,
+                y_inverted,
+            }],
+        );
+        let theirs = drawn_by_smithay(renderer, texture, dest);
+        ours.chunks_exact(4)
+            .zip(theirs.chunks_exact(4))
+            .enumerate()
+            .filter(|(_, (a, b))| a != b)
+            .map(|(at, _)| ((at as i32) % OUTPUT.0, (at as i32) / OUTPUT.0))
+            .collect()
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_y_inverted_texture_is_drawn_the_other_way_up() {
+        // A client that renders with GL hands over a buffer whose rows run
+        // bottom-to-top — which is every client that matters, the chrome
+        // included. Drawing it as if they did not turns the desktop upside
+        // down, and nothing about the types says which way round a buffer is.
+        //
+        // Deliberately not compared against `render_texture_from_to` the way
+        // the placement is: Smithay flips by negating the coordinate rather
+        // than reflecting it, so on a texture whose wrap mode clamps it samples
+        // the first row for the whole quad instead of the image upside down.
+        // It is the authority on where a quad lands, not on this.
+        let mut renderer = renderer();
+        // Red on top, black below.
+        let texture = gradient(&mut renderer, RED, true);
+
+        let output = composed(
+            &mut renderer,
+            &[Layer {
+                alpha: 1.0,
+                surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
+                texture: &texture,
+                y_inverted: true,
+            }],
+        );
+
+        let top = pixel(&output, OUTPUT.0 / 2, OUTPUT.1 / 4);
+        let bottom = pixel(&output, OUTPUT.0 / 2, OUTPUT.1 * 3 / 4);
+        assert_eq!(top, BLACK, "the buffer's last row is drawn at the top");
+        assert_eq!(bottom, RED, "the buffer's first row is drawn at the bottom");
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_texture_that_is_not_inverted_is_drawn_as_it_is() {
+        // The other half of the pair: without this, "always flip" passes the
+        // test above and turns every client upside down instead.
+        let mut renderer = renderer();
+        let texture = gradient(&mut renderer, RED, false);
+
+        let output = composed(
+            &mut renderer,
+            &[Layer {
+                alpha: 1.0,
+                surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
+                texture: &texture,
+                y_inverted: false,
+            }],
+        );
+
+        assert_eq!(pixel(&output, OUTPUT.0 / 2, OUTPUT.1 / 4), RED, "top");
+        assert_eq!(
+            pixel(&output, OUTPUT.0 / 2, OUTPUT.1 * 3 / 4),
+            BLACK,
+            "bottom"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn we_draw_a_placement_the_way_smithay_draws_it() {
+        let mut renderer = renderer();
+        // Patterned, not solid: a uniform colour looks the same however the
+        // texture is mapped onto the quad, so it would compare only where the
+        // quad landed and nothing about what is drawn in it.
+        let red = gradient(&mut renderer, RED, false);
+
+        // Off-centre and not square, so a flip in either axis moves it.
+        let differing = disagreements(&mut renderer, &red, false);
+        assert!(
+            differing.is_empty(),
+            "we disagree with Smithay's own texture path at {} pixels, first at {:?}",
+            differing.len(),
+            differing.first(),
+        );
     }
 
     #[test]
@@ -311,6 +526,7 @@ mod pixels {
                 alpha: 1.0,
                 surface_to_output: portal.surface_to_output(),
                 texture: textures(&portal.app_id),
+                y_inverted: false,
             })
             .collect();
 

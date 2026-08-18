@@ -88,6 +88,21 @@ nix develop .#full -c ./scripts/run-prototype.sh
   everything headless keeps working — so it looks like a compositing bug and is
   a packaging one. `NoCompositor` is the different failure: the library loaded
   and there was no session to nest in.
+- **A client's buffer may be upside down, and the types do not say so.** A
+  client that renders with GL hands the buffer over the way GL made it and sets
+  `Y_INVERT` on the dmabuf; Smithay records that on the texture but does not
+  expose it, so `Layer::y_inverted` carries it from the import instead. Drawing
+  without it turns the whole desktop over. Smithay's own `render_texture_from_to`
+  flips by *negating* the texture coordinate rather than reflecting it, which
+  needs a repeating wrap mode to land back in range — against a clamping one it
+  samples the buffer's first row for the whole quad. `compose::texture_matrix`
+  reflects (`1 - v`) so it does not depend on the wrap mode, which is also why
+  that case is tested directly rather than against Smithay.
+- **A solid-colour texture cannot test a texture matrix.** It looks the same
+  however it is mapped onto the quad, so a comparison against Smithay with one
+  checks only where the quad landed. The fixtures in `compose::pixels` are
+  patterned for this reason — the y-inversion bug above passed a solid-texture
+  comparison unchanged.
 - **Presenting means the compositor is itself a Wayland client**, so it must
   keep the session's `WAYLAND_DISPLAY` and cannot have a runtime directory to
   itself the way `run-prototype.sh` does — its socket lands in the host's
