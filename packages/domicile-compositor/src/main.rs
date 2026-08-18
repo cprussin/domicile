@@ -24,6 +24,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -31,7 +32,11 @@ use std::time::{Duration, Instant};
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
 use smithay::backend::allocator::Fourcc;
-use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState};
+use smithay::backend::input::{
+    AbsolutePositionEvent as _, Axis, AxisSource, ButtonState, InputEvent, KeyState,
+    KeyboardKeyEvent as _, PointerAxisEvent as _, PointerButtonEvent as _,
+};
+use smithay::backend::winit::{WinitEvent, WinitInput};
 use smithay::input::{
     keyboard::{FilterResult, Keycode, XkbConfig},
     pointer::{AxisFrame, ButtonEvent, CursorIcon, CursorImageStatus, MotionEvent},
@@ -85,7 +90,7 @@ mod outbound;
 mod scale;
 mod timing_window;
 
-use crate::compose::{draw_layers, logical_to_window, Layer};
+use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer};
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
@@ -96,7 +101,7 @@ use domicile_config::Config;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
-use domicile_scene::Transform as SceneTransform;
+use domicile_scene::{Point as ScenePoint, Transform as SceneTransform};
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{Color32F, Frame as _, ImportMem as _, Renderer as _};
 use smithay::backend::winit::WinitGraphicsBackend;
@@ -577,6 +582,10 @@ struct DomicileCompositor {
     shm_state: ShmState,
     seat_state: SeatState<DomicileCompositor>,
     seat: Seat<DomicileCompositor>,
+    /// The seat the chrome is focused on, carrying the window's own input.
+    /// Separate from `seat` so the two focuses do not fight — see where it is
+    /// created.
+    chrome_seat: Seat<DomicileCompositor>,
     /// Kept alive so the xdg-output manager global persists.
     #[allow(dead_code)]
     output_manager_state: OutputManagerState,
@@ -635,6 +644,9 @@ struct DomicileCompositor {
     /// The chrome's latest surface as a texture. Transparent wherever an
     /// `<app>` element is, which is what lets the app below show through.
     chrome_texture: Option<SurfaceTexture>,
+    /// Set when the window is closed, which is the user closing the desktop.
+    /// Read by the event loop, which is the only thing that can act on it.
+    stop: Arc<AtomicBool>,
 }
 
 /// Per-client state required by the compositor global.
@@ -953,6 +965,125 @@ impl DomicileCompositor {
             }
             Err(err) => tracing::warn!(%err, "could not draw the scene"),
         }
+    }
+
+    /// Give the chrome its seat's keyboard focus.
+    ///
+    /// Called again when the window is focused as well as when the chrome maps,
+    /// because a client that had not bound its keyboard by the time the first
+    /// one happened would have missed the enter — and a desktop that ignores
+    /// the keyboard looks like one that has hung.
+    fn focus_chrome(&mut self) {
+        let Some(surface) = self
+            .chrome_toplevel
+            .as_ref()
+            .map(|toplevel| toplevel.wl_surface().clone())
+        else {
+            return;
+        };
+        let keyboard = self.chrome_seat.get_keyboard().unwrap();
+        if keyboard.current_focus().as_ref() == Some(&surface) {
+            return;
+        }
+        info!("the chrome has the window's keyboard");
+        let serial = SERIAL_COUNTER.next_serial();
+        keyboard.set_focus(self, Some(surface), serial);
+    }
+
+    /// Hand the window's own input to the chrome.
+    ///
+    /// Everything the user does to Domicile's window is the chrome's to
+    /// interpret: it is the desktop, it knows where its `<app>` elements are,
+    /// and it already forwards what belongs to a client back to us over the
+    /// socket. So this delivers to the chrome's surface and stops there — the
+    /// compositor does no hit-testing of its own, exactly as when the chrome
+    /// was a window in someone else's session.
+    fn handle_window_input(&mut self, event: InputEvent<WinitInput>) {
+        let Some(surface) = self
+            .chrome_toplevel
+            .as_ref()
+            .map(|toplevel| toplevel.wl_surface().clone())
+        else {
+            // Input before the chrome has mapped. Dropped rather than queued:
+            // a click on a desktop that is not up yet has nothing to land on.
+            return;
+        };
+        let time = self.now_ms();
+        match event {
+            InputEvent::PointerMotionAbsolute { event } => {
+                let window = self.window_size();
+                let position = event.position_transformed(window.into());
+                let logical = window_to_logical(OUTPUT_LOGICAL_SIZE, (window.0, window.1))
+                    .apply(ScenePoint::new(position.x, position.y));
+                let pointer = self.chrome_seat.get_pointer().unwrap();
+                let serial = SERIAL_COUNTER.next_serial();
+                pointer.motion(
+                    self,
+                    // Anchored at the origin, so the location below is already
+                    // surface-local — the chrome's surface is the desktop.
+                    Some((surface, (0.0, 0.0).into())),
+                    &MotionEvent {
+                        location: (logical.x, logical.y).into(),
+                        serial,
+                        time,
+                    },
+                );
+                pointer.frame(self);
+            }
+            InputEvent::PointerButton { event } => {
+                let pointer = self.chrome_seat.get_pointer().unwrap();
+                let serial = SERIAL_COUNTER.next_serial();
+                pointer.button(
+                    self,
+                    &ButtonEvent {
+                        button: event.button_code(),
+                        state: event.state(),
+                        serial,
+                        time,
+                    },
+                );
+                pointer.frame(self);
+            }
+            InputEvent::PointerAxis { event } => {
+                let mut frame = AxisFrame::new(time).source(AxisSource::Wheel);
+                for axis in [Axis::Horizontal, Axis::Vertical] {
+                    if let Some(delta) = event.amount(axis) {
+                        frame = frame.value(axis, delta);
+                    }
+                    if let Some(steps) = event.amount_v120(axis) {
+                        frame = frame.v120(axis, steps as i32);
+                    }
+                }
+                let pointer = self.chrome_seat.get_pointer().unwrap();
+                pointer.axis(self, frame);
+                pointer.frame(self);
+            }
+            InputEvent::Keyboard { event } => {
+                let keyboard = self.chrome_seat.get_keyboard().unwrap();
+                let serial = SERIAL_COUNTER.next_serial();
+                // Already an X keycode: the winit backend applies the evdev +8
+                // itself, unlike the chrome, which sends evdev and has it added
+                // where its keys are injected.
+                let key = event.key_code();
+                keyboard.input::<(), _>(self, key, event.state(), serial, time, |_, _, _| {
+                    FilterResult::Forward
+                });
+            }
+            _ => {}
+        }
+    }
+
+    /// The window's size in device pixels, or the output's logical size where
+    /// there is no window — which only happens headless, where nothing asks.
+    fn window_size(&mut self) -> (i32, i32) {
+        self.gpu
+            .as_mut()
+            .and_then(Gpu::window)
+            .map(|backend| {
+                let size = backend.window_size();
+                (size.w, size.h)
+            })
+            .unwrap_or(OUTPUT_LOGICAL_SIZE)
     }
 
     /// Inject a forwarded input event into the appropriate client via the seat.
@@ -1373,6 +1504,7 @@ impl XdgShellHandler for DomicileCompositor {
                 state.size = Some(OUTPUT_LOGICAL_SIZE.into());
             });
             self.chrome_toplevel = Some(surface);
+            self.focus_chrome();
             return;
         }
 
@@ -1405,6 +1537,9 @@ impl XdgShellHandler for DomicileCompositor {
             info!("the chrome's toplevel went away");
             self.chrome_toplevel = None;
             self.chrome_texture = None;
+            let keyboard = self.chrome_seat.get_keyboard().unwrap();
+            let serial = SERIAL_COUNTER.next_serial();
+            keyboard.set_focus(self, None, serial);
             return;
         }
         if let Some(pos) = self
@@ -1751,6 +1886,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     seat.add_pointer();
 
+    // A second seat, which only the chrome is ever focused on.
+    //
+    // One seat cannot serve both: an app holds its focus (that is how a
+    // forwarded keystroke reaches a terminal) while the chrome needs the
+    // window's own input at the same time, and they would take the focus from
+    // each other on every event. Two seats give each a focus that stays put —
+    // the apps' follows what the chrome asks for, the chrome's is the chrome —
+    // and no client ever hears from the one it is not focused on.
+    let mut chrome_seat: Seat<DomicileCompositor> = seat_state.new_wl_seat(&dh, "domicile-chrome");
+    chrome_seat.add_keyboard(
+        XkbConfig {
+            rules: &keyboard.xkb_rules,
+            model: &keyboard.xkb_model,
+            layout: &keyboard.xkb_layout,
+            variant: &keyboard.xkb_variant,
+            options: Some(keyboard.xkb_options_string()),
+        },
+        200,
+        25,
+    )?;
+    chrome_seat.add_pointer();
+
     // Advertise one virtual output. Many clients (e.g. weston-terminal) wait for
     // a wl_output before they will map a toplevel.
     let output_manager_state = OutputManagerState::new_with_xdg_output::<DomicileCompositor>(&dh);
@@ -1823,10 +1980,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Presenting is opt-in. Headless is what every e2e script drives and what
     // a machine with no display can run, so a window is something you ask for
     // rather than something that happens to you.
+    let mut window_events = None;
     let mut gpu = if presenting() {
         match smithay::backend::winit::init::<GlesRenderer>() {
-            Ok((backend, _events)) => {
+            Ok((backend, events)) => {
                 info!(size = ?backend.window_size(), "presenting to a window");
+                window_events = Some(events);
                 Some(Gpu {
                     importer: DmabufImporter::for_existing_renderer(),
                     output: GpuOutput::Window(Box::new(backend)),
@@ -1863,6 +2022,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         xdg_shell_state: XdgShellState::new::<DomicileCompositor>(&dh),
         shm_state: ShmState::new::<DomicileCompositor>(&dh, vec![]),
         seat_state,
+        chrome_seat,
         seat,
         output_manager_state,
         output,
@@ -1884,6 +2044,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pending_key: None,
         chrome_toplevel: None,
         chrome_texture: None,
+        stop: Arc::new(AtomicBool::new(false)),
     };
 
     let mut data = CalloopData { display, state };
@@ -1921,10 +2082,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     })?;
 
+    // The window's own events: what the user does to Domicile rather than what
+    // a chrome asked us to do. Without this the window is a picture — it draws
+    // and it never hears anything, which looks exactly like a compositor that
+    // has frozen.
+    if let Some(events) = window_events {
+        handle.insert_source(events, |event, _, data: &mut CalloopData| match event {
+            WinitEvent::Input(input) => data.state.handle_window_input(input),
+            // The window changed size, so everything drawn in it is the wrong
+            // size until the next frame. Nothing else is going to ask for one:
+            // a resize is not a client commit.
+            WinitEvent::Resized { .. } | WinitEvent::Redraw => data.state.present(),
+            WinitEvent::CloseRequested => data.state.stop.store(true, Ordering::SeqCst),
+            // A window that has just been given the keyboard: assert the
+            // chrome's focus, in case it bound its keyboard after mapping.
+            WinitEvent::Focus(true) => data.state.focus_chrome(),
+            WinitEvent::Focus(false) => {}
+        })?;
+    }
+
     // Flush after every loop iteration so events queued while handling input
     // (which arrives off the wayland fd) reach clients promptly.
-    event_loop.run(None, &mut data, |data| {
+    let stop = data.state.stop.clone();
+    let signal = event_loop.get_signal();
+    event_loop.run(None, &mut data, move |data| {
         let _ = data.display.flush_clients();
+        if stop.load(Ordering::SeqCst) {
+            signal.stop();
+        }
     })?;
     Ok(())
 }

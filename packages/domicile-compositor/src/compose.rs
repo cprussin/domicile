@@ -81,6 +81,20 @@ pub fn logical_to_window(logical: (i32, i32), window: (i32, i32)) -> Transform {
     )
 }
 
+/// Maps the window's device pixels back onto the chrome's logical units.
+///
+/// The other direction from [`logical_to_window`], for input: a pointer arrives
+/// at a pixel of the window and the chrome laid itself out in logical units, so
+/// a click has to be told where it landed in the chrome's own terms or it will
+/// hit whatever happens to be at the same number of pixels.
+pub fn window_to_logical(logical: (i32, i32), window: (i32, i32)) -> Transform {
+    // A window with no size yet cannot be mapped out of, and an identity is the
+    // one answer that neither moves a pointer nor sends it off the desktop.
+    logical_to_window(logical, window)
+        .inverse()
+        .unwrap_or_else(Transform::identity)
+}
+
 /// A CSS affine transform as the renderer's matrix.
 ///
 /// `Matrix3::new` takes its arguments **column by column**, so the six CSS
@@ -101,7 +115,7 @@ mod tests {
     use cgmath::Vector3;
     use domicile_scene::{Point, Transform};
 
-    use super::{logical_to_window, matrix3};
+    use super::{logical_to_window, matrix3, window_to_logical};
 
     /// Where the renderer's matrix sends a point, so it can be compared with
     /// where [`Transform::apply`] says it should go.
@@ -163,6 +177,34 @@ mod tests {
     #[test]
     fn an_output_with_no_size_yet_does_not_send_everything_to_infinity() {
         let mapped = logical_to_window((0, 0), (1280, 800)).apply(Point::new(1.0, 1.0));
+        assert!(mapped.x.is_finite() && mapped.y.is_finite());
+    }
+
+    #[test]
+    fn a_click_in_the_corner_of_a_scaled_window_is_a_click_in_the_corner_of_the_desktop() {
+        // The round trip that matters: the pointer arrives in device pixels and
+        // has to come back as the logical position the chrome laid out in.
+        let mapped = window_to_logical((1280, 800), (2560, 1600)).apply(Point::new(2560.0, 1600.0));
+        assert!((mapped.x - 1280.0).abs() < 1e-9 && (mapped.y - 800.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn mapping_into_the_window_and_back_lands_where_it_started() {
+        let there = logical_to_window((1280, 800), (1920, 1200));
+        let back = window_to_logical((1280, 800), (1920, 1200));
+        let start = Point::new(317.0, 219.0);
+        let round_trip = back.apply(there.apply(start));
+        assert!(
+            (round_trip.x - start.x).abs() < 1e-9 && (round_trip.y - start.y).abs() < 1e-9,
+            "round trip landed at {round_trip:?}",
+        );
+    }
+
+    #[test]
+    fn a_window_with_no_size_yet_leaves_a_pointer_where_it_is() {
+        // Not invertible, and a pointer sent to infinity is worse than one that
+        // has not been mapped.
+        let mapped = window_to_logical((1280, 800), (0, 0)).apply(Point::new(4.0, 9.0));
         assert!(mapped.x.is_finite() && mapped.y.is_finite());
     }
 

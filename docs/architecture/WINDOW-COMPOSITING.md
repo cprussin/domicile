@@ -163,6 +163,7 @@ Phase 1 — prove one window composites at all:
 - [x] **probe first**: does a transparent Electron `BrowserWindow` commit a buffer with real alpha when it is a client of Domicile? Yes — `scripts/probe-transparency.sh`
 - [x] compositor: a `winit` output behind `--present`, one renderer shared with the import path (`scripts/run-native.sh`)
 - [x] compositor: draw `draw_order` through `surface_to_output`, then the page's surface over it
+- [x] compositor: the window's own input, on a seat the chrome owns
 - [ ] measure: `rt_ms` for the native path against the copy path, same client, same size
 - [ ] decide on the number — parity means `readback_ms` and `ipc_ms` *gone*, not smaller
 
@@ -172,6 +173,18 @@ a client connected on. Not an `xdg_toplevel` app id: that is set by the client,
 whenever the client feels like sending it, which is not necessarily before the
 toplevel it names. A chrome mistaken for an app would be announced to itself and
 mount an `<app>` element for itself, inside itself.
+
+**How the window's input reaches anything.** On a second `wl_seat`, named
+`domicile-chrome`, which only the chrome is ever focused on. One seat cannot
+serve both: an app holds the keyboard focus — that is how a forwarded keystroke
+reaches a terminal — while the chrome needs the window's input at the same time,
+and the two would take focus from each other on every event. With a seat each,
+both focuses stay put and no client hears from the one it is not focused on.
+
+What arrives at the chrome is raw: the compositor does no hit-testing of its
+own. The chrome knows where its `<app>` elements are and already forwards what
+belongs to a client back over the socket, exactly as it did when it was a window
+in someone else's session.
 
 The chrome's toplevel is therefore kept out of `toplevels` entirely — never
 announced, never placed by a portal, drawn last over everything rather than in
