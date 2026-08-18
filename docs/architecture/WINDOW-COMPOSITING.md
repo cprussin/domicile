@@ -174,19 +174,26 @@ whenever the client feels like sending it, which is not necessarily before the
 toplevel it names. A chrome mistaken for an app would be announced to itself and
 mount an `<app>` element for itself, inside itself.
 
-**How the window's input reaches anything.** On a second `wl_seat`, named
-`domicile-chrome`, which only the chrome is ever focused on. One seat cannot
-serve both: an app holds the keyboard focus — that is how a forwarded keystroke
-reaches a terminal — while the chrome needs the window's input at the same time,
-and the two would take focus from each other on every event. With a seat each,
-both focuses stay put and no client hears from the one it is not focused on.
+**How the window's input reaches anything.** On the one seat, which the chrome
+and the windows take turns on. A seat each — so that both could hold a focus at
+once — is the obvious design and does not survive contact with a client: GTK
+asserts on the second seat and Electron drops the connection.
 
-The keyboard arrives at the chrome raw, and it forwards what belongs to a client
-back over the socket exactly as it did when it was a window in someone else's
-session. The **pointer** does not: the compositor routes it, through the same
-`Scene::route_pointer` the chrome would have used. One seat has one pointer
+The **keyboard** goes to whatever holds focus. The chrome holds it until it says
+a window has been focused and gets it back when it says one has not, and a
+window that cannot be focused (one that closed while the message was in flight)
+leaves it with the chrome rather than nowhere — a keyboard focused on nothing is
+a desktop that has gone permanently deaf. While a window holds it, the chrome's
+own shortcuts do not reach the chrome; intercepting those in the compositor is
+the answer and is not written yet.
+
+The **pointer** is routed by the compositor, through the same
+`Scene::route_pointer` the chrome would have used, and a press focuses what is
+under it. Not by the chrome, even though it could: one seat has one pointer
 focus, and two things driving it means whichever moved it last gets the next
-click — a window that tracks the mouse and never receives a press.
+click — a window that tracks the mouse and never receives a press. That also
+takes the chrome out of the pointer path, which the copy path pays a socket
+round trip per motion for.
 
 The chrome's toplevel is therefore kept out of `toplevels` entirely — never
 announced, never placed by a portal, drawn last over everything rather than in
