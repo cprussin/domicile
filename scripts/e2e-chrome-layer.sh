@@ -60,6 +60,17 @@ else
   cat "$LOG"; exit 1
 fi
 
+# The chrome holds its own seat's keyboard, which is how the window's input
+# reaches it. Without a seat of its own it would be taking focus from whichever
+# app the chrome had focused, and losing it again on the next click.
+if wait_for "the chrome has the window's keyboard"; then
+  echo "PASS: the chrome took its seat's keyboard focus"
+else
+  echo "FAIL: the chrome never took keyboard focus, so the window's input has"
+  echo "  nowhere to go — the desktop would look hung."
+  cat "$LOG"; exit 1
+fi
+
 # One app, not two: the chrome must never have been announced.
 MAPPED="$(grep -c "toplevel mapped" "$LOG")"
 if [ "$MAPPED" = "1" ]; then

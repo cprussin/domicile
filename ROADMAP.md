@@ -88,6 +88,15 @@ nix develop .#full -c ./scripts/run-prototype.sh
   everything headless keeps working — so it looks like a compositing bug and is
   a packaging one. `NoCompositor` is the different failure: the library loaded
   and there was no session to nest in.
+- **`winit::init` hands back an event loop, and dropping it is silent.** The
+  window still opens and still draws; it just never hears a pointer or a key,
+  which reads as a compositor that has hung rather than as a wire-up that is
+  missing. It goes into calloop like any other source.
+- **The chrome needs a seat of its own.** One seat cannot serve both: an app
+  holds the keyboard focus (that is how a forwarded keystroke reaches a
+  terminal) while the chrome needs the window's input at the same time, and they
+  would take focus from each other on every event. Two seats give each a focus
+  that stays put, and no client hears from the one it is not focused on.
 - **A client's buffer may be upside down, and the types do not say so.** A
   client that renders with GL hands the buffer over the way GL made it and sets
   `Y_INVERT` on the dmabuf; Smithay records that on the texture but does not
