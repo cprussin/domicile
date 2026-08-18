@@ -8,11 +8,13 @@
 # client's own buffer through the transform the chrome laid out for it: no
 # readback, no socket, no IPC, no canvas.
 #
-# The chrome still runs as it does today, over the Unix socket, because it is
-# what decides where windows go — `place_portal` is the geometry this draws
-# with. It is not composited into the window yet, so what you should see is a
-# terminal on a black background at the position and size the chrome's `<app>`
-# element has, and *not* see is any of the chrome's own furniture.
+# The chrome is a client of Domicile too, on a socket of its own, and Domicile
+# draws its surface over the apps. Its window is transparent, so an `<app>`
+# element is a hole the client shows through — which is how every other Wayland
+# compositor does it, and why it costs what one costs.
+#
+# The Unix socket is still there and still carries the geometry: `place_portal`
+# is what this draws with. What it no longer carries is pixels.
 #
 # The comparison this exists for: `scripts/run-prototype.sh` is the same thing
 # on the copy path. Its `frames` line reports readback_ms and the chrome's
@@ -79,19 +81,30 @@ if ! kill -0 "$COMP" 2>/dev/null; then
   exit 1
 fi
 
-# The chrome, still over the socket: it is the source of the geometry, not yet
-# something the window draws.
-DOMICILE_CHROME_SOCKET="$CHROME_SOCK" electron --no-sandbox "$ROOT/apps/shell" &
+# Which displays Domicile bound: one for the apps, one for the chrome. Which
+# socket a client arrives on is how the compositor tells the two apart, so the
+# chrome goes on the second and everything the compositor spawns on the first.
+DOMICILE_DISPLAY="$(sed -n '/apps connect here/s/.*display="\([^"]*\)".*/\1/p' "$COMPLOG" | head -1)"
+CHROME_DISPLAY="$(sed -n '/the chrome connects here/s/.*display="\([^"]*\)".*/\1/p' "$COMPLOG" | head -1)"
+if [ -z "$CHROME_DISPLAY" ]; then
+  echo "The compositor did not report a chrome display; cannot put the chrome"
+  echo "on it. Its log is above."
+  exit 1
+fi
+
+# The chrome as our own client. `DOMICILE_COMPOSITED` is what makes its window
+# transparent — without it the page paints a desktop over the apps.
+WAYLAND_DISPLAY="$CHROME_DISPLAY" \
+  DOMICILE_COMPOSITED=1 \
+  DOMICILE_CHROME_SOCKET="$CHROME_SOCK" \
+  electron --no-sandbox --ozone-platform=wayland "$ROOT/apps/shell" &
 CHROME=$!
 
-# Which display Domicile bound. A terminal opened from the chrome is spawned by
-# the compositor onto *this* one; seeing it appear on your own desktop instead
-# means the child got your session's display rather than Domicile's.
-DOMICILE_DISPLAY="$(sed -n 's/.*socket_name="\([^"]*\)".*/\1/p' "$COMPLOG" | head -1)"
-
 echo
-echo "Compositor window is up on WAYLAND_DISPLAY=${DOMICILE_DISPLAY:-?} under"
-echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR. Open a terminal from the chrome"
-echo "(Alt+Enter) and it should appear *in the compositor's window*, not on"
-echo "your own desktop and not in the chrome's canvas. Ctrl-C to stop."
+echo "Compositor window is up: apps on WAYLAND_DISPLAY=${DOMICILE_DISPLAY:-?},"
+echo "the chrome on $CHROME_DISPLAY, both under XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR."
+echo "The chrome should be drawn *inside* the compositor's window. Open a"
+echo "terminal from it (Alt+Enter) and the terminal should appear inside that"
+echo "window too — under the chrome, showing through the <app> element's hole,"
+echo "and not on your own desktop. Ctrl-C to stop."
 wait "$COMP"

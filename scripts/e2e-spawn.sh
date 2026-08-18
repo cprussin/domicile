@@ -40,7 +40,7 @@ else
 fi
 
 for _ in $(seq 1 50); do [ -s "$SPAWNED" ] && break; sleep 0.1; done
-DOMICILE_DISPLAY="$(sed -n 's/.*socket_name="\([^"]*\)".*/\1/p' "$LOG" | head -1)"
+DOMICILE_DISPLAY="$(sed -n '/apps connect here/s/.*display="\([^"]*\)".*/\1/p' "$LOG" | head -1)"
 SPAWNED_DISPLAY="$(cat "$SPAWNED" 2>/dev/null || true)"
 if [ -n "$DOMICILE_DISPLAY" ] && [ "$SPAWNED_DISPLAY" = "$DOMICILE_DISPLAY" ]; then
   echo "PASS: the spawned client was aimed at Domicile (WAYLAND_DISPLAY=$SPAWNED_DISPLAY)"

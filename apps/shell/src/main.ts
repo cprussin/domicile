@@ -23,6 +23,9 @@ const WINDOW_WIDTH = 1280;
 const WINDOW_HEIGHT = 800;
 const BACKGROUND_COLOR = "#0b0e17";
 
+// Transparent, because Domicile is drawing the windows underneath us.
+const TRANSPARENT = "#00000000";
+
 // The compositor's chrome socket. `XDG_RUNTIME_DIR` must stay short: a Unix
 // socket path is capped near 108 bytes (SUN_LEN), which a deep scratch
 // directory blows past.
@@ -32,10 +35,20 @@ const socketPath =
   environment.DOMICILE_CHROME_SOCKET ??
   path.join(environment.XDG_RUNTIME_DIR ?? ".", "domicile-chrome.sock");
 
+// Whether Domicile is compositing this window's clients itself, rather than
+// sending their pixels here to be drawn into a canvas. Set by the runner that
+// puts us on Domicile's own display; the window has to be transparent for it,
+// so that the `<app>` elements are holes the clients show through.
+const composited = environment.DOMICILE_COMPOSITED === "1";
+
 const createWindow = (): BrowserWindow => {
   const win = new BrowserWindow({
-    backgroundColor: BACKGROUND_COLOR,
+    backgroundColor: composited ? TRANSPARENT : BACKGROUND_COLOR,
+    // The desktop has no window furniture of its own, and the compositor gives
+    // it the whole output regardless of what is asked for here.
+    frame: !composited,
     height: WINDOW_HEIGHT,
+    transparent: composited,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -47,6 +60,19 @@ const createWindow = (): BrowserWindow => {
     width: WINDOW_WIDTH,
   });
   win.loadFile(path.join(dirname, "../renderer/main_window/index.html"));
+  if (composited) {
+    // The design system paints `html`, which would cover a transparent window
+    // with a solid desktop and leave the `<app>` holes showing that instead of
+    // the clients behind them. Injected rather than authored into the shell's
+    // stylesheet because it is a property of how this window is being
+    // presented, not of the chrome: the same page in the copy path wants its
+    // background.
+    win.webContents.on("did-finish-load", () => {
+      void win.webContents.insertCSS(
+        "html, body { background: transparent !important; }",
+      );
+    });
+  }
   return win;
 };
 

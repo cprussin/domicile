@@ -88,10 +88,16 @@ export class DomicileAppElement extends HTMLElement {
    * Record the client's own content size, which pointer coordinates are scaled
    * to. Frames carry it, but so does an `app_resized` the client sends before
    * it has redrawn.
+   *
+   * A size is also what says the client has something to show, which is why the
+   * placeholder goes away here rather than when pixels land: where the
+   * compositor draws the client's surface itself there are no pixels to land,
+   * and a placeholder left up would be drawn over the real window.
    */
   setSurfaceSize(width: number, height: number): void {
     this.#surfaceWidth = width;
     this.#surfaceHeight = height;
+    this.classList.add(HAS_SURFACE_CLASS);
   }
 
   /**
@@ -159,7 +165,6 @@ export class DomicileAppElement extends HTMLElement {
         0,
         0,
       );
-      this.classList.add(HAS_SURFACE_CLASS);
     }
   }
 
