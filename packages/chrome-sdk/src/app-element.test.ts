@@ -202,6 +202,30 @@ describe("<domicile-app>", () => {
     expect(bridge.calls).toContainEqual(["remove", "term"]);
   });
 
+  it("takes the keyboard back when the focused window goes away", () => {
+    // Otherwise the host is left holding a focus for a client that no longer
+    // exists, and the chrome stops receiving keys — a desktop that works right
+    // up until you close a window.
+    const element = mountApp("term");
+    element.focusApp();
+
+    element.remove();
+
+    expect(bridge.calls).toContainEqual(["focusChrome"]);
+  });
+
+  it("leaves the keyboard alone when an unfocused window goes away", () => {
+    // Closing a background window must not steal the keyboard from the one
+    // that has it.
+    const focused = mountApp("term");
+    focused.focusApp();
+    const other = mountApp("other");
+
+    other.remove();
+
+    expect(bridge.calls).not.toContainEqual(["focusChrome"]);
+  });
+
   it("does nothing without an app-id", () => {
     mountApp();
     expect(bridge.calls).toHaveLength(0);

@@ -7,7 +7,14 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/target/debug/domicile-compositor"
-[ -x "$BIN" ] || { echo "build first: cargo build -p domicile-compositor"; exit 1; }
+# Built here rather than merely checked for. A binary that exists but predates
+# the source is the worst of both: every check runs, and every check reports on
+# code that is not the code in the tree. Incremental and near-free when there is
+# nothing to do.
+cargo build -p domicile-compositor >/dev/null 2>&1 || {
+  echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
+  exit 1
+}
 
 WORK="$(mktemp -d)"
 export XDG_RUNTIME_DIR="$WORK"; chmod 700 "$WORK"

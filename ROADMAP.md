@@ -99,6 +99,15 @@ nix develop .#full -c ./scripts/run-prototype.sh
   clean and broke Electron: `Gdk: gdk_seat_get_keyboard: assertion
   'GDK_IS_SEAT (seat)' failed`, then `Fatal Wayland communication error: Broken
   pipe` and the chrome was gone. One seat, taking turns.
+- **The e2e scripts used to run whatever binary was already built.** They
+  checked `target/debug/domicile-compositor` existed and never rebuilt, so a
+  source change that broke a check could pass on the previous build — every
+  assertion running, every assertion reporting on code that is not in the tree.
+  Renaming a log line the scripts grep for went to main exactly this way. They
+  build now; it costs nothing when there is nothing to do.
+- **Log messages the scripts grep for are an interface.** `e2e-hidpi.sh` matches
+  `advertising output scale scale=2`, so a word added to that message between
+  the text and the field breaks it. Grep the scripts before rewording a line.
 - **`winit::init` hands back an event loop, and dropping it is silent.** The
   window still opens and still draws; it just never hears a pointer or a key,
   which reads as a compositor that has hung rather than as a wire-up that is

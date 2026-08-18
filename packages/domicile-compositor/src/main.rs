@@ -1029,7 +1029,7 @@ impl DomicileCompositor {
     /// whatever it started as. The window's is the one that comes from outside.
     fn set_output_scale(&mut self, scale: i32) {
         if self.output.current_scale().integer_scale() != scale {
-            info!(scale, "advertising output scale (clients redraw at it)");
+            info!(scale, "advertising output scale");
             // The mode is physical pixels, so it grows with the scale to
             // hold the logical size still: a denser display is a sharper
             // desktop, not a smaller one.
@@ -1306,7 +1306,10 @@ impl DomicileCompositor {
             }
             ClientRequest::KeyboardFocus { app_id } => {
                 let surface = match app_id {
-                    Some(id) => self.surface_for(&id),
+                    Some(id) => {
+                        info!(app_id = %id, "keyboard focus -> client");
+                        self.surface_for(&id)
+                    }
                     // No window focused means the chrome itself has the
                     // keyboard, which is what its own fields and shortcuts
                     // need. Where the chrome is not our client there is
@@ -1657,11 +1660,20 @@ impl XdgShellHandler for DomicileCompositor {
             self.bridge.remove(&app_id);
             self.latest_dmabufs.remove(&app_id);
             self.textures.remove(&app_id);
+            if self.pointer_app.as_deref() == Some(app_id.as_str()) {
+                self.pointer_app = None;
+            }
             let closed = self.hub.host.lock().unwrap().app_closed(&app_id);
             info!(%app_id, "toplevel destroyed -> Host::app_closed");
             if let Some(closed) = closed {
                 self.hub.broadcast(closed);
             }
+            // The window that had the keyboard has gone, and a keyboard with
+            // nowhere to go is a desktop that has stopped listening. The chrome
+            // will usually ask for it back — but it does not have to, and a
+            // client that crashed rather than closed never got the chance, so
+            // the compositor is the one that has to guarantee this.
+            self.focus_chrome();
         }
     }
 

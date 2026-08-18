@@ -65,6 +65,10 @@ export class DomicileAppElement extends HTMLElement {
       activeBridge()?.removePortal(appId);
       if (focusedApp() === appId) {
         setFocusedApp(undefined);
+        // The window that had the keyboard has gone, so say who has it now.
+        // Without this the host is left holding a focus for a client that no
+        // longer exists, and the chrome stops receiving keys.
+        activeBridge()?.focusChrome();
       }
     }
   }
