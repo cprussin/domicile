@@ -71,6 +71,18 @@ else
   cat "$LOG"; exit 1
 fi
 
+# What the desktop is made of, reported once per shape. The picture cannot be
+# checked here — there is no display — but whether the compositor understood
+# the buffer can be, and that is what a wrong picture comes down to.
+if wait_for "the chrome committed a frame"; then
+  echo "PASS: the compositor described the chrome's frame"
+  grep "the chrome committed a frame" "$LOG" | head -1
+else
+  echo "FAIL: the chrome's frame was never described, so it never became a"
+  echo "  texture — there would be nothing drawn over the apps."
+  cat "$LOG"; exit 1
+fi
+
 # One app, not two: the chrome must never have been announced.
 MAPPED="$(grep -c "toplevel mapped" "$LOG")"
 if [ "$MAPPED" = "1" ]; then

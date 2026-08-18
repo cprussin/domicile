@@ -18,7 +18,7 @@
 //! What's intentionally missing (needs a GPU/display): presenting the engine's
 //! composited frame.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -644,6 +644,12 @@ struct DomicileCompositor {
     /// The chrome's latest surface as a texture. Transparent wherever an
     /// `<app>` element is, which is what lets the app below show through.
     chrome_texture: Option<SurfaceTexture>,
+    /// Which kinds of window input have been seen, so each is reported once
+    /// rather than on every pointer motion.
+    window_input_seen: HashSet<&'static str>,
+    /// What the chrome's last frame looked like, so the line describing it is
+    /// printed when it changes rather than sixty times a second.
+    chrome_frame_shape: Option<((f64, f64), bool, bool)>,
     /// Set when the window is closed, which is the user closing the desktop.
     /// Read by the event loop, which is the only thing that can act on it.
     stop: Arc<AtomicBool>,
@@ -738,7 +744,34 @@ impl DomicileCompositor {
         let Some(committed) = committed_buffer(buffer) else {
             return;
         };
-        self.chrome_texture = self.texture_from(committed, buffer_scale);
+        let texture = self.texture_from(committed, buffer_scale);
+        // Once, and again whenever what arrives changes shape. This is the one
+        // line that says what the desktop is actually made of — which kind of
+        // buffer, at what size, and which way up — and a picture that is the
+        // wrong size or upside down is answered here rather than by guessing
+        // from what it looks like.
+        let shape = texture.as_ref().map(|surface| {
+            (
+                surface.logical_size,
+                surface.y_inverted,
+                surface.from_dmabuf,
+            )
+        });
+        if shape != self.chrome_frame_shape {
+            self.chrome_frame_shape = shape;
+            match shape {
+                Some(((width, height), y_inverted, from_dmabuf)) => info!(
+                    width,
+                    height,
+                    y_inverted,
+                    dmabuf = from_dmabuf,
+                    scale = buffer_scale,
+                    "the chrome committed a frame"
+                ),
+                None => info!("the chrome's frame could not be made into a texture"),
+            }
+        }
+        self.chrome_texture = texture;
         self.present();
     }
 
@@ -758,6 +791,7 @@ impl DomicileCompositor {
         let gpu = self.gpu.as_mut()?;
         match committed {
             CommittedBuffer::Gpu(dmabuf) => Some(SurfaceTexture {
+                from_dmabuf: true,
                 texture: DmabufImporter::import(gpu.renderer(), &dmabuf)
                     .expect("a dmabuf the importer accepted imports"),
                 // A client that renders with GL hands the buffer over the way
@@ -775,6 +809,7 @@ impl DomicileCompositor {
                     .import_memory(&rgba, Fourcc::Abgr8888, size.into(), false)
                 {
                     Ok(texture) => Some(SurfaceTexture {
+                        from_dmabuf: false,
                         texture,
                         // Shared memory is described the way it is laid out.
                         y_inverted: false,
@@ -1008,6 +1043,32 @@ impl DomicileCompositor {
             // a click on a desktop that is not up yet has nothing to land on.
             return;
         };
+        // Once per kind, so the log distinguishes the three ways this fails:
+        // nothing arrives at all (the window's events are not wired up),
+        // something arrives but the chrome has no focus to receive it, or it
+        // arrives and is delivered and the chrome does nothing with it.
+        let kind = match &event {
+            InputEvent::PointerMotionAbsolute { .. } => Some("pointer motion"),
+            InputEvent::PointerButton { .. } => Some("pointer button"),
+            InputEvent::PointerAxis { .. } => Some("scroll"),
+            InputEvent::Keyboard { .. } => Some("key"),
+            _ => None,
+        };
+        if let Some(kind) = kind {
+            if self.window_input_seen.insert(kind) {
+                let focused = self
+                    .chrome_seat
+                    .get_keyboard()
+                    .and_then(|keyboard| keyboard.current_focus())
+                    .is_some();
+                info!(
+                    kind,
+                    chrome_has_keyboard = focused,
+                    "the window's input reached the compositor"
+                );
+            }
+        }
+
         let time = self.now_ms();
         match event {
             InputEvent::PointerMotionAbsolute { event } => {
@@ -1248,6 +1309,10 @@ impl DomicileCompositor {
 /// A client's latest surface, as something to draw.
 struct SurfaceTexture {
     texture: GlesTexture,
+    /// Whether the client handed over a GPU buffer or shared memory. Recorded
+    /// for the log: it is the difference between a frame that cost nothing and
+    /// one that cost an upload, and it is not visible in the picture.
+    from_dmabuf: bool,
     /// See [`Layer::y_inverted`]. Smithay records this on the texture but does
     /// not expose it, so it is kept from where the buffer said so.
     y_inverted: bool,
@@ -2044,6 +2109,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pending_key: None,
         chrome_toplevel: None,
         chrome_texture: None,
+        chrome_frame_shape: None,
+        window_input_seen: HashSet::new(),
         stop: Arc::new(AtomicBool::new(false)),
     };
 
