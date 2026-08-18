@@ -610,7 +610,7 @@ struct DomicileCompositor {
     /// Each app's latest surface as a texture, when presenting. Kept rather
     /// than read back and dropped: this *is* the client's buffer, and drawing
     /// it is what costs nothing.
-    textures: HashMap<String, GlesTexture>,
+    textures: HashMap<String, SurfaceTexture>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
     /// The app the pointer is currently over, so a `set_cursor` request can be
@@ -634,7 +634,7 @@ struct DomicileCompositor {
     chrome_toplevel: Option<ToplevelSurface>,
     /// The chrome's latest surface as a texture. Transparent wherever an
     /// `<app>` element is, which is what lets the app below show through.
-    chrome_texture: Option<GlesTexture>,
+    chrome_texture: Option<SurfaceTexture>,
 }
 
 /// Per-client state required by the compositor global.
@@ -722,11 +722,11 @@ impl DomicileCompositor {
     ///
     /// Unthrottled, unlike an app's: this is the desktop, and a frame of it
     /// dropped is the whole picture going stale rather than one window's.
-    fn publish_chrome_frame(&mut self, buffer: &wl_buffer::WlBuffer) {
+    fn publish_chrome_frame(&mut self, buffer: &wl_buffer::WlBuffer, buffer_scale: i32) {
         let Some(committed) = committed_buffer(buffer) else {
             return;
         };
-        self.chrome_texture = self.texture_from(committed);
+        self.chrome_texture = self.texture_from(committed, buffer_scale);
         self.present();
     }
 
@@ -735,18 +735,25 @@ impl DomicileCompositor {
     /// A dmabuf costs nothing — it *is* the client's buffer. Shared memory
     /// costs an upload, which is still the cheap half of what the copy path
     /// does, and is what a software-rendering client commits.
-    fn texture_from(&mut self, committed: CommittedBuffer) -> Option<GlesTexture> {
+    fn texture_from(
+        &mut self,
+        committed: CommittedBuffer,
+        buffer_scale: i32,
+    ) -> Option<SurfaceTexture> {
+        let (width, height) = committed.size();
+        let (logical_width, logical_height) = logical_size((width, height), buffer_scale);
+        let logical_size = (f64::from(logical_width), f64::from(logical_height));
         let gpu = self.gpu.as_mut()?;
         match committed {
-            CommittedBuffer::Gpu(dmabuf) => Some(
-                DmabufImporter::import(gpu.renderer(), &dmabuf)
+            CommittedBuffer::Gpu(dmabuf) => Some(SurfaceTexture {
+                texture: DmabufImporter::import(gpu.renderer(), &dmabuf)
                     .expect("a dmabuf the importer accepted imports"),
-            ),
-            CommittedBuffer::Pixels {
-                width,
-                height,
-                rgba,
-            } => {
+                // A client that renders with GL hands the buffer over the way
+                // GL made it, and says so on the buffer.
+                y_inverted: dmabuf.y_inverted(),
+                logical_size,
+            }),
+            CommittedBuffer::Pixels { rgba, .. } => {
                 let size = (
                     i32::try_from(width).unwrap_or(i32::MAX),
                     i32::try_from(height).unwrap_or(i32::MAX),
@@ -755,7 +762,12 @@ impl DomicileCompositor {
                     .renderer()
                     .import_memory(&rgba, Fourcc::Abgr8888, size.into(), false)
                 {
-                    Ok(texture) => Some(texture),
+                    Ok(texture) => Some(SurfaceTexture {
+                        texture,
+                        // Shared memory is described the way it is laid out.
+                        y_inverted: false,
+                        logical_size,
+                    }),
                     Err(err) => {
                         tracing::warn!(%err, "a shm buffer would not upload");
                         None
@@ -795,7 +807,7 @@ impl DomicileCompositor {
             // drop is never imported at all.
             let rgba = match committed {
                 CommittedBuffer::Pixels { rgba, .. } => rgba,
-                CommittedBuffer::Gpu(dmabuf) => self.import_gpu_frame(app_id, dmabuf),
+                CommittedBuffer::Gpu(dmabuf) => self.import_gpu_frame(app_id, dmabuf, buffer_scale),
             };
             if rgba.is_empty() {
                 // Presenting: the pixels never left the GPU, so there is
@@ -816,7 +828,7 @@ impl DomicileCompositor {
     ///
     /// The readback is the part the CEF bridge deletes: the descriptor stored
     /// here already names the very buffer the engine will sample directly.
-    fn import_gpu_frame(&mut self, app_id: &str, dmabuf: Dmabuf) -> Vec<u8> {
+    fn import_gpu_frame(&mut self, app_id: &str, dmabuf: Dmabuf, buffer_scale: i32) -> Vec<u8> {
         let gpu = self.gpu.as_mut().expect(
             "a dmabuf can only be committed where the global — and so the renderer — exists",
         );
@@ -828,9 +840,11 @@ impl DomicileCompositor {
             // Presenting: the client's buffer becomes a texture we draw, and
             // nothing is copied. The chrome gets no pixels for this app —
             // there is a hole in the page where the compositor puts it.
-            let texture = DmabufImporter::import(gpu.renderer(), &dmabuf)
-                .expect("a dmabuf the importer accepted imports");
-            self.textures.insert(app_id.to_string(), texture);
+            if let Some(surface) =
+                self.texture_from(CommittedBuffer::Gpu(dmabuf.clone()), buffer_scale)
+            {
+                self.textures.insert(app_id.to_string(), surface);
+            }
             Vec::new()
         } else {
             DmabufImporter::read_rgba(gpu.renderer(), &dmabuf)
@@ -885,23 +899,29 @@ impl DomicileCompositor {
         let mut layers: Vec<_> = placements
             .iter()
             .filter_map(|(app_id, surface_to_output)| {
+                let surface = self.textures.get(app_id)?;
                 Some(Layer {
                     alpha: 1.0,
                     surface_to_output: surface_to_output.then(to_window),
-                    texture: self.textures.get(app_id)?,
+                    texture: &surface.texture,
+                    y_inverted: surface.y_inverted,
                 })
             })
             .collect();
-        if let Some(texture) = self.chrome_texture.as_ref() {
+        if let Some(chrome) = self.chrome_texture.as_ref() {
             layers.push(Layer {
                 alpha: 1.0,
-                // The whole output, because the chrome is the desktop.
+                // At its own size rather than stretched over the output: it is
+                // asked to be the output's size, and a chrome that has not
+                // taken that size yet should show as a gap it has not filled
+                // rather than as a picture quietly scaled to fit.
                 surface_to_output: SceneTransform::scale(
-                    f64::from(OUTPUT_LOGICAL_SIZE.0),
-                    f64::from(OUTPUT_LOGICAL_SIZE.1),
+                    chrome.logical_size.0,
+                    chrome.logical_size.1,
                 )
                 .then(to_window),
-                texture,
+                texture: &chrome.texture,
+                y_inverted: chrome.y_inverted,
             });
         }
 
@@ -1094,6 +1114,19 @@ impl DomicileCompositor {
 
 /// What a client just attached: pixels we can already read (`wl_shm`), or a
 /// GPU buffer that has to go through the renderer first (`zwp_linux_dmabuf`).
+/// A client's latest surface, as something to draw.
+struct SurfaceTexture {
+    texture: GlesTexture,
+    /// See [`Layer::y_inverted`]. Smithay records this on the texture but does
+    /// not expose it, so it is kept from where the buffer said so.
+    y_inverted: bool,
+    /// The surface's own size in logical units, which is the box it is drawn
+    /// into. Not the output's: a client that has not answered a configure yet
+    /// is still its old size, and stretching it to the output would hide that
+    /// rather than show it.
+    logical_size: (f64, f64),
+}
+
 /// Which of the two kinds of client committed a buffer.
 #[derive(Debug)]
 enum Committer {
@@ -1213,7 +1246,7 @@ impl CompositorHandler for DomicileCompositor {
             }
             match &committer {
                 Committer::App(app_id) => self.publish_frame(app_id, &buffer, buffer_scale),
-                Committer::Chrome => self.publish_chrome_frame(&buffer),
+                Committer::Chrome => self.publish_chrome_frame(&buffer, buffer_scale),
             }
             // The client may redraw into this buffer the instant it is
             // released, so the release comes after the pixels are out of it —
