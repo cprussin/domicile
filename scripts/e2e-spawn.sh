@@ -6,11 +6,23 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/target/debug/domicile-compositor"
 [ -x "$BIN" ] || { echo "build first: nix develop .#full -c cargo build -p domicile-compositor"; exit 1; }
 
+# libwayland colours WAYLAND_DEBUG even into a file, and tracing colours its own
+# output; the checks below read that output, and escapes land mid-field.
+export NO_COLOR=1
+
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-spawn"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 export SOCK="$XDG_RUNTIME_DIR/c.sock"
 LOG="$(mktemp)"
+# The probe writes the display its spawned child saw beside the chrome socket.
+SPAWNED="$SOCK.display"
+rm -f "$SPAWNED"
+
+# A display that is not Domicile's, so "the child inherited ours" is a failure
+# the check can see rather than a value that happens to look right. This is the
+# session a presenting compositor would be a client of.
+export WAYLAND_DISPLAY="not-domicile"
 
 RUST_LOG="info" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
@@ -25,4 +37,17 @@ if grep -q "spawning client" "$LOG"; then
   grep "spawning client" "$LOG" | head -1
 else
   echo "FAIL: no spawn happened"; cat "$LOG"; exit 1
+fi
+
+for _ in $(seq 1 50); do [ -s "$SPAWNED" ] && break; sleep 0.1; done
+DOMICILE_DISPLAY="$(sed -n 's/.*socket_name="\([^"]*\)".*/\1/p' "$LOG" | head -1)"
+SPAWNED_DISPLAY="$(cat "$SPAWNED" 2>/dev/null || true)"
+if [ -n "$DOMICILE_DISPLAY" ] && [ "$SPAWNED_DISPLAY" = "$DOMICILE_DISPLAY" ]; then
+  echo "PASS: the spawned client was aimed at Domicile (WAYLAND_DISPLAY=$SPAWNED_DISPLAY)"
+else
+  echo "FAIL: the spawned client got WAYLAND_DISPLAY='$SPAWNED_DISPLAY', not"
+  echo "  Domicile's '$DOMICILE_DISPLAY'. A client that inherits the"
+  echo "  compositor's own display opens on the session the compositor is"
+  echo "  presenting into — the host desktop — instead of inside Domicile."
+  exit 1
 fi

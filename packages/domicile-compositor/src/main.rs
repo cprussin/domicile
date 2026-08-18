@@ -19,9 +19,11 @@
 //! composited frame.
 
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -201,10 +203,17 @@ struct ChromeHub {
     /// Read-only config, held here because it is the chrome connections that
     /// receive the density and have to bound it.
     max_scale: u32,
+    /// The name of *our* Wayland socket, which is what a client we spawn must
+    /// connect to.
+    wayland_display: OsString,
 }
 
 impl ChromeHub {
-    fn new(request_tx: Sender<ClientRequest>, max_scale: u32) -> (Arc<Self>, OutboundReceiver) {
+    fn new(
+        request_tx: Sender<ClientRequest>,
+        max_scale: u32,
+        wayland_display: OsString,
+    ) -> (Arc<Self>, OutboundReceiver) {
         let (outbound, outbound_rx) = outbound();
         let hub = Arc::new(ChromeHub {
             host: Mutex::new(Host::new()),
@@ -213,6 +222,7 @@ impl ChromeHub {
             outbound,
             timings: Mutex::new(FrameTimings::default()),
             max_scale,
+            wayland_display,
         });
         (hub, outbound_rx)
     }
@@ -468,7 +478,7 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
         let responses = match parse_chrome(line.trim()) {
             // Compositor-level side effects: intercept before the (pure) brain.
             Ok(ChromeMessage::Spawn { command }) => {
-                spawn_client(&command);
+                spawn_client(&command, &hub.wayland_display);
                 Vec::new()
             }
             Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
@@ -1247,20 +1257,15 @@ delegate_xdg_shell!(DomicileCompositor);
 
 // ---- boot -----------------------------------------------------------------
 
-/// Spawn a client process. It inherits the compositor's environment — including
-/// the `WAYLAND_DISPLAY` we set — so it connects to Domicile. `DISPLAY` is removed so
-/// GUI toolkits prefer Domicile's Wayland display over any outer X server. A reaper
-/// thread waits on the child so it doesn't become a zombie.
-fn spawn_client(command: &[String]) {
-    let Some((program, args)) = command.split_first() else {
+/// Spawn a client process onto Domicile's display.
+///
+/// A reaper thread waits on the child so it doesn't become a zombie.
+fn spawn_client(command: &[String], wayland_display: &OsStr) {
+    let Some(mut child) = client_command(command, wayland_display) else {
         return;
     };
-    info!(?command, "spawning client");
-    match std::process::Command::new(program)
-        .args(args)
-        .env_remove("DISPLAY")
-        .spawn()
-    {
+    info!(?command, ?wayland_display, "spawning client");
+    match child.spawn() {
         Ok(mut child) => {
             thread::spawn(move || {
                 let _ = child.wait();
@@ -1268,6 +1273,24 @@ fn spawn_client(command: &[String]) {
         }
         Err(err) => tracing::error!(%err, ?command, "failed to spawn client"),
     }
+}
+
+/// The command a spawned client runs under.
+///
+/// `WAYLAND_DISPLAY` is set on the child rather than left to the compositor's
+/// own environment. When Domicile presents to a window it is itself a client of
+/// the session it was started from, so it must keep that session's
+/// `WAYLAND_DISPLAY` to reach it — and a client that inherited it would open on
+/// the host desktop instead of on Domicile. `DISPLAY` is removed so a toolkit
+/// with both backends prefers Wayland over any outer X server.
+fn client_command(command: &[String], wayland_display: &OsStr) -> Option<Command> {
+    let (program, args) = command.split_first()?;
+    let mut child = Command::new(program);
+    child
+        .args(args)
+        .env("WAYLAND_DISPLAY", wayland_display)
+        .env_remove("DISPLAY");
+    Some(child)
 }
 
 /// Advertise `zwp_linux_dmabuf_v1`, with feedback whenever we can name the DRM
@@ -1543,11 +1566,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     output.set_preferred(mode);
 
+    // Bind the Wayland socket before anything can ask us to put a client on
+    // it. A chrome that connects the moment its own socket appears may send a
+    // `spawn` straight away, and a client spawned with no display of ours to
+    // name would land on whichever session we inherited. Inserting the source
+    // into the event loop happens later; binding is what reserves the name.
+    let source = ListeningSocketSource::new_auto()?;
+    let socket_name = source.socket_name().to_os_string();
+    info!(
+        ?socket_name,
+        "domicile-compositor: Wayland server up (WAYLAND_DISPLAY)"
+    );
+
     // Forward input from the chrome onto the Wayland thread via a channel.
     let (request_tx, request_rx) = channel::<ClientRequest>();
 
     // Shared brain, driven by both the Wayland side and chrome connections.
-    let (hub, outbound_rx) = ChromeHub::new(request_tx, config.output.max_scale);
+    let (hub, outbound_rx) =
+        ChromeHub::new(request_tx, config.output.max_scale, socket_name.clone());
     {
         let hub = hub.clone();
         thread::spawn(move || serve_chrome(hub, chrome_socket));
@@ -1627,9 +1663,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut data = CalloopData { display, state };
 
-    // Accept clients on an auto-named Wayland socket.
-    let source = ListeningSocketSource::new_auto()?;
-    let socket_name = source.socket_name().to_os_string();
+    // Start accepting on the socket bound above.
     let handle = event_loop.handle();
     handle.insert_source(source, move |stream, _, data: &mut CalloopData| {
         data.display
@@ -1656,12 +1690,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     })?;
 
-    info!(
-        ?socket_name,
-        "domicile-compositor: Wayland server up (WAYLAND_DISPLAY)"
-    );
-    std::env::set_var("WAYLAND_DISPLAY", &socket_name);
-
     // Flush after every loop iteration so events queued while handling input
     // (which arrives off the wayland fd) reach clients promptly.
     event_loop.run(None, &mut data, |data| {
@@ -1672,11 +1700,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::{OsStr, OsString};
+
     use smithay::input::pointer::CursorIcon;
 
     use domicile_protocol::CursorShape;
 
-    use super::{bgra_to_rgba, cursor_shape};
+    use super::{bgra_to_rgba, client_command, cursor_shape};
+
+    /// What a spawned client would find in its environment for `name`, where
+    /// `None` is the variable being cleared rather than left alone.
+    fn child_env(command: &[String], display: &str, name: &str) -> Option<OsString> {
+        client_command(command, OsStr::new(display))
+            .expect("a command with a program builds")
+            .get_envs()
+            .find(|(key, _)| *key == OsStr::new(name))
+            .map(|(_, value)| value.map(OsStr::to_os_string))
+            .expect("the variable is one this sets or clears")
+    }
+
+    fn kitty() -> Vec<String> {
+        vec!["kitty".to_string()]
+    }
+
+    #[test]
+    fn a_spawned_client_is_pointed_at_our_display_not_the_one_we_inherited() {
+        // The compositor keeps the session's own WAYLAND_DISPLAY, because
+        // presenting to a window means being a client of it. A child left to
+        // inherit that opens on the host desktop rather than on Domicile,
+        // which looks like a compositor that is not compositing.
+        assert_eq!(
+            child_env(&kitty(), "wayland-7", "WAYLAND_DISPLAY"),
+            Some(OsString::from("wayland-7")),
+        );
+    }
+
+    #[test]
+    fn a_spawned_client_gets_no_x_display() {
+        assert_eq!(child_env(&kitty(), "wayland-7", "DISPLAY"), None);
+    }
+
+    #[test]
+    fn an_empty_command_spawns_nothing() {
+        assert!(client_command(&[], OsStr::new("wayland-7")).is_none());
+    }
 
     #[test]
     fn cursor_icons_map_to_css_keywords() {

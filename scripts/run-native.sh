@@ -26,6 +26,10 @@ if [ -z "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
   exit 1
 fi
 
+# tracing colours its own output, and the display name is read back out of it
+# below; escapes would land between the field name and its value.
+export NO_COLOR=1
+
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/domicile-rt-native}"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 CHROME_SOCK="$XDG_RUNTIME_DIR/domicile-native.sock"
@@ -38,14 +42,22 @@ bun run turbo build:vite --filter @domicile/shell >/dev/null 2>&1 || {
   echo "the shell failed to build"; exit 1;
 }
 
-# The compositor's own Wayland socket is auto-named; it prints which. The
-# clients it spawns inherit it, which is how the terminal below finds us.
+# The compositor's own Wayland socket is auto-named; it logs which. Unlike the
+# headless prototype it cannot have a runtime dir to itself — presenting means
+# being a client of *your* session, so it has to keep your XDG_RUNTIME_DIR to
+# find it, and its socket lands in there beside your compositor's.
+#
+# The log is a file rather than a pipe because `$!` after a pipeline is the PID
+# of its *last* command: with `| tee` the liveness check below would be
+# watching tee, which outlives a compositor that died on startup.
 COMPLOG="$(mktemp)"
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=info}" \
-  ./target/debug/domicile-compositor --present --chrome-socket "$CHROME_SOCK" 2>&1 \
-  | tee "$COMPLOG" &
+  ./target/debug/domicile-compositor --present --chrome-socket "$CHROME_SOCK" \
+  >"$COMPLOG" 2>&1 &
 COMP=$!
-trap 'kill -9 "$COMP" ${CHROME:-} 2>/dev/null; rm -f "$COMPLOG"' EXIT
+# Its output still reaches the terminal, just by way of the file.
+tail -f "$COMPLOG" & TAILER=$!
+trap 'kill -9 "$COMP" "$TAILER" ${CHROME:-} 2>/dev/null; rm -f "$COMPLOG"' EXIT
 for _ in $(seq 1 200); do [ -S "$CHROME_SOCK" ] && break; sleep 0.05; done
 
 # A compositor that died leaves its socket behind for a moment, so waiting for
@@ -72,8 +84,14 @@ fi
 DOMICILE_CHROME_SOCKET="$CHROME_SOCK" electron --no-sandbox "$ROOT/apps/shell" &
 CHROME=$!
 
+# Which display Domicile bound. A terminal opened from the chrome is spawned by
+# the compositor onto *this* one; seeing it appear on your own desktop instead
+# means the child got your session's display rather than Domicile's.
+DOMICILE_DISPLAY="$(sed -n 's/.*socket_name="\([^"]*\)".*/\1/p' "$COMPLOG" | head -1)"
+
 echo
-echo "Compositor window is up. Open a terminal from the chrome (Alt+Enter) and"
-echo "it should appear *in the compositor's window*, not in the chrome's canvas."
-echo "Ctrl-C to stop."
+echo "Compositor window is up on WAYLAND_DISPLAY=${DOMICILE_DISPLAY:-?} under"
+echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR. Open a terminal from the chrome"
+echo "(Alt+Enter) and it should appear *in the compositor's window*, not on"
+echo "your own desktop and not in the chrome's canvas. Ctrl-C to stop."
 wait "$COMP"
