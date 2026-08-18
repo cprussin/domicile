@@ -113,13 +113,24 @@ if ! wait_for "keyboard focus -> client"; then
   cat "$LOG"; exit 1
 fi
 BEFORE="$(grep -c "the chrome has the window's keyboard" "$LOG")"
-kill -9 "$APP" 2>/dev/null
+kill -9 "$APP" 2>/dev/null; wait "$APP" 2>/dev/null || true
 if wait_for_more "the chrome has the window's keyboard" "$BEFORE"; then
   echo "PASS: the keyboard came back to the chrome when the window went away"
 else
   echo "FAIL: the window took the keyboard and kept it after it was gone, so"
   echo "  nothing the user types reaches anything — a desktop that works until"
   echo "  you close a window."
+  cat "$LOG"; exit 1
+fi
+
+# ...and focusing a window that no longer exists must not take it away again.
+# A real chrome loses this race whenever a window closes while its own focus
+# message is in flight, and the compositor is what has to survive it.
+if wait_for "a window with no surface"; then
+  echo "PASS: focusing a window that is gone leaves the keyboard with the chrome"
+else
+  echo "FAIL: the chrome focused a window with no surface and the compositor"
+  echo "  said nothing, so the keyboard went nowhere and stayed there."
   cat "$LOG"; exit 1
 fi
 
