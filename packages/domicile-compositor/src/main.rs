@@ -1103,6 +1103,20 @@ enum Committer {
     Chrome,
 }
 
+/// Whether this commit can be the answer to a keystroke we forwarded.
+///
+/// Only a window can: a keystroke goes to the focused *client*, and the frame
+/// that answers it is that client's. The chrome repaints constantly and for
+/// reasons of its own — a clock ticking is enough — so letting its commits
+/// consume the pending keystroke would report the clock's interval as the time
+/// the user waited, and the real answer would go uncounted.
+fn answers_keystroke(committer: &Committer) -> bool {
+    match committer {
+        Committer::App(_) => true,
+        Committer::Chrome => false,
+    }
+}
+
 enum CommittedBuffer {
     Pixels {
         width: u32,
@@ -1189,8 +1203,12 @@ impl CompositorHandler for DomicileCompositor {
                 // A commit with no keystroke behind it is not a response to
                 // one — a terminal redraws its blinking cursor unprompted, and
                 // counting that would report the blink interval as think time.
-                if let Some(keyed) = self.pending_key.take() {
-                    timings.response.record(started.duration_since(keyed));
+                // Nor is a commit by the chrome, which repaints on its own and
+                // is not where the keystroke went.
+                if answers_keystroke(&committer) {
+                    if let Some(keyed) = self.pending_key.take() {
+                        timings.response.record(started.duration_since(keyed));
+                    }
                 }
             }
             match &committer {
@@ -1886,7 +1904,7 @@ mod tests {
 
     use domicile_protocol::CursorShape;
 
-    use super::{bgra_to_rgba, client_command, cursor_shape};
+    use super::{answers_keystroke, bgra_to_rgba, client_command, cursor_shape, Committer};
 
     /// What a spawned client would find in its environment for `name`, where
     /// `None` is the variable being cleared rather than left alone.
@@ -1918,6 +1936,20 @@ mod tests {
     #[test]
     fn a_spawned_client_gets_no_x_display() {
         assert_eq!(child_env(&kitty(), "wayland-7", "DISPLAY"), None);
+    }
+
+    #[test]
+    fn a_window_can_be_the_answer_to_a_keystroke() {
+        assert!(answers_keystroke(&Committer::App("term".to_string())));
+    }
+
+    #[test]
+    fn the_chromes_own_repaint_is_not_an_answer_to_a_keystroke() {
+        // The chrome repaints on its own — a clock ticking is enough — and it
+        // is not where a forwarded keystroke went. Counting its commits would
+        // report the clock's interval as the time the user waited, and leave
+        // the real answer uncounted.
+        assert!(!answers_keystroke(&Committer::Chrome));
     }
 
     #[test]
