@@ -101,6 +101,13 @@ WAYLAND_DISPLAY="$CHROME_DISPLAY" \
 CHROME=$!
 
 echo
+echo "If the picture is wrong or nothing responds, the lines to look for above"
+echo "are 'the chrome committed a frame' (what the desktop is made of, and"
+echo "which way up), 'the chrome has the window's keyboard' (whether input has"
+echo "anywhere to go) and 'the window's input reached the compositor'. If none"
+echo "of those appear at all, this build predates them — nix caches a branch"
+echo "for an hour, so pass --refresh."
+echo
 echo "Compositor window is up: apps on WAYLAND_DISPLAY=${DOMICILE_DISPLAY:-?},"
 echo "the chrome on $CHROME_DISPLAY, both under XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR."
 echo "The chrome should be drawn *inside* the compositor's window. Open a"
