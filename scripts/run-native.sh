@@ -101,6 +101,11 @@ WAYLAND_DISPLAY="$CHROME_DISPLAY" \
 CHROME=$!
 
 echo
+echo "If the picture is upside down, run again with"
+echo "  DOMICILE_OUTPUT_TRANSFORM=flipped180 nix run ...#native"
+echo "and say which of the two was the right way up. Nothing without a display"
+echo "can answer that, so it is a switch until a screen has settled it."
+echo
 echo "If the picture is wrong or nothing responds, the lines to look for above"
 echo "are 'the chrome committed a frame' (what the desktop is made of, and"
 echo "which way up), 'the chrome has the window's keyboard' (whether input has"

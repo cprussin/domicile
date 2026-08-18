@@ -88,6 +88,13 @@ nix develop .#full -c ./scripts/run-prototype.sh
   everything headless keeps working — so it looks like a compositing bug and is
   a packaging one. `NoCompositor` is the different failure: the library loaded
   and there was no session to nest in.
+- **Which way up an output is drawn cannot be tested without a screen.**
+  Smithay's projection sends output-y=0 to NDC -1, which is GL's *bottom*;
+  whether that reaches a display as the top depends on what the window system
+  does with the buffer. Reading a buffer back — all a machine with no display
+  can do — is consistent either way, so the offscreen pixel tests pass under
+  both. `DOMICILE_OUTPUT_TRANSFORM=flipped180` is the switch that settles it on
+  a machine that has one.
 - **`winit::init` hands back an event loop, and dropping it is silent.** The
   window still opens and still draws; it just never hears a pointer or a key,
   which reads as a compositor that has hung rather than as a wire-up that is

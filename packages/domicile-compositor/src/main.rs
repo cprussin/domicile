@@ -980,7 +980,7 @@ impl DomicileCompositor {
             return;
         };
         let drawn = (|| {
-            let mut frame = renderer.render(&mut framebuffer, size, Transform::Normal)?;
+            let mut frame = renderer.render(&mut framebuffer, size, output_transform())?;
             frame.clear(
                 Color32F::new(0.0, 0.0, 0.0, 1.0),
                 &[Rectangle::from_size(size)],
@@ -1658,6 +1658,26 @@ impl XdgShellHandler for DomicileCompositor {
 delegate_xdg_shell!(DomicileCompositor);
 
 // ---- boot -----------------------------------------------------------------
+
+/// Which way up the window is drawn.
+///
+/// A bring-up switch, and it exists because nothing here can answer the
+/// question it settles. Smithay's projection sends output-y=0 to NDC -1, which
+/// is GL's *bottom*; whether that reaches the screen as the top depends on what
+/// the window system does with the buffer, and reading a buffer back — the only
+/// thing a machine with no display can do — cannot tell you. The offscreen
+/// tests are consistent either way, so this is a question for a screen.
+///
+/// `DOMICILE_OUTPUT_TRANSFORM=flipped180` turns the output over. If that is
+/// what a display wants, it stops being a switch and becomes the default.
+fn output_transform() -> Transform {
+    // Read per frame rather than once: it costs nothing next to a draw, and it
+    // means the answer can be changed without a rebuild.
+    match std::env::var("DOMICILE_OUTPUT_TRANSFORM").as_deref() {
+        Ok("flipped180") => Transform::Flipped180,
+        _ => Transform::Normal,
+    }
+}
 
 /// The display name the chrome connects on, given ours.
 ///
