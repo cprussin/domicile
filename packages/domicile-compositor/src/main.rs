@@ -659,6 +659,9 @@ struct DomicileCompositor {
     chrome_frame_shape: Option<((f64, f64), bool, bool)>,
     /// The highest output scale to advertise, whatever a display reports.
     max_scale: u32,
+    /// The desktop's size in logical units. Follows the window where there is
+    /// one; [`OUTPUT_LOGICAL_SIZE`] is what a headless run is stuck with.
+    output_logical: (i32, i32),
     /// Set when the window is closed, which is the user closing the desktop.
     /// Read by the event loop, which is the only thing that can act on it.
     stop: Arc<AtomicBool>,
@@ -943,7 +946,7 @@ impl DomicileCompositor {
         let size = backend.window_size();
         // The scene is in the chrome's logical units and the window is in
         // device pixels, and on a scaled display those are not the same number.
-        let to_window = logical_to_window(OUTPUT_LOGICAL_SIZE, (size.w, size.h));
+        let to_window = logical_to_window(self.output_logical, (size.w, size.h));
         let placements: Vec<_> = {
             let host = self.hub.host.lock().unwrap();
             host.scene()
@@ -1017,7 +1020,15 @@ impl DomicileCompositor {
     /// one — and the host compositor stretches the result over a denser screen.
     /// It does not look like the wrong scale, it looks like a blurry desktop.
     fn adopt_window_scale(&mut self, scale_factor: f64) {
-        self.set_output_scale(output_scale(scale_factor, self.max_scale));
+        let physical = self.window_size();
+        let scale = output_scale(scale_factor, self.max_scale);
+        // The desktop is the window: a client asking how big the screen is
+        // should be told what the user dragged the window to, not the size it
+        // started at. Without this the scene is mapped through a fixed
+        // 1280x800 whatever the window's shape, so a window that is not that
+        // shape shows the desktop stretched to fit it.
+        let logical = ((physical.0 / scale).max(1), (physical.1 / scale).max(1));
+        self.set_output(logical, scale);
     }
 
     /// Advertise a new output scale, so clients redraw at the resolution the
@@ -1029,24 +1040,46 @@ impl DomicileCompositor {
     /// *we* gave the chrome, so believing it back would pin the scale at
     /// whatever it started as. The window's is the one that comes from outside.
     fn set_output_scale(&mut self, scale: i32) {
-        if self.output.current_scale().integer_scale() != scale {
-            info!(scale, "advertising output scale");
-            // The mode is physical pixels, so it grows with the scale to
-            // hold the logical size still: a denser display is a sharper
-            // desktop, not a smaller one.
-            let mode = OutputMode {
-                size: (OUTPUT_LOGICAL_SIZE.0 * scale, OUTPUT_LOGICAL_SIZE.1 * scale).into(),
-                refresh: 60_000,
-            };
-            self.output
-                .change_current_state(Some(mode), None, Some(Scale::Integer(scale)), None);
-            self.output.set_preferred(mode);
-            // A client only redraws at the new scale once something
-            // asks it to, and its own size is unchanged — so re-send
-            // the configure it already has to prompt one.
-            for (_, toplevel) in &self.toplevels {
-                toplevel.send_configure();
-            }
+        let logical = self.output_logical;
+        self.set_output(logical, scale);
+    }
+
+    /// Advertise the desktop's size and density together, because a mode is
+    /// both and neither can be changed without restating the other.
+    fn set_output(&mut self, logical: (i32, i32), scale: i32) {
+        if self.output_logical == logical && self.output.current_scale().integer_scale() == scale {
+            return;
+        }
+        info!(
+            width = logical.0,
+            height = logical.1,
+            scale,
+            "advertising output scale"
+        );
+        self.output_logical = logical;
+        // The mode is physical pixels, so it grows with the scale to
+        // hold the logical size still: a denser display is a sharper
+        // desktop, not a smaller one.
+        let mode = OutputMode {
+            size: (logical.0 * scale, logical.1 * scale).into(),
+            refresh: 60_000,
+        };
+        self.output
+            .change_current_state(Some(mode), None, Some(Scale::Integer(scale)), None);
+        self.output.set_preferred(mode);
+        // A client only redraws at the new scale once something
+        // asks it to, and its own size is unchanged — so re-send
+        // the configure it already has to prompt one.
+        for (_, toplevel) in &self.toplevels {
+            toplevel.send_configure();
+        }
+        // The chrome covers the desktop, so its size *is* the desktop's and it
+        // has to be told when that changes — nothing else will tell it.
+        if let Some(chrome) = self.chrome_toplevel.clone() {
+            chrome.with_pending_state(|state| {
+                state.size = Some(logical.into());
+            });
+            chrome.send_configure();
         }
     }
 
@@ -1155,7 +1188,7 @@ impl DomicileCompositor {
             InputEvent::PointerMotionAbsolute { event } => {
                 let window = self.window_size();
                 let position = event.position_transformed(window.into());
-                let logical = window_to_logical(OUTPUT_LOGICAL_SIZE, (window.0, window.1))
+                let logical = window_to_logical(self.output_logical, (window.0, window.1))
                     .apply(ScenePoint::new(position.x, position.y));
                 let pointer = self.seat.get_pointer().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
@@ -1225,7 +1258,7 @@ impl DomicileCompositor {
                 let size = backend.window_size();
                 (size.w, size.h)
             })
-            .unwrap_or(OUTPUT_LOGICAL_SIZE)
+            .unwrap_or(self.output_logical)
     }
 
     /// Inject a forwarded input event into the appropriate client via the seat.
@@ -1654,7 +1687,7 @@ impl XdgShellHandler for DomicileCompositor {
             // not ask for is exactly what a compositor gives a fullscreen
             // window, and the portals it reports back are in these units.
             surface.with_pending_state(|state| {
-                state.size = Some(OUTPUT_LOGICAL_SIZE.into());
+                state.size = Some(self.output_logical.into());
             });
             self.chrome_toplevel = Some(surface);
             self.focus_chrome();
@@ -2205,6 +2238,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_texture: None,
         chrome_frame_shape: None,
         max_scale: config.output.max_scale,
+        output_logical: OUTPUT_LOGICAL_SIZE,
         window_input_seen: HashSet::new(),
         stop: Arc::new(AtomicBool::new(false)),
     };

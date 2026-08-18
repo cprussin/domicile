@@ -54,8 +54,8 @@ MOCK=$!
 for _ in $(seq 1 200); do plain | grep -q "advertising output scale" && break; sleep 0.05; done
 
 echo "== the scale the compositor advertised =="
-plain | grep -oE "advertising output scale scale=[0-9]+" | head -1
-if ! plain | grep -q "advertising output scale scale=2"; then
+plain | grep -oE "advertising output scale.*scale=[0-9]+" | head -1
+if ! plain | grep -qE "advertising output scale.*[^_]scale=2"; then
   fail "the compositor did not advertise scale 2 for a 2x chrome" \
        "$(plain | grep -aE 'WARN|ERROR|scale' | tail -5)"
 fi
