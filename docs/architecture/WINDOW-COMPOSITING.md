@@ -164,8 +164,34 @@ Phase 1 — prove one window composites at all:
 - [x] compositor: a `winit` output behind `--present`, one renderer shared with the import path (`scripts/run-native.sh`)
 - [x] compositor: draw `draw_order` through `surface_to_output`, then the page's surface over it
 - [x] compositor: the window's own input, on a seat the chrome owns
-- [ ] measure: `rt_ms` for the native path against the copy path, same client, same size
-- [ ] decide on the number — parity means `readback_ms` and `ipc_ms` *gone*, not smaller
+- [x] measure: the two paths against each other, same client, same size
+- [x] decide on the number
+
+**The number.** AMD Radeon 890M, kitty, a keystroke every 250ms, release build,
+`nix run .#measure`:
+
+| per frame | copy | native |
+|---|---|---|
+| `readback_ms` | 7–8 (worst 9) | 0 |
+| `write_ms` | 27–28 | 0 |
+| `commit_ms` | 7–8 | 0 |
+| `composite_ms` | — | 0 (worst 2–3) |
+| `mb_per_s` | 80–123 | 0 |
+| `response_ms` | 3–4 (worst 5) | 3–4 (worst 6) |
+
+The compositor's work per frame goes from ~35ms — 8 on the Wayland thread, 27 on
+the writer thread — to under a millisecond, 3ms at worst. Socket traffic goes to
+zero. `response_ms` is the client's own redraw and is unchanged, which is the
+thing worth ruling out: compositing in our process does not delay the client.
+
+Gone, not smaller. The approach is justified and Phase 2 can build on it.
+
+**What is still not measured:** `rt_ms` and `ipc_ms`, on either path. Both are
+timed by the chrome from the keystroke *it* sent, and the harness types over the
+socket instead — which is what makes the two runs comparable and what puts the
+chrome's clock out of the loop. Their absence in the output is a gap, not a
+result. What the native run does establish is `sent=0`: nothing crosses the
+socket, so nothing crosses the hop those numbers measure.
 
 **How the chrome is told from an app.** It arrives on a Wayland socket of its
 own, `<display>-chrome`, and `ClientState::is_chrome` follows from which socket

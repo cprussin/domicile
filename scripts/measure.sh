@@ -170,14 +170,15 @@ tee -a "$RESULTS" <<'EOF'
                 and it is the one number directly comparable between them.
   readback_ms   the GPU copy. The native path does not do it, so a zero here
                 is the result rather than a missing measurement.
-  rt_ms         key to pixels on screen, measured by the chrome — which is in
-                the frame path only on the copy path. Its absence on the native
-                run is the same result said the other way.
-  ipc_ms        the chrome's main-to-renderer hop, where a frame's megabytes
-                are structured-cloned. Unfixable in Electron; gone natively
-                because no frame crosses it.
+  rt_ms         NOT MEASURED HERE, on either path, and its absence below is a
+  ipc_ms        gap rather than a result. Both are timed by the chrome from the
+                keystroke *it* sent, and this types over the socket instead —
+                which is what makes the two runs comparable, and what puts the
+                chrome's own clock out of the loop. What the native run does
+                establish is `sent=0`: nothing crosses the socket, so nothing
+                crosses the IPC hop those numbers measure.
 
-Parity was never "smaller". It was `readback_ms` and `ipc_ms` *gone*.
+Parity was never "smaller". It was `readback_ms` and the socket *gone*.
 EOF
 
 echo

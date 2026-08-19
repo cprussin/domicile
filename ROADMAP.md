@@ -350,10 +350,15 @@ Two rules the copy path is built around, both from freezes:
 
 The plan lives in `docs/architecture/WINDOW-COMPOSITING.md`; this is the summary.
 
-### Phase 1 — one window composites natively — one item left
+### Phase 1 — one window composites natively ✅
 
-Everything is built and works on hardware. What remains is the measurement it was
-all for, and it is one command on a machine with a display:
+Done, and measured. On an AMD 890M with kitty, the compositor's work per frame
+goes from ~35ms (8 on the Wayland thread, 27 on the writer thread) to under a
+millisecond, and 80–123 MB/s of socket traffic to zero, while `response_ms` —
+the client's own redraw — is unchanged. The full table is in
+`docs/architecture/WINDOW-COMPOSITING.md`.
+
+To take it again, on a machine with a display:
 
 ```sh
 nix run 'github:cprussin/domicile#measure'
@@ -365,9 +370,10 @@ injected over the chrome socket rather than typed, so the two runs are comparabl
 and neither is hand-timed; they are spaced, because both measurements take the
 oldest unanswered keystroke and a burst would be counted once.
 
-Parity means `readback_ms` and `ipc_ms` are *gone*, not smaller. Until that
-number exists nothing downstream is justified — if it is not there, the shader
-work below is premature.
+`rt_ms` and `ipc_ms` are *not* measured by it, on either path: both are timed by
+the chrome from the keystroke it sent, and the harness types over the socket. Do
+not read their absence as a result — the result is `sent=0`, which is what says
+nothing crosses the hop they measure.
 
 ### Phase 2 — the effects that make an app a CSS element
 
