@@ -51,6 +51,8 @@ class FakeBridge {
 
 // The test DOM performs no layout, so measurement is injected.
 const stubMeasure: Measure = () => ({
+  cornerRadius: 0,
+  opacity: 1,
   size: [10, 20],
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,
@@ -110,6 +112,8 @@ describe("<domicile-app>", () => {
       "place",
       {
         appId: "term",
+        cornerRadius: 0,
+        opacity: 1,
         size: [10, 20],
         transform: [1, 0, 0, 1, 0, 0],
         visible: true,
@@ -129,6 +133,8 @@ describe("<domicile-app>", () => {
     // client to 0x0 and make it redraw on every tab switch.
     registerElements(bridge as unknown as BridgeClient, {
       measure: () => ({
+        cornerRadius: 0,
+        opacity: 1,
         size: [0, 0],
         transform: [1, 0, 0, 1, 0, 0],
         visible: false,
@@ -142,6 +148,8 @@ describe("<domicile-app>", () => {
       "place",
       {
         appId: "term",
+        cornerRadius: 0,
+        opacity: 1,
         size: [0, 0],
         transform: [1, 0, 0, 1, 0, 0],
         visible: false,
@@ -160,6 +168,8 @@ describe("<domicile-app>", () => {
       "place",
       {
         appId: "term",
+        cornerRadius: 0,
+        opacity: 1,
         size: [10, 20],
         transform: [1, 0, 0, 1, 0, 0],
         visible: true,
@@ -241,6 +251,8 @@ describe("<domicile-app>", () => {
       "place",
       {
         appId: "editor",
+        cornerRadius: 0,
+        opacity: 1,
         size: [10, 20],
         transform: [1, 0, 0, 1, 0, 0],
         visible: true,

@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use domicile_protocol::{ChromeMessage, HostMessage};
 
 pub mod ipc;
-use domicile_scene::{KeyboardTarget, PointerTarget, Portal, Scene, Transform};
+use domicile_scene::{KeyboardTarget, PointerTarget, Portal, Scene, Style, Transform};
 
 /// Identifier for a connected app (Wayland toplevel), assigned by the host.
 pub type AppId = String;
@@ -129,17 +129,25 @@ impl Host {
                 size,
                 z_index,
                 visible,
+                corner_radius,
+                opacity,
             } => {
                 if !self.apps.contains_key(&app_id) {
                     return Err(HostError::UnknownApp(app_id));
                 }
                 if visible {
-                    self.scene.upsert(Portal::new(
-                        app_id,
-                        (size[0], size[1]),
-                        transform_from_wire(transform),
-                        z_index,
-                    ));
+                    self.scene.upsert(
+                        Portal::new(
+                            app_id,
+                            (size[0], size[1]),
+                            transform_from_wire(transform),
+                            z_index,
+                        )
+                        .styled(Style {
+                            corner_radius,
+                            opacity,
+                        }),
+                    );
                 } else {
                     // A hidden app is not composited or hit-tested.
                     self.scene.remove(&app_id);

@@ -23,10 +23,28 @@ fn place(
         size,
         z_index: z,
         visible,
+        // Unstyled: what these tests are about is where a portal goes, and a
+        // style would be a second thing changing in every one of them.
+        corner_radius: 0.0,
+        opacity: 1.0,
     }
 }
 
 const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+
+/// The same, with a style — the compositor draws the window itself, so how it
+/// should look travels with where it goes.
+fn place_styled(app_id: &str, corner_radius: f64, opacity: f64) -> ChromeMessage {
+    ChromeMessage::PlacePortal {
+        app_id: app_id.into(),
+        transform: IDENTITY,
+        size: [100.0, 50.0],
+        z_index: 0,
+        visible: true,
+        corner_radius,
+        opacity,
+    }
+}
 
 // ---- app lifecycle --------------------------------------------------------
 
@@ -275,4 +293,36 @@ fn spawn_is_a_no_op_in_the_brain() {
     .unwrap();
     assert_eq!(host.scene().len(), 0);
     assert_eq!(host.app_count(), 0);
+}
+
+// ---- how a window is drawn, as opposed to where ---------------------------
+
+#[test]
+fn a_portals_style_reaches_the_scene() {
+    // The compositor reads this off the scene to draw with, so a radius the
+    // brain drops is a window that stays square however it is styled.
+    let mut host = Host::new();
+    let (app_id, _) = host.app_appeared(None, (100.0, 50.0));
+
+    host.handle_chrome_message(place_styled(&app_id, 12.0, 0.5))
+        .expect("a styled placement is applied");
+
+    let portal = host.scene().get(&app_id).expect("the portal is placed");
+    assert_eq!(portal.style.corner_radius, 12.0);
+    assert_eq!(portal.style.opacity, 0.5);
+}
+
+#[test]
+fn a_portal_that_styles_nothing_is_square_and_opaque() {
+    // The floor: a chrome that reports no style must not get invisible windows,
+    // which is what a zero default for opacity would mean.
+    let mut host = Host::new();
+    let (app_id, _) = host.app_appeared(None, (100.0, 50.0));
+
+    host.handle_chrome_message(place(&app_id, IDENTITY, [100.0, 50.0], 0, true))
+        .expect("an unstyled placement is applied");
+
+    let portal = host.scene().get(&app_id).expect("the portal is placed");
+    assert_eq!(portal.style, domicile_scene::Style::default());
+    assert_eq!(portal.style.opacity, 1.0);
 }

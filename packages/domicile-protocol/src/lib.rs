@@ -9,6 +9,12 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v6 added `corner_radius` and `opacity` to `place_portal`: the compositor
+/// draws app windows itself, so a `border-radius` or an `opacity` on the
+/// element is no longer something the engine applies to a picture of the
+/// window — it has to be told. A v5 chrome reports neither, and gets square
+/// opaque windows.
+///
 /// v5 added `grab_shortcut` and `shortcut`: the chrome claims key combinations
 /// and the compositor takes matching presses out of the stream before anyone is
 /// given them. A v4 chrome never claims any, so its own shortcuts stop working
@@ -29,7 +35,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 5;
+pub const PROTOCOL_VERSION: u32 = 6;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -43,6 +49,15 @@ pub struct Shortcut {
     pub ctrl: bool,
     pub shift: bool,
     pub logo: bool,
+}
+
+/// What an element with no `opacity` set has: all of it.
+///
+/// Spelled out because serde needs a function, and because a missing field
+/// meaning *invisible* would be the worst possible default — a v5 chrome would
+/// place windows nobody could see.
+fn opaque() -> f64 {
+    1.0
 }
 
 /// Messages sent from the chrome (in-page bridge) to the host.
@@ -61,6 +76,17 @@ pub enum ChromeMessage {
         size: [f64; 2],
         z_index: i32,
         visible: bool,
+        /// The element's `border-radius`, in the same logical units as `size`.
+        ///
+        /// One radius, not four: it is what the compositor's shader can apply
+        /// without knowing which way up a client's buffer is, and it is what
+        /// every window actually asks for. An element with four different
+        /// corners reports the one it uses most.
+        #[serde(default)]
+        corner_radius: f64,
+        /// The element's `opacity`, 0 to 1.
+        #[serde(default = "opaque")]
+        opacity: f64,
     },
 
     /// An `<app>` element was unmounted; the host should stop compositing it.

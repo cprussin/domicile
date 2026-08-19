@@ -139,9 +139,37 @@ pub struct Portal {
     pub transform: Transform,
     /// Stacking order; higher is closer to the viewer.
     pub z_index: i32,
+    /// How the window is drawn, as opposed to where.
+    pub style: Style,
+}
+
+/// The parts of an element's computed style the compositor applies itself.
+///
+/// It draws the window rather than handing its pixels to the engine, so a
+/// `border-radius` or an `opacity` on the element is no longer something the
+/// engine puts on a picture — the compositor has to be told, and does it in its
+/// own shader.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Style {
+    /// `border-radius`, in the same logical units as `size`.
+    pub corner_radius: f64,
+    /// `opacity`, 0 to 1.
+    pub opacity: f64,
+}
+
+impl Default for Style {
+    /// A square, opaque window: what an element that styled nothing gets.
+    fn default() -> Self {
+        Style {
+            corner_radius: 0.0,
+            opacity: 1.0,
+        }
+    }
 }
 
 impl Portal {
+    /// A portal with nothing styled — square and opaque. `styled` adds to it,
+    /// which keeps every existing caller and test saying what it meant.
     pub fn new(
         app_id: impl Into<String>,
         size: (f64, f64),
@@ -149,11 +177,17 @@ impl Portal {
         z_index: i32,
     ) -> Self {
         Portal {
+            style: Style::default(),
             app_id: app_id.into(),
             size,
             transform,
             z_index,
         }
+    }
+
+    /// The same portal, with a style.
+    pub fn styled(self, style: Style) -> Self {
+        Portal { style, ..self }
     }
 
     /// The transform a renderer draws this portal's surface with: the unit
