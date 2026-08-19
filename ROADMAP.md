@@ -66,6 +66,7 @@ cargo test -p domicile-compositor
 # Needs a real display — run on the user's machine.
 nix run 'github:cprussin/domicile#native'      # the native path: a window, composited
 nix run 'github:cprussin/domicile#prototype'   # the copy path, for comparison
+nix run 'github:cprussin/domicile#measure'     # both, with the numbers side by side
 ```
 
 `e2e-compose.sh` needs a GL stack (it gets a software rasteriser where there is
@@ -329,10 +330,21 @@ The plan lives in `docs/architecture/WINDOW-COMPOSITING.md`; this is the summary
 ### Phase 1 — one window composites natively — one item left
 
 Everything is built and works on hardware. What remains is the measurement it was
-all for: **`rt_ms` on the native path against the copy path**, same client, same
-size, `run-native.sh` against `run-prototype.sh`. Parity means `readback_ms` and
-`ipc_ms` are *gone*, not smaller. Until that number exists, nothing downstream is
-justified — if it is not there, the shader work below is premature.
+all for, and it is one command on a machine with a display:
+
+```sh
+nix run 'github:cprussin/domicile#measure'
+```
+
+It runs each path in turn on the same client at the same size, types a fixed
+number of keystrokes into it, and prints what each reported. The keystrokes are
+injected over the chrome socket rather than typed, so the two runs are comparable
+and neither is hand-timed; they are spaced, because both measurements take the
+oldest unanswered keystroke and a burst would be counted once.
+
+Parity means `readback_ms` and `ipc_ms` are *gone*, not smaller. Until that
+number exists nothing downstream is justified — if it is not there, the shader
+work below is premature.
 
 ### Phase 2 — the effects that make an app a CSS element
 
