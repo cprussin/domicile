@@ -77,6 +77,8 @@ describe("BridgeClient", () => {
     });
     expect(transport.lastSent()).toEqual({
       app_id: "term",
+      corner_radius: 0,
+      opacity: 1,
       size: [10, 20],
       transform: [1, 0, 0, 1, 0, 0],
       type: "place_portal",

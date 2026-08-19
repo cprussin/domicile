@@ -14,6 +14,10 @@ export type Placement = {
   transform: Matrix;
   zIndex?: number;
   visible?: boolean;
+  /** `border-radius` in logical pixels. Square if omitted. */
+  cornerRadius?: number;
+  /** `opacity`, 0 to 1. Opaque if omitted — never invisible. */
+  opacity?: number;
 };
 
 export type ChromeMessage =
@@ -42,12 +46,18 @@ export const placePortalMessage = ({
   transform,
   zIndex = 0,
   visible = true,
+  cornerRadius = 0,
+  // Opaque, never invisible: a window nobody can see is a worse failure than
+  // one that ignores a style, and it looks identical to not being drawn.
+  opacity = 1,
 }: Placement) => {
   if (appId.length === 0) {
     throw new TypeError("placePortal: appId must be a non-empty string");
   }
   return {
     app_id: appId,
+    corner_radius: cornerRadius,
+    opacity,
     size,
     transform,
     type: "place_portal",

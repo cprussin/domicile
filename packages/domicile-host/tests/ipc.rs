@@ -50,6 +50,8 @@ fn messages_before_the_handshake_are_ignored() {
         size: [100.0, 100.0],
         z_index: 0,
         visible: true,
+        corner_radius: 0.0,
+        opacity: 1.0,
     }));
     assert_eq!(session.host_mut().scene().len(), 0);
 }
@@ -68,6 +70,8 @@ fn placement_after_handshake_reaches_the_host() {
         size: [100.0, 100.0],
         z_index: 0,
         visible: true,
+        corner_radius: 0.0,
+        opacity: 1.0,
     }));
     assert_eq!(session.host_mut().scene().len(), 1);
 }

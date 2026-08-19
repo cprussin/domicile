@@ -228,7 +228,13 @@ checks that exactly one of them becomes a window.
 
 Phase 2 — the effects that make an app a CSS element:
 
-- [ ] rounded corners, opacity and shadow in the compositor shader
+- [x] rounded corners and opacity in the compositor shader — `place_portal`
+      carries the element's `border-radius` and `opacity`, and the shader
+      applies a rounded-rect SDF and an alpha multiply to the client's own
+      buffer. One radius, not four: it is what can be applied without knowing
+      which way up a client's buffer is.
+- [ ] shadow — the first effect that draws *outside* the quad, so it needs
+      geometry of its own rather than a change to the fragment shader
 - [ ] the rotated + rounded + shadowed window from the old spike's success criterion, at native cost
 - [ ] chrome above/below as two engine layers
 - [ ] per-window fallback to the copy path when the element's computed style needs an unsupported effect

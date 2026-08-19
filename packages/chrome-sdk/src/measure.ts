@@ -11,6 +11,10 @@ export type Measurement = {
   transform: Matrix;
   zIndex: number;
   visible: boolean;
+  /** `border-radius` in logical pixels; 0 for a square window. */
+  cornerRadius: number;
+  /** `opacity`, 0 to 1. */
+  opacity: number;
 };
 
 export type Measure = (element: HTMLElement) => Measurement;
@@ -34,6 +38,8 @@ export const defaultMeasure: Measure = (element) => {
     firstNonZero(element.offsetHeight, box.height),
   ] as const;
   return {
+    cornerRadius: readCornerRadius(style),
+    opacity: readOpacity(style),
     size,
     transform: elementToScreen({
       box,
@@ -50,6 +56,36 @@ export const defaultMeasure: Measure = (element) => {
 
 // Layout-dependent measurements read 0 before the element has a box; the
 // caller wants the first source that actually produced one.
+/**
+ * `border-radius` as one number of pixels.
+ *
+ * The compositor applies a single radius to all four corners — that is what its
+ * shader can do without knowing which way up a client's buffer is — so an
+ * element with four different ones reports the first, which is the one it set if
+ * it set one at all. A radius in `%` computes to `px` here, because
+ * `getComputedStyle` resolves it against the element's own box.
+ *
+ * Anything unparseable is no rounding rather than a guess: a square window is
+ * the honest floor, and a wrong radius clips content.
+ */
+const readCornerRadius = (style: CSSStyleDeclaration): number =>
+  finiteOrZero(Number.parseFloat(style.borderTopLeftRadius));
+
+/**
+ * `opacity`, clamped to what it can mean.
+ *
+ * A missing or unparseable value is fully opaque, never transparent: a window
+ * nobody can see is a worse failure than one that ignores a style, and it is
+ * indistinguishable from the compositor not drawing at all.
+ */
+const readOpacity = (style: CSSStyleDeclaration): number => {
+  const opacity = Number.parseFloat(style.opacity);
+  return Number.isFinite(opacity) ? Math.min(Math.max(opacity, 0), 1) : 1;
+};
+
+const finiteOrZero = (value: number): number =>
+  Number.isFinite(value) ? Math.max(value, 0) : 0;
+
 const firstNonZero = (preferred: number, fallback: number): number =>
   preferred > 0 ? preferred : fallback;
 

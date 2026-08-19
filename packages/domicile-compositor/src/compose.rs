@@ -11,7 +11,36 @@
 
 use cgmath::Matrix3;
 use domicile_scene::Transform;
-use smithay::backend::renderer::gles::{GlesError, GlesFrame, GlesTexture};
+use smithay::backend::renderer::gles::{
+    GlesError, GlesFrame, GlesRenderer, GlesTexProgram, GlesTexture, Uniform, UniformName,
+    UniformType,
+};
+
+/// The compositor's own shader, compiled once.
+///
+/// Rounding a window is not something the geometry can do — a quad is a quad —
+/// so it is done per pixel, which means a fragment shader of ours in place of
+/// Smithay's. Everything the built-in one does is still done here; the rounding
+/// is added at the end.
+pub struct Shaders {
+    rounded: GlesTexProgram,
+}
+
+impl Shaders {
+    /// Compile against a renderer. Fails only if the driver rejects the
+    /// source, which is a build-time mistake rather than a runtime condition.
+    pub fn compile(renderer: &mut GlesRenderer) -> Result<Self, GlesError> {
+        Ok(Shaders {
+            rounded: renderer.compile_custom_texture_shader(
+                include_str!("shaders/rounded.frag"),
+                &[
+                    UniformName::new("quad_size", UniformType::_2f),
+                    UniformName::new("corner_radius", UniformType::_1f),
+                ],
+            )?,
+        })
+    }
+}
 
 /// One surface to draw, and where.
 pub struct Layer<'a> {
@@ -19,6 +48,13 @@ pub struct Layer<'a> {
     /// Maps the unit square onto the output, from `Portal::surface_to_output`.
     pub surface_to_output: Transform,
     pub alpha: f32,
+    /// How much to round the corners, in output pixels.
+    ///
+    /// Zero is a square window, which is what a client that asked for nothing
+    /// gets. The same radius on every corner: CSS allows four, but a single one
+    /// is what the shader can apply without knowing which way up the buffer is,
+    /// and it is what every window actually asks for.
+    pub corner_radius: f32,
     /// Whether the texture's rows run bottom-to-top.
     ///
     /// A client that renders with GL hands over a buffer the way GL made it,
@@ -34,19 +70,40 @@ pub struct Layer<'a> {
 /// The caller owns the frame because it owns what happens around the draw —
 /// clearing, damage, and finishing — and those differ between an output being
 /// presented and a buffer being tested.
-pub fn draw_layers(frame: &mut GlesFrame<'_, '_>, layers: &[Layer<'_>]) -> Result<(), GlesError> {
+pub fn draw_layers(
+    frame: &mut GlesFrame<'_, '_>,
+    shaders: &Shaders,
+    layers: &[Layer<'_>],
+) -> Result<(), GlesError> {
     for layer in layers {
+        let (width, height) = on_screen_size(layer.surface_to_output);
         frame.render_texture(
             layer.texture,
             texture_matrix(layer.y_inverted),
             matrix3(layer.surface_to_output),
             None::<Option<_>>,
             layer.alpha,
-            None,
-            &[],
+            Some(&shaders.rounded),
+            &[
+                Uniform::new("quad_size", (width, height)),
+                Uniform::new("corner_radius", layer.corner_radius),
+            ],
         )?;
     }
     Ok(())
+}
+
+/// How big the quad is once placed, in output pixels.
+///
+/// The lengths of the transformed unit vectors rather than the matrix's scale
+/// terms, so a rotated window still reports the size it covers — a corner
+/// radius is in pixels on the screen, and a window turned 30 degrees has the
+/// same rounding as one that is not.
+fn on_screen_size(transform: Transform) -> (f32, f32) {
+    (
+        (transform.a * transform.a + transform.b * transform.b).sqrt() as f32,
+        (transform.c * transform.c + transform.d * transform.d).sqrt() as f32,
+    )
 }
 
 /// How the quad samples the texture.
@@ -244,7 +301,7 @@ mod pixels {
     };
     use smithay::utils::{Point, Rectangle, Size, Transform as OutputTransform};
 
-    use super::{draw_layers, Layer};
+    use super::{draw_layers, Layer, Shaders};
 
     const OUTPUT: (i32, i32) = (64, 48);
 
@@ -304,6 +361,7 @@ mod pixels {
 
     /// Compose the layers and hand back the output as row-major RGBA.
     fn composed(renderer: &mut GlesRenderer, layers: &[Layer<'_>]) -> Vec<u8> {
+        let shaders = Shaders::compile(renderer).expect("the compositor's shader compiles");
         let buffer_size = Size::from(OUTPUT);
         let physical = Size::from(OUTPUT);
         let mut target: GlesTexture = renderer
@@ -320,7 +378,7 @@ mod pixels {
                     &[Rectangle::from_size(physical)],
                 )
                 .expect("clearing");
-            draw_layers(&mut frame, layers).expect("drawing the layers");
+            draw_layers(&mut frame, &shaders, layers).expect("drawing the layers");
             let sync = frame.finish().expect("finishing");
             renderer.wait(&sync).expect("waiting for the draw");
         }
@@ -413,12 +471,14 @@ mod pixels {
             &[
                 Layer {
                     alpha: 1.0,
+                    corner_radius: 0.0,
                     surface_to_output: top_left.surface_to_output(),
                     texture: &red,
                     y_inverted: false,
                 },
                 Layer {
                     alpha: 1.0,
+                    corner_radius: 0.0,
                     surface_to_output: bottom_right.surface_to_output(),
                     texture: &blue,
                     y_inverted: false,
@@ -453,6 +513,9 @@ mod pixels {
             renderer,
             &[Layer {
                 alpha: 1.0,
+                // Square, so this still compares against Smithay's own drawing
+                // rather than against a shape it cannot make.
+                corner_radius: 0.0,
                 surface_to_output: Transform::scale(24.0, 12.0)
                     .then(Transform::translate(8.0, 6.0)),
                 texture,
@@ -489,6 +552,7 @@ mod pixels {
             &mut renderer,
             &[Layer {
                 alpha: 1.0,
+                corner_radius: 0.0,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
                 texture: &texture,
                 y_inverted: true,
@@ -513,6 +577,7 @@ mod pixels {
             &mut renderer,
             &[Layer {
                 alpha: 1.0,
+                corner_radius: 0.0,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
                 texture: &texture,
                 y_inverted: false,
@@ -546,6 +611,99 @@ mod pixels {
         );
     }
 
+    /// A full-output layer of one colour, with the given radius and alpha.
+    fn full_output(
+        renderer: &mut GlesRenderer,
+        texture: &GlesTexture,
+        corner_radius: f32,
+        alpha: f32,
+    ) -> Vec<u8> {
+        composed(
+            renderer,
+            &[Layer {
+                alpha,
+                corner_radius,
+                surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
+                texture,
+                y_inverted: false,
+            }],
+        )
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_rounded_window_is_cut_away_at_its_corners() {
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+
+        let output = full_output(&mut renderer, &red, 16.0, 1.0);
+
+        assert_eq!(
+            pixel(&output, OUTPUT.0 / 2, OUTPUT.1 / 2),
+            RED,
+            "the middle of the window is the window"
+        );
+        assert_eq!(
+            pixel(&output, 0, 0),
+            BLACK,
+            "the corner is outside the rounded rectangle, so what is behind shows"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_window_that_asked_for_no_rounding_keeps_its_corners() {
+        // Without this, a shader that rounds everything unconditionally passes
+        // the test above and quietly clips every window that wanted square
+        // edges.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+
+        let output = full_output(&mut renderer, &red, 0.0, 1.0);
+
+        assert_eq!(
+            pixel(&output, 0, 0),
+            RED,
+            "the corner is part of the window"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_translucent_window_lets_what_is_under_it_through() {
+        // Blue underneath, red at half alpha over it: the result is neither.
+        let mut renderer = renderer();
+        let blue = solid(&mut renderer, BLUE);
+        let red = solid(&mut renderer, RED);
+        let whole = Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1));
+
+        let output = composed(
+            &mut renderer,
+            &[
+                Layer {
+                    alpha: 1.0,
+                    corner_radius: 0.0,
+                    surface_to_output: whole,
+                    texture: &blue,
+                    y_inverted: false,
+                },
+                Layer {
+                    alpha: 0.5,
+                    corner_radius: 0.0,
+                    surface_to_output: whole,
+                    texture: &red,
+                    y_inverted: false,
+                },
+            ],
+        );
+
+        let [r, _, b, _] = pixel(&output, OUTPUT.0 / 2, OUTPUT.1 / 2);
+        assert!(
+            r > 96 && r < 160 && b > 96 && b < 160,
+            "half of each was expected, got r={r} b={b}",
+        );
+    }
+
     #[test]
     #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
     fn the_last_portal_in_draw_order_is_the_one_on_top() {
@@ -566,6 +724,7 @@ mod pixels {
             .into_iter()
             .map(|portal| Layer {
                 alpha: 1.0,
+                corner_radius: 0.0,
                 surface_to_output: portal.surface_to_output(),
                 texture: textures(&portal.app_id),
                 y_inverted: false,

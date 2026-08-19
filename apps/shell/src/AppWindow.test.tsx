@@ -21,6 +21,8 @@ const silentBridge = {
 
 // The test DOM performs no layout, so measurement is injected.
 const stubMeasure: Measure = () => ({
+  cornerRadius: 0,
+  opacity: 1,
   size: [100, 100],
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,

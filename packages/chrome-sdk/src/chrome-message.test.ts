@@ -23,6 +23,10 @@ describe("placePortalMessage", () => {
       }),
     ).toEqual({
       app_id: "term",
+      // Square and opaque unless the element says otherwise — the compositor
+      // draws the window itself now, so these travel with the placement.
+      corner_radius: 0,
+      opacity: 1,
       size: [10, 20],
       transform: [1, 0, 0, 1, 5, 6],
       type: "place_portal",

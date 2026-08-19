@@ -31,6 +31,8 @@ fn chrome_messages_round_trip() {
         size: [640.0, 480.0],
         z_index: 3,
         visible: true,
+        corner_radius: 0.0,
+        opacity: 1.0,
     });
     chrome_round_trip(&ChromeMessage::RemovePortal {
         app_id: "term".into(),
@@ -142,6 +144,8 @@ fn wire_shape_is_pinned() {
         size: [10.0, 20.0],
         z_index: 0,
         visible: true,
+        corner_radius: 0.0,
+        opacity: 1.0,
     })
     .unwrap();
     assert_eq!(v["type"], "place_portal");

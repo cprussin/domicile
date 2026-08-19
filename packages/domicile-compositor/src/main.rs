@@ -96,7 +96,7 @@ mod scale;
 mod shortcut;
 mod timing_window;
 
-use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer};
+use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer, Shaders};
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
@@ -120,6 +120,10 @@ use smithay::backend::winit::WinitGraphicsBackend;
 struct Gpu {
     output: GpuOutput,
     importer: DmabufImporter,
+    /// Compiled against this renderer, because a program belongs to the
+    /// context that built it. `None` where there is no window: the copy path
+    /// draws nothing and would only be paying the compile.
+    shaders: Option<Shaders>,
 }
 
 /// Where the renderer lives, which is whoever is presenting.
@@ -1036,15 +1040,26 @@ impl DomicileCompositor {
             host.scene()
                 .draw_order()
                 .into_iter()
-                .map(|portal| (portal.app_id.clone(), portal.surface_to_output()))
+                .map(|portal| {
+                    (
+                        portal.app_id.clone(),
+                        portal.surface_to_output(),
+                        portal.style,
+                    )
+                })
                 .collect()
         };
         let mut layers: Vec<_> = placements
             .iter()
-            .filter_map(|(app_id, surface_to_output)| {
+            .filter_map(|(app_id, surface_to_output, style)| {
                 let surface = self.textures.get(app_id)?;
                 Some(Layer {
-                    alpha: 1.0,
+                    alpha: style.opacity as f32,
+                    // The radius is in the chrome's logical units and the
+                    // shader works in output pixels, so it scales with
+                    // everything else — a rounded window on a 2x display has
+                    // twice the radius in pixels and looks the same.
+                    corner_radius: (style.corner_radius * to_window.a) as f32,
                     surface_to_output: surface_to_output.then(to_window),
                     texture: &surface.texture,
                     y_inverted: surface.y_inverted,
@@ -1054,6 +1069,8 @@ impl DomicileCompositor {
         if let Some(chrome) = self.chrome_texture.as_ref() {
             layers.push(Layer {
                 alpha: 1.0,
+                // The desktop itself is not a window and is never rounded.
+                corner_radius: 0.0,
                 // At its own size rather than stretched over the output: it is
                 // asked to be the output's size, and a chrome that has not
                 // taken that size yet should show as a gap it has not filled
@@ -1068,7 +1085,15 @@ impl DomicileCompositor {
             });
         }
 
-        let Some(backend) = self.gpu.as_mut().and_then(Gpu::window) else {
+        let Some(gpu) = self.gpu.as_mut() else {
+            return;
+        };
+        // Taken out for the borrow: binding hands back the renderer, and the
+        // shaders live beside it.
+        let Some(shaders) = gpu.shaders.take() else {
+            return;
+        };
+        let Some(backend) = gpu.window() else {
             return;
         };
         let Ok((renderer, mut framebuffer)) = backend.bind() else {
@@ -1081,10 +1106,13 @@ impl DomicileCompositor {
                 Color32F::new(0.0, 0.0, 0.0, 1.0),
                 &[Rectangle::from_size(size)],
             )?;
-            draw_layers(&mut frame, &layers)?;
+            draw_layers(&mut frame, &shaders, &layers)?;
             frame.finish()
         })();
         drop(framebuffer);
+        if let Some(gpu) = self.gpu.as_mut() {
+            gpu.shaders = Some(shaders);
+        }
         match drawn {
             Ok(sync) => {
                 let _ = sync;
@@ -2451,9 +2479,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok((backend, events)) => {
                 info!(size = ?backend.window_size(), "presenting to a window");
                 window_events = Some(events);
+                let mut backend = backend;
+                let shaders = match Shaders::compile(backend.renderer()) {
+                    Ok(shaders) => Some(shaders),
+                    Err(err) => {
+                        // A driver that will not compile it leaves nothing to
+                        // draw with, and drawing squares instead would be a
+                        // desktop quietly missing the thing this is for.
+                        tracing::error!(%err, "the compositor's shader would not compile");
+                        return Err(err.into());
+                    }
+                };
                 Some(Gpu {
                     importer: DmabufImporter::for_existing_renderer(),
                     output: GpuOutput::Window(Box::new(backend)),
+                    shaders,
                 })
             }
             Err(err) => {
@@ -2466,6 +2506,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok((renderer, importer)) => Some(Gpu {
                 importer,
                 output: GpuOutput::Headless(Box::new(renderer)),
+                shaders: None,
             }),
             Err(err) => {
                 tracing::warn!(%err, "no EGL renderer: serving wl_shm clients only");
