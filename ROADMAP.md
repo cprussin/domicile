@@ -112,6 +112,12 @@ below.
   `Scene::route_pointer`. Running both means whichever moved the focus last gets
   the next click — a window that tracks the mouse perfectly and never receives a
   press, so it cannot be focused by clicking it.
+- **A shortcut that depends on who has focus is not a shortcut.** The chrome
+  claims combinations with `grab_shortcut` and the compositor takes matching
+  presses out of the stream in the keyboard filter — before the focused client
+  is given them, which is the only place they can be taken from a window that
+  has the keyboard. Modifier *toggles* are deliberately not part of a chord:
+  matching on caps lock or num lock makes a shortcut stop working when one is on.
 - **Never leave the keyboard focused on nothing.** Focusing a window that has
   already closed — the race the chrome loses whenever one goes away while its
   focus message is in flight — used to hand the keyboard to `None`, and nothing
@@ -345,9 +351,6 @@ tracking, clipboard/data-device, touch and a security review all live here too.
 
 ### Known gaps in what is built
 
-- **Chrome shortcuts do not reach the chrome while a window holds the keyboard.**
-  The fix is for the compositor to intercept global shortcuts rather than depend
-  on who has focus; it needs one protocol message.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
   Compositing that surface is the same work as compositing any other.
 - **The chrome is not told when a click focuses a window**, so a chrome that

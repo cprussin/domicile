@@ -20,6 +20,15 @@ import { useShellWindows } from "./useShellWindows";
 /** A window with no tab selected — the rail's resting state on an empty shell. */
 const NO_WINDOW = "";
 
+/** Alt+Enter, in the evdev keycodes the protocol speaks. 28 is Enter. */
+const ALT_ENTER = {
+  alt: true,
+  ctrl: false,
+  key: 28,
+  logo: false,
+  shift: false,
+};
+
 type Props = {
   appElements: AppElements;
   bridge: BridgeClient;
@@ -49,6 +58,29 @@ export const Shell = ({ appElements, bridge }: Props) => {
   } = useShellWindows(bridge, appElements);
 
   // Alt+Enter -> a terminal; add Shift for a browser.
+  //
+  // Claimed from the compositor as well as listened for in the page. Where
+  // Domicile draws this window, a key goes to whatever holds the keyboard —
+  // so once a window is on screen the page hears nothing, which is exactly
+  // when the user wants to open another one. A claimed combination is taken
+  // out of the stream before the window is given it and arrives here instead.
+  // The two never both fire: the compositor either intercepted the key or the
+  // page received it.
+  useEffect(() => {
+    bridge.grabShortcut(ALT_ENTER);
+    bridge.grabShortcut({ ...ALT_ENTER, shift: true });
+    // `on` returns the bridge for chaining, so it is deliberately not returned
+    // as a cleanup — there is one handler per message type and re-registering
+    // replaces it.
+    bridge.on("shortcut", ({ shortcut }) => {
+      if (shortcut.shift) {
+        openBrowser();
+      } else {
+        openTerminal();
+      }
+    });
+  }, [bridge, openBrowser, openTerminal]);
+
   useEffect(() => {
     const launch = (event: KeyboardEvent) => {
       if (event.altKey && event.key === "Enter") {

@@ -43,6 +43,9 @@ class FakeBridge {
   spawn(command: readonly string[]): void {
     this.calls.push(["spawn", command]);
   }
+  grabShortcut(shortcut: unknown): void {
+    this.calls.push(["grabShortcut", shortcut]);
+  }
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
   }
@@ -153,6 +156,40 @@ describe("Shell", () => {
     it("opens a terminal on Alt+Enter", async () => {
       renderShell();
       await userEvent.keyboard("{Alt>}{Enter}{/Alt}");
+      expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
+    });
+
+    it("claims Alt+Enter from the compositor, with and without Shift", () => {
+      // The page only hears a keystroke while it holds the keyboard. Once a
+      // window is on screen it does not, which is exactly when the user reaches
+      // for the shortcut that opens another one — so the compositor has to be
+      // asked to take these before the window is given them.
+      renderShell();
+
+      expect(bridge.calls).toContainEqual([
+        "grabShortcut",
+        { alt: true, ctrl: false, key: 28, logo: false, shift: false },
+      ]);
+      expect(bridge.calls).toContainEqual([
+        "grabShortcut",
+        { alt: true, ctrl: false, key: 28, logo: false, shift: true },
+      ]);
+    });
+
+    it("opens a terminal when the compositor hands back a claimed Alt+Enter", () => {
+      renderShell();
+
+      bridge.emit("shortcut", {
+        shortcut: {
+          alt: true,
+          ctrl: false,
+          key: 28,
+          logo: false,
+          shift: false,
+        },
+        type: "shortcut",
+      });
+
       expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
     });
 

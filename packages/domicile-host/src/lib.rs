@@ -162,7 +162,10 @@ impl Host {
             ChromeMessage::FocusChrome => {
                 self.scene.focus_chrome();
             }
-            ChromeMessage::Spawn { .. }
+            // Compositor-level, like Spawn: a claim on the keyboard is not
+            // something the scene models.
+            ChromeMessage::GrabShortcut { .. }
+            | ChromeMessage::Spawn { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }
             | ChromeMessage::PointerButton { .. }

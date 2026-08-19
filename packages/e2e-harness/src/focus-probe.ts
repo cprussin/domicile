@@ -6,7 +6,10 @@
 // for it, but a client that crashed rather than closed never gave it the chance,
 // so the compositor has to be the one that guarantees it.
 
-import { focusAppMessage } from "@domicile/chrome-sdk/chrome-message";
+import {
+  focusAppMessage,
+  grabShortcutMessage,
+} from "@domicile/chrome-sdk/chrome-message";
 import type { ChromeSocket } from "./chrome-socket";
 import { connectChromeSocket, requireSocketPath } from "./chrome-socket";
 
@@ -14,8 +17,23 @@ const RUN_MS = 15_000;
 
 let focused = false;
 
+/** Alt+Enter, in the evdev keycodes the protocol speaks. */
+const ALT_ENTER = {
+  alt: true,
+  ctrl: false,
+  key: 28,
+  logo: false,
+  shift: false,
+};
+
 const chrome: ChromeSocket = connectChromeSocket(requireSocketPath(Bun.env), {
   onMessage: (message) => {
+    // A desktop claims its shortcuts as soon as it is up. Whether the
+    // compositor then takes one out of the stream needs a window; that it heard
+    // the claim at all does not.
+    if (message.type === "welcome") {
+      chrome.send(grabShortcutMessage(ALT_ENTER));
+    }
     // On the announcement rather than on a frame: this has to be connected
     // before the window appears either way (the host does not replay what a
     // chrome missed), and an announcement arrives even for a client that never
