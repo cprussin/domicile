@@ -589,6 +589,10 @@ mod pixels {
         [output[at], output[at + 1], output[at + 2], output[at + 3]]
     }
 
+    /// The middle of the output: where a centred window's own middle lands,
+    /// and what a turned one is turned about.
+    const MIDDLE: (i32, i32) = (OUTPUT.0 / 2, OUTPUT.1 / 2);
+
     const RED: [u8; 4] = [255, 0, 0, 255];
     const BLUE: [u8; 4] = [0, 0, 255, 255];
     const BLACK: [u8; 4] = [0, 0, 0, 255];
@@ -972,14 +976,12 @@ mod pixels {
             dy: 0.0,
             spread: 0.0,
         };
-        let middle = (OUTPUT.0 / 2, OUTPUT.1 / 2);
-
         let without = translucent(&mut renderer, &red, None);
         let with = translucent(&mut renderer, &red, Some(centred));
 
         assert_eq!(
-            pixel(&with, middle.0, middle.1),
-            pixel(&without, middle.0, middle.1),
+            pixel(&with, MIDDLE.0, MIDDLE.1),
+            pixel(&without, MIDDLE.0, MIDDLE.1),
             "a window shows what is behind it, not the shadow it casts itself"
         );
     }
@@ -1135,6 +1137,198 @@ mod pixels {
             pixel(&output, edge + 6, y)[1],
             0,
             "and is gone by six, which is half of the twelve it was given"
+        );
+    }
+
+    /// A square window turned 45 degrees about the middle of the output.
+    ///
+    /// Square and turned by an eighth so the shape it covers is a diamond,
+    /// which no unturned placement can produce however it is scaled — a test
+    /// against a turn that did not happen needs somewhere the window can only
+    /// be if it did.
+    fn turned(
+        renderer: &mut GlesRenderer,
+        texture: &GlesTexture,
+        corner_radius: f32,
+        shadow: Option<Shadow>,
+    ) -> Vec<u8> {
+        composed(
+            renderer,
+            &[Layer {
+                alpha: 1.0,
+                corner_radius,
+                shadow,
+                // Built the way a page builds one: sized, moved so the turn is
+                // about its own middle rather than its top-left corner, turned,
+                // and put where it goes.
+                surface_to_output: Transform::scale(TURNED_SIDE, TURNED_SIDE)
+                    .then(Transform::translate(-TURNED_SIDE / 2.0, -TURNED_SIDE / 2.0))
+                    .then(Transform::rotate(std::f64::consts::FRAC_PI_4))
+                    .then(Transform::translate(
+                        f64::from(MIDDLE.0),
+                        f64::from(MIDDLE.1),
+                    )),
+                texture,
+                y_inverted: false,
+            }],
+        )
+    }
+
+    /// Small enough that the diamond and the shadow around it both fit.
+    const TURNED_SIDE: f64 = 24.0;
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_turned_window_covers_what_it_is_turned_onto() {
+        // The success criterion the whole native path was for: an app window is
+        // an element, so a page that turns one gets a turned window rather than
+        // an upright one in a turned box.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+
+        let output = turned(&mut renderer, &red, 0.0, None);
+
+        assert_eq!(
+            pixel(&output, MIDDLE.0, MIDDLE.1),
+            RED,
+            "the middle of a window is the window however it is turned"
+        );
+        // A quarter of the way out along both axes at once: inside the upright
+        // square, outside the diamond the turn makes of it.
+        assert_eq!(
+            pixel(&output, MIDDLE.0 + 10, MIDDLE.1 + 10),
+            BLACK,
+            "the corner the turn moved away from"
+        );
+        // Further out along one axis than an upright window of this size
+        // reaches, which only the turned diamond's tip covers.
+        assert_eq!(
+            pixel(&output, MIDDLE.0 + 15, MIDDLE.1),
+            RED,
+            "the tip the turn brought here"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_turned_window_is_rounded_in_the_pixels_it_covers() {
+        // A radius is a length on the screen, so a window turned by an eighth
+        // is rounded the same as one that is not — which is why the quad is
+        // measured by the lengths of its sides rather than by its matrix's
+        // scale terms, and what the last assertion here holds to.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+
+        let square = turned(&mut renderer, &red, 0.0, None);
+        // Most of the radius this window can take. A turned corner is a thin
+        // wedge — the diamond's tip is only a couple of pixels deeper than a
+        // modest radius cuts to, which is inside the one pixel the edge is
+        // smoothed over and so not something a test can read.
+        let round = turned(&mut renderer, &red, 10.0, None);
+
+        assert_eq!(
+            pixel(&square, MIDDLE.0 + 15, MIDDLE.1),
+            RED,
+            "a square window reaches its turned corner"
+        );
+        assert_eq!(
+            pixel(&round, MIDDLE.0 + 15, MIDDLE.1),
+            BLACK,
+            "and a radius cuts that corner off"
+        );
+        // Either side of the tip, where the window's own corner lands after the
+        // turn. This is the only place a mis-measured quad shows — the shader
+        // spans the quad whatever size it is told, so the size it is told
+        // changes nothing but how deep the radius eats the corner — and it
+        // takes both samples to see it, because one alone is blind in one
+        // direction. A window measured by its matrix's scale terms reports
+        // itself 71% of its size and eats the corner half again as deep; one
+        // measured by its bounding box reports 141% and barely eats it at all.
+        assert_eq!(
+            pixel(&round, MIDDLE.0, MIDDLE.1 + 11),
+            RED,
+            "a radius is a length on the screen, not a fraction of a window"
+        );
+        assert_eq!(
+            pixel(&round, MIDDLE.0, MIDDLE.1 + 13),
+            BLACK,
+            "and the corner really is eaten, so an over-measured quad is caught too"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_turned_window_is_rounded_and_shadowed_at_once() {
+        // The success criterion itself, which the three tests around this one
+        // only cover a face at a time: turned *and* rounded *and* shadowed
+        // together. The pairing that needs a window wearing one of each is the
+        // green-channel assertion — the shadow is kept out from under the
+        // window by the window's *rounded* shape, so the corner a radius eats
+        // away is the corner the shadow is free to fill. A cut-out that
+        // ignored the radius would leave it empty, and nothing else here
+        // would notice.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let sideways = Shadow {
+            blur: 4.0,
+            color: [0.0, 1.0, 0.0, 1.0],
+            dx: 6.0,
+            dy: 0.0,
+            spread: 0.0,
+        };
+
+        let output = turned(&mut renderer, &red, 10.0, Some(sideways));
+
+        assert_eq!(
+            pixel(&output, MIDDLE.0, MIDDLE.1),
+            RED,
+            "the window is still the window"
+        );
+        // The red channel, not the whole pixel: the window's own colour is
+        // gone from its rounded-away corner, but the shadow it casts may well
+        // be there — which is the point of drawing both.
+        assert_eq!(
+            pixel(&output, MIDDLE.0 + 15, MIDDLE.1)[0],
+            0,
+            "its corner is still rounded away"
+        );
+        assert!(
+            pixel(&output, MIDDLE.0 + 15, MIDDLE.1)[1] > 0,
+            "and the shadow it casts fills the corner it rounded away"
+        );
+        let with = pixel(&output, MIDDLE.0 + 12, MIDDLE.1 + 12)[1];
+        let against = pixel(&output, MIDDLE.0 - 12, MIDDLE.1 - 12)[1];
+        assert!(
+            with > against,
+            "and its shadow still falls the way it faces: with={with} against={against}",
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_turned_windows_shadow_turns_with_it() {
+        // CSS offsets a shadow in the element's own space, so an element the
+        // page turned casts its shadow the way it is facing. A shadow placed in
+        // the output's axes instead would fall to the right of every window on
+        // the desktop no matter which way it was turned.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let sideways = Shadow {
+            blur: 4.0,
+            color: [0.0, 1.0, 0.0, 1.0],
+            // Along the window's own x, which the turn points down and right.
+            dx: 6.0,
+            dy: 0.0,
+            spread: 0.0,
+        };
+
+        let output = turned(&mut renderer, &red, 0.0, Some(sideways));
+
+        let with = pixel(&output, MIDDLE.0 + 12, MIDDLE.1 + 12)[1];
+        let against = pixel(&output, MIDDLE.0 - 12, MIDDLE.1 - 12)[1];
+        assert!(
+            with > against,
+            "the shadow falls the way the window faces: with={with} against={against}",
         );
     }
 
