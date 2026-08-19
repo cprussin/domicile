@@ -271,7 +271,14 @@ impl ChromeHub {
 /// every client on the compositor.
 fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
     let mut window = FrameWindow::default();
-    while let Some(item) = outbound.recv() {
+    // On a timeout as well as on traffic: the report is on a schedule, and the
+    // compositing path produces no outbound items at all — waiting for one
+    // would leave it silent however hard it was working.
+    while let Some(next) = outbound.recv_until(REPORT_EVERY) {
+        let Some(item) = next else {
+            report(&mut window, &outbound, &hub);
+            continue;
+        };
         // A frame is a header line followed by its pixels; everything else is
         // just the line. The pixels go out as bytes rather than base64 inside
         // the JSON — see `HostMessage::AppFrame` for why that matters.
@@ -307,7 +314,6 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
                 .and_then(|_| stream.flush())
                 .is_ok()
         });
-        let attached = chromes.len();
         drop(chromes);
 
         if is_frame {
@@ -315,25 +321,34 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
             window.bytes += line.len() + pixels.len();
             window.writing += started.elapsed();
         }
-        if let Some(report) = window.due(&outbound, &hub) {
-            info!(
-                sent = report.sent,
-                dropped = report.dropped,
-                fps = report.fps,
-                mb_per_s = report.mb_per_s,
-                write_ms = report.write_ms,
-                readback_ms = report.readback_ms,
-                readback_worst_ms = report.readback_worst_ms,
-                commit_ms = report.commit_ms,
-                idle_ms = report.idle_ms,
-                response_ms = report.response_ms,
-                response_worst_ms = report.response_worst_ms,
-                throttled = report.throttled,
-                chromes = attached,
-                "frames"
-            );
-        }
+        report(&mut window, &outbound, &hub);
     }
+}
+
+/// Print one line, if the window that just closed saw anything.
+fn report(window: &mut FrameWindow, outbound: &OutboundReceiver, hub: &Arc<ChromeHub>) {
+    let Some(report) = window.due(outbound, hub) else {
+        return;
+    };
+    info!(
+        sent = report.sent,
+        composited = report.composited,
+        dropped = report.dropped,
+        fps = report.fps,
+        mb_per_s = report.mb_per_s,
+        write_ms = report.write_ms,
+        readback_ms = report.readback_ms,
+        readback_worst_ms = report.readback_worst_ms,
+        commit_ms = report.commit_ms,
+        composite_ms = report.composite_ms,
+        composite_worst_ms = report.composite_worst_ms,
+        idle_ms = report.idle_ms,
+        response_ms = report.response_ms,
+        response_worst_ms = report.response_worst_ms,
+        throttled = report.throttled,
+        chromes = hub.chromes.lock().unwrap().len(),
+        "frames"
+    );
 }
 
 /// The Wayland thread's half of the frame path, recorded there and read by the
@@ -362,6 +377,10 @@ struct FrameTimings {
     /// ours. Measured the same way as the chrome's, from the oldest keystroke
     /// still unanswered, so the two numbers compare.
     response: TimingWindow,
+    /// How long a whole composite took — import, draw, submit.
+    composite: TimingWindow,
+    /// How many of them there were.
+    composited: usize,
     /// Commits the ~30fps throttle refused. Every one is a redraw the client
     /// made and the chrome never saw, so if the client then goes idle the
     /// screen holds stale pixels until it happens to redraw again — which for
@@ -387,6 +406,9 @@ struct FrameWindow {
 /// One window's worth of numbers, rounded for reading.
 struct FrameReport {
     sent: usize,
+    /// Frames drawn into the window. The native path's answer to `sent`: the
+    /// pixels went to the screen instead of to the chrome.
+    composited: usize,
     dropped: usize,
     fps: u32,
     mb_per_s: u32,
@@ -397,6 +419,9 @@ struct FrameReport {
     idle_ms: u32,
     response_ms: u32,
     response_worst_ms: u32,
+    /// Importing a client's buffer, drawing every layer, and submitting.
+    composite_ms: u32,
+    composite_worst_ms: u32,
     throttled: usize,
 }
 
@@ -425,33 +450,45 @@ impl FrameWindow {
             // should not fill the log. Throttled commits count as something
             // happening: a window where every frame was refused is exactly the
             // one worth seeing, and it has no `sent` to announce itself with.
-            let report = (self.sent > 0 || dropped > 0 || timings.throttled > 0).then(|| {
-                // A path that recorded nothing reads as zero: "did not run" and
-                // "took no time" are the same claim in a log line.
-                let (readback, commit, idle, response) = (
-                    timings.readback.take().unwrap_or_default(),
-                    timings.commit.take().unwrap_or_default(),
-                    timings.idle.take().unwrap_or_default(),
-                    timings.response.take().unwrap_or_default(),
-                );
-                FrameReport {
-                    sent: self.sent,
-                    dropped,
-                    fps: (self.sent as f64 / elapsed.as_secs_f64()).round() as u32,
-                    mb_per_s: (self.bytes as f64 / 1e6 / elapsed.as_secs_f64()).round() as u32,
-                    write_ms: self
-                        .writing
-                        .checked_div(self.sent.max(1) as u32)
-                        .map_or(0, |per| per.as_millis() as u32),
-                    readback_ms: readback.average.as_millis() as u32,
-                    readback_worst_ms: readback.worst.as_millis() as u32,
-                    commit_ms: commit.average.as_millis() as u32,
-                    idle_ms: idle.average.as_millis() as u32,
-                    response_ms: response.average.as_millis() as u32,
-                    response_worst_ms: response.worst.as_millis() as u32,
-                    throttled: std::mem::take(&mut timings.throttled),
-                }
-            });
+            let composited = std::mem::take(&mut timings.composited);
+            let report =
+                worth_reporting(self.sent, dropped, timings.throttled, composited).then(|| {
+                    // A path that recorded nothing reads as zero: "did not run" and
+                    // "took no time" are the same claim in a log line.
+                    let (readback, commit, idle, response, composite) = (
+                        timings.readback.take().unwrap_or_default(),
+                        timings.commit.take().unwrap_or_default(),
+                        timings.idle.take().unwrap_or_default(),
+                        timings.response.take().unwrap_or_default(),
+                        timings.composite.take().unwrap_or_default(),
+                    );
+                    FrameReport {
+                        sent: self.sent,
+                        composited,
+                        dropped,
+                        // Frames that got somewhere, which is a different somewhere
+                        // on each path: sent to the chrome, or drawn into the
+                        // window. Exactly one of the two can be non-zero, because
+                        // a compositor with a window sends no pixels and one
+                        // without draws none.
+                        fps: ((self.sent + composited) as f64 / elapsed.as_secs_f64()).round()
+                            as u32,
+                        mb_per_s: (self.bytes as f64 / 1e6 / elapsed.as_secs_f64()).round() as u32,
+                        write_ms: self
+                            .writing
+                            .checked_div(self.sent.max(1) as u32)
+                            .map_or(0, |per| per.as_millis() as u32),
+                        readback_ms: readback.average.as_millis() as u32,
+                        readback_worst_ms: readback.worst.as_millis() as u32,
+                        commit_ms: commit.average.as_millis() as u32,
+                        idle_ms: idle.average.as_millis() as u32,
+                        response_ms: response.average.as_millis() as u32,
+                        response_worst_ms: response.worst.as_millis() as u32,
+                        composite_ms: composite.average.as_millis() as u32,
+                        composite_worst_ms: composite.worst.as_millis() as u32,
+                        throttled: std::mem::take(&mut timings.throttled),
+                    }
+                });
             drop(timings);
             *self = FrameWindow {
                 since: Some(Instant::now()),
@@ -677,6 +714,18 @@ struct DomicileCompositor {
     /// The desktop's size in logical units. Follows the window where there is
     /// one; [`OUTPUT_LOGICAL_SIZE`] is what a headless run is stuck with.
     output_logical: (i32, i32),
+    /// Whether anything has changed since the last frame was drawn.
+    ///
+    /// Compositing does not happen where the change is noticed. Submitting a
+    /// frame blocks until the display will take it, so drawing once per client
+    /// commit means blocking the Wayland thread once per client commit — and a
+    /// client that commits faster than the display refreshes stops the
+    /// compositor from serving anything at all. Every other client freezes, the
+    /// chrome included, which is what it looks like from outside.
+    ///
+    /// So commits mark the desktop dirty and the event loop draws at most once
+    /// per pass, coalescing however many arrived.
+    needs_present: bool,
     /// Set when the window is closed, which is the user closing the desktop.
     /// Read by the event loop, which is the only thing that can act on it.
     stop: Arc<AtomicBool>,
@@ -799,7 +848,7 @@ impl DomicileCompositor {
             }
         }
         self.chrome_texture = texture;
-        self.present();
+        self.needs_present = true;
     }
 
     /// A committed buffer as a texture to draw, whichever kind it is.
@@ -888,8 +937,9 @@ impl DomicileCompositor {
             };
             if rgba.is_empty() {
                 // Presenting: the pixels never left the GPU, so there is
-                // nothing to send. The window is where this app appears.
-                self.present();
+                // nothing to send. The window is where this app appears — but
+                // not from here. See `needs_present`.
+                self.needs_present = true;
             } else {
                 tracing::debug!(%app_id, width, height, bytes = rgba.len(), "broadcast app frame");
                 let scale = u32::try_from(buffer_scale).unwrap_or(1).max(1);
@@ -955,6 +1005,7 @@ impl DomicileCompositor {
     /// wherever it has drawn a panel. Chrome *below* an app — a wallpaper —
     /// would need a second engine surface, which nothing asks for yet.
     fn present(&mut self) {
+        let started = Instant::now();
         let Some(gpu) = self.gpu.as_mut() else {
             return;
         };
@@ -1027,6 +1078,12 @@ impl DomicileCompositor {
                         tracing::warn!(%err, "could not submit the frame");
                     }
                 }
+                // Counted after the submit, and only when one happened: a frame
+                // that failed to draw is not a frame, and reporting it as one
+                // would say the desktop was keeping up while it was blank.
+                let mut timings = self.hub.timings.lock().unwrap();
+                timings.composited += 1;
+                timings.composite.record(started.elapsed());
             }
             Err(err) => tracing::warn!(%err, "could not draw the scene"),
         }
@@ -1578,6 +1635,17 @@ enum Committer {
     App(String),
     /// The engine drawing the desktop itself.
     Chrome,
+}
+
+/// Whether a reporting window saw anything worth a line.
+///
+/// An idle desktop should not fill the log, but "idle" has to mean idle on
+/// *either* path. Counting only what the copy path produces leaves the native
+/// one silent however hard it is working — which is what happened the moment
+/// the throttle stopped firing, and it read as a compositor doing nothing
+/// rather than as instrumentation that could not see it.
+fn worth_reporting(sent: usize, dropped: usize, throttled: usize, composited: usize) -> bool {
+    sent > 0 || dropped > 0 || throttled > 0 || composited > 0
 }
 
 /// Whether a client's commit should be drawn, or dropped on the floor.
@@ -2394,6 +2462,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_scale: config.output.max_scale,
         output_logical: OUTPUT_LOGICAL_SIZE,
         shortcuts: Shortcuts::default(),
+        needs_present: false,
         window_input_seen: HashSet::new(),
         stop: Arc::new(AtomicBool::new(false)),
     };
@@ -2457,9 +2526,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // for one, because a resize is not a client commit.
             WinitEvent::Resized { scale_factor, .. } => {
                 data.state.adopt_window_scale(scale_factor);
-                data.state.present();
+                data.state.needs_present = true;
             }
-            WinitEvent::Redraw => data.state.present(),
+            WinitEvent::Redraw => data.state.needs_present = true,
             WinitEvent::CloseRequested => data.state.stop.store(true, Ordering::SeqCst),
             // A window that has just been given the keyboard: assert the
             // chrome's focus, in case it bound its keyboard after mapping.
@@ -2473,6 +2542,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stop = data.state.stop.clone();
     let signal = event_loop.get_signal();
     event_loop.run(None, &mut data, move |data| {
+        if std::mem::take(&mut data.state.needs_present) {
+            data.state.present();
+        }
         let _ = data.display.flush_clients();
         if stop.load(Ordering::SeqCst) {
             signal.stop();

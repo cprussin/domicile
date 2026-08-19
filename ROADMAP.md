@@ -107,6 +107,19 @@ below.
   import. `compose::texture_matrix` reflects (`1 - v`) rather than negating,
   because Smithay's own flip needs a repeating wrap mode to land back in range
   and samples the first row for the whole quad against a clamping one.
+- **Submitting a frame blocks until the display will take it**, so compositing
+  must not happen where a change is *noticed*. Drawing once per client commit
+  means blocking the Wayland thread once per client commit, and a client that
+  commits faster than the display refreshes stops the compositor serving
+  anything — every other client freezes, the chrome included, which reads as a
+  crash. Commits mark the desktop dirty; the event loop draws at most once per
+  pass. Dragging a tab found this: it fires a stream of resizes, each of which
+  makes a client redraw.
+- **The frame report is on a schedule, so it cannot wait on traffic.** It used
+  to be printed by the writer thread as it forwarded, which works only on the
+  path that forwards something: the compositing path produced no outbound items
+  and so reported nothing at all, however hard it was working. Worse, the only
+  reason it *ever* reported was a throttle counter that a later fix set to zero.
 - **One seat has one pointer focus, so only one thing may drive it.** The copy
   path has the chrome route the pointer and forward what belongs to a client;
   where Domicile presents, it routes from the window's own events with
