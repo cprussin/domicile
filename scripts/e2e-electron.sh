@@ -28,7 +28,10 @@ wait_for() { local file="$1" pat="$2" n="${3:-150}"; for _ in $(seq 1 "$n"); do 
 
 RUST_LOG="info,domicile_compositor=debug" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
-cleanup() { kill -9 "$COMP" "$EL" "$XVFB" "$FLOWER" 2>/dev/null; pkill -9 -f "apps/shell" 2>/dev/null; rm -f "$LOG" "$ELOG"; }
+# By pid only. `pkill -f apps/shell` would also take out a chrome someone was
+# running in another terminal, which is not this script's to end — the same
+# hazard that had `measure.sh` killing the terminal it was started from.
+cleanup() { kill -9 "$COMP" "$EL" "$XVFB" "$FLOWER" 2>/dev/null; rm -f "$LOG" "$ELOG"; }
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 

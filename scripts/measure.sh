@@ -23,7 +23,7 @@ export NO_COLOR=1
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 KEYSTROKES="${1:-40}"
 
-if [ -z "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
+if [ -z "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ] && [ "${DOMICILE_MEASURE_ONLY:-both}" != "copy" ]; then
   echo "No display. The native path presents into a window, so this needs one."
   exit 1
 fi
@@ -42,7 +42,7 @@ mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 
 COMPLOG="$(mktemp)"; CHROMELOG="$(mktemp)"
 COPY_COMP="$(mktemp)"; COPY_CHROME="$(mktemp)"
-trap 'kill -9 ${COMP:-} ${CHROME:-} ${DRIVER:-} 2>/dev/null; wait 2>/dev/null;
+trap 'kill -9 ${COMP:-} ${CHROME:-} ${DRIVER:-} ${APP:-} 2>/dev/null; wait 2>/dev/null;
       rm -f "$COMPLOG" "$CHROMELOG" "$COPY_COMP" "$COPY_CHROME"' EXIT
 
 # One run of one path. $1 names it; $2 is "present" or "copy".
@@ -90,31 +90,62 @@ run_path() {
   local app_display
   app_display="$(sed -n '/apps connect here/s/.*display="\([^"]*\)".*/\1/p' "$COMPLOG" | head -1)"
   WAYLAND_DISPLAY="$app_display" kitty >/dev/null 2>&1 &
+  APP=$!
 
   echo "typing $KEYSTROKES keystrokes into a terminal..."
   wait "$DRIVER" 2>/dev/null
+  # By pid, never by name. `pkill kitty` killed the terminal this was being run
+  # *from*, which is the same terminal the output would have been printed to.
+  kill -9 "$APP" 2>/dev/null; wait "$APP" 2>/dev/null
   kill -9 "$CHROME" 2>/dev/null; wait "$CHROME" 2>/dev/null
   kill -9 "$COMP" 2>/dev/null; wait "$COMP" 2>/dev/null
-  pkill -9 -f "apps/shell" 2>/dev/null
-  pkill -9 kitty 2>/dev/null
-  DRIVER=""; CHROME=""; COMP=""
+  DRIVER=""; CHROME=""; COMP=""; APP=""
 }
+
+# Everything printed also lands in a file. A run takes minutes and ends by
+# tearing down what it started; losing the numbers to a closed terminal means
+# doing all of it again.
+#
+# Not under the repo: `nix run` stages the source into the store and runs from
+# there, so `$PWD` by this point is a copy that may not be writable and is
+# certainly not where anyone would look for it afterwards.
+RESULTS="${DOMICILE_RESULTS:-${TMPDIR:-/tmp}/domicile-measurement.txt}"
+: >"$RESULTS"
+say() { echo "$@" | tee -a "$RESULTS"; }
+
+# `grep … | tail` exits with *tail's* status, which is 0 even when grep matched
+# nothing, so the fallback has to be chosen on the text rather than on `||`.
+lines() { grep "$1" "$2" | tail -3; }
 
 report() {
-  echo "-- what the compositor reported"
-  grep "frames sent=" "$1" | tail -3 || echo "   (nothing — no frames were composited)"
-  echo "-- what the chrome reported"
-  grep "round trip" "$2" | tail -3 || echo "   (nothing)"
+  local composited chrome
+  composited="$(lines "frames sent=" "$1")"
+  chrome="$(lines "round trip" "$2")"
+  say "-- what the compositor reported"
+  say "${composited:-   (nothing — no frames were composited)}"
+  say "-- what the chrome reported"
+  say "${chrome:-   (nothing — no frames reached it)}"
 }
 
-run_path "copy path — pixels read back and drawn into a canvas" copy || exit 1
-cp "$COMPLOG" "$COPY_COMP"; cp "$CHROMELOG" "$COPY_CHROME"
-report "$COPY_COMP" "$COPY_CHROME"
+# Which paths to run. Both is the point — one of them alone answers nothing —
+# but a machine with no display can still exercise the copy half, which is how
+# this script is checked where the native one cannot run.
+ONLY="${DOMICILE_MEASURE_ONLY:-both}"
 
-run_path "native path — the client's own buffer, composited" present || exit 1
-report "$COMPLOG" "$CHROMELOG"
+if [ "$ONLY" != "native" ]; then
+  run_path "copy path — pixels read back and drawn into a canvas" copy || exit 1
+  cp "$COMPLOG" "$COPY_COMP"; cp "$CHROMELOG" "$COPY_CHROME"
+  say ""; say "== copy path =="
+  report "$COPY_COMP" "$COPY_CHROME"
+fi
 
-cat <<'EOF'
+if [ "$ONLY" != "copy" ]; then
+  run_path "native path — the client's own buffer, composited" present || exit 1
+  say ""; say "== native path =="
+  report "$COMPLOG" "$CHROMELOG"
+fi
+
+tee -a "$RESULTS" <<'EOF'
 
 == reading this ==
   response_ms   the client's own think-and-redraw, measured inside the
@@ -131,3 +162,6 @@ cat <<'EOF'
 
 Parity was never "smaller". It was `readback_ms` and `ipc_ms` *gone*.
 EOF
+
+echo
+echo "Also written to $RESULTS"
