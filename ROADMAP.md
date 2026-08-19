@@ -107,6 +107,16 @@ below.
   import. `compose::texture_matrix` reflects (`1 - v`) rather than negating,
   because Smithay's own flip needs a repeating wrap mode to land back in range
   and samples the first row for the whole quad against a clamping one.
+- **A global a client wants and does not find is not an error it reports.**
+  `wl_data_device_manager` was missing, and it showed up as the chrome freezing
+  whenever a tab was dragged: a page that starts an HTML5 drag has the engine
+  start a Wayland one, and the engine runs a nested loop until the drag
+  completes. Nothing could complete it. Every other client carried on, which
+  makes it read as a compositor crash rather than a missing global.
+  `smoke-compositor.sh` now checks each expected global by name.
+- **A popup must be configured before it can draw**, and a client waiting on its
+  own menu has stopped answering anything — the same shape of hang, equally
+  silent. `new_popup` sends the configure.
 - **Submitting a frame blocks until the display will take it**, so compositing
   must not happen where a change is *noticed*. Drawing once per client commit
   means blocking the Wayland thread once per client commit, and a client that

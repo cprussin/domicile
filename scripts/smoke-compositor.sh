@@ -25,8 +25,20 @@ COMP=$!
 for _ in $(seq 1 100); do [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break; sleep 0.05; done
 
 echo "== globals a real client binds against domicile-compositor =="
-WAYLAND_DISPLAY=wayland-1 timeout 5 wayland-info 2>/dev/null \
-  | grep -oE "interface: '(wl_compositor|wl_shm|xdg_wm_base|wl_seat)'" | sort -u
+ADVERTISED="$(WAYLAND_DISPLAY=wayland-1 timeout 5 wayland-info 2>/dev/null)"
+echo "$ADVERTISED" \
+  | grep -oE "interface: '(wl_compositor|wl_shm|xdg_wm_base|wl_seat|wl_data_device_manager)'" \
+  | sort -u
 
-got=$(WAYLAND_DISPLAY=wayland-1 timeout 5 wayland-info 2>/dev/null | grep -c "xdg_wm_base")
-if [ "$got" -ge 1 ]; then echo "PASS: client bound xdg_wm_base (+ others above)"; else echo "FAIL"; exit 1; fi
+# Each of these, by name. A global a toolkit expects and does not find is not an
+# error it reports — `wl_data_device_manager` was missing for months and showed
+# up as the chrome freezing whenever a tab was dragged, because the engine runs
+# a nested loop until a drag completes and nothing could complete it.
+for global in wl_compositor wl_shm xdg_wm_base wl_seat wl_data_device_manager; do
+  if ! echo "$ADVERTISED" | grep -q "interface: '$global'"; then
+    echo "FAIL: $global is not advertised. A client that wants it will not say"
+    echo "  so — it will wait, or quietly do without."
+    exit 1
+  fi
+done
+echo "PASS: every global a desktop's clients expect is advertised"

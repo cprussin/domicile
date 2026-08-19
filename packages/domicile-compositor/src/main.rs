@@ -69,6 +69,10 @@ use smithay::wayland::{
         get_dmabuf, DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier,
     },
     output::{OutputHandler, OutputManagerState},
+    selection::data_device::{
+        ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
+    },
+    selection::SelectionHandler,
     shell::xdg::{
         PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
         XdgToplevelSurfaceData,
@@ -79,8 +83,8 @@ use smithay::wayland::{
     tablet_manager::TabletSeatHandler,
 };
 use smithay::{
-    delegate_compositor, delegate_cursor_shape, delegate_dmabuf, delegate_output, delegate_seat,
-    delegate_shm, delegate_xdg_shell,
+    delegate_compositor, delegate_cursor_shape, delegate_data_device, delegate_dmabuf,
+    delegate_output, delegate_seat, delegate_shm, delegate_xdg_shell,
 };
 use tracing::info;
 
@@ -649,6 +653,17 @@ struct DomicileCompositor {
     /// The single virtual output. Every app surface is on it — a client asks
     /// which output it is on to learn its scale, and blocks until told.
     output: Output,
+    /// Drag-and-drop and the clipboard.
+    ///
+    /// Advertised because a desktop without it is not one — but the reason it
+    /// went in when it did is that its *absence* freezes a chrome. A page that
+    /// starts an HTML5 drag has the engine start a Wayland one, and the engine
+    /// runs a nested loop until the drag completes. With no
+    /// `wl_data_device_manager` there is nothing to complete it, so the chrome
+    /// stops answering anything while every other client carries on — which
+    /// reads as the compositor having crashed, and does not look like a missing
+    /// global at all.
+    data_device_state: DataDeviceState,
     /// Kept alive so the wp_cursor_shape_v1 global persists.
     #[allow(dead_code)]
     cursor_shape_state: CursorShapeManagerState,
@@ -1977,7 +1992,24 @@ impl XdgShellHandler for DomicileCompositor {
         }
     }
 
-    fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {}
+    fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {
+        // A popup cannot attach a buffer until it has been configured, so a
+        // compositor that ignores one leaves the client waiting — and a client
+        // waiting on its own menu is a client that has stopped answering
+        // anything. The same shape of hang as the missing data device, and just
+        // as invisible: nothing errors, it simply never appears.
+        //
+        // The positioner's own geometry is taken as given. Constraining a popup
+        // to the output is what the flags are for and is not done here; the
+        // menus that exist are small and near where they were asked for.
+        surface.with_pending_state(|state| {
+            state.geometry = positioner.get_geometry();
+            state.positioner = positioner;
+        });
+        if let Err(err) = surface.send_configure() {
+            tracing::warn!(%err, "could not configure a popup");
+        }
+    }
 
     fn reposition_request(
         &mut self,
@@ -2008,6 +2040,23 @@ impl XdgShellHandler for DomicileCompositor {
 }
 
 delegate_xdg_shell!(DomicileCompositor);
+
+// ---- data device: drag-and-drop, and the clipboard ------------------------
+
+impl SelectionHandler for DomicileCompositor {
+    type SelectionUserData = ();
+}
+
+impl ClientDndGrabHandler for DomicileCompositor {}
+impl ServerDndGrabHandler for DomicileCompositor {}
+
+impl DataDeviceHandler for DomicileCompositor {
+    fn data_device_state(&self) -> &DataDeviceState {
+        &self.data_device_state
+    }
+}
+
+delegate_data_device!(DomicileCompositor);
 
 // ---- boot -----------------------------------------------------------------
 
@@ -2299,6 +2348,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dh = display.handle();
 
     let mut seat_state = SeatState::new();
+    let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);
     // Advertise a keyboard and pointer; a real compositor would track hotplug.
     let mut seat: Seat<DomicileCompositor> = seat_state.new_wl_seat(&dh, "domicile");
     // The keymap the seat compiles is what every Wayland client is handed, so
@@ -2437,6 +2487,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         xdg_shell_state: XdgShellState::new::<DomicileCompositor>(&dh),
         shm_state: ShmState::new::<DomicileCompositor>(&dh, vec![]),
         seat_state,
+        data_device_state,
         seat,
         output_manager_state,
         output,
