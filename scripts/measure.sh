@@ -80,7 +80,24 @@ run_path() {
       electron --no-sandbox "$ROOT/apps/shell" >"$CHROMELOG" 2>&1 &
   fi
   CHROME=$!
-  sleep 3
+  # A run whose chrome never connected measures a compositor with no desktop
+  # over the windows, which is not the thing being compared — and it reports as
+  # a quietly better number rather than as a failure.
+  # Generously: Electron takes seconds to start even on hardware, and longer
+  # where it falls back to software rendering. Waiting too briefly here turns a
+  # slow start into a failed measurement, which is its own kind of wrong answer.
+  local connected=0
+  for _ in $(seq 1 600); do
+    if grep -q "chrome client connected" "$COMPLOG"; then connected=1; break; fi
+    sleep 0.1
+  done
+  if [ "$connected" = "0" ]; then
+    say "the chrome never connected on the $mode run, so there was no desktop"
+    say "over the windows. Its numbers would read as better rather than as the"
+    say "failure this is. The chrome's last words:"
+    tail -5 "$CHROMELOG" | tee -a "$RESULTS"
+    return 1
+  fi
 
   # A terminal, and someone to type into it. The driver waits for the window to
   # settle before it starts — see the harness.

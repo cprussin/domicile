@@ -871,9 +871,12 @@ impl DomicileCompositor {
         }
 
         let now = Instant::now();
-        let due = self.last_frame.get(app_id).map_or(true, |t| {
-            now.duration_since(*t) >= Duration::from_millis(33)
-        });
+        let due = frame_is_due(
+            self.last_frame
+                .get(app_id)
+                .map(|last| now.duration_since(*last)),
+            self.gpu.as_ref().is_some_and(Gpu::presenting),
+        );
         if due {
             self.last_frame.insert(app_id.to_string(), now);
             // The GPU readback happens here rather than during classification:
@@ -1575,6 +1578,25 @@ enum Committer {
     App(String),
     /// The engine drawing the desktop itself.
     Chrome,
+}
+
+/// Whether a client's commit should be drawn, or dropped on the floor.
+///
+/// The throttle is the copy path's, and it exists for the socket: a frame is
+/// megabytes, and a chrome that reads slowly is a chrome whose socket fills
+/// within a frame or two. Dropping one costs nothing there, because the next
+/// supersedes it.
+///
+/// Presenting, there is no socket and no chrome — the client's buffer is
+/// imported and drawn, which costs a texture bind and a quad. Throttling that
+/// is not protecting anything; it is refusing half the frames a client drew and
+/// holding a stale desktop between them. Measured: kitty committing ~59 times a
+/// second had ~29 of them composited, for nothing.
+fn frame_is_due(since_last: Option<Duration>, presenting: bool) -> bool {
+    if presenting {
+        return true;
+    }
+    since_last.map_or(true, |elapsed| elapsed >= Duration::from_millis(33))
 }
 
 /// Whether this commit can be the answer to a keystroke we forwarded.
@@ -2462,12 +2484,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use std::ffi::{OsStr, OsString};
+    use std::time::Duration;
 
     use smithay::input::pointer::CursorIcon;
 
     use domicile_protocol::CursorShape;
 
-    use super::{answers_keystroke, bgra_to_rgba, client_command, cursor_shape, Committer};
+    use super::{
+        answers_keystroke, bgra_to_rgba, client_command, cursor_shape, frame_is_due, Committer,
+    };
 
     /// What a spawned client would find in its environment for `name`, where
     /// `None` is the variable being cleared rather than left alone.
@@ -2499,6 +2524,27 @@ mod tests {
     #[test]
     fn a_spawned_client_gets_no_x_display() {
         assert_eq!(child_env(&kitty(), "wayland-7", "DISPLAY"), None);
+    }
+
+    #[test]
+    fn a_clients_first_frame_is_always_due() {
+        assert!(frame_is_due(None, false));
+    }
+
+    #[test]
+    fn the_copy_path_drops_a_frame_that_came_too_soon() {
+        // The socket is what this protects: a frame is megabytes, and the next
+        // one supersedes the one dropped.
+        assert!(!frame_is_due(Some(Duration::from_millis(5)), false));
+        assert!(frame_is_due(Some(Duration::from_millis(40)), false));
+    }
+
+    #[test]
+    fn presenting_draws_every_frame_a_client_commits() {
+        // Nothing is being protected: there is no socket and no chrome, and the
+        // client's own buffer costs a bind and a quad. Refusing it holds a
+        // stale desktop for no reason — measured at half of kitty's frames.
+        assert!(frame_is_due(Some(Duration::from_millis(1)), true));
     }
 
     #[test]
