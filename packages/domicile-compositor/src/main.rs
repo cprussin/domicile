@@ -89,6 +89,7 @@ mod dmabuf_descriptor;
 mod dmabuf_import;
 mod outbound;
 mod scale;
+mod shortcut;
 mod timing_window;
 
 use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer};
@@ -96,12 +97,13 @@ use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::scale::{logical_size, output_scale};
+use crate::shortcut::{Modifiers, Shortcuts};
 use crate::timing_window::TimingWindow;
 use domicile_bridge::BridgeRegistry;
 use domicile_config::Config;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
-use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
+use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Shortcut};
 use domicile_scene::{Point as ScenePoint, PointerTarget, Transform as SceneTransform};
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{Color32F, Frame as _, ImportMem as _, Renderer as _};
@@ -181,6 +183,10 @@ enum ClientRequest {
     },
     KeyboardFocus {
         app_id: Option<String>,
+    },
+    /// The chrome claimed a key combination for the desktop.
+    GrabShortcut {
+        shortcut: Shortcut,
     },
     /// The chrome's display density changed; re-advertise the output scale so
     /// clients redraw at the resolution the screen actually has.
@@ -490,6 +496,13 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
         tracing::debug!(chrome_msg = %line.trim(), "chrome -> host");
         let responses = match parse_chrome(line.trim()) {
             // Compositor-level side effects: intercept before the (pure) brain.
+            // Compositor-level, before the brain: a claim on the keyboard is
+            // the compositor's to keep, since it is the only thing that sees a
+            // key before its client does.
+            Ok(ChromeMessage::GrabShortcut { shortcut }) => {
+                hub.send_request(ClientRequest::GrabShortcut { shortcut });
+                Vec::new()
+            }
             Ok(ChromeMessage::Spawn { command }) => {
                 spawn_client(&command, &hub.wayland_display);
                 Vec::new()
@@ -659,6 +672,8 @@ struct DomicileCompositor {
     chrome_frame_shape: Option<((f64, f64), bool, bool)>,
     /// The highest output scale to advertise, whatever a display reports.
     max_scale: u32,
+    /// The key combinations the chrome has claimed for the desktop.
+    shortcuts: Shortcuts,
     /// The desktop's size in logical units. Follows the window where there is
     /// one; [`OUTPUT_LOGICAL_SIZE`] is what a headless run is stuck with.
     output_logical: (i32, i32),
@@ -1248,9 +1263,36 @@ impl DomicileCompositor {
                 // itself, unlike the chrome, which sends evdev and has it added
                 // where its keys are injected.
                 let key = event.key_code();
-                keyboard.input::<(), _>(self, key, event.state(), serial, time, |_, _, _| {
-                    FilterResult::Forward
-                });
+                let pressed = event.state() == KeyState::Pressed;
+                // The filter runs with the modifier state this key produced, so
+                // a claimed combination is taken out of the stream here — before
+                // the focused client is given it, which is the only place it can
+                // be taken from a window that has the keyboard.
+                let grabbed = keyboard.input(
+                    self,
+                    key,
+                    event.state(),
+                    serial,
+                    time,
+                    |state, modifiers, _| {
+                        let held = Modifiers {
+                            alt: modifiers.alt,
+                            ctrl: modifiers.ctrl,
+                            shift: modifiers.shift,
+                            logo: modifiers.logo,
+                        };
+                        match state.shortcuts.pressed(key.raw(), held) {
+                            // Releases are swallowed too, so a client never sees
+                            // half of a chord it was not given the start of.
+                            Some(shortcut) => FilterResult::Intercept(pressed.then_some(shortcut)),
+                            None => FilterResult::Forward,
+                        }
+                    },
+                );
+                if let Some(Some(shortcut)) = grabbed {
+                    info!(key = shortcut.key, "a claimed shortcut -> the chrome");
+                    self.hub.broadcast(HostMessage::Shortcut { shortcut });
+                }
             }
             _ => {}
         }
@@ -1478,6 +1520,10 @@ impl DomicileCompositor {
                 let keyboard = self.seat.get_keyboard().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 keyboard.set_focus(self, surface, serial);
+            }
+            ClientRequest::GrabShortcut { shortcut } => {
+                info!(key = shortcut.key, "the chrome claimed a shortcut");
+                self.shortcuts.grab(shortcut);
             }
             ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
             ClientRequest::ConfigureApp {
@@ -2325,6 +2371,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_frame_shape: None,
         max_scale: config.output.max_scale,
         output_logical: OUTPUT_LOGICAL_SIZE,
+        shortcuts: Shortcuts::default(),
         window_input_seen: HashSet::new(),
         stop: Arc::new(AtomicBool::new(false)),
     };

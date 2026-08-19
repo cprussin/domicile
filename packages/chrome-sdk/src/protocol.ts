@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
@@ -98,6 +98,22 @@ const appClosedSchema = z.looseObject({
   type: z.literal("app_closed"),
 });
 
+const shortcutSchema = z.looseObject({
+  alt: z.boolean(),
+  ctrl: z.boolean(),
+  key: z.number(),
+  logo: z.boolean(),
+  shift: z.boolean(),
+});
+
+// A combination the chrome claimed, pressed. It arrives here rather than as a
+// DOM event because the page is not what received it — the point of claiming
+// one is that it works while a window has the keyboard.
+const shortcutMessageSchema = z.looseObject({
+  shortcut: shortcutSchema,
+  type: z.literal("shortcut"),
+});
+
 const appCursorSchema = z.looseObject({
   app_id: z.string(),
   cursor: cursorShapeSchema,
@@ -116,6 +132,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appFrameSchema,
   appClosedSchema,
   appCursorSchema,
+  shortcutMessageSchema,
 ]);
 
 /**
@@ -141,6 +158,7 @@ export type AppFrameMessage = z.infer<typeof appFrameSchema> & {
 };
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
+export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 
 /** A CSS `cursor` keyword a client can ask the chrome to show over its app. */
 export type CursorShape = z.infer<typeof cursorShapeSchema>;

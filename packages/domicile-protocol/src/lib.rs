@@ -9,6 +9,12 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v5 added `grab_shortcut` and `shortcut`: the chrome claims key combinations
+/// and the compositor takes matching presses out of the stream before anyone is
+/// given them. A v4 chrome never claims any, so its own shortcuts stop working
+/// the moment a window takes the keyboard — which is what this fixes rather
+/// than a difference in how a message is read.
+///
 /// v4 made the frame path scale-aware: the chrome reports its
 /// `device_pixel_ratio`, and `app_frame` says at what `scale` its pixels were
 /// drawn so the chrome can size a canvas backing store in device pixels while
@@ -23,7 +29,21 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 4;
+pub const PROTOCOL_VERSION: u32 = 5;
+
+/// A key combination the desktop claims for itself.
+///
+/// `key` is a Linux evdev keycode, the same numbering the chrome forwards
+/// keystrokes in — not the X keycode the Wayland keymap uses, which is this
+/// plus 8.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Shortcut {
+    pub key: u32,
+    pub alt: bool,
+    pub ctrl: bool,
+    pub shift: bool,
+    pub logo: bool,
+}
 
 /// Messages sent from the chrome (in-page bridge) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -72,6 +92,17 @@ pub enum ChromeMessage {
     /// Used by chrome keybindings/launchers.
     Spawn { command: Vec<String> },
 
+    /// Claim a key combination for the desktop, whatever holds the keyboard.
+    ///
+    /// A chrome shortcut cannot depend on the chrome being focused: the moment
+    /// a window is, every key goes to it, and the combination that would put
+    /// another window on screen is the one the user can no longer press. The
+    /// compositor holds these and takes matching presses out of the stream
+    /// before anyone is given them, which is what "global" means.
+    ///
+    /// Registering the same combination twice is not an error; it is one claim.
+    GrabShortcut { shortcut: Shortcut },
+
     // --- input forwarding: the chrome captures input over an <app> element and
     // forwards it here so the compositor can inject it into the client. ---
     /// Pointer moved to a surface-local coordinate `(x, y)` over an app.
@@ -109,6 +140,13 @@ pub enum ChromeMessage {
 pub enum HostMessage {
     /// Response to `Hello`; declares the version the host agreed to speak.
     Welcome { protocol_version: u32 },
+
+    /// A combination claimed with `GrabShortcut` was pressed.
+    ///
+    /// Delivered instead of to whatever held the keyboard, so the chrome hears
+    /// it whether or not it was focused. Only presses: a release changes
+    /// nothing and would arrive as a second event for one keystroke.
+    Shortcut { shortcut: Shortcut },
 
     /// A new Wayland client wants a portal. The chrome decides where to mount
     /// its `<app id="…">` element.

@@ -134,6 +134,17 @@ else
   cat "$LOG"; exit 1
 fi
 
+# A shortcut the chrome claims has to reach the compositor, which is the only
+# thing that sees a key before its client does. Whether it is then taken out of
+# the stream needs a window and is unit-tested instead.
+if wait_for "the chrome claimed a shortcut"; then
+  echo "PASS: a claimed shortcut reached the compositor"
+else
+  echo "FAIL: the chrome claimed a shortcut and the compositor never heard it,"
+  echo "  so every desktop shortcut dies the moment a window takes the keyboard."
+  cat "$LOG"; exit 1
+fi
+
 # One app, not two: the chrome must never have been announced.
 MAPPED="$(grep -c "toplevel mapped" "$LOG")"
 if [ "$MAPPED" = "1" ]; then

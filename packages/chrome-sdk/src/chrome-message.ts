@@ -24,6 +24,7 @@ export type ChromeMessage =
   | ReturnType<typeof setDevicePixelRatioMessage>
   | ReturnType<typeof focusAppMessage>
   | ReturnType<typeof focusChromeMessage>
+  | ReturnType<typeof grabShortcutMessage>
   | ReturnType<typeof spawnMessage>
   | ReturnType<typeof pointerMotionMessage>
   | ReturnType<typeof pointerLeaveMessage>
@@ -84,6 +85,30 @@ export const focusAppMessage = (appId: string) =>
   ({ app_id: appId, type: "focus_app" }) as const;
 
 export const focusChromeMessage = () => ({ type: "focus_chrome" }) as const;
+
+/**
+ * A key combination the desktop claims for itself.
+ *
+ * `key` is an evdev keycode, the same numbering {@link keyMessage} forwards in.
+ */
+export type Shortcut = {
+  key: number;
+  alt: boolean;
+  ctrl: boolean;
+  shift: boolean;
+  logo: boolean;
+};
+
+/**
+ * Claim a combination, so the compositor takes it out of the stream before the
+ * focused client is given it.
+ *
+ * Without this a chrome shortcut only works while the chrome has the keyboard —
+ * which is to say, not once a window is on screen, which is exactly when the
+ * user wants to open another one.
+ */
+export const grabShortcutMessage = (shortcut: Shortcut) =>
+  ({ shortcut, type: "grab_shortcut" }) as const;
 
 /** Ask the compositor to spawn a client process (argv). */
 export const spawnMessage = (command: readonly string[]) => {

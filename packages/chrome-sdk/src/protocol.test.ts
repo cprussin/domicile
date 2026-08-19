@@ -64,4 +64,26 @@ describe("parseHostMessage", () => {
       parseHostMessage('{"type":"app_frame","app_id":"term"}'),
     ).toThrow();
   });
+
+  it("decodes a shortcut the compositor took for the desktop", () => {
+    // It arrives as a message rather than a DOM event because the page is not
+    // what received it — which is the whole point of claiming one.
+    const message = parseHostMessage(
+      JSON.stringify({
+        shortcut: {
+          alt: true,
+          ctrl: false,
+          key: 28,
+          logo: false,
+          shift: false,
+        },
+        type: "shortcut",
+      }),
+    );
+
+    expect(message).toStrictEqual({
+      shortcut: { alt: true, ctrl: false, key: 28, logo: false, shift: false },
+      type: "shortcut",
+    });
+  });
 });

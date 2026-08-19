@@ -5,10 +5,11 @@
 // the engine exposes to the page. The BridgeClient handles the version
 // handshake, dispatches host events to handlers, and offers typed senders.
 
-import type { ChromeMessage, Placement } from "./chrome-message";
+import type { ChromeMessage, Placement, Shortcut } from "./chrome-message";
 import {
   focusAppMessage,
   focusChromeMessage,
+  grabShortcutMessage,
   helloMessage,
   keyMessage,
   placePortalMessage,
@@ -138,6 +139,16 @@ export class BridgeClient {
   /** Ask the compositor to spawn a client process (argv array). */
   spawn(command: readonly string[]): void {
     this.send(spawnMessage(command));
+  }
+
+  /**
+   * Claim a key combination for the desktop, whatever holds the keyboard.
+   *
+   * The press arrives back as a `shortcut` message rather than as a DOM event,
+   * because the page is not what received it.
+   */
+  grabShortcut(shortcut: Shortcut): void {
+    this.send(grabShortcutMessage(shortcut));
   }
 
   // ---- input forwarding ---------------------------------------------------
