@@ -80,7 +80,20 @@ run_path() {
       electron --no-sandbox "$ROOT/apps/shell" >"$CHROMELOG" 2>&1 &
   fi
   CHROME=$!
-  sleep 3
+  # A run whose chrome never connected measures a compositor with no desktop
+  # over the windows, which is not the thing being compared — and it reports as
+  # a quietly better number rather than as a failure.
+  local connected=0
+  for _ in $(seq 1 100); do
+    if grep -q "chrome client connected" "$COMPLOG"; then connected=1; break; fi
+    sleep 0.1
+  done
+  if [ "$connected" = "0" ]; then
+    say "the chrome never connected on the $name run; its numbers would not be"
+    say "comparable, so this is a failure rather than a result."
+    tail -5 "$CHROMELOG" | tee -a "$RESULTS"
+    return 1
+  fi
 
   # A terminal, and someone to type into it. The driver waits for the window to
   # settle before it starts — see the harness.
