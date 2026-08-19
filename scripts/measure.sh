@@ -113,13 +113,18 @@ RESULTS="${DOMICILE_RESULTS:-${TMPDIR:-/tmp}/domicile-measurement.txt}"
 : >"$RESULTS"
 say() { echo "$@" | tee -a "$RESULTS"; }
 
+# `grep … | tail` exits with *tail's* status, which is 0 even when grep matched
+# nothing, so the fallback has to be chosen on the text rather than on `||`.
+lines() { grep "$1" "$2" | tail -3; }
+
 report() {
+  local composited chrome
+  composited="$(lines "frames sent=" "$1")"
+  chrome="$(lines "round trip" "$2")"
   say "-- what the compositor reported"
-  grep "frames sent=" "$1" | tail -3 | tee -a "$RESULTS" \
-    || say "   (nothing — no frames were composited)"
+  say "${composited:-   (nothing — no frames were composited)}"
   say "-- what the chrome reported"
-  grep "round trip" "$2" | tail -3 | tee -a "$RESULTS" \
-    || say "   (nothing — the chrome is not in the frame path)"
+  say "${chrome:-   (nothing — no frames reached it)}"
 }
 
 # Which paths to run. Both is the point — one of them alone answers nothing —
