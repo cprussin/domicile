@@ -14,8 +14,9 @@
 //! rate a person opens and closes windows.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
+use std::time::Duration;
 
 use domicile_protocol::HostMessage;
 
@@ -108,18 +109,36 @@ impl OutboundReceiver {
         self.dropped.swap(0, Ordering::SeqCst)
     }
 
-    /// Block until the next item, or `None` once the sender is gone.
-    pub fn recv(&self) -> Option<Outbound> {
-        let item = self.receiver.recv().ok()?;
-        if matches!(item, Outbound::Frame { .. }) {
+    /// Block until the next item, giving up after `timeout` with `Some(None)`.
+    ///
+    /// The caller reports on a schedule as well as forwarding, and a path that
+    /// sends nothing must not silence it: waiting for traffic that will never
+    /// come is how the compositing path came to report nothing at all while it
+    /// was drawing sixty frames a second.
+    ///
+    /// `None` still means the sender is gone.
+    pub fn recv_until(&self, timeout: Duration) -> Option<Option<Outbound>> {
+        match self.receiver.recv_timeout(timeout) {
+            Ok(item) => Some(self.took(Some(item))),
+            Err(RecvTimeoutError::Timeout) => Some(None),
+            Err(RecvTimeoutError::Disconnected) => None,
+        }
+    }
+
+    fn took(&self, item: Option<Outbound>) -> Option<Outbound> {
+        if matches!(item, Some(Outbound::Frame { .. })) {
             self.waiting_frames.fetch_sub(1, Ordering::SeqCst);
         }
-        Some(item)
+        item
     }
 }
 
 #[cfg(test)]
 mod tests {
+    /// Long enough that a timeout in these tests means a genuine failure to
+    /// deliver rather than a slow machine.
+    const PATIENTLY: Duration = Duration::from_secs(5);
+
     use std::sync::mpsc::sync_channel;
     use std::thread;
     use std::time::Duration;
@@ -149,7 +168,10 @@ mod tests {
     fn taking_a_frame_makes_room_for_the_next() {
         let (sender, receiver) = outbound();
         assert!(frame_bytes(&sender));
-        assert!(matches!(receiver.recv(), Some(Outbound::Frame { .. })));
+        assert!(matches!(
+            receiver.recv_until(PATIENTLY).flatten(),
+            Some(Outbound::Frame { .. })
+        ));
         assert!(frame_bytes(&sender), "the writer caught up, so this fits");
     }
 
@@ -163,7 +185,7 @@ mod tests {
             sender.message(closed(&format!("app-{index}")));
         }
         let mut delivered = 0;
-        while let Some(item) = receiver.recv() {
+        while let Some(item) = receiver.recv_until(PATIENTLY).flatten() {
             if matches!(item, Outbound::Message(_)) {
                 delivered += 1;
             }
@@ -219,12 +241,15 @@ mod tests {
         sender.message(closed("last"));
 
         assert!(matches!(
-            receiver.recv(),
+            receiver.recv_until(PATIENTLY).flatten(),
             Some(Outbound::Message(HostMessage::AppClosed { app_id })) if app_id == "first"
         ));
-        assert!(matches!(receiver.recv(), Some(Outbound::Frame { .. })));
         assert!(matches!(
-            receiver.recv(),
+            receiver.recv_until(PATIENTLY).flatten(),
+            Some(Outbound::Frame { .. })
+        ));
+        assert!(matches!(
+            receiver.recv_until(PATIENTLY).flatten(),
             Some(Outbound::Message(HostMessage::AppClosed { app_id })) if app_id == "last"
         ));
     }
