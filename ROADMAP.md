@@ -377,7 +377,10 @@ nothing crosses the hop they measure.
 
 ### Phase 2 — the effects that make an app a CSS element
 
-- rounded corners, opacity and shadow in the compositor's shader
+- ~~rounded corners, opacity and shadow in the compositor's shader~~ — done.
+  `place_portal` carries the element's computed `border-radius`, `opacity` and
+  `box-shadow`; the shader rounds and fades the client's own buffer, and a
+  second quad under it casts the shadow.
 - the rotated + rounded + shadowed window that was the original success criterion,
   at native cost
 - chrome above *and* below as two engine layers (only above is free today)

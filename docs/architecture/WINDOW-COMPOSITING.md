@@ -233,8 +233,15 @@ Phase 2 — the effects that make an app a CSS element:
       applies a rounded-rect SDF and an alpha multiply to the client's own
       buffer. One radius, not four: it is what can be applied without knowing
       which way up a client's buffer is.
-- [ ] shadow — the first effect that draws *outside* the quad, so it needs
-      geometry of its own rather than a change to the fragment shader
+- [x] shadow — the first effect that draws *outside* the quad, so it gets
+      geometry of its own: a second quad, grown by the spread and the blur and
+      moved by the offset, drawn under the window by a second shader which cuts
+      the window's own shape back out of it. CSS clips an outer shadow to
+      outside the border box, so a translucent window must not show the shadow
+      it casts through itself. `place_portal` carries the element's computed
+      `box-shadow`; an `inset` one is reported as no shadow, and a colour in a
+      syntax the SDK cannot read is reported to the console rather than
+      silently dropped.
 - [ ] the rotated + rounded + shadowed window from the old spike's success criterion, at native cost
 - [ ] chrome above/below as two engine layers
 - [ ] per-window fallback to the copy path when the element's computed style needs an unsupported effect

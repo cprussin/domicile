@@ -96,7 +96,7 @@ mod scale;
 mod shortcut;
 mod timing_window;
 
-use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer, Shaders};
+use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer, Shaders, Shadow};
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
@@ -1049,17 +1049,21 @@ impl DomicileCompositor {
                 })
                 .collect()
         };
+        // Everything a style measures is in the chrome's logical units and the
+        // shader works in output pixels.
+        let scale = to_window.a;
         let mut layers: Vec<_> = placements
             .iter()
             .filter_map(|(app_id, surface_to_output, style)| {
                 let surface = self.textures.get(app_id)?;
                 Some(Layer {
                     alpha: style.opacity as f32,
+                    shadow: style.shadow.map(|shadow| shadow_in_pixels(shadow, scale)),
                     // The radius is in the chrome's logical units and the
                     // shader works in output pixels, so it scales with
                     // everything else — a rounded window on a 2x display has
                     // twice the radius in pixels and looks the same.
-                    corner_radius: (style.corner_radius * to_window.a) as f32,
+                    corner_radius: (style.corner_radius * scale) as f32,
                     surface_to_output: surface_to_output.then(to_window),
                     texture: &surface.texture,
                     y_inverted: surface.y_inverted,
@@ -1069,8 +1073,10 @@ impl DomicileCompositor {
         if let Some(chrome) = self.chrome_texture.as_ref() {
             layers.push(Layer {
                 alpha: 1.0,
-                // The desktop itself is not a window and is never rounded.
+                // The desktop itself is not a window: it is never rounded and
+                // casts nothing.
                 corner_radius: 0.0,
+                shadow: None,
                 // At its own size rather than stretched over the output: it is
                 // asked to be the output's size, and a chrome that has not
                 // taken that size yet should show as a gap it has not filled
@@ -1678,6 +1684,28 @@ enum Committer {
     App(String),
     /// The engine drawing the desktop itself.
     Chrome,
+}
+
+/// A shadow the way the shader wants it: lengths in output pixels, colour
+/// channels counted to one.
+///
+/// Everything a style measures is in the chrome's logical units, so a window on
+/// a 2x display casts a shadow twice as far in pixels and looks the same. The
+/// colour is the exception — CSS counts channels to 255 and a shader counts
+/// everything to one, and alpha is already 0-1 on both sides.
+fn shadow_in_pixels(shadow: domicile_scene::Shadow, scale: f64) -> Shadow {
+    Shadow {
+        blur: (shadow.blur * scale) as f32,
+        color: [
+            (shadow.color[0] / 255.0) as f32,
+            (shadow.color[1] / 255.0) as f32,
+            (shadow.color[2] / 255.0) as f32,
+            shadow.color[3] as f32,
+        ],
+        dx: (shadow.dx * scale) as f32,
+        dy: (shadow.dy * scale) as f32,
+        spread: (shadow.spread * scale) as f32,
+    }
 }
 
 /// Whether a reporting window saw anything worth a line.
@@ -2655,7 +2683,8 @@ mod tests {
     use domicile_protocol::CursorShape;
 
     use super::{
-        answers_keystroke, bgra_to_rgba, client_command, cursor_shape, frame_is_due, Committer,
+        answers_keystroke, bgra_to_rgba, client_command, cursor_shape, frame_is_due,
+        shadow_in_pixels, Committer,
     };
 
     /// What a spawned client would find in its environment for `name`, where
@@ -2667,6 +2696,49 @@ mod tests {
             .find(|(key, _)| *key == OsStr::new(name))
             .map(|(_, value)| value.map(OsStr::to_os_string))
             .expect("the variable is one this sets or clears")
+    }
+
+    #[test]
+    fn a_shadows_colour_is_counted_to_one_for_the_shader() {
+        // CSS counts channels to 255 and a shader counts everything to one, so
+        // a scene shadow cannot be handed to the shader as it stands. Alpha is
+        // already 0-1 on both sides and must not be divided again — doing so
+        // would make every shadow invisible rather than merely wrong.
+        let white = domicile_scene::Shadow {
+            blur: 0.0,
+            color: [255.0, 128.0, 0.0, 0.5],
+            dx: 0.0,
+            dy: 0.0,
+            spread: 0.0,
+        };
+
+        let converted = shadow_in_pixels(white, 1.0);
+
+        assert_eq!(converted.color[0], 1.0);
+        assert!((converted.color[1] - 128.0 / 255.0).abs() < f32::EPSILON);
+        assert_eq!(converted.color[2], 0.0);
+        assert_eq!(converted.color[3], 0.5, "alpha is already counted to one");
+    }
+
+    #[test]
+    fn a_shadow_scales_with_the_display_it_is_drawn_on() {
+        // Every length in a style is in the chrome's logical units. A window on
+        // a 2x display casts a shadow twice as far in pixels and looks the
+        // same; a shadow that did not scale would drift as the density changed.
+        let shadow = domicile_scene::Shadow {
+            blur: 12.0,
+            color: [0.0, 0.0, 0.0, 1.0],
+            dx: 3.0,
+            dy: -4.0,
+            spread: 2.0,
+        };
+
+        let converted = shadow_in_pixels(shadow, 2.0);
+
+        assert_eq!(
+            (converted.blur, converted.dx, converted.dy, converted.spread),
+            (24.0, 6.0, -8.0, 4.0)
+        );
     }
 
     fn kitty() -> Vec<String> {

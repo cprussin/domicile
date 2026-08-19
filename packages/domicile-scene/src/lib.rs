@@ -155,6 +155,19 @@ pub struct Style {
     pub corner_radius: f64,
     /// `opacity`, 0 to 1.
     pub opacity: f64,
+    /// The shadow the window casts, if any.
+    pub shadow: Option<Shadow>,
+}
+
+/// A shadow, in the same logical units as a portal's size.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Shadow {
+    pub dx: f64,
+    pub dy: f64,
+    pub blur: f64,
+    pub spread: f64,
+    /// Straight RGBA: channels 0-255, alpha 0-1.
+    pub color: [f64; 4],
 }
 
 impl Default for Style {
@@ -163,6 +176,7 @@ impl Default for Style {
         Style {
             corner_radius: 0.0,
             opacity: 1.0,
+            shadow: None,
         }
     }
 }

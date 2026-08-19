@@ -9,11 +9,20 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v7 added `shadow` to `place_portal`, for the same reason v6 added the other
+/// two: the compositor draws the window, so a `box-shadow` on the element is
+/// its to cast.
+///
+/// `negotiate` matches exactly, so an older chrome is turned away at the
+/// handshake rather than running with the fields it knows — the version is what
+/// the two halves agree on, not a floor. The `serde` defaults on the newer
+/// fields are for reading a message that predates them, not for admitting a
+/// chrome that would send one.
+///
 /// v6 added `corner_radius` and `opacity` to `place_portal`: the compositor
 /// draws app windows itself, so a `border-radius` or an `opacity` on the
 /// element is no longer something the engine applies to a picture of the
-/// window — it has to be told. A v5 chrome reports neither, and gets square
-/// opaque windows.
+/// window — it has to be told.
 ///
 /// v5 added `grab_shortcut` and `shortcut`: the chrome claims key combinations
 /// and the compositor takes matching presses out of the stream before anyone is
@@ -35,7 +44,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 6;
+pub const PROTOCOL_VERSION: u32 = 7;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -49,6 +58,24 @@ pub struct Shortcut {
     pub ctrl: bool,
     pub shift: bool,
     pub logo: bool,
+}
+
+/// A shadow an element casts, in the logical units the placement is in.
+///
+/// One shadow, not the list CSS allows: the first, which is the one on top.
+/// Inset shadows are not represented at all — they fall *inside* the box, over
+/// the client's own pixels, and drawing one as an outer shadow would ring a
+/// window that asked for the opposite.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Shadow {
+    pub dx: f64,
+    pub dy: f64,
+    /// The width of the falloff. Zero is a hard edge, never negative.
+    pub blur: f64,
+    /// How much bigger than the window the shadow is before it blurs.
+    pub spread: f64,
+    /// Straight RGBA: channels 0-255, alpha 0-1, as CSS reports them.
+    pub color: [f64; 4],
 }
 
 /// What an element with no `opacity` set has: all of it.
@@ -87,6 +114,9 @@ pub enum ChromeMessage {
         /// The element's `opacity`, 0 to 1.
         #[serde(default = "opaque")]
         opacity: f64,
+        /// The element's `box-shadow`, if it casts one that can be drawn.
+        #[serde(default)]
+        shadow: Option<Shadow>,
     },
 
     /// An `<app>` element was unmounted; the host should stop compositing it.

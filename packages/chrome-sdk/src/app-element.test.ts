@@ -53,6 +53,7 @@ class FakeBridge {
 const stubMeasure: Measure = () => ({
   cornerRadius: 0,
   opacity: 1,
+  shadow: undefined,
   size: [10, 20],
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,
@@ -135,6 +136,7 @@ describe("<domicile-app>", () => {
       measure: () => ({
         cornerRadius: 0,
         opacity: 1,
+        shadow: undefined,
         size: [0, 0],
         transform: [1, 0, 0, 1, 0, 0],
         visible: false,
@@ -150,6 +152,7 @@ describe("<domicile-app>", () => {
         appId: "term",
         cornerRadius: 0,
         opacity: 1,
+        shadow: undefined,
         size: [0, 0],
         transform: [1, 0, 0, 1, 0, 0],
         visible: false,

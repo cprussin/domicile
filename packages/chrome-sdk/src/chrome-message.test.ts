@@ -27,6 +27,7 @@ describe("placePortalMessage", () => {
       // draws the window itself now, so these travel with the placement.
       corner_radius: 0,
       opacity: 1,
+      shadow: null,
       size: [10, 20],
       transform: [1, 0, 0, 1, 5, 6],
       type: "place_portal",
@@ -43,6 +44,25 @@ describe("placePortalMessage", () => {
     });
     expect(message.z_index).toBe(0);
     expect(message.visible).toBe(true);
+  });
+
+  it("carries the shadow the element casts", () => {
+    // The compositor draws it, so the numbers have to reach it — an element
+    // that styles a shadow and gets none is the same bug as one that styles a
+    // radius and stays square.
+    const message = placePortalMessage({
+      appId: "term",
+      shadow: { blur: 12, color: [0, 0, 0, 0.5], dx: 4, dy: 8, spread: 2 },
+      size: [1, 1],
+      transform: [1, 0, 0, 1, 0, 0],
+    });
+    expect(message.shadow).toEqual({
+      blur: 12,
+      color: [0, 0, 0, 0.5],
+      dx: 4,
+      dy: 8,
+      spread: 2,
+    });
   });
 
   it("rejects an empty app id", () => {

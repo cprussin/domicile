@@ -131,6 +131,7 @@ impl Host {
                 visible,
                 corner_radius,
                 opacity,
+                shadow,
             } => {
                 if !self.apps.contains_key(&app_id) {
                     return Err(HostError::UnknownApp(app_id));
@@ -146,6 +147,13 @@ impl Host {
                         .styled(Style {
                             corner_radius,
                             opacity,
+                            shadow: shadow.map(|shadow| domicile_scene::Shadow {
+                                blur: shadow.blur,
+                                color: shadow.color,
+                                dx: shadow.dx,
+                                dy: shadow.dy,
+                                spread: shadow.spread,
+                            }),
                         }),
                     );
                 } else {

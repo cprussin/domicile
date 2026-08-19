@@ -24,6 +24,18 @@ use smithay::backend::renderer::gles::{
 /// is added at the end.
 pub struct Shaders {
     rounded: GlesTexProgram,
+    shadow: GlesTexProgram,
+}
+
+/// A shadow cast by a window, in output pixels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Shadow {
+    pub dx: f32,
+    pub dy: f32,
+    pub blur: f32,
+    pub spread: f32,
+    /// Straight (not premultiplied) RGBA, each 0 to 1.
+    pub color: [f32; 4],
 }
 
 impl Shaders {
@@ -36,6 +48,19 @@ impl Shaders {
                 &[
                     UniformName::new("quad_size", UniformType::_2f),
                     UniformName::new("corner_radius", UniformType::_1f),
+                ],
+            )?,
+            shadow: renderer.compile_custom_texture_shader(
+                include_str!("shaders/shadow.frag"),
+                &[
+                    UniformName::new("quad_size", UniformType::_2f),
+                    UniformName::new("shadow_size", UniformType::_2f),
+                    UniformName::new("shadow_radius", UniformType::_1f),
+                    UniformName::new("window_size", UniformType::_2f),
+                    UniformName::new("window_radius", UniformType::_1f),
+                    UniformName::new("window_offset", UniformType::_2f),
+                    UniformName::new("blur", UniformType::_1f),
+                    UniformName::new("shadow_color", UniformType::_4f),
                 ],
             )?,
         })
@@ -55,6 +80,8 @@ pub struct Layer<'a> {
     /// is what the shader can apply without knowing which way up the buffer is,
     /// and it is what every window actually asks for.
     pub corner_radius: f32,
+    /// The shadow this window casts, if any. Drawn under it, and outside it.
+    pub shadow: Option<Shadow>,
     /// Whether the texture's rows run bottom-to-top.
     ///
     /// A client that renders with GL hands over a buffer the way GL made it,
@@ -77,6 +104,12 @@ pub fn draw_layers(
 ) -> Result<(), GlesError> {
     for layer in layers {
         let (width, height) = on_screen_size(layer.surface_to_output);
+        // Before the window, because a shadow that drew afterwards would be
+        // over the client. The shader keeps it out from under the window too,
+        // so a translucent window does not show its own shadow through itself.
+        if let Some(shadow) = layer.shadow {
+            draw_shadow(frame, shaders, layer, (width, height), shadow)?;
+        }
         frame.render_texture(
             layer.texture,
             texture_matrix(layer.y_inverted),
@@ -91,6 +124,113 @@ pub fn draw_layers(
         )?;
     }
     Ok(())
+}
+
+/// Draw one window's shadow: a quad big enough to hold the blur, with the
+/// window's own shape cut out of it by the shader.
+///
+/// The first effect that draws *outside* the window, which is why it is a quad
+/// of its own rather than another line in the window's shader — there is
+/// nowhere in the window's own geometry to put it.
+fn draw_shadow(
+    frame: &mut GlesFrame<'_, '_>,
+    shaders: &Shaders,
+    layer: &Layer<'_>,
+    (width, height): (f32, f32),
+    shadow: Shadow,
+) -> Result<(), GlesError> {
+    // Room for the blur to fade out in on every side. Too little and the
+    // shadow is cut off square, which looks like a bug and is one. The blur
+    // reaches half its radius past the shadow's edge, because that is where
+    // the shader's falloff ends.
+    let margin = shadow.blur * 0.5 + shadow.spread.max(0.0);
+    let quad = (width + margin * 2.0, height + margin * 2.0);
+    // A spread that eats more than half the window leaves no shape to cast.
+    // Clamping the size to zero instead would leave the SDF measuring distance
+    // from a point, and the blur would paint a faint disc where CSS paints
+    // nothing at all.
+    let (spread_width, spread_height) = (width + shadow.spread * 2.0, height + shadow.spread * 2.0);
+    if spread_width <= 0.0 || spread_height <= 0.0 {
+        return Ok(());
+    }
+    let grown = Transform::scale(f64::from(quad.0), f64::from(quad.1)).then(Transform::translate(
+        f64::from(shadow.dx - margin),
+        f64::from(shadow.dy - margin),
+    ));
+    frame.render_texture(
+        layer.texture,
+        // Identity, not the layer's: this quad never samples the texture, so
+        // it has no business carrying the texture's orientation. Smithay's
+        // vertex shader builds `v_coords` from the texture matrix, and the
+        // shadow reads `v_coords` as a position — so a y-inverted client would
+        // otherwise have its cut-out placed at `+dy` instead of `-dy` and the
+        // shadow drawn straight through the middle of the window.
+        Matrix3::from_scale(1.0),
+        matrix3(placed_like(layer.surface_to_output, grown)),
+        None::<Option<_>>,
+        layer.alpha,
+        Some(&shaders.shadow),
+        &[
+            Uniform::new("quad_size", quad),
+            // The shadow's own rectangle: the window grown by the spread,
+            // which makes it bigger than what casts it before any blurring. A
+            // spread can be negative, so this can shrink instead.
+            Uniform::new("shadow_size", (spread_width, spread_height)),
+            Uniform::new(
+                "shadow_radius",
+                spread_radius(layer.corner_radius, shadow.spread),
+            ),
+            // The window itself, for the shader to keep the shadow out from
+            // under. The quad was moved by the offset, so relative to its
+            // centre the window sits the other way by the same amount.
+            Uniform::new("window_size", (width, height)),
+            Uniform::new("window_radius", layer.corner_radius),
+            Uniform::new("window_offset", (-shadow.dx, -shadow.dy)),
+            Uniform::new("blur", shadow.blur.max(f32::EPSILON)),
+            Uniform::new("shadow_color", shadow.color),
+        ],
+    )
+}
+
+/// How round the shadow's corners are once the spread has been applied.
+///
+/// A square window casts a square shadow however far it is spread, which is
+/// what CSS does — growing a sharp corner does not round it. A rounded one
+/// grows its radius with the spread.
+///
+/// A spread can be negative, and one bigger than the radius takes it below
+/// zero. That is left alone rather than clamped: `rounded_box` degenerates to
+/// a sharp rectangle for a negative radius rather than turning inside out, and
+/// a sharp rectangle is what a shadow spread in past its own rounding should
+/// be. Clamping moved 43 parts in 51,000 of one shadow's ink, all of it in the
+/// antialiasing band at the corners — a guard nothing can see and no test can
+/// hold.
+fn spread_radius(corner_radius: f32, spread: f32) -> f32 {
+    if corner_radius > 0.0 {
+        corner_radius + spread
+    } else {
+        0.0
+    }
+}
+
+/// The shadow's quad, placed the way the window is.
+///
+/// The window's transform maps the unit square onto the output; the shadow's
+/// has to land in the same place, rotated the same way, only bigger and moved.
+/// So it is built in the window's own space and then put through the window's
+/// placement with the scale taken out — otherwise a scaled window would scale
+/// its blur twice.
+fn placed_like(surface_to_output: Transform, shadow_quad: Transform) -> Transform {
+    let (width, height) = on_screen_size(surface_to_output);
+    let unscaled = Transform {
+        a: surface_to_output.a / f64::from(width.max(f32::EPSILON)),
+        b: surface_to_output.b / f64::from(width.max(f32::EPSILON)),
+        c: surface_to_output.c / f64::from(height.max(f32::EPSILON)),
+        d: surface_to_output.d / f64::from(height.max(f32::EPSILON)),
+        e: surface_to_output.e,
+        f: surface_to_output.f,
+    };
+    shadow_quad.then(unscaled)
 }
 
 /// How big the quad is once placed, in output pixels.
@@ -301,7 +441,7 @@ mod pixels {
     };
     use smithay::utils::{Point, Rectangle, Size, Transform as OutputTransform};
 
-    use super::{draw_layers, Layer, Shaders};
+    use super::{draw_layers, Layer, Shaders, Shadow};
 
     const OUTPUT: (i32, i32) = (64, 48);
 
@@ -472,6 +612,7 @@ mod pixels {
                 Layer {
                     alpha: 1.0,
                     corner_radius: 0.0,
+                    shadow: None,
                     surface_to_output: top_left.surface_to_output(),
                     texture: &red,
                     y_inverted: false,
@@ -479,6 +620,7 @@ mod pixels {
                 Layer {
                     alpha: 1.0,
                     corner_radius: 0.0,
+                    shadow: None,
                     surface_to_output: bottom_right.surface_to_output(),
                     texture: &blue,
                     y_inverted: false,
@@ -516,6 +658,7 @@ mod pixels {
                 // Square, so this still compares against Smithay's own drawing
                 // rather than against a shape it cannot make.
                 corner_radius: 0.0,
+                shadow: None,
                 surface_to_output: Transform::scale(24.0, 12.0)
                     .then(Transform::translate(8.0, 6.0)),
                 texture,
@@ -553,6 +696,7 @@ mod pixels {
             &[Layer {
                 alpha: 1.0,
                 corner_radius: 0.0,
+                shadow: None,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
                 texture: &texture,
                 y_inverted: true,
@@ -578,6 +722,7 @@ mod pixels {
             &[Layer {
                 alpha: 1.0,
                 corner_radius: 0.0,
+                shadow: None,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
                 texture: &texture,
                 y_inverted: false,
@@ -623,7 +768,34 @@ mod pixels {
             &[Layer {
                 alpha,
                 corner_radius,
+                shadow: None,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
+                texture,
+                y_inverted: false,
+            }],
+        )
+    }
+
+    /// A window in the middle of the output, with room around it for a shadow
+    /// to fall into — the whole point of a shadow being that it is outside.
+    const INSET: (f64, f64) = (16.0, 12.0);
+
+    fn shadowed(
+        renderer: &mut GlesRenderer,
+        texture: &GlesTexture,
+        shadow: Option<Shadow>,
+    ) -> Vec<u8> {
+        composed(
+            renderer,
+            &[Layer {
+                alpha: 1.0,
+                corner_radius: 0.0,
+                shadow,
+                surface_to_output: Transform::scale(
+                    f64::from(OUTPUT.0) - INSET.0 * 2.0,
+                    f64::from(OUTPUT.1) - INSET.1 * 2.0,
+                )
+                .then(Transform::translate(INSET.0, INSET.1)),
                 texture,
                 y_inverted: false,
             }],
@@ -668,6 +840,415 @@ mod pixels {
         );
     }
 
+    /// A shadow offset down-right, with room to blur.
+    ///
+    /// Green rather than the black a real one is, because the tests draw onto a
+    /// black output: a black shadow is indistinguishable from no shadow, and a
+    /// test that cannot tell those apart passes when nothing is drawn at all.
+    const CAST: Shadow = Shadow {
+        blur: 6.0,
+        color: [0.0, 1.0, 0.0, 1.0],
+        dx: 6.0,
+        dy: 6.0,
+        spread: 0.0,
+    };
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_shadow_darkens_the_desktop_outside_the_window() {
+        // Just below the window's bottom edge, where the shadow falls and the
+        // window does not. The output was cleared to black, so a shadow of any
+        // colour has to be compared against a run without one.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let at = (OUTPUT.0 / 2, OUTPUT.1 - INSET.1 as i32 + 3);
+
+        let without = shadowed(&mut renderer, &red, None);
+        let with = shadowed(&mut renderer, &red, Some(CAST));
+
+        assert_eq!(
+            pixel(&without, at.0, at.1),
+            BLACK,
+            "nothing is drawn outside a window that casts nothing"
+        );
+        // The green channel, not the alpha: the output was cleared to opaque
+        // black, so alpha is already 255 everywhere and an assertion on it
+        // holds whether or not anything was drawn.
+        assert!(
+            pixel(&with, at.0, at.1)[1] > 0,
+            "a shadow is drawn where the window is not"
+        );
+        assert_ne!(
+            pixel(&with, at.0, at.1),
+            pixel(&without, at.0, at.1),
+            "a shadow changes what is outside the window, or it is not a shadow"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_shadow_does_not_cover_the_window_it_belongs_to() {
+        // Drawn under the window, not over it. Getting the order wrong puts a
+        // dark sheet across every client and is the obvious way to do this
+        // wrong.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+
+        let output = shadowed(&mut renderer, &red, Some(CAST));
+
+        assert_eq!(
+            pixel(&output, OUTPUT.0 / 2, OUTPUT.1 / 2),
+            RED,
+            "the window is on top of its own shadow"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_shadow_fades_out_with_distance() {
+        // What makes it a shadow rather than a rectangle: nearer the window is
+        // darker. A blur that did nothing would make these two equal.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let x = OUTPUT.0 / 2;
+        let edge = OUTPUT.1 - INSET.1 as i32;
+
+        let output = shadowed(&mut renderer, &red, Some(CAST));
+
+        let near = pixel(&output, x, edge + 2)[1];
+        let far = pixel(&output, x, edge + 9)[1];
+        assert!(
+            near > far,
+            "a shadow is strongest against the window it falls from: \
+             near={near} far={far}",
+        );
+    }
+
+    /// The same shadow thrown along one axis only, for tests about *where* a
+    /// shadow lands rather than what it looks like.
+    const SIDEWAYS: Shadow = Shadow {
+        blur: 4.0,
+        color: [0.0, 1.0, 0.0, 1.0],
+        dx: 8.0,
+        dy: 0.0,
+        spread: 0.0,
+    };
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_shadow_falls_the_way_it_is_thrown() {
+        // The offset is the whole difference between a shadow and a glow, and
+        // every other test here probes below the window — where a shadow that
+        // ignored its offset entirely still reaches. Two points either side of
+        // the window at the same distance can only differ because of it.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let y = OUTPUT.1 / 2;
+
+        let output = shadowed(&mut renderer, &red, Some(SIDEWAYS));
+
+        let downwind = pixel(&output, OUTPUT.0 - INSET.0 as i32 + 2, y)[1];
+        let upwind = pixel(&output, INSET.0 as i32 - 2, y)[1];
+        assert!(
+            downwind > upwind,
+            "the shadow is thrown to one side: downwind={downwind} upwind={upwind}",
+        );
+        assert_eq!(upwind, 0, "and nothing falls the other way");
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_shadow_is_not_drawn_under_the_window_it_falls_from() {
+        // CSS clips an outer shadow to outside the border box. Drawing it
+        // under the whole window instead is invisible while the window is
+        // opaque and bleeds through the moment it is not — so the window here
+        // is translucent, which is the only way to see the difference.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let centred = Shadow {
+            blur: 6.0,
+            color: [0.0, 1.0, 0.0, 1.0],
+            dx: 0.0,
+            dy: 0.0,
+            spread: 0.0,
+        };
+        let middle = (OUTPUT.0 / 2, OUTPUT.1 / 2);
+
+        let without = translucent(&mut renderer, &red, None);
+        let with = translucent(&mut renderer, &red, Some(centred));
+
+        assert_eq!(
+            pixel(&with, middle.0, middle.1),
+            pixel(&without, middle.0, middle.1),
+            "a window shows what is behind it, not the shadow it casts itself"
+        );
+    }
+
+    /// A half-transparent window over the cleared output, so anything drawn
+    /// underneath it shows through.
+    fn translucent(
+        renderer: &mut GlesRenderer,
+        texture: &GlesTexture,
+        shadow: Option<Shadow>,
+    ) -> Vec<u8> {
+        composed(
+            renderer,
+            &[Layer {
+                alpha: 0.5,
+                corner_radius: 0.0,
+                shadow,
+                surface_to_output: Transform::scale(
+                    f64::from(OUTPUT.0) - INSET.0 * 2.0,
+                    f64::from(OUTPUT.1) - INSET.1 * 2.0,
+                )
+                .then(Transform::translate(INSET.0, INSET.1)),
+                texture,
+                y_inverted: false,
+            }],
+        )
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_spread_makes_a_shadow_bigger_than_what_casts_it() {
+        // Without this nothing exercises `spread` at all: it would be a field
+        // that travels the whole protocol and changes nothing.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let spread = Shadow {
+            spread: 5.0,
+            ..SIDEWAYS
+        };
+        // Beyond where the unspread shadow's blur reaches — its rectangle ends
+        // 8px past the window's right edge and fades out 2px after that — so
+        // only the spread can put anything here.
+        let at = (OUTPUT.0 - 4, OUTPUT.1 / 2);
+
+        let tight = shadowed(&mut renderer, &red, Some(SIDEWAYS));
+        let wide = shadowed(&mut renderer, &red, Some(spread));
+
+        assert_eq!(
+            pixel(&tight, at.0, at.1)[1],
+            0,
+            "an unspread shadow stops short of here"
+        );
+        assert!(
+            pixel(&wide, at.0, at.1)[1] > 0,
+            "and a spread one reaches it"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_rounded_window_casts_a_rounded_shadow() {
+        // The shadow is cast by the window's shape, not by its bounding box.
+        // Nothing else pairs a radius with a shadow, so without this the
+        // radius could be dropped on the way into the shadow's shader and
+        // every test would still pass.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let centred = Shadow {
+            blur: 1.0,
+            color: [0.0, 1.0, 0.0, 1.0],
+            dx: 0.0,
+            dy: 0.0,
+            spread: 4.0,
+        };
+        // Diagonally out from the window's corner: inside the shadow of a
+        // square window, outside the shadow of a well-rounded one.
+        let at = (INSET.0 as i32 - 3, INSET.1 as i32 - 3);
+
+        let square = rounded_and_shadowed(&mut renderer, &red, 0.0, centred);
+        let round = rounded_and_shadowed(&mut renderer, &red, 12.0, centred);
+
+        assert!(
+            pixel(&square, at.0, at.1)[1] > 0,
+            "a square window's shadow reaches its corner"
+        );
+        assert_eq!(
+            pixel(&round, at.0, at.1)[1],
+            0,
+            "a rounded window's shadow is cut back with it"
+        );
+    }
+
+    fn rounded_and_shadowed(
+        renderer: &mut GlesRenderer,
+        texture: &GlesTexture,
+        corner_radius: f32,
+        shadow: Shadow,
+    ) -> Vec<u8> {
+        composed(
+            renderer,
+            &[Layer {
+                alpha: 1.0,
+                corner_radius,
+                shadow: Some(shadow),
+                surface_to_output: Transform::scale(
+                    f64::from(OUTPUT.0) - INSET.0 * 2.0,
+                    f64::from(OUTPUT.1) - INSET.1 * 2.0,
+                )
+                .then(Transform::translate(INSET.0, INSET.1)),
+                texture,
+                y_inverted: false,
+            }],
+        )
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_shadow_fades_out_half_a_blur_past_its_edge() {
+        // CSS defines the blur radius as a transition centred on the shadow's
+        // edge, so it reaches half the radius beyond it — not the whole
+        // radius, which would make every shadow twice as soft and twice as
+        // far-reaching as it was authored. Nothing else here pins the width:
+        // a falloff of any size passes every other shadow test.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let soft = Shadow {
+            blur: 12.0,
+            color: [0.0, 1.0, 0.0, 1.0],
+            dx: 0.0,
+            dy: 0.0,
+            spread: 0.0,
+        };
+        let edge = OUTPUT.0 - INSET.0 as i32;
+        let y = OUTPUT.1 / 2;
+
+        let output = shadowed(&mut renderer, &red, Some(soft));
+
+        assert!(
+            pixel(&output, edge + 4, y)[1] > 0,
+            "the shadow is still fading four pixels out"
+        );
+        // Nearly gone one pixel before it ends, rather than dropping off a
+        // cliff. A falloff wider than the quad it is drawn in reaches this
+        // pixel at full strength and is then cut off square by the quad's
+        // edge — which is what a blur measured across its whole radius, rather
+        // than half of it, does to every shadow on the desktop.
+        assert!(
+            pixel(&output, edge + 5, y)[1] < 8,
+            "the shadow fades out rather than being cut off square: {}",
+            pixel(&output, edge + 5, y)[1],
+        );
+        assert_eq!(
+            pixel(&output, edge + 6, y)[1],
+            0,
+            "and is gone by six, which is half of the twelve it was given"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_shadow_does_not_care_which_way_up_the_client_drew() {
+        // A shadow is a shape, not a picture, so the quad never samples the
+        // texture and which way up the client's buffer is cannot matter. It
+        // did: the shadow's quad carried the texture's orientation, and the
+        // offset — the first thing about a shadow that is not symmetric —
+        // came out mirrored, putting the cut-out on the wrong side and the
+        // shadow through the middle of the window. Every client that renders
+        // with GL hands over an inverted buffer, so this was most of them.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let downward = Shadow {
+            blur: 2.0,
+            color: [0.0, 1.0, 0.0, 1.0],
+            dx: 0.0,
+            dy: 8.0,
+            spread: 0.0,
+        };
+
+        let upright = inverted_or_not(&mut renderer, &red, downward, false);
+        let flipped = inverted_or_not(&mut renderer, &red, downward, true);
+
+        let differing = upright
+            .chunks_exact(4)
+            .zip(flipped.chunks_exact(4))
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(differing, 0, "{differing} pixels differ");
+    }
+
+    /// The same translucent window and shadow, drawn as though the client's
+    /// buffer were the right way up and as though it were not.
+    fn inverted_or_not(
+        renderer: &mut GlesRenderer,
+        texture: &GlesTexture,
+        shadow: Shadow,
+        y_inverted: bool,
+    ) -> Vec<u8> {
+        composed(
+            renderer,
+            &[Layer {
+                // Translucent, so a shadow drawn under the window shows rather
+                // than hiding behind it.
+                alpha: 0.5,
+                corner_radius: 0.0,
+                shadow: Some(shadow),
+                surface_to_output: Transform::scale(
+                    f64::from(OUTPUT.0) - INSET.0 * 2.0,
+                    f64::from(OUTPUT.1) - INSET.1 * 2.0,
+                )
+                .then(Transform::translate(INSET.0, INSET.1)),
+                texture,
+                y_inverted,
+            }],
+        )
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_square_window_casts_a_square_shadow_however_far_it_is_spread() {
+        // CSS grows a sharp corner without rounding it, so a spread cannot
+        // turn a square window's shadow into a lozenge.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let wide = Shadow {
+            blur: 1.0,
+            color: [0.0, 1.0, 0.0, 1.0],
+            dx: 0.0,
+            dy: 0.0,
+            spread: 8.0,
+        };
+        // Diagonally off the window's corner, far enough out that a shadow
+        // rounded by the spread has cut it away while a square one still
+        // reaches it — the corner is only eight pixels deep, so a sample
+        // nearer than this is lit either way.
+        let at = (INSET.0 as i32 - 8, INSET.1 as i32 - 8);
+
+        let output = rounded_and_shadowed(&mut renderer, &red, 0.0, wide);
+
+        assert!(
+            pixel(&output, at.0, at.1)[1] > 0,
+            "a square window's shadow keeps its corners"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_shadow_spread_away_to_nothing_is_not_drawn() {
+        // A negative spread shrinks the shape the shadow is cast from, and one
+        // bigger than the window leaves no shape at all. Measuring distance
+        // from what is left would light a blurred disc where CSS draws
+        // nothing.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let gone = Shadow {
+            blur: 6.0,
+            color: [0.0, 1.0, 0.0, 1.0],
+            // Far enough to one side that anything drawn is not hidden under
+            // the window it came from.
+            dx: 24.0,
+            dy: 0.0,
+            spread: -20.0,
+        };
+
+        let output = shadowed(&mut renderer, &red, Some(gone));
+
+        let lit = output.chunks_exact(4).filter(|px| px[1] > 0).count();
+        assert_eq!(lit, 0, "{lit} pixels of a shadow that has nothing to cast");
+    }
+
     #[test]
     #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
     fn a_translucent_window_lets_what_is_under_it_through() {
@@ -683,6 +1264,7 @@ mod pixels {
                 Layer {
                     alpha: 1.0,
                     corner_radius: 0.0,
+                    shadow: None,
                     surface_to_output: whole,
                     texture: &blue,
                     y_inverted: false,
@@ -690,6 +1272,7 @@ mod pixels {
                 Layer {
                     alpha: 0.5,
                     corner_radius: 0.0,
+                    shadow: None,
                     surface_to_output: whole,
                     texture: &red,
                     y_inverted: false,
@@ -725,6 +1308,7 @@ mod pixels {
             .map(|portal| Layer {
                 alpha: 1.0,
                 corner_radius: 0.0,
+                shadow: None,
                 surface_to_output: portal.surface_to_output(),
                 texture: textures(&portal.app_id),
                 y_inverted: false,

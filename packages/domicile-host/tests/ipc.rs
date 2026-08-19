@@ -52,6 +52,7 @@ fn messages_before_the_handshake_are_ignored() {
         visible: true,
         corner_radius: 0.0,
         opacity: 1.0,
+        shadow: None,
     }));
     assert_eq!(session.host_mut().scene().len(), 0);
 }
@@ -72,6 +73,7 @@ fn placement_after_handshake_reaches_the_host() {
         visible: true,
         corner_radius: 0.0,
         opacity: 1.0,
+        shadow: None,
     }));
     assert_eq!(session.host_mut().scene().len(), 1);
 }

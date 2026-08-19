@@ -3,6 +3,8 @@
 import { elementToScreen } from "./element-transform";
 import type { Matrix, Point } from "./matrix";
 import { IDENTITY } from "./matrix";
+import type { Shadow } from "./shadow";
+import { parseShadow, ShadowKind } from "./shadow";
 import { parseTransformOrigin } from "./transform-origin";
 
 /** An element's geometry in the form `place_portal` needs it. */
@@ -15,6 +17,8 @@ export type Measurement = {
   cornerRadius: number;
   /** `opacity`, 0 to 1. */
   opacity: number;
+  /** The first drawable `box-shadow`, if the element has one. */
+  shadow: Shadow | undefined;
 };
 
 export type Measure = (element: HTMLElement) => Measurement;
@@ -40,6 +44,7 @@ export const defaultMeasure: Measure = (element) => {
   return {
     cornerRadius: readCornerRadius(style),
     opacity: readOpacity(style),
+    shadow: readShadow(style),
     size,
     transform: elementToScreen({
       box,
@@ -81,6 +86,71 @@ const readCornerRadius = (style: CSSStyleDeclaration): number =>
 const readOpacity = (style: CSSStyleDeclaration): number => {
   const opacity = Number.parseFloat(style.opacity);
   return Number.isFinite(opacity) ? Math.min(Math.max(opacity, 0), 1) : 1;
+};
+
+/**
+ * The `box-shadow` the compositor should cast, if it can cast it.
+ *
+ * Only the outer shadows the shader knows how to draw; an `inset` one is no
+ * shadow, which is the same thing the element gets today.
+ *
+ * The engine paints this shadow too — it is ordinary CSS on an ordinary
+ * element, and the placeholder being transparent does not stop a `box-shadow`
+ * from being ink. Casting it in the compositor is what puts it in the right
+ * place: the chrome is drawn over the apps, so an engine-painted shadow lands
+ * on top of any window it overlaps rather than under its own.
+ *
+ * An element that asked for a shadow in a syntax this cannot read is reported,
+ * once per distinct value. Silently dropping it would be indistinguishable from
+ * the compositor not drawing at all, and the author has no other way to find
+ * out that the syntax they wrote is one this does not read. An `inset` shadow
+ * is not that case — it is read, understood, and declined on purpose.
+ */
+const readShadow = (style: CSSStyleDeclaration): Shadow | undefined => {
+  const computed = style.boxShadow;
+  const reading = parseShadow(computed);
+  switch (reading.kind) {
+    case ShadowKind.Cast: {
+      return reading.shadow;
+    }
+    case ShadowKind.Unreadable: {
+      reportUnreadable(computed);
+      return undefined;
+    }
+    case ShadowKind.None:
+    case ShadowKind.Inset: {
+      return undefined;
+    }
+  }
+};
+
+// Measurement runs on every resize, so the same unreadable value would
+// otherwise be reported many times a second.
+//
+// Bounded, because the key is the whole computed string and a `transition` on
+// `box-shadow` produces a new one every frame. Past the cap the reports stop
+// rather than the memory growing: the first few name the syntax at fault,
+// which is the whole job, and an unbounded set on a path that runs per resize
+// is a worse bug than the one it is reporting.
+const REPORT_LIMIT = 32;
+const reported = new Set<string>();
+
+/**
+ * Say so, once, that an element asked for a shadow this could not read.
+ *
+ * The console is the only channel the SDK has to whoever wrote the CSS, and a
+ * window that silently loses its shadow is indistinguishable from one the
+ * compositor never drew — which is the failure that is impossible to debug.
+ */
+const reportUnreadable = (computed: string): void => {
+  if (!reported.has(computed) && reported.size < REPORT_LIMIT) {
+    reported.add(computed);
+    // biome-ignore lint/suspicious/noConsole: the only channel to the author
+    console.warn(
+      `domicile: cannot read box-shadow ${JSON.stringify(computed)}; ` +
+        `this window will be drawn without one`,
+    );
+  }
 };
 
 const finiteOrZero = (value: number): number =>

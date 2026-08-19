@@ -7,7 +7,7 @@
 //! Wayland or GPU dependency.
 
 use domicile_host::{Host, HostError, InputDelivery};
-use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{ChromeMessage, HostMessage, Shadow};
 use domicile_scene::KeyboardTarget;
 
 fn place(
@@ -27,6 +27,7 @@ fn place(
         // style would be a second thing changing in every one of them.
         corner_radius: 0.0,
         opacity: 1.0,
+        shadow: None,
     }
 }
 
@@ -34,7 +35,12 @@ const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
 
 /// The same, with a style — the compositor draws the window itself, so how it
 /// should look travels with where it goes.
-fn place_styled(app_id: &str, corner_radius: f64, opacity: f64) -> ChromeMessage {
+fn place_styled(
+    app_id: &str,
+    corner_radius: f64,
+    opacity: f64,
+    shadow: Option<Shadow>,
+) -> ChromeMessage {
     ChromeMessage::PlacePortal {
         app_id: app_id.into(),
         transform: IDENTITY,
@@ -43,6 +49,7 @@ fn place_styled(app_id: &str, corner_radius: f64, opacity: f64) -> ChromeMessage
         visible: true,
         corner_radius,
         opacity,
+        shadow,
     }
 }
 
@@ -304,12 +311,47 @@ fn a_portals_style_reaches_the_scene() {
     let mut host = Host::new();
     let (app_id, _) = host.app_appeared(None, (100.0, 50.0));
 
-    host.handle_chrome_message(place_styled(&app_id, 12.0, 0.5))
+    host.handle_chrome_message(place_styled(&app_id, 12.0, 0.5, None))
         .expect("a styled placement is applied");
 
     let portal = host.scene().get(&app_id).expect("the portal is placed");
     assert_eq!(portal.style.corner_radius, 12.0);
     assert_eq!(portal.style.opacity, 0.5);
+}
+
+#[test]
+fn a_portals_shadow_reaches_the_scene() {
+    // A shadow is the one style that draws outside the window, so the
+    // compositor has to be told its numbers rather than infer them from the
+    // placement — nothing else in the message describes where it falls.
+    let mut host = Host::new();
+    let (app_id, _) = host.app_appeared(None, (100.0, 50.0));
+
+    host.handle_chrome_message(place_styled(
+        &app_id,
+        0.0,
+        1.0,
+        Some(Shadow {
+            dx: 4.0,
+            dy: 8.0,
+            blur: 12.0,
+            spread: 2.0,
+            color: [0.0, 0.0, 0.0, 0.5],
+        }),
+    ))
+    .expect("a shadowed placement is applied");
+
+    let portal = host.scene().get(&app_id).expect("the portal is placed");
+    assert_eq!(
+        portal.style.shadow,
+        Some(domicile_scene::Shadow {
+            dx: 4.0,
+            dy: 8.0,
+            blur: 12.0,
+            spread: 2.0,
+            color: [0.0, 0.0, 0.0, 0.5],
+        })
+    );
 }
 
 #[test]
