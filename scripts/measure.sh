@@ -83,14 +83,18 @@ run_path() {
   # A run whose chrome never connected measures a compositor with no desktop
   # over the windows, which is not the thing being compared — and it reports as
   # a quietly better number rather than as a failure.
+  # Generously: Electron takes seconds to start even on hardware, and longer
+  # where it falls back to software rendering. Waiting too briefly here turns a
+  # slow start into a failed measurement, which is its own kind of wrong answer.
   local connected=0
-  for _ in $(seq 1 100); do
+  for _ in $(seq 1 600); do
     if grep -q "chrome client connected" "$COMPLOG"; then connected=1; break; fi
     sleep 0.1
   done
   if [ "$connected" = "0" ]; then
-    say "the chrome never connected on the $name run; its numbers would not be"
-    say "comparable, so this is a failure rather than a result."
+    say "the chrome never connected on the $mode run, so there was no desktop"
+    say "over the windows. Its numbers would read as better rather than as the"
+    say "failure this is. The chrome's last words:"
     tail -5 "$CHROMELOG" | tee -a "$RESULTS"
     return 1
   fi
