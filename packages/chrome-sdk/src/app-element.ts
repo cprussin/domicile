@@ -82,11 +82,13 @@ export class DomicileAppElement extends HTMLElement {
       // keeps them for a window the host has been told it does not hold, and
       // the host will never send the message that clears them.
       //
-      // The cost is a window blank until it has pixels again, and the host can
-      // only supply those for a client that committed a dmabuf — it keeps no
-      // shm frame anywhere. So a software-rendered window moved in the DOM is
-      // blank until its client next draws. Recorded in ROADMAP.md; the
-      // alternative is a still of a window over the live one, for good.
+      // Safe to drop them because the host can put them back: it keeps
+      // whatever each app last drew — the buffer for a GPU client and the
+      // pixels themselves for a software one — and hands them over on its next
+      // pass, whether or not it has a display of its own to draw on. So the
+      // window is blank until that pass rather than until its client next
+      // happens to draw, which for an app that redraws on input is until the
+      // user does something.
       this.dropSurface();
       if (focusedApp() === appId) {
         setFocusedApp(undefined);

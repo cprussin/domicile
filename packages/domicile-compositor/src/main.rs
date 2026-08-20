@@ -159,9 +159,129 @@ impl Gpu {
     }
 }
 
+/// The last frame an app drew, kept so the compositor can give it to the
+/// chrome again.
+///
+/// Two forms because there are two kinds of client and the difference survives
+/// all the way here. A GPU client's buffer is held as the buffer — the
+/// descriptor the bridge hands the engine names this very allocation, so its
+/// plane fds have to stay open anyway, and its pixels are read back only if
+/// somebody asks. A software client's pixels have already been read, and are
+/// shared rather than copied: the same allocation is on its way to the chrome.
+enum LastFrame {
+    Gpu {
+        dmabuf: Dmabuf,
+        buffer_scale: i32,
+    },
+    Pixels {
+        rgba: Arc<Vec<u8>>,
+        width: u32,
+        height: u32,
+        scale: u32,
+    },
+}
+
 /// One window as the scene placed it: where its surface goes, how it is
-/// styled, and whether the compositor is the one drawing it at all.
+/// styled, and whether its chrome asked for it to be drawn natively.
 type Placed = (String, SceneTransform, SceneStyle, bool);
+
+/// One placed window, and whether the compositor is in fact the one drawing
+/// it — which is not the same as its chrome having asked for that.
+type Drawn<'a> = (&'a str, bool);
+
+/// Keep a frame against whatever this app last drew, and hand back the pixels
+/// to send.
+///
+/// A software client's pixels are all anybody has: it is never drawn natively,
+/// so nothing can produce them a second time, and a window whose element moves
+/// in the page loses its canvas and needs them back. They are kept, and the
+/// same allocation does both jobs — a copy per frame, to cover a gesture,
+/// would cost more than the gesture is worth.
+///
+/// A GPU client's frame leaves nothing, because it has already left something
+/// better. `import_gpu_frame` keeps the buffer itself, which is both cheaper
+/// than its pixels and the allocation the bridge's descriptor names — its
+/// plane fds have to stay open for as long as that descriptor does. Replacing
+/// it with a copy of the same frame's pixels would drop the buffer to gain
+/// nothing but a readback that [`pixels_to_hand_over`] performs on demand.
+///
+/// The map is a parameter rather than the caller's business because the
+/// keeping and the sending have to happen together. Handed back as two values
+/// for the caller to use as it liked, the keeping was the half a refactor
+/// could drop in silence — and did, through three revisions of this change, in
+/// each of which reverting the fix left every test passing.
+fn keep_frame(
+    latest: &mut HashMap<String, LastFrame>,
+    app_id: &str,
+    from_gpu: bool,
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+    scale: u32,
+) -> Arc<Vec<u8>> {
+    let rgba = Arc::new(rgba);
+    if !from_gpu {
+        latest.insert(
+            app_id.to_string(),
+            LastFrame::Pixels {
+                rgba: Arc::clone(&rgba),
+                width,
+                height,
+                scale,
+            },
+        );
+    }
+    rgba
+}
+
+/// The pixels to hand the chrome for whatever this app last drew.
+///
+/// A software client's are already read, and are handed on as they are — that
+/// is what keeping them bought. A GPU client's are still on the card, so
+/// producing them costs whatever `read_back` costs, which is a pipeline stall
+/// on the Wayland thread and the reason a caller asks whether the chrome has
+/// room before calling this at all.
+fn pixels_to_hand_over(
+    last: &LastFrame,
+    read_back: impl FnOnce(&Dmabuf) -> Vec<u8>,
+) -> (Arc<Vec<u8>>, u32, u32, u32) {
+    match last {
+        LastFrame::Pixels {
+            rgba,
+            width,
+            height,
+            scale,
+        } => (Arc::clone(rgba), *width, *height, *scale),
+        LastFrame::Gpu {
+            dmabuf,
+            buffer_scale,
+        } => (
+            Arc::new(read_back(dmabuf)),
+            dmabuf.width(),
+            dmabuf.height(),
+            u32::try_from(*buffer_scale).unwrap_or(1).max(1),
+        ),
+    }
+}
+
+/// Which of these windows the compositor is actually drawing.
+///
+/// Two things have to be true, and the placement is only one of them. A
+/// `wl_shm` client's pixels live in main memory and are never imported as a
+/// texture, so `present()` draws nothing for that window however ordinary its
+/// element's CSS — and reading the placement alone would call it drawn, and
+/// leave it blank the moment its element moved in the page and took its canvas
+/// with it. Having the texture is what says the compositor can draw it; the
+/// placement says whether it should.
+fn drawn_by_the_compositor<'a>(
+    placed: &'a [Placed],
+    has_texture: impl Fn(&str) -> bool,
+) -> Vec<Drawn<'a>> {
+    placed
+        .iter()
+        .map(|(app_id, _, _, natively)| (app_id.as_str(), *natively && has_texture(app_id)))
+        .collect()
+}
 
 /// The app whose element this message says has stopped showing it, if it does.
 ///
@@ -209,8 +329,14 @@ enum HandOver {
 /// it — the compositor has stopped drawing it and the engine has no canvas to
 /// draw instead.
 ///
-/// `copied` is what stops this firing on every presented frame: a window on
-/// the copy path would otherwise be read back once per composite as well as
+/// The question is "does the chrome have this window's pixels, and can I give
+/// them to it" — not "has this window changed paths". Those were the same set
+/// until a window could lose its canvas without changing paths at all, and a
+/// `wl_shm` client is never in the second set however ordinary its CSS: its
+/// pixels never reach a texture, so the chrome draws that window always.
+///
+/// `copied` is what stops this firing on every presented frame: a window the
+/// chrome draws would otherwise be read back once per composite as well as
 /// once per client commit, which is the readback the native path exists to
 /// avoid, twice over. It holds only what the chrome was actually given — a
 /// dropped frame is not a hand-over, and a window recorded on the strength of
@@ -220,16 +346,16 @@ enum HandOver {
 /// from the scene. A backgrounded window leaves the scene while its element,
 /// and its canvas, stay in the page — see [`unmounts_the_element`].
 fn hand_over(
-    placed: &[Placed],
+    windows: &[Drawn],
     copied: &mut HashSet<String>,
     mut offer: impl FnMut(&str) -> HandOver,
 ) -> Refusals {
     let mut refused = false;
-    for (app_id, _, _, natively) in placed {
-        if !natively && !copied.contains(app_id) {
+    for (app_id, drawn_here) in windows {
+        if !drawn_here && !copied.contains(*app_id) {
             match offer(app_id) {
                 HandOver::Sent => {
-                    copied.insert(app_id.clone());
+                    copied.insert((*app_id).to_string());
                 }
                 HandOver::Refused => refused = true,
                 HandOver::NothingToSend => {}
@@ -384,7 +510,14 @@ impl ChromeHub {
     /// They are dropped if it has not kept up, and the queue is one frame
     /// deep — so a caller that needs the chrome to *have* this frame, rather
     /// than merely offering it the latest one, has to look at the answer.
-    fn send_frame(&self, app_id: &str, width: u32, height: u32, scale: u32, rgba: Vec<u8>) -> bool {
+    fn send_frame(
+        &self,
+        app_id: &str,
+        width: u32,
+        height: u32,
+        scale: u32,
+        rgba: Arc<Vec<u8>>,
+    ) -> bool {
         let taken = self.outbound.frame(app_id, width, height, scale, rgba);
         if !taken {
             tracing::debug!(%app_id, "chrome is behind; dropped a frame");
@@ -412,7 +545,7 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
         // just the line. The pixels go out as bytes rather than base64 inside
         // the JSON — see `HostMessage::AppFrame` for why that matters.
         let (message, pixels) = match item {
-            Outbound::Message(message) => (message, Vec::new()),
+            Outbound::Message(message) => (message, Arc::new(Vec::new())),
             Outbound::Frame {
                 app_id,
                 width,
@@ -829,11 +962,11 @@ struct DomicileCompositor {
     /// Each app's engine texture and the dmabuf behind its latest frame — what
     /// the CEF external-texture path binds instead of copying pixels.
     bridge: BridgeRegistry,
-    /// The buffers those descriptors point into, held so their plane fds stay
-    /// open for as long as the descriptor names them — and, with the scale the
-    /// client drew at, so a window that leaves the native path can be sent to
-    /// the chrome without waiting for that client to draw again.
-    latest_dmabufs: HashMap<String, (Dmabuf, i32)>,
+    /// What each app last drew, in whatever form it can be given to the chrome
+    /// again without waiting for that client to draw. The compositor is the
+    /// only thing that can re-supply a window's pixels, and a window can need
+    /// them at a moment no client knows anything about — see [`hand_over`].
+    latest_frames: HashMap<String, LastFrame>,
     /// Which apps the chrome holds a copied frame of, as far as we can tell.
     ///
     /// The compositor cannot see the page, so this is its own record rather
@@ -1099,8 +1232,9 @@ impl DomicileCompositor {
         }
 
         let now = Instant::now();
+        let from_gpu = matches!(committed, CommittedBuffer::Gpu(_));
         let taking = disposition(
-            matches!(committed, CommittedBuffer::Gpu(_)),
+            from_gpu,
             self.gpu.as_ref().is_some_and(Gpu::presenting),
             self.draws_natively(app_id),
             self.last_frame
@@ -1138,6 +1272,17 @@ impl DomicileCompositor {
         } else {
             tracing::debug!(%app_id, width, height, bytes = rgba.len(), "broadcast app frame");
             let scale = u32::try_from(buffer_scale).unwrap_or(1).max(1);
+            // Kept whether or not the chrome takes it: a refused frame is
+            // still the only copy of those pixels anybody has.
+            let rgba = keep_frame(
+                &mut self.latest_frames,
+                app_id,
+                from_gpu,
+                rgba,
+                width,
+                height,
+                scale,
+            );
             if self.hub.send_frame(app_id, width, height, scale, rgba) {
                 self.copied.insert(app_id.to_string());
             }
@@ -1186,8 +1331,13 @@ impl DomicileCompositor {
         self.bridge
             .update_frame(app_id, descriptor_from(&dmabuf))
             .expect("every mapped toplevel is registered with the bridge");
-        self.latest_dmabufs
-            .insert(app_id.to_string(), (dmabuf, buffer_scale));
+        self.latest_frames.insert(
+            app_id.to_string(),
+            LastFrame::Gpu {
+                dmabuf,
+                buffer_scale,
+            },
+        );
         rgba
     }
 
@@ -1207,32 +1357,35 @@ impl DomicileCompositor {
     /// cost of the copy path and doing it per presented frame would be worse
     /// than never having had a native path at all.
     fn hand_over_to_the_engine(&mut self, placed: &[Placed]) {
-        let (hub, latest, gpu) = (&self.hub, &self.latest_dmabufs, &mut self.gpu);
-        let refusals = hand_over(placed, &mut self.copied, |app_id| {
-            let Some((dmabuf, buffer_scale)) = latest.get(app_id) else {
+        let windows = drawn_by_the_compositor(placed, |app_id| self.textures.contains_key(app_id));
+        let (hub, latest, gpu) = (&self.hub, &self.latest_frames, &mut self.gpu);
+        let refusals = hand_over(&windows, &mut self.copied, |app_id| {
+            let Some(last) = latest.get(app_id) else {
                 // Announced but never committed: there is nothing to hand over,
                 // and the client's first frame goes down the copy path of its
                 // own accord.
                 return HandOver::NothingToSend;
             };
-            // Asked before the readback rather than after the send, because
-            // the readback is what this costs: a pipeline stall on the Wayland
-            // thread, for a frame the queue would refuse. Several windows
-            // leaving at once is the ordinary case — one stylesheet rule
-            // matches all of them — and paying it once per window per present
-            // for a queue one frame deep is most of that work wasted.
+            // Asked before the pixels are produced rather than after, because
+            // producing them is what this costs: for a GPU client a readback,
+            // which stalls the pipeline on the Wayland thread, for a frame the
+            // queue would refuse. Several windows leaving at once is the
+            // ordinary case — one stylesheet rule matches all of them — and
+            // paying it once per window per present for a queue one frame deep
+            // is most of that work wasted.
             if !hub.can_send_frame() {
                 return HandOver::Refused;
             }
-            let renderer = gpu
-                .as_mut()
-                .expect("presenting, so the renderer that imported the buffer exists")
-                .renderer();
-            let rgba = DmabufImporter::read_rgba(renderer, dmabuf)
-                .expect("a dmabuf the importer accepted reads back");
-            let scale = u32::try_from(*buffer_scale).unwrap_or(1).max(1);
-            info!(%app_id, "window left the native path -> handing its pixels to the engine");
-            if hub.send_frame(app_id, dmabuf.width(), dmabuf.height(), scale, rgba) {
+            let (rgba, width, height, scale) = pixels_to_hand_over(last, |dmabuf| {
+                let renderer = gpu
+                    .as_mut()
+                    .expect("a dmabuf was imported, so the renderer that imported it exists")
+                    .renderer();
+                DmabufImporter::read_rgba(renderer, dmabuf)
+                    .expect("a dmabuf the importer accepted reads back")
+            });
+            info!(%app_id, "handing this window's pixels to the engine");
+            if hub.send_frame(app_id, width, height, scale, rgba) {
                 HandOver::Sent
             } else {
                 // Not recording it is the whole point: the next present tries
@@ -1270,17 +1423,7 @@ impl DomicileCompositor {
     /// would need a second engine surface, which nothing asks for yet.
     fn present(&mut self) {
         let started = Instant::now();
-        let Some(gpu) = self.gpu.as_mut() else {
-            return;
-        };
-        let Some(backend) = gpu.window() else {
-            return;
-        };
-        let size = backend.window_size();
-        // The scene is in the chrome's logical units and the window is in
-        // device pixels, and on a scaled display those are not the same number.
-        let to_window = logical_to_window(self.output_logical, (size.w, size.h));
-        let placed: Vec<_> = {
+        let placed: Vec<Placed> = {
             let host = self.hub.host.lock().unwrap();
             host.scene()
                 .draw_order()
@@ -1295,7 +1438,21 @@ impl DomicileCompositor {
                 })
                 .collect()
         };
+        // Before the checks below, not after: a headless desktop draws nothing
+        // here and returns, and it is the desktop where the chrome draws
+        // *every* window — so it is the one that can least afford a window the
+        // chrome has no pixels for and nobody to ask.
         self.hand_over_to_the_engine(&placed);
+        let Some(gpu) = self.gpu.as_mut() else {
+            return;
+        };
+        let Some(backend) = gpu.window() else {
+            return;
+        };
+        let size = backend.window_size();
+        // The scene is in the chrome's logical units and the window is in
+        // device pixels, and on a scaled display those are not the same number.
+        let to_window = logical_to_window(self.output_logical, (size.w, size.h));
         // A window on the copy path is drawn by the engine, into the canvas in
         // its own hole. Drawing it here as well would put the compositor's
         // picture over the engine's — two versions of the same window, the
@@ -2360,7 +2517,7 @@ impl XdgShellHandler for DomicileCompositor {
             let (app_id, _) = self.toplevels.remove(pos);
             self.last_frame.remove(&app_id);
             self.bridge.remove(&app_id);
-            self.latest_dmabufs.remove(&app_id);
+            self.latest_frames.remove(&app_id);
             self.copied.remove(&app_id);
             self.textures.remove(&app_id);
             if self.pointer_app.as_deref() == Some(app_id.as_str()) {
@@ -2900,7 +3057,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         gpu,
         hub,
         bridge: BridgeRegistry::new(),
-        latest_dmabufs: HashMap::new(),
+        latest_frames: HashMap::new(),
         copied: HashSet::new(),
         textures: HashMap::new(),
         toplevels: Vec::new(),
@@ -3016,12 +3173,14 @@ mod tests {
     use domicile_protocol::CursorShape;
 
     use super::{
-        answers_keystroke, bgra_to_rgba, client_command, cursor_shape, disposition, draws_natively,
-        frame_is_due, hand_back, hand_over, shadow_in_pixels, unmounts_the_element, Committer,
-        Disposition, HandOver, Placed, Refusals,
+        answers_keystroke, bgra_to_rgba, client_command, cursor_shape, disposition,
+        drawn_by_the_compositor, draws_natively, frame_is_due, hand_back, hand_over, keep_frame,
+        pixels_to_hand_over, shadow_in_pixels, unmounts_the_element, Committer, Disposition, Drawn,
+        HandOver, LastFrame, Placed, Refusals,
     };
 
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
 
     use domicile_protocol::{ChromeMessage, HostMessage};
     use domicile_scene::{Portal, Scene, Style as SceneStyle, Transform as SceneTransform};
@@ -3042,7 +3201,13 @@ mod tests {
         app_ids.iter().map(|id| (*id).to_string()).collect()
     }
 
-    /// One window in the draw order, drawn by whichever side `natively` says.
+    /// One window in the draw order, and who is drawing it.
+    fn drawn(app_id: &str, drawn_here: bool) -> Drawn<'_> {
+        (app_id, drawn_here)
+    }
+
+    /// One window as the scene placed it, styled and positioned the same way
+    /// every time: only `natively` matters to what reads these.
     fn placed(app_id: &str, natively: bool) -> Placed {
         (
             app_id.to_string(),
@@ -3055,7 +3220,7 @@ mod tests {
     /// Run `hand_over` against a chrome that answers `answer` to everything,
     /// reporting which apps were offered pixels and what was recorded.
     fn offering(
-        windows: &[Placed],
+        windows: &[Drawn<'_>],
         held: &[&str],
         answer: HandOver,
     ) -> (Vec<String>, Vec<String>, Refusals) {
@@ -3353,19 +3518,130 @@ mod tests {
     }
 
     #[test]
-    fn a_window_that_has_just_left_the_native_path_is_handed_over() {
-        // Nothing else would send it: the page changed, not the client, and a
-        // client that is not drawing is exactly the case where the window
-        // would otherwise be a hole with nothing behind it.
-        let (offered, recorded, _) = offering(&[placed("term", false)], &[], HandOver::Sent);
+    fn a_window_the_compositor_is_not_drawing_is_handed_over() {
+        // Two windows are in this state and nothing else would send either.
+        // One has just left the native path — the page changed, not the
+        // client, so a client that is not drawing would leave a hole with
+        // nothing behind it. The other is a `wl_shm` client, which is never
+        // drawn natively however ordinary its CSS, and so needs its pixels
+        // back every time its element moves in the page and drops its canvas.
+        let (offered, recorded, _) = offering(&[drawn("term", false)], &[], HandOver::Sent);
         assert_eq!(offered, vec!["term".to_string()]);
         assert_eq!(recorded, vec!["term".to_string()]);
     }
 
     #[test]
     fn a_window_the_compositor_draws_is_not_handed_over() {
-        let (offered, _, _) = offering(&[placed("term", true)], &[], HandOver::Sent);
+        let (offered, _, _) = offering(&[drawn("term", true)], &[], HandOver::Sent);
         assert!(offered.is_empty());
+    }
+
+    #[test]
+    fn a_software_frame_is_kept_without_being_copied() {
+        // The whole reason a frame's pixels travel as an `Arc`: keeping them
+        // has to cost a refcount rather than a second full-frame copy, on
+        // every frame of every software-rendered client, to cover a gesture
+        // that happens rarely. A `(*rgba).clone()` here would be invisible in
+        // behaviour and expensive in the only path that carries megabytes.
+        let mut latest = HashMap::new();
+        let sent = keep_frame(&mut latest, "term", false, vec![1, 2, 3, 4], 1, 1, 1);
+        let Some(LastFrame::Pixels { rgba, .. }) = latest.get("term") else {
+            panic!("a software frame is kept as pixels");
+        };
+        assert!(
+            Arc::ptr_eq(rgba, &sent),
+            "the frame that was kept is the one that was sent, not a copy of it"
+        );
+    }
+
+    #[test]
+    fn a_gpu_frame_on_the_copy_path_leaves_its_pixels_behind() {
+        // Its buffer is already kept, by `import_gpu_frame`, and that is both
+        // cheaper than these pixels and the allocation the bridge's descriptor
+        // names — its plane fds stay open only while something owns it.
+        // Keeping a copy of the same frame's pixels here would drop the buffer
+        // to gain a readback that is performed on demand anyway.
+        let mut latest = HashMap::new();
+        let sent = keep_frame(&mut latest, "term", true, vec![1, 2, 3, 4], 1, 1, 1);
+        assert!(
+            !latest.contains_key("term"),
+            "a GPU client's buffer is what is kept, and `import_gpu_frame` kept it"
+        );
+        assert_eq!(*sent, vec![1, 2, 3, 4], "and its pixels still go out");
+    }
+
+    #[test]
+    fn a_software_frame_is_kept_at_the_size_the_client_drew() {
+        // The chrome is told a frame's shape in the header that precedes its
+        // bytes, so a size that did not travel with the pixels would draw this
+        // window at the wrong one when it was handed back.
+        // Three distinct values for the same reason as the hand-over's
+        // fixture below: a height and a scale that agree cannot tell a
+        // transposition from a correct answer.
+        let mut latest = HashMap::new();
+        keep_frame(&mut latest, "term", false, vec![0; 32], 8, 4, 2);
+        let Some(LastFrame::Pixels {
+            width,
+            height,
+            scale,
+            ..
+        }) = latest.get("term")
+        else {
+            panic!("a software frame is kept as pixels");
+        };
+        assert_eq!((*width, *height, *scale), (8, 4, 2));
+    }
+
+    #[test]
+    fn a_kept_software_frame_is_handed_over_without_touching_the_gpu() {
+        // The point of keeping them. A software client's pixels are already in
+        // main memory, so handing them back must not cost a readback — and it
+        // cannot, because there is no buffer on the card to read.
+        // Three distinct values, none of them a fallback: a square frame
+        // cannot tell a transposition from a correct answer, and a scale of 1
+        // is what *both* arms fall back to, so it cannot tell the kept scale
+        // from the default. This repo has fallen into the first trap once
+        // already — see `on_screen_size` in ROADMAP.md.
+        let mut latest = HashMap::new();
+        let sent = keep_frame(&mut latest, "term", false, vec![9; 32], 8, 4, 2);
+        let kept = latest.get("term").expect("a software frame is kept");
+        let (rgba, width, height, scale) = pixels_to_hand_over(kept, |_| {
+            unreachable!("a software client's pixels are read already")
+        });
+
+        assert!(Arc::ptr_eq(&rgba, &sent), "handed back, not copied");
+        assert_eq!((width, height, scale), (8, 4, 2));
+    }
+
+    #[test]
+    fn a_window_with_no_texture_is_not_drawn_by_the_compositor() {
+        // The `wl_shm` case. Its chrome asked for the fast path and its CSS is
+        // ordinary, so the placement says native — but the pixels never became
+        // a texture, so `present()` has nothing to draw and the chrome is
+        // still the one showing this window.
+        assert_eq!(
+            drawn_by_the_compositor(&[placed("term", true)], |_| false),
+            vec![("term", false)]
+        );
+    }
+
+    #[test]
+    fn a_native_window_with_a_texture_is_drawn_by_the_compositor() {
+        assert_eq!(
+            drawn_by_the_compositor(&[placed("term", true)], |_| true),
+            vec![("term", true)]
+        );
+    }
+
+    #[test]
+    fn a_copy_path_window_is_not_drawn_by_the_compositor_texture_or_not() {
+        // It has one — it was drawn natively until its chrome asked otherwise,
+        // and the texture is still there. Having a texture is not permission
+        // to use it.
+        assert_eq!(
+            drawn_by_the_compositor(&[placed("term", false)], |_| true),
+            vec![("term", false)]
+        );
     }
 
     #[test]
@@ -3373,7 +3649,7 @@ mod tests {
         // The readback is the whole cost of the copy path. Doing it once per
         // composited frame as well as once per client commit would be the
         // expense the native path exists to avoid, twice over.
-        let (offered, _, _) = offering(&[placed("term", false)], &["term"], HandOver::Sent);
+        let (offered, _, _) = offering(&[drawn("term", false)], &["term"], HandOver::Sent);
         assert!(offered.is_empty());
     }
 
@@ -3383,9 +3659,9 @@ mod tests {
         // blurs its inactive apps moves all of them at once.
         let (offered, _, _) = offering(
             &[
-                placed("term", false),
-                placed("editor", true),
-                placed("browser", false),
+                drawn("term", false),
+                drawn("editor", true),
+                drawn("browser", false),
             ],
             &[],
             HandOver::Sent,
@@ -3399,7 +3675,7 @@ mod tests {
         // batches, so all but the first are refused. Without this they wait on
         // something unrelated redrawing the desktop.
         let (_, _, refusals) = offering(
-            &[placed("term", false), placed("editor", false)],
+            &[drawn("term", false), drawn("editor", false)],
             &[],
             HandOver::Refused,
         );
@@ -3408,7 +3684,7 @@ mod tests {
 
     #[test]
     fn a_pass_that_handed_everything_over_asks_for_nothing() {
-        let (_, _, refusals) = offering(&[placed("term", false)], &[], HandOver::Sent);
+        let (_, _, refusals) = offering(&[drawn("term", false)], &[], HandOver::Sent);
         assert_eq!(refusals, Refusals::None);
     }
 
@@ -3416,7 +3692,7 @@ mod tests {
     fn a_window_with_nothing_to_send_does_not_ask_for_another_pass() {
         // Announced but never committed. Asking again would redraw the desktop
         // once per turn of the loop for a window that has never had a frame.
-        let (_, _, refusals) = offering(&[placed("term", false)], &[], HandOver::NothingToSend);
+        let (_, _, refusals) = offering(&[drawn("term", false)], &[], HandOver::NothingToSend);
         assert_eq!(refusals, Refusals::None);
     }
 
@@ -3426,7 +3702,7 @@ mod tests {
         // refuses. Recording it anyway would leave that window a hole in the
         // page with nothing behind it — for good, if the client never drew
         // again, which is the case the hand-over exists for.
-        let (offered, recorded, _) = offering(&[placed("term", false)], &[], HandOver::Refused);
+        let (offered, recorded, _) = offering(&[drawn("term", false)], &[], HandOver::Refused);
         assert_eq!(offered, vec!["term".to_string()]);
         assert!(recorded.is_empty(), "a dropped frame is not a hand-over");
     }
@@ -3436,7 +3712,7 @@ mod tests {
         // Announced but never committed. Its first frame goes down the copy
         // path of its own accord, and recording it here would stop the
         // hand-over ever running for it.
-        let (_, recorded, _) = offering(&[placed("term", false)], &[], HandOver::NothingToSend);
+        let (_, recorded, _) = offering(&[drawn("term", false)], &[], HandOver::NothingToSend);
         assert!(recorded.is_empty());
     }
 
@@ -3447,7 +3723,7 @@ mod tests {
         // which cannot happen until there is a frame to put in its place. A
         // window forgotten here would be handed over a second time the moment
         // it returned to the copy path, for pixels the chrome never lost.
-        let (_, recorded, _) = offering(&[placed("term", true)], &["term"], HandOver::Sent);
+        let (_, recorded, _) = offering(&[drawn("term", true)], &["term"], HandOver::Sent);
         assert_eq!(recorded, vec!["term".to_string()]);
     }
 }

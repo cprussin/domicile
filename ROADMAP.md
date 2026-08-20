@@ -439,23 +439,22 @@ falloff the shadow uses, is the next candidate to move it.
   its client next commits. Invisible while the element survives the transition,
   because the canvas holds fresher pixels and stays up until there is something
   better — but not when the element is remounted, where the canvas is gone.
-  `latest_dmabufs` holds the current buffer, so re-importing on the way back is
-  the fix whenever it is worth taking.
+  `latest_frames` holds the current buffer as `LastFrame::Gpu`, so re-importing
+  on the way back is the fix whenever it is worth taking.
 - every mounted window is measured on every animation frame, and the shell
   keeps a backgrounded window mounted and merely hidden — so a twenty-app
   desktop pays a `getBoundingClientRect`, a `getComputedStyle` and some twenty
   computed-property reads for nineteen `display: none` elements per frame to
   learn they are still hidden. Wants an early-out for an element with no box,
   and a measurement to say whether it was worth taking.
-- a `wl_shm` window blanks until its client next commits if its element is
-  moved in the DOM — dragging a tab reorders a keyed list, and React moves the
-  node, which is a disconnect and a reconnect. The element drops its pixels
-  because the host has been told it no longer holds them, and nothing can give
-  them back: the compositor keeps the last *dmabuf* per app and no shm frame at
-  all, so `hand_over` has nothing to offer and `present()` has no texture to
-  draw. Wants the last shm frame retained the way `latest_dmabufs` retains the
-  last buffer — shared rather than copied, or it is a full-frame copy per frame
-  to cover a rare event.
+- a client that changes **buffer type** on the same surface — dmabuf commits,
+  then a `wl_shm` one — replaces its retained buffer with the shm frame's
+  pixels, while the bridge's descriptor still names the buffer's raw fds. The
+  descriptor contract says a caller keeping one must keep the buffer alive too,
+  and the compositor no longer does. Latent: nothing outside `domicile-bridge`'s
+  own tests reads the descriptor, and the client's `wl_buffer` holds the fds
+  until it destroys them. Narrow trigger, mostly a toolkit falling back off the
+  GPU.
 - a hand-over the chrome was too busy to take waits for the next reason to
   redraw rather than for the queue to drain. The chrome's own repaint supplies
   one in practice, since its CSS just changed, but nothing orders the two. Wants
