@@ -7,17 +7,28 @@ import { defaultMeasure } from "./measure";
  * resolves almost nothing, so the properties under test have to be supplied
  * rather than set as CSS and read back.
  */
-const measuredWith = (style: Partial<CSSStyleDeclaration>) => {
+const measuredWith = (
+  style: Partial<CSSStyleDeclaration>,
+  size?: { width: number; height: number },
+) => {
   const element = document.createElement("div");
+  // happy-dom lays nothing out, so an element has no box unless the test gives
+  // it one. Only the tests that read `visible` need that.
+  if (size !== undefined) {
+    element.getBoundingClientRect = () =>
+      ({ height: size.height, left: 0, top: 0, width: size.width }) as DOMRect;
+  }
   const computed = {
     borderTopLeftRadius: "",
     boxShadow: "none",
+    filter: "none",
     opacity: "",
     rotate: "none",
     scale: "none",
     transform: "none",
     transformOrigin: "50% 50%",
     translate: "none",
+    visibility: "",
     zIndex: "auto",
     ...style,
   } as CSSStyleDeclaration;
@@ -33,10 +44,14 @@ const measuredWith = (style: Partial<CSSStyleDeclaration>) => {
 /**
  * What `defaultMeasure` writes to the console while measuring an element.
  *
- * Each case uses a distinct `box-shadow`, because the once-per-value record is
- * module state that outlives any one test.
+ * The record of what has already been said is module state that outlives any
+ * one test, so every case here has to reach for something no other case uses:
+ * a distinct value where the record is keyed on the value, and a distinct
+ * *property* where it is keyed on the property — which is why the two cases
+ * about the bound use `mix-blend-mode` and `clip-path` rather than a second
+ * `filter` that would find the first already reported.
  */
-const warningsFrom = (style: Partial<CSSStyleDeclaration>): string[] => {
+const warningsFrom = (...styles: Partial<CSSStyleDeclaration>[]): string[] => {
   const warnings: string[] = [];
   // biome-ignore lint/suspicious/noConsole: capturing what the SDK reports
   const original = console.warn;
@@ -44,7 +59,9 @@ const warningsFrom = (style: Partial<CSSStyleDeclaration>): string[] => {
     warnings.push(args.join(" "));
   };
   try {
-    measuredWith(style);
+    for (const style of styles) {
+      measuredWith(style);
+    }
   } finally {
     console.warn = original;
   }
@@ -187,6 +204,72 @@ describe("defaultMeasure", () => {
       const warnings = warningsFrom({ rotate: "1 0 0" });
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain("rotate");
+    });
+
+    it("says when a style will not be drawn at all", () => {
+      // The window still appears, so nothing looks broken — it just ignores
+      // the rule. Saying so is the whole remedy until a window can fall back
+      // to the copy path for effects the shader has no answer for.
+      const warnings = warningsFrom({ filter: "blur(4px)" });
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("filter");
+      expect(warnings[0]).toContain("unfiltered");
+    });
+
+    it("says the same property once, however many values it takes", () => {
+      // A `transition` on `filter` mints a new computed value every frame.
+      // Keying the record on the value would burn all thirty-two entries
+      // inside a second and silence everything reported after them.
+      expect(
+        warningsFrom({ mixBlendMode: "multiply" }, { mixBlendMode: "screen" }),
+      ).toHaveLength(1);
+    });
+
+    it("does not call an unsupported effect an unreadable one", () => {
+      // Different news. One says the SDK fell over on valid CSS, which is a
+      // bug worth reporting upstream; the other says the compositor has no
+      // counterpart, which is not. Telling an author their filter was a
+      // deliberate omission when it in fact failed to parse sends them
+      // looking in the wrong place.
+      expect(warningsFrom({ clipPath: "circle(40%)" })[0]).toContain(
+        "cannot draw",
+      );
+      expect(warningsFrom({ rotate: "1 0 0 0 45deg" })[0]).toContain(
+        "cannot read",
+      );
+    });
+
+    it("says nothing about a window it can draw as asked", () => {
+      expect(
+        warningsFrom({ borderTopLeftRadius: "8px", opacity: "0.5" }),
+      ).toStrictEqual([]);
+    });
+
+    it("takes a hidden window off the stage, not just an empty one", () => {
+      // `visibility: hidden` keeps the layout box, so the element still
+      // measures as a size and every other signal says to draw it. Reading
+      // only the size shows a window the page asked to hide — which is worse
+      // than dropping an effect, because the disagreement is total.
+      expect(
+        measuredWith({ visibility: "hidden" }, { height: 50, width: 100 })
+          .visible,
+      ).toBe(false);
+    });
+
+    it("takes a collapsed window off the stage too", () => {
+      // `collapse` is the third value and means `hidden` on anything that is
+      // not a table row or column, which a window never is. It keeps its box
+      // just the same, so it lands in the state the size check cannot see.
+      expect(
+        measuredWith({ visibility: "collapse" }, { height: 50, width: 100 })
+          .visible,
+      ).toBe(false);
+    });
+
+    it("keeps a window whose visibility was never resolved", () => {
+      // Absent is not hidden. Treating it as hidden would take every window
+      // off the stage in a DOM implementation that computes nothing.
+      expect(measuredWith({}, { height: 50, width: 100 }).visible).toBe(true);
     });
 
     it("refuses a negative radius rather than passing it to a shader", () => {

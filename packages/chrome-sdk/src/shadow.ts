@@ -27,6 +27,22 @@ export type Shadow = {
   color: readonly [r: number, g: number, b: number, a: number];
 };
 
+/**
+ * A computed `box-shadow` as its separate shadows, front to back.
+ *
+ * Empty for an element that casts none. Splitting on every comma would also
+ * split `rgba(0, 0, 0, 0.5)`, so the split is on commas outside brackets —
+ * which is the one definition of "how many shadows is this" in the SDK.
+ * Anything counting them and anything reading them must agree, or a report
+ * names a different shadow than the one that was dropped.
+ */
+export const splitShadows = (computed: string): string[] => {
+  const trimmed = computed.trim();
+  return trimmed === "" || trimmed === "none"
+    ? []
+    : trimmed.split(/,(?![^(]*\))/).map((shadow) => shadow.trim());
+};
+
 const RGB = /^rgba?\(([^)]*)\)/;
 const OKLAB = /^oklab\(([^)]*)\)/;
 const OKLCH = /^oklch\(([^)]*)\)/;
@@ -68,11 +84,9 @@ export type ShadowReading = ReturnType<
  * half-understood shadow is a smear across the desktop.
  */
 export const parseShadow = (computed: string): ShadowReading => {
-  // CSS layers several front to back, so the first is the one on top. Splitting
-  // on commas would also split `rgba(0, 0, 0, 0.5)`, so the split is on commas
-  // that are not inside brackets.
-  const first = computed.split(/,(?![^(]*\))/)[0]?.trim();
-  if (first === undefined || first === "" || first === "none") {
+  // CSS layers several front to back, so the first is the one on top.
+  const [first] = splitShadows(computed);
+  if (first === undefined) {
     return ShadowReading.None();
   }
   // An inset shadow is drawn *inside* the box, over the client's own pixels.
