@@ -6,6 +6,7 @@ import { IDENTITY } from "./matrix";
 import type { Shadow } from "./shadow";
 import { parseShadow, ShadowKind } from "./shadow";
 import { parseTransformOrigin } from "./transform-origin";
+import { unsupportedEffects } from "./unsupported";
 
 /** An element's geometry in the form `place_portal` needs it. */
 export type Measurement = {
@@ -41,6 +42,7 @@ export const defaultMeasure: Measure = (element) => {
     firstNonZero(element.offsetWidth, box.width),
     firstNonZero(element.offsetHeight, box.height),
   ] as const;
+  reportUnsupported(style);
   return {
     cornerRadius: readCornerRadius(style),
     opacity: readOpacity(style),
@@ -54,21 +56,25 @@ export const defaultMeasure: Measure = (element) => {
       origin: parseTransformOrigin(style.transformOrigin) ?? centreOf(size),
       size,
     }),
-    visible: size[0] > 0 && size[1] > 0,
+    visible: isVisible(style, size),
     zIndex: readZIndex(style),
   };
 };
 
-// Layout-dependent measurements read 0 before the element has a box; the
-// caller wants the first source that actually produced one.
 /**
  * `border-radius` as one number of pixels.
  *
  * The compositor applies a single radius to all four corners — that is what its
  * shader can do without knowing which way up a client's buffer is — so an
  * element with four different ones reports the first, which is the one it set if
- * it set one at all. A radius in `%` computes to `px` here, because
- * `getComputedStyle` resolves it against the element's own box.
+ * it set one at all.
+ *
+ * Only an absolute length survives this. A radius in `%` keeps its `%` in the
+ * computed value — `getComputedStyle` resolves it against nothing — so `50%`
+ * arrives here as the string `"50%"` and leaves as fifty pixels. So does the
+ * two-axis `10px / 20px` form, whose vertical radius is simply dropped.
+ * `unsupportedEffects` reports both, because a window drawn that way looks
+ * deliberate rather than broken.
  *
  * Anything unparseable is no rounding rather than a guess: a square window is
  * the honest floor, and a wrong radius clips content.
@@ -143,20 +149,89 @@ const reported = new Set<string>();
  * compositor never drew — which is the failure that is impossible to debug.
  */
 const reportUnreadable = (property: string, computed: string): void => {
-  const seen = `${property}: ${computed}`;
-  if (!reported.has(seen) && reported.size < REPORT_LIMIT) {
-    reported.add(seen);
+  report(
+    `${property}: ${computed}`,
+    `cannot read ${property} ${JSON.stringify(computed)}; ` +
+      `this window will be drawn without it`,
+  );
+};
+
+/**
+ * Say, once, that a style was understood and will not be drawn.
+ *
+ * A different sentence from `reportUnreadable`, because they are different
+ * news: one says the SDK failed on syntax that is valid CSS, which is a bug
+ * worth reporting upstream, and this one says the compositor has no
+ * counterpart for an effect, which is not. Collapsing them would tell an
+ * author their `rotate` was a deliberate omission when in fact it fell over.
+ *
+ * Keyed on the property alone rather than on the value: a `transition` on
+ * `filter` mints a new computed value every frame, and keying on it would burn
+ * the whole bound inside a second and silence everything after it.
+ */
+const reportUndrawable = (
+  property: string,
+  computed: string,
+  consequence: string,
+): void => {
+  report(
+    property,
+    `cannot draw ${property} ${JSON.stringify(computed)}; ${consequence}`,
+  );
+};
+
+const report = (key: string, message: string): void => {
+  if (!reported.has(key) && reported.size < REPORT_LIMIT) {
+    reported.add(key);
     // biome-ignore lint/suspicious/noConsole: the only channel to the author
-    console.warn(
-      `domicile: cannot read ${property} ${JSON.stringify(computed)}; ` +
-        `this window will be drawn without it`,
-    );
+    console.warn(`domicile: ${message}`);
   }
 };
+
+/**
+ * Say, once each, what about this element the compositor will not draw.
+ *
+ * The window still appears; it just ignores the style, and it ignores it
+ * without a word — which is the hard kind of wrong to find, because the CSS is
+ * right and the picture is not. Until a window can fall back to the copy path
+ * for effects the shader has no answer for, saying so is the whole remedy.
+ */
+const reportUnsupported = (style: CSSStyleDeclaration): void => {
+  for (const { property, value, consequence } of unsupportedEffects(style)) {
+    reportUndrawable(property, value, consequence);
+  }
+};
+
+/**
+ * Whether the compositor should draw this window at all.
+ *
+ * A size of nothing is the tabbed case: a hidden element has no box, and a
+ * portal with no box is one the host stops compositing.
+ *
+ * `visibility: hidden` — or `collapse` — is the other way to mean it, and it
+ * is the dangerous one: it *keeps* the layout box, so the element still measures as a size and
+ * every other signal says to draw. Reading only the size shows a window the
+ * page asked to hide, which is a worse disagreement than dropping an effect:
+ * the window is not merely wrong, it is there at all.
+ *
+ * Absent is not hidden. An unresolved `visibility` would otherwise take every
+ * window off the stage in a DOM implementation that computes nothing.
+ */
+const isVisible = (
+  style: CSSStyleDeclaration,
+  [width, height]: readonly [number, number],
+): boolean => width > 0 && height > 0 && !HIDDEN.has(style.visibility);
+
+// `collapse` is the third value, and on anything that is not a table row or
+// column it means `hidden` — which a window never is. It keeps its box too, so
+// it lands in exactly the state this guards against.
+const HIDDEN = new Set(["collapse", "hidden"]);
 
 const finiteOrZero = (value: number): number =>
   Number.isFinite(value) ? Math.max(value, 0) : 0;
 
+// Layout-dependent measurements read 0 before the element has a box; the
+// caller wants the first source that actually produced one.
 const firstNonZero = (preferred: number, fallback: number): number =>
   preferred > 0 ? preferred : fallback;
 
