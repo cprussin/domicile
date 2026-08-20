@@ -82,4 +82,37 @@ const appStyles = css({
   // with the placement and the compositor's shader applies it to the client's
   // own buffer, which is why a window can be round at all without a copy.
   borderRadius: "lg",
+
+  // Loud on purpose. A realistic shadow is dark, the stage is dark, and the
+  // two are indistinguishable by eye — which tells you nothing about whether
+  // the compositor drew one. `accent` at full strength with no offset reads as
+  // a halo: unmistakably present, or unmistakably absent.
+  //
+  // A token, not a literal, so this also exercises the colour path: the preset
+  // writes every colour through `color-mix(in oklab, ...)`, which computes to
+  // `oklab(...)` — a syntax the SDK could not read until #46.
+  boxShadow: "0 0 24px 6px {colors.accent}",
+
+  // --- everything below this line is the demonstration, and is why this
+  // --- branch is not meant to be merged. See the PR description.
+
+  // A shadow needs somewhere to fall, and a window that fills the stage has
+  // nowhere. `margin` rather than `inset`, because `windowStyles` already sets
+  // `inset: 0` and two atomic classes on one element tie on specificity — an
+  // `inset` here would win or lose depending on how the bundle happened to
+  // order them.
+  margin: "8",
+
+  // Every one of these is drawn by the compositor's own shader against the
+  // client's dmabuf. None of them is the engine painting a picture of a
+  // window: the element is a hole, and what shows through it is the client.
+  //
+  // Slightly transparent, which is what makes the shadow's cut-out visible:
+  // the shadow is not painted under the window it falls from, and before that
+  // was fixed it bled through any window you could see through.
+  opacity: 0.9,
+  // The independent `rotate` property rather than `transform`, because that is
+  // the spelling most people reach for — and because it did nothing until #49.
+  // Either works now.
+  rotate: "-3deg",
 });
