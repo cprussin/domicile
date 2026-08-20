@@ -13,8 +13,11 @@ const measuredWith = (style: Partial<CSSStyleDeclaration>) => {
     borderTopLeftRadius: "",
     boxShadow: "none",
     opacity: "",
+    rotate: "none",
+    scale: "none",
     transform: "none",
     transformOrigin: "50% 50%",
+    translate: "none",
     zIndex: "auto",
     ...style,
   } as CSSStyleDeclaration;
@@ -117,6 +120,73 @@ describe("defaultMeasure", () => {
       const style = { boxShadow: "color(display-p3 0 1 0) 0px 0px 4px" };
       expect(warningsFrom(style)).toHaveLength(1);
       expect(warningsFrom(style)).toStrictEqual([]);
+    });
+
+    it("reads the independent rotate property, not just `transform`", () => {
+      // `rotate: 45deg` is not reported in `getComputedStyle(...).transform`,
+      // so an element written that way turns in the page while the compositor
+      // draws the window square — a silent disagreement rather than an error.
+      const { transform } = measuredWith({ rotate: "90deg" });
+      expect(transform.slice(0, 4).map(Math.round)).toStrictEqual([
+        0, 1, -1, 0,
+      ]);
+    });
+
+    it("reads the independent scale property too", () => {
+      expect(
+        measuredWith({ scale: "2 3" }).transform.slice(0, 4).map(Math.round),
+      ).toStrictEqual([2, 0, 0, 3]);
+    });
+
+    it("survives the centring idiom, which resolves to a percentage", () => {
+      // `translate` keeps its percentages in the computed value, where
+      // `transform` does not — and a matrix cannot be built from a relative
+      // length. Measuring runs on every resize and every pointer move, so a
+      // throw here stops a window being placed at all.
+      expect(() => measuredWith({ translate: "-50% -50%" })).not.toThrow();
+    });
+
+    it("turns a window the way an axis rotation turns it", () => {
+      // `rotate` takes an axis as well as an angle, and CSS spells that with a
+      // different function than the plain angle form. Emitting the wrong one
+      // leaves the window square while the page turns it.
+      const [a, b, c, d] = measuredWith({ rotate: "x 45deg" }).transform;
+      expect([a, b, c]).toStrictEqual([1, 0, 0]);
+      expect(d).toBeCloseTo(Math.SQRT1_2, 4);
+    });
+
+    it("reads the vector form of an axis rotation as well as the keyword", () => {
+      const [a, b, c, d] = measuredWith({ rotate: "1 0 0 45deg" }).transform;
+      expect([a, b, c]).toStrictEqual([1, 0, 0]);
+      expect(d).toBeCloseTo(Math.SQRT1_2, 4);
+    });
+
+    it("reads a three-component scale, which is spelled differently again", () => {
+      expect(
+        measuredWith({ scale: "2 3 4" }).transform.slice(0, 4).map(Math.round),
+      ).toStrictEqual([2, 0, 0, 3]);
+    });
+
+    it("composes the independent properties in the order CSS applies them", () => {
+      // CSS applies translate, then rotate, then scale, then `transform`. The
+      // order is not a detail: a quarter turn and a stretch compose to
+      // different matrices each way round, so a window using both lands
+      // somewhere else entirely if they are multiplied backwards.
+      const { transform } = measuredWith({ rotate: "90deg", scale: "2 1" });
+
+      // Turn-then-stretch. The other order would give [0, 1, -2, 0].
+      expect(transform.slice(0, 4).map(Math.round)).toStrictEqual([
+        0, 2, -1, 0,
+      ]);
+    });
+
+    it("says so when it cannot read a rotate the element asked for", () => {
+      // The fall-through: a shape none of the forms account for. Returning
+      // identity in silence is the failure this function exists to prevent, so
+      // it must not be how the function itself fails.
+      const warnings = warningsFrom({ rotate: "1 0 0" });
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("rotate");
     });
 
     it("refuses a negative radius rather than passing it to a shader", () => {
