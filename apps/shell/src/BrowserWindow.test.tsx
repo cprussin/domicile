@@ -176,8 +176,11 @@ describe("BrowserWindow", () => {
         src="https://example.com"
       />,
     );
-    // A hidden element is out of the accessibility tree, so it has no
-    // accessible name left to match on — being the only region is enough.
+    // DEMO BRANCH: off the stage is `opacity: 0` rather than the `hidden`
+    // attribute, so that the window can transition out rather than vanish.
+    // Still out of the accessibility tree and still with no accessible name
+    // left to match on, so being the only region is enough — but now because
+    // it is transparent rather than because it is display-none.
     expect(screen.getByRole("region", { hidden: true })).not.toBeVisible();
   });
 });

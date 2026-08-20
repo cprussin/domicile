@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
 import type { AppElements } from "./app-elements";
+import { offStageClass, onStageClass } from "./stage-transition";
 import { windowStyles } from "./window-styles";
 
 type Props = {
@@ -46,11 +47,25 @@ export const AppWindow = ({ active, appElements, appId }: Props) => {
     }
   }, [active, portal]);
 
+  // DEMO BRANCH — not for merge. `hidden` is what takes a window off the stage
+  // in the real shell, and a `display: none` element cannot transition out of
+  // anything. So every window stays laid out here and the inactive ones are
+  // faded and slid instead, which is the whole point: both are properties the
+  // compositor has to follow *per frame* while they change.
+  //
+  // A window at `opacity: 0` costs nothing to draw — the shader multiplies it
+  // out — and `pointer-events: none` on the off-stage class is what keeps the
+  // pointer on the window you can see. What it does cost is being measured and
+  // placed every frame, for every window on the desktop rather than only the
+  // one on screen.
   return (
     <domicile-app
       app-id={appId}
-      className={cx(windowStyles, appStyles)}
-      hidden={!active}
+      className={cx(
+        windowStyles,
+        appStyles,
+        active ? onStageClass : offStageClass,
+      )}
       ref={setPortal}
     />
   );

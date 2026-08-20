@@ -7,9 +7,9 @@ import {
 } from "@domicile/chrome-sdk/register-elements";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
 import { AppElements } from "./app-elements";
 import { Shell } from "./Shell";
+import { onStageClass } from "./stage-transition";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
@@ -70,9 +70,13 @@ const stubMeasure: Measure = () => ({
 const tabNames = (): string[] =>
   screen.getAllByRole("listitem").map((row) => row.textContent ?? "");
 
+// DEMO BRANCH: windows are no longer hidden with the `hidden` attribute —
+// a `display: none` element cannot transition — so "shown" is the one that is
+// not faded out. The class name is Panda's, so the test asks the element which
+// of the two it was given rather than matching on a generated string.
 const shownWindowIds = (container: HTMLElement): (string | null)[] =>
   [...(container.querySelector("main")?.children ?? [])]
-    .filter((element) => !element.hasAttribute("hidden"))
+    .filter((element) => element.className.includes(onStageClass))
     .map((element) => element.getAttribute("app-id") ?? element.tagName);
 
 let bridge: FakeBridge;

@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
+import { offStageClass, onStageClass } from "./stage-transition";
 import { windowStyles } from "./window-styles";
 import { withScheme } from "./with-scheme";
 
@@ -89,8 +90,15 @@ export const BrowserWindow = ({ active, onNavigate, src }: Props) => {
   return (
     <section
       aria-label="Browser"
-      className={cx(windowStyles, browserStyles)}
-      hidden={!active}
+      // DEMO BRANCH — not for merge. `hidden` was what took this window off
+      // the stage, and a `display: none` element cannot transition out of
+      // anything. It is faded and slid like an app window instead, so a switch
+      // between the two kinds animates on both sides rather than one.
+      className={cx(
+        windowStyles,
+        browserStyles,
+        active ? onStageClass : offStageClass,
+      )}
     >
       <form className={addressBarStyles} onSubmit={handleSubmit}>
         <Button
