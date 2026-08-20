@@ -26,13 +26,13 @@ the client shows through the hole. No pixel is copied by the CPU anywhere in
 that path. Verified on real hardware (AMD Radeon 890M): the desktop renders, a
 terminal opens into it, and input reaches both.
 
-**The copy path** — the original prototype, still the fallback and still what
-every headless check drives. The compositor is headless, reads each client's
-frame back off the GPU, and sends the pixels to the chrome over a Unix socket to
-be drawn into a `<canvas>`. Correct everywhere, and four full-frame copies per
-frame.
+**The copy path** — the original prototype, still the fallback for any window
+the shaders cannot draw, and still what every headless check drives. The
+compositor is headless, reads each client's frame back off the GPU, and sends
+the pixels to the chrome over a Unix socket to be drawn into a `<canvas>`.
+Correct everywhere, and four full-frame copies per frame.
 
-The wire protocol is at `PROTOCOL_VERSION = 7`.
+The wire protocol is at `PROTOCOL_VERSION = 8`.
 
 Run the suites for their counts rather than reading one here. A number written
 down goes stale on the next commit that adds a test, and this one went stale
@@ -417,9 +417,42 @@ falloff the shadow uses, is the next candidate to move it.
   fixture is square, so nothing in the repo can tell the two apart. Needs a
   non-square `turned` fixture rather than another assertion on the one there.
 - chrome above *and* below as two engine layers (only above is free today)
-- per-window fallback to the copy path when a computed style needs an effect the
-  shader cannot do — this is what makes the native path safe to leave on: correct
-  always, fast almost always
+- ~~per-window fallback to the copy path when a computed style needs an effect
+  the shader cannot do~~ — done, and it is what makes the native path safe to
+  leave on: correct always, fast almost always. `<domicile-app>` reads its own
+  computed style, names anything the shaders have no answer for, and sends
+  `native: false` with the placement; the compositor draws nothing for that
+  window and reads its buffer back as it always did. One window, not the
+  desktop — a blur on one app costs that app. The author is told on the console
+  what it cost them, once per property.
+- a window re-measures when its **box** changes and not when its **style**
+  does, so a rule that starts matching an already-mounted window — `:hover`, a
+  class toggle, a transition — does not move it until something resizes it.
+  The same gap means an animated `transform` is not followed either. Wants a
+  measurement driven by something that sees style rather than size.
+- a window on the copy path is drawn *above* every natively-drawn window it
+  overlaps, whatever its `z-index`, because the page is composited over all of
+  the app surfaces rather than in the stacking order. The same two engine
+  layers that fix chrome-between-two-windows fix this.
+- a window rejoining the native path is drawn from the texture it left on until
+  its client next commits. Invisible while the element survives the transition,
+  because the canvas holds fresher pixels and stays up until there is something
+  better — but not when the element is remounted, where the canvas is gone.
+  `latest_dmabufs` holds the current buffer, so re-importing on the way back is
+  the fix whenever it is worth taking.
+- a `wl_shm` window blanks until its client next commits if its element is
+  moved in the DOM — dragging a tab reorders a keyed list, and React moves the
+  node, which is a disconnect and a reconnect. The element drops its pixels
+  because the host has been told it no longer holds them, and nothing can give
+  them back: the compositor keeps the last *dmabuf* per app and no shm frame at
+  all, so `hand_over` has nothing to offer and `present()` has no texture to
+  draw. Wants the last shm frame retained the way `latest_dmabufs` retains the
+  last buffer — shared rather than copied, or it is a full-frame copy per frame
+  to cover a rare event.
+- a hand-over the chrome was too busy to take waits for the next reason to
+  redraw rather than for the queue to drain. The chrome's own repaint supplies
+  one in practice, since its CSS just changed, but nothing orders the two. Wants
+  a redraw when the queue drains, not a poll.
 
 ### Phase 3 — own the display
 

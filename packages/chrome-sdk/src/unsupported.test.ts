@@ -30,6 +30,16 @@ const NOT_INITIAL: Record<string, string> = {
   "mix-blend-mode": "multiply",
 };
 
+/** Every row's property set to the value that means "not asked for". */
+const AT_INITIAL: Record<string, string> = {
+  backdropFilter: "none",
+  backfaceVisibility: "visible",
+  clipPath: "none",
+  filter: "none",
+  maskImage: "none",
+  mixBlendMode: "normal",
+};
+
 describe("unsupportedEffects", () => {
   it("names nothing for a window the compositor can draw as asked", () => {
     expect(
@@ -60,11 +70,7 @@ describe("unsupportedEffects", () => {
         "mix-blend-mode",
       ].map((property) =>
         propertiesIn({
-          backdropFilter: "none",
-          clipPath: "none",
-          filter: "none",
-          maskImage: "none",
-          mixBlendMode: "normal",
+          ...AT_INITIAL,
           // Each in turn set to something that is not its initial value; the
           // rest stay at theirs, so exactly one row can fire.
           [PROPERTY_KEYS[property] as string]: NOT_INITIAL[property] as string,
@@ -93,12 +99,11 @@ describe("unsupportedEffects", () => {
     ).toStrictEqual(["clip-path", "filter", "mix-blend-mode"]);
   });
 
-  it("says what the window gets instead, not only what was dropped", () => {
-    // A property name alone tells an author what they wrote. The consequence
-    // is what tells them what to look for on screen.
+  it("says which value was at fault, not only which property", () => {
+    // A property name alone tells an author what they wrote. The value is what
+    // tells them which rule wrote it, in a stylesheet with several.
     const [dropped] = unsupportedEffects(styleOf({ filter: "blur(4px)" }));
     expect(dropped?.value).toBe("blur(4px)");
-    expect(dropped?.consequence).toContain("unfiltered");
   });
 
   it("says nothing about a property the DOM did not resolve", () => {
@@ -113,10 +118,22 @@ describe("unsupportedEffects", () => {
     ).toStrictEqual([]);
   });
 
-  it("names a second shadow, which is drawn as though it were not there", () => {
-    // The partial cases matter more than the absent ones: a window with no
-    // filter is obviously missing something, where a window whose second
-    // shadow was dropped looks like a window with one shadow.
+  it("says nothing about an inset shadow behind one the shader casts", () => {
+    // The outer one is first, so the shader casts it; the inset one is drawn
+    // by the engine over the top, exactly as CSS asks. Both are already right,
+    // which is the one two-shadow list that stays native.
+    expect(
+      propertiesIn({
+        boxShadow:
+          "rgb(0, 0, 255) 0px 4px 8px 0px, rgb(255, 0, 0) 0px 1px 2px 0px inset",
+      }),
+    ).toStrictEqual([]);
+  });
+
+  it("names a second shadow, because the placement carries only one", () => {
+    // The partial cases are the ones worth finding: a window with no filter is
+    // obviously missing something, where a window whose second shadow was
+    // dropped would just look like a window with one shadow.
     expect(
       propertiesIn({
         boxShadow: "rgb(0, 0, 0) 0px 4px 8px, rgb(255, 0, 0) 0px 8px 16px",
@@ -140,7 +157,43 @@ describe("unsupportedEffects", () => {
       }),
     );
     expect(dropped?.property).toBe("border-radius");
-    expect(dropped?.consequence).toContain("8px");
+    expect(dropped?.value).toBe("8px, 8px, 0px, 0px");
+  });
+
+  it("names a hidden backface on a window that is turned away", () => {
+    // `rotateY(180deg)` carries no perspective, so `flattened` passes it — the
+    // compositor keeps the six 2D terms and draws the window mirrored, while
+    // CSS hides it outright. The two pictures could hardly disagree more.
+    expect(
+      propertiesIn({
+        backfaceVisibility: "hidden",
+        transform: "matrix3d(-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1)",
+      }),
+    ).toStrictEqual(["backface-visibility"]);
+  });
+
+  it("reads a hidden backface on the independent rotate property too", () => {
+    // An axis rotation does not appear in the computed `transform` at all, so
+    // a window written this way turns in the page while a check that read only
+    // `transform` saw a flat element and said nothing.
+    expect(
+      propertiesIn({ backfaceVisibility: "hidden", rotate: "y 180deg" }),
+    ).toStrictEqual(["backface-visibility"]);
+  });
+
+  it("says nothing about a hidden backface on a window that never turns", () => {
+    // By far the commonest use of the property: the old
+    // promote-to-its-own-layer flicker hack, on elements that are never
+    // rotated out of the plane. Both paths draw those identically, so reading
+    // the property alone would move a desktop's worth of windows onto the copy
+    // path to fix nothing at all.
+    expect(
+      propertiesIn({
+        backfaceVisibility: "hidden",
+        rotate: "45deg",
+        transform: "matrix(1, 0, 0, 1, 0, 0)",
+      }),
+    ).toStrictEqual([]);
   });
 
   it("names a transform with perspective in it, which is drawn flat", () => {
@@ -159,7 +212,6 @@ describe("unsupportedEffects", () => {
       }),
     );
     expect(dropped?.property).toBe("transform");
-    expect(dropped?.consequence).toContain("flat");
   });
 
   it("says nothing about a 3D transform with no perspective in it", () => {
@@ -188,7 +240,7 @@ describe("unsupportedEffects", () => {
       }),
     );
     expect(dropped?.property).toBe("border-radius");
-    expect(dropped?.consequence).toContain("50px");
+    expect(dropped?.value).toBe("50%, 50%, 50%, 50%");
   });
 
   it("names a two-axis radius, whose second axis is dropped", () => {
@@ -201,31 +253,52 @@ describe("unsupportedEffects", () => {
       }),
     );
     expect(dropped?.property).toBe("border-radius");
-    expect(dropped?.consequence).toContain("10px");
     // Separated, because each corner here is itself two values — four of them
     // run together is not something anyone can match against a stylesheet.
     expect(dropped?.value).toBe("10px 20px, 10px 20px, 10px 20px, 10px 20px");
   });
 
-  it("does not claim the first shadow is drawn when it is an inset one", () => {
-    // `parseShadow` declines an inset shadow, so the window casts none at all.
-    // Telling the author the first is drawn sends them looking for a shadow
-    // that was never there.
-    const [dropped] = unsupportedEffects(
-      styleOf({
+  it("names a shadow list whose first shadow is one the shader declines", () => {
+    // The shader casts the *first* shadow, and declines an inset one — so a
+    // window written this way would cast nothing while CSS casts the blue one
+    // behind it. The first being undrawable does not excuse the second.
+    expect(
+      propertiesIn({
         boxShadow:
           "rgb(255, 0, 0) 0px 1px 2px 0px inset, rgb(0, 0, 255) 0px 4px 8px 0px",
       }),
-    );
-    expect(dropped?.property).toBe("box-shadow");
-    expect(dropped?.consequence).toContain("none of them");
+    ).toStrictEqual(["box-shadow"]);
   });
 
-  it("does not report a calc() radius as NaN pixels", () => {
+  it("says nothing about an inset shadow, which is drawn already", () => {
+    // On the native path this element has no content, so the engine paints the
+    // inset shadow into the page and `present()` composites the page over the
+    // client. It is the copy path that loses it, under an opaque canvas — so
+    // handing the window over would buy a readback and *remove* a shadow that
+    // was working.
+    expect(
+      propertiesIn({ boxShadow: "rgb(0, 0, 0) 0px 1px 2px 0px inset" }),
+    ).toStrictEqual([]);
+    expect(
+      propertiesIn({
+        boxShadow:
+          "rgb(0, 0, 0) 0px 1px 2px 0px inset, rgb(0, 0, 255) 0px 2px 4px 0px inset",
+      }),
+    ).toStrictEqual([]);
+  });
+
+  it("names a shadow whose colour it cannot read, which the engine can", () => {
+    // Unreadable is the SDK's gap, not CSS's: the browser draws this shadow
+    // perfectly well, and the compositor would draw none at all. Handing the
+    // window over is what makes the window right while the parser catches up.
+    expect(
+      propertiesIn({ boxShadow: "color(display-p3 1 0 0) 0px 0px 4px" }),
+    ).toStrictEqual(["box-shadow"]);
+  });
+
+  it("names a calc() radius, which has no absolute number to send", () => {
     // `calc()` survives into the computed value the way `%` does, and parses
-    // to nothing at all — so the window is drawn square. Saying `NaNpx` would
-    // report a number that is on nobody's screen, in a module whose whole job
-    // is saying what the window got instead.
+    // to nothing at all — so a window drawn natively would be drawn square.
     const [dropped] = unsupportedEffects(
       styleOf({
         borderBottomLeftRadius: "calc(10% + 2px)",
@@ -235,7 +308,6 @@ describe("unsupportedEffects", () => {
       }),
     );
     expect(dropped?.property).toBe("border-radius");
-    expect(dropped?.consequence).toBe("every corner is drawn square");
   });
 
   it("says nothing when all four corners agree", () => {

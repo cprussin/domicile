@@ -80,6 +80,22 @@ impl OutboundSender {
         let _ = self.sender.send(Outbound::Message(message));
     }
 
+    /// Whether a frame queued now would be taken rather than dropped.
+    ///
+    /// For a caller that has to *pay* to produce the frame — a GPU readback
+    /// stalls the pipeline — and would rather find out first.
+    ///
+    /// It can go stale only towards pessimism, which is what makes it worth
+    /// asking: every sender is the Wayland thread and the writer thread only
+    /// ever *decrements*, so a `true` cannot become `false` before the send.
+    /// So a pass that hands several windows over at once pays one readback and
+    /// then an atomic load per window, rather than a readback per window for a
+    /// queue that has room for one. [`frame`](Self::frame) still reports what
+    /// actually happened, because it is what `publish_frame` reads.
+    pub fn has_room(&self) -> bool {
+        self.waiting_frames.load(Ordering::SeqCst) < FRAME_DEPTH
+    }
+
     /// Queue an app's pixels, returning whether they were taken. Never waits.
     pub fn frame(&self, app_id: &str, width: u32, height: u32, scale: u32, rgba: Vec<u8>) -> bool {
         if self.waiting_frames.load(Ordering::SeqCst) >= FRAME_DEPTH {

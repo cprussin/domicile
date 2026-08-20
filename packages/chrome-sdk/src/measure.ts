@@ -6,6 +6,7 @@ import { IDENTITY } from "./matrix";
 import type { Shadow } from "./shadow";
 import { parseShadow, ShadowKind } from "./shadow";
 import { parseTransformOrigin } from "./transform-origin";
+import type { Unsupported } from "./unsupported";
 import { unsupportedEffects } from "./unsupported";
 
 /** An element's geometry in the form `place_portal` needs it. */
@@ -20,6 +21,16 @@ export type Measurement = {
   opacity: number;
   /** The first drawable `box-shadow`, if the element has one. */
   shadow: Shadow | undefined;
+  /**
+   * Whether the compositor can draw this window from the client's own buffer.
+   *
+   * False when the element is styled in a way its shaders have no answer for.
+   * That window goes back down the copy path — read off the GPU and drawn by
+   * the engine — which is slow and correct rather than fast and wrong. One
+   * window, not the desktop: a blur on one app costs that app and nothing
+   * else.
+   */
+  native: boolean;
 };
 
 export type Measure = (element: HTMLElement) => Measurement;
@@ -42,9 +53,13 @@ export const defaultMeasure: Measure = (element) => {
     firstNonZero(element.offsetWidth, box.width),
     firstNonZero(element.offsetHeight, box.height),
   ] as const;
-  reportUnsupported(style);
+  const undrawable = unsupportedEffects(style);
+  reportUnsupported(undrawable);
   return {
     cornerRadius: readCornerRadius(style),
+    // Anything on that list at all means the compositor's picture would differ
+    // from the page's, so the engine draws this one instead.
+    native: undrawable.length === 0,
     opacity: readOpacity(style),
     shadow: readShadow(style),
     size,
@@ -120,7 +135,13 @@ const readShadow = (style: CSSStyleDeclaration): Shadow | undefined => {
       return reading.shadow;
     }
     case ShadowKind.Unreadable: {
-      reportUnreadable("box-shadow", computed);
+      // Not dropped: `unsupportedEffects` names this same value, so the window
+      // has gone to the engine and the engine casts the shadow.
+      reportUnreadable(
+        "box-shadow",
+        computed,
+        "this window is copied frame by frame instead, where the engine draws it",
+      );
       return undefined;
     }
     case ShadowKind.None:
@@ -147,36 +168,48 @@ const reported = new Set<string>();
  * The console is the only channel the SDK has to whoever wrote the CSS, and a
  * window that silently loses a style is indistinguishable from one the
  * compositor never drew — which is the failure that is impossible to debug.
- */
-const reportUnreadable = (property: string, computed: string): void => {
-  report(
-    `${property}: ${computed}`,
-    `cannot read ${property} ${JSON.stringify(computed)}; ` +
-      `this window will be drawn without it`,
-  );
-};
-
-/**
- * Say, once, that a style was understood and will not be drawn.
  *
- * A different sentence from `reportUnreadable`, because they are different
- * news: one says the SDK failed on syntax that is valid CSS, which is a bug
- * worth reporting upstream, and this one says the compositor has no
- * counterpart for an effect, which is not. Collapsing them would tell an
- * author their `rotate` was a deliberate omission when in fact it fell over.
- *
- * Keyed on the property alone rather than on the value: a `transition` on
- * `filter` mints a new computed value every frame, and keying on it would burn
- * the whole bound inside a second and silence everything after it.
+ * The consequence is the caller's to state because it is not the same one
+ * every time. An unreadable `box-shadow` hands the window to the engine, which
+ * draws the shadow perfectly; an unreadable `rotate` does not, and that window
+ * really is drawn without it. One sentence for both would be wrong for one of
+ * them, and an author told their shadow was dropped goes looking for a bug in
+ * a window that has the shadow.
  */
-const reportUndrawable = (
+const reportUnreadable = (
   property: string,
   computed: string,
   consequence: string,
 ): void => {
   report(
+    `${property}: ${computed}`,
+    `cannot read ${property} ${JSON.stringify(computed)}; ${consequence}`,
+  );
+};
+
+/**
+ * Say, once, that a style costs this window the native path.
+ *
+ * A different sentence from `reportUnreadable`, because they are different
+ * news: one says the SDK failed on syntax that is valid CSS, which is a bug
+ * worth reporting upstream, and this one says the compositor's shaders have no
+ * counterpart for an effect, which is not. Collapsing them would tell an
+ * author their `rotate` was a deliberate omission when in fact it fell over.
+ *
+ * The window still looks right — the engine draws it, and the engine can draw
+ * anything. What it costs is a readback and a socket hop per frame, for this
+ * window alone, which is a thing worth knowing when a stylesheet quietly puts
+ * every window on the desktop there.
+ *
+ * Keyed on the property alone rather than on the value: a `transition` on
+ * `filter` mints a new computed value every frame, and keying on it would burn
+ * the whole bound inside a second and silence everything after it.
+ */
+const reportUndrawable = (property: string, computed: string): void => {
+  report(
     property,
-    `cannot draw ${property} ${JSON.stringify(computed)}; ${consequence}`,
+    `cannot draw ${property} ${JSON.stringify(computed)} in the compositor; ` +
+      `this window is copied frame by frame instead, which is slower`,
   );
 };
 
@@ -189,16 +222,16 @@ const report = (key: string, message: string): void => {
 };
 
 /**
- * Say, once each, what about this element the compositor will not draw.
+ * Say, once each, what about this element took it off the native path.
  *
- * The window still appears; it just ignores the style, and it ignores it
- * without a word — which is the hard kind of wrong to find, because the CSS is
- * right and the picture is not. Until a window can fall back to the copy path
- * for effects the shader has no answer for, saying so is the whole remedy.
+ * Not a warning that anything is wrong: the window is drawn exactly as the CSS
+ * asks. It is the bill. A single rule in a stylesheet can move every window on
+ * the desktop onto the copy path, and the only symptom of that is that the
+ * desktop got slower.
  */
-const reportUnsupported = (style: CSSStyleDeclaration): void => {
-  for (const { property, value, consequence } of unsupportedEffects(style)) {
-    reportUndrawable(property, value, consequence);
+const reportUnsupported = (undrawable: Unsupported[]): void => {
+  for (const { property, value } of undrawable) {
+    reportUndrawable(property, value);
   }
 };
 
@@ -372,8 +405,12 @@ const isSet = (value: string | undefined): value is string =>
 // A shape none of the above accounts for. Reported rather than dropped, for
 // the same reason an unreadable shadow is: a window that quietly ignores a
 // style it was given is the failure nobody can debug.
+// The transform properties, where unreadable really does mean the window is
+// drawn without it: nothing here takes it off the native path, because the
+// same matrix is what `surfaceLocal` inverts to map a click. A window handed
+// to the engine for this would look right and still be unclickable.
 const unreadable = (property: string, value: string | undefined): undefined => {
-  reportUnreadable(property, value ?? "");
+  reportUnreadable(property, value ?? "", "this window is drawn without it");
   return undefined;
 };
 

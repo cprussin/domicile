@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
@@ -114,6 +114,15 @@ const shortcutMessageSchema = z.looseObject({
   type: z.literal("shortcut"),
 });
 
+// The counterpart to `app_frame`: the compositor is drawing this window's own
+// buffer now, so whatever pixels the chrome holds for it are stale. It arrives
+// after the last frame on the same socket, which is what makes it safe to act
+// on — see `HostMessage::AppComposited`.
+const appCompositedSchema = z.looseObject({
+  app_id: z.string(),
+  type: z.literal("app_composited"),
+});
+
 const appCursorSchema = z.looseObject({
   app_id: z.string(),
   cursor: cursorShapeSchema,
@@ -131,6 +140,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appResizedSchema,
   appFrameSchema,
   appClosedSchema,
+  appCompositedSchema,
   appCursorSchema,
   shortcutMessageSchema,
 ]);
@@ -157,6 +167,7 @@ export type AppFrameMessage = z.infer<typeof appFrameSchema> & {
   pixels: Uint8Array<ArrayBuffer>;
 };
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
+export type AppCompositedMessage = z.infer<typeof appCompositedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 

@@ -52,6 +52,7 @@ class FakeBridge {
 // The test DOM performs no layout, so measurement is injected.
 const stubMeasure: Measure = () => ({
   cornerRadius: 0,
+  native: true,
   opacity: 1,
   shadow: undefined,
   size: [10, 20],
@@ -114,6 +115,7 @@ describe("<domicile-app>", () => {
       {
         appId: "term",
         cornerRadius: 0,
+        native: true,
         opacity: 1,
         size: [10, 20],
         transform: [1, 0, 0, 1, 0, 0],
@@ -135,6 +137,7 @@ describe("<domicile-app>", () => {
     registerElements(bridge as unknown as BridgeClient, {
       measure: () => ({
         cornerRadius: 0,
+        native: true,
         opacity: 1,
         shadow: undefined,
         size: [0, 0],
@@ -151,6 +154,7 @@ describe("<domicile-app>", () => {
       {
         appId: "term",
         cornerRadius: 0,
+        native: true,
         opacity: 1,
         shadow: undefined,
         size: [0, 0],
@@ -172,6 +176,7 @@ describe("<domicile-app>", () => {
       {
         appId: "term",
         cornerRadius: 0,
+        native: true,
         opacity: 1,
         size: [10, 20],
         transform: [1, 0, 0, 1, 0, 0],
@@ -255,6 +260,7 @@ describe("<domicile-app>", () => {
       {
         appId: "editor",
         cornerRadius: 0,
+        native: true,
         opacity: 1,
         size: [10, 20],
         transform: [1, 0, 0, 1, 0, 0],
@@ -276,6 +282,143 @@ describe("<domicile-app>", () => {
     // path and must not throw even when drawing is unavailable.
     element.drawFrame(2, 1, 1, new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]));
     expect(element.querySelector("canvas")).not.toBeNull();
+  });
+
+  it("clips the copied pixels to the element's own rounding", () => {
+    // Content is not clipped by the box that holds it: `border-radius` rounds
+    // this element and does nothing to a child. A window sent down the copy
+    // path *because* of its radius would be drawn square by the very path that
+    // was meant to draw it round. On the canvas rather than as `overflow` on
+    // the element, whose inline style belongs to whoever wrote the chrome.
+    const element = mountApp("term");
+
+    element.drawFrame(2, 1, 1, new Uint8Array(8));
+
+    expect(element.querySelector("canvas")?.style.borderRadius).toBe("inherit");
+    expect(element.style.overflow).toBe("");
+  });
+
+  it("drops the copied pixels when the host says it has taken the window", () => {
+    // The chrome is composited *over* the client, so a canvas still holding
+    // the last copied frame is opaque where the page has to be a hole: the
+    // live window would be hidden behind a still of itself.
+    const element = mountApp("term");
+    element.drawFrame(2, 1, 1, new Uint8Array(8));
+    expect(element.querySelector("canvas")).not.toBeNull();
+
+    element.dropSurface();
+
+    expect(element.querySelector("canvas")).toBeNull();
+  });
+
+  it("keeps the copied pixels until the host says so, however it is styled", () => {
+    // The element knows what it *asked* for, which is not the same as what the
+    // compositor managed: a `wl_shm` client is never drawn natively however
+    // ordinary its CSS. A chrome that dropped the canvas on the strength of
+    // its own `native: true` would blank those windows until the client next
+    // drew — for an app that redraws on input, that is until the user does
+    // something.
+    const element = mountApp("term");
+    element.drawFrame(2, 1, 1, new Uint8Array(8));
+
+    resizes.resize();
+
+    expect(element.querySelector("canvas")).not.toBeNull();
+  });
+
+  it("takes a frame that arrives after the host took the window", () => {
+    // The message is ordered behind the frames on the same socket, so pixels
+    // arriving after it are a window that has gone back to the copy path — not
+    // a straggler to ignore. Refusing them would leave that window blank.
+    const element = mountApp("term");
+    element.drawFrame(2, 1, 1, new Uint8Array(8));
+    element.dropSurface();
+
+    element.drawFrame(2, 1, 1, new Uint8Array(8));
+
+    expect(element.querySelector("canvas")).not.toBeNull();
+  });
+
+  it("drops the copied pixels when the element changes which app it shows", () => {
+    // They are the previous app's last frame, and the element now stands for
+    // another. The host cannot correct this: `app_composited` is only sent for
+    // a window whose pixels it sent, and it never sent these under the new
+    // name — so the stale frame would sit over the new app's live window for
+    // as long as the element existed.
+    const element = mountApp("term");
+    element.drawFrame(2, 1, 1, new Uint8Array(8));
+
+    element.setAttribute("app-id", "editor");
+
+    expect(element.querySelector("canvas")).toBeNull();
+  });
+
+  it("drops the copied pixels when it tells the host to stop compositing", () => {
+    // A disconnect is not always a teardown: moving an element between two
+    // containers is a disconnect *and* a reconnect, and children survive the
+    // move. An element that kept its canvas here would be holding pixels the
+    // host has been told it does not hold — and the host only ever sends the
+    // message that clears a canvas to a window whose pixels it sent, so a
+    // window moved while copied and re-placed as native wears a still of
+    // itself for good.
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const element = mountApp("term");
+    element.drawFrame(2, 1, 1, new Uint8Array(8));
+
+    parent.append(element);
+
+    expect(element.querySelector("canvas")).toBeNull();
+  });
+
+  it("forgets the client's resolution when it changes which app it shows", () => {
+    // The recorded surface size is what pointer coordinates are scaled
+    // through. Left at the previous app's resolution it maps every click on
+    // the new one through the wrong surface — and unlike the canvas, nothing
+    // about the picture looks wrong while it does.
+    // stubMeasure lays the element out at 10x20 and `term` renders at twice
+    // that, so its surface coordinates are double the element's — which is
+    // what makes the two answers tell each other apart.
+    const element = mountApp("term");
+    element.drawFrame(40, 80, 2, new Uint8Array(40 * 80 * 4));
+
+    element.setAttribute("app-id", "editor");
+    element.dispatchEvent(
+      new MouseEvent("pointermove", { bubbles: true, clientX: 5, clientY: 10 }),
+    );
+
+    // One to one, because nothing is known about `editor` yet. Through
+    // `term`'s resolution it would have been (10, 20).
+    expect(bridge.calls).toContainEqual(["motion", "editor", 5, 10]);
+  });
+
+  it("keeps the client's resolution when the host takes the window over", () => {
+    // The same window, drawn by the compositor instead: the client is still
+    // rendering at the resolution it reported, so forgetting it here would
+    // break the pointer for every window that went native.
+    const element = mountApp("term");
+    element.drawFrame(40, 80, 2, new Uint8Array(40 * 80 * 4));
+
+    element.dropSurface();
+    element.dispatchEvent(
+      new MouseEvent("pointermove", { bubbles: true, clientX: 5, clientY: 10 }),
+    );
+
+    // Still through the 20x40 the client renders at. Forgotten, it would map
+    // one to one and report (5, 10).
+    expect(bridge.calls).toContainEqual(["motion", "term", 10, 20]);
+  });
+
+  it("keeps the placeholder down after the copied pixels go", () => {
+    // `has-surface` says this element has a window behind it, which is as true
+    // when the compositor draws it as when a canvas does. Putting the "app
+    // surface: …" placeholder back would draw it over a live window.
+    const element = mountApp("term");
+    element.drawFrame(2, 1, 1, new Uint8Array(8));
+
+    element.dropSurface();
+
+    expect(element.classList.contains("has-surface")).toBe(true);
   });
 
   it("drops the placeholder as soon as the client has a size", () => {

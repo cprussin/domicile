@@ -80,6 +80,8 @@ const appStyles = css({
   // Rounded by the compositor, not by the browser: this element is a hole in
   // the page and has no pixels of its own to clip. The SDK reports the radius
   // with the placement and the compositor's shader applies it to the client's
-  // own buffer, which is why a window can be round at all without a copy.
+  // own buffer, which is why a window can be round at all without a copy. A
+  // length rather than a percentage on purpose — a `%` radius is one the shader
+  // cannot draw, and it would send every window down the copy path.
   borderRadius: "lg",
 });

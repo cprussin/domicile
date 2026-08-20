@@ -112,11 +112,18 @@ describe("defaultMeasure", () => {
     it("says so when it cannot read a shadow the element asked for", () => {
       // Dropping it in silence is indistinguishable from the compositor not
       // drawing at all, which is the version of this bug nobody can debug.
+      //
+      // Twice over, and they are not the same sentence: the parser fell over
+      // on valid CSS, which someone should hear about, and the window went
+      // down the copy path so that it would look right anyway, which is what
+      // it cost.
       const warnings = warningsFrom({
         boxShadow: "color(display-p3 1 0 0) 0px 0px 4px",
       });
-      expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain("display-p3");
+      expect(warnings).toHaveLength(2);
+      expect(warnings.join("\n")).toContain("cannot read");
+      expect(warnings.join("\n")).toContain("display-p3");
+      expect(warnings.join("\n")).toContain("copied");
     });
 
     it("says nothing about a shadow it declined on purpose", () => {
@@ -206,14 +213,46 @@ describe("defaultMeasure", () => {
       expect(warnings[0]).toContain("rotate");
     });
 
-    it("says when a style will not be drawn at all", () => {
-      // The window still appears, so nothing looks broken — it just ignores
-      // the rule. Saying so is the whole remedy until a window can fall back
-      // to the copy path for effects the shader has no answer for.
+    it("says when a style costs the window the native path", () => {
+      // Nothing looks broken — the engine draws the window exactly as asked.
+      // What it costs is a readback and a socket hop per frame, and a single
+      // rule can put every window on the desktop there.
       const warnings = warningsFrom({ filter: "blur(4px)" });
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain("filter");
-      expect(warnings[0]).toContain("unfiltered");
+      expect(warnings[0]).toContain("copied");
+    });
+
+    it("takes a window off the native path for a style it cannot draw", () => {
+      // The whole point of naming them: the compositor's shaders have no
+      // filter, so this window is drawn by the engine instead — one window,
+      // not the desktop.
+      expect(measuredWith({ filter: "blur(4px)" }).native).toBe(false);
+    });
+
+    it("keeps a window on the native path when it can draw every style", () => {
+      // The copy path is the expensive one. Falling back for a window that
+      // needs nothing would cost a readback per frame to draw the same
+      // picture.
+      expect(
+        measuredWith({ borderTopLeftRadius: "8px", opacity: "0.5" }).native,
+      ).toBe(true);
+    });
+
+    it("keeps a window whose transform it could not read on the native path", () => {
+      // The one unreadable value that does not hand the window over, and the
+      // reason is that it cannot happen: `asRotate` and `asScale` between them
+      // cover every form a computed `rotate` or `scale` can take, so this
+      // branch is a floor under a browser that computes something CSS does not
+      // define. An unreadable shadow *colour* is the opposite — real CSS this
+      // does not read yet — and that one does hand the window over.
+      //
+      // The pointer decides it either way. `surfaceLocal` inverts this same
+      // matrix to map a click, so a transform this cannot read maps clicks to
+      // the wrong place on both paths. The copy path would buy a right-looking
+      // window that still could not be used, in exchange for a readback per
+      // frame on every window in a browser we had not caught up with.
+      expect(measuredWith({ rotate: "9 9 9" }).native).toBe(true);
     });
 
     it("says the same property once, however many values it takes", () => {
@@ -225,7 +264,7 @@ describe("defaultMeasure", () => {
       ).toHaveLength(1);
     });
 
-    it("does not call an unsupported effect an unreadable one", () => {
+    it("does not call an effect it cannot draw an unreadable one", () => {
       // Different news. One says the SDK fell over on valid CSS, which is a
       // bug worth reporting upstream; the other says the compositor has no
       // counterpart, which is not. Telling an author their filter was a

@@ -108,7 +108,9 @@ use domicile_config::Config;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Shortcut};
-use domicile_scene::{Point as ScenePoint, PointerTarget, Transform as SceneTransform};
+use domicile_scene::{
+    Point as ScenePoint, PointerTarget, Scene, Style as SceneStyle, Transform as SceneTransform,
+};
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{Color32F, Frame as _, ImportMem as _, Renderer as _};
 use smithay::backend::winit::WinitGraphicsBackend;
@@ -155,6 +157,102 @@ impl Gpu {
     fn presenting(&self) -> bool {
         matches!(self.output, GpuOutput::Window(_))
     }
+}
+
+/// One window as the scene placed it: where its surface goes, how it is
+/// styled, and whether the compositor is the one drawing it at all.
+type Placed = (String, SceneTransform, SceneStyle, bool);
+
+/// The app whose element this message says has stopped showing it, if it does.
+///
+/// The compositor cannot see the page, so it keeps its own record of which
+/// windows the chrome holds a canvas for. `remove_portal` is what takes a
+/// canvas away without the compositor asking: an element unmounted, or one
+/// whose `app-id` changed to another window. Both drop their pixels, and the
+/// second has to — they are the *previous* app's, and nothing would ever
+/// correct them, because the message that clears a canvas is only sent to a
+/// window whose pixels we sent under that name.
+///
+/// A window merely *hidden* is emphatically not that, and reading it as such
+/// is a bug with a long fuse. The shell keeps every window mounted and toggles
+/// `hidden`, which reaches the host as a placement with `visible: false` and
+/// takes the portal out of the scene — while the element, and the canvas
+/// holding that window's last frame, stay exactly where they were. Forgetting
+/// the canvas then means never telling the chrome to drop it, so a window
+/// backgrounded on the copy path and brought back native wears a still of
+/// itself for good.
+fn unmounts_the_element(message: &ChromeMessage) -> Option<&str> {
+    match message {
+        ChromeMessage::RemovePortal { app_id } => Some(app_id),
+        _ => None,
+    }
+}
+
+/// What came of offering one window's pixels to the chrome.
+#[derive(Debug, PartialEq, Eq)]
+enum HandOver {
+    /// The chrome has them, and will not be offered them again.
+    Sent,
+    /// The chrome is behind and the frame was dropped. Offer them again.
+    Refused,
+    /// Announced but never committed: there is nothing to offer yet.
+    NothingToSend,
+}
+
+/// Offer their pixels to the chrome for every window that has just left the
+/// native path.
+///
+/// A window changes paths because the *page* changed: a filter appears on the
+/// element in front of a client that knows nothing about it and may never draw
+/// again. Nothing else would send that client's pixels to the chrome, and
+/// until something does the window is a hole in the page with nothing behind
+/// it — the compositor has stopped drawing it and the engine has no canvas to
+/// draw instead.
+///
+/// `copied` is what stops this firing on every presented frame: a window on
+/// the copy path would otherwise be read back once per composite as well as
+/// once per client commit, which is the readback the native path exists to
+/// avoid, twice over. It holds only what the chrome was actually given — a
+/// dropped frame is not a hand-over, and a window recorded on the strength of
+/// one is a hole nothing ever fills again.
+///
+/// What is deliberately *not* here is any inference from a window being absent
+/// from the scene. A backgrounded window leaves the scene while its element,
+/// and its canvas, stay in the page — see [`unmounts_the_element`].
+fn hand_over(
+    placed: &[Placed],
+    copied: &mut HashSet<String>,
+    mut offer: impl FnMut(&str) -> HandOver,
+) -> Refusals {
+    let mut refused = false;
+    for (app_id, _, _, natively) in placed {
+        if !natively && !copied.contains(app_id) {
+            match offer(app_id) {
+                HandOver::Sent => {
+                    copied.insert(app_id.clone());
+                }
+                HandOver::Refused => refused = true,
+                HandOver::NothingToSend => {}
+            }
+        }
+    }
+    if refused {
+        Refusals::Some
+    } else {
+        Refusals::None
+    }
+}
+
+/// Whether any window is still waiting for its pixels to be handed over.
+///
+/// The queue is one frame deep, so a batch of windows leaving the native path
+/// together — which is what a single stylesheet rule produces — sends the first
+/// and is refused for the rest. Somebody has to ask again, and the only thing
+/// that runs the hand-over is a present.
+#[derive(Debug, PartialEq, Eq)]
+enum Refusals {
+    None,
+    Some,
 }
 
 /// Data threaded through the calloop event loop. The `Display` lives here (not
@@ -207,6 +305,17 @@ enum ClientRequest {
         app_id: String,
         width: i32,
         height: i32,
+    },
+    /// The chrome moved or restyled a portal.
+    ///
+    /// The scene is mutated on the chrome's own thread, which draws nothing
+    /// and cannot wake the event loop. Without this a placement waits for an
+    /// unrelated reason to redraw — and one of the things it waits for is the
+    /// hand-over to the engine, which only runs while presenting.
+    ScenePlaced,
+    /// The chrome unmounted an app's element, which took its canvas with it.
+    PortalRemoved {
+        app_id: String,
     },
 }
 
@@ -264,11 +373,23 @@ impl ChromeHub {
         self.outbound.message(message);
     }
 
-    /// Queue an app's pixels, which are dropped if the chrome has not kept up.
-    fn send_frame(&self, app_id: &str, width: u32, height: u32, scale: u32, rgba: Vec<u8>) {
-        if !self.outbound.frame(app_id, width, height, scale, rgba) {
+    /// Whether a frame sent now would be taken rather than dropped. Advisory —
+    /// see [`OutboundSender::has_room`].
+    fn can_send_frame(&self) -> bool {
+        self.outbound.has_room()
+    }
+
+    /// Queue an app's pixels, returning whether the chrome took them.
+    ///
+    /// They are dropped if it has not kept up, and the queue is one frame
+    /// deep — so a caller that needs the chrome to *have* this frame, rather
+    /// than merely offering it the latest one, has to look at the answer.
+    fn send_frame(&self, app_id: &str, width: u32, height: u32, scale: u32, rgba: Vec<u8>) -> bool {
+        let taken = self.outbound.frame(app_id, width, height, scale, rgba);
+        if !taken {
             tracing::debug!(%app_id, "chrome is behind; dropped a frame");
         }
+        taken
     }
 }
 
@@ -628,6 +749,25 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
                 let mut host = hub.host.lock().unwrap();
                 apply_chrome_message(&mut host, &mut ready, ChromeMessage::FocusChrome)
             }
+            // A placement changes what is drawn and where, so the desktop is
+            // dirty — and the chrome's thread is not the one that can draw.
+            Ok(
+                message @ (ChromeMessage::PlacePortal { .. } | ChromeMessage::RemovePortal { .. }),
+            ) => {
+                // Read before the message is consumed, and from the message
+                // rather than from the scene: a backgrounded window leaves the
+                // scene too, and its element is still in the page.
+                let unmounted = unmounts_the_element(&message).map(str::to_string);
+                let responses = {
+                    let mut host = hub.host.lock().unwrap();
+                    apply_chrome_message(&mut host, &mut ready, message)
+                };
+                hub.send_request(match unmounted {
+                    Some(app_id) => ClientRequest::PortalRemoved { app_id },
+                    None => ClientRequest::ScenePlaced,
+                });
+                responses
+            }
             Ok(message) => {
                 let mut host = hub.host.lock().unwrap();
                 apply_chrome_message(&mut host, &mut ready, message)
@@ -690,8 +830,23 @@ struct DomicileCompositor {
     /// the CEF external-texture path binds instead of copying pixels.
     bridge: BridgeRegistry,
     /// The buffers those descriptors point into, held so their plane fds stay
-    /// open for as long as the descriptor names them.
-    latest_dmabufs: HashMap<String, Dmabuf>,
+    /// open for as long as the descriptor names them — and, with the scale the
+    /// client drew at, so a window that leaves the native path can be sent to
+    /// the chrome without waiting for that client to draw again.
+    latest_dmabufs: HashMap<String, (Dmabuf, i32)>,
+    /// Which apps the chrome holds a copied frame of, as far as we can tell.
+    ///
+    /// The compositor cannot see the page, so this is its own record rather
+    /// than an observation, and exactly three things change it: a frame the
+    /// chrome took goes in; `app_composited` — which is us telling the chrome
+    /// to drop the canvas — takes one out; and so does the element being
+    /// unmounted, which arrives as `remove_portal`.
+    ///
+    /// Not a placement that says `native`. The chrome keeps its canvas until
+    /// told, and it cannot be told until there is a frame to put in its place.
+    /// Not a window leaving the scene either — a backgrounded window does that
+    /// with its element still in the page. See [`unmounts_the_element`].
+    copied: HashSet<String>,
     /// Each app's latest surface as a texture, when presenting. Kept rather
     /// than read back and dropped: this *is* the client's buffer, and drawing
     /// it is what costs nothing.
@@ -919,6 +1074,11 @@ impl DomicileCompositor {
         }
     }
 
+    /// [`draws_natively`] against the scene the chrome has placed.
+    fn draws_natively(&self, app_id: &str) -> bool {
+        draws_natively(self.hub.host.lock().unwrap().scene(), app_id)
+    }
+
     /// Turn a client's newly-attached buffer into pixels for the chrome,
     /// throttled to ~30fps per app.
     fn publish_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer, buffer_scale: i32) {
@@ -939,33 +1099,48 @@ impl DomicileCompositor {
         }
 
         let now = Instant::now();
-        let due = frame_is_due(
+        let taking = disposition(
+            matches!(committed, CommittedBuffer::Gpu(_)),
+            self.gpu.as_ref().is_some_and(Gpu::presenting),
+            self.draws_natively(app_id),
             self.last_frame
                 .get(app_id)
                 .map(|last| now.duration_since(*last)),
-            self.gpu.as_ref().is_some_and(Gpu::presenting),
         );
-        if due {
-            self.last_frame.insert(app_id.to_string(), now);
-            // The GPU readback happens here rather than during classification:
-            // it costs a pipeline stall, so a frame the throttle is about to
-            // drop is never imported at all.
-            let rgba = match committed {
-                CommittedBuffer::Pixels { rgba, .. } => rgba,
-                CommittedBuffer::Gpu(dmabuf) => self.import_gpu_frame(app_id, dmabuf, buffer_scale),
-            };
-            if rgba.is_empty() {
-                // Presenting: the pixels never left the GPU, so there is
-                // nothing to send. The window is where this app appears — but
-                // not from here. See `needs_present`.
-                self.needs_present = true;
-            } else {
-                tracing::debug!(%app_id, width, height, bytes = rgba.len(), "broadcast app frame");
-                let scale = u32::try_from(buffer_scale).unwrap_or(1).max(1);
-                self.hub.send_frame(app_id, width, height, scale, rgba);
+        if taking == Disposition::Throttle {
+            self.hub.timings.lock().unwrap().throttled += 1;
+            return;
+        }
+        self.last_frame.insert(app_id.to_string(), now);
+        // The GPU readback happens here rather than during classification: it
+        // costs a pipeline stall, so a frame the throttle has just dropped is
+        // never imported at all.
+        let rgba = match committed {
+            CommittedBuffer::Pixels { rgba, .. } => rgba,
+            CommittedBuffer::Gpu(dmabuf) => {
+                self.import_gpu_frame(app_id, dmabuf, buffer_scale, taking == Disposition::Draw)
+            }
+        };
+        if rgba.is_empty() {
+            // Drawn here: the pixels never left the GPU, so there is nothing to
+            // send. The window is where this app appears — but not from here.
+            // See `needs_present`.
+            self.needs_present = true;
+            // And this is the first frame of it drawn since the chrome last
+            // held pixels for it, so its canvas is a still of a window that is
+            // now live underneath. Here rather than when the placement
+            // arrived, because until this moment there was nothing to put in
+            // the canvas's place.
+            if let Some(taken_back) = hand_back(app_id, &mut self.copied) {
+                info!(%app_id, "drawing this window natively -> chrome should drop its pixels");
+                self.hub.broadcast(taken_back);
             }
         } else {
-            self.hub.timings.lock().unwrap().throttled += 1;
+            tracing::debug!(%app_id, width, height, bytes = rgba.len(), "broadcast app frame");
+            let scale = u32::try_from(buffer_scale).unwrap_or(1).max(1);
+            if self.hub.send_frame(app_id, width, height, scale, rgba) {
+                self.copied.insert(app_id.to_string());
+            }
         }
     }
 
@@ -974,7 +1149,13 @@ impl DomicileCompositor {
     ///
     /// The readback is the part the CEF bridge deletes: the descriptor stored
     /// here already names the very buffer the engine will sample directly.
-    fn import_gpu_frame(&mut self, app_id: &str, dmabuf: Dmabuf, buffer_scale: i32) -> Vec<u8> {
+    fn import_gpu_frame(
+        &mut self,
+        app_id: &str,
+        dmabuf: Dmabuf,
+        buffer_scale: i32,
+        composited: bool,
+    ) -> Vec<u8> {
         let gpu = self.gpu.as_mut().expect(
             "a dmabuf can only be committed where the global — and so the renderer — exists",
         );
@@ -982,7 +1163,7 @@ impl DomicileCompositor {
         // (`DmabufHandler::dmabuf_imported`), so a failure here is not a client
         // handing us something unsupported — it is the renderer breaking.
         let started = Instant::now();
-        let rgba = if gpu.presenting() {
+        let rgba = if composited {
             // Presenting: the client's buffer becomes a texture we draw, and
             // nothing is copied. The chrome gets no pixels for this app —
             // there is a hole in the page where the compositor puts it.
@@ -1005,8 +1186,72 @@ impl DomicileCompositor {
         self.bridge
             .update_frame(app_id, descriptor_from(&dmabuf))
             .expect("every mapped toplevel is registered with the bridge");
-        self.latest_dmabufs.insert(app_id.to_string(), dmabuf);
+        self.latest_dmabufs
+            .insert(app_id.to_string(), (dmabuf, buffer_scale));
         rgba
+    }
+
+    /// Send one frame to the chrome for every window that has just left the
+    /// native path.
+    ///
+    /// A window changes paths because the *page* changed: a filter appears on
+    /// the element in front of a client that knows nothing about it and may
+    /// never draw again. Nothing else would send that client's pixels to the
+    /// chrome, and until something does the window is a hole in the page with
+    /// nothing behind it — the compositor has stopped drawing it and the
+    /// engine has no canvas to draw instead. So the compositor pushes the
+    /// buffer it is already holding, once, and the client's own frames take
+    /// over from there.
+    ///
+    /// Nothing happens for a window that never left: the readback is the whole
+    /// cost of the copy path and doing it per presented frame would be worse
+    /// than never having had a native path at all.
+    fn hand_over_to_the_engine(&mut self, placed: &[Placed]) {
+        let (hub, latest, gpu) = (&self.hub, &self.latest_dmabufs, &mut self.gpu);
+        let refusals = hand_over(placed, &mut self.copied, |app_id| {
+            let Some((dmabuf, buffer_scale)) = latest.get(app_id) else {
+                // Announced but never committed: there is nothing to hand over,
+                // and the client's first frame goes down the copy path of its
+                // own accord.
+                return HandOver::NothingToSend;
+            };
+            // Asked before the readback rather than after the send, because
+            // the readback is what this costs: a pipeline stall on the Wayland
+            // thread, for a frame the queue would refuse. Several windows
+            // leaving at once is the ordinary case — one stylesheet rule
+            // matches all of them — and paying it once per window per present
+            // for a queue one frame deep is most of that work wasted.
+            if !hub.can_send_frame() {
+                return HandOver::Refused;
+            }
+            let renderer = gpu
+                .as_mut()
+                .expect("presenting, so the renderer that imported the buffer exists")
+                .renderer();
+            let rgba = DmabufImporter::read_rgba(renderer, dmabuf)
+                .expect("a dmabuf the importer accepted reads back");
+            let scale = u32::try_from(*buffer_scale).unwrap_or(1).max(1);
+            info!(%app_id, "window left the native path -> handing its pixels to the engine");
+            if hub.send_frame(app_id, dmabuf.width(), dmabuf.height(), scale, rgba) {
+                HandOver::Sent
+            } else {
+                // Not recording it is the whole point: the next present tries
+                // again, where recording it would leave a hole in the page with
+                // nothing behind it for as long as the client stayed idle.
+                HandOver::Refused
+            }
+        });
+        // Ask again, rather than leaving those windows to whatever wakes the
+        // loop next. In practice the chrome repaints when it draws the frame
+        // that filled the queue, and that commit schedules a present — but
+        // that is the chrome scheduling the compositor's work by accident, and
+        // it does not happen at all while the frames in flight belong to some
+        // *other* copy-path window. Not a spin: this only decides whether the
+        // next turn of the loop draws, and the frame that refused us has to
+        // drain before there is a turn worth using.
+        if refusals == Refusals::Some {
+            self.needs_present = true;
+        }
     }
 
     /// Draw the desktop into the window: every placed app bottom to top, then
@@ -1035,7 +1280,7 @@ impl DomicileCompositor {
         // The scene is in the chrome's logical units and the window is in
         // device pixels, and on a scaled display those are not the same number.
         let to_window = logical_to_window(self.output_logical, (size.w, size.h));
-        let placements: Vec<_> = {
+        let placed: Vec<_> = {
             let host = self.hub.host.lock().unwrap();
             host.scene()
                 .draw_order()
@@ -1045,10 +1290,21 @@ impl DomicileCompositor {
                         portal.app_id.clone(),
                         portal.surface_to_output(),
                         portal.style,
+                        portal.draws_natively,
                     )
                 })
                 .collect()
         };
+        self.hand_over_to_the_engine(&placed);
+        // A window on the copy path is drawn by the engine, into the canvas in
+        // its own hole. Drawing it here as well would put the compositor's
+        // picture over the engine's — two versions of the same window, the
+        // wrong one on top.
+        let placements: Vec<_> = placed
+            .into_iter()
+            .filter(|(_, _, _, natively)| *natively)
+            .map(|(app_id, surface_to_output, style, _)| (app_id, surface_to_output, style))
+            .collect();
         // Everything a style measures is in the chrome's logical units and the
         // shader works in output pixels.
         let scale = to_window.a;
@@ -1634,6 +1890,15 @@ impl DomicileCompositor {
                 info!(key = shortcut.key, "the chrome claimed a shortcut");
                 self.shortcuts.grab(shortcut);
             }
+            ClientRequest::ScenePlaced => self.needs_present = true,
+            ClientRequest::PortalRemoved { app_id } => {
+                // The element left the page and its canvas went with it, so
+                // the chrome no longer holds this window's pixels. Mounted
+                // again it is a fresh element with nothing in it, and needs
+                // the hand-over a remembered record would skip.
+                self.copied.remove(&app_id);
+                self.needs_present = true;
+            }
             ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
             ClientRequest::ConfigureApp {
                 app_id,
@@ -1725,17 +1990,83 @@ fn worth_reporting(sent: usize, dropped: usize, throttled: usize, composited: us
 /// megabytes, and a chrome that reads slowly is a chrome whose socket fills
 /// within a frame or two. Dropping one costs nothing there, because the next
 /// supersedes it.
-///
-/// Presenting, there is no socket and no chrome — the client's buffer is
-/// imported and drawn, which costs a texture bind and a quad. Throttling that
-/// is not protecting anything; it is refusing half the frames a client drew and
-/// holding a stale desktop between them. Measured: kitty committing ~59 times a
-/// second had ~29 of them composited, for nothing.
-fn frame_is_due(since_last: Option<Duration>, presenting: bool) -> bool {
-    if presenting {
-        return true;
-    }
+fn frame_is_due(since_last: Option<Duration>) -> bool {
     since_last.map_or(true, |elapsed| elapsed >= Duration::from_millis(33))
+}
+
+/// What becomes of a client's newly-committed frame.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum Disposition {
+    /// Drawn by the compositor from the client's own buffer. Nothing is copied
+    /// and nothing is sent, so nothing is throttled either: it costs a texture
+    /// bind and a quad, and refusing half of them would only hold a stale
+    /// desktop between the ones drawn. Measured: kitty committing ~59 times a
+    /// second had ~29 of them composited, for nothing.
+    Draw,
+    /// Read back and sent for the chrome to draw into a canvas.
+    Send,
+    /// Superseded before it could be sent. See [`frame_is_due`].
+    Throttle,
+}
+
+/// Which of the two paths this frame takes, and whether it is due at all.
+///
+/// Three things have to hold for the compositor to draw a window itself, and
+/// each fails for a different desktop:
+///
+/// - there is an output to draw into. A headless run copies everything, which
+///   is what every check in the repo drives.
+/// - the chrome has not asked for this window to be copied, because its
+///   element wears a style the shaders have no answer for.
+/// - the client committed a **dmabuf**. A `wl_shm` client's pixels are in main
+///   memory and are never imported as a texture, so that window is on the copy
+///   path whatever its CSS says. Reading only the first two would call it
+///   composited and hand it an unthrottled socket, which is a megabyte per
+///   commit down a queue one frame deep.
+fn disposition(
+    from_gpu: bool,
+    presenting: bool,
+    draws_natively: bool,
+    since_last: Option<Duration>,
+) -> Disposition {
+    if from_gpu && presenting && draws_natively {
+        Disposition::Draw
+    } else if frame_is_due(since_last) {
+        Disposition::Send
+    } else {
+        Disposition::Throttle
+    }
+}
+
+/// Whether this app's own buffer is what the compositor draws.
+///
+/// False for a window whose chrome reported a style the shaders have no answer
+/// for. That window goes back down the copy path — read back, sent over the
+/// socket, drawn into a canvas by the engine — which is slow and correct
+/// rather than fast and wrong. Every other window on the desktop stays native.
+///
+/// An app with no portal is treated as native, because the fast path is the
+/// one to be on and a placement always arrives before it matters. That is not
+/// only the moment before the first placement: a *hidden* window has no portal
+/// either, and reading absence as "copy this" would put every backgrounded
+/// window on the socket for frames nobody is looking at.
+fn draws_natively(scene: &Scene, app_id: &str) -> bool {
+    scene
+        .get(app_id)
+        .map_or(true, |portal| portal.draws_natively)
+}
+
+/// The message telling the chrome to drop a window's pixels, if it has any.
+///
+/// `None` for a chrome that was never sent this window's pixels, which is
+/// every window that has only ever been drawn natively — and is why this is
+/// asked on the frame the compositor draws rather than when the placement
+/// arrived. Until there is a texture to put in the canvas's place, dropping it
+/// would blank the window.
+fn hand_back(app_id: &str, copied: &mut HashSet<String>) -> Option<HostMessage> {
+    copied.remove(app_id).then(|| HostMessage::AppComposited {
+        app_id: app_id.to_string(),
+    })
 }
 
 /// Whether this commit can be the answer to a keystroke we forwarded.
@@ -2030,6 +2361,7 @@ impl XdgShellHandler for DomicileCompositor {
             self.last_frame.remove(&app_id);
             self.bridge.remove(&app_id);
             self.latest_dmabufs.remove(&app_id);
+            self.copied.remove(&app_id);
             self.textures.remove(&app_id);
             if self.pointer_app.as_deref() == Some(app_id.as_str()) {
                 self.pointer_app = None;
@@ -2569,6 +2901,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         hub,
         bridge: BridgeRegistry::new(),
         latest_dmabufs: HashMap::new(),
+        copied: HashSet::new(),
         textures: HashMap::new(),
         toplevels: Vec::new(),
         pointer_app: None,
@@ -2683,9 +3016,63 @@ mod tests {
     use domicile_protocol::CursorShape;
 
     use super::{
-        answers_keystroke, bgra_to_rgba, client_command, cursor_shape, frame_is_due,
-        shadow_in_pixels, Committer,
+        answers_keystroke, bgra_to_rgba, client_command, cursor_shape, disposition, draws_natively,
+        frame_is_due, hand_back, hand_over, shadow_in_pixels, unmounts_the_element, Committer,
+        Disposition, HandOver, Placed, Refusals,
     };
+
+    use std::collections::HashSet;
+
+    use domicile_protocol::{ChromeMessage, HostMessage};
+    use domicile_scene::{Portal, Scene, Style as SceneStyle, Transform as SceneTransform};
+
+    /// A frame committed one millisecond after the last one, so only the path
+    /// decides whether it is drawn, sent or dropped.
+    fn just_committed(from_gpu: bool, presenting: bool, draws_natively: bool) -> Disposition {
+        disposition(
+            from_gpu,
+            presenting,
+            draws_natively,
+            Some(Duration::from_millis(1)),
+        )
+    }
+
+    /// The record of which apps the chrome holds a copied frame of.
+    fn holding(app_ids: &[&str]) -> HashSet<String> {
+        app_ids.iter().map(|id| (*id).to_string()).collect()
+    }
+
+    /// One window in the draw order, drawn by whichever side `natively` says.
+    fn placed(app_id: &str, natively: bool) -> Placed {
+        (
+            app_id.to_string(),
+            SceneTransform::identity(),
+            SceneStyle::default(),
+            natively,
+        )
+    }
+
+    /// Run `hand_over` against a chrome that answers `answer` to everything,
+    /// reporting which apps were offered pixels and what was recorded.
+    fn offering(
+        windows: &[Placed],
+        held: &[&str],
+        answer: HandOver,
+    ) -> (Vec<String>, Vec<String>, Refusals) {
+        let mut copied = holding(held);
+        let mut offered = Vec::new();
+        let refusals = hand_over(windows, &mut copied, |app_id| {
+            offered.push(app_id.to_string());
+            match answer {
+                HandOver::Sent => HandOver::Sent,
+                HandOver::Refused => HandOver::Refused,
+                HandOver::NothingToSend => HandOver::NothingToSend,
+            }
+        });
+        let mut recorded: Vec<_> = copied.into_iter().collect();
+        recorded.sort();
+        (offered, recorded, refusals)
+    }
 
     /// What a spawned client would find in its environment for `name`, where
     /// `None` is the variable being cleared rather than left alone.
@@ -2764,23 +3151,139 @@ mod tests {
 
     #[test]
     fn a_clients_first_frame_is_always_due() {
-        assert!(frame_is_due(None, false));
+        assert!(frame_is_due(None));
     }
 
     #[test]
     fn the_copy_path_drops_a_frame_that_came_too_soon() {
         // The socket is what this protects: a frame is megabytes, and the next
         // one supersedes the one dropped.
-        assert!(!frame_is_due(Some(Duration::from_millis(5)), false));
-        assert!(frame_is_due(Some(Duration::from_millis(40)), false));
+        assert!(!frame_is_due(Some(Duration::from_millis(5))));
+        assert!(frame_is_due(Some(Duration::from_millis(40))));
     }
 
     #[test]
-    fn presenting_draws_every_frame_a_client_commits() {
+    fn compositing_draws_every_frame_a_client_commits() {
         // Nothing is being protected: there is no socket and no chrome, and the
         // client's own buffer costs a bind and a quad. Refusing it holds a
         // stale desktop for no reason — measured at half of kitty's frames.
-        assert!(frame_is_due(Some(Duration::from_millis(1)), true));
+        assert_eq!(just_committed(true, true, true), Disposition::Draw);
+    }
+
+    #[test]
+    fn a_copy_path_window_is_throttled_even_where_the_desktop_is_presented() {
+        // The throttle is the socket's, and this window is on the socket
+        // whatever the rest of the desktop is doing: its pixels are read back
+        // and sent because its own element wears a style the shaders cannot
+        // draw. Reading only whether the compositor is presenting would send a
+        // megabyte per commit down a queue one frame deep.
+        assert_eq!(just_committed(true, true, false), Disposition::Throttle);
+    }
+
+    #[test]
+    fn a_shared_memory_client_is_copied_however_ordinary_its_css() {
+        // Its pixels are in main memory and are never imported as a texture,
+        // so `present()` has nothing to draw for it whatever the placement
+        // says: its frames go to the chrome.
+        assert_eq!(disposition(false, true, true, None), Disposition::Send);
+        // And being on the socket, it wants the socket's throttle. Calling it
+        // composited would hand it an unthrottled one — a megabyte per commit
+        // down a queue one frame deep — which `Send` alone does not catch,
+        // because a first frame is due on every path.
+        assert_eq!(just_committed(false, true, true), Disposition::Throttle);
+    }
+
+    #[test]
+    fn a_headless_desktop_copies_everything() {
+        // What every check in the repo drives: there is no output to draw
+        // into, so the frame goes to the chrome however the window is styled.
+        assert_eq!(disposition(true, false, true, None), Disposition::Send);
+    }
+
+    #[test]
+    fn a_placed_window_is_drawn_the_way_its_chrome_asked() {
+        let mut scene = Scene::new();
+        scene.upsert(Portal::new(
+            "term",
+            (100.0, 50.0),
+            SceneTransform::identity(),
+            0,
+        ));
+        assert!(draws_natively(&scene, "term"));
+
+        scene.upsert(Portal::new("term", (100.0, 50.0), SceneTransform::identity(), 0).copied());
+        assert!(!draws_natively(&scene, "term"));
+    }
+
+    #[test]
+    fn a_window_with_no_portal_is_drawn_natively() {
+        // Two windows are in this state and neither wants the socket: one that
+        // has been announced and not yet placed, where a placement is about to
+        // arrive and the fast path is the one to start on — and a *hidden*
+        // one, which has no portal either. Reading absence as "copy this"
+        // would put every backgrounded window on the socket, sending frames
+        // for windows nobody is looking at.
+        assert!(draws_natively(&Scene::new(), "term"));
+    }
+
+    #[test]
+    fn a_window_the_chrome_never_held_is_not_asked_to_drop_anything() {
+        // Every window that has only ever been drawn natively. Sending it
+        // would be a message per frame per window, all of them telling the
+        // chrome to drop a canvas it never had.
+        let mut copied = holding(&[]);
+        assert_eq!(hand_back("term", &mut copied), None);
+    }
+
+    #[test]
+    fn a_window_the_chrome_holds_is_asked_to_drop_it_once() {
+        // Once, because the canvas is gone after the first — and the message
+        // is what makes it gone, so a second would be for a window that has
+        // been drawn natively all along.
+        let mut copied = holding(&["term"]);
+        assert_eq!(
+            hand_back("term", &mut copied),
+            Some(HostMessage::AppComposited {
+                app_id: "term".to_string()
+            })
+        );
+        assert_eq!(hand_back("term", &mut copied), None);
+    }
+
+    #[test]
+    fn unmounting_an_element_is_what_takes_its_canvas() {
+        assert_eq!(
+            unmounts_the_element(&ChromeMessage::RemovePortal {
+                app_id: "term".to_string()
+            }),
+            Some("term")
+        );
+    }
+
+    #[test]
+    fn hiding_a_window_does_not_take_its_canvas() {
+        // The bug this function exists to prevent, and it is not visible from
+        // the scene: the shell keeps every window mounted and toggles
+        // `hidden`, which arrives as this and removes the portal — while the
+        // element, and its canvas, stay in the page. Reading it as an unmount
+        // means never telling that chrome to drop the canvas, so a window
+        // backgrounded on the copy path and brought back native wears a still
+        // of itself for good.
+        let hidden = |visible| ChromeMessage::PlacePortal {
+            app_id: "term".to_string(),
+            transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            size: [0.0, 0.0],
+            z_index: 0,
+            visible,
+            corner_radius: 0.0,
+            opacity: 1.0,
+            shadow: None,
+            native: true,
+        };
+        assert_eq!(unmounts_the_element(&hidden(false)), None);
+        // Nor does any other placement: `remove_portal` is the only message
+        // that says the chrome has stopped holding a window's pixels.
+        assert_eq!(unmounts_the_element(&hidden(true)), None);
     }
 
     #[test]
@@ -2847,5 +3350,104 @@ mod tests {
     #[test]
     fn rejects_undersized_buffers() {
         assert!(bgra_to_rgba(&[0, 0, 0], 2, 2, 8, 0, true).is_none());
+    }
+
+    #[test]
+    fn a_window_that_has_just_left_the_native_path_is_handed_over() {
+        // Nothing else would send it: the page changed, not the client, and a
+        // client that is not drawing is exactly the case where the window
+        // would otherwise be a hole with nothing behind it.
+        let (offered, recorded, _) = offering(&[placed("term", false)], &[], HandOver::Sent);
+        assert_eq!(offered, vec!["term".to_string()]);
+        assert_eq!(recorded, vec!["term".to_string()]);
+    }
+
+    #[test]
+    fn a_window_the_compositor_draws_is_not_handed_over() {
+        let (offered, _, _) = offering(&[placed("term", true)], &[], HandOver::Sent);
+        assert!(offered.is_empty());
+    }
+
+    #[test]
+    fn a_window_the_chrome_already_has_pixels_for_is_not_handed_over_again() {
+        // The readback is the whole cost of the copy path. Doing it once per
+        // composited frame as well as once per client commit would be the
+        // expense the native path exists to avoid, twice over.
+        let (offered, _, _) = offering(&[placed("term", false)], &["term"], HandOver::Sent);
+        assert!(offered.is_empty());
+    }
+
+    #[test]
+    fn every_window_that_left_is_handed_over_not_just_the_first() {
+        // A stylesheet rule matches windows, not one window: a chrome that
+        // blurs its inactive apps moves all of them at once.
+        let (offered, _, _) = offering(
+            &[
+                placed("term", false),
+                placed("editor", true),
+                placed("browser", false),
+            ],
+            &[],
+            HandOver::Sent,
+        );
+        assert_eq!(offered, vec!["term".to_string(), "browser".to_string()]);
+    }
+
+    #[test]
+    fn a_refusal_asks_for_another_pass() {
+        // The queue is one frame deep and a stylesheet rule moves windows in
+        // batches, so all but the first are refused. Without this they wait on
+        // something unrelated redrawing the desktop.
+        let (_, _, refusals) = offering(
+            &[placed("term", false), placed("editor", false)],
+            &[],
+            HandOver::Refused,
+        );
+        assert_eq!(refusals, Refusals::Some);
+    }
+
+    #[test]
+    fn a_pass_that_handed_everything_over_asks_for_nothing() {
+        let (_, _, refusals) = offering(&[placed("term", false)], &[], HandOver::Sent);
+        assert_eq!(refusals, Refusals::None);
+    }
+
+    #[test]
+    fn a_window_with_nothing_to_send_does_not_ask_for_another_pass() {
+        // Announced but never committed. Asking again would redraw the desktop
+        // once per turn of the loop for a window that has never had a frame.
+        let (_, _, refusals) = offering(&[placed("term", false)], &[], HandOver::NothingToSend);
+        assert_eq!(refusals, Refusals::None);
+    }
+
+    #[test]
+    fn a_refused_frame_is_not_recorded_as_a_hand_over() {
+        // The queue is one frame deep, so a chrome a single frame behind
+        // refuses. Recording it anyway would leave that window a hole in the
+        // page with nothing behind it — for good, if the client never drew
+        // again, which is the case the hand-over exists for.
+        let (offered, recorded, _) = offering(&[placed("term", false)], &[], HandOver::Refused);
+        assert_eq!(offered, vec!["term".to_string()]);
+        assert!(recorded.is_empty(), "a dropped frame is not a hand-over");
+    }
+
+    #[test]
+    fn a_window_with_nothing_to_send_is_not_recorded_either() {
+        // Announced but never committed. Its first frame goes down the copy
+        // path of its own accord, and recording it here would stop the
+        // hand-over ever running for it.
+        let (_, recorded, _) = offering(&[placed("term", false)], &[], HandOver::NothingToSend);
+        assert!(recorded.is_empty());
+    }
+
+    #[test]
+    fn a_window_drawn_natively_is_still_assumed_to_hold_its_pixels() {
+        // The chrome does not drop a canvas because a placement said `native`;
+        // it drops it when the compositor says it has taken the window back,
+        // which cannot happen until there is a frame to put in its place. A
+        // window forgotten here would be handed over a second time the moment
+        // it returned to the copy path, for pixels the chrome never lost.
+        let (_, recorded, _) = offering(&[placed("term", true)], &["term"], HandOver::Sent);
+        assert_eq!(recorded, vec!["term".to_string()]);
     }
 }

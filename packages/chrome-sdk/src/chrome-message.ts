@@ -21,6 +21,14 @@ export type Placement = {
   opacity?: number;
   /** The shadow the window casts. None if omitted. */
   shadow?: Shadow | undefined;
+  /**
+   * Whether the compositor should draw this window's own buffer.
+   *
+   * Natively if omitted. False sends this window — and only this window — back
+   * down the copy path, which is what an element styled in a way the shaders
+   * have no answer for needs.
+   */
+  native?: boolean;
 };
 
 export type ChromeMessage =
@@ -54,6 +62,7 @@ export const placePortalMessage = ({
   // one that ignores a style, and it looks identical to not being drawn.
   opacity = 1,
   shadow,
+  native = true,
 }: Placement) => {
   if (appId.length === 0) {
     throw new TypeError("placePortal: appId must be a non-empty string");
@@ -61,6 +70,7 @@ export const placePortalMessage = ({
   return {
     app_id: appId,
     corner_radius: cornerRadius,
+    native,
     opacity,
     // Explicitly null rather than absent: the host's field is an `Option`, and
     // a window that stopped casting a shadow has to say so.
