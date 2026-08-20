@@ -21,6 +21,7 @@
     "./measure": "./src/measure.ts",
     "./newline-frames": "./src/newline-frames.ts",
     "./observe-placement": "./src/observe-placement.ts",
+    "./placement-timing": "./src/placement-timing.ts",
     "./protocol": "./src/protocol.ts",
     "./register-elements": "./src/register-elements.ts",
     "./round-trip": "./src/round-trip.ts",

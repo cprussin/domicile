@@ -264,11 +264,14 @@ frames sent=N dropped=M fps=F mb_per_s=B write_ms=W \
   two paths.
 - `throttled` — commits the ~30fps throttle refused (copy path only).
 
-The chrome reports the round trip on the same cadence and the same stdout:
+The chrome reports on the same cadence and the same stdout, on two lines —
+the round trip is per keystroke and placement is per window per frame, so they
+are different subjects and each is silent when nothing happened to it:
 
 ```
 chrome: round trip keys=N rt_ms=R rt_worst_ms=RW \
         frames=F ipc_ms=I ipc_worst_ms=IW draw_ms=D draw_worst_ms=DW
+chrome: placements=P place_total_ms=PT place_ms=PA place_worst_ms=PW
 ```
 
 `rt_ms` is the number behind "sluggish": key press to pixels on screen. Taken
@@ -276,6 +279,14 @@ after the frame handler runs, so the draw is inside it. `ipc_ms` and `draw_ms`
 are the two stages the compositor cannot see. On the native path there are no
 frames on the socket at all, so these fall silent — which is the result, not a
 gap in the measurement.
+
+`placements` counts measurements rather than frames, because every mounted
+window is measured on every animation frame — so a desktop with twenty windows
+pays it twenty times a frame, and `place_total_ms` against the reporting
+interval is the fraction of a core that costs. `place_worst_ms` is the one to
+hold against a dropped frame, with the caveat that a measurement which also
+*sent* a placement includes the send, so the worst sample is usually one of
+those rather than a measurement on its own.
 
 Two rules the numbers depend on, both learned the hard way:
 
@@ -445,8 +456,11 @@ falloff the shadow uses, is the next candidate to move it.
   keeps a backgrounded window mounted and merely hidden — so a twenty-app
   desktop pays a `getBoundingClientRect`, a `getComputedStyle` and some twenty
   computed-property reads for nineteen `display: none` elements per frame to
-  learn they are still hidden. Wants an early-out for an element with no box,
-  and a measurement to say whether it was worth taking.
+  learn they are still hidden. The chrome now reports what that costs, as
+  `placements`, `place_total_ms`, `place_ms` and `place_worst_ms` on its
+  diagnostics line, and `scripts/measure.sh` collects it. What it wants next is
+  a number from a real desktop, and then — if the number says so — an early-out
+  for an element with no box.
 - a client that changes **buffer type** on the same surface — dmabuf commits,
   then a `wl_shm` one — replaces its retained buffer with the shm frame's
   pixels, while the bridge's descriptor still names the buffer's raw fds. The

@@ -3,6 +3,7 @@
 // the SDK to it and mounts the React chrome on top.
 
 import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { placementTiming } from "@domicile/chrome-sdk/placement-timing";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
   applyPreference,
@@ -11,17 +12,13 @@ import {
 import { createRoot } from "react-dom/client";
 
 import { AppElements } from "./app-elements";
+import { diagnosticLines } from "./diagnostic-lines";
 import { Shell } from "./Shell";
 
 import "./global.css";
 
 /** Matches the compositor's reporting interval so the two lines interleave. */
 const REPORT_EVERY_MS = 5000;
-
-// A stage that recorded nothing reads as zero, the way the compositor's line
-// does: "did not run" and "took no time" are the same claim in a log line.
-const round = (ms: number | undefined): string =>
-  Math.round(ms ?? 0).toString();
 
 // Apply the persisted (or system) theme before React mounts so the first paint
 // uses the right semantic-token values. (`index.html` runs an inline copy of
@@ -54,8 +51,8 @@ if (container === null) {
 // other half, on the same cadence and in the same shape, so the two lines can
 // be read side by side. It is the number behind "sluggish": everything between
 // pressing a key and seeing it, including the client's own redraw and
-// `putImageData`. Silent when nothing was typed — the compositor's line is
-// silent for an idle desktop too. Outside Electron (the shell opened in a
+// `putImageData`. That line is silent when nothing was typed — so is the
+// compositor's for an idle desktop. Outside Electron (the shell opened in a
 // plain browser for styling work) there is nowhere to print, so there is no
 // report either.
 // The round trip is reported alongside the two stages inside it that the
@@ -63,22 +60,25 @@ if (container === null) {
 // observed: `ipc` is the main-process → renderer hop, where a frame's pixels
 // are structured-cloned across a process boundary, and `draw` is putting them
 // on the canvas.
+//
+// Placement is reported on a line of its own, because it is not part of the
+// round trip at all: it is the one cost that grows with the number of windows
+// rather than with what any of them is doing. See `diagnostic-lines`.
 const diagnostics = window.domicileDiagnostics;
 if (diagnostics !== undefined) {
   setInterval(() => {
-    const trip = bridge.roundTrip.take();
-    if (trip !== undefined) {
-      const ipc = diagnostics.takeIpcHop();
-      const draw = appElements.drawTiming.take();
-      diagnostics.report(
-        [
-          `round trip keys=${trip.count.toString()}`,
-          `rt_ms=${round(trip.averageMs)} rt_worst_ms=${round(trip.worstMs)}`,
-          `frames=${(ipc?.count ?? 0).toString()}`,
-          `ipc_ms=${round(ipc?.averageMs)} ipc_worst_ms=${round(ipc?.worstMs)}`,
-          `draw_ms=${round(draw?.averageMs)} draw_worst_ms=${round(draw?.worstMs)}`,
-        ].join(" "),
-      );
+    // Every window is drained on every interval, whether or not anything is
+    // printed: a window left undrained accumulates across the whole session,
+    // and the next line to include it would report an average since startup
+    // rather than since the last line.
+    const lines = diagnosticLines({
+      draw: appElements.drawTiming.take(),
+      ipc: diagnostics.takeIpcHop(),
+      place: placementTiming.take(),
+      trip: bridge.roundTrip.take(),
+    });
+    for (const line of lines) {
+      diagnostics.report(line);
     }
   }, REPORT_EVERY_MS);
 }

@@ -132,12 +132,22 @@ say() { echo "$@" | tee -a "$RESULTS"; }
 
 # `grep … | tail` exits with *tail's* status, which is 0 even when grep matched
 # nothing, so the fallback has to be chosen on the text rather than on `||`.
-lines() { grep "$1" "$2" | tail -3; }
+#
+# Six rather than three because the chrome's half of this is now placement
+# lines, one per interval, and six of them is a wider window to read a trend
+# in. Note this widens the compositor's block to six as well — the helper is
+# shared — which is deliberate: the two halves are read side by side and want
+# to cover the same span.
+lines() { grep "$1" "$2" | tail -6; }
 
 report() {
   local composited chrome
   composited="$(lines "frames sent=" "$1")"
-  chrome="$(lines "round trip" "$2")"
+  # Every line the chrome prints is prefixed by `main.ts`, so this takes all
+  # of them rather than naming one. Selecting on "round trip" dropped the
+  # placement line, which is the number this script exists to fetch for the
+  # question of whether measuring every window every frame scales.
+  chrome="$(lines "^chrome: " "$2")"
   say "-- what the compositor reported"
   say "${composited:-   (nothing — no frames were composited)}"
   say "-- what the chrome reported"
@@ -170,6 +180,16 @@ tee -a "$RESULTS" <<'EOF'
                 and it is the one number directly comparable between them.
   readback_ms   the GPU copy. The native path does not do it, so a zero here
                 is the result rather than a missing measurement.
+  placements    how many times a window was measured, and what that cost.
+  place_ms      Every mounted window is measured on every animation frame so
+  place_worst_ms that it follows a CSS transition, and the shell keeps a
+  place_total_ms backgrounded window mounted — so this is paid for windows
+                nobody is looking at. `place_total_ms` against the interval is
+                the fraction of a core it takes. Expected to be similar on both
+                paths, being the page's cost rather than the compositor's — so
+                a large difference is itself a finding. `place_worst_ms` is
+                usually a sample that also *sent* a placement rather than one
+                that only measured.
   rt_ms         NOT MEASURED HERE, on either path, and its absence below is a
   ipc_ms        gap rather than a result. Both are timed by the chrome from the
                 keystroke *it* sent, and this types over the socket instead —

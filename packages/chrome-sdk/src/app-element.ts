@@ -18,6 +18,7 @@ import {
   setFocusedApp,
 } from "./element-context";
 import { buttonCodeFromJs } from "./input";
+import { placementTiming } from "./placement-timing";
 import type { CursorShape } from "./protocol";
 import { surfaceLocal } from "./surface-coordinates";
 import { axisFromWheel } from "./wheel-axis";
@@ -247,6 +248,27 @@ export class DomicileAppElement extends HTMLElement {
   }
 
   #place(): void {
+    // Priced whether or not anything is sent, and whether or not it finishes.
+    // What costs is the measuring, and the measuring happens every frame for
+    // every window — see `placement-timing`.
+    //
+    // In a `finally` because a window that cannot be measured has already paid
+    // for the attempt: `readElementTransform` throws on a computed value it
+    // cannot parse, from *after* the layout read, and the loop keeps calling
+    // it every frame for the life of the page. Priced only on success, that
+    // window would cost the desktop sixty measurements a second and contribute
+    // nothing to the number — so the desktop where this matters most is the one
+    // it would under-report hardest. Nothing is caught: the throw still reaches
+    // the loop, which reports it.
+    const started = performance.now();
+    try {
+      this.#placeNow();
+    } finally {
+      placementTiming.record(performance.now() - started);
+    }
+  }
+
+  #placeNow(): void {
     const appId = this.appId;
     const bridge = activeBridge();
     if (appId !== undefined && bridge !== undefined) {
