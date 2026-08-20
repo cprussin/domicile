@@ -417,6 +417,12 @@ falloff the shadow uses, is the next candidate to move it.
   fixture is square, so nothing in the repo can tell the two apart. Needs a
   non-square `turned` fixture rather than another assertion on the one there.
 - chrome above *and* below as two engine layers (only above is free today)
+- ~~follow a window that moves~~ — done. `<domicile-app>` re-measures on every
+  animation frame rather than on a `ResizeObserver`, which sees a box change
+  size and nothing else: moving a window, animating a transform, a `:hover`
+  filter and a class toggle all leave the size alone and all change where or
+  how the compositor must draw it. One loop for every portal, and a window that
+  did not move sends nothing.
 - ~~per-window fallback to the copy path when a computed style needs an effect
   the shader cannot do~~ — done, and it is what makes the native path safe to
   leave on: correct always, fast almost always. `<domicile-app>` reads its own
@@ -425,11 +431,6 @@ falloff the shadow uses, is the next candidate to move it.
   window and reads its buffer back as it always did. One window, not the
   desktop — a blur on one app costs that app. The author is told on the console
   what it cost them, once per property.
-- a window re-measures when its **box** changes and not when its **style**
-  does, so a rule that starts matching an already-mounted window — `:hover`, a
-  class toggle, a transition — does not move it until something resizes it.
-  The same gap means an animated `transform` is not followed either. Wants a
-  measurement driven by something that sees style rather than size.
 - a window on the copy path is drawn *above* every natively-drawn window it
   overlaps, whatever its `z-index`, because the page is composited over all of
   the app surfaces rather than in the stacking order. The same two engine
@@ -440,6 +441,12 @@ falloff the shadow uses, is the next candidate to move it.
   better — but not when the element is remounted, where the canvas is gone.
   `latest_dmabufs` holds the current buffer, so re-importing on the way back is
   the fix whenever it is worth taking.
+- every mounted window is measured on every animation frame, and the shell
+  keeps a backgrounded window mounted and merely hidden — so a twenty-app
+  desktop pays a `getBoundingClientRect`, a `getComputedStyle` and some twenty
+  computed-property reads for nineteen `display: none` elements per frame to
+  learn they are still hidden. Wants an early-out for an element with no box,
+  and a measurement to say whether it was worth taking.
 - a `wl_shm` window blanks until its client next commits if its element is
   moved in the DOM — dragging a tab reorders a keyed list, and React moves the
   node, which is a disconnect and a reconnect. The element drops its pixels

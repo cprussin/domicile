@@ -43,7 +43,15 @@ const portal = (container: HTMLElement): Element => {
 };
 
 beforeEach(() => {
-  registerElements(silentBridge, { measure: stubMeasure });
+  registerElements(silentBridge, {
+    measure: stubMeasure,
+    // Otherwise these suites run the SDK's own animation loop, which happy-dom
+    // serves as fast as it can: every mounted window re-measured tens of
+    // thousands of times a second, for the length of every `await`.
+    observePlacement: () => () => {
+      // Never turned: nothing here tests what happens when a window moves.
+    },
+  });
 });
 
 describe("AppWindow", () => {
