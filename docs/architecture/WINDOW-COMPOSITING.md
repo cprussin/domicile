@@ -245,8 +245,8 @@ Phase 2 — the effects that make an app a CSS element:
 - [x] the rotated + rounded + shadowed window from the old spike's success
       criterion is drawn correctly, held by pixel tests over a window turned 45
       degrees
-- [ ] ...and at native cost: re-run `scripts/measure.sh` now that a blur runs
-      per shadow pixel, and watch `composite_ms`
+- [x] ...and at native cost: measured again after the shadow work. The table is
+      in `ROADMAP.md`.
 - [ ] chrome above/below as two engine layers
 - [ ] per-window fallback to the copy path when the element's computed style needs an unsupported effect
 

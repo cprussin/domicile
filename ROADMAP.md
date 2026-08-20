@@ -34,9 +34,9 @@ frame.
 
 The wire protocol is at `PROTOCOL_VERSION = 7`.
 
-**Tests:** 99 core Rust + 57 in `domicile-compositor` (23 more behind
-`--ignored`, run by `e2e-compose.sh`) + 387 TypeScript. Clippy clean, `cargo
-fmt` clean.
+Run the suites for their counts rather than reading one here. A number written
+down goes stale on the next commit that adds a test, and this one went stale
+four times in a single afternoon of review before it earned its deletion.
 
 ### How to run / test
 
@@ -376,6 +376,27 @@ the chrome from the keystroke it sent, and the harness types over the socket. Do
 not read their absence as a result — the result is `sent=0`, which is what says
 nothing crosses the hop they measure.
 
+Taken again after the shadow work, to see what a per-pixel blur costs. Both
+paths were re-run, so the copy column is a fresh measurement rather than the one
+above — same machine, same client, same forty keystrokes, and it drifts by a
+millisecond or two from run to run:
+
+| per frame | copy | native, before shadows | native, with them |
+|---|---|---|---|
+| `readback_ms` | 8 (worst 10) | 0 | 0 |
+| `write_ms` | 25-26 | 0 | 0 |
+| `commit_ms` | 7-8 | 0 | 0 |
+| `composite_ms` | 0 | 0 (worst 2-3) | 0-1 (worst 1-2) |
+| `mb_per_s` | 80-123 | 0 | 0 |
+| `response_ms` | 3-4 (worst 5) | 3-4 (worst 6) | 4 (worst 4-5) |
+
+The blur is free. `composite_ms` was the number to watch, because a shadow is
+the first effect that runs work per pixel rather than per quad, and it did not
+move — the worst case is if anything lower than it was before shadows existed,
+which is noise rather than an improvement. Re-run this whenever an effect lands
+that samples more than once per pixel; a real blur, rather than the one-tap
+falloff the shadow uses, is the next candidate to move it.
+
 ### Phase 2 — the effects that make an app a CSS element
 
 - ~~rounded corners, opacity and shadow in the compositor's shader~~ — done.
@@ -387,9 +408,9 @@ nothing crosses the hop they measure.
   turned 45 degrees covering the diamond it should, rounded by a length on the
   screen rather than a fraction of itself, and casting its shadow the way it
   faces.
-- the same window **at native cost** — `#measure` has not been re-run since the
-  blur landed, and `composite_ms` is the number to watch: a blur is the first
-  effect that could move it off zero.
+- ~~the same window **at native cost**~~ — done, and the blur is free.
+  `composite_ms` reads 0-1ms after shadows landed, worst case 1-2ms against the
+  2-3ms measured before they existed. The full table is under Phase 1 above.
 - a **rotated non-square window**. `compose::on_screen_size` reads the matrix's
   rows; reading its columns instead is numerically identical for anything
   axis-aligned and swaps width for height on anything turned, and every turned
