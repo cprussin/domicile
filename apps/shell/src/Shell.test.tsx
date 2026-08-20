@@ -58,6 +58,7 @@ class FakeBridge {
 const stubMeasure: Measure = () => ({
   cornerRadius: 0,
   opacity: 1,
+  shadow: undefined,
   size: [100, 100],
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,

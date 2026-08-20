@@ -176,12 +176,20 @@ export class DomicileAppElement extends HTMLElement {
     const appId = this.appId;
     const bridge = activeBridge();
     if (appId !== undefined && bridge !== undefined) {
-      const { size, transform, zIndex, visible, cornerRadius, opacity } =
-        activeMeasure()(this);
+      const {
+        size,
+        transform,
+        zIndex,
+        visible,
+        cornerRadius,
+        opacity,
+        shadow,
+      } = activeMeasure()(this);
       bridge.placePortal({
         appId,
         cornerRadius,
         opacity,
+        shadow,
         size,
         transform,
         visible,

@@ -5,6 +5,7 @@
 
 import type { Matrix } from "./matrix";
 import { PROTOCOL_VERSION } from "./protocol";
+import type { Shadow } from "./shadow";
 import type { AxisDelta } from "./wheel-axis";
 
 /** The on-screen geometry of an `<domicile-app>`, as the host needs it. */
@@ -18,6 +19,8 @@ export type Placement = {
   cornerRadius?: number;
   /** `opacity`, 0 to 1. Opaque if omitted — never invisible. */
   opacity?: number;
+  /** The shadow the window casts. None if omitted. */
+  shadow?: Shadow | undefined;
 };
 
 export type ChromeMessage =
@@ -50,6 +53,7 @@ export const placePortalMessage = ({
   // Opaque, never invisible: a window nobody can see is a worse failure than
   // one that ignores a style, and it looks identical to not being drawn.
   opacity = 1,
+  shadow,
 }: Placement) => {
   if (appId.length === 0) {
     throw new TypeError("placePortal: appId must be a non-empty string");
@@ -58,6 +62,9 @@ export const placePortalMessage = ({
     app_id: appId,
     corner_radius: cornerRadius,
     opacity,
+    // Explicitly null rather than absent: the host's field is an `Option`, and
+    // a window that stopped casting a shadow has to say so.
+    shadow: shadow ?? null,
     size,
     transform,
     type: "place_portal",

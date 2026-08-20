@@ -6,7 +6,9 @@
 //!  2. The on-the-wire shape is stable (the JS side hard-codes these strings),
 //!     so we pin the tag/field names explicitly.
 
-use domicile_protocol::{negotiate, ChromeMessage, CursorShape, HostMessage, PROTOCOL_VERSION};
+use domicile_protocol::{
+    negotiate, ChromeMessage, CursorShape, HostMessage, Shadow, PROTOCOL_VERSION,
+};
 
 fn chrome_round_trip(msg: &ChromeMessage) {
     let json = serde_json::to_string(msg).unwrap();
@@ -33,6 +35,13 @@ fn chrome_messages_round_trip() {
         visible: true,
         corner_radius: 0.0,
         opacity: 1.0,
+        shadow: Some(Shadow {
+            dx: 4.0,
+            dy: 8.0,
+            blur: 12.0,
+            spread: 2.0,
+            color: [0.0, 0.0, 0.0, 0.5],
+        }),
     });
     chrome_round_trip(&ChromeMessage::RemovePortal {
         app_id: "term".into(),
@@ -146,6 +155,7 @@ fn wire_shape_is_pinned() {
         visible: true,
         corner_radius: 0.0,
         opacity: 1.0,
+        shadow: None,
     })
     .unwrap();
     assert_eq!(v["type"], "place_portal");
