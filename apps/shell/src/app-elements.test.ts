@@ -15,6 +15,9 @@ const fakeElement = (calls: Call[]): DomicileAppElement =>
     drawFrame: (width: number, height: number, scale: number) => {
       calls.push(["draw", width, height, scale]);
     },
+    dropSurface: () => {
+      calls.push(["drop"]);
+    },
     focusApp: () => {
       calls.push(["focus"]);
     },
@@ -57,6 +60,17 @@ describe("AppElements", () => {
       elements.register("term", fakeElement(calls));
       elements.applyCursor({ app_id: "term", cursor: "text" });
       expect(calls).toStrictEqual([["cursor", "text"]]);
+    });
+
+    it("carries the host taking a window back to the element", () => {
+      // The compositor is drawing this window's own buffer now, so the pixels
+      // the element holds are a still of a live window — and the chrome is
+      // composited over the client, so that still would hide it.
+      const calls: Call[] = [];
+      const elements = new AppElements();
+      elements.register("term", fakeElement(calls));
+      elements.composited({ app_id: "term" });
+      expect(calls).toStrictEqual([["drop"]]);
     });
 
     it("drops a frame for an app the shell is not showing an element for", () => {

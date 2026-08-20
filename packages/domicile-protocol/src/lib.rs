@@ -9,6 +9,20 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v8 added `native` to `place_portal` and `app_composited` alongside
+/// `app_frame`: the chrome can see a computed style the compositor's shaders
+/// have no answer for, and says so, and that window alone goes back down the
+/// copy path — and the compositor answers when it has taken a window back, so
+/// the chrome knows when the pixels it holds are stale.
+///
+/// A bump rather than a silent addition, though `native` defaults and
+/// `app_composited` can be ignored. A v7 chrome would never send `native:
+/// false`, so a window it styled with a `filter` would be drawn natively and
+/// wrongly, and it would never drop a canvas it had been told to — leaving a
+/// still of a window over the live one. Both are pictures that are quietly
+/// wrong, which is worse than a chrome that is turned away at `hello` and says
+/// so.
+///
 /// v7 added `shadow` to `place_portal`, for the same reason v6 added the other
 /// two: the compositor draws the window, so a `box-shadow` on the element is
 /// its to cast.
@@ -44,7 +58,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 7;
+pub const PROTOCOL_VERSION: u32 = 8;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -87,6 +101,11 @@ fn opaque() -> f64 {
     1.0
 }
 
+/// What a window whose chrome expressed no opinion gets: the fast path.
+fn natively() -> bool {
+    true
+}
+
 /// Messages sent from the chrome (in-page bridge) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -117,6 +136,18 @@ pub enum ChromeMessage {
         /// The element's `box-shadow`, if it casts one that can be drawn.
         #[serde(default)]
         shadow: Option<Shadow>,
+        /// Whether the compositor should draw this window's own buffer.
+        ///
+        /// False for an element styled in a way the compositor's shaders have
+        /// no answer for — a `filter`, a `clip-path`, a shadow past the first.
+        /// That window goes back down the copy path, which is slow and correct
+        /// rather than fast and wrong, and only that window does.
+        ///
+        /// Natively by default, so a chrome with no opinion gets the fast
+        /// path: a chrome that cannot say is a chrome from before there was
+        /// anything the shaders could not draw.
+        #[serde(default = "natively")]
+        native: bool,
     },
 
     /// An `<app>` element was unmounted; the host should stop compositing it.
@@ -249,6 +280,22 @@ pub enum HostMessage {
     /// applies it to the app's element, so the pointer changes shape over an
     /// `<app>` exactly as it would over any other web content.
     AppCursor { app_id: String, cursor: CursorShape },
+
+    /// The compositor has taken this window back and is drawing the client's
+    /// own buffer; the chrome should drop any pixels it holds for it.
+    ///
+    /// The counterpart to `app_frame`, and the reason it is a message rather
+    /// than something the chrome works out for itself: only the compositor
+    /// knows whether it *managed* to draw the window. A `wl_shm` client is
+    /// never drawn natively however ordinary its element's CSS, and a chrome
+    /// that dropped its canvas on the strength of its own `native: true` would
+    /// blank that window until the client next redrew.
+    ///
+    /// Sent on the frame the compositor first draws itself, so it arrives
+    /// after the last copied frame on the same socket. A chrome that drops the
+    /// canvas any earlier races the frames still in flight, and one of them
+    /// puts a still of the window back over the live one.
+    AppComposited { app_id: String },
 }
 
 /// A cursor a client can ask for, named as the CSS `cursor` keyword the chrome

@@ -132,30 +132,34 @@ impl Host {
                 corner_radius,
                 opacity,
                 shadow,
+                native,
             } => {
                 if !self.apps.contains_key(&app_id) {
                     return Err(HostError::UnknownApp(app_id));
                 }
                 if visible {
-                    self.scene.upsert(
-                        Portal::new(
-                            app_id,
-                            (size[0], size[1]),
-                            transform_from_wire(transform),
-                            z_index,
-                        )
-                        .styled(Style {
-                            corner_radius,
-                            opacity,
-                            shadow: shadow.map(|shadow| domicile_scene::Shadow {
-                                blur: shadow.blur,
-                                color: shadow.color,
-                                dx: shadow.dx,
-                                dy: shadow.dy,
-                                spread: shadow.spread,
-                            }),
+                    let placed = Portal::new(
+                        app_id,
+                        (size[0], size[1]),
+                        transform_from_wire(transform),
+                        z_index,
+                    )
+                    .styled(Style {
+                        corner_radius,
+                        opacity,
+                        shadow: shadow.map(|shadow| domicile_scene::Shadow {
+                            blur: shadow.blur,
+                            color: shadow.color,
+                            dx: shadow.dx,
+                            dy: shadow.dy,
+                            spread: shadow.spread,
                         }),
-                    );
+                    });
+                    // A window styled in a way the shaders have no answer for
+                    // goes back down the copy path — that window, and only
+                    // that window.
+                    self.scene
+                        .upsert(if native { placed } else { placed.copied() });
                 } else {
                     // A hidden app is not composited or hit-tested.
                     self.scene.remove(&app_id);

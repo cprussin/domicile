@@ -8,6 +8,7 @@
 
 import type { DomicileAppElement } from "@domicile/chrome-sdk/app-element";
 import type {
+  AppCompositedMessage,
   AppCursorMessage,
   AppFrameMessage,
   AppResizedMessage,
@@ -72,5 +73,12 @@ export class AppElements {
     cursor,
   }: Pick<AppCursorMessage, "app_id" | "cursor">): void {
     this.#elements.get(app_id)?.applyCursor(cursor);
+  }
+
+  // The compositor has taken this window back and is drawing the client's own
+  // buffer. Whatever pixels this element holds are a still of the window, and
+  // the chrome is composited over the client — so they would hide the live one.
+  composited({ app_id }: Pick<AppCompositedMessage, "app_id">): void {
+    this.#elements.get(app_id)?.dropSurface();
   }
 }

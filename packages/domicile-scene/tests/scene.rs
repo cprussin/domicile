@@ -147,6 +147,40 @@ fn insertion_order_breaks_z_index_ties() {
 // ---- registry management --------------------------------------------------
 
 #[test]
+fn a_portal_is_drawn_from_the_clients_own_buffer_by_default() {
+    // The fast path is what a portal is for. A window that had to opt into it
+    // would leave every chrome that has not heard of the choice paying a
+    // readback per frame for nothing.
+    assert!(portal("term", 100.0, 50.0, Transform::identity(), 0).draws_natively);
+}
+
+#[test]
+fn a_copied_portal_is_not_drawn_from_the_clients_own_buffer() {
+    // What the chrome asks for when the element wears a style the compositor's
+    // shaders have no answer for: this window goes back to being read off the
+    // GPU and drawn by the engine.
+    assert!(
+        !portal("term", 100.0, 50.0, Transform::identity(), 0)
+            .copied()
+            .draws_natively
+    );
+}
+
+#[test]
+fn copying_a_portal_changes_nothing_else_about_it() {
+    // It is a choice of who draws, not of what is drawn: the window is in the
+    // same place, at the same size, in the same order, wearing the same style.
+    let placed = portal("term", 100.0, 50.0, Transform::translate(3.0, 4.0), 7);
+    let copied = placed.clone().copied();
+
+    assert_eq!(copied.app_id, placed.app_id);
+    assert_eq!(copied.size, placed.size);
+    assert_eq!(copied.z_index, placed.z_index);
+    assert_eq!(copied.style, placed.style);
+    assert_eq!(copied.surface_to_output(), placed.surface_to_output());
+}
+
+#[test]
 fn upsert_replaces_an_existing_app_rather_than_duplicating() {
     let mut scene = Scene::new();
     scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 0));

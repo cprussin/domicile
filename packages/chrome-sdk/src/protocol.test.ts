@@ -24,6 +24,15 @@ describe("parseHostMessage", () => {
     });
   });
 
+  it("decodes the host taking a window back", () => {
+    // The counterpart to `app_frame`: the compositor is drawing this window's
+    // own buffer now, so the pixels the chrome holds are a still of a live
+    // window and have to go.
+    expect(
+      parseHostMessage('{"type":"app_composited","app_id":"term"}'),
+    ).toEqual({ app_id: "term", type: "app_composited" });
+  });
+
   it("throws on a cursor that is not a CSS keyword the chrome knows", () => {
     expect(() =>
       parseHostMessage(

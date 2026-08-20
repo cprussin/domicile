@@ -63,6 +63,19 @@ export class DomicileAppElement extends HTMLElement {
     const appId = this.appId;
     if (appId !== undefined) {
       activeBridge()?.removePortal(appId);
+      // Told the host this element no longer shows that window, so it must
+      // stop being true. A disconnect is not always a teardown — moving an
+      // element between two containers is a disconnect *and* a reconnect, and
+      // children survive the move — so an element that keeps its pixels here
+      // keeps them for a window the host has been told it does not hold, and
+      // the host will never send the message that clears them.
+      //
+      // The cost is a window blank until it has pixels again, and the host can
+      // only supply those for a client that committed a dmabuf — it keeps no
+      // shm frame anywhere. So a software-rendered window moved in the DOM is
+      // blank until its client next draws. Recorded in ROADMAP.md; the
+      // alternative is a still of a window over the live one, for good.
+      this.dropSurface();
       if (focusedApp() === appId) {
         setFocusedApp(undefined);
         // The window that had the keyboard has gone, so say who has it now.
@@ -83,6 +96,14 @@ export class DomicileAppElement extends HTMLElement {
     if (name === "app-id" && this.isConnected && oldValue !== newValue) {
       if (oldValue !== null) {
         activeBridge()?.removePortal(oldValue);
+        // Those pixels — and the resolution they were drawn at — are the *old*
+        // app's, and the size is what pointer coordinates are scaled through.
+        // Keeping either shows one client's last frame in the element that now
+        // stands for another, and maps clicks on the new app through the old
+        // one's surface.
+        this.dropSurface();
+        this.#surfaceWidth = 0;
+        this.#surfaceHeight = 0;
       }
       this.#place();
     }
@@ -114,6 +135,34 @@ export class DomicileAppElement extends HTMLElement {
       setFocusedApp(appId);
       bridge.focusApp(appId);
     });
+  }
+
+  /**
+   * Drop the pixels this element holds, because the compositor is drawing the
+   * client's own buffer now.
+   *
+   * The chrome is composited *over* the client, so a canvas still holding the
+   * last copied frame is opaque exactly where the page has to be a hole: the
+   * live window would sit behind a still of itself, indefinitely.
+   *
+   * Only the host can say when this is safe. The element knows what it *asked*
+   * for, which is not the same thing — a `wl_shm` client is never drawn
+   * natively however ordinary its CSS — and the message arrives after the last
+   * copied frame on the same socket, where a guess would race the frames still
+   * in flight and one of them would put the canvas straight back.
+   *
+   * `has-surface` stays: it says this element has a window behind it, which is
+   * as true when the compositor draws it as when a canvas does. Putting the
+   * placeholder back would draw "app surface: …" over a live window.
+   *
+   * So does the recorded surface size, which is what pointer coordinates are
+   * scaled through and is still the client's resolution when the compositor
+   * takes the window over. The one caller that must forget it is the one where
+   * the element changes *which app* it shows.
+   */
+  dropSurface(): void {
+    this.#canvas?.remove();
+    this.#canvas = undefined;
   }
 
   /** Show the cursor a client asked for while the pointer is over this app. */
@@ -182,12 +231,14 @@ export class DomicileAppElement extends HTMLElement {
         zIndex,
         visible,
         cornerRadius,
+        native,
         opacity,
         shadow,
       } = activeMeasure()(this);
       bridge.placePortal({
         appId,
         cornerRadius,
+        native,
         opacity,
         shadow,
         size,
@@ -293,5 +344,15 @@ export class DomicileAppElement extends HTMLElement {
 const createSurfaceCanvas = (): HTMLCanvasElement => {
   const canvas = document.createElement("canvas");
   canvas.className = "domicile-app-surface";
+  // On the copy path the client's pixels are ordinary content, and the box
+  // that holds them does not clip them: `border-radius` on the element rounds
+  // the element and does nothing to a child. A window sent down this path
+  // *because* of its radius would then be drawn square by the very path meant
+  // to draw it round.
+  //
+  // On the canvas rather than as `overflow` on the element, because a replaced
+  // element's own content *is* clipped to its border radius — and the
+  // element's inline style belongs to whoever wrote the chrome, not to us.
+  canvas.style.borderRadius = "inherit";
   return canvas;
 };

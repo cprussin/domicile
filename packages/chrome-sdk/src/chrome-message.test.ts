@@ -26,6 +26,9 @@ describe("placePortalMessage", () => {
       // Square and opaque unless the element says otherwise — the compositor
       // draws the window itself now, so these travel with the placement.
       corner_radius: 0,
+      // And it draws it from the client's own buffer unless the element is
+      // styled in a way its shaders have no answer for.
+      native: true,
       opacity: 1,
       shadow: null,
       size: [10, 20],
@@ -44,6 +47,33 @@ describe("placePortalMessage", () => {
     });
     expect(message.z_index).toBe(0);
     expect(message.visible).toBe(true);
+  });
+
+  it("sends a window down the copy path when the element asks", () => {
+    // The one thing on the placement that is not a style: it says which of the
+    // two paths draws this window, and the compositor draws nothing for a
+    // window it has been told the engine is drawing.
+    expect(
+      placePortalMessage({
+        appId: "term",
+        native: false,
+        size: [1, 1],
+        transform: [1, 0, 0, 1, 0, 0],
+      }).native,
+    ).toBe(false);
+  });
+
+  it("keeps a window on the native path unless told otherwise", () => {
+    // The fast path is the default, and a chrome written before this field
+    // existed says nothing about it — so absent has to mean native, or every
+    // window on such a chrome pays a readback per frame.
+    expect(
+      placePortalMessage({
+        appId: "term",
+        size: [1, 1],
+        transform: [1, 0, 0, 1, 0, 0],
+      }).native,
+    ).toBe(true);
   });
 
   it("carries the shadow the element casts", () => {

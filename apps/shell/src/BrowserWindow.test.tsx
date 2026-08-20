@@ -23,6 +23,7 @@ const silentBridge = {
 
 const stubMeasure: Measure = () => ({
   cornerRadius: 0,
+  native: true,
   opacity: 1,
   shadow: undefined,
   size: [100, 100],

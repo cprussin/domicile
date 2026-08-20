@@ -59,6 +59,9 @@ export const useShellWindows = (
     bridge.on("app_cursor", (message) => {
       appElements.applyCursor(message);
     });
+    bridge.on("app_composited", (message) => {
+      appElements.composited(message);
+    });
   }, [appElements, bridge]);
 
   const close = useCallback((id: string) => {

@@ -28,6 +28,7 @@ fn place(
         corner_radius: 0.0,
         opacity: 1.0,
         shadow: None,
+        native: true,
     }
 }
 
@@ -50,6 +51,7 @@ fn place_styled(
         corner_radius,
         opacity,
         shadow,
+        native: true,
     }
 }
 
@@ -352,6 +354,49 @@ fn a_portals_shadow_reaches_the_scene() {
             color: [0.0, 0.0, 0.0, 0.5],
         })
     );
+}
+
+#[test]
+fn a_window_the_shaders_cannot_draw_goes_back_down_the_copy_path() {
+    // The chrome is the only one that can see a computed style, so it is the
+    // one that decides. A window wearing a `filter` is drawn by the engine
+    // again — slow and correct, rather than fast and wrong.
+    let mut host = Host::new();
+    let (app_id, _) = host.app_appeared(None, (100.0, 50.0));
+
+    host.handle_chrome_message(ChromeMessage::PlacePortal {
+        app_id: app_id.clone(),
+        transform: IDENTITY,
+        size: [100.0, 50.0],
+        z_index: 0,
+        visible: true,
+        corner_radius: 0.0,
+        opacity: 1.0,
+        shadow: None,
+        native: false,
+    })
+    .expect("a placement on the copy path is applied");
+
+    let portal = host.scene().get(&app_id).expect("the portal is placed");
+    assert!(
+        !portal.draws_natively,
+        "a window the chrome could not describe is not drawn from its own buffer"
+    );
+}
+
+#[test]
+fn a_window_is_drawn_from_its_own_buffer_unless_the_chrome_says_otherwise() {
+    // The floor. A chrome too old to have an opinion, or one whose window is
+    // ordinary, gets the fast path — the whole point of the native path is
+    // that it is what happens by default.
+    let mut host = Host::new();
+    let (app_id, _) = host.app_appeared(None, (100.0, 50.0));
+
+    host.handle_chrome_message(place(&app_id, IDENTITY, [100.0, 50.0], 0, true))
+        .expect("an ordinary placement is applied");
+
+    let portal = host.scene().get(&app_id).expect("the portal is placed");
+    assert!(portal.draws_natively);
 }
 
 #[test]

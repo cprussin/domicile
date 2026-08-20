@@ -78,6 +78,7 @@ describe("BridgeClient", () => {
     expect(transport.lastSent()).toEqual({
       app_id: "term",
       corner_radius: 0,
+      native: true,
       opacity: 1,
       shadow: null,
       size: [10, 20],
