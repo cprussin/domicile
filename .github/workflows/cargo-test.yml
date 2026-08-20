@@ -18,6 +18,10 @@ jobs:
   # No graphics or Wayland stack needed, so this stays fast.
   core:
     runs-on: ubuntu-latest
+    # A job with no ceiling sits on a wedged runner until GitHub's six-hour
+    # default, which reads as "still running" rather than as a failure.
+    # Neither of these takes two minutes when the network is well.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -37,6 +41,7 @@ jobs:
   # engine is the renderer.
   compositor:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -47,9 +52,46 @@ jobs:
       # for Smithay's winit backend, which is how the compositor presents.
       # No GL stack here on purpose — the tests needing one are `#[ignore]`d
       # and run from `scripts/e2e-compose.sh`.
-      - run: >
-          sudo apt-get update && sudo apt-get install -y
-          libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev
-          libxrandr-dev libxi-dev
+      #
+      # Retried, with a deadline on each attempt. A stalled apt mirror is the
+      # commonest way this job fails and it fails by *hanging*, so a plain
+      # `apt-get` can burn the whole job budget getting nowhere.
+      #
+      # Five minutes an attempt, not one or two: this step is usually 11-13s
+      # but its tail is heavy, and runs taking 1m45s, 2m41s and 7m36s have all
+      # *succeeded*. A deadline inside that distribution trades a rare hang for
+      # a regular red build, and retrying does not help a merely-slow mirror —
+      # each attempt starts `apt-get update` again from nothing.
+      #
+      # `--kill-after` because `timeout` alone does not guarantee its own
+      # deadline: it sends TERM and then waits for the process to go, forever
+      # if the process does not. Real apt honours TERM, but a wedged one on
+      # dead network storage is the case this exists for.
+      #
+      # Three attempts at five minutes plus backoff is 15m15s, or 15m45s if
+      # every attempt has to be killed — the grace is added to the deadline,
+      # not taken out of it. Both sit inside the 20-minute job cap, which is
+      # the real backstop.
+      - name: Install the libraries the compositor links
+        run: |
+          install() {
+            sudo apt-get update \
+              && sudo apt-get install -y \
+                libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev \
+                libxrandr-dev libxi-dev
+          }
+          for attempt in 1 2 3; do
+            if timeout --kill-after=10 300 bash -c "$(declare -f install); install"; then
+              exit 0
+            fi
+            echo "::warning::apt attempt $attempt failed or timed out" >&2
+            # Not after the last one: a total outage should say so rather than
+            # sit idle for fifteen seconds first.
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 5))
+            fi
+          done
+          echo "::error::apt did not succeed in three attempts" >&2
+          exit 1
       - run: cargo clippy -p domicile-compositor --all-targets -- -D warnings
       - run: cargo test -p domicile-compositor
