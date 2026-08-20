@@ -37,7 +37,11 @@ pub enum Outbound {
         height: u32,
         /// Device pixels per logical unit the client drew at.
         scale: u32,
-        rgba: Vec<u8>,
+        /// Shared rather than owned: the compositor keeps the last frame of a
+        /// software-rendered client so it can hand those pixels to the chrome
+        /// again without waiting for the client to draw, and a copy per frame
+        /// to cover that would cost more than the case is worth.
+        rgba: Arc<Vec<u8>>,
     },
 }
 
@@ -97,7 +101,14 @@ impl OutboundSender {
     }
 
     /// Queue an app's pixels, returning whether they were taken. Never waits.
-    pub fn frame(&self, app_id: &str, width: u32, height: u32, scale: u32, rgba: Vec<u8>) -> bool {
+    pub fn frame(
+        &self,
+        app_id: &str,
+        width: u32,
+        height: u32,
+        scale: u32,
+        rgba: Arc<Vec<u8>>,
+    ) -> bool {
         if self.waiting_frames.load(Ordering::SeqCst) >= FRAME_DEPTH {
             self.dropped.fetch_add(1, Ordering::SeqCst);
             false
@@ -162,9 +173,10 @@ mod tests {
     use domicile_protocol::HostMessage;
 
     use super::{outbound, Outbound};
+    use std::sync::Arc;
 
     fn frame_bytes(sender: &super::OutboundSender) -> bool {
-        sender.frame("app-1", 2, 2, 1, vec![0; 16])
+        sender.frame("app-1", 2, 2, 1, Arc::new(vec![0; 16]))
     }
 
     fn closed(app_id: &str) -> HostMessage {
