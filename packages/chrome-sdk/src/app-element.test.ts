@@ -6,6 +6,7 @@ import { BTN_LEFT } from "./input";
 import type { Matrix, Point } from "./matrix";
 import type { Measure } from "./measure";
 import type { ObservePlacement } from "./observe-placement";
+import { placementTiming } from "./placement-timing";
 import { APP_TAG_NAME, registerElements } from "./register-elements";
 
 type Call = readonly [kind: string, ...args: unknown[]];
@@ -197,6 +198,86 @@ describe("<domicile-app>", () => {
         zIndex: 0,
       },
     ]);
+  });
+
+  it("prices every measurement, not only the ones that send something", () => {
+    // What costs is the measuring, and the measuring happens for every window
+    // on every frame whether or not anything changed. A timing that only
+    // counted the frames that moved a window would report an idle desktop as
+    // free, which is exactly the claim in doubt.
+    placementTiming.take();
+    mountApp("term");
+    const placing = placementTiming.take();
+
+    frames.turn();
+    frames.turn();
+    const idling = placementTiming.take();
+
+    expect(placing?.count).toBe(1);
+    expect(idling?.count).toBe(2);
+  });
+
+  it("prices a measurement that threw, which has already cost the same", () => {
+    // `readElementTransform` throws on a computed value it cannot parse, from
+    // after the layout read. Priced only on success, such a window would cost
+    // the desktop a measurement and contribute nothing to the number.
+    //
+    // This is the cheap case, and the throw is why: `connectedCallback` calls
+    // `#place()` before it subscribes to the animation loop, so a window that
+    // throws at mount never joins the loop at all and is measured exactly
+    // once. It costs that one measurement, which is what the count below
+    // pins. (Re-appending the element runs `connectedCallback` again, and
+    // pays again.)
+    //
+    // Nothing catches the throw either way. `mountApp` propagating it here is
+    // happy-dom rather than a browser — the DOM spec has a custom element
+    // reaction that throws *reported* rather than rethrown to whoever appended
+    // the element — so the assertion that matters is the count below.
+    registerElements(bridge as unknown as BridgeClient, {
+      measure: () => {
+        throw new Error("a window the SDK could not measure");
+      },
+      observePlacement: frames.observe,
+    });
+    placementTiming.take();
+
+    expect(() => {
+      mountApp("term");
+    }).toThrow("a window the SDK could not measure");
+
+    expect(placementTiming.take()?.count).toBe(1);
+  });
+
+  it("keeps pricing a window that starts throwing after it was mounted", () => {
+    // The case that costs a desktop something: a window measured fine at mount
+    // and then given, by a class toggle, a computed transform the SDK cannot
+    // parse. The loop keeps calling it every frame for the life of the page —
+    // deliberately, so that one bad window does not stop the others — so it
+    // pays the layout read sixty times a second forever. The test above is
+    // the cheap counterpart: a window that was already throwing at mount never
+    // joined the loop, so it costs one measurement rather than every frame's.
+    mountApp("term");
+    registerElements(bridge as unknown as BridgeClient, {
+      measure: () => {
+        throw new Error("a window the SDK could not measure");
+      },
+      observePlacement: frames.observe,
+    });
+    placementTiming.take();
+
+    expect(() => {
+      frames.turn();
+    }).toThrow("a window the SDK could not measure");
+    // A second frame, because "keeps" is the whole claim. One frame would pass
+    // just as well if the throw had unfollowed the element — which would make
+    // this the cheap case rather than the expensive one it is named for. It is
+    // the element that would have to do that unfollowing: `tick` reschedules
+    // regardless, and `#unobserve` is only reached from `disconnectedCallback`.
+    expect(() => {
+      frames.turn();
+    }).toThrow("a window the SDK could not measure");
+
+    expect(placementTiming.take()?.count).toBe(2);
   });
 
   it("says nothing about a window that did not move", () => {
