@@ -242,7 +242,11 @@ Phase 2 — the effects that make an app a CSS element:
       `box-shadow`; an `inset` one is reported as no shadow, and a colour in a
       syntax the SDK cannot read is reported to the console rather than
       silently dropped.
-- [ ] the rotated + rounded + shadowed window from the old spike's success criterion, at native cost
+- [x] the rotated + rounded + shadowed window from the old spike's success
+      criterion is drawn correctly, held by pixel tests over a window turned 45
+      degrees
+- [ ] ...and at native cost: re-run `scripts/measure.sh` now that a blur runs
+      per shadow pixel, and watch `composite_ms`
 - [ ] chrome above/below as two engine layers
 - [ ] per-window fallback to the copy path when the element's computed style needs an unsupported effect
 

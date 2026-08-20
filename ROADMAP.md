@@ -32,10 +32,11 @@ frame back off the GPU, and sends the pixels to the chrome over a Unix socket to
 be drawn into a `<canvas>`. Correct everywhere, and four full-frame copies per
 frame.
 
-The wire protocol is at `PROTOCOL_VERSION = 4`.
+The wire protocol is at `PROTOCOL_VERSION = 7`.
 
-**Tests:** 96 core Rust + 46 in `domicile-compositor` (5 more behind `--ignored`,
-run by `e2e-compose.sh`) + 353 TypeScript. Clippy clean, `cargo fmt` clean.
+**Tests:** 99 core Rust + 57 in `domicile-compositor` (23 more behind
+`--ignored`, run by `e2e-compose.sh`) + 387 TypeScript. Clippy clean, `cargo
+fmt` clean.
 
 ### How to run / test
 
@@ -381,8 +382,19 @@ nothing crosses the hop they measure.
   `place_portal` carries the element's computed `border-radius`, `opacity` and
   `box-shadow`; the shader rounds and fades the client's own buffer, and a
   second quad under it casts the shadow.
-- the rotated + rounded + shadowed window that was the original success criterion,
-  at native cost
+- ~~the rotated + rounded + shadowed window that was the original success
+  criterion, drawn correctly~~ — done. `compose.rs` has pixel tests for a window
+  turned 45 degrees covering the diamond it should, rounded by a length on the
+  screen rather than a fraction of itself, and casting its shadow the way it
+  faces.
+- the same window **at native cost** — `#measure` has not been re-run since the
+  blur landed, and `composite_ms` is the number to watch: a blur is the first
+  effect that could move it off zero.
+- a **rotated non-square window**. `compose::on_screen_size` reads the matrix's
+  rows; reading its columns instead is numerically identical for anything
+  axis-aligned and swaps width for height on anything turned, and every turned
+  fixture is square, so nothing in the repo can tell the two apart. Needs a
+  non-square `turned` fixture rather than another assertion on the one there.
 - chrome above *and* below as two engine layers (only above is free today)
 - per-window fallback to the copy path when a computed style needs an effect the
   shader cannot do — this is what makes the native path safe to leave on: correct
