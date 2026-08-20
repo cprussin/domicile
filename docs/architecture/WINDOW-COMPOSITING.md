@@ -257,9 +257,10 @@ Phase 2 — the effects that make an app a CSS element:
       changed and the client did not: leaving, it hands over the buffer it is
       already holding, and returning, it tells the chrome with `app_composited`
       so the canvas goes only once there are pixels to put in its place.
-- [ ] re-measure on style, not only on size — see the open question below. Until
-      then the fallback fires when a window is styled at mount, not when a rule
-      starts matching one that is already up.
+- [x] re-measure on style, not only on size: every portal is measured on each
+      animation frame, so a rule that starts matching a window already on the
+      stage moves it when the pointer arrives rather than whenever something
+      next resizes it.
 - [ ] the fallback inherits the interleaved-stacking limitation, and makes it
       reachable one window at a time: the page is drawn over all of the app
       surfaces rather than in the stacking order, so a window whose pixels move
@@ -284,16 +285,14 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
   `app_composited` when it has taken a window back — the chrome cannot work
   that out for itself, because a `wl_shm` client is never drawn natively
   however ordinary its CSS.
-- **What makes a window re-measure?** Only its box changing. `<domicile-app>`
-  measures on connect, on an `app-id` change, and on a `ResizeObserver` — and
-  none of `filter`, `clip-path`, `mix-blend-mode`, a second `box-shadow` or
-  `border-radius: 8px` → `50%` changes the box. So `.window:hover { filter:
-  blur(2px) }` does not move that window to the copy path when the pointer
-  arrives; it moves when something next resizes it, which makes the symptom
-  intermittent rather than absent. The same gap means a CSS *transition* on
-  `transform` is not followed either, which is the larger half of the problem
-  and the reason the fix is its own change: measurement wants to be driven by
-  something that sees style, not size.
+- ~~**What makes a window re-measure?**~~ Settled: an animation frame. A
+  `ResizeObserver` sees a box change size and nothing else, and none of the
+  things a chrome does to a window most often changes its size — moving it,
+  animating a transform, a `:hover` filter, a class toggle. The browser has no
+  "this box moved" event, so the box is read once per frame, which is the rate
+  at which the page can change anyway. One loop for every portal, and an
+  element that measures what it measured last frame sends nothing, so a still
+  desktop is silent.
 - **What the number actually is.** Everything through the draw is in place and
   tested, but the only measurement so far is of the copy path. Phase 1 is not
   done until `rt_ms` says what this costs against it.

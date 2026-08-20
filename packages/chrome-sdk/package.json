@@ -20,7 +20,7 @@
     "./matrix": "./src/matrix.ts",
     "./measure": "./src/measure.ts",
     "./newline-frames": "./src/newline-frames.ts",
-    "./observe-resize": "./src/observe-resize.ts",
+    "./observe-placement": "./src/observe-placement.ts",
     "./protocol": "./src/protocol.ts",
     "./register-elements": "./src/register-elements.ts",
     "./round-trip": "./src/round-trip.ts",

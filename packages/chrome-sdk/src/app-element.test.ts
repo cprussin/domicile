@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import type { DomicileAppElement } from "./app-element";
 import type { BridgeClient } from "./bridge";
 import { BTN_LEFT } from "./input";
+import type { Matrix, Point } from "./matrix";
 import type { Measure } from "./measure";
-import type { ObserveResize } from "./observe-resize";
+import type { ObservePlacement } from "./observe-placement";
 import { APP_TAG_NAME, registerElements } from "./register-elements";
 
 type Call = readonly [kind: string, ...args: unknown[]];
@@ -61,20 +62,21 @@ const stubMeasure: Measure = () => ({
   zIndex: 0,
 });
 
-// The test DOM lays nothing out, so its ResizeObserver never fires; the
-// observer is injected instead and driven by hand.
-class FakeResizeObserver {
+// happy-dom does animate frames — and as fast as it can, which is not a clock
+// anything can assert against. The observer is injected so a test says when a
+// frame happened.
+class FakeFrames {
   #callbacks: (() => void)[] = [];
 
-  readonly observe: ObserveResize = (_element, onResize) => {
-    this.#callbacks.push(onResize);
+  readonly observe: ObservePlacement = (onMoved) => {
+    this.#callbacks.push(onMoved);
     return () => {
-      this.#callbacks = this.#callbacks.filter((entry) => entry !== onResize);
+      this.#callbacks = this.#callbacks.filter((entry) => entry !== onMoved);
     };
   };
 
-  /** Simulate the browser reporting a new box for every watched element. */
-  resize(): void {
+  /** Simulate the page reaching its next animation frame. */
+  turn(): void {
     for (const callback of this.#callbacks) {
       callback();
     }
@@ -96,15 +98,15 @@ const mountApp = (appId?: string): DomicileAppElement => {
 
 describe("<domicile-app>", () => {
   let bridge: FakeBridge;
-  let resizes: FakeResizeObserver;
+  let frames: FakeFrames;
 
   beforeEach(() => {
     document.body.innerHTML = "";
     bridge = new FakeBridge();
-    resizes = new FakeResizeObserver();
+    frames = new FakeFrames();
     registerElements(bridge as unknown as BridgeClient, {
       measure: stubMeasure,
-      observeResize: resizes.observe,
+      observePlacement: frames.observe,
     });
   });
 
@@ -145,7 +147,7 @@ describe("<domicile-app>", () => {
         visible: false,
         zIndex: 0,
       }),
-      observeResize: resizes.observe,
+      observePlacement: frames.observe,
     });
     mountApp("term");
 
@@ -166,11 +168,22 @@ describe("<domicile-app>", () => {
     expect(bridge.calls.some(([kind]) => kind === "resize")).toBe(false);
   });
 
-  it("re-reports geometry when the element's box changes", () => {
+  it("re-reports geometry when the element moves", () => {
+    // Moving is the case a `ResizeObserver` cannot see and the one a chrome
+    // does most: the box is the same size somewhere else. A portal that
+    // followed only size would sit still while its element slid across the
+    // page, and the window would come apart from the hole it is drawn into.
+    const moved = { transform: [1, 0, 0, 1, 0, 0] as Matrix };
+    registerElements(bridge as unknown as BridgeClient, {
+      measure: (element) => ({ ...stubMeasure(element), ...moved }),
+      observePlacement: frames.observe,
+    });
     mountApp("term");
     bridge.calls.length = 0;
 
-    resizes.resize();
+    moved.transform = [1, 0, 0, 1, 40, 5];
+    frames.turn();
+
     expect(bridge.calls).toContainEqual([
       "place",
       {
@@ -179,17 +192,77 @@ describe("<domicile-app>", () => {
         native: true,
         opacity: 1,
         size: [10, 20],
-        transform: [1, 0, 0, 1, 0, 0],
+        transform: [1, 0, 0, 1, 40, 5],
         visible: true,
         zIndex: 0,
       },
     ]);
-    expect(bridge.calls).toContainEqual(["resize", "term", [10, 20]]);
+  });
+
+  it("says nothing about a window that did not move", () => {
+    // Measuring happens on every animation frame now, so a window that is
+    // simply sitting there would otherwise send its placement sixty times a
+    // second down a socket shared with every client's pixels.
+    mountApp("term");
+    bridge.calls.length = 0;
+
+    frames.turn();
+    frames.turn();
+
+    expect(bridge.calls).toStrictEqual([]);
+  });
+
+  it("does not make a client redraw because its window moved", () => {
+    // A client repaints when it is configured, so sending its size again for
+    // a window that only moved would cost every app on the desktop a repaint
+    // per frame of any animation.
+    const moved = { transform: [1, 0, 0, 1, 0, 0] as Matrix };
+    registerElements(bridge as unknown as BridgeClient, {
+      measure: (element) => ({ ...stubMeasure(element), ...moved }),
+      observePlacement: frames.observe,
+    });
+    mountApp("term");
+    bridge.calls.length = 0;
+
+    moved.transform = [1, 0, 0, 1, 40, 5];
+    frames.turn();
+
+    expect(bridge.calls.some(([kind]) => kind === "resize")).toBe(false);
+  });
+
+  it("re-reports geometry when the element's box changes", () => {
+    const box = { size: [10, 20] as Point };
+    registerElements(bridge as unknown as BridgeClient, {
+      measure: (element) => ({ ...stubMeasure(element), ...box }),
+      observePlacement: frames.observe,
+    });
+    mountApp("term");
+    bridge.calls.length = 0;
+
+    box.size = [30, 40];
+    frames.turn();
+
+    expect(bridge.calls).toContainEqual(["resize", "term", [30, 40]]);
+  });
+
+  it("reports a window afresh after telling the host to forget it", () => {
+    // The host no longer knows where this window is, so the placement that
+    // follows a remount has to be sent however little the element moved. A
+    // record kept across the gap would leave the portal unplaced for as long
+    // as nothing about the element changed.
+    const element = mountApp("term");
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    bridge.calls.length = 0;
+
+    parent.append(element);
+
+    expect(bridge.calls.some(([kind]) => kind === "place")).toBe(true);
   });
 
   it("stops watching the box once disconnected", () => {
     mountApp("term").remove();
-    expect(resizes.watching).toBe(0);
+    expect(frames.watching).toBe(0);
   });
 
   it("applies a client's requested cursor to the element", () => {
@@ -321,7 +394,7 @@ describe("<domicile-app>", () => {
     const element = mountApp("term");
     element.drawFrame(2, 1, 1, new Uint8Array(8));
 
-    resizes.resize();
+    frames.turn();
 
     expect(element.querySelector("canvas")).not.toBeNull();
   });
@@ -369,6 +442,116 @@ describe("<domicile-app>", () => {
     parent.append(element);
 
     expect(element.querySelector("canvas")).toBeNull();
+  });
+
+  it("sends a placement again when the host never received the last one", () => {
+    // Recording the key before the send would leave the element sure it had
+    // reported a placement that never arrived — and because the record is what
+    // suppresses the next one, nothing would ever send it again until
+    // something else about the window changed.
+    const moved = { transform: [1, 0, 0, 1, 0, 0] as Matrix };
+    registerElements(bridge as unknown as BridgeClient, {
+      measure: (element) => ({ ...stubMeasure(element), ...moved }),
+      observePlacement: frames.observe,
+    });
+    mountApp("term");
+    const placePortal = bridge.placePortal.bind(bridge);
+    bridge.placePortal = () => {
+      throw new Error("the socket went away");
+    };
+
+    moved.transform = [1, 0, 0, 1, 40, 5];
+    expect(() => {
+      frames.turn();
+    }).toThrow("the socket went away");
+    bridge.placePortal = placePortal;
+    bridge.calls.length = 0;
+    frames.turn();
+
+    expect(bridge.calls).toContainEqual([
+      "place",
+      {
+        appId: "term",
+        cornerRadius: 0,
+        native: true,
+        opacity: 1,
+        size: [10, 20],
+        transform: [1, 0, 0, 1, 40, 5],
+        visible: true,
+        zIndex: 0,
+      },
+    ]);
+  });
+
+  it("configures a client again when the host never received the last size", () => {
+    // The same hazard on the other record, and it is cleared on different
+    // paths from the placement — so one test cannot stand in for both.
+    const box = { size: [10, 20] as Point };
+    registerElements(bridge as unknown as BridgeClient, {
+      measure: (element) => ({ ...stubMeasure(element), ...box }),
+      observePlacement: frames.observe,
+    });
+    mountApp("term");
+    const resizeApp = bridge.resizeApp.bind(bridge);
+    bridge.resizeApp = () => {
+      throw new Error("the socket went away");
+    };
+
+    box.size = [30, 40];
+    expect(() => {
+      frames.turn();
+    }).toThrow("the socket went away");
+    bridge.resizeApp = resizeApp;
+    bridge.calls.length = 0;
+    frames.turn();
+
+    expect(bridge.calls).toContainEqual(["resize", "term", [30, 40]]);
+  });
+
+  it("tells a newly shown app its size even if it was swapped in detached", () => {
+    // `attributeChangedCallback` cannot run while the element is out of the
+    // page, so nothing gets the chance to clear anything by hand on this path.
+    // A chrome that parks an element, re-points it and puts it back would
+    // otherwise leave the new client never configured, drawing at whatever
+    // size the previous one had asked for.
+    const element = mountApp("term");
+    const parent = document.createElement("div");
+    document.body.append(parent);
+
+    element.remove();
+    element.setAttribute("app-id", "editor");
+    bridge.calls.length = 0;
+    parent.append(element);
+
+    expect(bridge.calls).toContainEqual(["resize", "editor", [10, 20]]);
+  });
+
+  it("re-places a window whose app-id was taken away and given back", () => {
+    // Removing the attribute tells the host to forget the portal but places
+    // nothing in its stead — there is no app to place. Putting the same id
+    // back is then a placement the element has already sent once, so a record
+    // that survived the removal would deduplicate it away and the window would
+    // never return to the scene.
+    const element = mountApp("term");
+    element.removeAttribute("app-id");
+    bridge.calls.length = 0;
+
+    element.setAttribute("app-id", "term");
+
+    expect(bridge.calls.some(([kind]) => kind === "place")).toBe(true);
+  });
+
+  it("tells a newly shown app what size to render at", () => {
+    // The render size carries no app id, so an element that swapped `app-id`
+    // while keeping its box would never configure the new client — it would
+    // draw at whatever the previous one happened to be until the element next
+    // resized, which for a window that fills the stage is never.
+    const element = mountApp("term");
+    bridge.calls.length = 0;
+
+    element.setAttribute("app-id", "editor");
+
+    expect(bridge.calls).toContainEqual(["resize", "editor", [10, 20]]);
   });
 
   it("forgets the client's resolution when it changes which app it shows", () => {

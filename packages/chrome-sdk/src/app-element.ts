@@ -13,7 +13,7 @@ import type { BridgeClient } from "./bridge";
 import {
   activeBridge,
   activeMeasure,
-  activeObserveResize,
+  activeObservePlacement,
   focusedApp,
   setFocusedApp,
 } from "./element-context";
@@ -34,6 +34,10 @@ export class DomicileAppElement extends HTMLElement {
   #surfaceWidth = 0;
   #surfaceHeight = 0;
   #unobserve: (() => void) | undefined;
+  // The last placement and render size sent, so a measurement that changed
+  // nothing costs nothing. See `#place`.
+  #placed: string | undefined;
+  #rendered: string | undefined;
 
   constructor() {
     super();
@@ -50,9 +54,11 @@ export class DomicileAppElement extends HTMLElement {
 
   connectedCallback(): void {
     this.#place();
-    // CSS moves and resizes the element without any of this code running, so
-    // the portal has to follow the box rather than be reported once.
-    this.#unobserve = activeObserveResize()(this, () => {
+    // CSS moves, resizes and restyles the element without any of this code
+    // running, so the portal has to follow the box rather than be reported
+    // once. Everything the compositor draws this window with is read from the
+    // page, so anything the page can change is something this has to see.
+    this.#unobserve = activeObservePlacement()(() => {
       this.#place();
     });
   }
@@ -63,6 +69,12 @@ export class DomicileAppElement extends HTMLElement {
     const appId = this.appId;
     if (appId !== undefined) {
       activeBridge()?.removePortal(appId);
+      // The host no longer knows where this window is, so the next placement
+      // has to be sent however little the element moved in the meantime. Not
+      // the render size: `remove_portal` takes the portal out of the scene and
+      // leaves the client's requested size alone, so the client is still
+      // drawing at the right resolution and there is nothing to say.
+      this.#placed = undefined;
       // Told the host this element no longer shows that window, so it must
       // stop being true. A disconnect is not always a teardown — moving an
       // element between two containers is a disconnect *and* a reconnect, and
@@ -104,6 +116,17 @@ export class DomicileAppElement extends HTMLElement {
         this.dropSurface();
         this.#surfaceWidth = 0;
         this.#surfaceHeight = 0;
+        // Whatever the host has been told to forget, this element has to be
+        // willing to say again — the same rule as in `disconnectedCallback`.
+        // It is tempting to argue the placement carries the app id and so
+        // re-places itself: true of a *swap*, and false of a removal, where
+        // the `#place()` below does nothing because there is no app to place,
+        // and setting the same id back is then deduplicated away against a
+        // portal that is no longer in the scene.
+        //
+        // The render size needs no such clearing, because its key carries the
+        // app id too.
+        this.#placed = undefined;
       }
       this.#place();
     }
@@ -235,7 +258,7 @@ export class DomicileAppElement extends HTMLElement {
         opacity,
         shadow,
       } = activeMeasure()(this);
-      bridge.placePortal({
+      const placement = {
         appId,
         cornerRadius,
         native,
@@ -245,13 +268,41 @@ export class DomicileAppElement extends HTMLElement {
         transform,
         visible,
         zIndex,
-      });
+      };
+      // Measuring happens on every animation frame, so most of the time this
+      // is the same window in the same place and there is nothing to say. The
+      // key is the placement itself rather than a hand-written comparison,
+      // because a comparison that forgot a field would drop exactly the change
+      // it forgot — silently, and only for windows that used it.
+      const placed = JSON.stringify(placement);
+      if (placed !== this.#placed) {
+        // Recorded after the send, not before: a throw on the way out would
+        // otherwise leave the element sure it had reported a placement the
+        // host never received, and nothing would send it again until something
+        // else about the window changed.
+        bridge.placePortal(placement);
+        this.#placed = placed;
+      }
       // The client renders at its own resolution: without this it would keep
       // drawing at the old size and be stretched into the new box. An element
       // with no box (a hidden tab) has no size to render at, and configuring
       // the client to nothing would make it redraw on every tab switch.
-      if (visible) {
+      //
+      // Kept apart from the placement because a client redraws when it is
+      // configured: a window merely moving must not cost every client on the
+      // desktop a repaint.
+      // Keyed on the app as well as the size, for the same reason the
+      // placement is keyed on the whole message: what identifies this
+      // instruction is what it would say, and the app it is about is half of
+      // that. Keyed on the size alone it would have to be cleared by hand
+      // wherever the app changed — and `attributeChangedCallback` cannot run
+      // while the element is detached, so a chrome that swapped `app-id`
+      // between a remove and a re-append would leave the new client never
+      // configured, drawing at whatever size the previous one asked for.
+      const rendered = JSON.stringify({ appId, size });
+      if (visible && rendered !== this.#rendered) {
         bridge.resizeApp(appId, size);
+        this.#rendered = rendered;
       }
     }
   }
