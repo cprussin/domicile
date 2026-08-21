@@ -14,7 +14,11 @@ class FakeTransport implements Transport {
   readonly sent: unknown[] = [];
 
   #onMessage:
-    | ((text: string, pixels?: Uint8Array<ArrayBuffer>) => void)
+    | ((
+        text: string,
+        pixels?: Uint8Array<ArrayBuffer>,
+        sentAt?: number,
+      ) => void)
     | undefined;
 
   send(text: string): void {
@@ -22,14 +26,22 @@ class FakeTransport implements Transport {
   }
 
   onMessage(
-    callback: (text: string, pixels?: Uint8Array<ArrayBuffer>) => void,
+    callback: (
+      text: string,
+      pixels?: Uint8Array<ArrayBuffer>,
+      sentAt?: number,
+    ) => void,
   ): void {
     this.#onMessage = callback;
   }
 
   /** Simulate a message arriving from the host. */
-  push(message: unknown, pixels?: Uint8Array<ArrayBuffer>): void {
-    this.#onMessage?.(JSON.stringify(message), pixels);
+  push(
+    message: unknown,
+    pixels?: Uint8Array<ArrayBuffer>,
+    sentAt?: number,
+  ): void {
+    this.#onMessage?.(JSON.stringify(message), pixels, sentAt);
   }
 
   lastSent(): unknown {
@@ -247,6 +259,52 @@ describe("BridgeClient", () => {
       transport.push(...frame("term"));
 
       expect(timed.roundTrip.take()?.worstMs).toBe(50);
+    });
+  });
+
+  describe("the hop from the host's bytes to this page", () => {
+    // Reported separately from the round trip that contains it: an
+    // unattributed total says a desktop is slow without saying which half of
+    // it to fix. This stage used to be Electron's IPC, at 79ms a frame.
+    const frame = (appId: string): [unknown, Uint8Array<ArrayBuffer>] => [
+      {
+        app_id: appId,
+        bytes: 4,
+        format: "rgba",
+        height: 1,
+        scale: 1,
+        type: "app_frame",
+        width: 1,
+      },
+      new Uint8Array(4),
+    ];
+
+    it("prices a message against the moment its bytes arrived", () => {
+      let clock = 0;
+      const timed = new BridgeClient(transport, {
+        now: () => clock,
+        protocolVersion: 1,
+      });
+
+      clock = 12;
+      transport.push(...frame("term"), 4);
+
+      expect(timed.hop.take()).toStrictEqual({
+        averageMs: 8,
+        count: 1,
+        worstMs: 8,
+      });
+    });
+
+    it("records nothing for a transport that never says", () => {
+      // A transport with no such moment — the no-op the shell falls back to in
+      // a plain browser — must not be charged one. `undefined` is the honest
+      // return; what a reporter renders it as is the reporter's business.
+      const timed = new BridgeClient(transport, { protocolVersion: 1 });
+
+      transport.push(...frame("term"));
+
+      expect(timed.hop.take()).toBeUndefined();
     });
   });
 });

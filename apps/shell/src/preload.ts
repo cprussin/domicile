@@ -1,51 +1,116 @@
-// Exposes the compositor transport to the renderer as
-// `window.domicileTransport`, the shape the chrome-sdk BridgeClient expects.
+// The renderer's half of the host connection.
+//
+// This holds the compositor socket itself rather than receiving its messages
+// from the main process, and that is the point of it. Electron's IPC
+// structured-clones what it carries, which for a frame's pixels is megabytes
+// per frame across a process boundary: measured at 79ms average and 237ms
+// worst against ~8ms for the GPU readback that produced them, it was the
+// single largest cost in the copy path. Read here, the bytes are already in
+// the renderer, and the only copy left is the context bridge's — in-process,
+// into the page.
+//
+// The whole body runs inside `orDie`. Electron catches a throw at preload
+// scope, logs it to the renderer's devtools console — which nobody has open
+// while using a desktop — and then loads the page anyway, where
+// `window.domicileTransport` is missing and the shell's own no-op fallback
+// brings up a permanently deaf desktop. A shell that cannot reach the
+// compositor has to say so where it can be read, and stop.
 
-import { SampleWindow } from "@domicile/chrome-sdk/sample-window";
+import net from "node:net";
+import { hostTransport } from "@domicile/chrome-sdk/host-transport";
 import { contextBridge, ipcRenderer } from "electron";
 
 import {
   CHROME_DIAGNOSTIC_CHANNEL,
-  CHROME_TO_HOST_CHANNEL,
-  HOST_TO_CHROME_CHANNEL,
+  CHROME_FAILURE_CHANNEL,
 } from "./ipc-channels";
+import { socketFailed } from "./socket-failure";
+import { socketPathFrom } from "./socket-path";
 
-// What the main process → renderer hop costs. Measured here rather than in the
-// page because this is the first code in the renderer process to see the
-// message, so nothing of the page's own work is inside the number.
-const hop = new SampleWindow();
+/**
+ * Say why on stderr and stop, which only the main process can do.
+ *
+ * Once. `app.exit` does not stop an IPC message already queued behind it, so
+ * two failures arriving together — a throw at preload scope and the socket
+ * error it left in flight — both reach the terminal, and the second is at best
+ * redundant and at worst a wrong account of the first. Whichever spoke first
+ * is the one that knows.
+ */
+let said = false;
+const fail = (line: string, code: number): void => {
+  if (!said) {
+    said = true;
+    ipcRenderer.send(CHROME_FAILURE_CHANNEL, line, code);
+  }
+};
 
-contextBridge.exposeInMainWorld("domicileTransport", {
-  onMessage: (
-    callback: (text: string, pixels?: Uint8Array<ArrayBuffer>) => void,
-  ) => {
-    ipcRenderer.on(
-      HOST_TO_CHROME_CHANNEL,
-      (
-        _event,
-        text: string,
-        pixels?: Uint8Array<ArrayBuffer>,
-        sentAt?: number,
-      ) => {
-        if (sentAt !== undefined) {
-          hop.record(Date.now() - sentAt);
-        }
-        callback(text, pixels);
+const orDie = (start: () => void): void => {
+  try {
+    start();
+  } catch (failure: unknown) {
+    const said = failure instanceof Error ? failure.message : String(failure);
+    fail(`domicile: the chrome could not start: ${said}\n`, 1);
+  }
+};
+
+orDie(() => {
+  // Passed as an `additionalArguments` switch by the main process rather than
+  // read from the environment: the main process is where the shell's
+  // configuration is resolved, and a renderer that read it again could
+  // disagree with the window it belongs to.
+  const socketPath = socketPathFrom(process.argv);
+
+  const socket = net.connect(socketPath);
+  const lost = socketFailed(fail, socketPath);
+  socket.on("error", lost);
+  // `error` is not the common way to lose a compositor. A peer that dies on a
+  // Unix stream socket sends a FIN, which Node reports as `end` then `close`
+  // and never as an error — so without this the desktop goes on drawing a
+  // still of a machine that is gone.
+  // `hadError` is what keeps this from speaking over the `error` handler.
+  // Node emits `close` after *every* `error`, so an unguarded one reports a
+  // second time and gets it wrong: a socket that was never there reads as a
+  // compositor that closed the connection, which is the commonest failure
+  // there is followed by a false account of it.
+  const compositorClosed = (hadError: boolean): void => {
+    if (!hadError) {
+      lost(new Error("the compositor closed the connection"));
+    }
+  };
+  socket.on("close", compositorClosed);
+  // Except when it is *this page* going away. A reload — or the window
+  // closing on the way out of the app — tears the preload's Node environment
+  // down with the document, and the socket closing on the way is not a
+  // compositor that died. Read as one it would print a failure and exit
+  // non-zero on every reload and on every ordinary quit.
+  //
+  // The handler comes off before the socket is closed, rather than a flag
+  // being set and checked, so *this* ordering is not something to get right.
+  // (The one that is, `error` before `close`, is handled above.)
+  window.addEventListener("pagehide", () => {
+    socket.off("close", compositorClosed);
+    socket.destroy();
+  });
+
+  contextBridge.exposeInMainWorld(
+    "domicileTransport",
+    hostTransport({
+      onData: (listener) => {
+        socket.on("data", listener);
       },
-    );
-  },
-  send: (text: string) => {
-    ipcRenderer.send(CHROME_TO_HOST_CHANNEL, text);
-  },
-});
+      write: (text) => {
+        socket.write(text);
+      },
+    }),
+  );
 
-// Kept off `domicileTransport`: that object is the host protocol, whose shape
-// the SDK's `Transport` type fixes. This is the shell asking its own Electron
-// host for things the eventual CEF embedder will answer some other way — or
-// not at all.
-contextBridge.exposeInMainWorld("domicileDiagnostics", {
-  report: (line: string) => {
-    ipcRenderer.send(CHROME_DIAGNOSTIC_CHANNEL, line);
-  },
-  takeIpcHop: () => hop.take(),
+  // Kept off `domicileTransport`: that object is the host protocol, whose shape
+  // the SDK's `Transport` type fixes. This is the shell asking its own Electron
+  // host for things the eventual CEF embedder will answer some other way — or
+  // not at all.
+  contextBridge.exposeInMainWorld("domicileDiagnostics", {
+    report: (line: string) => {
+      ipcRenderer.send(CHROME_DIAGNOSTIC_CHANNEL, line);
+    },
+  });
 });

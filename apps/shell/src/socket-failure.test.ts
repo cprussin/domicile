@@ -9,20 +9,18 @@ describe("socketFailed", () => {
     // which is what happened every time it was started without the compositor.
     // Both effects are pinned: a message saying which socket, and a non-zero
     // exit rather than a window that never appears.
-    const reported: string[] = [];
-    const exited: number[] = [];
+    const failures: [string, number][] = [];
 
     socketFailed(
-      {
-        exit: (code) => exited.push(code),
-        report: (line) => reported.push(line),
-      },
+      (line, code) => failures.push([line, code]),
       "/run/user/1000/domicile.sock",
     )(new Error("connect ENOENT"));
 
-    expect(reported).toStrictEqual([
-      "domicile: the compositor socket at /run/user/1000/domicile.sock failed: connect ENOENT\n",
+    expect(failures).toStrictEqual([
+      [
+        "domicile: the compositor socket at /run/user/1000/domicile.sock failed: connect ENOENT\n",
+        1,
+      ],
     ]);
-    expect(exited).toStrictEqual([1]);
   });
 });

@@ -34,8 +34,10 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<domicile-webview>`. |
 | `src/Clock.tsx` | The rail footer's live clock. |
 | `src/window-styles.ts` | What every window on the stage shares. |
-| `src/main.ts` | Electron main process: owns the Unix socket to the compositor and bridges it to the renderer. |
-| `src/preload.ts` | Exposes that bridge to the page as `window.domicileTransport`. |
+| `src/main.ts` | Electron main process: opens the window, and prints and exits on the renderer's behalf. |
+| `src/preload.ts` | Holds the Unix socket to the compositor and exposes it to the page as `window.domicileTransport`. |
+| `src/socket-path.ts` | Where that socket is, off the renderer's own command line. |
+| `src/socket-failure.ts` | What a dead compositor socket costs the shell. |
 | `src/ipc-channels.ts` | The channel names main and preload agree on. |
 | `src/domicile-elements.d.ts` | The SDK's custom elements, as JSX. |
 

@@ -17,6 +17,7 @@
     "./chrome-message": "./src/chrome-message.ts",
     "./element-transform": "./src/element-transform.ts",
     "./host-stream": "./src/host-stream.ts",
+    "./host-transport": "./src/host-transport.ts",
     "./input": "./src/input.ts",
     "./matrix": "./src/matrix.ts",
     "./measure": "./src/measure.ts",

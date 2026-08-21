@@ -28,6 +28,7 @@ import {
 import type { HostMessageOf, HostMessageType } from "./protocol";
 import { PROTOCOL_VERSION, parseHostMessage } from "./protocol";
 import { RoundTripWindow } from "./round-trip";
+import { SampleWindow } from "./sample-window";
 import type { AxisDelta } from "./wheel-axis";
 
 /** The clock the round-trip timing reads; a parameter so tests can hold it. */
@@ -75,7 +76,16 @@ export const describeHandshakeFailure = (failure: HandshakeFailure): string => {
 export type Transport = {
   send: (text: string) => void;
   onMessage: (
-    callback: (text: string, pixels?: Uint8Array<ArrayBuffer>) => void,
+    callback: (
+      text: string,
+      pixels?: Uint8Array<ArrayBuffer>,
+      /**
+       * When the host's own bytes arrived, on the same clock `now` reads.
+       * Optional because a transport that is not a socket — the no-op one the
+       * shell falls back to in a plain browser — has no such moment.
+       */
+      sentAt?: number,
+    ) => void,
   ) => void;
 };
 
@@ -100,6 +110,13 @@ export class BridgeClient {
    */
   readonly roundTrip = new RoundTripWindow();
 
+  /**
+   * What the host's bytes cost between arriving in this process and reaching
+   * this page. Zero work of the page's own is inside it: the stamp is taken by
+   * whoever read the socket, and this is the first line of the page to run.
+   */
+  readonly hop = new SampleWindow();
+
   readonly #transport: Transport;
   readonly #handlers = new Map<HostMessageType, Handler>();
   readonly #now: typeof monotonicNow;
@@ -115,7 +132,10 @@ export class BridgeClient {
     this.protocolVersion = protocolVersion;
     this.#now = now;
     this.#transport = transport;
-    this.#transport.onMessage((text, pixels) => {
+    this.#transport.onMessage((text, pixels, sentAt) => {
+      if (sentAt !== undefined) {
+        this.hop.record(this.#now() - sentAt);
+      }
       this.#handleIncoming(text, pixels);
     });
   }

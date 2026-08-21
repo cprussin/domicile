@@ -29,7 +29,7 @@ import type { SampleReport } from "@domicile/chrome-sdk/sample-window";
 export type Timings = {
   /** Keystroke to pixels, when a key was pressed. */
   trip: SampleReport | undefined;
-  /** The main-process → renderer hop for a frame's pixels. */
+  /** The host's bytes arriving in this process, to reaching this page. */
   ipc: SampleReport | undefined;
   /** Putting those pixels on the canvas. */
   draw: SampleReport | undefined;

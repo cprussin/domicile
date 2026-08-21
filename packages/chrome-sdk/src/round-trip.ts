@@ -2,8 +2,8 @@
 //
 // The compositor reports its own half of the frame path, and that half is
 // small — a few milliseconds of GPU readback and socket write. What it cannot
-// see is the rest of the round trip: the chrome's socket, the IPC hop into the
-// renderer, the client's own redraw, and `putImageData`. This measures the
+// see is the rest of the round trip: the chrome's socket, the hop from there
+// into the page, the client's own redraw, and `putImageData`. This measures the
 // whole loop from the only place that sees both ends of it — the page that
 // sent the keystroke and drew the frame that answered it.
 //

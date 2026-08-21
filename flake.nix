@@ -110,6 +110,7 @@
           measure = "measure.sh";
           e2e-chrome = "e2e-chrome.sh";
           e2e-electron = "e2e-electron.sh";
+          e2e-no-compositor = "e2e-no-compositor.sh";
           e2e-spawn = "e2e-spawn.sh";
           e2e-input = "e2e-input.sh";
           e2e-dmabuf = "e2e-dmabuf.sh";

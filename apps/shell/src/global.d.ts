@@ -1,5 +1,4 @@
 import type { Transport } from "@domicile/chrome-sdk/bridge";
-import type { SampleReport } from "@domicile/chrome-sdk/sample-window";
 
 declare global {
   // biome-ignore lint/style/useConsistentTypeDefinitions: declaration-merging Window requires interface
@@ -13,12 +12,6 @@ declare global {
      */
     domicileDiagnostics?: {
       report: (line: string) => void;
-      /**
-       * What the main-process → renderer hop has cost since last asked. Taken
-       * in the preload because that is the first code in this process to see a
-       * message, so none of the page's own work is inside the number.
-       */
-      takeIpcHop: () => SampleReport | undefined;
     };
   }
 }

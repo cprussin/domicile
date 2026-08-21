@@ -9,12 +9,12 @@ stops owning the app's pixels.
 ## Problem
 
 The frame path copies every client frame four times — GPU readback, socket,
-Electron IPC clone, `putImageData` — and then the browser uploads it back to
-the GPU. Measured on an AMD 890M with kitty at ~1500x1000: ~11ms of compositor
-and ~16ms of chrome per frame, ~80MB/s for one window. It scales as pixels²
-(HiDPI quadruples it) and linearly in window count. A normal compositor imports
-the client's dmabuf as a texture and composites on the GPU: zero copies,
-microseconds of CPU, and in the best case direct scanout.
+context-bridge clone into the page, `putImageData` — and then the browser
+uploads it back to the GPU. Measured on an AMD 890M with kitty at ~1500x1000:
+~11ms of compositor and ~16ms of chrome per frame, ~80MB/s for one window. It
+scales as pixels² (HiDPI quadruples it) and linearly in window count. A normal
+compositor imports the client's dmabuf as a texture and composites on the GPU:
+zero copies, microseconds of CPU, and in the best case direct scanout.
 
 The existing plan was to fix this by getting client dmabufs *into* the page as
 external textures. That plan does not survive contact with the API.

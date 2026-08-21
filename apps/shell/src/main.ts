@@ -1,22 +1,23 @@
 // Electron host for the reference chrome shell.
 //
 // This is the prototype's window: Electron renders the chrome (full CSS/JS) and
-// this main process owns the Unix socket to the compositor, bridging it to the
-// renderer as `window.domicileTransport`. (The eventual target embeds CEF
-// directly; Electron gets us a visible, testable chrome now.)
+// the *preload* owns the Unix socket to the compositor. (The eventual target
+// embeds CEF directly; Electron gets us a visible, testable chrome now.)
+//
+// The socket used to be held here and its messages forwarded over Electron's
+// IPC, which structured-clones what it carries across a process boundary. For
+// a frame's pixels that measured 79ms on hardware — ten times the GPU readback
+// that produced them, and the largest single cost in the copy path. So this
+// process keeps only what a renderer cannot do for itself: opening the window,
+// and writing to the terminal it was started from.
 
-import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHostStreamReader } from "@domicile/chrome-sdk/host-stream";
-import { withFrameDelimiter } from "@domicile/chrome-sdk/newline-frames";
 import { app, BrowserWindow, ipcMain } from "electron";
 import {
   CHROME_DIAGNOSTIC_CHANNEL,
-  CHROME_TO_HOST_CHANNEL,
-  HOST_TO_CHROME_CHANNEL,
+  CHROME_FAILURE_CHANNEL,
 } from "./ipc-channels";
-import { socketFailed } from "./socket-failure";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,7 +43,7 @@ const socketPath =
 // so that the `<app>` elements are holes the clients show through.
 const composited = environment.DOMICILE_COMPOSITED === "1";
 
-const createWindow = (): BrowserWindow => {
+const createWindow = (): void => {
   const win = new BrowserWindow({
     backgroundColor: composited ? TRANSPARENT : BACKGROUND_COLOR,
     // The desktop has no window furniture of its own, and the compositor gives
@@ -51,9 +52,21 @@ const createWindow = (): BrowserWindow => {
     height: WINDOW_HEIGHT,
     transparent: composited,
     webPreferences: {
+      // The preload reads the socket path off its own command line: it has to
+      // connect before the page's first message, so there is no round trip to
+      // ask for it.
+      additionalArguments: [`--domicile-chrome-socket=${socketPath}`],
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(dirname, "preload.cjs"),
+      // For this renderer, so its preload can hold the socket: a sandboxed
+      // preload gets a polyfilled subset of Node with no `net` in it. This
+      // unconfines the whole renderer process, page included — the page keeps
+      // `contextIsolation`, which is a different guarantee — but the only
+      // thing in this process is our own bundle, and `<webview>` guests stay
+      // sandboxed regardless of what their embedder asks for, so remote
+      // content is still in a confined process of its own.
+      sandbox: false,
       // `<domicile-webview>` embeds a real Electron `<webview>`, which is off
       // by default.
       webviewTag: true,
@@ -88,55 +101,6 @@ const createWindow = (): BrowserWindow => {
         });
     });
   }
-  return win;
-};
-
-// Bridge the compositor socket to the renderer. The stream is newline
-// delimited JSON except for an app frame's pixels, which follow their header
-// as raw bytes — so it is read as bytes, never as text (a pixel is as likely to
-// be a newline as anything else). The pixels cross to the renderer as a
-// Uint8Array rather than a string, which is the point of sending them this way.
-const connectHost = (win: BrowserWindow): void => {
-  const socket = net.connect(socketPath);
-  const readHost = createHostStreamReader();
-
-  socket.on(
-    "error",
-    socketFailed(
-      {
-        exit: (code) => {
-          // `exit` rather than `quit`: a page must not be able to veto the
-          // shutdown from `beforeunload`, and the code has to be non-zero.
-          app.exit(code);
-        },
-        report: (line) => process.stderr.write(line),
-      },
-      socketPath,
-    ),
-  );
-
-  socket.on("data", (chunk: Buffer) => {
-    const items = readHost(chunk);
-    if (!win.isDestroyed()) {
-      for (const item of items) {
-        // The send timestamp rides along so the preload can price the hop
-        // itself: a frame's pixels are structured-cloned across the process
-        // boundary, which for a full window is megabytes per frame and the
-        // largest copy in the chrome's half of the path. `Date.now()` because
-        // it is the one clock both processes read the same way.
-        win.webContents.send(
-          HOST_TO_CHROME_CHANNEL,
-          item.text,
-          item.pixels,
-          Date.now(),
-        );
-      }
-    }
-  });
-
-  ipcMain.on(CHROME_TO_HOST_CHANNEL, (_event, text: string) => {
-    socket.write(withFrameDelimiter(text));
-  });
 };
 
 // The renderer's own console goes to devtools, which nobody has open while
@@ -149,6 +113,19 @@ const printDiagnostics = (): void => {
   });
 };
 
+// The other half of the same problem: the renderer holds the socket, so it is
+// the half that learns the compositor is gone — and it can neither write to
+// stderr nor stop the app.
+//
+// `exit` rather than `quit`: a page must not be able to veto the shutdown from
+// `beforeunload`, and the code has to be non-zero.
+const stopOnFailure = (): void => {
+  ipcMain.on(CHROME_FAILURE_CHANNEL, (_event, line: string, code: number) => {
+    process.stderr.write(line);
+    app.exit(code);
+  });
+};
+
 const main = (): void => {
   app.on("window-all-closed", () => {
     app.quit();
@@ -157,7 +134,8 @@ const main = (): void => {
     .whenReady()
     .then(() => {
       printDiagnostics();
-      connectHost(createWindow());
+      stopOnFailure();
+      createWindow();
     })
     .catch((error: unknown) => {
       throw new Error("domicile shell: failed to open the window", {
