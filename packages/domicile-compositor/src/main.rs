@@ -1438,7 +1438,8 @@ impl DomicileCompositor {
     /// that work rather than hide everything: it is transparent wherever an
     /// `<app>` element is, so the app below shows through the hole, and opaque
     /// wherever it has drawn a panel. Chrome *below* an app — a wallpaper —
-    /// would need a second engine surface, which nothing asks for yet.
+    /// means drawing this texture a second time, scissored; the open question
+    /// in docs/architecture/WINDOW-COMPOSITING.md is how far that goes.
     fn present(&mut self) {
         let started = Instant::now();
         let placed: Vec<Placed> = {

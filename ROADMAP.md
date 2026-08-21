@@ -453,7 +453,11 @@ falloff the shadow uses, is the next candidate to move it.
   axis-aligned and swaps width for height on anything turned, and every turned
   fixture is square, so nothing in the repo can tell the two apart. Needs a
   non-square `turned` fixture rather than another assertion on the one there.
-- chrome above *and* below as two engine layers (only above is free today)
+- interleave chrome and windows by CSS `z-index` — the shell writes `z-index`
+  and the compositor honours it, in the stacking space the portals are already
+  reported in. Only chrome-*above* is free today, because the chrome is one
+  surface drawn last and a texture cannot be sliced by depth. The mechanism is
+  an open question in `docs/architecture/WINDOW-COMPOSITING.md`.
 - ~~follow a window that moves~~ — done. `<domicile-app>` re-measures on every
   animation frame rather than on a `ResizeObserver`, which sees a box change
   size and nothing else: moving a window, animating a transform, a `:hover`
@@ -470,8 +474,8 @@ falloff the shadow uses, is the next candidate to move it.
   what it cost them, once per property.
 - a window on the copy path is drawn *above* every natively-drawn window it
   overlaps, whatever its `z-index`, because the page is composited over all of
-  the app surfaces rather than in the stacking order. The same two engine
-  layers that fix chrome-between-two-windows fix this.
+  the app surfaces rather than in the stacking order. Interleaving by
+  `z-index` fixes this and chrome-between-two-windows together.
 - ~~a window swallows the *clicks* meant for whatever the chrome painted over
   it~~ — done, by the page saying so. Routing is a hit test against a
   rectangle, and a rectangle cannot see that the engine drew a menu, a dialog
