@@ -33,6 +33,11 @@ pub enum HostError {
 #[derive(Debug, Clone)]
 pub struct App {
     pub app_id: AppId,
+    /// Where this app falls in the order clients mapped, so a desktop can be
+    /// re-announced in the order it was built up. Kept as a field because the
+    /// alternative — reading the number back out of `app_id` — has to answer
+    /// for an id with no number in it, and there is no such id.
+    pub arrival: u64,
     pub title: Option<String>,
     /// The client's own content size, as of its latest committed buffer.
     pub size: (f64, f64),
@@ -77,6 +82,7 @@ impl Host {
             app_id.clone(),
             App {
                 app_id: app_id.clone(),
+                arrival: self.next_id,
                 title: title.clone(),
                 size,
                 requested_size: None,
@@ -88,6 +94,31 @@ impl Host {
             size: [size.0, size.1],
         };
         (app_id, message)
+    }
+
+    /// Everything a chrome needs to mount the desktop as it stands, as if each
+    /// window had just appeared.
+    ///
+    /// `app_appeared` is sent once, when the client maps, and nothing ever says
+    /// it again — so a chrome that was not listening at that moment loses that
+    /// window for good, while the client goes on running and drawing. Two ways
+    /// in: a client that maps in the milliseconds between the page's handshake
+    /// and its first React commit, and every reload, which starts a fresh page
+    /// against a compositor full of clients.
+    ///
+    /// In the order the apps arrived rather than the map's, which is arbitrary
+    /// — a desktop that mounts its windows in a different order on each reload
+    /// is its own bug.
+    pub fn open_apps(&self) -> Vec<HostMessage> {
+        let mut open: Vec<&App> = self.apps.values().collect();
+        open.sort_by_key(|app| app.arrival);
+        open.iter()
+            .map(|app| HostMessage::AppAppeared {
+                app_id: app.app_id.clone(),
+                title: app.title.clone(),
+                size: [app.size.0, app.size.1],
+            })
+            .collect()
     }
 
     /// Record a client's new content size. Returns the chrome notification, or

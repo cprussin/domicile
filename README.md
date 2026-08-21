@@ -99,14 +99,16 @@ nix run --refresh 'github:cprussin/domicile?ref=some/branch#e2e-dmabuf'
 ```
 
 Each is one of the flake's apps — `prototype` (the default), `e2e-chrome`,
-`e2e-electron`, `e2e-no-compositor`, `e2e-spawn`, `e2e-input`, `e2e-dmabuf`,
-`e2e-slow-chrome`, `smoke-compositor` — and each runs the matching script under
+`e2e-electron`, `e2e-late-chrome`, `e2e-no-compositor`, `e2e-spawn`, `e2e-input`,
+`e2e-dmabuf`, `e2e-slow-chrome`, `smoke-compositor` — and each runs the matching script under
 `scripts/`. From a checkout, run that script yourself:
 `nix develop .#full -c ./scripts/e2e-chrome.sh`, and so on.
 
 `e2e-electron.sh` runs the actual Electron chrome headlessly and confirms it
 connects, handshakes, and mounts a `<domicile-app>` (reporting its geometry back)
-when a real Wayland client maps a window.
+when a real Wayland client maps a window. `e2e-late-chrome.sh` is the same path
+in the other order — the client is already running when the chrome arrives,
+which is what a page reload looks like from the compositor's side.
 
 ## Develop
 

@@ -106,6 +106,81 @@ describe("BridgeClient", () => {
     expect(seen[0]?.app_id).toBe("term");
   });
 
+  it("holds a message that arrives before its handler registers", () => {
+    // The host starts talking the moment the socket opens: `connect()` is
+    // answered with a `welcome` and one `app_appeared` per client already
+    // running. A React page registers its handlers in its first effect flush,
+    // tens of milliseconds later — always after, never before, because
+    // rendering only schedules the effect. Dropping what lands in that window
+    // is a live client with no window on screen, and no second chance: nothing
+    // ever says `app_appeared` again for that client.
+    transport.push({
+      app_id: "term",
+      size: [640, 480],
+      title: "Terminal",
+      type: "app_appeared",
+    });
+    transport.push({
+      app_id: "editor",
+      size: [800, 600],
+      title: "Editor",
+      type: "app_appeared",
+    });
+
+    const seen: { app_id: string }[] = [];
+    bridge.on("app_appeared", (message) => {
+      seen.push(message);
+    });
+
+    expect(seen.map((message) => message.app_id)).toEqual(["term", "editor"]);
+  });
+
+  it("does not replay a held message to a handler that replaces another", () => {
+    // The flush empties the hold. Without that, every later `on` for the same
+    // type would mount the same windows again.
+    transport.push({
+      app_id: "term",
+      size: [640, 480],
+      title: "Terminal",
+      type: "app_appeared",
+    });
+    bridge.on("app_appeared", () => {
+      // The first handler takes the held message; this test is about the
+      // second one.
+    });
+
+    const seen: string[] = [];
+    bridge.on("app_appeared", (message) => {
+      seen.push(message.app_id);
+    });
+
+    expect(seen).toEqual([]);
+  });
+
+  it("holds only the type that has no handler", () => {
+    // One hold per type, not one queue for everything: a page that registers
+    // `app_appeared` must not be handed the `app_closed` it has no handler
+    // for yet.
+    const seen: string[] = [];
+    transport.push({ app_id: "term", type: "app_closed" });
+    transport.push({
+      app_id: "term",
+      size: [640, 480],
+      title: "Terminal",
+      type: "app_appeared",
+    });
+
+    bridge.on("app_appeared", (message) => {
+      seen.push(`appeared:${message.app_id}`);
+    });
+    expect(seen).toEqual(["appeared:term"]);
+
+    bridge.on("app_closed", (message) => {
+      seen.push(`closed:${message.app_id}`);
+    });
+    expect(seen).toEqual(["appeared:term", "closed:term"]);
+  });
+
   it("send helpers emit correctly-shaped messages", () => {
     bridge.placePortal({
       appId: "term",

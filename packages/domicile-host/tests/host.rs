@@ -6,7 +6,7 @@
 //! geometry), so these tests exercise the whole pipeline end to end without any
 //! Wayland or GPU dependency.
 
-use domicile_host::{Host, HostError, InputDelivery};
+use domicile_host::{AppId, Host, HostError, InputDelivery};
 use domicile_protocol::{ChromeMessage, HostMessage, Shadow};
 use domicile_scene::KeyboardTarget;
 
@@ -58,6 +58,55 @@ fn place_styled(
 }
 
 // ---- app lifecycle --------------------------------------------------------
+
+#[test]
+fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
+    // A chrome learns about a window from `app_appeared`, which is sent once,
+    // when the client maps — and nothing ever says it again. A page that was
+    // not listening at that moment loses that window permanently, though the
+    // client is alive and drawing: it happens when a client maps in the
+    // milliseconds after the chrome's handshake, and every time the page
+    // reloads.
+    let mut host = Host::new();
+    let (first, _) = host.app_appeared(Some("a terminal".to_string()), (640.0, 480.0));
+    let (second, _) = host.app_appeared(None, (100.0, 200.0));
+    // Enough of them that arrival order and a hash map's order are all but
+    // certain to differ. With two, an unordered implementation passes this
+    // about half the time, which is a test that reports luck.
+    let rest: Vec<AppId> = (0..10)
+        .map(|n| host.app_appeared(None, (f64::from(n), 0.0)).0)
+        .collect();
+
+    let announcements = host.open_apps();
+
+    // Everything the chrome would have been told, and in the order the apps
+    // arrived — a desktop that mounts its windows differently on each reload
+    // is its own bug.
+    let expected: Vec<HostMessage> = [
+        HostMessage::AppAppeared {
+            app_id: first,
+            title: Some("a terminal".to_string()),
+            size: [640.0, 480.0],
+        },
+        HostMessage::AppAppeared {
+            app_id: second,
+            title: None,
+            size: [100.0, 200.0],
+        },
+    ]
+    .into_iter()
+    .chain(
+        rest.into_iter()
+            .enumerate()
+            .map(|(n, app_id)| HostMessage::AppAppeared {
+                app_id,
+                title: None,
+                size: [n as f64, 0.0],
+            }),
+    )
+    .collect();
+    assert_eq!(announcements, expected);
+}
 
 #[test]
 fn chrome_resize_records_the_size_to_configure_the_client_to() {
