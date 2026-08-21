@@ -1,0 +1,114 @@
+name: End to end
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Superseded pushes shouldn't keep a full graphics stack running.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  # A skip here is a check that stopped running, which is the worst outcome a
+  # check can have and the one nobody notices. On a developer's machine a
+  # missing Electron is a fact about the machine; here everything is installed,
+  # so a skip means the job quietly stopped testing.
+  DOMICILE_CHECK_STRICT: "1"
+  # Except this one, which is a fact about the runner rather than about the
+  # code: `ubuntu-latest` has no DRM render node, so no client can allocate a
+  # dmabuf and `e2e-dmabuf.sh` proves the global is advertised and stops.
+  # Named rather than suppressed wholesale — that is the difference between
+  # "we know this box has no GPU" and "something stopped working", and it is
+  # what keeps a *new* skip fatal.
+  DOMICILE_CHECK_ALLOW_SKIP: "e2e-dmabuf"
+
+jobs:
+  # The behavioural half. `cargo test` and `turbo test` have their own jobs and
+  # prove the units; this proves what only exists once the pieces are wired
+  # together — pixels through a real GLES stack, a real Wayland client through
+  # the compositor to the chrome, and the whole Electron path.
+  #
+  # None of it ran in CI before. Every suite was something whoever was working
+  # had to remember to run, and the bugs that reached review in the change that
+  # added this job were all of a kind no unit test can see.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: oven-sh/setup-bun@v2
+
+      # The runner's own graphics stack rather than the flake's, which is not
+      # the obvious choice and was not the first one. `nix develop .#full` says
+      # what these scripts need in one place and would be the tidier answer.
+      # Measured both ways on this runner: `e2e-compose` passes under apt, and
+      # under the flake shell the compositor comes up `no EGL renderer:
+      # serving wl_shm clients only` and every pixel test fails.
+      #
+      # Not for want of `LD_LIBRARY_PATH` — `devShells.full` already sets it,
+      # mesa included. libglvnd finds its vendor through
+      # `__EGL_VENDOR_LIBRARY_DIRS` and the gallium driver through
+      # `LIBGL_DRIVERS_PATH`, neither of which a library path covers, and nix
+      # puts both inside its own closure at `${mesa}/share/glvnd/egl_vendor.d`
+      # and `${mesa}/lib/dri`. So the fix is likely two more lines in the block
+      # that already exists rather than anything about the host — worth doing,
+      # untested from here, and not on the way to this.
+      #
+      # Retried with a deadline per attempt, for the reason `cargo-test.yml`
+      # spells out: a stalled apt mirror fails by hanging, so a plain
+      # `apt-get` can burn the whole job budget getting nowhere.
+      - name: Install the graphics and client stacks
+        run: |
+          install() {
+            sudo apt-get update && sudo apt-get install -y \
+              libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev \
+              libxrandr-dev libxi-dev \
+              libegl1-mesa-dev libgles2-mesa-dev libgbm-dev mesa-utils \
+              libgl1-mesa-dri \
+              weston wayland-utils \
+              xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+              libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+              libxrandr2 libasound2t64 libpango-1.0-0 libcairo2
+          }
+          for attempt in 1 2 3; do
+            if timeout --kill-after=10 300 bash -c "$(declare -f install); install"; then
+              exit 0
+            fi
+            echo "::warning::apt attempt $attempt failed or timed out" >&2
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 5)); fi
+          done
+          echo "::error::apt did not succeed in three attempts" >&2
+          exit 1
+
+      # `wayland-utils` is in that list for a reason worth recording: it
+      # provides `wayland-info`, which `e2e-dmabuf.sh` and `e2e-slow-chrome.sh`
+      # use to ask the compositor what it advertises. Without it the probe
+      # cannot run, and both scripts report that as "the compositor is alive
+      # but NOT answering: its event loop is blocked" — a missing tool wearing
+      # the signature of a hung compositor.
+      - run: bun install --frozen-lockfile
+
+      # Bun does not run an untrusted dependency's postinstall, and Electron's
+      # postinstall is what fetches the actual binary — so `node_modules/.bin`
+      # holds a shim with nothing behind it, and the first run of this job
+      # reported `no electron` for a package that was installed.
+      - name: Fetch the Electron binary
+        run: |
+          node apps/shell/node_modules/electron/install.js
+          echo "$PWD/apps/shell/node_modules/.bin" >> "$GITHUB_PATH"
+
+      # Which clients and libraries actually arrived. When a suite fails on a
+      # runner nobody can log into, the first question is always whether it
+      # failed or whether it never had what it needed.
+      - name: What is here
+        run: |
+          for tool in electron weston-flower wayland-info Xvfb eglinfo; do
+            printf '%-16s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
+          done
+
+      - run: ./scripts/check.sh e2e

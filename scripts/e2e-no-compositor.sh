@@ -26,7 +26,7 @@ export NO_COLOR=1
 # this check exists to detect.
 if ! command -v electron >/dev/null 2>&1; then
   ELECTRON_BIN="$(ls -d /nix/store/*-electron-[0-9]*/bin 2>/dev/null | tail -1 || true)"
-  [ -n "$ELECTRON_BIN" ] || { echo "SKIP: no electron to run the shell with"; exit 0; }
+  [ -n "$ELECTRON_BIN" ] || { echo "SKIP: no electron to run the shell with"; exit 77; }
   PATH="$ELECTRON_BIN:$PATH"; export PATH
 fi
 

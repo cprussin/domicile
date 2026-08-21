@@ -53,8 +53,17 @@ elif command -v kitty >/dev/null 2>&1; then
           sh -c 'while :; do date; sleep 0.2; done')
 else
   echo "SKIP: no continuously-drawing client on PATH (wanted weston-simple-shm or kitty)."
-  exit 0
+  exit 77
 fi
+
+# The verdict below is "did the compositor keep answering", and it is asked by
+# binding a global with `wayland-info`. Without it the answer is `command not
+# found`, which reads as a compositor with a blocked event loop — a missing
+# tool wearing the signature of the bug this exists to catch.
+command -v wayland-info >/dev/null 2>&1 || {
+  echo "SKIP: no wayland-info to ask the compositor whether it is still answering."
+  exit 77
+}
 
 DOMICILE_CHROME_SOCK="$SOCK" bun "$ROOT/packages/e2e-harness/src/stuck-chrome.ts" >/dev/null 2>&1 &
 STUCK=$!

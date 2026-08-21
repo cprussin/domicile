@@ -117,6 +117,45 @@ working in its area; it is context, not compliance.
 [`/ROADMAP.md`](/ROADMAP.md) carries the current state and the ordered plan;
 read it before starting anything substantial.
 
+## Checking your work
+
+```sh
+./scripts/check.sh                 # everything
+./scripts/check.sh rust            # or one group: rust, typescript, e2e
+```
+
+That is the whole answer, and using it is not optional politeness — it is how
+you find the things the unit tests cannot. It runs `fmt`, `clippy`, `cargo
+test`, `biome`, `turbo test` and every `scripts/e2e-*.sh` there is, and it
+arranges what they need rather than assuming it: a fresh worktree has no
+`node_modules`, Electron is not on `PATH` under `nix develop`, and a display
+picked by number collides with the corpse a previous run left behind. Each of
+those has cost a session an hour and produced failures that looked like
+findings.
+
+**Read a `skipped` line as loudly as a failure.** A skip means a check did not
+run, which on a machine without a GPU or without Electron is a fact rather than
+a verdict — but it is never evidence that the thing works. A script that cannot
+run says so by exiting **77**, which is the only thing that distinguishes it
+from one that ran and passed; before that existed, a green CI run reported ten
+suites where nine had run.
+
+CI adds `DOMICILE_CHECK_STRICT=1`, where a skip *is* a failure, and names the
+one it expects (`DOMICILE_CHECK_ALLOW_SKIP=e2e-dmabuf`, because no runner has a
+DRM render node). That pair is the point: the expected skip stays green, and a
+*new* one — an Electron that vanished, a display that never came up — is fatal.
+
+Three things this cannot reach, so do not read a green run as covering them:
+
+- **The dmabuf import.** It needs a DRM render node; `e2e-dmabuf.sh` says so
+  and stops. Everything around the import is reachable — see `dmabuf_import`'s
+  own tests — and anything you put *inside* it is not covered by anything.
+- **Presentation.** The pixel tests read an offscreen buffer back; no check
+  puts a window on a screen.
+- **Hardware timing.** `readback_ms`, `rt_ms` and the rest come off a software
+  rasteriser here, which flatters some stages and punishes others. Numbers from
+  this container are directional, not results.
+
 ## Per-package addenda
 
 When working on any package in `/apps/` or `/packages/`, you MUST check for
