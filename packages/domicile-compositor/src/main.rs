@@ -1490,6 +1490,7 @@ impl DomicileCompositor {
                 let surface = self.textures.get(app_id)?;
                 Some(Layer {
                     alpha: style.opacity as f32,
+                    clip: &[],
                     shadow: style.shadow.map(|shadow| shadow_in_pixels(shadow, scale)),
                     // The radius is in the chrome's logical units and the
                     // shader works in output pixels, so it scales with
@@ -1505,6 +1506,7 @@ impl DomicileCompositor {
         if let Some(chrome) = self.chrome_texture.as_ref() {
             layers.push(Layer {
                 alpha: 1.0,
+                clip: &[],
                 // The desktop itself is not a window: it is never rounded and
                 // casts nothing.
                 corner_radius: 0.0,

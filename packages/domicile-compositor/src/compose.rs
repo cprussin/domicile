@@ -82,6 +82,28 @@ pub struct Layer<'a> {
     pub corner_radius: f32,
     /// The shadow this window casts, if any. Drawn under it, and outside it.
     pub shadow: Option<Shadow>,
+    /// The parts of this layer to draw: an `[x, y, width, height]` per
+    /// rectangle, each component a fraction of the quad in the unit square's
+    /// own coordinates — the space `surface_to_output` maps. Empty draws all
+    /// of it.
+    ///
+    /// This is how the chrome gets to be in more than one place in the
+    /// stacking order. It is one texture drawn over every app surface, and a
+    /// texture carries no per-fragment depth, so it cannot be sliced by z. It
+    /// can be sliced by *region*: drawn once confined to the parts that belong
+    /// under the windows and again confined to the parts that belong over
+    /// them, with the windows drawn in between.
+    ///
+    /// The unit square rather than output pixels because that is what the
+    /// shader's instances are in: `gl_Position = matrix * (vert *
+    /// vert_position.zw + vert_position.xy)`, and `matrix` here maps the unit
+    /// square. `v_coords` comes off the same position, so the texture follows
+    /// the clip without being told about it.
+    ///
+    /// Does not clip the layer's shadow, which is drawn from a larger quad of
+    /// its own and would need its own rectangles in that quad's space. The
+    /// only layer that is banded is the chrome, and the chrome casts nothing.
+    pub clip: &'a [[f32; 4]],
     /// Whether the texture's rows run bottom-to-top.
     ///
     /// A client that renders with GL hands over a buffer the way GL made it,
@@ -114,7 +136,10 @@ pub fn draw_layers(
             layer.texture,
             texture_matrix(layer.y_inverted),
             matrix3(layer.surface_to_output),
-            None::<Option<_>>,
+            // `None` is the whole quad; `Some` is one instance per rectangle.
+            // An empty list would draw nothing at all, which is why the empty
+            // case is the whole-quad one rather than an empty `Some`.
+            (!layer.clip.is_empty()).then(|| layer.clip.iter().flatten().copied()),
             layer.alpha,
             Some(&shaders.rounded),
             &[
@@ -615,6 +640,7 @@ mod pixels {
             &[
                 Layer {
                     alpha: 1.0,
+                    clip: &[],
                     corner_radius: 0.0,
                     shadow: None,
                     surface_to_output: top_left.surface_to_output(),
@@ -623,6 +649,7 @@ mod pixels {
                 },
                 Layer {
                     alpha: 1.0,
+                    clip: &[],
                     corner_radius: 0.0,
                     shadow: None,
                     surface_to_output: bottom_right.surface_to_output(),
@@ -661,6 +688,7 @@ mod pixels {
                 alpha: 1.0,
                 // Square, so this still compares against Smithay's own drawing
                 // rather than against a shape it cannot make.
+                clip: &[],
                 corner_radius: 0.0,
                 shadow: None,
                 surface_to_output: Transform::scale(24.0, 12.0)
@@ -699,6 +727,7 @@ mod pixels {
             &mut renderer,
             &[Layer {
                 alpha: 1.0,
+                clip: &[],
                 corner_radius: 0.0,
                 shadow: None,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
@@ -725,6 +754,7 @@ mod pixels {
             &mut renderer,
             &[Layer {
                 alpha: 1.0,
+                clip: &[],
                 corner_radius: 0.0,
                 shadow: None,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
@@ -771,6 +801,7 @@ mod pixels {
             renderer,
             &[Layer {
                 alpha,
+                clip: &[],
                 corner_radius,
                 shadow: None,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
@@ -793,6 +824,7 @@ mod pixels {
             renderer,
             &[Layer {
                 alpha: 1.0,
+                clip: &[],
                 corner_radius: 0.0,
                 shadow,
                 surface_to_output: Transform::scale(
@@ -823,6 +855,66 @@ mod pixels {
             pixel(&output, 0, 0),
             BLACK,
             "the corner is outside the rounded rectangle, so what is behind shows"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_clipped_layer_draws_only_inside_its_bands() {
+        // What interleaving needs. The chrome is one texture drawn over
+        // everything, so putting a window *between* two pieces of it means
+        // drawing that texture more than once, each time confined to the part
+        // of the screen that piece occupies — by region, because a texture
+        // carries no per-fragment depth to be sliced by.
+        //
+        // Two disjoint bands of one full-output texture, and between them the
+        // texture must not be drawn at all. That gap is where a window goes.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        let full = Portal::new(
+            "chrome",
+            (OUTPUT.0 as f64, OUTPUT.1 as f64),
+            Transform::identity(),
+            0,
+        );
+
+        let output = composed(
+            &mut renderer,
+            &[Layer {
+                alpha: 1.0,
+                // `[x, y, width, height]` in the unit square's own space,
+                // which is what `surface_to_output` maps: the top eighth of
+                // the quad, and a band an eighth tall and a quarter wide
+                // starting a quarter of the way down and across.
+                //
+                // The second band is deliberately not full width. Two
+                // full-width bands are drawn identically by a renderer that
+                // discards `x` and `width` altogether, so a picture made of
+                // those alone agrees with the code being half wrong.
+                clip: &[[0.0, 0.0, 1.0, 0.125], [0.25, 0.25, 0.25, 0.125]],
+                corner_radius: 0.0,
+                shadow: None,
+                surface_to_output: full.surface_to_output(),
+                texture: &red,
+                y_inverted: false,
+            }],
+        );
+
+        assert_eq!(pixel(&output, MIDDLE.0, 1), RED, "the top band is drawn");
+        assert_eq!(
+            pixel(&output, 20, 14),
+            RED,
+            "the narrow band is drawn where it starts"
+        );
+        assert_eq!(
+            pixel(&output, 40, 14),
+            BLACK,
+            "and stops at its width, rather than running the whole way across"
+        );
+        assert_eq!(
+            pixel(&output, MIDDLE.0, 9),
+            BLACK,
+            "between the bands the chrome is absent, which is where a window goes"
         );
     }
 
@@ -997,6 +1089,7 @@ mod pixels {
             renderer,
             &[Layer {
                 alpha: 0.5,
+                clip: &[],
                 corner_radius: 0.0,
                 shadow,
                 surface_to_output: Transform::scale(
@@ -1084,6 +1177,7 @@ mod pixels {
             renderer,
             &[Layer {
                 alpha: 1.0,
+                clip: &[],
                 corner_radius,
                 shadow: Some(shadow),
                 surface_to_output: Transform::scale(
@@ -1156,6 +1250,7 @@ mod pixels {
             renderer,
             &[Layer {
                 alpha: 1.0,
+                clip: &[],
                 corner_radius,
                 shadow,
                 // Built the way a page builds one: sized, moved so the turn is
@@ -1377,6 +1472,7 @@ mod pixels {
                 // Translucent, so a shadow drawn under the window shows rather
                 // than hiding behind it.
                 alpha: 0.5,
+                clip: &[],
                 corner_radius: 0.0,
                 shadow: Some(shadow),
                 surface_to_output: Transform::scale(
@@ -1457,6 +1553,7 @@ mod pixels {
             &[
                 Layer {
                     alpha: 1.0,
+                    clip: &[],
                     corner_radius: 0.0,
                     shadow: None,
                     surface_to_output: whole,
@@ -1465,6 +1562,7 @@ mod pixels {
                 },
                 Layer {
                     alpha: 0.5,
+                    clip: &[],
                     corner_radius: 0.0,
                     shadow: None,
                     surface_to_output: whole,
@@ -1503,6 +1601,7 @@ mod pixels {
             .into_iter()
             .map(|portal| Layer {
                 alpha: 1.0,
+                clip: &[],
                 corner_radius: 0.0,
                 shadow: None,
                 surface_to_output: portal.surface_to_output(),
