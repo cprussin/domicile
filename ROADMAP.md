@@ -247,9 +247,10 @@ The compositor logs one INFO line every 5s while compositing, so "is it faster"
 is a number rather than an impression:
 
 ```
-frames sent=N dropped=M fps=F mb_per_s=B write_ms=W \
-       readback_ms=R readback_worst_ms=RW commit_ms=C idle_ms=I \
-       response_ms=RS response_worst_ms=RSW throttled=T chromes=K
+frames sent=N composited=CN dropped=M fps=F mb_per_s=B write_ms=W \
+       readback_ms=R readback_worst_ms=RW commit_ms=C \
+       composite_ms=CM composite_worst_ms=CMW submit_ms=S submit_worst_ms=SW \
+       idle_ms=I response_ms=RS response_worst_ms=RSW throttled=T chromes=K
 ```
 
 - `readback_ms` — the GPU copy. **Zero on the native path**, because it does not
@@ -257,7 +258,28 @@ frames sent=N dropped=M fps=F mb_per_s=B write_ms=W \
 - `commit_ms` — the whole Wayland-thread commit; minus `readback_ms` it is
   everything around the copy.
 - `idle_ms` — the gap between one commit finishing and the next arriving. Large
-  means *waiting*, not working. `idle + commit ≈ 1000/fps` is the self-check.
+  means *waiting*, not working. `idle + commit ≈ 1000/fps` is the self-check on
+  the *copy* path, where a frame is a client commit; the native path counts
+  composites instead, and the check below is that path's.
+- `composite_ms` — the drawing: the scene read, the hand-over and the draw
+  calls. It stops before the submit, so the frame-callback wait is no longer
+  inside it. Neither field is a whole cost: GLES hands work to the driver
+  rather than doing it, so this under-reports the GPU's share and `submit_ms`
+  carries it. The self-check is `composited × composite_ms`, which must
+  fit inside the reporting interval — when it did not (seven composites
+  averaging 1434ms inside five seconds) the submit was being counted as
+  compositing. Two things that are still in scope and are *not* the
+  compositor's drawing: `hand_over_to_the_engine`'s `glReadPixels`, which
+  stalls on the GPU when a window leaves the native path, and the host lock,
+  which is bounded because no holder of it waits on a chrome. **Unverified:**
+  whether the frame-callback throttle really lands in the submit on this
+  stack. Mesa's wayland-egl can instead block acquiring the *next* frame's back
+  buffer, which is inside `composite_ms` — in which case the wait relocates
+  rather than being quarantined, and the self-check above is what says so.
+- `submit_ms` — `eglSwapBuffers`, plus the driver's share of the drawing above.
+  Large is the *normal* reading for a window nobody is looking at, so it is a
+  caveat on `composite_ms` before it is a cost — but it is not pure idleness
+  either, and the two cannot be separated from outside.
 - `response_ms` — from injecting a keystroke into a client to that client's next
   commit: the client's own think-and-redraw, isolated. It is measured entirely
   inside the compositor, so it is the one figure directly comparable between the
@@ -400,6 +422,10 @@ millisecond or two from run to run:
 | `composite_ms` | 0 | 0 (worst 2-3) | 0-1 (worst 1-2) |
 | `mb_per_s` | 80-123 | 0 | 0 |
 | `response_ms` | 3-4 (worst 5) | 3-4 (worst 6) | 4 (worst 4-5) |
+
+Measured before `composite_ms` and `submit_ms` were split, so the figures here
+include the buffer swap and are not directly comparable with a run from after
+it — they are an upper bound on what the same work costs now.
 
 The blur is free. `composite_ms` was the number to watch, because a shadow is
 the first effect that runs work per pixel rather than per quad, and it did not

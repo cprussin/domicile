@@ -180,6 +180,15 @@ tee -a "$RESULTS" <<'EOF'
                 and it is the one number directly comparable between them.
   readback_ms   the GPU copy. The native path does not do it, so a zero here
                 is the result rather than a missing measurement.
+  composite_ms  the drawing, stopping before the submit. The self-check is that
+                `composited x composite_ms` fits inside the reporting interval;
+                when it does not, something that waits is being counted as
+                something that works. ROADMAP.md's legend has the full reading,
+                including what is still in scope and what is unverified.
+  submit_ms     the buffer swap, which on a window nested in another compositor
+                blocks for a frame callback. Large means nobody is looking at
+                the window, not that Domicile is slow. Read it as a caveat on
+                `composite_ms` rather than as a cost.
   placements    how many times a window was measured, and what that cost.
   place_ms      Every mounted window is measured on every animation frame so
   place_worst_ms that it follows a CSS transition, and the shell keeps a

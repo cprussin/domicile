@@ -604,6 +604,8 @@ fn report(window: &mut FrameWindow, outbound: &OutboundReceiver, hub: &Arc<Chrom
         commit_ms = report.commit_ms,
         composite_ms = report.composite_ms,
         composite_worst_ms = report.composite_worst_ms,
+        submit_ms = report.submit_ms,
+        submit_worst_ms = report.submit_worst_ms,
         idle_ms = report.idle_ms,
         response_ms = report.response_ms,
         response_worst_ms = report.response_worst_ms,
@@ -639,8 +641,13 @@ struct FrameTimings {
     /// ours. Measured the same way as the chrome's, from the oldest keystroke
     /// still unanswered, so the two numbers compare.
     response: TimingWindow,
-    /// How long a whole composite took — import, draw, submit.
+    /// The drawing: the scene read, the hand-over and the draw calls, stopping
+    /// before the submit. Not the client-buffer import, which is on the commit
+    /// path — the only import inside this is the hand-over's.
     composite: TimingWindow,
+    /// The submit alone. What the two mean and how to read them together is
+    /// the legend in ROADMAP.md; `record_present` is what keeps them apart.
+    submit: TimingWindow,
     /// How many of them there were.
     composited: usize,
     /// Commits the ~30fps throttle refused. Every one is a redraw the client
@@ -681,9 +688,14 @@ struct FrameReport {
     idle_ms: u32,
     response_ms: u32,
     response_worst_ms: u32,
-    /// Importing a client's buffer, drawing every layer, and submitting.
+    /// Importing a client's buffer and drawing every layer, up to but not
+    /// including the submit — see `submit_ms`, and the legend in ROADMAP.md
+    /// for how to read the two together.
     composite_ms: u32,
     composite_worst_ms: u32,
+    /// The submit, which on a nested window blocks for a frame callback.
+    submit_ms: u32,
+    submit_worst_ms: u32,
     throttled: usize,
 }
 
@@ -724,6 +736,7 @@ impl FrameWindow {
                         timings.response.take().unwrap_or_default(),
                         timings.composite.take().unwrap_or_default(),
                     );
+                    let submit = timings.submit.take().unwrap_or_default();
                     FrameReport {
                         sent: self.sent,
                         composited,
@@ -748,6 +761,8 @@ impl FrameWindow {
                         response_worst_ms: response.worst.as_millis() as u32,
                         composite_ms: composite.average.as_millis() as u32,
                         composite_worst_ms: composite.worst.as_millis() as u32,
+                        submit_ms: submit.average.as_millis() as u32,
+                        submit_worst_ms: submit.worst.as_millis() as u32,
                         throttled: std::mem::take(&mut timings.throttled),
                     }
                 });
@@ -1538,17 +1553,19 @@ impl DomicileCompositor {
         match drawn {
             Ok(sync) => {
                 let _ = sync;
-                if let Some(backend) = self.gpu.as_mut().and_then(Gpu::window) {
+                // Only on `Ok`: a frame that failed to draw is not a frame,
+                // and reporting it as one would say the desktop was keeping up
+                // while it was blank.
+                let backend = self
+                    .gpu
+                    .as_mut()
+                    .and_then(Gpu::window)
+                    .expect("present returned early without a window to draw into");
+                record_present(&self.hub.timings, started, || {
                     if let Err(err) = backend.submit(None) {
                         tracing::warn!(%err, "could not submit the frame");
                     }
-                }
-                // Counted after the submit, and only when one happened: a frame
-                // that failed to draw is not a frame, and reporting it as one
-                // would say the desktop was keeping up while it was blank.
-                let mut timings = self.hub.timings.lock().unwrap();
-                timings.composited += 1;
-                timings.composite.record(started.elapsed());
+                });
             }
             Err(err) => tracing::warn!(%err, "could not draw the scene"),
         }
@@ -2142,6 +2159,41 @@ fn shadow_in_pixels(shadow: domicile_scene::Shadow, scale: f64) -> Shadow {
 /// rather than as instrumentation that could not see it.
 fn worth_reporting(sent: usize, dropped: usize, throttled: usize, composited: usize) -> bool {
     sent > 0 || dropped > 0 || throttled > 0 || composited > 0
+}
+
+/// Record what one present cost, with the submit's time kept out of the
+/// drawing's.
+///
+/// The submit is `eglSwapBuffers`, and on a window nested in another
+/// compositor it blocks until that compositor hands back a frame callback.
+/// Counting that wait as drawing made `composite_ms` say the compositor could
+/// not keep up precisely when nothing was being asked of it.
+///
+/// This owns the recording rather than handing two durations back, because the
+/// defect was never in the arithmetic — it was a caller assigning the wrong
+/// span to the right field, and a caller with no durations in its hands has
+/// nothing to misassign. It is not sealed: submitting *outside* the closure
+/// and passing an empty one puts the wait back in `composite_ms`. Sealing it
+/// would take a `&mut impl Submits` whose exclusive borrow makes that a
+/// visible double submit, which is machinery against a mutation that reads as
+/// wrong on sight — passing `|| {}` to a parameter called `submit`.
+///
+/// `composited` counts here too: a present that drew is a present that
+/// submitted, and the count and the two timings have to describe the same
+/// frames or the self-check over them means nothing.
+///
+/// Neither span is the whole cost. GLES hands work to the driver rather than
+/// doing it, so `composite_ms` under-reports the GPU's share and `submit_ms`
+/// carries it along with the wait.
+fn record_present(timings: &Mutex<FrameTimings>, started: Instant, submit: impl FnOnce()) {
+    let composing = started.elapsed();
+    let submitting = Instant::now();
+    submit();
+    let submitted = submitting.elapsed();
+    let mut timings = timings.lock().unwrap();
+    timings.composited += 1;
+    timings.composite.record(composing);
+    timings.submit.record(submitted);
 }
 
 /// Whether a client's commit should be drawn, or dropped on the floor.
@@ -3169,7 +3221,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use std::ffi::{OsStr, OsString};
-    use std::time::Duration;
+    use std::sync::Mutex;
+    use std::thread::sleep;
+    use std::time::{Duration, Instant};
 
     use smithay::input::pointer::CursorIcon;
 
@@ -3178,8 +3232,8 @@ mod tests {
     use super::{
         answers_keystroke, bgra_to_rgba, client_command, cursor_shape, disposition,
         drawn_by_the_compositor, draws_natively, frame_is_due, hand_back, hand_over, keep_frame,
-        pixels_to_hand_over, shadow_in_pixels, unmounts_the_element, Committer, Disposition, Drawn,
-        HandOver, LastFrame, Placed, Refusals,
+        pixels_to_hand_over, record_present, shadow_in_pixels, unmounts_the_element, Committer,
+        Disposition, Drawn, FrameTimings, HandOver, LastFrame, Placed, Refusals,
     };
 
     use std::collections::{HashMap, HashSet};
@@ -3729,5 +3783,39 @@ mod tests {
         // it returned to the copy path, for pixels the chrome never lost.
         let (_, recorded, _) = offering(&[drawn("term", true)], &["term"], HandOver::Sent);
         assert_eq!(recorded, vec!["term".to_string()]);
+    }
+
+    #[test]
+    fn the_submit_is_not_recorded_as_compositing() {
+        // The defect this exists to prevent, seen in the wild: an idle nested
+        // window reported `composite_ms=1434` over a five-second interval with
+        // seven composites in it — ten seconds of work inside five seconds of
+        // wall clock, which is not a number a stopwatch can produce. It was
+        // timing `eglSwapBuffers` blocking until the compositor we are a client
+        // of handed back a frame callback nobody was waiting for.
+        //
+        // Asserted on the recorded windows rather than on returned durations,
+        // because those windows are what the log line prints and the original
+        // bug was a caller putting the wrong span in the right one.
+        let timings = Mutex::new(FrameTimings::default());
+
+        record_present(&timings, Instant::now(), || {
+            sleep(Duration::from_millis(50));
+        });
+
+        let mut timings = timings.lock().unwrap();
+        assert_eq!(timings.composited, 1, "the frame is counted once");
+        let composite = timings.composite.take().expect("a drawing was recorded");
+        let submit = timings.submit.take().expect("a submit was recorded");
+        assert!(
+            submit.worst >= Duration::from_millis(50),
+            "the submit's own time is the submit's: {:?}",
+            submit.worst
+        );
+        assert!(
+            composite.worst < Duration::from_millis(50),
+            "the wait belongs to the submit, not to the drawing: {:?}",
+            composite.worst
+        );
     }
 }

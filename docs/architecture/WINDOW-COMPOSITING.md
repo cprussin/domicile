@@ -179,6 +179,9 @@ Phase 1 — prove one window composites at all:
 | `mb_per_s` | 80–123 | 0 |
 | `response_ms` | 3–4 (worst 5) | 3–4 (worst 6) |
 
+Measured before `composite_ms` and `submit_ms` were split, so its figures
+include the buffer swap and are an upper bound on the same work today.
+
 The compositor's work per frame goes from ~35ms — 8 on the Wayland thread, 27 on
 the writer thread — to under a millisecond, 3ms at worst. Socket traffic goes to
 zero. `response_ms` is the client's own redraw and is unchanged, which is the
