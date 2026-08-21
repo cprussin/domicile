@@ -16,6 +16,7 @@ import {
   CHROME_TO_HOST_CHANNEL,
   HOST_TO_CHROME_CHANNEL,
 } from "./ipc-channels";
+import { socketFailed } from "./socket-failure";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,7 +60,13 @@ const createWindow = (): BrowserWindow => {
     },
     width: WINDOW_WIDTH,
   });
-  win.loadFile(path.join(dirname, "../renderer/main_window/index.html"));
+  win
+    .loadFile(path.join(dirname, "../renderer/main_window/index.html"))
+    .catch((failure: unknown) => {
+      throw new Error("domicile: the chrome's page would not load", {
+        cause: failure,
+      });
+    });
   if (composited) {
     // The design system paints `html`, which would cover a transparent window
     // with a solid desktop and leave the `<app>` holes showing that instead of
@@ -68,9 +75,17 @@ const createWindow = (): BrowserWindow => {
     // presented, not of the chrome: the same page in the copy path wants its
     // background.
     win.webContents.on("did-finish-load", () => {
-      void win.webContents.insertCSS(
-        "html, body { background: transparent !important; }",
-      );
+      win.webContents
+        .insertCSS("html, body { background: transparent !important; }")
+        .catch((failure: unknown) => {
+          // Thrown, unlike the renderer's handshake failure: this is the main
+          // process, where an unhandled rejection is loud on stderr and exits
+          // non-zero. In a renderer it would land in a devtools console nobody
+          // has open, which is why that side reports instead.
+          throw new Error("domicile: could not clear the window's background", {
+            cause: failure,
+          });
+        });
     });
   }
   return win;
@@ -84,6 +99,21 @@ const createWindow = (): BrowserWindow => {
 const connectHost = (win: BrowserWindow): void => {
   const socket = net.connect(socketPath);
   const readHost = createHostStreamReader();
+
+  socket.on(
+    "error",
+    socketFailed(
+      {
+        exit: (code) => {
+          // `exit` rather than `quit`: a page must not be able to veto the
+          // shutdown from `beforeunload`, and the code has to be non-zero.
+          app.exit(code);
+        },
+        report: (line) => process.stderr.write(line),
+      },
+      socketPath,
+    ),
+  );
 
   socket.on("data", (chunk: Buffer) => {
     const items = readHost(chunk);
