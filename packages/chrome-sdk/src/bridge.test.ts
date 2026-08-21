@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { Err, Ok } from "@cprussin/option-result";
 import type { Transport } from "./bridge";
-import { BridgeClient } from "./bridge";
+
+import {
+  BridgeClient,
+  describeHandshakeFailure,
+  HandshakeFailure,
+} from "./bridge";
 import { BTN_LEFT } from "./input";
 
 // A fake transport: records outgoing JSON and lets the test push incoming.
@@ -40,17 +46,37 @@ describe("BridgeClient", () => {
     bridge = new BridgeClient(transport, { protocolVersion: 1 });
   });
 
-  it("sends hello on connect and resolves on welcome", async () => {
+  it("sends hello on connect and agrees on welcome", async () => {
     const connected = bridge.connect();
     expect(transport.sent[0]).toEqual({ protocol_version: 1, type: "hello" });
     transport.push({ protocol_version: 1, type: "welcome" });
-    expect(await connected).toBe(1);
+    expect(await connected).toStrictEqual(Ok(1));
   });
 
-  it("rejects connect on a version mismatch", async () => {
+  it("reports a version mismatch as a value rather than a rejection", async () => {
+    // The handshake crosses a process boundary, and the two halves
+    // disagreeing is an outcome the caller has to decide about — not a bug to
+    // throw at it. Rejecting made the shell's only recourse a `.catch` that
+    // rethrew inside a promise handler, which is an unhandled rejection rather
+    // than a desktop saying why it will not start.
     const connected = bridge.connect();
     transport.push({ protocol_version: 2, type: "welcome" });
-    await expect(connected).rejects.toThrow(/version/i);
+
+    expect(await connected).toStrictEqual(
+      Err(HandshakeFailure.VersionMismatch({ chrome: 1, host: 2 })),
+    );
+  });
+
+  it("names both versions when the halves disagree", () => {
+    // The wording is the whole point of reporting rather than throwing — a
+    // desktop that will not start should say what it disagreed about. Nothing
+    // else pins it, and `describeHandshakeFailure` could be gutted to `""`
+    // with the rest of this file still green.
+    expect(
+      describeHandshakeFailure(
+        HandshakeFailure.VersionMismatch({ chrome: 1, host: 2 }),
+      ),
+    ).toBe("protocol version mismatch: chrome speaks 1, host speaks 2");
   });
 
   it("dispatches host messages to registered handlers", () => {

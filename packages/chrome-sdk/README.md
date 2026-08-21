@@ -23,18 +23,33 @@ It provides three things:
 - **Pure helpers** — affine `./matrix` math mirroring the Rust
   `domicile-scene::Transform`, `./chrome-message` builders for the wire format,
   `./protocol` schemas for decoding host frames, `./input` keycode mapping, and
-  `./frame` base64 → RGBA decoding.
+  `./newline-frames` for the delimiter on chrome→host messages.
 
 ## Usage
 
 ```ts
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import {
+  BridgeClient,
+  describeHandshakeFailure,
+} from "@domicile/chrome-sdk/bridge";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
 const bridge = new BridgeClient(window.domicileTransport);
 registerElements(bridge);
-await bridge.connect();
+(await bridge.connect()).match({
+  Err: (failure) => {
+    console.error(describeHandshakeFailure(failure));
+  },
+  Ok: () => {
+    // The host ignores everything sent before the handshake.
+  },
+});
 ```
+
+`connect` reports a failed handshake rather than rejecting: the two halves
+speaking different protocol versions is part of what the call answers, not a
+bug in it. `Result` has no `unwrap`, so the caller has to say what happens on
+each arm.
 
 Then render `<domicile-app app-id="…">` / `<domicile-webview src="…">` as
 normal DOM and style them with ordinary CSS — rounding, blur, transforms, and
@@ -51,6 +66,12 @@ bare `<app>` / `<webview>` names the compositor exposes.
 schemas in `./protocol` rather than cast, so a malformed frame fails loudly
 where it enters. An unknown *message type* is not malformed — it is dropped, so
 a newer host can add messages an older chrome ignores.
+
+`@cprussin/option-result`, for the one outcome a caller has to decide about
+rather than recover from: `connect` returns `Result<number, HandshakeFailure>`.
+Everything else here either throws — a bug, per
+[ERRORS.md](/docs/guidelines/ERRORS.md) — or returns `T | undefined` for
+ordinary absence.
 
 ## Test
 

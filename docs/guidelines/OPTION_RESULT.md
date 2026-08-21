@@ -83,7 +83,7 @@ object. Tests assert on outcomes the same way: build the expected
 ## Domain error unions
 
 An `E` that crosses a real boundary is a tagged union with a factory object,
-not a bare `Error`: each variant carries a `type` discriminant and a factory
+not a bare `Error`: each variant carries a `kind` discriminant and a factory
 (`SomeError.Execution`, `SomeError.Aborted`, …).
 
 - When the error crosses the wire, back the union with a Zod schema (as

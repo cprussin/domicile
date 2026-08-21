@@ -2,7 +2,10 @@
 // index.html, injects a transport at `window.domicileTransport`, and this wires
 // the SDK to it and mounts the React chrome on top.
 
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import {
+  BridgeClient,
+  describeHandshakeFailure,
+} from "@domicile/chrome-sdk/bridge";
 import { placementTiming } from "@domicile/chrome-sdk/placement-timing";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
@@ -83,9 +86,6 @@ if (diagnostics !== undefined) {
   }, REPORT_EVERY_MS);
 }
 
-// The compositor watches this attribute to know the chrome finished its
-// handshake; a failed handshake must surface rather than leave it unset
-// silently, so the rejection is rethrown out of the microtask.
 // A client can only draw at the display's real resolution if the compositor
 // knows what that is, and the page is the only part of Domicile that does.
 // `resolution:` matches at exactly the current ratio, so the listener fires on
@@ -98,13 +98,33 @@ const reportDevicePixelRatio = (): void => {
     .addEventListener("change", reportDevicePixelRatio, { once: true });
 };
 
+// The handshake's failure is a value, so it is reported rather than thrown:
+// this used to `.catch` and rethrow, which inside a promise handler is an
+// unhandled rejection — the desktop failed to start and said so nowhere a user
+// would look. A version mismatch is the compositor and the chrome having been
+// built from different commits, which is worth naming precisely.
+//
+// The trailing `.catch` is not for `connect()`, which cannot reject: its only
+// other failure is a `transport.send` that throws, and that happens
+// synchronously inside `connect()` before this chain exists. It is for the
+// handler above — the `Ok` arm sends, and a throw there rejects the promise
+// `.then` returns. Only a `.catch` after it sees that; an `onRejected` passed
+// to the same `.then` is wired to `connect()`'s rejections and never fires.
 bridge
   .connect()
-  .then(() => {
-    document.body.dataset.domicileConnected = "true";
-    // After the handshake: the host ignores everything sent before it.
-    reportDevicePixelRatio();
+  .then((agreed) => {
+    agreed.match({
+      Err: (failure) => {
+        // biome-ignore lint/suspicious/noConsole: the desktop has not started
+        console.error(`domicile: ${describeHandshakeFailure(failure)}`);
+      },
+      Ok: () => {
+        // After the handshake: the host ignores everything sent before it.
+        reportDevicePixelRatio();
+      },
+    });
   })
-  .catch((error: unknown) => {
-    throw new Error("domicile: bridge handshake failed", { cause: error });
+  .catch((failure: unknown) => {
+    // biome-ignore lint/suspicious/noConsole: the desktop has not started
+    console.error("domicile: the handshake could not be completed", failure);
   });

@@ -5,6 +5,9 @@
 // the engine exposes to the page. The BridgeClient handles the version
 // handshake, dispatches host events to handlers, and offers typed senders.
 
+import type { Result } from "@cprussin/option-result";
+import { Err, Ok } from "@cprussin/option-result";
+
 import type { ChromeMessage, Placement, Shortcut } from "./chrome-message";
 import {
   focusAppMessage,
@@ -29,6 +32,44 @@ import type { AxisDelta } from "./wheel-axis";
 
 /** The clock the round-trip timing reads; a parameter so tests can hold it. */
 const monotonicNow = (): number => performance.now();
+
+/**
+ * Why a handshake did not agree.
+ *
+ * A value rather than a rejection because the two halves disagreeing is a
+ * contract outcome, not a bug: the handshake crosses a process boundary, and
+ * what the host answers with is part of what `connect` is for. Rejecting put
+ * it in the throw channel, where a caller has to remember it exists. See
+ * docs/guidelines/OPTION_RESULT.md.
+ *
+ * One variant so far. It is a constructor rather than a bare object because a
+ * second is already foreseeable — a host that closes the socket without ever
+ * answering — and the enum is what makes adding it one edit.
+ */
+export enum HandshakeFailureKind {
+  VersionMismatch,
+}
+
+export const HandshakeFailure = {
+  VersionMismatch: ({ chrome, host }: { chrome: number; host: number }) => ({
+    chrome,
+    host,
+    kind: HandshakeFailureKind.VersionMismatch as const,
+  }),
+};
+
+export type HandshakeFailure = ReturnType<
+  (typeof HandshakeFailure)[keyof typeof HandshakeFailure]
+>;
+
+/** What a failed handshake reads as on a console. */
+export const describeHandshakeFailure = (failure: HandshakeFailure): string => {
+  switch (failure.kind) {
+    case HandshakeFailureKind.VersionMismatch: {
+      return `protocol version mismatch: chrome speaks ${failure.chrome.toString()}, host speaks ${failure.host.toString()}`;
+    }
+  }
+};
 
 /** The message pipe the host exposes to the page. */
 export type Transport = {
@@ -62,9 +103,7 @@ export class BridgeClient {
   readonly #transport: Transport;
   readonly #handlers = new Map<HostMessageType, Handler>();
   readonly #now: typeof monotonicNow;
-  #welcome:
-    | { resolve: (version: number) => void; reject: (error: Error) => void }
-    | undefined;
+  #welcome: ((agreed: Result<number, HandshakeFailure>) => void) | undefined;
 
   constructor(
     transport: Transport,
@@ -84,12 +123,14 @@ export class BridgeClient {
   /**
    * Perform the handshake.
    *
-   * @returns The agreed protocol version; rejects when the host speaks a
-   *   different one.
+   * @returns The agreed protocol version, or why the two halves did not
+   *   agree. A `Result` rather than a rejection: a host speaking another
+   *   version is part of this call's contract rather than a bug in it, so it
+   *   belongs in the type where the caller has to answer for it.
    */
-  connect(): Promise<number> {
-    const promise = new Promise<number>((resolve, reject) => {
-      this.#welcome = { reject, resolve };
+  connect(): Promise<Result<number, HandshakeFailure>> {
+    const promise = new Promise<Result<number, HandshakeFailure>>((settle) => {
+      this.#welcome = settle;
     });
     this.send(helloMessage(this.protocolVersion));
     return promise;
@@ -210,14 +251,12 @@ export class BridgeClient {
   }
 
   #settleWelcome(hostVersion: number): void {
-    if (hostVersion === this.protocolVersion) {
-      this.#welcome?.resolve(hostVersion);
-    } else {
-      this.#welcome?.reject(
-        new Error(
-          `protocol version mismatch: chrome speaks ${this.protocolVersion.toString()}, host speaks ${hostVersion.toString()}`,
-        ),
-      );
-    }
+    const mismatch = HandshakeFailure.VersionMismatch({
+      chrome: this.protocolVersion,
+      host: hostVersion,
+    });
+    this.#welcome?.(
+      hostVersion === this.protocolVersion ? Ok(hostVersion) : Err(mismatch),
+    );
   }
 }

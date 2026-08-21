@@ -55,7 +55,17 @@ setTimeout(() => {
 const chrome: ChromeSocket = connectChromeSocket(requireSocketPath(Bun.env), {
   onMessage: (message) => {
     if (message.type === "app_appeared") {
-      void drive(message.app_id);
+      // Not `void`: ERRORS.md wants a rejection path on a fire-and-forget
+      // unconditionally, and `drive` is one — it waits out the settle and then
+      // sends a keystroke a frame at a time. Swallowed, anything that rejects
+      // in there leaves a run that stopped early looking like a measurement,
+      // and this script is the one `measure.sh` reads its numbers from.
+      drive(message.app_id).catch((failure: unknown) => {
+        process.stderr.write(
+          `keystroke-driver: could not drive ${message.app_id}: ${String(failure)}\n`,
+        );
+        process.exit(1);
+      });
     }
   },
 });

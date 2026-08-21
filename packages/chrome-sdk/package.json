@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@cprussin/option-result": "catalog:",
     "zod": "catalog:"
   },
   "description": "Domicile chrome SDK: <domicile-app>/<domicile-webview> custom elements and the host bridge client",

@@ -40,6 +40,7 @@
       "name": "@domicile/chrome-sdk",
       "version": "0.0.0",
       "dependencies": {
+        "@cprussin/option-result": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -117,6 +118,7 @@
   "catalog": {
     "@base-ui/react": "^1.7.0",
     "@biomejs/biome": "^2.5.7",
+    "@cprussin/option-result": "^2.0.1",
     "@cprussin/tsconfig": "^5.0.0",
     "@happy-dom/global-registrator": "^20.11.1",
     "@pandacss/dev": "^1.12.0",
@@ -205,6 +207,8 @@
     "@clack/core": ["@clack/core@1.4.2", "", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-0Ty/1Gfm+Kb07sXcuESjyKfwEhSy4Ns1AgeEisHb/bDY5fWme0tTeTkU14T1Gmcs17YIjB/teiDe4uaCghbYqQ=="],
 
     "@clack/prompts": ["@clack/prompts@1.6.0", "", { "dependencies": { "@clack/core": "1.4.2", "fast-string-width": "^3.0.2", "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-EYlRokl8szrP9Z25qT5aepMdBjzBvHF9ZEhzIiUBc9guz/T31EqRgvD0QSgZcpE93xiwrr+OkB4nz0BZyF6fSA=="],
+
+    "@cprussin/option-result": ["@cprussin/option-result@2.0.1", "", {}, "sha512-FtR98rdUFGBiOclgsu4am/LfeDKGYVoEoScSTw2HRJJ/J2vK35Eq7imCMM4IaRZJwdTycO83eBpv8IvEXQr6dw=="],
 
     "@cprussin/tsconfig": ["@cprussin/tsconfig@5.0.0", "", { "peerDependencies": { "typescript": "^6.0.3" } }, "sha512-2n2pUP9oIilDUqD0jN/SfINzIMd1Kdnb97aWakPunJXlf3oKrzufl6c7gglHxF1gSJHV9XdWAELwqN9JAJLlIw=="],
 

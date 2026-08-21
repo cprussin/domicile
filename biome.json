@@ -133,7 +133,9 @@
         "useValidTypeof": "error",
         "useYield": "error"
       },
-      "nursery": {},
+      "nursery": {
+        "noFloatingPromises": "error"
+      },
       "preset": "none",
       "security": {
         "noDangerouslySetInnerHtmlWithChildren": "error"
