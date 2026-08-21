@@ -508,15 +508,28 @@ falloff the shadow uses, is the next candidate to move it.
   better — but not when the element is remounted, where the canvas is gone.
   `latest_frames` holds the current buffer as `LastFrame::Gpu`, so re-importing
   on the way back is the fix whenever it is worth taking.
-- every mounted window is measured on every animation frame, and the shell
-  keeps a backgrounded window mounted and merely hidden — so a twenty-app
-  desktop pays a `getBoundingClientRect`, a `getComputedStyle` and some twenty
-  computed-property reads for nineteen `display: none` elements per frame to
-  learn they are still hidden. The chrome now reports what that costs, as
-  `placements`, `place_total_ms`, `place_ms` and `place_worst_ms` on its
-  diagnostics line, and `scripts/measure.sh` collects it. What it wants next is
-  a number from a real desktop, and then — if the number says so — an early-out
-  for an element with no box.
+- ~~every mounted window is measured on every animation frame~~ — measured, and
+  it is cheap. From `scripts/measure.sh` on hardware, steady state:
+
+  | | placements / 5s | `place_total_ms` | `place_ms` | share of a core |
+  |---|---|---|---|---|
+  | copy path | 518-550 | 40-57 | 0.07-0.11 | 0.8-1.1% |
+  | native path | 299 | 18-22 | 0.06-0.07 | 0.4% |
+  | idle desktop | 134 | 6 | 0.05 | 0.12% |
+
+  The worry was that a twenty-app desktop pays a `getBoundingClientRect`, a
+  `getComputedStyle` and some twenty computed-property reads for nineteen
+  `display: none` elements per frame to learn they are still hidden. At 0.07ms
+  a measurement that is 20 x 60 x 0.07 = 84ms a second, 8% of a core, with
+  every window mounted and the loop at full rate. The early-out for a boxless
+  element does not earn its complexity against that.
+
+  One artifact worth not misreading: the **first** interval of each run shows
+  `place_worst_ms` at 193-251ms and a `place_total_ms` an order up (218-310).
+  That is the first measurement of a freshly laid-out page, not steady state —
+  every interval after it is in the table above. `place_worst_ms` stays on the
+  diagnostics line so a shell whose per-frame styling makes a single
+  measurement expensive says so.
 - a client that changes **buffer type** on the same surface — dmabuf commits,
   then a `wl_shm` one — replaces its retained buffer with the shm frame's
   pixels, while the bridge's descriptor still names the buffer's raw fds. The
