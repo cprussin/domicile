@@ -25,7 +25,8 @@
 // every *natively* drawn window it overlaps, whatever its `z-index`. That is
 // the interleaved-stacking limitation in WINDOW-COMPOSITING.md, which used to
 // be reachable only by putting chrome between two windows and is now reachable
-// by writing a `filter` on one. Two engine layers are what fix it.
+// by writing a `filter` on one. What fixes it is drawing the chrome texture
+// more than once; that doc's open question is which way.
 
 import { parseShadow, ShadowKind, splitShadows } from "./shadow";
 

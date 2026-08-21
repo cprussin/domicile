@@ -46,13 +46,17 @@ Hole-punching needs only the row that exists.
 
 ## Design
 
-Three layers, composited by `domicile-compositor` on the GPU:
+Composited by `domicile-compositor` on the GPU:
 
 ```
-  chrome-above     engine texture, transparent where apps show through
+  chrome           engine texture, transparent where apps show through
   app surfaces     each client's dmabuf, transformed per place_portal
-  chrome-below     engine texture
 ```
+
+One chrome texture, drawn last. Putting chrome *under* a window, or between
+two, means drawing that texture more than once — the mechanism is an open
+question below, and CSS `z-index` is the authoring model whichever way it is
+answered.
 
 The chrome already reports everything the compositor needs — `place_portal`
 sends a full CSS matrix, size, `z_index` and visibility per `<app>`, and
@@ -84,7 +88,7 @@ have to be reimplemented. The common ones are cheap; the long tail is not.
 | `opacity` | alpha multiply |
 | `box-shadow` | blurred rounded rect behind the quad |
 | `backdrop-filter` on chrome above an app | blur sample of the composited result |
-| **Interleaved stacking** — chrome between two app windows | needs one engine layer per interleave; only below/above are free |
+| **Interleaved stacking** — chrome between two app windows | the chrome texture is drawn once, last; interleaving means drawing it more than once — open question below |
 | Arbitrary `filter`, `clip-path`, `mask`, 3D perspective, blend modes | not reimplemented |
 
 **Keep the copy path as the fallback.** A window whose element needs an effect
@@ -147,8 +151,8 @@ Three consequences, all good:
   in the frame path is copied by the CPU any more, which was the whole target.
 - **Chrome-over-app comes free.** Draw apps in `draw_order`, then the page on
   top with blending: wherever the page is transparent the app shows through,
-  and wherever it has a panel the panel wins. Only chrome *below* an app —
-  wallpaper, say — needs a second layer.
+  and wherever it has a panel the panel wins. Chrome *below* an app —
+  wallpaper, say — means drawing the chrome texture a second time.
 
 This is why `renderer_gl`/`backend_egl` were already the only Smithay backends
 enabled: `winit` now has to join them, which the crate deliberately excluded
@@ -250,7 +254,10 @@ Phase 2 — the effects that make an app a CSS element:
       degrees
 - [x] ...and at native cost: measured again after the shadow work. The table is
       in `ROADMAP.md`.
-- [ ] chrome above/below as two engine layers
+- [ ] interleave chrome and windows by CSS `z-index` — the shell writes it and
+      the compositor honours it, in the stacking space the portals are already
+      reported in. The mechanism is the open question below — region clipping
+      or a raster per band, both of which need nothing from the engine.
 - [x] per-window fallback to the copy path when the element's computed style
       needs an unsupported effect. The SDK names what the shaders cannot draw
       and sends `native: false` with the placement; the compositor draws
@@ -268,8 +275,8 @@ Phase 2 — the effects that make an app a CSS element:
       reachable one window at a time: the page is drawn over all of the app
       surfaces rather than in the stacking order, so a window whose pixels move
       into the page is drawn above every natively-drawn window it overlaps,
-      whatever its `z-index`. The two engine layers above fix this and the
-      chrome-between-two-windows case together.
+      whatever its `z-index`. Interleaving by `z-index`, above, fixes this and
+      the chrome-between-two-windows case together.
 
 Phase 3 — own the display:
 
@@ -296,6 +303,52 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
   at which the page can change anyway. One loop for every portal, and an
   element that measures what it measured last frame sends nothing, so a still
   desktop is silent.
+- **How chrome and windows interleave.** The authoring model is settled: plain
+  CSS `z-index`, no container to opt into and no Wayland concept in the page.
+  The mechanism is not.
+
+  The chrome is one client on its own socket (`ClientState::is_chrome`), one
+  `chrome_texture`, pushed into `layers` after the `draw_order()` loop — drawn
+  once, last, over everything. A texture carries no per-fragment depth, so it
+  cannot be sliced by z.
+
+  **What decides this: one raster is already flattened.** The page composites
+  its own content before we ever see it, so wherever chrome that belongs below
+  a window and chrome that belongs above it cover the same pixel, that texel is
+  already blended and nothing downstream can unblend it. Every mechanism that
+  slices a single raster inherits that; only rendering the bands separately
+  escapes it.
+
+  | | how | cost |
+  |---|---|---|
+  | **region-clipped** | a clip-rects field on `Layer`, passed to `render_texture`'s `instances` (which `draw_layers` currently passes `None`); push the chrome `Layer` into `layers` once per band | N quads for N bands. Correct only where the upper band is **opaque** over the lower — see below |
+  | **raster per band** | the chrome rasterises N views of the same DOM, each with the other bands hidden, and the SDK generates the views | N rasters, plus transport: `chrome_toplevel` and `chrome_texture` are single `Option`s, so N textures means N surfaces or N frames the compositor caches |
+  | **many surfaces** | one transparent toplevel per band | the transport cost above, and the shell must partition its DOM — Wayland back in the page |
+  | **layer tree** | the compositor merges the engine's compositing layers with the portals in one z-ordered list | **a Chromium fork.** CEF's only route out is `OnAcceleratedPaint` — *one* composited texture, the same flat texture. Per-layer depths mean `cc::LayerTreeHost`, the engine-internals project with a per-release rebase cost that this doc already declined |
+
+  **Region-clipped first, and its restriction is not a corner case.** Take
+  wallpaper, window, panel. Where the panel overlaps the window, the single
+  texel is panel-over-wallpaper. An opaque panel is just the panel, drawn last,
+  correct. A *translucent* one shows wallpaper through itself where the window
+  should be — and translucent panels are ordinary, which the `opacity` and
+  `backdrop-filter` rows of *What CSS survives* above already promise. So this
+  buys chrome below a window when the chrome above it is opaque, which is worth
+  having and is not the general case.
+
+  Escalating such a window to the copy path does fix it — the engine draws the
+  window in the page at its element's true `z-index`, so it stacks correctly
+  against all chrome by construction — but at the copy path's price, ~35ms a
+  frame from the Phase 1 table, for what would be every window under a
+  translucent panel. That is an exception's mechanism, not a policy, and it
+  trades chrome-vs-window correctness for window-vs-window: the copy-path
+  stacking limitation in the Phase 2 plan above.
+
+  **Raster per band is where this goes** if the shell wants translucent chrome
+  over a window with anything behind it, because nothing is pre-flattened. Its
+  open part is transport, not rendering. Settle that before building region
+  clipping if the shell's panels are translucent; region clipping is the
+  cheaper first step only if they are not.
+
 - **What the number actually is.** Everything through the draw is in place and
   tested, but the only measurement so far is of the copy path. Phase 1 is not
   done until `rt_ms` says what this costs against it.
