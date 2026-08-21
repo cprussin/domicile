@@ -4,12 +4,17 @@ The in-page half of Domicile. A Domicile chrome is ordinary web content; this
 package is what lets that content talk to the compositor and mount real Wayland
 clients as DOM elements.
 
-It provides three things:
+It provides four things:
 
 - **`BridgeClient`** (`./bridge`) — the client for the host protocol: version
   handshake, a handler table for host events, and a typed sender per
   chrome→host message. It takes a `Transport` (`send` / `onMessage`), which the
-  host injects into the page.
+  host injects into the page. A message may carry the moment its bytes reached
+  the process, and `bridge.hop` is what that costs to get from there to here.
+- **`hostTransport`** (`./host-transport`) — a `Transport` over a byte stream
+  carrying the host protocol, for a host that has one to hand: it frames what
+  the page sends, reassembles what arrives, stamps each message with when its
+  chunk landed, and holds what arrives before the page is listening.
 - **Custom elements** (`./register-elements`) — `<domicile-app>` and
   `<domicile-webview>`. An `<domicile-app>` reports its on-screen box to the
   host, forwards pointer and keyboard input to the client underneath it, and
@@ -22,8 +27,10 @@ It provides three things:
   with, and `focus` puts the keyboard on the embedded page.
 - **Pure helpers** — affine `./matrix` math mirroring the Rust
   `domicile-scene::Transform`, `./chrome-message` builders for the wire format,
-  `./protocol` schemas for decoding host frames, `./input` keycode mapping, and
-  `./newline-frames` for the delimiter on chrome→host messages.
+  `./protocol` schemas for decoding host frames, `./input` keycode mapping,
+  `./newline-frames` for the delimiter on chrome→host messages, and
+  `./host-stream` for reading the host's direction, where an `app_frame`'s
+  pixels follow its header as raw bytes.
 
 ## Usage
 

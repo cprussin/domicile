@@ -14,21 +14,22 @@
  * connect, and naming a path that was reached would send the reader looking
  * for a missing file.
  *
- * Its own module rather than a helper in `main.ts`, so a test can reach it:
- * importing `main.ts` pulls in Electron, which does not load outside Electron.
- * `exit` and `report` are injected for the same reason.
+ * `fail` is injected, and is one function rather than a report and an exit,
+ * because saying why and stopping is one action: the caller holding the socket
+ * is the renderer, which can do neither half itself and asks the main process
+ * for both over one channel.
+ *
+ * Its own module rather than a helper alongside the socket, so a test can reach
+ * it without Electron, which does not load outside Electron.
  */
 export const socketFailed = (
-  {
-    exit,
-    report,
-  }: { exit: (code: number) => void; report: (line: string) => void },
+  fail: (line: string, code: number) => void,
   path: string,
 ) => {
   return (failure: Error): void => {
-    report(
+    fail(
       `domicile: the compositor socket at ${path} failed: ${failure.message}\n`,
+      1,
     );
-    exit(1);
   };
 };

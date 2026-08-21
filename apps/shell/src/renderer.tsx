@@ -60,9 +60,8 @@ if (container === null) {
 // report either.
 // The round trip is reported alongside the two stages inside it that the
 // compositor cannot see, so a large total can be attributed rather than just
-// observed: `ipc` is the main-process → renderer hop, where a frame's pixels
-// are structured-cloned across a process boundary, and `draw` is putting them
-// on the canvas.
+// observed: `ipc` is what the host's bytes cost between arriving in this
+// process and reaching this page, and `draw` is putting them on the canvas.
 //
 // Placement is reported on a line of its own, because it is not part of the
 // round trip at all: it is the one cost that grows with the number of windows
@@ -76,7 +75,7 @@ if (diagnostics !== undefined) {
     // rather than since the last line.
     const lines = diagnosticLines({
       draw: appElements.drawTiming.take(),
-      ipc: diagnostics.takeIpcHop(),
+      ipc: bridge.hop.take(),
       place: placementTiming.take(),
       trip: bridge.roundTrip.take(),
     });

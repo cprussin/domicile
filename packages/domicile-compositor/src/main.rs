@@ -812,7 +812,24 @@ fn serve_chrome(hub: Arc<ChromeHub>, path: PathBuf) {
     }
 }
 
+/// One chrome connection, from accept to EOF, and then forgotten.
+///
+/// Forgetting it here rather than leaving it to the next failed broadcast:
+/// `chromes` is only pruned when a write to a dead socket fails, and on an
+/// idle desktop there is no write. A shell whose page reloads opens a new
+/// connection each time, so without this the list grows one dead writer per
+/// reload — every one of them held open, and counted in the `chromes=` field
+/// of the frame line.
 fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<UnixStream>>) {
+    read_chrome_messages(&hub, stream, &writer);
+    hub.chromes
+        .lock()
+        .unwrap()
+        .retain(|held| !Arc::ptr_eq(held, &writer));
+    info!("chrome client disconnected");
+}
+
+fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<Mutex<UnixStream>>) {
     let reader = BufReader::new(stream);
     let mut ready = false;
     for line in reader.lines() {
@@ -823,12 +840,11 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
             // Compositor-level, before the brain: a claim on the keyboard is
             // the compositor's to keep, since it is the only thing that sees a
             // key before its client does.
-            // A page that has just started has no canvas for anything. The
-            // canvases belong to the *page*, not to this socket: in the
-            // Electron prototype the socket is opened once by the main process
-            // and lives as long as the app, while the renderer can reload — or
-            // be recreated after a crash — and come back with a fresh DOM.
-            // `hello` is the one message that says a page has started, so it
+            // A page that has just started has no canvas for anything, and
+            // the canvases belong to the *page* rather than to this socket.
+            // `hello` is the one message that says a page has started — it is
+            // sent by the page's own bundle, so it arrives again after a
+            // reload or a crash-and-recreate whatever the socket did — so it
             // is what the record of what the chrome holds is cleared on. A
             // stale entry is a window drawn as a patch onto a blank canvas,
             // and for a client that then goes idle, a hole that stays until it
@@ -4004,7 +4020,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use std::ffi::{OsStr, OsString};
+    use std::os::unix::net::UnixStream;
     use std::sync::Mutex;
+    use std::thread;
     use std::thread::sleep;
     use std::time::{Duration, Instant};
 
@@ -4013,10 +4031,11 @@ mod tests {
     use domicile_protocol::CursorShape;
 
     use super::{
-        answers_keystroke, bgra_to_rgba, client_command, cursor_shape, disposition,
-        drawn_by_the_compositor, draws_natively, frame_is_due, hand_back, hand_over, keep_frame,
-        pixels_to_hand_over, record_present, shadow_in_pixels, unmounts_the_element, Committer,
-        Disposition, Drawn, FrameTimings, HandOver, LastFrame, Placed, Refusals,
+        answers_keystroke, bgra_to_rgba, channel, chrome_connection, client_command, cursor_shape,
+        disposition, drawn_by_the_compositor, draws_natively, frame_is_due, hand_back, hand_over,
+        keep_frame, pixels_to_hand_over, record_present, shadow_in_pixels, unmounts_the_element,
+        ChromeHub, ClientRequest, Committer, Disposition, Drawn, FrameTimings, HandOver, LastFrame,
+        Placed, Refusals,
     };
 
     use std::collections::HashMap;
@@ -4034,6 +4053,37 @@ mod tests {
             draws_natively,
             Some(Duration::from_millis(1)),
         )
+    }
+
+    #[test]
+    fn a_chrome_that_goes_away_is_forgotten() {
+        // `chromes` is otherwise pruned only by a broadcast that fails to
+        // write, and an idle desktop never broadcasts — so a shell whose page
+        // reloads left one dead writer per reload, held open and counted in
+        // the `chromes=` field of the frame line.
+        //
+        // A real socket pair and a real EOF, because that is what the
+        // connection thread is waiting on: nothing short of the peer going
+        // away ends the loop this asserts the far side of.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (page, compositor) = UnixStream::pair().expect("a socket pair");
+        let writer = Arc::new(Mutex::new(
+            compositor.try_clone().expect("the stream clones"),
+        ));
+        hub.chromes.lock().unwrap().push(writer.clone());
+
+        let serving = {
+            let hub = hub.clone();
+            thread::spawn(move || chrome_connection(hub, compositor, writer))
+        };
+        drop(page);
+        serving.join().expect("the connection thread ends at EOF");
+
+        assert!(
+            hub.chromes.lock().unwrap().is_empty(),
+            "the writer for a chrome that disconnected is not kept"
+        );
     }
 
     /// A buffer size for a window whose size is beside the point.

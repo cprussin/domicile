@@ -74,6 +74,7 @@ covered by headless, reproducible checks that run without a display:
 ```sh
 nix run github:cprussin/domicile#e2e-chrome      # message plane (mock chrome)
 nix run github:cprussin/domicile#e2e-electron    # full path incl. the real Electron renderer, under Xvfb
+nix run github:cprussin/domicile#e2e-no-compositor # a shell that cannot reach the compositor says so once and stops
 nix run github:cprussin/domicile#e2e-spawn       # a chrome `spawn` message launches a client
 nix run github:cprussin/domicile#e2e-input       # forwarded keyboard + pointer input reaches a client
 nix run github:cprussin/domicile#e2e-dmabuf      # the dmabuf global; with a GPU, a real GPU client's frames
@@ -96,8 +97,9 @@ nix run --refresh 'github:cprussin/domicile?ref=some/branch#e2e-dmabuf'
 ```
 
 Each is one of the flake's apps — `prototype` (the default), `e2e-chrome`,
-`e2e-electron`, `e2e-spawn`, `e2e-input`, `e2e-dmabuf`, `e2e-slow-chrome`,
-`smoke-compositor` — and each runs the matching script under `scripts/`. From a checkout, run that script yourself:
+`e2e-electron`, `e2e-no-compositor`, `e2e-spawn`, `e2e-input`, `e2e-dmabuf`,
+`e2e-slow-chrome`, `smoke-compositor` — and each runs the matching script under
+`scripts/`. From a checkout, run that script yourself:
 `nix develop .#full -c ./scripts/e2e-chrome.sh`, and so on.
 
 `e2e-electron.sh` runs the actual Electron chrome headlessly and confirms it

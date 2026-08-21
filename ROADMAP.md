@@ -323,10 +323,37 @@ Two rules the numbers depend on, both learned the hard way:
   identical in that line.
 
 Measured on the copy path, AMD 890M, kitty at ~1500x1000: `rt_ms≈100`,
-`ipc_ms≈19`, `draw_ms≈1`, compositor ≈11ms. `ipc_ms` is *unfixable* in Electron —
-every main→renderer path types its transfer list as `MessagePortMain[]`, so the
-bytes are structured-cloned, never transferred. Deleting it is what the native
-path is for.
+`ipc_ms≈19`, `draw_ms≈1`, compositor ≈11ms — and later, on a full-screen window,
+`ipc_ms≈79` with a worst case of 237.
+
+`ipc_ms` was once written down here as *unfixable* in Electron, on the grounds
+that every main→renderer path types its transfer list as `MessagePortMain[]`, so
+the bytes are structured-cloned rather than transferred. That is true of the
+hop and false of the conclusion: the hop is avoidable by not having one. The
+preload runs in the renderer process and, unsandboxed, can hold the compositor
+socket itself, so a frame's bytes are read where they are drawn.
+
+What is left is the context bridge's own clone into the page, which is
+in-process. Probed under Electron 41 on 5.94MB — a 1494x994 frame — on the
+container the checks run in:
+
+| route | per frame |
+|---|---|
+| main → renderer over Electron IPC | 29.4ms avg, 39ms worst |
+| preload → page over the context bridge | 13.6ms avg, 22ms worst |
+| preload → page in one world (`contextIsolation: false`) | 0ms |
+
+The third row is available and not taken: it trades the isolated world for the
+copy, and with damage tracking a steady-state frame is a patch rather than a
+window. It is the lever to pull if full frames — a resize, a first frame, a
+hand-over — turn out to matter more than the isolation does.
+
+What moved with the socket is the reading of it: the stream reassembly in
+`host-stream` now runs on the renderer's only thread, the one that also handles
+the keyboard, where it used to be another process's. It is inside `ipc_ms` —
+the stamp is taken at the top of the `data` handler, before the chunk is read —
+so the number stays honest, but it is the thread to watch if that number stops
+falling.
 
 ### Repo layout
 
