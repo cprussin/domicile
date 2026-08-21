@@ -43,6 +43,7 @@ fn chrome_messages_round_trip() {
             color: [0.0, 0.0, 0.0, 0.5],
         }),
         native: true,
+        takes_pointer: true,
     });
     chrome_round_trip(&ChromeMessage::RemovePortal {
         app_id: "term".into(),
@@ -149,6 +150,23 @@ fn cursor_shapes_are_css_keywords() {
 }
 
 #[test]
+fn a_place_portal_without_takes_pointer_takes_the_pointer() {
+    // The default has to be the useful one: a chrome that does not send the
+    // field is one from before there was anything to paint over a window, and
+    // every window it places is meant to be clicked. Defaulting the other way
+    // would make such a desktop's windows all inert at once.
+    let placed: ChromeMessage = serde_json::from_str(
+        r#"{"type":"place_portal","app_id":"term","transform":[1,0,0,1,0,0],
+            "size":[10,20],"z_index":0,"visible":true}"#,
+    )
+    .unwrap();
+    let ChromeMessage::PlacePortal { takes_pointer, .. } = placed else {
+        panic!("not a place_portal");
+    };
+    assert!(takes_pointer);
+}
+
+#[test]
 fn wire_shape_is_pinned() {
     // The JS bridge depends on these exact strings — lock them.
     let v = serde_json::to_value(ChromeMessage::PlacePortal {
@@ -161,9 +179,11 @@ fn wire_shape_is_pinned() {
         opacity: 1.0,
         shadow: None,
         native: true,
+        takes_pointer: true,
     })
     .unwrap();
     assert_eq!(v["type"], "place_portal");
+    assert_eq!(v["takes_pointer"], true);
     assert_eq!(v["app_id"], "term");
     assert_eq!(v["z_index"], 0);
     assert_eq!(v["size"][0], 10.0);

@@ -1411,10 +1411,13 @@ impl DomicileCompositor {
     /// the chrome over all of them.
     ///
     /// The apps' geometry is the scene's — `draw_order` gives the stacking the
-    /// chrome asked for and `hit_test` resolves, and `surface_to_output` places
-    /// each surface exactly where a click on it would land. An app with no
-    /// texture yet is skipped rather than drawn empty: it has been announced
-    /// but has not committed.
+    /// chrome asked for, and `surface_to_output` places each surface exactly
+    /// where a click on it would land. `hit_test` resolves the same stacking
+    /// among the windows that take the pointer; every window is drawn,
+    /// including the ones that do not, so a window the chrome made inert is
+    /// painted over the window its clicks now go to. An app with no texture
+    /// yet is skipped rather than drawn empty: it has been announced but has
+    /// not committed.
     ///
     /// The chrome goes last and covers the output, and blending is what makes
     /// that work rather than hide everything: it is transparent wherever an
@@ -3444,6 +3447,7 @@ mod tests {
             opacity: 1.0,
             shadow: None,
             native: true,
+            takes_pointer: true,
         };
         assert_eq!(unmounts_the_element(&hidden(false)), None);
         // Nor does any other placement: `remove_portal` is the only message

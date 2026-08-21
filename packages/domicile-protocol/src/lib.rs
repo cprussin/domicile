@@ -9,6 +9,18 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v9 added `takes_pointer` to `place_portal`: the chrome reports an element's
+/// `pointer-events`, so a window the engine painted something over stops
+/// swallowing the clicks meant for what covers it.
+///
+/// A bump rather than a silent addition, though the field defaults. The
+/// default is for reading a message that predates the field, not for admitting
+/// a chrome that would send one: `negotiate` matches exactly, so a v8 chrome
+/// is turned away at `hello` and says so. Left unbumped it would instead have
+/// started, placed every window as taking the pointer, and had its menus
+/// swallowed by the windows under them with nothing anywhere to say why —
+/// which is worse than not starting.
+///
 /// v8 added `native` to `place_portal` and `app_composited` alongside
 /// `app_frame`: the chrome can see a computed style the compositor's shaders
 /// have no answer for, and says so, and that window alone goes back down the
@@ -58,7 +70,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 8;
+pub const PROTOCOL_VERSION: u32 = 9;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -106,6 +118,10 @@ fn natively() -> bool {
     true
 }
 
+fn interactive() -> bool {
+    true
+}
+
 /// Messages sent from the chrome (in-page bridge) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -148,6 +164,20 @@ pub enum ChromeMessage {
         /// anything the shaders could not draw.
         #[serde(default = "natively")]
         native: bool,
+        /// Whether a pointer over this window belongs to it.
+        ///
+        /// False for an element with `pointer-events: none`. The compositor
+        /// hit-tests a rectangle and cannot see what the engine painted over
+        /// it, so a window under a menu, a dialog or a browser tab would
+        /// swallow the clicks meant for them — and the click that hands the
+        /// keyboard back to the chrome is one the chrome has to receive, so it
+        /// would swallow the way out too.
+        ///
+        /// Takes the pointer by default: a chrome that cannot say is a chrome
+        /// from before there was anything to paint over a window, and every
+        /// window it places is meant to be used.
+        #[serde(default = "interactive")]
+        takes_pointer: bool,
     },
 
     /// An `<app>` element was unmounted; the host should stop compositing it.

@@ -23,6 +23,7 @@ const measuredWith = (
     boxShadow: "none",
     filter: "none",
     opacity: "",
+    pointerEvents: "auto",
     rotate: "none",
     scale: "none",
     transform: "none",
@@ -96,6 +97,31 @@ describe("defaultMeasure", () => {
     it("clamps an opacity outside the range it can mean", () => {
       expect(measuredWith({ opacity: "3" }).opacity).toBe(1);
       expect(measuredWith({ opacity: "-1" }).opacity).toBe(0);
+    });
+
+    it("says a window with `pointer-events: none` takes no pointer", () => {
+      // The compositor hit-tests a rectangle and cannot see what the engine
+      // painted over it, so a window under a menu or a browser tab would
+      // swallow the click meant for them. `pointer-events` is how a page
+      // already says this, so it is what gets reported.
+      expect(measuredWith({ pointerEvents: "none" }).takesPointer).toBe(false);
+    });
+
+    it("takes the pointer when the value cannot be read", () => {
+      // A DOM that resolves no style is not one whose windows should all be
+      // unclickable: unusable is a worse failure than ignoring a style, and
+      // the two look identical from outside.
+      expect(measuredWith({ pointerEvents: "" }).takesPointer).toBe(true);
+    });
+
+    it("takes the pointer for the values that only narrow where it lands", () => {
+      // `none` is the only value that means "not this element". Every other
+      // one — the SVG-shaped `fill`, `stroke`, `painted`, `visiblePainted` —
+      // still delivers the pointer to the element, and a window is not an SVG
+      // shape anyway.
+      expect(
+        measuredWith({ pointerEvents: "visiblePainted" }).takesPointer,
+      ).toBe(true);
     });
 
     it("reports the box-shadow the compositor should cast", () => {

@@ -26,6 +26,7 @@ const stubMeasure: Measure = () => ({
   opacity: 1,
   shadow: undefined,
   size: [100, 100],
+  takesPointer: true,
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,
   zIndex: 0,

@@ -446,6 +446,32 @@ falloff the shadow uses, is the next candidate to move it.
   overlaps, whatever its `z-index`, because the page is composited over all of
   the app surfaces rather than in the stacking order. The same two engine
   layers that fix chrome-between-two-windows fix this.
+- ~~a window swallows the *clicks* meant for whatever the chrome painted over
+  it~~ — done, by the page saying so. Routing is a hit test against a
+  rectangle, and a rectangle cannot see that the engine drew a menu, a dialog
+  or a browser tab on top; the window under it won every click, and because the
+  click that hands the keyboard back to the chrome is one the chrome has to
+  *receive*, it won the way out too — nothing on the stage could be clicked
+  again. `<domicile-app>` reports its `pointer-events` with the placement and
+  the compositor passes an inert window over. Drawing needed no fix for this
+  case: the chrome is composited over every app surface already, which is why
+  only chrome-*above* is free today. Three things it does not do:
+  - **it introduces a disagreement of its own.** An inert window is still
+    drawn, and still on top of the windows below it, while its clicks now go
+    to one of them. Where two app windows overlap and the upper is inert, what
+    you see on top is not what you click.
+  - **all-or-nothing per window.** `pointer-events` is per element, so a menu
+    over one corner makes the whole window unclickable. Right for a dropdown
+    with a backdrop, wrong for a popover meant to leave the window usable, and
+    no partial answer is available from this signal.
+  - **the keyboard is untouched.** `Scene::keyboard_target` ignores
+    `takes_pointer` and the compositor only re-points the keyboard on a click,
+    so a chrome that opens a menu over the focused window *from a shortcut*
+    leaves every keystroke going to the window.
+
+  No shell in the tree sets `pointer-events: none` yet — the routing model was
+  wrong on its own terms, and `claude/demo-tab-transition` is what exercises
+  it.
 - a window rejoining the native path is drawn from the texture it left on until
   its client next commits. Invisible while the element survives the transition,
   because the canvas holds fresher pixels and stays up until there is something

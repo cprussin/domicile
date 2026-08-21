@@ -29,6 +29,7 @@ fn place(
         opacity: 1.0,
         shadow: None,
         native: true,
+        takes_pointer: true,
     }
 }
 
@@ -52,6 +53,7 @@ fn place_styled(
         opacity,
         shadow,
         native: true,
+        takes_pointer: true,
     }
 }
 
@@ -322,6 +324,32 @@ fn a_portals_style_reaches_the_scene() {
 }
 
 #[test]
+fn a_portal_that_takes_no_pointer_reaches_the_scene_inert() {
+    // The compositor routes the pointer off the scene, so a `pointer-events`
+    // the brain drops is a window that goes on swallowing the clicks meant for
+    // whatever the engine painted over it.
+    let mut host = Host::new();
+    let (app_id, _) = host.app_appeared(None, (100.0, 50.0));
+
+    host.handle_chrome_message(ChromeMessage::PlacePortal {
+        app_id: app_id.clone(),
+        transform: IDENTITY,
+        size: [100.0, 50.0],
+        z_index: 0,
+        visible: true,
+        corner_radius: 0.0,
+        opacity: 1.0,
+        shadow: None,
+        native: true,
+        takes_pointer: false,
+    })
+    .expect("an inert placement is applied");
+
+    let portal = host.scene().get(&app_id).expect("the portal is placed");
+    assert!(!portal.takes_pointer);
+}
+
+#[test]
 fn a_portals_shadow_reaches_the_scene() {
     // A shadow is the one style that draws outside the window, so the
     // compositor has to be told its numbers rather than infer them from the
@@ -374,6 +402,7 @@ fn a_window_the_shaders_cannot_draw_goes_back_down_the_copy_path() {
         opacity: 1.0,
         shadow: None,
         native: false,
+        takes_pointer: true,
     })
     .expect("a placement on the copy path is applied");
 

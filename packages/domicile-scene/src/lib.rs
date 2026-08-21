@@ -152,6 +152,17 @@ pub struct Portal {
     /// Per window, not per compositor. A desktop where one window wears a blur
     /// pays for that window and nothing else.
     pub draws_natively: bool,
+    /// Whether a pointer over this window belongs to it.
+    ///
+    /// False for an element the chrome gave `pointer-events: none`. That is
+    /// the page's own way of saying an element does not take the pointer, and
+    /// it is the only way the compositor can know: hit-testing here is a test
+    /// against a rectangle, and a rectangle cannot see that the engine painted
+    /// a menu, a dialog or a browser tab over the window. Such a window would
+    /// swallow every click meant for what covers it — and because the click
+    /// that hands the keyboard back to the chrome is one the chrome has to
+    /// *receive*, it would swallow the way out as well.
+    pub takes_pointer: bool,
 }
 
 /// The parts of an element's computed style the compositor applies itself.
@@ -207,6 +218,9 @@ impl Portal {
             // one to be on, and a chrome too old to have an opinion is a
             // chrome whose windows the shaders can draw.
             draws_natively: true,
+            // A window is there to be used. A chrome with no opinion is one
+            // from before there was anything to paint over a window.
+            takes_pointer: true,
             app_id: app_id.into(),
             size,
             transform,
@@ -223,6 +237,14 @@ impl Portal {
     pub fn copied(self) -> Self {
         Portal {
             draws_natively: false,
+            ..self
+        }
+    }
+
+    /// The same portal, drawn but not clickable — `pointer-events: none`.
+    pub fn inert(self) -> Self {
+        Portal {
+            takes_pointer: false,
             ..self
         }
     }
@@ -348,19 +370,43 @@ impl Scene {
     /// The portals bottom-to-top, which is the order to paint them in.
     ///
     /// Sorted by the same key [`hit_test`](Scene::hit_test) picks a winner
-    /// with — z-index, then arrival — so the portal painted last is exactly
-    /// the one a click reaches. Keeping the two orders in one place is what
-    /// stops a compositor from looking right and behaving wrong.
+    /// with — z-index, then arrival — so among the portals that take the
+    /// pointer, the one painted last is exactly the one a click reaches.
+    /// Keeping the two orders in one place is what stops a compositor from
+    /// looking right and behaving wrong.
+    ///
+    /// Every portal is painted, including the ones that take no pointer, so
+    /// that agreement is narrower than it looks: a window drawn *over*
+    /// another while inert hands its clicks to the window underneath, and
+    /// what is on top is then not what you click. That is the deliberate
+    /// exception rather than the failure above — the chrome asked for it by
+    /// giving the element `pointer-events: none`, and it is asking because it
+    /// has painted something over that window itself.
     pub fn draw_order(&self) -> Vec<&Portal> {
         let mut ordered: Vec<_> = self.portals.iter().enumerate().collect();
         ordered.sort_by_key(|(index, portal)| (portal.z_index, *index));
         ordered.into_iter().map(|(_, portal)| portal).collect()
     }
 
-    /// Find the topmost app portal under `screen`.
+    /// Find the topmost app portal under `screen` that takes the pointer.
+    ///
+    /// Not simply the topmost one: a window the chrome made inert is passed
+    /// straight over rather than allowed to win and then swallow the event,
+    /// so what answers is whatever is under it — another window, or the
+    /// chrome. This is where drawing and routing part company, and
+    /// [`draw_order`](Scene::draw_order) says what that costs.
     pub fn hit_test(&self, screen: Point) -> Option<Hit> {
         let mut best: Option<(i32, usize, Hit)> = None;
-        for (index, portal) in self.portals.iter().enumerate() {
+        // Enumerated before the filter, so an inert portal still spends its
+        // index: the tie-break is arrival order among *all* the portals, and
+        // renumbering the survivors would reorder two that arrived either
+        // side of one.
+        let takes_pointer = self
+            .portals
+            .iter()
+            .enumerate()
+            .filter(|(_, portal)| portal.takes_pointer);
+        for (index, portal) in takes_pointer {
             if let Some(local) = portal.local_hit(screen) {
                 let candidate = (portal.z_index, index);
                 let better = match &best {
