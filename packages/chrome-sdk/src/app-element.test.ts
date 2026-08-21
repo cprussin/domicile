@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { DomicileAppElement } from "./app-element";
 import type { BridgeClient } from "./bridge";
@@ -97,6 +97,36 @@ const mountApp = (appId?: string): DomicileAppElement => {
   document.body.append(element);
   return element;
 };
+
+/**
+ * What `drawFrame` put on the canvas, in a DOM that has no 2d context of its
+ * own. The arguments are the whole behaviour worth pinning: a patch placed at
+ * the wrong origin, or sized by the buffer rather than the region, draws a
+ * window out of its own corner.
+ *
+ * The prototype rather than the instance, because the canvas is created inside
+ * the very call under test — there is no instance to reach until afterwards.
+ */
+const recordDrawing = () => {
+  const drawn: { x: number; y: number; width: number; height: number }[] = [];
+  const original = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = (() => ({
+    putImageData: (image: ImageData, x: number, y: number) => {
+      drawn.push({ height: image.height, width: image.width, x, y });
+    },
+  })) as unknown as HTMLCanvasElement["getContext"];
+  restoreContext = () => {
+    HTMLCanvasElement.prototype.getContext = original;
+  };
+  return drawn;
+};
+
+let restoreContext: (() => void) | undefined;
+
+afterEach(() => {
+  restoreContext?.();
+  restoreContext = undefined;
+});
 
 describe("<domicile-app>", () => {
   let bridge: FakeBridge;
@@ -488,6 +518,34 @@ describe("<domicile-app>", () => {
     expect(canvas?.style.inlineSize).toBe("100%");
     expect(canvas?.style.blockSize).toBe("100%");
     expect(canvas?.style.display).toBe("block");
+  });
+
+  it("draws a partial frame where the host said it goes", () => {
+    // The copy path's cost is bytes, so a client that changed a cursor cell
+    // sends a cursor cell. Placing it wrong is not a subtle failure: the patch
+    // lands at the canvas origin and the window is drawn from its own top-left
+    // corner outwards.
+    const element = mountApp("term");
+    const drawn = recordDrawing();
+
+    element.drawFrame(4, 3, 1, new Uint8Array(48));
+    element.drawFrame(4, 3, 1, new Uint8Array(2 * 2 * 4), [1, 1, 2, 2]);
+
+    expect(drawn).toStrictEqual([
+      { height: 3, width: 4, x: 0, y: 0 },
+      { height: 2, width: 2, x: 1, y: 1 },
+    ]);
+  });
+
+  it("sizes a partial frame's pixels by the region, not the buffer", () => {
+    // `ImageData` reads `width * height * 4` bytes, so a region's patch built
+    // at the buffer's width runs off the end of the bytes that arrived.
+    const element = mountApp("term");
+    const drawn = recordDrawing();
+
+    element.drawFrame(400, 300, 1, new Uint8Array(2 * 2 * 4), [8, 9, 2, 2]);
+
+    expect(drawn).toStrictEqual([{ height: 2, width: 2, x: 8, y: 9 }]);
   });
 
   it("clips the copied pixels to the element's own rounding", () => {

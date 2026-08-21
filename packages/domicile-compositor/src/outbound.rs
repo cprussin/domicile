@@ -42,6 +42,10 @@ pub enum Outbound {
         /// again without waiting for the client to draw, and a copy per frame
         /// to cover that would cost more than the case is worth.
         rgba: Arc<Vec<u8>>,
+        /// Which part of the buffer `rgba` is, or `None` for all of it. The
+        /// chrome patches its canvas with it, so it is only ever `Some` when
+        /// the chrome still holds the frame this one updates.
+        region: Option<[u32; 4]>,
     },
 }
 
@@ -108,6 +112,7 @@ impl OutboundSender {
         height: u32,
         scale: u32,
         rgba: Arc<Vec<u8>>,
+        region: Option<[u32; 4]>,
     ) -> bool {
         if self.waiting_frames.load(Ordering::SeqCst) >= FRAME_DEPTH {
             self.dropped.fetch_add(1, Ordering::SeqCst);
@@ -121,6 +126,7 @@ impl OutboundSender {
                     height,
                     scale,
                     rgba,
+                    region,
                 })
                 .is_ok()
         }
@@ -176,7 +182,7 @@ mod tests {
     use std::sync::Arc;
 
     fn frame_bytes(sender: &super::OutboundSender) -> bool {
-        sender.frame("app-1", 2, 2, 1, Arc::new(vec![0; 16]))
+        sender.frame("app-1", 2, 2, 1, Arc::new(vec![0; 16]), None)
     }
 
     fn closed(app_id: &str) -> HostMessage {

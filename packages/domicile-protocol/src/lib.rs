@@ -9,6 +9,12 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v10 added `region` to `app_frame`: a frame carries only the part of the
+/// buffer the client damaged, so the copy path stops paying megabytes for a
+/// blinking cursor. A v9 chrome would draw those pixels as if they were the
+/// whole buffer, which is a window drawn from its own top-left corner
+/// outwards — visibly wrong rather than merely stale.
+///
 /// v9 added `takes_pointer` to `place_portal`: the chrome reports an element's
 /// `pointer-events`, so a window the engine painted something over stops
 /// swallowing the clicks meant for what covers it.
@@ -70,7 +76,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 9;
+pub const PROTOCOL_VERSION: u32 = 10;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -301,6 +307,17 @@ pub enum HostMessage {
         scale: u32,
         format: String,
         bytes: u32,
+        /// Which part of the buffer these bytes are, as `[x, y, width,
+        /// height]` in buffer pixels. Absent means all of it.
+        ///
+        /// The copy path's cost is bytes — a frame crosses a Unix socket and
+        /// then the engine's process boundary — so a client that changed a
+        /// cursor cell sends a cursor cell. Only ever present when the chrome
+        /// still holds the frame this one patches; the compositor sends the
+        /// whole buffer for a first frame, a resize, or a window whose pixels
+        /// it just handed back.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        region: Option<[u32; 4]>,
     },
 
     /// A client went away; the chrome should unmount its `<app>` element.

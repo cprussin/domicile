@@ -210,6 +210,7 @@ export class DomicileAppElement extends HTMLElement {
     height: number,
     scale: number,
     pixels: Uint8Array<ArrayBuffer>,
+    region?: readonly [x: number, y: number, width: number, height: number],
   ): void {
     // A scale of zero would divide the surface out of existence; it can only
     // arrive from a host that disagrees with this build about the protocol.
@@ -231,18 +232,23 @@ export class DomicileAppElement extends HTMLElement {
     // exercises the canvas-creation and sizing paths above; there is nothing
     // to draw into.
     if (context !== null) {
+      // A partial frame is only the part the client changed, so its rows are
+      // the *region's* width and it lands at the region's corner. Sizing the
+      // patch by the buffer would read past the bytes that arrived; placing it
+      // at the origin would draw the window out of its own top-left corner.
+      const [x, y, patchWidth, patchHeight] = region ?? [0, 0, width, height];
       context.putImageData(
         new ImageData(
           new Uint8ClampedArray(
             pixels.buffer,
             pixels.byteOffset,
-            width * height * BYTES_PER_PIXEL,
+            patchWidth * patchHeight * BYTES_PER_PIXEL,
           ),
-          width,
-          height,
+          patchWidth,
+          patchHeight,
         ),
-        0,
-        0,
+        x,
+        y,
       );
     }
   }
