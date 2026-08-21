@@ -431,5 +431,30 @@ const createSurfaceCanvas = (): HTMLCanvasElement => {
   // element's own content *is* clipped to its border radius — and the
   // element's inline style belongs to whoever wrote the chrome, not to us.
   canvas.style.borderRadius = "inherit";
+  // Filled to the element, because a canvas has no size of its own beyond its
+  // backing store: it lays out at the *buffer's* dimensions, in CSS pixels.
+  // Left to itself it draws the window at whatever size the client last drew
+  // at, so the same window changes size when it falls to this path. On a 2x
+  // display that is twice the element, permanently; at any scale it is wrong
+  // for as long as the element and the buffer disagree, which is every resize
+  // until the client has answered it.
+  //
+  // Not a style choice a chrome makes — a chrome that wants the window a
+  // different size sizes the *element*. Two limits on how far this follows it:
+  // a percentage resolves against the element's *content* box while the
+  // compositor draws across its border box, so padding on a `<domicile-app>`
+  // insets this path's window and not the other's; and where the element has
+  // no definite block size, `100%` computes to `auto` and a replaced element
+  // then takes its block size from its aspect ratio rather than filling.
+  // Neither is reachable from the shell in this repo, whose windows are
+  // `position: absolute; inset: 0` with no padding.
+  //
+  // `display` with them: a canvas is inline by default, and an inline box sits
+  // on the text baseline with a descender's worth of gap beneath it — enough
+  // to show a strip of whatever is behind the window. A chrome with a CSS
+  // reset already gets this; the SDK cannot assume one.
+  canvas.style.display = "block";
+  canvas.style.inlineSize = "100%";
+  canvas.style.blockSize = "100%";
   return canvas;
 };

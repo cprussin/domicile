@@ -57,14 +57,6 @@ export const AppWindow = ({ active, appElements, appId }: Props) => {
 };
 
 const appStyles = css({
-  // The live client's pixels fill the element.
-  "& .domicile-app-surface": {
-    blockSize: "100%",
-    borderStyle: "none",
-    display: "block",
-    imageRendering: "auto",
-    inlineSize: "100%",
-  },
   // Placeholder label until the real surface is composited in, hidden the
   // moment the element has pixels of its own to show.
   "&:not(.has-surface)::after": {

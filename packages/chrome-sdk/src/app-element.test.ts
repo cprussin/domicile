@@ -472,6 +472,24 @@ describe("<domicile-app>", () => {
     expect(element.querySelector("canvas")).not.toBeNull();
   });
 
+  it("sizes the copied pixels to the element, not to the buffer", () => {
+    // A canvas has no size of its own beyond its backing store, and the
+    // backing store is the client's *device* pixels. Left alone on a 2x
+    // display that is a window drawn at twice its element — the copy path and
+    // the native path showing the same window at different sizes, which is
+    // what a shell author sees and cannot explain. `display` because a canvas
+    // is inline by default, and an inline box sits on the text baseline with a
+    // descender's gap beneath it.
+    const element = mountApp("term");
+
+    element.drawFrame(2, 1, 1, new Uint8Array(8));
+
+    const canvas = element.querySelector("canvas");
+    expect(canvas?.style.inlineSize).toBe("100%");
+    expect(canvas?.style.blockSize).toBe("100%");
+    expect(canvas?.style.display).toBe("block");
+  });
+
   it("clips the copied pixels to the element's own rounding", () => {
     // Content is not clipped by the box that holds it: `border-radius` rounds
     // this element and does nothing to a child. A window sent down the copy
