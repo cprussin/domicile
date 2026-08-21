@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 9;
+export const PROTOCOL_VERSION = 10;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
@@ -88,6 +88,10 @@ const appFrameSchema = z.looseObject({
   // Device pixels, so the canvas backing store; divide by `scale` for the
   // logical size the element is laid out at.
   height: z.number(),
+  // Which part of the buffer the bytes are, as [x, y, width, height] in
+  // buffer pixels. Absent means all of it — a host too old to send it, or a
+  // frame the compositor could not send partially.
+  region: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
   scale: z.number(),
   type: z.literal("app_frame"),
   width: z.number(),

@@ -123,6 +123,7 @@ fn host_messages_round_trip() {
         scale: 1,
         format: "rgba".into(),
         bytes: 8,
+        region: Some([1, 2, 3, 4]),
     });
     host_round_trip(&HostMessage::AppClosed {
         app_id: "term".into(),
@@ -147,6 +148,22 @@ fn cursor_shapes_are_css_keywords() {
     assert_eq!(shape(CursorShape::NotAllowed), "not-allowed");
     assert_eq!(shape(CursorShape::NwseResize), "nwse-resize");
     assert_eq!(shape(CursorShape::ZoomIn), "zoom-in");
+}
+
+#[test]
+fn an_app_frame_without_a_region_is_the_whole_buffer() {
+    // The field is what makes a partial frame legible, so a frame that does
+    // not carry one has to mean all of it. Defaulting the other way would draw
+    // every window from its own top-left corner outwards.
+    let frame: HostMessage = serde_json::from_str(
+        r#"{"type":"app_frame","app_id":"term","width":4,"height":3,
+            "scale":1,"format":"rgba","bytes":48}"#,
+    )
+    .unwrap();
+    let HostMessage::AppFrame { region, .. } = frame else {
+        panic!("not an app_frame");
+    };
+    assert_eq!(region, None);
 }
 
 #[test]

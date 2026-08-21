@@ -48,16 +48,17 @@ export class AppElements {
     height,
     scale,
     pixels,
+    region,
   }: Pick<
     AppFrameMessage,
-    "app_id" | "width" | "height" | "scale" | "pixels"
+    "app_id" | "width" | "height" | "scale" | "pixels" | "region"
   >): void {
     const element = this.#elements.get(app_id);
     // Only a draw that happened is priced: recording a zero for a frame that
     // hit no element would pull the average down with work never done.
     if (element !== undefined) {
       const started = this.#now();
-      element.drawFrame(width, height, scale, pixels);
+      element.drawFrame(width, height, scale, pixels, region);
       this.drawTiming.record(this.#now() - started);
     }
   }

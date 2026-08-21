@@ -62,7 +62,7 @@ use smithay::wayland::{
     buffer::BufferHandler,
     compositor::{
         with_states, BufferAssignment, CompositorClientState, CompositorHandler, CompositorState,
-        SurfaceAttributes,
+        Damage, SurfaceAttributes,
     },
     cursor_shape::CursorShapeManagerState,
     dmabuf::{
@@ -309,10 +309,13 @@ fn unmounts_the_element(message: &ChromeMessage) -> Option<&str> {
 }
 
 /// What came of offering one window's pixels to the chrome.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum HandOver {
-    /// The chrome has them, and will not be offered them again.
-    Sent,
+    /// The chrome has them, and will not be offered them again. Carries the
+    /// buffer size they were sent at, because that is what the chrome's canvas
+    /// is now sized to — and recording that it holds a frame without recording
+    /// which size is what let the two records drift apart.
+    Sent { size: (u32, u32) },
     /// The chrome is behind and the frame was dropped. Offer them again.
     Refused,
     /// Announced but never committed: there is nothing to offer yet.
@@ -335,7 +338,7 @@ enum HandOver {
 /// `wl_shm` client is never in the second set however ordinary its CSS: its
 /// pixels never reach a texture, so the chrome draws that window always.
 ///
-/// `copied` is what stops this firing on every presented frame: a window the
+/// `held` is what stops this firing on every presented frame: a window the
 /// chrome draws would otherwise be read back once per composite as well as
 /// once per client commit, which is the readback the native path exists to
 /// avoid, twice over. It holds only what the chrome was actually given — a
@@ -347,15 +350,15 @@ enum HandOver {
 /// and its canvas, stay in the page — see [`unmounts_the_element`].
 fn hand_over(
     windows: &[Drawn],
-    copied: &mut HashSet<String>,
+    held: &mut HashMap<String, (u32, u32)>,
     mut offer: impl FnMut(&str) -> HandOver,
 ) -> Refusals {
     let mut refused = false;
     for (app_id, drawn_here) in windows {
-        if !drawn_here && !copied.contains(*app_id) {
+        if !drawn_here && !held.contains_key(*app_id) {
             match offer(app_id) {
-                HandOver::Sent => {
-                    copied.insert((*app_id).to_string());
+                HandOver::Sent { size } => {
+                    held.insert((*app_id).to_string(), size);
                 }
                 HandOver::Refused => refused = true,
                 HandOver::NothingToSend => {}
@@ -439,6 +442,8 @@ enum ClientRequest {
     /// unrelated reason to redraw — and one of the things it waits for is the
     /// hand-over to the engine, which only runs while presenting.
     ScenePlaced,
+    /// A chrome's page said `hello`. Whatever it is, it holds no pixels yet.
+    ChromeHello,
     /// The chrome unmounted an app's element, which took its canvas with it.
     PortalRemoved {
         app_id: String,
@@ -517,8 +522,11 @@ impl ChromeHub {
         height: u32,
         scale: u32,
         rgba: Arc<Vec<u8>>,
+        region: Option<[u32; 4]>,
     ) -> bool {
-        let taken = self.outbound.frame(app_id, width, height, scale, rgba);
+        let taken = self
+            .outbound
+            .frame(app_id, width, height, scale, rgba, region);
         if !taken {
             tracing::debug!(%app_id, "chrome is behind; dropped a frame");
         }
@@ -552,6 +560,7 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
                 height,
                 scale,
                 rgba,
+                region,
             } => (
                 HostMessage::AppFrame {
                     app_id,
@@ -560,6 +569,7 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
                     scale,
                     format: "rgba".to_string(),
                     bytes: rgba.len() as u32,
+                    region,
                 },
                 rgba,
             ),
@@ -813,6 +823,25 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
             // Compositor-level, before the brain: a claim on the keyboard is
             // the compositor's to keep, since it is the only thing that sees a
             // key before its client does.
+            // A page that has just started has no canvas for anything. The
+            // canvases belong to the *page*, not to this socket: in the
+            // Electron prototype the socket is opened once by the main process
+            // and lives as long as the app, while the renderer can reload — or
+            // be recreated after a crash — and come back with a fresh DOM.
+            // `hello` is the one message that says a page has started, so it
+            // is what the record of what the chrome holds is cleared on. A
+            // stale entry is a window drawn as a patch onto a blank canvas,
+            // and for a client that then goes idle, a hole that stays until it
+            // is resized.
+            Ok(ChromeMessage::Hello { protocol_version }) => {
+                hub.send_request(ClientRequest::ChromeHello);
+                let mut host = hub.host.lock().unwrap();
+                apply_chrome_message(
+                    &mut host,
+                    &mut ready,
+                    ChromeMessage::Hello { protocol_version },
+                )
+            }
             Ok(ChromeMessage::GrabShortcut { shortcut }) => {
                 hub.send_request(ClientRequest::GrabShortcut { shortcut });
                 Vec::new()
@@ -916,10 +945,9 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
                 });
                 responses
             }
-            Ok(message) => {
-                let mut host = hub.host.lock().unwrap();
-                apply_chrome_message(&mut host, &mut ready, message)
-            }
+            // No catch-all: every message is named above, so a new one is a
+            // compile error here rather than a silent trip to the brain that
+            // skips whatever compositor-level effect it also wanted.
             Err(_) => Vec::new(),
         };
         let mut writer = writer.lock().unwrap();
@@ -982,19 +1010,34 @@ struct DomicileCompositor {
     /// only thing that can re-supply a window's pixels, and a window can need
     /// them at a moment no client knows anything about — see [`hand_over`].
     latest_frames: HashMap<String, LastFrame>,
-    /// Which apps the chrome holds a copied frame of, as far as we can tell.
+    /// Which apps the chrome holds a frame of, and at what buffer size.
     ///
     /// The compositor cannot see the page, so this is its own record rather
-    /// than an observation, and exactly three things change it: a frame the
+    /// than an observation, and exactly four things change it: a frame the
     /// chrome took goes in; `app_composited` — which is us telling the chrome
-    /// to drop the canvas — takes one out; and so does the element being
-    /// unmounted, which arrives as `remove_portal`.
+    /// to drop the canvas — takes one out; so does the element being
+    /// unmounted, which arrives as `remove_portal`; and a chrome that has just
+    /// said `hello` empties it, because that page has no canvas in it yet.
     ///
     /// Not a placement that says `native`. The chrome keeps its canvas until
     /// told, and it cannot be told until there is a frame to put in its place.
     /// Not a window leaving the scene either — a backgrounded window does that
     /// with its element still in the page. See [`unmounts_the_element`].
-    copied: HashSet<String>,
+    ///
+    /// One map rather than a set beside it, because the size is what decides
+    /// whether a partial frame is safe and the two must agree: `drawFrame`
+    /// assigns `canvas.width`/`canvas.height` from these, and assigning either
+    /// resets the backing store to transparent. The logical size is not a
+    /// proxy for it — at scale 2 a buffer can go 806x491 to 1612x982 with the
+    /// logical size unmoved, and 801 and 800 both floor to 400 — so a record
+    /// that says "held" without saying "at what" is a canvas the chrome
+    /// silently blanks while the compositor patches it.
+    held: HashMap<String, (u32, u32)>,
+    /// Damage owed to the chrome: what a frame the throttle dropped, or the
+    /// outbound queue refused, changed and never showed it. Folded into the
+    /// next frame that gets through, because that frame is a patch over a
+    /// canvas still holding the one before the drop.
+    pending_damage: HashMap<String, PendingDamage>,
     /// Each app's latest surface as a texture, when presenting. Kept rather
     /// than read back and dropped: this *is* the client's buffer, and drawing
     /// it is what costs nothing.
@@ -1229,7 +1272,13 @@ impl DomicileCompositor {
 
     /// Turn a client's newly-attached buffer into pixels for the chrome,
     /// throttled to ~30fps per app.
-    fn publish_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer, buffer_scale: i32) {
+    fn publish_frame(
+        &mut self,
+        app_id: &str,
+        buffer: &wl_buffer::WlBuffer,
+        buffer_scale: i32,
+        damaged: Option<Region>,
+    ) {
         let Some(committed) = committed_buffer(buffer) else {
             return;
         };
@@ -1256,6 +1305,18 @@ impl DomicileCompositor {
                 .get(app_id)
                 .map(|last| now.duration_since(*last)),
         );
+        // Recorded before anything can drop this frame, and left recorded until
+        // one actually goes. `frame_fate` decides the rest in one place: split
+        // across the early returns below, the ordering was prose, and moving
+        // this line under the throttle left the suite green while a client's
+        // pixels went missing.
+        let pending = owed(&mut self.pending_damage, app_id, damaged);
+        let fate = frame_fate(
+            taking,
+            pending,
+            self.held.get(app_id).copied(),
+            (width, height),
+        );
         if taking == Disposition::Throttle {
             self.hub.timings.lock().unwrap().throttled += 1;
             return;
@@ -1280,7 +1341,10 @@ impl DomicileCompositor {
             // now live underneath. Here rather than when the placement
             // arrived, because until this moment there was nothing to put in
             // the canvas's place.
-            if let Some(taken_back) = hand_back(app_id, &mut self.copied) {
+            // Nothing is owed to a chrome that holds no pixels for this
+            // window; the frame it gets next will be a whole one.
+            self.pending_damage.remove(app_id);
+            if let Some(taken_back) = hand_back(app_id, &mut self.held) {
                 info!(%app_id, "drawing this window natively -> chrome should drop its pixels");
                 self.hub.broadcast(taken_back);
             }
@@ -1298,8 +1362,28 @@ impl DomicileCompositor {
                 height,
                 scale,
             );
-            if self.hub.send_frame(app_id, width, height, scale, rgba) {
-                self.copied.insert(app_id.to_string());
+            // Only what changed, and only when the chrome still holds the
+            // frame this one patches — `held` is exactly that record.
+            let Frame::Sent(sending) = fate else {
+                unreachable!("a frame with pixels to send is `Disposition::Send`")
+            };
+            let (pixels, region) = match sending {
+                None => (rgba, None),
+                Some(region) => (
+                    Arc::new(crop_region(&rgba, width, region)),
+                    Some([region.x, region.y, region.width, region.height]),
+                ),
+            };
+            if self
+                .hub
+                .send_frame(app_id, width, height, scale, pixels, region)
+            {
+                self.held.insert(app_id.to_string(), (width, height));
+                // Drawn: nothing is owed until the client changes something
+                // else. A refusal by a full outbound queue leaves it owed,
+                // which is this branch not being taken rather than a branch of
+                // its own.
+                self.pending_damage.remove(app_id);
             }
         }
     }
@@ -1325,7 +1409,7 @@ impl DomicileCompositor {
         let started = Instant::now();
         let rgba = if composited {
             // Presenting: the client's buffer becomes a texture we draw, and
-            // nothing is copied. The chrome gets no pixels for this app —
+            // nothing is copied out. The chrome gets no pixels for this app —
             // there is a hole in the page where the compositor puts it.
             if let Some(surface) =
                 self.texture_from(CommittedBuffer::Gpu(dmabuf.clone()), buffer_scale)
@@ -1374,7 +1458,7 @@ impl DomicileCompositor {
     fn hand_over_to_the_engine(&mut self, placed: &[Placed]) {
         let windows = drawn_by_the_compositor(placed, |app_id| self.textures.contains_key(app_id));
         let (hub, latest, gpu) = (&self.hub, &self.latest_frames, &mut self.gpu);
-        let refusals = hand_over(&windows, &mut self.copied, |app_id| {
+        let refusals = hand_over(&windows, &mut self.held, |app_id| {
             let Some(last) = latest.get(app_id) else {
                 // Announced but never committed: there is nothing to hand over,
                 // and the client's first frame goes down the copy path of its
@@ -1400,8 +1484,12 @@ impl DomicileCompositor {
                     .expect("a dmabuf the importer accepted reads back")
             });
             info!(%app_id, "handing this window's pixels to the engine");
-            if hub.send_frame(app_id, width, height, scale, rgba) {
-                HandOver::Sent
+            // Whole buffer: the chrome has no pixels for this window, which
+            // is why it is being handed any.
+            if hub.send_frame(app_id, width, height, scale, rgba, None) {
+                HandOver::Sent {
+                    size: (width, height),
+                }
             } else {
                 // Not recording it is the whole point: the next present tries
                 // again, where recording it would leave a hole in the page with
@@ -2071,12 +2159,22 @@ impl DomicileCompositor {
                 self.shortcuts.grab(shortcut);
             }
             ClientRequest::ScenePlaced => self.needs_present = true,
+            ClientRequest::ChromeHello => {
+                // Nothing is held and nothing is owed. The windows a chrome
+                // needs are re-supplied by the hand-over pass in `present`,
+                // which is what an empty `held` asks for.
+                self.held.clear();
+                self.pending_damage.clear();
+                self.needs_present = true;
+            }
             ClientRequest::PortalRemoved { app_id } => {
                 // The element left the page and its canvas went with it, so
                 // the chrome no longer holds this window's pixels. Mounted
                 // again it is a fresh element with nothing in it, and needs
                 // the hand-over a remembered record would skip.
-                self.copied.remove(&app_id);
+                self.held.remove(&app_id);
+                // And nothing is owed to a canvas that no longer exists.
+                self.pending_damage.remove(&app_id);
                 self.needs_present = true;
             }
             ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
@@ -2199,6 +2297,673 @@ fn record_present(timings: &Mutex<FrameTimings>, started: Instant, submit: impl 
     timings.submit.record(submitted);
 }
 
+/// RGBA, which is what the readback produces and what `ImageData` takes.
+const BYTES_PER_PIXEL: usize = 4;
+
+/// A rectangle of a client's buffer, in buffer pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Region {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+impl Region {
+    fn new(x: u32, y: u32, width: u32, height: u32) -> Self {
+        Region {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+}
+
+/// Damage the chrome has not been shown yet.
+///
+/// Not every frame reaches it: the throttle drops one that came too soon after
+/// the last, and a full outbound queue refuses one outright. Neither clears
+/// `copied`, so the chrome goes on holding the frame *before* the dropped one
+/// — and a partial frame after that would patch around the hole rather than
+/// over it, leaving a stale rectangle in a live window until the client next
+/// touched those pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PendingDamage {
+    /// A client that reported no damage, which is not a claim that little
+    /// changed. Sticky: folding a smaller claim into it must not shrink it.
+    Everything,
+    /// The box around everything not yet drawn.
+    Region(Region),
+}
+
+/// Fold this commit's damage into whatever has not reached the chrome yet.
+fn accumulate(pending: Option<PendingDamage>, latest: Option<Region>) -> PendingDamage {
+    match (pending, latest) {
+        (Some(PendingDamage::Everything), _) | (_, None) => PendingDamage::Everything,
+        (None, Some(region)) => PendingDamage::Region(region),
+        (Some(PendingDamage::Region(held)), Some(region)) => {
+            // Saturating for the same reason as `damage_bounds`: neither box
+            // has been clamped to the buffer yet, so both still carry whatever
+            // the client asked for.
+            let right = held
+                .x
+                .saturating_add(held.width)
+                .max(region.x.saturating_add(region.width));
+            let bottom = held
+                .y
+                .saturating_add(held.height)
+                .max(region.y.saturating_add(region.height));
+            let (x, y) = (held.x.min(region.x), held.y.min(region.y));
+            PendingDamage::Region(Region::new(x, y, right - x, bottom - y))
+        }
+    }
+}
+
+/// What a frame costs the chrome, and what it leaves owed.
+///
+/// The whole decision in one place because its two halves are one rule: damage
+/// is recorded before anything can drop the frame, and cleared only where a
+/// frame actually goes. Split across `publish_frame`'s early returns it was
+/// prose — moving the record below the throttle, or dropping either clear,
+/// left the suite green while a client's pixels went missing.
+#[derive(Debug, PartialEq, Eq)]
+enum Frame {
+    /// Dropped before it was drawn. Whatever it changed is still owed.
+    Held(PendingDamage),
+    /// Drawn by the compositor; the chrome holds nothing for this window.
+    Native,
+    /// Sent, with the region the chrome should patch — `None` for all of it.
+    Sent(Option<Region>),
+}
+
+/// Decide a frame's fate from what is known before any of it is done.
+fn frame_fate(
+    taking: Disposition,
+    pending: PendingDamage,
+    held: Option<(u32, u32)>,
+    size: (u32, u32),
+) -> Frame {
+    match taking {
+        Disposition::Throttle => Frame::Held(pending),
+        Disposition::Draw => Frame::Native,
+        Disposition::Send => Frame::Sent(region_to_send(pending, held, size)),
+    }
+}
+
+/// Fold this commit's damage into what the chrome is owed, and keep it there.
+///
+/// Kept rather than taken: a frame reaches the chrome only if it survives the
+/// throttle and the outbound queue, and the debt is cleared where it is paid.
+/// Every other path out of `publish_frame` is then correct by doing nothing.
+fn owed(
+    pending_damage: &mut HashMap<String, PendingDamage>,
+    app_id: &str,
+    damaged: Option<Region>,
+) -> PendingDamage {
+    let pending = accumulate(pending_damage.get(app_id).copied(), damaged);
+    pending_damage.insert(app_id.to_string(), pending);
+    pending
+}
+
+/// Which part of a frame the chrome needs, or `None` for all of it.
+///
+/// The copy path's cost is bytes: a frame is megabytes, and it crosses a Unix
+/// socket and then Electron's process boundary, which together measured ~103ms
+/// against ~8ms for the readback that produced it. A client that changed a
+/// cursor cell should pay for a cursor cell.
+///
+/// Sending less is only sound when the chrome still holds the frame this one
+/// patches, which is why every case that leaves it holding nothing — or
+/// holding a canvas that is about to be reset — asks for the whole buffer.
+fn region_to_send(
+    pending: PendingDamage,
+    held: Option<(u32, u32)>,
+    (width, height): (u32, u32),
+) -> Option<Region> {
+    // One comparison for both halves of the question, and that is the point:
+    // assigning either canvas dimension resets the backing store, so a chrome
+    // holding this window at another size is holding a blank canvas — which is
+    // the same situation as holding nothing, and cannot be told apart from it
+    // by a record that keeps them in separate maps.
+    if held != Some((width, height)) {
+        None
+    } else {
+        match pending {
+            PendingDamage::Everything => None,
+            PendingDamage::Region(region) => clamp_to(region, (width, height))
+                .filter(|region| region.width < width || region.height < height),
+        }
+    }
+}
+
+/// The part of `region` that lies inside the buffer, if any of it does.
+fn clamp_to(region: Region, (width, height): (u32, u32)) -> Option<Region> {
+    let right = region.x.saturating_add(region.width).min(width);
+    let bottom = region.y.saturating_add(region.height).min(height);
+    // Wholly outside: there is nothing to crop to, and sending nothing would
+    // freeze the window. The caller reads `None` as "send all of it".
+    if region.x >= right || region.y >= bottom {
+        None
+    } else {
+        Some(Region::new(
+            region.x,
+            region.y,
+            right - region.x,
+            bottom - region.y,
+        ))
+    }
+}
+
+/// The rows and columns `region` names, packed tight.
+///
+/// The caller has already clamped `region` to the buffer, so every index here
+/// is inside it.
+fn crop_region(rgba: &[u8], width: u32, region: Region) -> Vec<u8> {
+    let stride = width as usize * BYTES_PER_PIXEL;
+    let run = region.width as usize * BYTES_PER_PIXEL;
+    let left = region.x as usize * BYTES_PER_PIXEL;
+    (region.y..region.y + region.height)
+        .flat_map(|row| {
+            let start = row as usize * stride + left;
+            rgba[start..start + run].iter().copied()
+        })
+        .collect()
+}
+
+/// The bounds of what a client damaged since the last commit, leaving nothing
+/// behind.
+///
+/// Taken, not read. Smithay aggregates damage in the current state until the
+/// compositor clears it — `Cacheable for SurfaceAttributes` does
+/// `into.damage.extend(self.damage)` — so borrowing it gives every rectangle
+/// the surface has ever reported: a vector growing for the life of the window,
+/// walked on every commit by the Wayland thread, and a box that only ever
+/// widens until it is the whole window and none of this saves anything.
+///
+/// What is owed *across dropped frames* is `pending_damage`'s job, where it is
+/// bounded and cleared where it is paid.
+fn take_damage(damage: &mut Vec<Damage>, buffer_scale: i32) -> Option<Region> {
+    damage_bounds(&std::mem::take(damage), buffer_scale)
+}
+
+/// The one rectangle covering everything a client said it changed.
+///
+/// A bounding box rather than the rectangles themselves: the win is not paying
+/// for a whole window when a cursor cell moved, and a box captures that. Two
+/// far-apart edits fall back to most of the window, which is the honest answer
+/// for a single blit anyway.
+///
+/// `Surface` damage is in logical units and `Buffer` damage is already in
+/// buffer pixels, so the first is scaled and the second is not — mixing them up
+/// silently under-damages a HiDPI window, which draws as a stale band down the
+/// right and bottom of whatever changed.
+fn damage_bounds(damage: &[Damage], buffer_scale: i32) -> Option<Region> {
+    let scale = buffer_scale.max(1);
+    damage
+        .iter()
+        .map(|reported| match reported {
+            // Saturating throughout: `wl_surface.damage` takes four `i32`s a
+            // client picks, and "everything changed" is conventionally
+            // `(0, 0, i32::MAX, i32::MAX)`. Multiplied by a scale that
+            // overflows, a debug build panics on the Wayland thread — taking
+            // the compositor and every client on it — and a release build
+            // wraps negative, which the positive filter below then drops, so
+            // the client's claim that all of it changed disappears. The result
+            // is clamped to the buffer a moment later, so a saturated value
+            // costs nothing.
+            Damage::Surface(rect) => (
+                rect.loc.x.saturating_mul(scale),
+                rect.loc.y.saturating_mul(scale),
+                rect.size.w.saturating_mul(scale),
+                rect.size.h.saturating_mul(scale),
+            ),
+            Damage::Buffer(rect) => (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h),
+        })
+        .filter(|(_, _, w, h)| *w > 0 && *h > 0)
+        .map(|(x, y, w, h)| (x, y, x.saturating_add(w), y.saturating_add(h)))
+        .reduce(|(ax, ay, ar, ab), (bx, by, br, bb)| {
+            (ax.min(bx), ay.min(by), ar.max(br), ab.max(bb))
+        })
+        .map(|(x, y, right, bottom)| {
+            // A client may damage at a negative offset; the part off the top
+            // or left of the buffer is not ours to draw.
+            let (x, y) = (x.max(0), y.max(0));
+            Region::new(
+                x as u32,
+                y as u32,
+                (right - x).max(0) as u32,
+                (bottom - y).max(0) as u32,
+            )
+        })
+}
+
+#[cfg(test)]
+mod damage_tests {
+    use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Size};
+
+    use super::{
+        accumulate, crop_region, damage_bounds, frame_fate, owed, region_to_send, take_damage,
+        Damage, Disposition, Frame, PendingDamage, Region,
+    };
+    use std::collections::HashMap;
+
+    fn buffer(x: i32, y: i32, w: i32, h: i32) -> Damage {
+        Damage::Buffer(Rectangle::new(
+            Point::<i32, BufferCoords>::from((x, y)),
+            Size::<i32, BufferCoords>::from((w, h)),
+        ))
+    }
+
+    fn surface(x: i32, y: i32, w: i32, h: i32) -> Damage {
+        Damage::Surface(Rectangle::new(
+            Point::<i32, Physical>::from((x, y)).to_logical(1),
+            Size::<i32, Physical>::from((w, h)).to_logical(1),
+        ))
+    }
+
+    #[test]
+    fn taking_the_damage_leaves_none_for_the_next_commit() {
+        // Smithay aggregates damage from commit to commit until it is cleared,
+        // so reading it without taking gives every rectangle the surface has
+        // ever reported. The box then only widens, converges on the whole
+        // window, and a blinking cursor costs a whole frame again — which is
+        // the thing this all exists to stop.
+        let mut damage = vec![surface(1, 1, 2, 2)];
+
+        let first = take_damage(&mut damage, 1);
+        let second = take_damage(&mut damage, 1);
+
+        assert_eq!(first, Some(Region::new(1, 1, 2, 2)));
+        assert_eq!(second, None, "the next commit starts from nothing");
+    }
+
+    #[test]
+    fn nothing_reported_is_no_bounds() {
+        assert_eq!(damage_bounds(&[], 1), None);
+    }
+
+    #[test]
+    fn two_rectangles_become_the_box_around_both() {
+        assert_eq!(
+            damage_bounds(&[surface(1, 1, 2, 2), surface(10, 5, 1, 1)], 1),
+            Some(Region::new(1, 1, 10, 5))
+        );
+    }
+
+    #[test]
+    fn surface_damage_scales_to_buffer_pixels() {
+        // The half a HiDPI window gets wrong if this is skipped: the client
+        // damages in logical units and the buffer is twice that, so an
+        // unscaled box leaves a stale band down the right and bottom of
+        // whatever changed.
+        assert_eq!(
+            damage_bounds(&[surface(3, 4, 5, 6)], 2),
+            Some(Region::new(6, 8, 10, 12))
+        );
+    }
+
+    #[test]
+    fn a_client_claiming_everything_is_not_multiplied_into_nothing() {
+        // `(0, 0, i32::MAX, i32::MAX)` is how a client conventionally says all
+        // of it changed. Multiplied by a scale it overflows: a debug build
+        // panics on the Wayland thread, taking the compositor and every client
+        // on it, and a release build wraps negative — which the positive
+        // filter drops, so the loudest claim a client can make becomes no
+        // claim at all.
+        let bounds = damage_bounds(&[surface(0, 0, i32::MAX, i32::MAX)], 2);
+
+        // Saturating at `i32::MAX` rather than wrapping: the arithmetic is in
+        // the type the client's numbers arrive in. Clamped to the buffer a
+        // moment later, so the exact ceiling does not matter — that it is a
+        // ceiling rather than a negative number does.
+        assert_eq!(
+            bounds,
+            Some(Region::new(0, 0, i32::MAX as u32, i32::MAX as u32))
+        );
+    }
+
+    #[test]
+    fn damage_starting_near_the_end_of_the_axis_does_not_wrap() {
+        let bounds = damage_bounds(&[surface(i32::MAX - 1, 0, 8, 8)], 1);
+
+        assert_eq!(
+            bounds,
+            Some(Region::new((i32::MAX - 1) as u32, 0, 1, 8)),
+            "the far edge saturates rather than wrapping behind the near one"
+        );
+    }
+
+    #[test]
+    fn a_damage_offset_past_the_scale_saturates_rather_than_folding_back() {
+        // The location is scaled too, and it is the term the two tests above
+        // miss between them: the far-edge case runs at scale 1, where nothing
+        // is multiplied, and the `i32::MAX` case starts at the origin, where
+        // the multiply is zero.
+        //
+        // A near rectangle and an absurd one. Wrapping puts the far one at
+        // -294967296, which is *behind* the near one — so the box that should
+        // cover both stops at the near one's edge, and every pixel past it is
+        // left holding whatever the last frame put there.
+        let bounds = damage_bounds(&[surface(0, 0, 4, 4), surface(2_000_000_000, 0, 8, 8)], 2);
+
+        assert_eq!(bounds, Some(Region::new(0, 0, i32::MAX as u32, 16)));
+    }
+
+    #[test]
+    fn a_pending_box_near_the_end_of_the_axis_does_not_wrap() {
+        let carried = accumulate(
+            Some(PendingDamage::Region(Region::new(0, 0, u32::MAX, 4))),
+            Some(Region::new(1, 1, 2, 2)),
+        );
+
+        assert_eq!(
+            carried,
+            PendingDamage::Region(Region::new(0, 0, u32::MAX, 4))
+        );
+    }
+
+    #[test]
+    fn buffer_damage_is_already_in_buffer_pixels() {
+        // The arm most clients take: `damage_buffer` has been the preferred
+        // request since `wl_compositor` v4. Scaling it the way surface damage
+        // is scaled would over-damage a HiDPI window by the scale factor —
+        // the mirror of the bug the test below guards.
+        assert_eq!(
+            damage_bounds(&[buffer(3, 4, 5, 6)], 2),
+            Some(Region::new(3, 4, 5, 6))
+        );
+    }
+
+    #[test]
+    fn damage_reaching_off_the_top_left_starts_at_the_corner() {
+        assert_eq!(
+            damage_bounds(&[surface(-4, -2, 8, 6)], 1),
+            Some(Region::new(0, 0, 4, 4))
+        );
+    }
+
+    const FULL: (u32, u32) = (4, 3);
+
+    #[test]
+    fn a_throttled_frame_stays_owed() {
+        // The bug this whole accumulator exists for: a frame the throttle
+        // dropped leaves the chrome holding the one before it, so what this
+        // one changed has to survive to the next.
+        let pending = PendingDamage::Region(Region::new(1, 1, 2, 2));
+
+        assert_eq!(
+            frame_fate(Disposition::Throttle, pending, Some(FULL), FULL),
+            Frame::Held(pending)
+        );
+    }
+
+    #[test]
+    fn a_frame_the_compositor_draws_owes_the_chrome_nothing() {
+        // The chrome has no canvas for a natively drawn window, so there is
+        // nothing to patch and nothing to remember.
+        assert_eq!(
+            frame_fate(
+                Disposition::Draw,
+                PendingDamage::Region(Region::new(1, 1, 2, 2)),
+                Some(FULL),
+                FULL
+            ),
+            Frame::Native
+        );
+    }
+
+    #[test]
+    fn a_frame_that_goes_carries_its_region_and_owes_nothing_after() {
+        assert_eq!(
+            frame_fate(
+                Disposition::Send,
+                PendingDamage::Region(Region::new(1, 1, 2, 2)),
+                Some(FULL),
+                FULL
+            ),
+            Frame::Sent(Some(Region::new(1, 1, 2, 2)))
+        );
+    }
+
+    #[test]
+    fn damage_from_a_frame_that_never_went_is_carried_to_the_next_one() {
+        // The bug this exists to prevent. Two paths drop a frame after the
+        // chrome already holds pixels — the throttle, and an outbound queue
+        // that is full — and neither clears `copied`. Without carrying the
+        // damage forward the next frame is sent partial, and whatever the
+        // dropped frame changed is never drawn: a stale rectangle in a live
+        // window, for as long as the client leaves those pixels alone.
+        let carried = accumulate(
+            Some(PendingDamage::Region(Region::new(0, 0, 2, 2))),
+            Some(Region::new(6, 6, 2, 2)),
+        );
+
+        assert_eq!(carried, PendingDamage::Region(Region::new(0, 0, 8, 8)));
+    }
+
+    #[test]
+    fn damage_stays_owed_until_a_frame_actually_goes() {
+        // The bug the arithmetic alone does not catch: `owed` records before
+        // the throttle can drop the frame, and only a send clears it. Two
+        // dropped frames in a row owe the box around both.
+        let mut owing = HashMap::new();
+
+        owed(&mut owing, "term", Some(Region::new(0, 0, 2, 2)));
+        let after_two = owed(&mut owing, "term", Some(Region::new(6, 6, 2, 2)));
+
+        assert_eq!(after_two, PendingDamage::Region(Region::new(0, 0, 8, 8)));
+        assert_eq!(
+            owing.get("term"),
+            Some(&PendingDamage::Region(Region::new(0, 0, 8, 8))),
+            "a frame that never went is still owed"
+        );
+    }
+
+    #[test]
+    fn a_frame_that_went_leaves_nothing_owed() {
+        let mut owing = HashMap::new();
+        owed(&mut owing, "term", Some(Region::new(0, 0, 2, 2)));
+
+        owing.remove("term");
+        let next = owed(&mut owing, "term", Some(Region::new(6, 6, 2, 2)));
+
+        assert_eq!(
+            next,
+            PendingDamage::Region(Region::new(6, 6, 2, 2)),
+            "the frame that went is not owed a second time"
+        );
+    }
+
+    #[test]
+    fn nothing_pending_carries_only_this_frame() {
+        assert_eq!(
+            accumulate(None, Some(Region::new(1, 2, 3, 4))),
+            PendingDamage::Region(Region::new(1, 2, 3, 4))
+        );
+    }
+
+    #[test]
+    fn a_dropped_frame_that_claimed_everything_keeps_claiming_it() {
+        // `Everything` is what a client reporting no damage means, and it has
+        // to survive being folded with a later, smaller claim — otherwise a
+        // tiny commit after a full one would shrink the region and lose the
+        // rest.
+        assert_eq!(
+            accumulate(
+                Some(PendingDamage::Everything),
+                Some(Region::new(1, 1, 1, 1))
+            ),
+            PendingDamage::Everything
+        );
+    }
+
+    #[test]
+    fn a_frame_claiming_everything_widens_what_was_pending() {
+        assert_eq!(
+            accumulate(Some(PendingDamage::Region(Region::new(1, 1, 1, 1))), None),
+            PendingDamage::Everything
+        );
+    }
+
+    #[test]
+    fn a_chrome_holding_nothing_gets_the_whole_buffer() {
+        // A partial frame is only meaningful against the previous one. The
+        // chrome that has no canvas yet — first frame, or one whose pixels
+        // were handed back when the window went native — has nothing to patch,
+        // so a damaged region would leave the rest of the window undrawn.
+        assert_eq!(
+            region_to_send(PendingDamage::Region(Region::new(1, 1, 2, 2)), None, FULL),
+            None
+        );
+    }
+
+    #[test]
+    fn a_resize_gets_the_whole_buffer() {
+        // Assigning either canvas dimension resets the backing store, so the
+        // frame that reports a new size is drawing into a blank canvas — and
+        // "holding another size" is the only way that is visible from here.
+        assert_eq!(
+            region_to_send(
+                PendingDamage::Region(Region::new(1, 1, 2, 2)),
+                Some((FULL.0, FULL.1 + 1)),
+                FULL
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_client_that_reported_no_damage_gets_the_whole_buffer() {
+        // `wl_surface.damage` is what a client uses to say less than
+        // everything changed. Saying nothing is not the same claim, and a
+        // client that omits it entirely has to be taken at its word that the
+        // frame is new.
+        assert_eq!(
+            region_to_send(PendingDamage::Everything, Some(FULL), FULL),
+            None
+        );
+    }
+
+    #[test]
+    fn damage_covering_the_buffer_is_sent_as_the_whole_buffer() {
+        // Cropping to the full size is the same bytes plus the arithmetic, and
+        // it costs the chrome a sub-image blit where a plain one would do.
+        assert_eq!(
+            region_to_send(
+                PendingDamage::Region(Region::new(0, 0, 4, 3)),
+                Some(FULL),
+                FULL
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_damaged_corner_is_sent_as_that_corner() {
+        assert_eq!(
+            region_to_send(
+                PendingDamage::Region(Region::new(1, 1, 2, 2)),
+                Some(FULL),
+                FULL
+            ),
+            Some(Region::new(1, 1, 2, 2))
+        );
+    }
+
+    #[test]
+    fn damage_past_the_buffer_is_clamped_to_it() {
+        // A client may damage in surface coordinates that round outward, or
+        // simply overreach. Trusting it would read past the frame.
+        assert_eq!(
+            region_to_send(
+                PendingDamage::Region(Region::new(3, 2, 99, 99)),
+                Some(FULL),
+                FULL
+            ),
+            Some(Region::new(3, 2, 1, 1))
+        );
+    }
+
+    #[test]
+    fn damage_spanning_one_full_axis_is_still_sent_partially() {
+        // The commonest partial damage there is: a terminal scrolling a line
+        // damages the full width and a few rows, and so does a status bar or a
+        // progress bar. Requiring both axes to be smaller sends every one of
+        // those whole, which is most of the win.
+        assert_eq!(
+            region_to_send(
+                PendingDamage::Region(Region::new(0, 0, 4, 2)),
+                Some(FULL),
+                FULL
+            ),
+            Some(Region::new(0, 0, 4, 2))
+        );
+    }
+
+    #[test]
+    fn damage_starting_at_the_far_edge_sends_the_whole_buffer() {
+        // A client damaging just past its own edge. Clamped, this region has
+        // zero width — and a zero-width patch reaches the chrome as
+        // `new ImageData(bytes, 0, h)`, which throws inside the frame handler
+        // rather than merely drawing the wrong thing.
+        assert_eq!(
+            region_to_send(
+                PendingDamage::Region(Region::new(4, 0, 2, 2)),
+                Some(FULL),
+                FULL
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn damage_outside_on_one_axis_only_sends_the_whole_buffer() {
+        // Outside on one axis is enough. Treating it as inside underflows
+        // `right - region.x` on `u32`, which is a panic on the Wayland thread
+        // in debug and a ~17GB slice index in release.
+        assert_eq!(
+            region_to_send(
+                PendingDamage::Region(Region::new(9, 0, 2, 2)),
+                Some(FULL),
+                FULL
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn damage_wholly_outside_the_buffer_sends_the_whole_buffer() {
+        // Nothing to crop to. Sending everything is wrong-but-visible rather
+        // than sending nothing, which would freeze the window.
+        assert_eq!(
+            region_to_send(
+                PendingDamage::Region(Region::new(9, 9, 2, 2)),
+                Some(FULL),
+                FULL
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn cropping_takes_the_rows_the_region_names() {
+        // 4x3 RGBA where each pixel's red channel is its index, so a wrong
+        // stride or offset shows up as the wrong numbers rather than as a
+        // length that happens to match.
+        let rgba: Vec<u8> = (0..12u8).flat_map(|i| [i, 0, 0, 255]).collect();
+
+        // Non-square and at an asymmetric offset on purpose: with a 2x2 at
+        // (1,1), `x` and `y` are interchangeable and so are `width` and
+        // `height`, so a crop taking its column offset from `y` or its run
+        // length from `height` reads exactly the same bytes.
+        let cropped = crop_region(&rgba, 4, Region::new(2, 1, 1, 2));
+
+        // Column 2 of row 1 is pixel 6; column 2 of row 2 is pixel 10.
+        assert_eq!(cropped, vec![6, 0, 0, 255, 10, 0, 0, 255]);
+    }
+}
+
 /// Whether a client's commit should be drawn, or dropped on the floor.
 ///
 /// The throttle is the copy path's, and it exists for the socket: a frame is
@@ -2278,8 +3043,8 @@ fn draws_natively(scene: &Scene, app_id: &str) -> bool {
 /// asked on the frame the compositor draws rather than when the placement
 /// arrived. Until there is a texture to put in the canvas's place, dropping it
 /// would blank the window.
-fn hand_back(app_id: &str, copied: &mut HashSet<String>) -> Option<HostMessage> {
-    copied.remove(app_id).then(|| HostMessage::AppComposited {
+fn hand_back(app_id: &str, held: &mut HashMap<String, (u32, u32)>) -> Option<HostMessage> {
+    held.remove(app_id).map(|_| HostMessage::AppComposited {
         app_id: app_id.to_string(),
     })
 }
@@ -2350,7 +3115,7 @@ impl CompositorHandler for DomicileCompositor {
         // it (rather than borrowing) hands us the release: Smithay would
         // otherwise hold it until the *next* buffer arrives, which is a buffer
         // the client cannot draw without the release it is waiting for.
-        let (attached, callbacks, buffer_scale) = with_states(surface, |states| {
+        let (attached, callbacks, buffer_scale, damaged) = with_states(surface, |states| {
             let mut guard = states.cached_state.get::<SurfaceAttributes>();
             let attrs = guard.current();
             let attached = match attrs.buffer.take() {
@@ -2358,12 +3123,22 @@ impl CompositorHandler for DomicileCompositor {
                 Some(BufferAssignment::Removed) | None => None,
             };
             let callbacks = std::mem::take(&mut attrs.frame_callbacks);
+            // Taken, not read. Smithay aggregates damage from commit to commit
+            // until the compositor clears it — `Cacheable for
+            // SurfaceAttributes` does `into.damage.extend(self.damage)` — so
+            // borrowing it gives every rectangle the surface has ever
+            // reported. That is a vector growing for the life of the window,
+            // walked on every commit by the Wayland thread, and a bounding box
+            // that only ever widens until it is the whole window and this
+            // stops saving anything. What is owed across dropped frames is
+            // `pending_damage`'s job, where it is bounded and testable.
+            let damaged = take_damage(&mut attrs.damage, attrs.buffer_scale);
             // How many buffer pixels the client drew per logical unit. Taken
             // here with the buffer rather than looked up later: it is the
             // scale *this* buffer was drawn at, and a client that is mid-way
             // through answering a scale change will commit the next one at a
             // different number.
-            (attached, callbacks, attrs.buffer_scale)
+            (attached, callbacks, attrs.buffer_scale, damaged)
         });
 
         // Ask the client to draw its next frame (keeps it animating).
@@ -2393,7 +3168,9 @@ impl CompositorHandler for DomicileCompositor {
                 }
             }
             match &committer {
-                Committer::App(app_id) => self.publish_frame(app_id, &buffer, buffer_scale),
+                Committer::App(app_id) => {
+                    self.publish_frame(app_id, &buffer, buffer_scale, damaged)
+                }
                 Committer::Chrome => self.publish_chrome_frame(&buffer, buffer_scale),
             }
             // The client may redraw into this buffer the instant it is
@@ -2576,7 +3353,9 @@ impl XdgShellHandler for DomicileCompositor {
             self.last_frame.remove(&app_id);
             self.bridge.remove(&app_id);
             self.latest_frames.remove(&app_id);
-            self.copied.remove(&app_id);
+            self.held.remove(&app_id);
+            // And nothing is owed to a canvas that no longer exists.
+            self.pending_damage.remove(&app_id);
             self.textures.remove(&app_id);
             if self.pointer_app.as_deref() == Some(app_id.as_str()) {
                 self.pointer_app = None;
@@ -3116,7 +3895,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         hub,
         bridge: BridgeRegistry::new(),
         latest_frames: HashMap::new(),
-        copied: HashSet::new(),
+        held: HashMap::new(),
+        pending_damage: HashMap::new(),
         textures: HashMap::new(),
         toplevels: Vec::new(),
         pointer_app: None,
@@ -3239,7 +4019,7 @@ mod tests {
         Disposition, Drawn, FrameTimings, HandOver, LastFrame, Placed, Refusals,
     };
 
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
     use std::sync::Arc;
 
     use domicile_protocol::{ChromeMessage, HostMessage};
@@ -3256,9 +4036,16 @@ mod tests {
         )
     }
 
-    /// The record of which apps the chrome holds a copied frame of.
-    fn holding(app_ids: &[&str]) -> HashSet<String> {
-        app_ids.iter().map(|id| (*id).to_string()).collect()
+    /// A buffer size for a window whose size is beside the point.
+    const ANY_SIZE: (u32, u32) = (64, 48);
+
+    /// The record of which apps the chrome holds a frame of, all at the same
+    /// size: what these read is which apps are in it.
+    fn holding(app_ids: &[&str]) -> HashMap<String, (u32, u32)> {
+        app_ids
+            .iter()
+            .map(|id| ((*id).to_string(), ANY_SIZE))
+            .collect()
     }
 
     /// One window in the draw order, and who is drawing it.
@@ -3284,17 +4071,13 @@ mod tests {
         held: &[&str],
         answer: HandOver,
     ) -> (Vec<String>, Vec<String>, Refusals) {
-        let mut copied = holding(held);
+        let mut chrome_holds = holding(held);
         let mut offered = Vec::new();
-        let refusals = hand_over(windows, &mut copied, |app_id| {
+        let refusals = hand_over(windows, &mut chrome_holds, |app_id| {
             offered.push(app_id.to_string());
-            match answer {
-                HandOver::Sent => HandOver::Sent,
-                HandOver::Refused => HandOver::Refused,
-                HandOver::NothingToSend => HandOver::NothingToSend,
-            }
+            answer
         });
-        let mut recorded: Vec<_> = copied.into_iter().collect();
+        let mut recorded: Vec<_> = chrome_holds.into_keys().collect();
         recorded.sort();
         (offered, recorded, refusals)
     }
@@ -3456,8 +4239,8 @@ mod tests {
         // Every window that has only ever been drawn natively. Sending it
         // would be a message per frame per window, all of them telling the
         // chrome to drop a canvas it never had.
-        let mut copied = holding(&[]);
-        assert_eq!(hand_back("term", &mut copied), None);
+        let mut chrome_holds = holding(&[]);
+        assert_eq!(hand_back("term", &mut chrome_holds), None);
     }
 
     #[test]
@@ -3465,14 +4248,14 @@ mod tests {
         // Once, because the canvas is gone after the first — and the message
         // is what makes it gone, so a second would be for a window that has
         // been drawn natively all along.
-        let mut copied = holding(&["term"]);
+        let mut chrome_holds = holding(&["term"]);
         assert_eq!(
-            hand_back("term", &mut copied),
+            hand_back("term", &mut chrome_holds),
             Some(HostMessage::AppComposited {
                 app_id: "term".to_string()
             })
         );
-        assert_eq!(hand_back("term", &mut copied), None);
+        assert_eq!(hand_back("term", &mut chrome_holds), None);
     }
 
     #[test]
@@ -3586,14 +4369,22 @@ mod tests {
         // nothing behind it. The other is a `wl_shm` client, which is never
         // drawn natively however ordinary its CSS, and so needs its pixels
         // back every time its element moves in the page and drops its canvas.
-        let (offered, recorded, _) = offering(&[drawn("term", false)], &[], HandOver::Sent);
+        let (offered, recorded, _) = offering(
+            &[drawn("term", false)],
+            &[],
+            HandOver::Sent { size: ANY_SIZE },
+        );
         assert_eq!(offered, vec!["term".to_string()]);
         assert_eq!(recorded, vec!["term".to_string()]);
     }
 
     #[test]
     fn a_window_the_compositor_draws_is_not_handed_over() {
-        let (offered, _, _) = offering(&[drawn("term", true)], &[], HandOver::Sent);
+        let (offered, _, _) = offering(
+            &[drawn("term", true)],
+            &[],
+            HandOver::Sent { size: ANY_SIZE },
+        );
         assert!(offered.is_empty());
     }
 
@@ -3710,7 +4501,11 @@ mod tests {
         // The readback is the whole cost of the copy path. Doing it once per
         // composited frame as well as once per client commit would be the
         // expense the native path exists to avoid, twice over.
-        let (offered, _, _) = offering(&[drawn("term", false)], &["term"], HandOver::Sent);
+        let (offered, _, _) = offering(
+            &[drawn("term", false)],
+            &["term"],
+            HandOver::Sent { size: ANY_SIZE },
+        );
         assert!(offered.is_empty());
     }
 
@@ -3725,7 +4520,7 @@ mod tests {
                 drawn("browser", false),
             ],
             &[],
-            HandOver::Sent,
+            HandOver::Sent { size: ANY_SIZE },
         );
         assert_eq!(offered, vec!["term".to_string(), "browser".to_string()]);
     }
@@ -3745,7 +4540,11 @@ mod tests {
 
     #[test]
     fn a_pass_that_handed_everything_over_asks_for_nothing() {
-        let (_, _, refusals) = offering(&[drawn("term", false)], &[], HandOver::Sent);
+        let (_, _, refusals) = offering(
+            &[drawn("term", false)],
+            &[],
+            HandOver::Sent { size: ANY_SIZE },
+        );
         assert_eq!(refusals, Refusals::None);
     }
 
@@ -3784,7 +4583,11 @@ mod tests {
         // which cannot happen until there is a frame to put in its place. A
         // window forgotten here would be handed over a second time the moment
         // it returned to the copy path, for pixels the chrome never lost.
-        let (_, recorded, _) = offering(&[drawn("term", true)], &["term"], HandOver::Sent);
+        let (_, recorded, _) = offering(
+            &[drawn("term", true)],
+            &["term"],
+            HandOver::Sent { size: ANY_SIZE },
+        );
         assert_eq!(recorded, vec!["term".to_string()]);
     }
 
