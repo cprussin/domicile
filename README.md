@@ -72,6 +72,7 @@ The message plane (Wayland client → compositor → host brain → chrome) is a
 covered by headless, reproducible checks that run without a display:
 
 ```sh
+nix run github:cprussin/domicile#measure-round-trip  # what a keystroke costs, end to end
 nix run github:cprussin/domicile#e2e-chrome      # message plane (mock chrome)
 nix run github:cprussin/domicile#e2e-electron    # full path incl. the real Electron renderer, under Xvfb
 nix run github:cprussin/domicile#e2e-no-compositor # a shell that cannot reach the compositor says so once and stops

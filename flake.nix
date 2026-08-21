@@ -108,6 +108,7 @@
           prototype = "run-prototype.sh";
           native = "run-native.sh";
           measure = "measure.sh";
+          measure-round-trip = "measure-round-trip.sh";
           e2e-chrome = "e2e-chrome.sh";
           e2e-electron = "e2e-electron.sh";
           e2e-no-compositor = "e2e-no-compositor.sh";
