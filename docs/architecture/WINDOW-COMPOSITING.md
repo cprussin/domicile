@@ -174,6 +174,13 @@ Phase 1 — prove one window composites at all:
 **The number.** AMD Radeon 890M, kitty, a keystroke every 250ms, release build,
 `nix run .#measure`:
 
+Measured on a copy path that read and sent the whole window every frame, which
+is no longer what it does: damage tracking narrowed the wire and the readback
+now reads only what is about to be sent, so `readback_ms`, `write_ms` and
+`mb_per_s` all scale with what the client changed. The figures below stand as
+the *full-frame* case — a first frame, a resize, a hand-over — and as what the
+native path is measured against.
+
 | per frame | copy | native |
 |---|---|---|
 | `readback_ms` | 7–8 (worst 9) | 0 |

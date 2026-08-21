@@ -254,7 +254,20 @@ frames sent=N composited=CN dropped=M fps=F mb_per_s=B write_ms=W \
 ```
 
 - `readback_ms` — the GPU copy. **Zero on the native path**, because it does not
-  happen: that is the whole point.
+  happen: that is the whole point. On the copy path everything it does is the
+  size of the region about to be sent — the offscreen it allocates, the blit
+  that resolves the client's format, and the copy out — so it scales with what
+  the client changed rather than with the size of its window. A full-window
+  figure means a frame the chrome could not patch (a first frame, a resize, a
+  hand-over) or a client that reported no damage.
+
+  Measured on llvmpipe at 1920x1080: 11.0ms for the whole buffer, 4.7ms for
+  half of it, 0.13ms for a 32x32 patch. Narrowing *only* the copy out — with
+  the offscreen and the blit left full-size — measured 8.6-9.1ms for that same
+  32x32 patch, which is to say indistinguishable from not narrowing at all. A
+  software rasteriser flatters the blit's share, so the split will differ on
+  hardware; what will not is that a partly-narrowed readback reports the
+  unnarrowed part in this same number.
 - `commit_ms` — the whole Wayland-thread commit; minus `readback_ms` it is
   everything around the copy.
 - `idle_ms` — the gap between one commit finishing and the next arriving. Large
@@ -439,7 +452,11 @@ nothing crosses the hop they measure.
 Taken again after the shadow work, to see what a per-pixel blur costs. Both
 paths were re-run, so the copy column is a fresh measurement rather than the one
 above — same machine, same client, same forty keystrokes, and it drifts by a
-millisecond or two from run to run:
+millisecond or two from run to run.
+
+The copy column is from before damage tracking, so `readback_ms`, `write_ms`
+and `mb_per_s` are all the whole-window case: what a first frame, a resize or a
+hand-over still costs, rather than what a steady-state frame does:
 
 | per frame | copy | native, before shadows | native, with them |
 |---|---|---|---|

@@ -1338,14 +1338,22 @@ impl DomicileCompositor {
             return;
         }
         self.last_frame.insert(app_id.to_string(), now);
+        // What the chrome is getting, decided above and needed here: the
+        // readback is a pipeline stall proportional to what it reads, so it
+        // reads what is going to be sent and nothing else.
+        let sending = readback_area(fate);
         // The GPU readback happens here rather than during classification: it
         // costs a pipeline stall, so a frame the throttle has just dropped is
         // never imported at all.
         let rgba = match committed {
             CommittedBuffer::Pixels { rgba, .. } => rgba,
-            CommittedBuffer::Gpu(dmabuf) => {
-                self.import_gpu_frame(app_id, dmabuf, buffer_scale, taking == Disposition::Draw)
-            }
+            CommittedBuffer::Gpu(dmabuf) => self.import_gpu_frame(
+                app_id,
+                dmabuf,
+                buffer_scale,
+                taking == Disposition::Draw,
+                sending,
+            ),
         };
         if rgba.is_empty() {
             // Drawn here: the pixels never left the GPU, so there is nothing to
@@ -1380,13 +1388,20 @@ impl DomicileCompositor {
             );
             // Only what changed, and only when the chrome still holds the
             // frame this one patches — `held` is exactly that record.
-            let Frame::Sent(sending) = fate else {
-                unreachable!("a frame with pixels to send is `Disposition::Send`")
-            };
+            //
+            // Asserted rather than assumed: `readback_area` has to answer for
+            // every `Frame`, because it is called before the readback settles
+            // which one this is, and its answer for the other two is the safe
+            // one. Here the invariant is knowable and violating it means a
+            // frame with pixels that nothing decided the fate of.
+            assert!(
+                matches!(fate, Frame::Sent(_)),
+                "a frame with pixels to send is `Disposition::Send`, not {fate:?}"
+            );
             let (pixels, region) = match sending {
                 None => (rgba, None),
                 Some(region) => (
-                    Arc::new(crop_region(&rgba, width, region)),
+                    only_the_region(rgba, from_gpu, width, region),
                     Some([region.x, region.y, region.width, region.height]),
                 ),
             };
@@ -1415,6 +1430,7 @@ impl DomicileCompositor {
         dmabuf: Dmabuf,
         buffer_scale: i32,
         composited: bool,
+        area: Option<Region>,
     ) -> Vec<u8> {
         let gpu = self.gpu.as_mut().expect(
             "a dmabuf can only be committed where the global — and so the renderer — exists",
@@ -1434,7 +1450,7 @@ impl DomicileCompositor {
             }
             Vec::new()
         } else {
-            DmabufImporter::read_rgba(gpu.renderer(), &dmabuf)
+            DmabufImporter::read_rgba(gpu.renderer(), &dmabuf, area)
                 .expect("a dmabuf the importer accepted reads back")
         };
         self.hub
@@ -1496,7 +1512,9 @@ impl DomicileCompositor {
                     .as_mut()
                     .expect("a dmabuf was imported, so the renderer that imported it exists")
                     .renderer();
-                DmabufImporter::read_rgba(renderer, dmabuf)
+                // Whole: the chrome has no pixels for this window, which is
+                // why it is being handed any.
+                DmabufImporter::read_rgba(renderer, dmabuf, None)
                     .expect("a dmabuf the importer accepted reads back")
             });
             info!(%app_id, "handing this window's pixels to the engine");
@@ -2383,7 +2401,7 @@ fn accumulate(pending: Option<PendingDamage>, latest: Option<Region>) -> Pending
 /// frame actually goes. Split across `publish_frame`'s early returns it was
 /// prose — moving the record below the throttle, or dropping either clear,
 /// left the suite green while a client's pixels went missing.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Frame {
     /// Dropped before it was drawn. Whatever it changed is still owed.
     Held(PendingDamage),
@@ -2468,6 +2486,46 @@ fn clamp_to(region: Region, (width, height): (u32, u32)) -> Option<Region> {
             right - region.x,
             bottom - region.y,
         ))
+    }
+}
+
+/// How much of a frame to read back off the GPU.
+///
+/// The same region it is going to be sent as, because the readback is a
+/// pipeline stall proportional to what it reads and there is nothing to do
+/// with the rest. It is the last cost on the copy path that was still
+/// proportional to the window rather than to what changed: a client moving a
+/// cursor cell stalled for a window.
+///
+/// `None` reads the whole buffer, which is what a frame the chrome cannot
+/// patch needs. A frame nobody is sending reads nothing extra either way —
+/// `Native` never leaves the GPU, and `Held` returned before this — so the
+/// safe answer is the whole one.
+fn readback_area(fate: Frame) -> Option<Region> {
+    match fate {
+        Frame::Sent(region) => region,
+        Frame::Held(_) | Frame::Native => None,
+    }
+}
+
+/// The bytes for a partial frame.
+///
+/// A GPU frame is *already* only those rows: the readback took them and
+/// nothing else, which is the whole point of narrowing it — reading a window
+/// to send a cursor cell is a pipeline stall paid for pixels that are then
+/// thrown away. A software client's pixels are the whole buffer, because that
+/// is what it committed and what `latest_frames` has to go on keeping, so
+/// those are cropped here.
+fn only_the_region(
+    rgba: Arc<Vec<u8>>,
+    already_narrowed: bool,
+    width: u32,
+    region: Region,
+) -> Arc<Vec<u8>> {
+    if already_narrowed {
+        rgba
+    } else {
+        Arc::new(crop_region(&rgba, width, region))
     }
 }
 
@@ -2559,10 +2617,11 @@ mod damage_tests {
     use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Size};
 
     use super::{
-        accumulate, crop_region, damage_bounds, frame_fate, owed, region_to_send, take_damage,
-        Damage, Disposition, Frame, PendingDamage, Region,
+        accumulate, crop_region, damage_bounds, frame_fate, only_the_region, owed, readback_area,
+        region_to_send, take_damage, Damage, Disposition, Frame, PendingDamage, Region,
     };
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     fn buffer(x: i32, y: i32, w: i32, h: i32) -> Damage {
         Damage::Buffer(Rectangle::new(
@@ -2873,6 +2932,63 @@ mod damage_tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn only_the_part_being_sent_is_read_back() {
+        // The whole point. Reading a window off the GPU to send a cursor cell
+        // is a pipeline stall paid for pixels that are then thrown away, and
+        // it was the last cost on this path still proportional to the window.
+        let corner = Region::new(1, 1, 2, 2);
+
+        assert_eq!(
+            readback_area(Frame::Sent(Some(corner))),
+            Some(corner),
+            "a patch reads the patch"
+        );
+        assert_eq!(
+            readback_area(Frame::Sent(None)),
+            None,
+            "a frame the chrome cannot patch reads all of it"
+        );
+        assert_eq!(
+            readback_area(Frame::Native),
+            None,
+            "a frame the compositor draws is not read back at all, and a region \
+             would be a claim about a readback that does not happen"
+        );
+        assert_eq!(
+            readback_area(Frame::Held(PendingDamage::Everything)),
+            None,
+            "nor is one the throttle dropped"
+        );
+    }
+
+    #[test]
+    fn a_gpu_frame_is_sent_as_it_was_read_back() {
+        // The readback already took only the region, so cropping it again
+        // would take a corner *of the corner*: the second crop reads with the
+        // full buffer's stride across bytes that no longer have one.
+        let patch = Arc::new(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+
+        let sending = only_the_region(Arc::clone(&patch), true, 4, Region::new(1, 1, 1, 2));
+
+        assert!(
+            Arc::ptr_eq(&sending, &patch),
+            "handed on, not cropped a second time"
+        );
+    }
+
+    #[test]
+    fn a_software_frame_is_cropped_to_the_region() {
+        // Nothing narrowed a `wl_shm` client's pixels: they are the whole
+        // buffer, because that is what it committed and what `latest_frames`
+        // keeps.
+        let whole: Vec<u8> = (0..(2 * 2 * 4) as u8).collect();
+
+        let sending = only_the_region(Arc::new(whole), false, 2, Region::new(1, 0, 1, 1));
+
+        assert_eq!(*sending, vec![4, 5, 6, 7]);
     }
 
     #[test]
