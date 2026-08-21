@@ -19,6 +19,8 @@ export type Measurement = {
   cornerRadius: number;
   /** `opacity`, 0 to 1. */
   opacity: number;
+  /** Whether a pointer over this window belongs to it. */
+  takesPointer: boolean;
   /** The first drawable `box-shadow`, if the element has one. */
   shadow: Shadow | undefined;
   /**
@@ -63,6 +65,7 @@ export const defaultMeasure: Measure = (element) => {
     opacity: readOpacity(style),
     shadow: readShadow(style),
     size,
+    takesPointer: takesThePointer(style),
     transform: elementToScreen({
       box,
       linear: readElementTransform(style),
@@ -250,6 +253,47 @@ const reportUnsupported = (undrawable: Unsupported[]): void => {
  * Absent is not hidden. An unresolved `visibility` would otherwise take every
  * window off the stage in a DOM implementation that computes nothing.
  */
+/**
+ * Whether a pointer over this element belongs to it.
+ *
+ * The compositor routes the pointer by hit-testing a window's rectangle, and a
+ * rectangle cannot see that the engine painted a menu, a dialog or a browser
+ * tab over it. Without this such a window swallows every click meant for what
+ * covers it — including the click that would have handed the keyboard back to
+ * the chrome, which is one the chrome has to receive, so there is no way out
+ * of it either.
+ *
+ * `pointer-events` because its *meaning* already matches and it is vocabulary
+ * a chrome author knows — not because a page already carries the signal. It
+ * does not: the engine hit-tests its own stacking order correctly and has no
+ * reason to mark anything, so a chrome that paints over a window has to write
+ * a rule it would otherwise never write, and forgetting it is silent.
+ *
+ * Inherited, which is the part that surprises people and is usually what you
+ * want: a `<domicile-app>` inside a container the chrome made inert computes
+ * `none` itself and is reported inert with it.
+ *
+ * All-or-nothing per window, because `pointer-events` is per element. A menu
+ * covering one corner of a window makes the *whole* window unclickable rather
+ * than that corner — the right trade for a dropdown with a backdrop over it,
+ * the wrong one for a popover the user is meant to keep working around. There
+ * is no partial-coverage answer available from this signal.
+ *
+ * `opacity: 0` is not this. A transparent element still hit-tests in the DOM
+ * and still reports as taking the pointer, which matches CSS and is what an
+ * invisible-but-live window should do; a chrome that wants a faded-out window
+ * to stop taking clicks has to say `pointer-events: none` as well.
+ *
+ * `none` is its only value that means "not this element": the SVG-shaped ones
+ * narrow *where on* an element the pointer lands, and a window is not an SVG
+ * shape. An unreadable value takes the pointer, for the same reason an
+ * unreadable opacity is opaque — a window nobody can click is a worse failure
+ * than one that ignores a style, and the two are indistinguishable from
+ * outside.
+ */
+const takesThePointer = (style: CSSStyleDeclaration): boolean =>
+  style.pointerEvents !== "none";
+
 const isVisible = (
   style: CSSStyleDeclaration,
   [width, height]: readonly [number, number],

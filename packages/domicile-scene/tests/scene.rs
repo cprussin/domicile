@@ -144,6 +144,38 @@ fn insertion_order_breaks_z_index_ties() {
     );
 }
 
+#[test]
+fn a_portal_that_takes_no_pointer_is_not_hit() {
+    // `pointer-events: none` is how a page says an element does not take the
+    // pointer, and a window the chrome has painted something over is the case
+    // that needs it: the compositor hit-tests rectangles and cannot see what
+    // the engine drew on top, so a window under a menu would swallow the click
+    // meant for the menu. The chrome says so instead.
+    let mut scene = Scene::new();
+    scene.upsert(portal("under", 100.0, 100.0, Transform::identity(), 0));
+    scene.upsert(portal("over", 100.0, 100.0, Transform::identity(), 5).inert());
+    let hit = scene.hit_test(Point::new(50.0, 50.0)).expect("inside both");
+    assert_eq!(hit.app_id, "under");
+}
+
+#[test]
+fn a_pointer_over_only_inert_portals_belongs_to_the_chrome() {
+    // The case the shell actually hits: every window on the stage is inert
+    // because what is on the stage is a browser tab the engine drew. Falling
+    // through to the topmost window regardless would send the click to a
+    // window nobody can see, and the chrome would never hear the click that
+    // would have handed the keyboard back — so nothing on the stage could be
+    // clicked again.
+    let mut scene = Scene::new();
+    scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 0).inert());
+    assert_eq!(
+        scene.route_pointer(Point::new(50.0, 50.0)),
+        PointerTarget::Chrome {
+            screen: Point::new(50.0, 50.0)
+        }
+    );
+}
+
 // ---- registry management --------------------------------------------------
 
 #[test]
@@ -466,6 +498,12 @@ fn whatever_is_drawn_last_is_what_a_click_reaches() {
     // one painted over the others is the one that takes the click. A
     // compositor that drew in one order and routed in another would look
     // right and behave wrong.
+    //
+    // Among the portals that take the pointer, which is every portal here. A
+    // window the chrome made inert is drawn where it always was and routes
+    // its clicks to whatever is under it, so for that one the two halves part
+    // company on purpose — `a_portal_that_takes_no_pointer_is_not_hit` is
+    // that case.
     let mut scene = Scene::new();
     scene.upsert(covering("under", 0));
     scene.upsert(covering("over", 3));

@@ -1485,8 +1485,10 @@ mod pixels {
     #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
     fn the_last_portal_in_draw_order_is_the_one_on_top() {
         // The same overlap `hit_test` resolves, resolved in pixels: whatever
-        // the scene draws last is what is visible, so a click reaching the
-        // window a user can see is the same fact as this one.
+        // the scene draws last is what is visible. For a window that takes
+        // the pointer — which both of these do — that is the same fact as a
+        // click reaching the window a user can see. An inert window breaks
+        // the pair deliberately: still drawn last, no longer clicked.
         let mut renderer = renderer();
         let red = solid(&mut renderer, RED);
         let blue = solid(&mut renderer, BLUE);

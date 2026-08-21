@@ -281,6 +281,7 @@ export class DomicileAppElement extends HTMLElement {
         native,
         opacity,
         shadow,
+        takesPointer,
       } = activeMeasure()(this);
       const placement = {
         appId,
@@ -289,6 +290,7 @@ export class DomicileAppElement extends HTMLElement {
         opacity,
         shadow,
         size,
+        takesPointer,
         transform,
         visible,
         zIndex,

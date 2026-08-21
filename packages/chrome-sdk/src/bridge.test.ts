@@ -82,6 +82,7 @@ describe("BridgeClient", () => {
       opacity: 1,
       shadow: null,
       size: [10, 20],
+      takes_pointer: true,
       transform: [1, 0, 0, 1, 0, 0],
       type: "place_portal",
       visible: true,

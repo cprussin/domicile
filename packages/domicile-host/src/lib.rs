@@ -133,6 +133,7 @@ impl Host {
                 opacity,
                 shadow,
                 native,
+                takes_pointer,
             } => {
                 if !self.apps.contains_key(&app_id) {
                     return Err(HostError::UnknownApp(app_id));
@@ -158,8 +159,15 @@ impl Host {
                     // A window styled in a way the shaders have no answer for
                     // goes back down the copy path — that window, and only
                     // that window.
-                    self.scene
-                        .upsert(if native { placed } else { placed.copied() });
+                    let placed = if native { placed } else { placed.copied() };
+                    // And a window the chrome painted something over takes no
+                    // pointer, so the click reaches what covers it.
+                    let placed = if takes_pointer {
+                        placed
+                    } else {
+                        placed.inert()
+                    };
+                    self.scene.upsert(placed);
                 } else {
                     // A hidden app is not composited or hit-tested.
                     self.scene.remove(&app_id);

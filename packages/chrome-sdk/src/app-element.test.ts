@@ -58,6 +58,7 @@ const stubMeasure: Measure = () => ({
   opacity: 1,
   shadow: undefined,
   size: [10, 20],
+  takesPointer: true,
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,
   zIndex: 0,
@@ -121,6 +122,7 @@ describe("<domicile-app>", () => {
         native: true,
         opacity: 1,
         size: [10, 20],
+        takesPointer: true,
         transform: [1, 0, 0, 1, 0, 0],
         visible: true,
         zIndex: 0,
@@ -144,6 +146,7 @@ describe("<domicile-app>", () => {
         opacity: 1,
         shadow: undefined,
         size: [0, 0],
+        takesPointer: true,
         transform: [1, 0, 0, 1, 0, 0],
         visible: false,
         zIndex: 0,
@@ -161,12 +164,41 @@ describe("<domicile-app>", () => {
         opacity: 1,
         shadow: undefined,
         size: [0, 0],
+        takesPointer: true,
         transform: [1, 0, 0, 1, 0, 0],
         visible: false,
         zIndex: 0,
       },
     ]);
     expect(bridge.calls.some(([kind]) => kind === "resize")).toBe(false);
+  });
+
+  it("tells the host when a window takes no pointer", () => {
+    // The whole point of measuring it: the compositor routes the pointer by
+    // hit-testing a rectangle, so a window the chrome painted a menu or a
+    // browser tab over goes on swallowing the clicks meant for them until it
+    // is told. Measured but not sent is the same as not measured.
+    registerElements(bridge as unknown as BridgeClient, {
+      measure: (element) => ({ ...stubMeasure(element), takesPointer: false }),
+      observePlacement: frames.observe,
+    });
+    mountApp("term");
+
+    expect(bridge.calls).toContainEqual([
+      "place",
+      {
+        appId: "term",
+        cornerRadius: 0,
+        native: true,
+        opacity: 1,
+        shadow: undefined,
+        size: [10, 20],
+        takesPointer: false,
+        transform: [1, 0, 0, 1, 0, 0],
+        visible: true,
+        zIndex: 0,
+      },
+    ]);
   });
 
   it("re-reports geometry when the element moves", () => {
@@ -193,6 +225,7 @@ describe("<domicile-app>", () => {
         native: true,
         opacity: 1,
         size: [10, 20],
+        takesPointer: true,
         transform: [1, 0, 0, 1, 40, 5],
         visible: true,
         zIndex: 0,
@@ -417,6 +450,7 @@ describe("<domicile-app>", () => {
         native: true,
         opacity: 1,
         size: [10, 20],
+        takesPointer: true,
         transform: [1, 0, 0, 1, 0, 0],
         visible: true,
         zIndex: 0,
@@ -557,6 +591,7 @@ describe("<domicile-app>", () => {
         native: true,
         opacity: 1,
         size: [10, 20],
+        takesPointer: true,
         transform: [1, 0, 0, 1, 40, 5],
         visible: true,
         zIndex: 0,

@@ -32,6 +32,9 @@ describe("placePortalMessage", () => {
       opacity: 1,
       shadow: null,
       size: [10, 20],
+      // And a window takes the pointer unless the element says otherwise:
+      // `pointer-events: none` is the only thing that makes one inert.
+      takes_pointer: true,
       transform: [1, 0, 0, 1, 5, 6],
       type: "place_portal",
       visible: true,

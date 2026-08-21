@@ -22,6 +22,14 @@ export type Placement = {
   /** The shadow the window casts. None if omitted. */
   shadow?: Shadow | undefined;
   /**
+   * Whether a pointer over this window belongs to it.
+   *
+   * True if omitted. False is what an element with `pointer-events: none`
+   * reports, and it is what stops a window swallowing the clicks meant for
+   * whatever the engine painted over it.
+   */
+  takesPointer?: boolean;
+  /**
    * Whether the compositor should draw this window's own buffer.
    *
    * Natively if omitted. False sends this window — and only this window — back
@@ -63,6 +71,10 @@ export const placePortalMessage = ({
   opacity = 1,
   shadow,
   native = true,
+  // Clickable, never inert: a window nobody can click is a worse failure than
+  // one that ignores a style, and a chrome that puts nothing over a window has
+  // no reason to say anything here.
+  takesPointer = true,
 }: Placement) => {
   if (appId.length === 0) {
     throw new TypeError("placePortal: appId must be a non-empty string");
@@ -76,6 +88,7 @@ export const placePortalMessage = ({
     // a window that stopped casting a shadow has to say so.
     shadow: shadow ?? null,
     size,
+    takes_pointer: takesPointer,
     transform,
     type: "place_portal",
     visible,
