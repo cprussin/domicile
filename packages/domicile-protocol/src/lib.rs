@@ -9,6 +9,15 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v13 added `close_app`: the chrome can ask a client to close its window, so
+/// a native window's tab gets the same X button a chrome's own window has.
+///
+/// A bump although a v12 host would merely ignore the message, because that is
+/// precisely what it does — silently. The button would be on screen and do
+/// nothing, with no way for the page to tell that the host it is talking to
+/// has no answer for it; `negotiate` matching exactly is what turns that into
+/// a chrome that says why it did not start.
+///
 /// v12 added `displays`: the desktop is a list of displays the shell lays out
 /// against, rather than one screen it can only assume. The chrome is one page
 /// spanning all of them and puts things on one by position, so without this it
@@ -100,7 +109,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 12;
+pub const PROTOCOL_VERSION: u32 = 13;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -233,6 +242,15 @@ pub enum ChromeMessage {
 
     /// Return keyboard focus to the chrome.
     FocusChrome,
+
+    /// Ask a client to close the window `app_id`.
+    ///
+    /// A request, not a kill: the compositor sends the toplevel a close, and
+    /// what happens next is the client's — a terminal exits, an editor with
+    /// unsaved work puts a dialog up and stays. The window leaves the chrome
+    /// when the client actually goes away and `app_closed` says so, which is
+    /// why this has no answer of its own.
+    CloseApp { app_id: String },
 
     /// Ask the compositor to spawn a client process (argv). The child inherits
     /// the compositor's environment, so it connects to Domicile's Wayland display.

@@ -53,6 +53,9 @@ class FakeBridge {
   focusChrome(): void {
     this.calls.push(["focusChrome"]);
   }
+  closeApp(appId: string): void {
+    this.calls.push(["closeApp", appId]);
+  }
 }
 
 // The test DOM performs no layout, so measurement is injected.
@@ -179,10 +182,21 @@ describe("Shell", () => {
       expect(shownWindowIds(container)).toStrictEqual(["a"]);
     });
 
-    it("does not offer to close a client's window — the client owns that", () => {
+    it("asks the client to close its window, and waits for it to go", async () => {
+      // The client owns the window, so the X is a request: it stays on the
+      // rail until the host says the client actually went away. A tab that
+      // vanished on the click would take an editor's unsaved-work dialog off
+      // the stage with nothing that ever puts it back.
       renderShell();
       bridge.emit("app_appeared", { app_id: "a", title: "A" });
-      expect(screen.queryByRole("button", { name: /^Close/ })).toBeNull();
+
+      await userEvent.click(screen.getByRole("button", { name: "Close A" }));
+
+      expect(bridge.calls).toContainEqual(["closeApp", "a"]);
+      expect(tabNames()).toStrictEqual(["A"]);
+
+      bridge.emit("app_closed", { app_id: "a" });
+      expect(screen.queryAllByRole("listitem")).toStrictEqual([]);
     });
   });
 

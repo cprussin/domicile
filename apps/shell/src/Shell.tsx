@@ -171,9 +171,6 @@ export const Shell = ({ appElements, bridge }: Props) => {
           onReorder={reorder}
           onSelect={select}
           tabs={windows.map((window) => ({
-            // A client's window belongs to the client: the chrome can put it
-            // off the stage but has no way to end it.
-            closable: window.kind === WindowKind.Browser,
             id: window.id,
             label: window.title,
           }))}

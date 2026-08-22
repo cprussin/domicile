@@ -2,6 +2,9 @@
 // browser window the shell opened itself. Both get a tab, and the tab rail is
 // what switches between them, so they share one id space and one title.
 
+/** The prefix {@link appWindowId} namespaces a client's window with. */
+const APP_PREFIX = "app:";
+
 /** Which kind of window a {@link ShellWindow} is. */
 export enum WindowKind {
   App,
@@ -41,7 +44,17 @@ export type ShellWindow = ReturnType<
  * The window id for a client the host announced. Separate from the constructor
  * so a lookup by app id doesn't have to build a whole window to get at it.
  */
-export const appWindowId = (appId: string): string => `app:${appId}`;
+export const appWindowId = (appId: string): string => `${APP_PREFIX}${appId}`;
+
+/**
+ * The client behind a window id, or `undefined` when the shell opened the
+ * window itself.
+ *
+ * The inverse of {@link appWindowId}, and here for the same reason: what the
+ * tab rail reports is an id, and what the host answers to is an app id.
+ */
+export const appIdOf = (id: string): string | undefined =>
+  id.startsWith(APP_PREFIX) ? id.slice(APP_PREFIX.length) : undefined;
 
 /** A window is labelled by the site it is showing, the way a browser tab is. */
 export const siteOf = (url: string): string => new URL(url).hostname;
