@@ -9,6 +9,16 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v11 added `focus_changed`: the chrome is told who holds the keyboard, which
+/// it could not work out for itself once a click or a closing window moved
+/// focus without it asking.
+///
+/// A bump although nothing a v10 chrome sends changes, because `negotiate`
+/// matches exactly and a new *host* message is observable to an older chrome
+/// as silence. Left unbumped, a v10 chrome would start, mark whichever window
+/// it last asked for as active, and be wrong from the first click onwards —
+/// with nothing anywhere to say why.
+///
 /// v10 added `region` to `app_frame`: a frame carries only the part of the
 /// buffer the client damaged, so the copy path stops paying megabytes for a
 /// blinking cursor. A v9 chrome would draw those pixels as if they were the
@@ -76,7 +86,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 10;
+pub const PROTOCOL_VERSION: u32 = 11;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -343,6 +353,25 @@ pub enum HostMessage {
     /// canvas any earlier races the frames still in flight, and one of them
     /// puts a still of the window back over the live one.
     AppComposited { app_id: String },
+
+    /// Who holds the keyboard now: an app, or the chrome itself (`None`).
+    ///
+    /// The chrome asks for focus with `focus_app`, but it is not the only
+    /// thing that moves it — a click on a window focuses it in the compositor,
+    /// and a focused client going away hands the keyboard back. Without this
+    /// the chrome's idea of which window is active is right until the first
+    /// click and wrong afterwards, which is every focus affordance a desktop
+    /// has: the active title bar, the highlighted taskbar entry, the border.
+    ///
+    /// Sent when it *changes*, to every chrome — focus is the desktop's, and a
+    /// page not told has missed the change for good. It also rides along with
+    /// the windows a connecting chrome is caught up on, so a page that has just
+    /// loaded knows without having to ask; that catch-up is broadcast too, and
+    /// a chrome that already knew is being told what it already knew.
+    FocusChanged {
+        /// `None` means the chrome holds the keyboard.
+        app_id: Option<String>,
+    },
 }
 
 /// A cursor a client can ask for, named as the CSS `cursor` keyword the chrome

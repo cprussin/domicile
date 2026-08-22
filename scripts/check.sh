@@ -240,7 +240,7 @@ for script in scripts/e2e-*.sh; do
     # while `e2e-hidpi` and `e2e-input` failed with compositor-shaped verdicts
     # on a missing client. The scripts that own a `77` for their own client
     # (`e2e-slow-chrome`, `e2e-dmabuf`) are left to say so themselves.
-    e2e-chrome|e2e-chrome-layer)
+    e2e-chrome|e2e-chrome-layer|e2e-two-chromes)
       if ! command -v weston-flower >/dev/null 2>&1; then
         label "$name"; skip "$name" "no weston-flower"; continue
       fi

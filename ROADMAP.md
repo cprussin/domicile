@@ -60,6 +60,7 @@ cargo test -p domicile-compositor
 ./scripts/e2e-input.sh           # keyboard + pointer reach a client (copy path)
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
 ./scripts/e2e-slow-chrome.sh     # a chrome that stops reading does not freeze the compositor
+./scripts/e2e-two-chromes.sh     # a focus change reaches every chrome, not just the one that moved it
 ./scripts/e2e-window-alpha.sh    # a translucent client's premultiplied alpha is undone once
 ./scripts/e2e-hidpi.sh           # a 2x chrome makes a client draw at 2x, and the frame says so
 ./scripts/e2e-chrome-layer.sh    # the chrome is told from the apps, and keeps the keyboard
@@ -599,8 +600,14 @@ tracking, clipboard/data-device, touch and a security review all live here too.
 
 - **A client that draws its own cursor into a surface gets a plain arrow.**
   Compositing that surface is the same work as compositing any other.
-- **The chrome is not told when a click focuses a window**, so a chrome that
-  displays focus can go stale.
+- **`e2e-chrome-layer.sh` focuses a window that was never placed.** Its
+  `focus-probe.ts` sends `focus_app` without a `place_portal`, and
+  `Scene::focus_app` refuses an app with no portal — the same silent no-op
+  `input-injector.ts` had. The script *does* assert on focus, in three places,
+  and passes anyway: those assertions read the **seat**, which
+  `ClientRequest::KeyboardFocus` moves before the brain is consulted at all. So
+  the brain's `Scene::focus` never leaves the chrome and nothing notices.
+  Fixing it widens what that check covers, which is its own change.
 - **One output.** The scene has a single `surface_to_output`; the desktop's size
   follows Domicile's window, which is all a nested compositor can do.
 - **Fractional scaling.** Non-integer ratios round *up* to the next integer scale:

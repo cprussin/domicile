@@ -535,6 +535,46 @@ impl ChromeHub {
     }
 }
 
+/// Apply a focus decision the *compositor* made, and tell every chrome.
+///
+/// Broadcast rather than sent to one page: focus is the desktop's, and
+/// [`Host::focus_change`] reports a change *once*, so a chrome that was not
+/// told has missed it for good — it would go on marking the wrong window
+/// active until some other page happened to connect.
+///
+/// A free function taking the hub, like [`announce_open_apps`], because the
+/// alternative is wiring only a running compositor can reach — and this is
+/// the wiring the whole change is about.
+fn broadcast_focus_decision(hub: &ChromeHub, decision: ChromeMessage) {
+    let moved = {
+        let mut host = hub.host.lock().unwrap();
+        let mut ready = true;
+        let _ = apply_chrome_message(&mut host, &mut ready, decision);
+        host.focus_change()
+    };
+    if let Some(message) = moved {
+        hub.broadcast(message);
+    }
+}
+
+/// Forget a client that went away, and tell every chrome what that changed.
+///
+/// Two things, in this order: that the app is gone, and — if it was the one
+/// being typed into — that the keyboard came back. A chrome told only the
+/// first would go on marking a window that no longer exists as active.
+fn broadcast_closed(hub: &ChromeHub, app_id: &str) {
+    let (closed, focus) = {
+        let mut host = hub.host.lock().unwrap();
+        let closed = host.app_closed(app_id);
+        // Asked after the close, because the window going away is what hands
+        // the keyboard back.
+        (closed, host.focus_change())
+    };
+    for message in closed.into_iter().chain(focus) {
+        hub.broadcast(message);
+    }
+}
+
 /// Tell every connected chrome what is already running.
 ///
 /// `app_appeared` goes out once, when the client maps, and a page that was not
@@ -991,6 +1031,23 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
             // skips whatever compositor-level effect it also wanted.
             Err(_) => Vec::new(),
         };
+        // Whatever that message did, it may have moved the keyboard — a focus
+        // message obviously, a placement less so, since hiding the focused
+        // window's portal hands the keyboard back. Asked once here rather than
+        // per message type, because a list of "the messages that can move
+        // focus" is a list to keep in step with the protocol.
+        //
+        // Broadcast, not returned: `responses` goes to the one connection that
+        // asked, and focus is the whole desktop's. `Host::focus_change`
+        // reports a change *once*, so a second chrome that was not told has
+        // missed it for good — it would mark the wrong window active until
+        // some other page happened to connect. The guard is dropped before the
+        // broadcast rather than held across it, since the Wayland thread wants
+        // that lock too.
+        let moved = hub.host.lock().unwrap().focus_change();
+        if let Some(message) = moved {
+            hub.broadcast(message);
+        }
         let mut writer = writer.lock().unwrap();
         for message in responses {
             if writer.write_all(to_line(&message).as_bytes()).is_err() {
@@ -1860,6 +1917,13 @@ impl DomicileCompositor {
         info!("the chrome has the window's keyboard");
         let serial = SERIAL_COUNTER.next_serial();
         keyboard.set_focus(self, Some(surface), serial);
+        // The brain as well as the seat. Every route that hands the keyboard
+        // back to the page comes through here — a click on the desktop,
+        // alt-tabbing into Domicile, the chrome's own window mapping — and
+        // moving the seat without telling the brain leaves `keyboard_target`
+        // naming a window the compositor is no longer typing into, with the
+        // chrome still marking it active.
+        broadcast_focus_decision(&self.hub, ChromeMessage::FocusChrome);
     }
 
     /// Hand the window's own input to the chrome.
@@ -2051,18 +2115,24 @@ impl DomicileCompositor {
                 info!(%app_id, "clicked -> the window has the keyboard");
                 // Through the brain rather than around it, so the click also
                 // raises the window — the same thing the chrome's own focus
-                // message does, because it is the same message.
-                let mut host = self.hub.host.lock().unwrap();
-                let mut ready = true;
-                let _ = apply_chrome_message(
-                    &mut host,
-                    &mut ready,
+                // message does, because it is the same message. And out to
+                // every chrome: this is a focus move the chrome did not ask
+                // for, so it is the one it cannot work out for itself.
+                broadcast_focus_decision(
+                    &self.hub,
                     ChromeMessage::FocusApp {
                         app_id: app_id.clone(),
                     },
                 );
             }
-            None => info!("clicked -> the chrome has the keyboard"),
+            None => {
+                info!("clicked -> the chrome has the keyboard");
+                // The same for a click that landed on the desktop. The seat
+                // moves below either way; without this the brain still names
+                // the last window and the chrome still marks it active, one
+                // click after the marker was right.
+                broadcast_focus_decision(&self.hub, ChromeMessage::FocusChrome);
+            }
         }
         let serial = SERIAL_COUNTER.next_serial();
         keyboard.set_focus(self, Some(surface), serial);
@@ -3534,11 +3604,8 @@ impl XdgShellHandler for DomicileCompositor {
             if self.pointer_app.as_deref() == Some(app_id.as_str()) {
                 self.pointer_app = None;
             }
-            let closed = self.hub.host.lock().unwrap().app_closed(&app_id);
             info!(%app_id, "toplevel destroyed -> Host::app_closed");
-            if let Some(closed) = closed {
-                self.hub.broadcast(closed);
-            }
+            broadcast_closed(&self.hub, &app_id);
             // The window that had the keyboard has gone, and a keyboard with
             // nowhere to go is a desktop that has stopped listening. The chrome
             // will usually ask for it back — but it does not have to, and a
@@ -4195,11 +4262,12 @@ mod tests {
     use domicile_protocol::CursorShape;
 
     use super::{
-        announce_open_apps, answers_keystroke, bgra_to_rgba, channel, chrome_connection,
-        client_command, cursor_shape, disposition, drawn_by_the_compositor, draws_natively,
-        frame_is_due, hand_back, hand_over, keep_frame, pixels_to_hand_over, record_present,
-        shadow_in_pixels, unmounts_the_element, ChromeHub, ClientRequest, Committer, Disposition,
-        Drawn, FrameTimings, HandOver, LastFrame, Outbound, Placed, Refusals,
+        announce_open_apps, answers_keystroke, bgra_to_rgba, broadcast_closed,
+        broadcast_focus_decision, channel, chrome_connection, client_command, cursor_shape,
+        disposition, drawn_by_the_compositor, draws_natively, frame_is_due, hand_back, hand_over,
+        keep_frame, pixels_to_hand_over, record_present, shadow_in_pixels, unmounts_the_element,
+        ChromeHub, ClientRequest, Committer, Disposition, Drawn, FrameTimings, HandOver, LastFrame,
+        Outbound, Placed, Refusals,
     };
 
     use std::collections::HashMap;
@@ -4266,14 +4334,20 @@ mod tests {
 
         announce_open_apps(&hub);
 
-        // Three reads for two windows: everything was queued before the first
-        // read, so the third is what says nothing followed them.
+        // Four reads for two windows and a focus message: everything was
+        // queued before the first read, so the last is what says nothing
+        // followed them.
         let mut announced = Vec::new();
-        for _ in 0..3 {
+        for _ in 0..4 {
             match outbound.recv_until(Duration::from_millis(100)) {
                 Some(Some(Outbound::Message(HostMessage::AppAppeared { app_id, .. }))) => {
                     announced.push(app_id);
                 }
+                // Who holds the keyboard rides along with the windows, so a
+                // page that has just loaded knows without having to ask. Not
+                // what this test is about — `domicile-host` pins its content —
+                // but it is on the wire and has to be read past.
+                Some(Some(Outbound::Message(HostMessage::FocusChanged { .. }))) => {}
                 Some(Some(_)) => panic!("something other than an announcement was queued"),
                 Some(None) => break,
                 None => panic!("the queue's sending half went away"),
@@ -4284,6 +4358,161 @@ mod tests {
             announced,
             vec![first, second],
             "both open windows, in the order they arrived"
+        );
+    }
+
+    #[test]
+    fn a_chrome_asking_for_focus_is_answered_to_every_chrome() {
+        // The line the whole change turned on. `chrome_connection` asks the
+        // brain what moved *after* the message rather than taking a delta back
+        // from it — so the answer is the desktop's and goes to everyone, and a
+        // second chrome is not left marking the wrong window active. Returning
+        // it from the message's own handling is what put it on one socket, and
+        // only a real connection reaches that line.
+        let (hub, outbound, app_id) = hub_with_an_app();
+        let (page, compositor) = UnixStream::pair().expect("a socket pair");
+        let writer = Arc::new(Mutex::new(
+            compositor.try_clone().expect("the stream clones"),
+        ));
+        hub.chromes.lock().unwrap().push(writer.clone());
+        let serving = {
+            let hub = hub.clone();
+            thread::spawn(move || chrome_connection(hub, compositor, writer))
+        };
+
+        {
+            use std::io::Write as _;
+            let version = domicile_protocol::PROTOCOL_VERSION;
+            let mut writing = &page;
+            for message in [
+                format!("{{\"type\":\"hello\",\"protocol_version\":{version}}}"),
+                format!("{{\"type\":\"focus_app\",\"app_id\":\"{app_id}\"}}"),
+            ] {
+                writeln!(writing, "{message}").expect("the page can write");
+            }
+        }
+        // Drained before the page goes away, not after: the handshake's
+        // `Welcome` is written back to this socket, and closing the reading
+        // end first breaks that write — which ends the connection thread
+        // before it ever reads the second line.
+        let seen = queued(&outbound);
+        drop(page);
+        serving.join().expect("the connection thread ends at EOF");
+
+        assert!(
+            seen.contains(&HostMessage::FocusChanged {
+                app_id: Some(app_id.clone()),
+            }),
+            "every chrome is told the window took the keyboard: {seen:?}"
+        );
+    }
+
+    /// Drain what the hub has queued for the chromes, in order.
+    ///
+    /// Reads until one comes back empty, so it works whether everything was
+    /// queued before the first read or is still arriving from a connection
+    /// thread. A caller that knows how many to expect should assert on the
+    /// length rather than trusting the drain to have caught up.
+    fn queued(outbound: &crate::outbound::OutboundReceiver) -> Vec<HostMessage> {
+        let mut seen = Vec::new();
+        while let Some(Some(item)) = outbound.recv_until(Duration::from_millis(100)) {
+            match item {
+                Outbound::Message(message) => seen.push(message),
+                Outbound::Frame { .. } => panic!("a frame was queued, not a message"),
+            }
+        }
+        seen
+    }
+
+    /// A hub with one placed app, ready to be focused.
+    fn hub_with_an_app() -> (Arc<ChromeHub>, crate::outbound::OutboundReceiver, String) {
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let app_id = {
+            let mut host = hub.host.lock().unwrap();
+            let (app_id, _) = host.app_appeared(None, (100.0, 100.0));
+            host.handle_chrome_message(ChromeMessage::PlacePortal {
+                app_id: app_id.clone(),
+                corner_radius: 0.0,
+                native: true,
+                opacity: 1.0,
+                shadow: None,
+                size: [100.0, 100.0],
+                takes_pointer: true,
+                transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                visible: true,
+                z_index: 0,
+            })
+            .expect("the portal is placed — without it `focus_app` refuses");
+            app_id
+        };
+        (hub, outbound, app_id)
+    }
+
+    #[test]
+    fn a_focus_the_compositor_decided_reaches_every_chrome() {
+        // The click that focuses a window happens inside the compositor, so it
+        // is the one move the chrome cannot work out for itself — and
+        // `focus_change` reports a change once, so a page not told has missed
+        // it for good.
+        let (hub, outbound, app_id) = hub_with_an_app();
+
+        broadcast_focus_decision(
+            &hub,
+            ChromeMessage::FocusApp {
+                app_id: app_id.clone(),
+            },
+        );
+
+        assert_eq!(
+            queued(&outbound),
+            vec![HostMessage::FocusChanged {
+                app_id: Some(app_id)
+            }]
+        );
+    }
+
+    #[test]
+    fn a_click_on_the_desktop_says_the_keyboard_came_back() {
+        // The mirror, and the one that was silent: the seat moved to the page
+        // while the brain still named the window, so the marker stayed on a
+        // window the compositor was no longer typing into.
+        let (hub, outbound, app_id) = hub_with_an_app();
+        broadcast_focus_decision(&hub, ChromeMessage::FocusApp { app_id });
+        let _ = queued(&outbound);
+
+        broadcast_focus_decision(&hub, ChromeMessage::FocusChrome);
+
+        assert_eq!(
+            queued(&outbound),
+            vec![HostMessage::FocusChanged { app_id: None }]
+        );
+    }
+
+    #[test]
+    fn a_focused_window_closing_says_both_things_in_order() {
+        // The app is gone *and* the keyboard came back. A chrome told only the
+        // first would go on marking a window that no longer exists as active,
+        // and the order is what lets it act on them in one pass.
+        let (hub, outbound, app_id) = hub_with_an_app();
+        broadcast_focus_decision(
+            &hub,
+            ChromeMessage::FocusApp {
+                app_id: app_id.clone(),
+            },
+        );
+        let _ = queued(&outbound);
+
+        broadcast_closed(&hub, &app_id);
+
+        assert_eq!(
+            queued(&outbound),
+            vec![
+                HostMessage::AppClosed {
+                    app_id: app_id.clone()
+                },
+                HostMessage::FocusChanged { app_id: None },
+            ]
         );
     }
 

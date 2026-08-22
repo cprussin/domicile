@@ -125,6 +125,50 @@ describe("reduceShell", () => {
     });
   });
 
+  describe("who has the keyboard", () => {
+    it("follows the compositor rather than the stage", () => {
+      // The stage says which window the shell is *showing*; this says which
+      // one is being typed into. They agree while the shell is the only thing
+      // moving focus, and part company the moment a click does — which is the
+      // case this exists for, because the shell never hears about that click.
+      const state = after(
+        ShellAction.AppAppeared("term", "Terminal"),
+        ShellAction.AppAppeared("editor", "Editor"),
+        ShellAction.FocusChanged("term"),
+      );
+
+      expect(state.focusedId).toBe("app:term");
+      expect(state.shownId).toBe("app:editor");
+    });
+
+    it("says the chrome has it when no app does", () => {
+      // A focused client going away hands the keyboard back, and nothing the
+      // shell did caused it. `undefined` is an answer a desktop draws — no
+      // window is active — not an absence of one.
+      const state = after(
+        ShellAction.AppAppeared("term", "Terminal"),
+        ShellAction.FocusChanged("term"),
+        ShellAction.FocusChanged(undefined),
+      );
+
+      expect(state.focusedId).toBeUndefined();
+    });
+
+    it("does not re-render for focus that did not move", () => {
+      // A chrome that has just connected is told the current holder, which is
+      // usually what it already knew. Returning a fresh object there would
+      // re-render every window for nothing.
+      const focused = after(
+        ShellAction.AppAppeared("term", "Terminal"),
+        ShellAction.FocusChanged("term"),
+      );
+
+      expect(reduceShell(focused, ShellAction.FocusChanged("term"))).toBe(
+        focused,
+      );
+    });
+  });
+
   describe("reordering", () => {
     it("moves a window before another", () => {
       const state = after(

@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
@@ -127,6 +127,24 @@ const appCompositedSchema = z.looseObject({
   type: z.literal("app_composited"),
 });
 
+// Who holds the keyboard now. The chrome asks for focus with `focus_app`, but
+// it is not the only thing that moves it — a click on a window focuses it in
+// the compositor, and a focused client going away hands the keyboard back — so
+// a chrome that tracked only its own requests would be right until the first
+// click and wrong afterwards.
+const focusChangedSchema = z.looseObject({
+  // `null` on the wire, not absent: the chrome holding the keyboard is an
+  // answer, and one a desktop draws differently from any window being active.
+  // Normalised here so no `null` reaches the SDK, the same way `app_appeared`
+  // handles its optional title — the wire's shape is serde's business and the
+  // page's is not.
+  app_id: z
+    .string()
+    .nullable()
+    .transform((appId) => appId ?? undefined),
+  type: z.literal("focus_changed"),
+});
+
 const appCursorSchema = z.looseObject({
   app_id: z.string(),
   cursor: cursorShapeSchema,
@@ -146,6 +164,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appClosedSchema,
   appCompositedSchema,
   appCursorSchema,
+  focusChangedSchema,
   shortcutMessageSchema,
 ]);
 
@@ -173,6 +192,7 @@ export type AppFrameMessage = z.infer<typeof appFrameSchema> & {
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCompositedMessage = z.infer<typeof appCompositedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
+export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 
 /** A CSS `cursor` keyword a client can ask the chrome to show over its app. */

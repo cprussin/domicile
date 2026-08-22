@@ -5,6 +5,7 @@
 import {
   focusAppMessage,
   keyMessage,
+  placePortalMessage,
   pointerButtonMessage,
   pointerMotionMessage,
 } from "@domicile/chrome-sdk/chrome-message";
@@ -21,7 +22,19 @@ const EVDEV_KEY_A = 30;
 const SECOND_WAVE_MS = 1500;
 const RUN_MS = 5000;
 
+/** Where a real chrome would put the window: the whole of a small screen. */
+const PLACEMENT = {
+  size: [500, 400] as const,
+  transform: [1, 0, 0, 1, 0, 0] as const,
+};
+
 const forward = (chrome: ChromeSocket, appId: string): void => {
+  // A window has to be *placed* before it can be focused: `Scene::focus_app`
+  // refuses an app with no portal, because a window that is not on screen is
+  // not one the keyboard can go to. A real chrome places one when it mounts
+  // the element; this harness has to as well, or `focus_app` is a silent
+  // no-op and the focus it claims to be testing never moves.
+  chrome.send(placePortalMessage({ appId, ...PLACEMENT }));
   chrome.send(focusAppMessage(appId));
   chrome.send(pointerMotionMessage(appId, 10, 10));
   chrome.send(pointerMotionMessage(appId, 20, 20));
