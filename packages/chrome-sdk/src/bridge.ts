@@ -25,7 +25,7 @@ import {
   setDevicePixelRatioMessage,
   spawnMessage,
 } from "./chrome-message";
-import type { HostMessageOf, HostMessageType } from "./protocol";
+import type { DisplayInfo, HostMessageOf, HostMessageType } from "./protocol";
 import { PROTOCOL_VERSION, parseHostMessage } from "./protocol";
 import { RoundTripWindow } from "./round-trip";
 import { SampleWindow } from "./sample-window";
@@ -139,6 +139,7 @@ export class BridgeClient {
   readonly #held = new Map<HostMessageType, unknown[]>();
   readonly #now: typeof monotonicNow;
   #welcome: ((agreed: Result<number, HandshakeFailure>) => void) | undefined;
+  #displays: readonly DisplayInfo[] | undefined;
 
   constructor(
     transport: Transport,
@@ -156,6 +157,31 @@ export class BridgeClient {
       }
       this.#handleIncoming(text, pixels);
     });
+  }
+
+  /**
+   * The displays the host described, or `undefined` until it has.
+   *
+   * Retained rather than only delivered, because {@link #held} answers the
+   * *first* handler to register for a type and then forgets — which is right
+   * for a stream and wrong for a fact. `displays` arrives once per connection,
+   * so a page whose components each register their own handler would leave
+   * every one after the first with nothing, and silently: a component with no
+   * displays renders the same empty region as one for a display that is not
+   * there.
+   *
+   * `undefined` is "not told yet" and `[]` is "told, and the desktop is the
+   * one that follows Domicile's own window". A shell that collapsed the two
+   * would lay out against a screen whose shape it had not been given.
+   *
+   * This fixes the replay half of that problem and not the other half:
+   * {@link on} is a single-slot registry, so a second `on("displays")` still
+   * *unregisters* the first for every message after it. Anything wanting to
+   * react to a change — as opposed to reading the current desktop — has to
+   * register once and fan out from there.
+   */
+  get displays(): readonly DisplayInfo[] | undefined {
+    return this.#displays;
   }
 
   /**
@@ -297,6 +323,11 @@ export class BridgeClient {
         // measuring before it would leave the most suspect step out.
         this.roundTrip.drew(message.app_id, this.#now());
       } else {
+        if (message.type === "displays") {
+          // Kept before it is delivered, so a handler that reads the accessor
+          // sees this message rather than the one before it.
+          this.#displays = message.displays;
+        }
         this.#deliver(message.type, message);
       }
     }

@@ -60,9 +60,14 @@ copy of the shell's state, so moving a window between displays is changing
 where its `<domicile-app>` is laid out.
 
 **Where it lives.** `@domicile/chrome-sdk` is framework-agnostic — no React, no
-`.tsx` — so it gets the data only: the decoded message on `BridgeClient`.
-`useDisplays` and `<Screen>` are React, so they go in
-`@domicile/component-library` with the rest of the chrome's components.
+`.tsx` — so it gets the data only: `BridgeClient.displays`, retained rather
+than merely delivered, because the hold answers the *first* handler to
+register for a type and then forgets — right for a stream, wrong for a fact
+that arrives once per connection. `useDisplays` and `<Screen>` are React, so
+they go in `@domicile/component-library` with the rest of the chrome's
+components, and `useDisplays` registers `bridge.on("displays")` **once**, as a
+provider: `on` is a single slot, so a hook that registered per component would
+unregister every one before it.
 
 ```rust
 HostMessage::Displays { displays: Vec<DisplayInfo> }
@@ -85,8 +90,9 @@ connection thread with `Welcome`, but that does not order it against
 `announce_open_apps`, which reaches the same writer from the Wayland thread —
 `AppAppeared` can already precede `Welcome` today. `BridgeClient` holds
 messages by type until a handler is registered, which is the existing mechanism
-for exactly this — `hello` precedes every `on()` on every startup already. The
-hook registers `bridge.on("displays")` in its effect and `#held` replays it.
+for exactly this — `hello` precedes every `on()` on every startup already — and
+it also retains the last `displays`, so anything that asks later gets it
+without a handler at all.
 
 ### Which output a surface is on
 
@@ -200,9 +206,9 @@ its own change.
 ## Plan
 
 - [x] `[[output.displays]]` in `domicile-config` (#74)
-- [ ] `domicile-protocol` + `@domicile/chrome-sdk/protocol`:
+- [x] `domicile-protocol` + `@domicile/chrome-sdk/protocol`:
       `HostMessage::Displays`, `DisplayInfo`, `PROTOCOL_VERSION` 12, decoded
-      onto `BridgeClient`
+      onto `BridgeClient` (#76)
 - [ ] `domicile-compositor`: normalise the configured layout to a
       top-left-origin desktop; one `Output` per display, positioned; the
       bounding box as the desktop; `compositor.nested_size` as the no-displays
@@ -217,10 +223,11 @@ its own change.
       `apply_chrome_message` can answer `Hello` with `Displays` — `ChromeHub`
       already carries `max_scale` / `wayland_display` / `presenting` for the
       same reason
-- [ ] `@domicile/component-library`: `useDisplays` and `<Screen>`, and how the
-      hook reaches the `BridgeClient` — a provider, or `useDisplays(bridge)`.
-      The package has no `@domicile/*` dependency today, so this decides
-      whether the design system takes one on the chrome SDK
+- [ ] `@domicile/component-library`: `useDisplays` and `<Screen>`. A provider
+      rather than `useDisplays(bridge)` per component — `on` is a single slot,
+      so a hook that registered per component would unregister every one
+      before it. What is left to decide is how the provider reaches the
+      `BridgeClient`: the package has no `@domicile/*` dependency today
 - [ ] `apps/shell`: put the rail and the clock on named screens; size the
       Electron window from the desktop, which is cross-process — the desktop
       size arrives on the renderer's bridge and the window is the main
