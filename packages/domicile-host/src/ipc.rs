@@ -93,6 +93,13 @@ pub fn apply_chrome_message(
         other if *ready => {
             // Placement/focus errors (e.g. an unknown app) are non-fatal.
             let _ = host.handle_chrome_message(other);
+            // Who holds the keyboard is *not* returned here. What this
+            // function returns is written back to the one connection that
+            // asked, and focus is the whole desktop's business: a second
+            // chrome told nothing would believe the wrong window was active
+            // for as long as it stayed connected, because the change is a
+            // delta and a delta is only reported once. The compositor asks
+            // `Host::focus_change` and broadcasts it instead.
             Vec::new()
         }
         _ => Vec::new(),

@@ -65,3 +65,23 @@ if grep -q '"app_cursor"' "$CHROME"; then
 else
   echo "FAIL: no app_cursor reached the chrome"; exit 1
 fi
+
+# And who holds the keyboard. The chrome asked for this focus, so this proves
+# the message reaches a real chrome over a real socket rather than that the
+# compositor volunteers it — the click that moves focus *without* the chrome
+# asking arrives through Domicile's own window, which needs a display and so is
+# covered by the host's unit tests instead.
+echo
+echo "== who the chrome was told holds the keyboard =="
+# The one the assertion is about, not the first on the wire: a chrome is caught
+# up with the current holder as it connects, so `-m1` printed the catch-up
+# (`"app_id":null`) while the assertion below was passing on a later line.
+grep -m1 '"app_id":"app-1","type":"focus_changed"' "$CHROME"
+if grep -q '"app_id":"app-1","type":"focus_changed"' "$CHROME"; then
+  echo "PASS: the chrome was told which window has the keyboard"
+else
+  echo "FAIL: no focus_changed naming the focused app reached the chrome"
+  echo "  Without it a desktop's active-window marker is right until the first"
+  echo "  click and wrong afterwards."
+  exit 1
+fi

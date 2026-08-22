@@ -121,6 +121,7 @@
           e2e-hidpi = "e2e-hidpi.sh";
           probe-transparency = "probe-transparency.sh";
           e2e-slow-chrome = "e2e-slow-chrome.sh";
+          e2e-two-chromes = "e2e-two-chromes.sh";
           e2e-window-alpha = "e2e-window-alpha.sh";
           smoke-compositor = "smoke-compositor.sh";
         };

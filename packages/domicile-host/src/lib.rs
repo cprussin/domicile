@@ -61,6 +61,9 @@ pub struct Host {
     scene: Scene,
     apps: HashMap<AppId, App>,
     next_id: u64,
+    /// The keyboard holder as the chromes were last told it, so that
+    /// [`Host::focus_change`] can say nothing when nothing moved.
+    told_focus: Option<AppId>,
 }
 
 impl Host {
@@ -118,7 +121,45 @@ impl Host {
                 title: app.title.clone(),
                 size: [app.size.0, app.size.1],
             })
+            // And who has the keyboard, which a page that has just loaded has
+            // no other way to learn. After the windows: it names one of them.
+            //
+            // Sent unconditionally rather than through `focus_change`, and
+            // without disturbing what that has told the other chromes. This
+            // announcement is a catch-up rather than a change, so it must not
+            // consume the delta the chromes that were already listening are
+            // still owed — and the compositor broadcasts it, so a chrome that
+            // already knew is told what it already knew, which is the same
+            // no-op as a second `app_appeared`.
+            .chain(std::iter::once(HostMessage::FocusChanged {
+                app_id: self.focus_holder(),
+            }))
             .collect()
+    }
+
+    /// Who holds the keyboard, in the shape the chrome is told it.
+    fn focus_holder(&self) -> Option<AppId> {
+        match self.scene.keyboard_target() {
+            KeyboardTarget::App(app_id) => Some(app_id),
+            KeyboardTarget::Chrome => None,
+        }
+    }
+
+    /// What the chrome has to be told about focus, which is nothing unless it
+    /// moved since the last time this was asked.
+    ///
+    /// Asked after anything that could move it rather than returned from each
+    /// of those, because the things that move focus do not look alike — a
+    /// chrome message, a click the compositor routed, a client going away —
+    /// and the one thing they have in common is that afterwards the answer to
+    /// this question may have changed.
+    pub fn focus_change(&mut self) -> Option<HostMessage> {
+        let holder = self.focus_holder();
+        if holder == self.told_focus {
+            return None;
+        }
+        self.told_focus = holder.clone();
+        Some(HostMessage::FocusChanged { app_id: holder })
     }
 
     /// Record a client's new content size. Returns the chrome notification, or

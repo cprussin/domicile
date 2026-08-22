@@ -74,6 +74,22 @@ describe("parseHostMessage", () => {
     ).toThrow();
   });
 
+  it("decodes who holds the keyboard, both ways round", () => {
+    // The one host message with a nullable field. `null` means the chrome
+    // itself has the keyboard — an answer a desktop draws differently, not an
+    // absence of one — and it dies here rather than in the page, the same way
+    // `app_appeared`'s optional title does.
+    expect(
+      parseHostMessage(
+        JSON.stringify({ app_id: "app-1", type: "focus_changed" }),
+      ),
+    ).toStrictEqual({ app_id: "app-1", type: "focus_changed" });
+
+    expect(
+      parseHostMessage(JSON.stringify({ app_id: null, type: "focus_changed" })),
+    ).toStrictEqual({ app_id: undefined, type: "focus_changed" });
+  });
+
   it("decodes a shortcut the compositor took for the desktop", () => {
     // It arrives as a message rather than a DOM event because the page is not
     // what received it — which is the whole point of claiming one.

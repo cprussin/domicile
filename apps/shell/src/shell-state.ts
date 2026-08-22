@@ -13,6 +13,15 @@ import { appWindowId, ShellWindow as Window } from "./shell-window";
 export type ShellState = {
   /** How many browser windows have been opened, ever — the id counter. */
   browsersOpened: number;
+  /**
+   * The app that holds the keyboard, or `undefined` when the chrome does.
+   *
+   * Not the same as `shownId`: the stage says which window the shell is
+   * *showing*, and this says which one the compositor is *typing into*. They
+   * agree while the shell is the only thing moving focus, and part company the
+   * moment a click does — which is what this exists to follow.
+   */
+  focusedId: string | undefined;
   /** The window on the stage, or `undefined` when nothing is open. */
   shownId: string | undefined;
   windows: readonly ShellWindow[];
@@ -21,6 +30,7 @@ export type ShellState = {
 /** A shell with nothing open: what the chrome starts from. */
 export const EMPTY_SHELL: ShellState = {
   browsersOpened: 0,
+  focusedId: undefined,
   shownId: undefined,
   windows: [],
 };
@@ -29,6 +39,7 @@ export enum ShellActionKind {
   AppAppeared,
   AppClosed,
   BrowserOpened,
+  FocusChanged,
   WindowClosed,
   WindowRenamed,
   WindowSelected,
@@ -53,6 +64,18 @@ export const ShellAction = {
   BrowserOpened: (src: string) => ({
     kind: ShellActionKind.BrowserOpened as const,
     src,
+  }),
+
+  /**
+   * The compositor moved the keyboard, by whatever route.
+   *
+   * `undefined` means the chrome holds it. This arrives for focus the shell
+   * asked for *and* for focus it did not — a click on a window, or a focused
+   * client going away — which is the whole reason it is a message.
+   */
+  FocusChanged: (appId: string | undefined) => ({
+    appId,
+    kind: ShellActionKind.FocusChanged as const,
   }),
 
   /** The user closed a window from its tab. */
@@ -100,6 +123,15 @@ export const reduceShell = (
     }
     case ShellActionKind.BrowserOpened: {
       return openBrowser(state, action.src);
+    }
+    case ShellActionKind.FocusChanged: {
+      const focusedId =
+        action.appId === undefined ? undefined : appWindowId(action.appId);
+      // The same object when it did not move, so React bails out rather than
+      // re-rendering every window. The host only sends this on a change, but
+      // a chrome that has just connected is told the current holder too, and
+      // that one usually says what the shell already knew.
+      return focusedId === state.focusedId ? state : { ...state, focusedId };
     }
     case ShellActionKind.WindowClosed: {
       return closeWindow(state, action.id);

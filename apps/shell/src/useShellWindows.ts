@@ -62,6 +62,9 @@ export const useShellWindows = (
     bridge.on("app_composited", (message) => {
       appElements.composited(message);
     });
+    bridge.on("focus_changed", ({ app_id }) => {
+      dispatch(ShellAction.FocusChanged(app_id));
+    });
   }, [appElements, bridge]);
 
   const close = useCallback((id: string) => {

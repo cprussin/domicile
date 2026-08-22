@@ -81,6 +81,7 @@ nix run github:cprussin/domicile#e2e-spawn       # a chrome `spawn` message laun
 nix run github:cprussin/domicile#e2e-input       # forwarded keyboard + pointer input reaches a client
 nix run github:cprussin/domicile#e2e-dmabuf      # the dmabuf global; with a GPU, a real GPU client's frames
 nix run github:cprussin/domicile#e2e-slow-chrome # a chrome that stops reading must not freeze the compositor
+nix run github:cprussin/domicile#e2e-two-chromes # a focus change reaches every chrome, not just the one that caused it
 nix run github:cprussin/domicile#e2e-window-alpha # a translucent client's alpha reaches the chrome undoubled
 ```
 

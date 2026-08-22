@@ -104,8 +104,113 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
                 size: [n as f64, 0.0],
             }),
     )
+    // And who has the keyboard, which is the chrome while nothing is placed.
+    .chain(std::iter::once(HostMessage::FocusChanged { app_id: None }))
     .collect();
     assert_eq!(announcements, expected);
+}
+
+#[test]
+fn focus_is_reported_when_it_moves_and_not_when_it_does_not() {
+    // The chrome asks for focus, but it is not the only thing that moves it —
+    // a click on a window focuses it in the compositor. Without a message the
+    // chrome's idea of the active window is right until the first click and
+    // wrong afterwards, which is every focus affordance a desktop has.
+    //
+    // And silent when nothing moved: this is asked after *every* chrome
+    // message, so a report per ask would be a message per mouse move.
+    let mut host = Host::new();
+    let (app, _) = host.app_appeared(None, (100.0, 100.0));
+    host.handle_chrome_message(place(&app, IDENTITY, [100.0, 100.0], 0, true))
+        .unwrap();
+
+    host.handle_chrome_message(ChromeMessage::FocusApp {
+        app_id: app.clone(),
+    })
+    .unwrap();
+
+    assert_eq!(
+        host.focus_change(),
+        Some(HostMessage::FocusChanged {
+            app_id: Some(app.clone())
+        })
+    );
+    assert_eq!(host.focus_change(), None, "nothing moved the second time");
+}
+
+#[test]
+fn the_keyboard_coming_back_to_the_chrome_is_reported_too() {
+    // The mirror, and the one a chrome cannot infer: it did not ask for this.
+    let mut host = Host::new();
+    let (app, _) = host.app_appeared(None, (100.0, 100.0));
+    host.handle_chrome_message(place(&app, IDENTITY, [100.0, 100.0], 0, true))
+        .unwrap();
+    host.handle_chrome_message(ChromeMessage::FocusApp {
+        app_id: app.clone(),
+    })
+    .unwrap();
+    host.focus_change();
+
+    host.handle_chrome_message(ChromeMessage::FocusChrome)
+        .unwrap();
+
+    assert_eq!(
+        host.focus_change(),
+        Some(HostMessage::FocusChanged { app_id: None })
+    );
+}
+
+#[test]
+fn a_focused_window_closing_hands_the_keyboard_back_and_says_so() {
+    // Nothing asked for this at all — the client went away, possibly by
+    // crashing. A chrome told only that the app closed would go on marking it
+    // active, and there is nothing else it could consult.
+    let mut host = Host::new();
+    let (app, _) = host.app_appeared(None, (100.0, 100.0));
+    host.handle_chrome_message(place(&app, IDENTITY, [100.0, 100.0], 0, true))
+        .unwrap();
+    host.handle_chrome_message(ChromeMessage::FocusApp {
+        app_id: app.clone(),
+    })
+    .unwrap();
+    host.focus_change();
+
+    host.app_closed(&app);
+
+    assert_eq!(
+        host.focus_change(),
+        Some(HostMessage::FocusChanged { app_id: None })
+    );
+}
+
+#[test]
+fn a_chrome_that_arrives_late_is_told_who_has_the_keyboard() {
+    // A page that has just loaded has no other way to learn it, and every
+    // other route to this message is a *change* it was not there for.
+    let mut host = Host::new();
+    let (app, _) = host.app_appeared(None, (100.0, 100.0));
+    host.handle_chrome_message(place(&app, IDENTITY, [100.0, 100.0], 0, true))
+        .unwrap();
+    host.handle_chrome_message(ChromeMessage::FocusApp {
+        app_id: app.clone(),
+    })
+    .unwrap();
+
+    let announced = host.open_apps();
+
+    assert_eq!(
+        announced.last(),
+        Some(&HostMessage::FocusChanged {
+            app_id: Some(app.clone())
+        }),
+        "after the windows, since it names one of them"
+    );
+    // And telling one chrome does not make the others think focus moved.
+    assert_eq!(
+        host.focus_change(),
+        Some(HostMessage::FocusChanged { app_id: Some(app) }),
+        "the delta the other chromes are still owed is untouched"
+    );
 }
 
 #[test]
