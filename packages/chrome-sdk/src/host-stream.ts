@@ -30,9 +30,15 @@ const NEWLINE = 0x0a;
  * A stateful reader over one host connection: feed it each chunk, get back
  * whatever it completed.
  *
- * Pending bytes are kept as the chunks they arrived in and joined only when
- * something is complete, so a frame delivered in hundreds of pieces costs one
- * copy rather than one per piece.
+ * Pending bytes are kept as the chunks they arrived in. A line is joined out
+ * of them when one is complete, which is cheap because a line is short.
+ *
+ * A frame is not. Its pixels are copied **once**, straight from the chunks
+ * they arrived in into the buffer the page will be handed — a megabytes-large
+ * frame arrives in a hundred socket chunks, and joining those into one buffer
+ * and then copying the frame out of the join is two full copies of it per
+ * frame. That buffer is also the one that gets transferred across the world
+ * boundary, so it has to be exactly the frame and nothing else.
  */
 export const createHostStreamReader = (): ((
   chunk: Uint8Array,
@@ -40,7 +46,10 @@ export const createHostStreamReader = (): ((
   let pending: Uint8Array[] = [];
   let pendingLength = 0;
   // Set while a header has been read and its pixels are still arriving.
-  let awaiting: { text: string; byteCount: number } | undefined;
+  // `into` is the frame's own buffer, filled as the chunks come.
+  let awaiting:
+    | { text: string; into: Uint8Array<ArrayBuffer>; filled: number }
+    | undefined;
 
   const take = (count: number): Uint8Array => {
     const joined = join(pending, pendingLength);
@@ -67,23 +76,50 @@ export const createHostStreamReader = (): ((
           if (byteCount === undefined) {
             items.push({ text: line });
           } else {
-            awaiting = { byteCount, text: line };
+            awaiting = {
+              filled: 0,
+              into: new Uint8Array(byteCount),
+              text: line,
+            };
           }
         }
-      } else if (pendingLength < awaiting.byteCount) {
-        progressing = false;
       } else {
-        // `take` hands back a view over the joined buffer, and the next join
-        // would leave that view aliasing memory the reader still owns.
-        items.push({
-          pixels: new Uint8Array(take(awaiting.byteCount)),
-          text: awaiting.text,
-        });
-        awaiting = undefined;
+        fill(awaiting);
+        if (awaiting.filled === awaiting.into.length) {
+          items.push({ pixels: awaiting.into, text: awaiting.text });
+          awaiting = undefined;
+        } else {
+          progressing = false;
+        }
       }
     }
     return items;
   };
+
+  /** Move as much of `pending` into the frame as it still has room for. */
+  function fill(frame: {
+    into: Uint8Array<ArrayBuffer>;
+    filled: number;
+  }): void {
+    let chunk = pending[0];
+    while (frame.filled < frame.into.length && chunk !== undefined) {
+      const room = frame.into.length - frame.filled;
+      if (chunk.length <= room) {
+        frame.into.set(chunk, frame.filled);
+        frame.filled += chunk.length;
+        pendingLength -= chunk.length;
+        pending.shift();
+      } else {
+        // The chunk straddles the end of this frame: take the part that is
+        // the frame's and leave the rest where the next message will find it.
+        frame.into.set(chunk.subarray(0, room), frame.filled);
+        frame.filled += room;
+        pendingLength -= room;
+        pending[0] = chunk.subarray(room);
+      }
+      chunk = pending[0];
+    }
+  }
 
   function takeLine(): string | undefined {
     const at = indexOfNewline(pending);
