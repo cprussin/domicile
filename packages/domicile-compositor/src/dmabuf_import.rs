@@ -20,7 +20,7 @@ use smithay::backend::allocator::{Buffer as _, Fourcc};
 use smithay::backend::egl::{EGLContext, EGLDevice, EGLDisplay};
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{
-    Bind as _, ExportMem as _, Frame, ImportDma as _, Offscreen as _, Renderer as _,
+    Bind as _, Color32F, ExportMem as _, Frame, ImportDma as _, Offscreen as _, Renderer as _,
 };
 use smithay::utils::{Buffer as BufferCoords, Rectangle, Size, Transform};
 
@@ -155,7 +155,19 @@ impl DmabufImporter {
         tracing::debug!("readback: import");
         let texture = renderer.import_dmabuf(dmabuf, None)?;
         let size = dmabuf.size();
-        let pixels = copy_out(renderer, &texture, area_to_read(area, size))?;
+        let mut pixels = copy_out(renderer, &texture, area_to_read(area, size))?;
+        // What the client drew is premultiplied and what the page draws with
+        // is not — see `straight_alpha`.
+        //
+        // Unconditionally, whatever the client allocated. `copy_out` blits
+        // through the sampler into an `Abgr8888` offscreen and reads that
+        // back, so by the time this runs the format is always plain 8-bit
+        // RGBA — and a source with no alpha channel of its own samples as
+        // opaque, where undoing a premultiply is the identity. Deciding from
+        // the fourcc instead means keeping a list of every format with alpha
+        // in it; the driver advertises 57 here, and the first draft of that
+        // list missed nine of them.
+        crate::straight_alpha::to_straight(&mut pixels);
         tracing::debug!(bytes = pixels.len(), "readback: done");
         Ok(pixels)
     }
@@ -224,6 +236,11 @@ fn copy_out(
             (area.size.w, area.size.h).into(),
             Transform::Normal,
         )?;
+        // `create_buffer` allocates without initialising, and the blit below
+        // is a premultiplied "over" — so a translucent source pixel would pick
+        // up `dst * (1 - a)` from whatever the driver last left in that
+        // memory. Opaque pixels hide it, which is why it survived this long.
+        Frame::clear(&mut frame, Color32F::TRANSPARENT, &[patch])?;
         Frame::render_texture_from_to(
             &mut frame,
             texture,
@@ -348,6 +365,69 @@ mod readback {
         let mut renderer = renderer();
         let texture = numbered(&mut renderer);
         copy_out(&mut renderer, &texture, area_to_read(area, size())).expect("the readback runs")
+    }
+
+    /// A uniform premultiplied half-alpha red, which is what a client with a
+    /// translucent window commits. Every fixture above is opaque, and opaque
+    /// pixels are exactly what hides both the blend below and the premultiply.
+    fn translucent(renderer: &mut GlesRenderer) -> GlesTexture {
+        let pixels: Vec<u8> = std::iter::repeat_n([128, 0, 0, 128], (SIDE * SIDE) as usize)
+            .flatten()
+            .collect();
+        renderer
+            .import_memory(&pixels, Fourcc::Abgr8888, (SIDE, SIDE).into(), false)
+            .expect("a memory texture imports")
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_translucent_frame_comes_back_over_nothing_but_itself() {
+        // `copy_out` blits with blending — a premultiplied `over` — into an
+        // offscreen from `create_buffer`, which GL leaves uninitialised. Every
+        // translucent pixel therefore picks up `dst * (1 - a)` from whatever
+        // was last in that memory unless the offscreen is cleared first.
+        //
+        // The drivers seen so far zero fresh storage, so this is what says the
+        // clear is there rather than what caught it missing: without it a
+        // driver that recycled a buffer would corrupt colour *and* alpha, and
+        // nothing else in the suite reads a pixel that is not opaque.
+        let mut renderer = renderer();
+        let texture = translucent(&mut renderer);
+
+        let whole = copy_out(&mut renderer, &texture, area_to_read(None, size()))
+            .expect("the readback runs");
+
+        assert_eq!(
+            &whole[..4],
+            &[128, 0, 0, 128],
+            "a premultiplied pixel survives the blit unblended"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_frame_without_alpha_of_its_own_reads_back_opaque() {
+        // Why `read_rgba` undoes the premultiply without asking what the
+        // client allocated. A source with no alpha channel samples as opaque,
+        // so the conversion is the identity on it — and the alternative, a
+        // list of every fourcc that carries alpha, is a list this repo does
+        // not own: the driver advertises 57 of them here.
+        let mut renderer = renderer();
+        let mut pixels = Vec::with_capacity((SIDE * SIDE * 4) as usize);
+        for _ in 0..(SIDE * SIDE) {
+            pixels.extend_from_slice(&[10, 20, 30, 0]);
+        }
+        let texture = renderer
+            .import_memory(&pixels, Fourcc::Xbgr8888, (SIDE, SIDE).into(), false)
+            .expect("a memory texture imports");
+
+        let whole = copy_out(&mut renderer, &texture, area_to_read(None, size()))
+            .expect("the readback runs");
+
+        assert_eq!(
+            whole[3], 255,
+            "an X format's fourth byte is not the alpha the readback reports"
+        );
     }
 
     #[test]

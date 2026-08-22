@@ -60,6 +60,7 @@ cargo test -p domicile-compositor
 ./scripts/e2e-input.sh           # keyboard + pointer reach a client (copy path)
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
 ./scripts/e2e-slow-chrome.sh     # a chrome that stops reading does not freeze the compositor
+./scripts/e2e-window-alpha.sh    # a translucent client's premultiplied alpha is undone once
 ./scripts/e2e-hidpi.sh           # a 2x chrome makes a client draw at 2x, and the frame says so
 ./scripts/e2e-chrome-layer.sh    # the chrome is told from the apps, and keeps the keyboard
 ./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel

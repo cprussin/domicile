@@ -94,6 +94,7 @@ mod dmabuf_import;
 mod outbound;
 mod scale;
 mod shortcut;
+mod straight_alpha;
 mod timing_window;
 
 use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer, Shaders, Shadow};
@@ -1370,7 +1371,23 @@ impl DomicileCompositor {
         // costs a pipeline stall, so a frame the throttle has just dropped is
         // never imported at all.
         let rgba = match committed {
-            CommittedBuffer::Pixels { rgba, .. } => rgba,
+            // Straightened here rather than in `bgra_to_rgba`, because a
+            // decoded shm buffer has two consumers and they want opposite
+            // things. This one is bytes for the page, which draws them with
+            // `putImageData` and multiplies by alpha again; the other is
+            // `texture_from`, a texture the compositor draws itself, and
+            // `shaders/rounded.frag` says in as many words that it wants the
+            // colour premultiplied. Converting where the buffer is decoded
+            // reached both, and made every partial-alpha pixel of the chrome's
+            // own frame composite too bright.
+            //
+            // The dmabuf arm below already works this way: `read_rgba` runs
+            // only on the copy branch, while the composited branch hands the
+            // buffer straight to the GPU.
+            CommittedBuffer::Pixels { mut rgba, .. } => {
+                straight_alpha::to_straight(&mut rgba);
+                rgba
+            }
             CommittedBuffer::Gpu(dmabuf) => self.import_gpu_frame(
                 app_id,
                 dmabuf,
@@ -3734,6 +3751,12 @@ fn shm_buffer_to_rgba(buffer: &wl_buffer::WlBuffer) -> Option<(u32, u32, Vec<u8>
 /// Convert an ARGB/XRGB8888 buffer (`[B, G, R, A]` per pixel in memory) into
 /// tightly-packed RGBA, honouring `stride` padding. Returns `None` if the source
 /// is too small for the described geometry.
+///
+/// The alpha stays **premultiplied**, which is what a client committed and what
+/// the compositor's own shaders expect. Undoing it is the page's business and
+/// happens where the bytes are handed to the page — see `publish_frame`. Doing
+/// it here would reach both consumers of a decoded buffer, and the other one
+/// draws it.
 fn bgra_to_rgba(
     src: &[u8],
     width: usize,
@@ -4563,10 +4586,14 @@ mod tests {
 
     #[test]
     fn swaps_b_and_r_and_keeps_alpha() {
-        // two pixels: [B,G,R,A] = [10,20,30,40], [50,60,70,80]
-        let src = [10, 20, 30, 40, 50, 60, 70, 80];
+        // two pixels: [B,G,R,A] = [10,20,30,255], [50,60,70,255].
+        //
+        // Opaque, so this reads the channel order and nothing else: at alpha
+        // 255 undoing the premultiply is the identity. What it does to a
+        // translucent pixel is `premultiplied_colour_is_divided_back_out`.
+        let src = [10, 20, 30, 255, 50, 60, 70, 255];
         let out = bgra_to_rgba(&src, 2, 1, 8, 0, true).unwrap();
-        assert_eq!(out, vec![30, 20, 10, 40, 70, 60, 50, 80]);
+        assert_eq!(out, vec![30, 20, 10, 255, 70, 60, 50, 255]);
     }
 
     #[test]
@@ -4579,9 +4606,10 @@ mod tests {
     #[test]
     fn honours_stride_padding() {
         // 1px wide, 2 rows, stride 8 (4 bytes pixel + 4 bytes padding).
-        let src = [1, 2, 3, 4, 0, 0, 0, 0, 5, 6, 7, 8, 0, 0, 0, 0];
+        // Opaque, for the same reason as `swaps_b_and_r_and_keeps_alpha`.
+        let src = [1, 2, 3, 255, 0, 0, 0, 0, 5, 6, 7, 255, 0, 0, 0, 0];
         let out = bgra_to_rgba(&src, 1, 2, 8, 0, true).unwrap();
-        assert_eq!(out, vec![3, 2, 1, 4, 7, 6, 5, 8]);
+        assert_eq!(out, vec![3, 2, 1, 255, 7, 6, 5, 255]);
     }
 
     #[test]
