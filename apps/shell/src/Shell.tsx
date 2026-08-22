@@ -6,7 +6,7 @@ import { Provider } from "@domicile/component-library/Provider";
 import { TabRail } from "@domicile/component-library/TabRail";
 import { ThemeSwitch } from "@domicile/component-library/ThemeSwitch";
 import { TerminalWindowIcon } from "@phosphor-icons/react/dist/ssr/TerminalWindow";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 
 import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
@@ -14,6 +14,7 @@ import { AppWindow } from "./AppWindow";
 import type { AppElements } from "./app-elements";
 import { BrowserWindow } from "./BrowserWindow";
 import { Clock } from "./Clock";
+import type { Chord } from "./chord";
 import { WindowKind } from "./shell-window";
 import { useShellWindows } from "./useShellWindows";
 
@@ -26,6 +27,18 @@ const ALT_ENTER = {
   ctrl: false,
   key: 28,
   logo: false,
+  shift: false,
+};
+
+/**
+ * The same combination as the page names its keys, which is what the Electron
+ * host matches an embedded page's keys against — see `chord`.
+ */
+const ALT_ENTER_CHORD: Chord = {
+  alt: true,
+  ctrl: false,
+  key: "Enter",
+  meta: false,
   shift: false,
 };
 
@@ -58,7 +71,17 @@ export const Shell = ({ appElements, bridge }: Props) => {
   } = useShellWindows(bridge, appElements);
 
   // Alt+Enter -> a terminal; add Shift for a browser.
-  //
+  const launch = useCallback(
+    (withShift: boolean) => {
+      if (withShift) {
+        openBrowser();
+      } else {
+        openTerminal();
+      }
+    },
+    [openBrowser, openTerminal],
+  );
+
   // Claimed from the compositor as well as listened for in the page. Where
   // Domicile draws this window, a key goes to whatever holds the keyboard —
   // so once a window is on screen the page hears nothing, which is exactly
@@ -73,30 +96,55 @@ export const Shell = ({ appElements, bridge }: Props) => {
     // as a cleanup — there is one handler per message type and re-registering
     // replaces it.
     bridge.on("shortcut", ({ shortcut }) => {
-      if (shortcut.shift) {
-        openBrowser();
-      } else {
-        openTerminal();
-      }
+      launch(shortcut.shift);
     });
-  }, [bridge, openBrowser, openTerminal]);
+  }, [bridge, launch]);
+
+  // And claimed from the Electron host, which covers the one keyboard neither
+  // of those reaches: a `<webview>` is a browsing context of its own, so a key
+  // pressed in a browser window on the stage goes to the site showing there
+  // and nowhere else. Where Domicile composites this window the compositor
+  // takes the key first and this never fires; where it does not, the host is
+  // the only layer above the embedded page. There is no host at all when the
+  // shell is opened in a plain browser for styling work.
+  useEffect(() => {
+    const host = window.domicileGuestShortcuts;
+    if (host !== undefined) {
+      host.grab(ALT_ENTER_CHORD);
+      host.grab({ ...ALT_ENTER_CHORD, shift: true });
+      host.onPressed((chord) => {
+        launch(chord.shift);
+      });
+    }
+  }, [launch]);
 
   useEffect(() => {
-    const launch = (event: KeyboardEvent) => {
-      if (event.altKey && event.key === "Enter") {
+    const onKeyDown = (event: KeyboardEvent) => {
+      // Every modifier is part of the combination, the way the compositor's
+      // claim and the host's are: Ctrl+Alt+Enter is a chord nobody claimed,
+      // and the page is the only path that would otherwise answer it.
+      if (
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        event.key === "Enter"
+      ) {
+        // Taken from the page whether or not it opens anything: the chord is
+        // the desktop's for as long as it is held. A held key repeats tens of
+        // times a second and only the first of them opens a window — the
+        // compositor never sees a repeat at all, and the host takes them out
+        // of a guest's stream, so one press opens one window on every path.
         event.preventDefault();
-        if (event.shiftKey) {
-          openBrowser();
-        } else {
-          openTerminal();
+        if (!event.repeat) {
+          launch(event.shiftKey);
         }
       }
     };
-    document.addEventListener("keydown", launch);
+    document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("keydown", launch);
+      document.removeEventListener("keydown", onKeyDown);
     };
-  }, [openBrowser, openTerminal]);
+  }, [launch]);
 
   return (
     <Provider>

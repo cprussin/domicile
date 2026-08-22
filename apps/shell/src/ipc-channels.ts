@@ -8,7 +8,7 @@
 // page. Sending them through here cost 79ms a frame, against ~8ms for the GPU
 // readback that produced them.
 //
-// What is left is the two things a renderer cannot do for itself.
+// What is left is the things a renderer cannot do for itself.
 
 /**
  * Chrome → terminal: one line of diagnostics.
@@ -28,3 +28,23 @@ export const CHROME_DIAGNOSTIC_CHANNEL = "domicile:diagnostic";
  * the file descriptor the reason goes to.
  */
 export const CHROME_FAILURE_CHANNEL = "domicile:failure";
+
+/**
+ * Chrome → host: claim a key combination from the pages this window embeds.
+ *
+ * A `<webview>` is a browsing context of its own, so a key pressed in one is
+ * given to it and to nothing else — the shell's page hears nothing, which is
+ * exactly when the user reaches for the combination that opens another window.
+ * The main process is the only thing above a guest that sees the key first.
+ * See `guest-shortcuts`.
+ */
+export const CHROME_GRAB_SHORTCUT_CHANNEL = "domicile:grab-shortcut";
+
+/**
+ * Host → chrome: a claimed combination was pressed in an embedded page.
+ *
+ * The guest is not given it, so this is the only account of the keystroke the
+ * page gets — the same bargain the compositor's `grab_shortcut` strikes with a
+ * Wayland client.
+ */
+export const CHROME_SHORTCUT_CHANNEL = "domicile:shortcut";

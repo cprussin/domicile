@@ -9,11 +9,13 @@
 // a frame's pixels that measured 79ms on hardware — ten times the GPU readback
 // that produced them, and the largest single cost in the copy path. So this
 // process keeps only what a renderer cannot do for itself: opening the window,
-// and writing to the terminal it was started from.
+// writing to the terminal it was started from, and seeing the keys pressed in
+// the pages the window embeds.
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
+import { takeGuestShortcuts } from "./guest-shortcuts";
 import {
   CHROME_DIAGNOSTIC_CHANNEL,
   CHROME_FAILURE_CHANNEL,
@@ -73,6 +75,11 @@ const createWindow = (): void => {
     },
     width: WINDOW_WIDTH,
   });
+  // The keys a `<webview>` would otherwise swallow. The page claims what it
+  // wants; this takes a claimed combination out of the embedded page before it
+  // is given it, which is the only place it can be taken from a site holding
+  // the keyboard.
+  takeGuestShortcuts(win.webContents, ipcMain);
   win
     .loadFile(path.join(dirname, "../renderer/main_window/index.html"))
     .catch((failure: unknown) => {

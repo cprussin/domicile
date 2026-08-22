@@ -9,6 +9,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AppElements } from "./app-elements";
+import type { Chord } from "./chord";
 import { Shell } from "./Shell";
 
 type Call = readonly [kind: string, ...args: unknown[]];
@@ -75,6 +76,34 @@ const shownWindowIds = (container: HTMLElement): (string | null)[] =>
     .filter((element) => !element.hasAttribute("hidden"))
     .map((element) => element.getAttribute("app-id") ?? element.tagName);
 
+// The Electron host's half of the guest shortcuts, as the preload injects it:
+// what the page claims from the pages it embeds, and how a claimed press
+// arrives when a `<webview>` swallowed the key.
+class FakeGuestShortcuts {
+  readonly claims: Chord[] = [];
+
+  #pressed: ((chord: Chord) => void) | undefined;
+
+  grab(chord: Chord): void {
+    this.claims.push(chord);
+  }
+
+  onPressed(listener: (chord: Chord) => void): void {
+    this.#pressed = listener;
+  }
+
+  press(chord: Chord): void {
+    const pressed = this.#pressed;
+    if (pressed === undefined) {
+      throw new Error("nothing listened for a claimed press");
+    } else {
+      act(() => {
+        pressed(chord);
+      });
+    }
+  }
+}
+
 let bridge: FakeBridge;
 
 const renderShell = () => {
@@ -92,8 +121,18 @@ const renderShell = () => {
   return render(<Shell appElements={new AppElements()} bridge={client} />);
 };
 
+// The shell opened in a plain browser has no Electron host, so nothing
+// installs this; the tests that want one put it back.
+const renderHostedShell = () => {
+  const host = new FakeGuestShortcuts();
+  window.domicileGuestShortcuts = host;
+  renderShell();
+  return host;
+};
+
 beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
+  delete window.domicileGuestShortcuts;
 });
 
 describe("Shell", () => {
@@ -204,6 +243,84 @@ describe("Shell", () => {
       });
 
       expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
+    });
+
+    it("claims Alt+Enter from the Electron host, with and without Shift", () => {
+      // The compositor's claim covers a Wayland client holding the keyboard,
+      // and not a page the chrome embeds: a `<webview>` is a browsing context
+      // of its own, so its keys never reach this page. Where Domicile is not
+      // the one dispatching them, the Electron host is what can take them.
+      const host = renderHostedShell();
+
+      expect(host.claims).toStrictEqual([
+        { alt: true, ctrl: false, key: "Enter", meta: false, shift: false },
+        { alt: true, ctrl: false, key: "Enter", meta: false, shift: true },
+      ]);
+    });
+
+    it("opens a terminal when the host hands back a chord pressed in an embedded page", () => {
+      const host = renderHostedShell();
+
+      host.press({
+        alt: true,
+        ctrl: false,
+        key: "Enter",
+        meta: false,
+        shift: false,
+      });
+
+      expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
+    });
+
+    it("opens a browser when the host's chord carries Shift", () => {
+      // The shift is read off the chord the host delivered, not off the one
+      // key this page could have heard for itself.
+      const host = renderHostedShell();
+
+      host.press({
+        alt: true,
+        ctrl: false,
+        key: "Enter",
+        meta: false,
+        shift: true,
+      });
+
+      expect(tabNames()).toStrictEqual(["www.google.com"]);
+    });
+
+    it("opens one terminal for a held Alt+Enter, not one per repeat", async () => {
+      // A held key repeats tens of times a second. The other two paths deliver
+      // one press — the compositor never sees a repeat, and the host takes
+      // them out of a guest's stream — and a page that opened a window for
+      // each would be the only one that did.
+      renderShell();
+      await userEvent.keyboard("{Alt>}{Enter}{/Alt}");
+      const repeat = new KeyboardEvent("keydown", {
+        altKey: true,
+        cancelable: true,
+        key: "Enter",
+        repeat: true,
+      });
+      act(() => {
+        document.dispatchEvent(repeat);
+      });
+
+      expect(bridge.calls.filter(([kind]) => kind === "spawn")).toHaveLength(1);
+      // Answered by nobody, but still not passed on: the chord belongs to the
+      // desktop for as long as it is held, which is what the other two paths
+      // do with a repeat.
+      expect(repeat.defaultPrevented).toBe(true);
+    });
+
+    it("leaves a chord the desktop never claimed alone", async () => {
+      // The page hears every key, so it is the one path that can answer a
+      // combination nobody claimed. Neither of these is Alt+Enter to the
+      // compositor or to the host, and neither is one here either.
+      renderShell();
+      await userEvent.keyboard("{Control>}{Alt>}{Enter}{/Alt}{/Control}");
+      await userEvent.keyboard("{Meta>}{Alt>}{Enter}{/Alt}{/Meta}");
+
+      expect(bridge.calls).not.toContainEqual(["spawn", ["kitty"]]);
     });
 
     it("opens a browser on Alt+Shift+Enter", async () => {
