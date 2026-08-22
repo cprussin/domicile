@@ -460,6 +460,24 @@ fn spawn_is_a_no_op_in_the_brain() {
     assert_eq!(host.app_count(), 0);
 }
 
+#[test]
+fn asking_a_client_to_close_leaves_the_window_where_it_is() {
+    // The compositor sends the toplevel a close and the client decides: an
+    // editor with unsaved work stays up. A brain that dropped the window here
+    // would take the tab away from a window still on screen, and nothing ever
+    // puts it back — `app_appeared` is sent once.
+    let mut host = Host::new();
+    let (id, _) = host.app_appeared(None, (100.0, 100.0));
+    host.handle_chrome_message(place(&id, IDENTITY, [100.0, 100.0], 0, true))
+        .unwrap();
+
+    host.handle_chrome_message(ChromeMessage::CloseApp { app_id: id.clone() })
+        .unwrap();
+
+    assert_eq!(host.app_count(), 1);
+    assert_eq!(host.scene().len(), 1);
+}
+
 // ---- how a window is drawn, as opposed to where ---------------------------
 
 #[test]

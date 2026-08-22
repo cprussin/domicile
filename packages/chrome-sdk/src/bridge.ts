@@ -10,6 +10,7 @@ import { Err, Ok } from "@cprussin/option-result";
 
 import type { ChromeMessage, Placement, Shortcut } from "./chrome-message";
 import {
+  closeAppMessage,
   focusAppMessage,
   focusChromeMessage,
   grabShortcutMessage,
@@ -252,6 +253,16 @@ export class BridgeClient {
 
   focusChrome(): void {
     this.send(focusChromeMessage());
+  }
+
+  /**
+   * Ask the client owning `appId` to close its window.
+   *
+   * A request, not a kill: a terminal exits, an editor with unsaved work puts
+   * a dialog up and stays. The window goes when `app_closed` arrives.
+   */
+  closeApp(appId: string): void {
+    this.send(closeAppMessage(appId));
   }
 
   /** Ask the compositor to spawn a client process (argv array). */

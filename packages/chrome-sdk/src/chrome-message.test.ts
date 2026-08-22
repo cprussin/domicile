@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  closeAppMessage,
   focusAppMessage,
   focusChromeMessage,
   helloMessage,
@@ -162,6 +163,10 @@ describe("the remaining chrome->host messages", () => {
       type: "focus_app",
     });
     expect(focusChromeMessage()).toEqual({ type: "focus_chrome" });
+    expect(closeAppMessage("term")).toEqual({
+      app_id: "term",
+      type: "close_app",
+    });
     expect(helloMessage(2)).toEqual({ protocol_version: 2, type: "hello" });
   });
 });

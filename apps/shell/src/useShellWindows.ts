@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useReducer } from "react";
 import type { AppElements } from "./app-elements";
 import type { ShellState } from "./shell-state";
 import { EMPTY_SHELL, reduceShell, ShellAction } from "./shell-state";
-import { siteOf } from "./shell-window";
+import { appIdOf, siteOf } from "./shell-window";
 
 /** Where a browser window starts. */
 const HOME_PAGE = "https://www.google.com";
@@ -14,7 +14,12 @@ const HOME_PAGE = "https://www.google.com";
 const TERMINAL_COMMAND = ["kitty"] as const;
 
 export type ShellWindows = ShellState & {
-  /** Close the window `id` — what a tab's close button does. */
+  /**
+   * Close the window `id` — what a tab's close button does.
+   *
+   * A client's window is the client's to end, so this asks it to; the window
+   * leaves the list when the host says it went.
+   */
   close: (id: string) => void;
   /** Open a browser window on the stage and give it the stage. */
   openBrowser: () => void;
@@ -67,9 +72,20 @@ export const useShellWindows = (
     });
   }, [appElements, bridge]);
 
-  const close = useCallback((id: string) => {
-    dispatch(ShellAction.WindowClosed(id));
-  }, []);
+  const close = useCallback(
+    (id: string) => {
+      const appId = appIdOf(id);
+      if (appId === undefined) {
+        dispatch(ShellAction.WindowClosed(id));
+      } else {
+        // Nothing here ends a client: the compositor sends its toplevel a
+        // close, and an editor with unsaved work is entitled to stay. What
+        // takes the tab away is the `app_closed` that follows if it goes.
+        bridge.closeApp(appId);
+      }
+    },
+    [bridge],
+  );
 
   const openBrowser = useCallback(() => {
     dispatch(ShellAction.BrowserOpened(HOME_PAGE));

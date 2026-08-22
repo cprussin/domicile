@@ -263,8 +263,10 @@ impl Host {
                 self.scene.focus_chrome();
             }
             // Compositor-level, like Spawn: a claim on the keyboard is not
-            // something the scene models.
-            ChromeMessage::GrabShortcut { .. }
+            // something the scene models, and a close is the client's to
+            // answer — the window leaves the scene when it actually goes away.
+            ChromeMessage::CloseApp { .. }
+            | ChromeMessage::GrabShortcut { .. }
             | ChromeMessage::Spawn { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }

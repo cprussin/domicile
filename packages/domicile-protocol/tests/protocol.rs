@@ -53,6 +53,9 @@ fn chrome_messages_round_trip() {
     });
     chrome_round_trip(&ChromeMessage::SetDevicePixelRatio { ratio: 1.5 });
     chrome_round_trip(&ChromeMessage::FocusChrome);
+    chrome_round_trip(&ChromeMessage::CloseApp {
+        app_id: "term".into(),
+    });
     chrome_round_trip(&ChromeMessage::Spawn {
         command: vec!["kitty".into(), "--hold".into()],
     });

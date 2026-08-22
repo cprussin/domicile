@@ -212,6 +212,9 @@ describe("BridgeClient", () => {
     bridge.focusApp("term");
     expect(transport.lastSent()).toEqual({ app_id: "term", type: "focus_app" });
 
+    bridge.closeApp("term");
+    expect(transport.lastSent()).toEqual({ app_id: "term", type: "close_app" });
+
     bridge.spawn(["kitty"]);
     expect(transport.lastSent()).toEqual({ command: ["kitty"], type: "spawn" });
 

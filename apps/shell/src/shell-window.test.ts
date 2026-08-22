@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { ShellWindow, WindowKind } from "./shell-window";
+import { appIdOf, ShellWindow, WindowKind } from "./shell-window";
 
 describe("ShellWindow", () => {
   describe("App", () => {
@@ -11,6 +11,18 @@ describe("ShellWindow", () => {
         kind: WindowKind.App,
         title: "Terminal",
       });
+    });
+  });
+
+  describe("appIdOf", () => {
+    it("reads the client back out of a window id", () => {
+      expect(appIdOf(ShellWindow.App("term", "Terminal").id)).toBe("term");
+    });
+
+    it("has no client for a window the shell opened itself", () => {
+      expect(appIdOf(ShellWindow.Browser(1, "https://example.com").id)).toBe(
+        undefined,
+      );
     });
   });
 

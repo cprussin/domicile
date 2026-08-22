@@ -429,6 +429,14 @@ enum ClientRequest {
     SetOutputScale {
         scale: i32,
     },
+    /// The chrome asked a client to close the window `app_id`.
+    ///
+    /// A request the client answers, so it goes to the Wayland thread where
+    /// its toplevel is rather than to the brain, which has nothing that ends a
+    /// client.
+    CloseApp {
+        app_id: String,
+    },
     /// The chrome laid an app's element out at a new size; configure the client
     /// to match so it redraws at that resolution.
     ConfigureApp {
@@ -1001,6 +1009,13 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                 });
                 let mut host = hub.host.lock().unwrap();
                 apply_chrome_message(&mut host, &mut ready, ChromeMessage::FocusApp { app_id })
+            }
+            // Compositor-level, and nothing the brain models: only the
+            // client's own toplevel can end it, and the window leaves the
+            // scene when it goes away and `app_closed` says so.
+            Ok(ChromeMessage::CloseApp { app_id }) => {
+                hub.send_request(ClientRequest::CloseApp { app_id });
+                Vec::new()
             }
             Ok(ChromeMessage::FocusChrome) => {
                 hub.send_request(ClientRequest::KeyboardFocus { app_id: None });
@@ -2324,6 +2339,19 @@ impl DomicileCompositor {
                 self.needs_present = true;
             }
             ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
+            ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
+                Some(toplevel) => {
+                    info!(%app_id, "close -> client");
+                    toplevel.send_close();
+                }
+                // The window went away while the message was in flight, which
+                // is the outcome that was asked for — said out loud rather
+                // than passed over, because the other way to reach this line
+                // is an id the chrome invented. At `info!` for that reason:
+                // the default subscriber is INFO, so a `debug!` here would be
+                // the passing over it claims not to be.
+                None => info!(%app_id, "close: a window with no toplevel"),
+            },
             ClientRequest::ConfigureApp {
                 app_id,
                 width,
@@ -4404,6 +4432,63 @@ mod tests {
                 app_id: Some(app_id.clone()),
             }),
             "every chrome is told the window took the keyboard: {seen:?}"
+        );
+    }
+
+    #[test]
+    fn a_chrome_closing_a_window_asks_the_client_rather_than_the_brain() {
+        // The X button on a native window's tab. Nothing in the scene ends a
+        // client — only its own toplevel can — so the message has to leave the
+        // chrome thread for the Wayland one, where the toplevel is.
+        let (request_tx, requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (page, compositor) = UnixStream::pair().expect("a socket pair");
+        let writer = Arc::new(Mutex::new(
+            compositor.try_clone().expect("the stream clones"),
+        ));
+        let serving = {
+            let hub = hub.clone();
+            thread::spawn(move || chrome_connection(hub, compositor, writer))
+        };
+
+        {
+            use std::io::Write as _;
+            let version = domicile_protocol::PROTOCOL_VERSION;
+            let mut writing = &page;
+            // The handshake first, so this drives the connection the product
+            // reaches rather than one that skipped it.
+            for message in [
+                format!("{{\"type\":\"hello\",\"protocol_version\":{version}}}"),
+                "{\"type\":\"close_app\",\"app_id\":\"term\"}".to_string(),
+            ] {
+                writeln!(writing, "{message}").expect("the page can write");
+            }
+        }
+        // Collected before the page goes away, not after: the handshake's
+        // `welcome` is written back to this socket, and closing the reading end
+        // first breaks that write — which ends the connection thread before it
+        // ever reads the second line. Waited for rather than read once, because
+        // the thread that sends these is not the one asserting on them.
+        let mut asked = Vec::new();
+        for _ in 0..200 {
+            while let Ok(request) = requests.try_recv() {
+                asked.push(request);
+            }
+            if asked.len() >= 2 {
+                break;
+            }
+            sleep(Duration::from_millis(10));
+        }
+        drop(page);
+        serving.join().expect("the connection thread ends at EOF");
+
+        assert!(
+            matches!(
+                asked.as_slice(),
+                [ClientRequest::ChromeHello, ClientRequest::CloseApp { app_id }]
+                    if app_id == "term"
+            ),
+            "the handshake, and then the one client asked to close"
         );
     }
 

@@ -47,6 +47,7 @@ export type ChromeMessage =
   | ReturnType<typeof setDevicePixelRatioMessage>
   | ReturnType<typeof focusAppMessage>
   | ReturnType<typeof focusChromeMessage>
+  | ReturnType<typeof closeAppMessage>
   | ReturnType<typeof grabShortcutMessage>
   | ReturnType<typeof spawnMessage>
   | ReturnType<typeof pointerMotionMessage>
@@ -125,6 +126,15 @@ export const focusAppMessage = (appId: string) =>
   ({ app_id: appId, type: "focus_app" }) as const;
 
 export const focusChromeMessage = () => ({ type: "focus_chrome" }) as const;
+
+/**
+ * Ask the client owning `appId` to close its window.
+ *
+ * A request, not a kill: what happens next is the client's, and the window
+ * leaves the chrome when the host says `app_closed`.
+ */
+export const closeAppMessage = (appId: string) =>
+  ({ app_id: appId, type: "close_app" }) as const;
 
 /**
  * A key combination the desktop claims for itself.
