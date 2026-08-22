@@ -55,6 +55,7 @@ cargo test -p domicile-compositor
 ./scripts/smoke-compositor.sh    # a real client binds our globals
 ./scripts/e2e-chrome.sh          # client -> host -> mock chrome, and the buffer release
 ./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow
+./scripts/e2e-late-chrome.sh     # a chrome arriving to a client already running (reload)
 ./scripts/e2e-spawn.sh           # a spawned client is aimed at *our* display
 ./scripts/e2e-input.sh           # keyboard + pointer reach a client (copy path)
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
@@ -186,7 +187,8 @@ below.
   native libs). Plain `cargo test`/`cargo build` skip it; build it explicitly.
 - **Verifying without nix**: the headless scripts need `libxkbcommon-dev`,
   `weston` and `wayland-utils`. With those, everything except `e2e-electron.sh`
-  runs outside the nix shell; that one also needs `electron` on `PATH`.
+  and `e2e-late-chrome.sh` runs outside the nix shell; those two also need
+  `electron` on `PATH`.
 - Reference material for Smithay: fetch from `github.com/Smithay/smithay` tag
   **`v0.7.0`** (smallvil + anvil examples, `src/input/*`, `src/wayland/*`).
 

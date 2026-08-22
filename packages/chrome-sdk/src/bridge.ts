@@ -119,6 +119,24 @@ export class BridgeClient {
 
   readonly #transport: Transport;
   readonly #handlers = new Map<HostMessageType, Handler>();
+
+  /**
+   * Messages that arrived before the page registered a handler for their type,
+   * kept in arrival order and delivered when it does.
+   *
+   * The host starts talking the moment the socket opens — the `welcome`, and
+   * one `app_appeared` for every client already running — but a React page
+   * registers its handlers in its first effect flush, tens of milliseconds
+   * later. Not a race it usually wins: rendering only *schedules* the effect,
+   * so `hello` precedes every `on` on every startup. Dropping what lands in
+   * between is a live, drawing client with no window on screen, and there is
+   * no second chance — nothing ever re-sends `app_appeared` for it.
+   *
+   * Unbounded on purpose. {@link parseHostMessage} has already dropped the
+   * types this chrome does not know, so what can pile up here is only a type
+   * the page does register — and it registers all of them in one mount.
+   */
+  readonly #held = new Map<HostMessageType, unknown[]>();
   readonly #now: typeof monotonicNow;
   #welcome: ((agreed: Result<number, HandshakeFailure>) => void) | undefined;
 
@@ -156,12 +174,25 @@ export class BridgeClient {
     return promise;
   }
 
-  /** Register the handler for a host message `type` (e.g. `app_appeared`). */
+  /**
+   * Register the handler for a host message `type` (e.g. `app_appeared`).
+   *
+   * Anything of that type that arrived before this call is delivered to
+   * `handler` synchronously, in the order it arrived — see {@link #held}.
+   */
   on<T extends HostMessageType>(
     type: T,
     handler: (message: HostMessageOf<T>) => void,
   ): this {
     this.#handlers.set(type, handler as Handler);
+    const waiting = this.#held.get(type);
+    // Deleted before the handler runs, not after: a handler that sends
+    // something the host answers with the same type would otherwise find the
+    // hold still full and see its own messages again.
+    this.#held.delete(type);
+    for (const message of waiting ?? []) {
+      handler(message as HostMessageOf<T>);
+    }
     return this;
   }
 
@@ -243,8 +274,9 @@ export class BridgeClient {
   }
 
   // Unknown message types are dropped rather than raised, so a newer host can
-  // add messages an older chrome has no handler for. Malformed frames are not
-  // in that category: `parseHostMessage` throws on those.
+  // add messages an older chrome cannot name. A *known* type with no handler
+  // yet is a different thing and is held, not dropped — see `#held`. Malformed
+  // frames are in neither category: `parseHostMessage` throws on those.
   #handleIncoming(text: string, pixels?: Uint8Array<ArrayBuffer>): void {
     const message = parseHostMessage(text);
     if (message !== undefined) {
@@ -259,14 +291,29 @@ export class BridgeClient {
             `app_frame for ${message.app_id} arrived without its ${message.bytes} bytes`,
           );
         }
-        this.#handlers.get(message.type)?.({ ...message, pixels } as never);
+        this.#deliver(message.type, { ...message, pixels });
         // After the handler, not before: the handler is what puts the pixels
         // on the canvas, and `putImageData` for a full window is a real cost —
         // measuring before it would leave the most suspect step out.
         this.roundTrip.drew(message.app_id, this.#now());
       } else {
-        this.#handlers.get(message.type)?.(message as never);
+        this.#deliver(message.type, message);
       }
+    }
+  }
+
+  /** Hand a message to its handler, or hold it until one registers. */
+  #deliver(type: HostMessageType, message: unknown): void {
+    const handler = this.#handlers.get(type);
+    if (handler === undefined) {
+      const waiting = this.#held.get(type);
+      if (waiting === undefined) {
+        this.#held.set(type, [message]);
+      } else {
+        waiting.push(message);
+      }
+    } else {
+      handler(message as never);
     }
   }
 

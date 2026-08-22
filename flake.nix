@@ -112,6 +112,7 @@
           measure-round-trip = "measure-round-trip.sh";
           e2e-chrome = "e2e-chrome.sh";
           e2e-electron = "e2e-electron.sh";
+          e2e-late-chrome = "e2e-late-chrome.sh";
           e2e-no-compositor = "e2e-no-compositor.sh";
           e2e-spawn = "e2e-spawn.sh";
           e2e-input = "e2e-input.sh";

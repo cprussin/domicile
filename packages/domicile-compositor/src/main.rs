@@ -534,6 +534,30 @@ impl ChromeHub {
     }
 }
 
+/// Tell every connected chrome what is already running.
+///
+/// `app_appeared` goes out once, when the client maps, and a page that was not
+/// listening then never hears it — there is nothing to ask and nothing that
+/// repeats. That loses a live, drawing client its window for good, and it
+/// happens two ways: a client that maps in the milliseconds between the page's
+/// handshake and its first React commit, and every reload.
+///
+/// Broadcast rather than sent to the one page that asked. The writer is
+/// reachable from the `hello` arm, but a chrome that already holds the window
+/// ignores a second announcement — the shell keys its windows by app id — so
+/// singling one out buys nothing and would need the hub to grow a
+/// send-to-one path.
+///
+/// A free function, and the guard is dropped before the first broadcast:
+/// holding `host` across a loop that writes to `outbound` puts a lock the
+/// Wayland thread needs underneath a queue a chrome could be slow to drain.
+fn announce_open_apps(hub: &ChromeHub) {
+    let announcements = hub.host.lock().unwrap().open_apps();
+    for announcement in announcements {
+        hub.broadcast(announcement);
+    }
+}
+
 /// Encode and write everything bound for the chrome, off the Wayland thread.
 ///
 /// This is the only place that blocks on a chrome socket. Before it existed a
@@ -2200,6 +2224,7 @@ impl DomicileCompositor {
                 self.held.clear();
                 self.pending_damage.clear();
                 self.needs_present = true;
+                announce_open_apps(&self.hub);
             }
             ClientRequest::PortalRemoved { app_id } => {
                 // The element left the page and its canvas went with it, so
@@ -4147,11 +4172,11 @@ mod tests {
     use domicile_protocol::CursorShape;
 
     use super::{
-        answers_keystroke, bgra_to_rgba, channel, chrome_connection, client_command, cursor_shape,
-        disposition, drawn_by_the_compositor, draws_natively, frame_is_due, hand_back, hand_over,
-        keep_frame, pixels_to_hand_over, record_present, shadow_in_pixels, unmounts_the_element,
-        ChromeHub, ClientRequest, Committer, Disposition, Drawn, FrameTimings, HandOver, LastFrame,
-        Placed, Refusals,
+        announce_open_apps, answers_keystroke, bgra_to_rgba, channel, chrome_connection,
+        client_command, cursor_shape, disposition, drawn_by_the_compositor, draws_natively,
+        frame_is_due, hand_back, hand_over, keep_frame, pixels_to_hand_over, record_present,
+        shadow_in_pixels, unmounts_the_element, ChromeHub, ClientRequest, Committer, Disposition,
+        Drawn, FrameTimings, HandOver, LastFrame, Outbound, Placed, Refusals,
     };
 
     use std::collections::HashMap;
@@ -4199,6 +4224,43 @@ mod tests {
         assert!(
             hub.chromes.lock().unwrap().is_empty(),
             "the writer for a chrome that disconnected is not kept"
+        );
+    }
+
+    #[test]
+    fn a_page_that_says_hello_is_told_what_is_already_running() {
+        // Nothing else ever re-sends `app_appeared`. Without this the desktop
+        // is only ever built up by live ones, so a page that reloads comes back
+        // to a compositor full of running clients and an empty screen.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (first, _) = hub
+            .host
+            .lock()
+            .unwrap()
+            .app_appeared(Some("a terminal".to_string()), (640.0, 480.0));
+        let (second, _) = hub.host.lock().unwrap().app_appeared(None, (100.0, 200.0));
+
+        announce_open_apps(&hub);
+
+        // Three reads for two windows: everything was queued before the first
+        // read, so the third is what says nothing followed them.
+        let mut announced = Vec::new();
+        for _ in 0..3 {
+            match outbound.recv_until(Duration::from_millis(100)) {
+                Some(Some(Outbound::Message(HostMessage::AppAppeared { app_id, .. }))) => {
+                    announced.push(app_id);
+                }
+                Some(Some(_)) => panic!("something other than an announcement was queued"),
+                Some(None) => break,
+                None => panic!("the queue's sending half went away"),
+            }
+        }
+
+        assert_eq!(
+            announced,
+            vec![first, second],
+            "both open windows, in the order they arrived"
         );
     }
 
