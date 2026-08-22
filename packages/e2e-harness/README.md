@@ -9,14 +9,16 @@ message plane can be verified in CI and on a headless box.
 |---|---|---|
 | `src/mock-chrome.ts` | `scripts/e2e-chrome.sh`, `scripts/e2e-spawn.sh` | Connects, handshakes, and prints every frame the host pushes so the calling script can grep for one. |
 | `src/input-injector.ts` | `scripts/e2e-input.sh` | Waits for `app_appeared`, then forwards a focus + pointer + keyboard sequence to prove input injection reaches a real client. |
+| `src/reload-typist.ts` | `scripts/e2e-stuck-key.sh` | Holds a key down, reloads, and then tries to toggle it — the page dying mid-press, which used to leave that key down in the seat for good. |
 
 `src/chrome-socket.ts` is the shared connection: newline-delimited JSON framing
 from [`@domicile/chrome-sdk/newline-frames`](../chrome-sdk/README.md), the
 handshake, and decoding via the SDK's protocol schemas — so the harnesses drift
 from the wire format only if the SDK does.
 
-Both harnesses read the socket path from `DOMICILE_CHROME_SOCK` and exit on
-their own timer, since the scripts that spawn them run unattended.
+Every harness reads the socket path from `DOMICILE_CHROME_SOCK` and ends on its
+own — on a timer, or when its sequence is done — since the scripts that spawn
+them run unattended.
 
 ## Usage
 
