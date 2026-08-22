@@ -1,11 +1,13 @@
 // Entry point for the shell's renderer. The compositor loads the built
-// index.html, injects a transport at `window.domicileTransport`, and this wires
-// the SDK to it and mounts the React chrome on top.
+// index.html, the host injects its half of the transport at
+// `window.domicileHost`, and this wires the SDK to it and mounts the React
+// chrome on top.
 
 import {
   BridgeClient,
   describeHandshakeFailure,
 } from "@domicile/chrome-sdk/bridge";
+import { postedTransport } from "@domicile/chrome-sdk/host-transport";
 import { placementTiming } from "@domicile/chrome-sdk/placement-timing";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
@@ -28,12 +30,14 @@ const REPORT_EVERY_MS = 5000;
 // this for the pre-bundle paint; this call covers the rest of the chrome.)
 applyPreference(loadPreference());
 
-// The host exposes a transport (send/onMessage) to the page. Fall back to a
-// no-op so the shell can be opened in a plain browser for styling work.
-const transport = window.domicileTransport ?? {
-  onMessage: () => undefined,
-  send: () => undefined,
-};
+// The host exposes its half of the transport; the pixels come by `postMessage`
+// and this joins the two. Fall back to a no-op so the shell can be opened in a
+// plain browser for styling work.
+const host = window.domicileHost;
+const transport =
+  host === undefined
+    ? { onMessage: () => undefined, send: () => undefined }
+    : postedTransport(window, host);
 
 const bridge = new BridgeClient(transport);
 const appElements = new AppElements();

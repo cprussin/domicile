@@ -5,9 +5,15 @@
 // structured-clones what it carries, which for a frame's pixels is megabytes
 // per frame across a process boundary: measured at 79ms average and 237ms
 // worst against ~8ms for the GPU readback that produced them, it was the
-// single largest cost in the copy path. Read here, the bytes are already in
-// the renderer, and the only copy left is the context bridge's — in-process,
-// into the page.
+// single largest cost in the copy path.
+//
+// Reading here left one copy: the context bridge's, in-process, into the page
+// — 9.9ms average for a 1612x982 window, because a bridged call
+// structured-clones every argument. So the pixels do not go over the bridge
+// at all now. They are posted with `window.postMessage` and the buffer in the
+// transfer list, which *moves* them: the same frames at **0.11ms**. Only the
+// small things — the page saying it is listening, and what it sends back —
+// still cross the bridge, where a clone costs nothing.
 //
 // The whole body runs inside `orDie`. Electron catches a throw at preload
 // scope, logs it to the renderer's devtools console — which nobody has open
@@ -17,7 +23,7 @@
 // compositor has to say so where it can be read, and stop.
 
 import net from "node:net";
-import { hostTransport } from "@domicile/chrome-sdk/host-transport";
+import { postHostMessages } from "@domicile/chrome-sdk/host-transport";
 import { contextBridge, ipcRenderer } from "electron";
 
 import {
@@ -93,18 +99,27 @@ orDie(() => {
   });
 
   contextBridge.exposeInMainWorld(
-    "domicileTransport",
-    hostTransport({
-      onData: (listener) => {
-        socket.on("data", listener);
+    "domicileHost",
+    postHostMessages(
+      {
+        onData: (listener) => {
+          socket.on("data", listener);
+        },
+        write: (text) => {
+          socket.write(text);
+        },
       },
-      write: (text) => {
-        socket.write(text);
+      // `"*"` rather than an origin: the page is loaded from a build directory
+      // over `file:`, whose origin is opaque and never matches anything. The
+      // post is not addressed by origin but by *window* — this is the same
+      // window, and the page checks that the post came from it.
+      (message, transfer) => {
+        window.postMessage(message, "*", [...transfer]);
       },
-    }),
+    ),
   );
 
-  // Kept off `domicileTransport`: that object is the host protocol, whose shape
+  // Kept off `domicileHost`: that object is the host protocol, whose shape
   // the SDK's `Transport` type fixes. This is the shell asking its own Electron
   // host for things the eventual CEF embedder will answer some other way — or
   // not at all.

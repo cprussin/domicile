@@ -86,6 +86,26 @@ describe("createHostStreamReader", () => {
     ]);
   });
 
+  it("hands back a frame that owns its buffer and nothing more", () => {
+    // The page is handed these bytes by *transfer* rather than by copy, and a
+    // transfer moves the whole `ArrayBuffer`. A view onto a larger buffer —
+    // the shape a join-then-slice reader produces — would take the messages
+    // that arrived behind the frame with it, and detach them mid-read.
+    const read = createHostStreamReader();
+
+    const [frame] = read(
+      bytes(
+        frameHeader(4),
+        new Uint8Array([1, 2, 3, 4]),
+        '{"type":"app_closed","app_id":"a"}\n',
+      ),
+    );
+
+    expect(frame?.pixels).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(frame?.pixels?.byteOffset).toBe(0);
+    expect(frame?.pixels?.buffer.byteLength).toBe(4);
+  });
+
   it("reassembles a frame-sized payload in linear time", () => {
     // Pixels arrive in many small chunks; re-joining the buffer on each one is
     // quadratic, which at frame size costs seconds.
