@@ -20,6 +20,8 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/xvfb-display.sh
+. "$ROOT/scripts/xvfb-display.sh"
 cd "$ROOT"
 KEYSTROKES="${1:-40}"
 export NO_COLOR=1
@@ -46,26 +48,20 @@ CLIENT="$(command -v kitty || command -v weston-terminal || true)"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/domicile-rt-trip}"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 SOCK="$XDG_RUNTIME_DIR/round-trip.sock"; rm -f "$SOCK"
-COMPLOG="$(mktemp)"; CHROMELOG="$(mktemp)"; APPLOG="$(mktemp)"; DISPLAY_FILE="$(mktemp)"
+COMPLOG="$(mktemp)"; CHROMELOG="$(mktemp)"; APPLOG="$(mktemp)"
 TYPISTLOG="$(mktemp)"; PROFILE=""
 cleanup() {
   kill ${TYPIST:-} ${APP:-} ${CHROME:-} ${COMP:-} ${XVFB:-} 2>/dev/null
   wait 2>/dev/null
-  rm -f "$COMPLOG" "$CHROMELOG" "$APPLOG" "$DISPLAY_FILE" "$TYPISTLOG"
+  rm -f "$COMPLOG" "$CHROMELOG" "$APPLOG" "$TYPISTLOG"
   [ -n "$PROFILE" ] && rm -rf "$PROFILE"
 }
 trap cleanup EXIT
 
-# A display the server chooses. Picking a number ourselves collides with the
-# socket a previous run left behind, and Electron given a dead display dies
-# rather than waiting — which reads as a measurement of nothing.
-if [ -z "${DISPLAY:-}" ]; then
-  Xvfb -displayfd 3 -screen 0 1280x800x24 3>"$DISPLAY_FILE" >/dev/null 2>&1 &
-  XVFB=$!
-  for _ in $(seq 1 100); do [ -s "$DISPLAY_FILE" ] && break; sleep 0.1; done
-  [ -s "$DISPLAY_FILE" ] || { echo "Xvfb never came up"; exit 1; }
-  export DISPLAY=":$(tr -d '[:space:]' <"$DISPLAY_FILE")"
-fi
+# A display: the caller's if there is one, else one of our own. Electron given
+# a dead display dies rather than waiting, which reads as a measurement of
+# nothing — so a display that never arrived has to say why.
+ensure_display 1280x800x24 60 || exit 1
 
 echo "== the desktop =="
 # `place_portal` — the chrome saying it mounted the window — is logged at

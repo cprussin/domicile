@@ -16,6 +16,8 @@
 # reports twice and the second reason is invented.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/xvfb-display.sh
+. "$ROOT/scripts/xvfb-display.sh"
 export NO_COLOR=1
 
 ( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell ) >/dev/null 2>&1 \
@@ -36,25 +38,18 @@ mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 # by some other run would make this pass by connecting to it.
 SOCK="$XDG_RUNTIME_DIR/never-listening.sock"
 rm -f "$SOCK"
-LOG="$(mktemp)"; DISPLAY_FILE="$(mktemp)"
+LOG="$(mktemp)"
 # TERM, not KILL. A `kill -9`d X server cannot unlink its socket or its lock,
 # and the corpse it leaves is indistinguishable from a live display to anything
 # that tests for the socket — which is how this check spent its first day
 # passing once and then failing two runs in three, with Electron segfaulting
 # against a dead display and reporting zero lines. Zero lines is also what the
 # bug this exists to catch looks like.
-trap 'kill ${XVFB:-} 2>/dev/null; rm -f "$LOG" "$DISPLAY_FILE"' EXIT
+trap 'kill ${XVFB:-} 2>/dev/null; rm -f "$LOG"' EXIT
 
-# Headless X for Electron, on a display the *server* chooses. Picking a number
-# ourselves is the other half of the same problem: whatever number we pick, a
-# previous run may have left something at it, and there is no reliable way from
-# a shell to tell a live X server from the socket of a dead one. `-displayfd`
-# hands the question to the thing that actually knows.
-Xvfb -displayfd 3 -screen 0 800x600x24 3>"$DISPLAY_FILE" >/dev/null 2>&1 &
-XVFB=$!
-for _ in $(seq 1 100); do [ -s "$DISPLAY_FILE" ] && break; sleep 0.1; done
-[ -s "$DISPLAY_FILE" ] || { echo "Xvfb never came up"; exit 1; }
-export DISPLAY=":$(tr -d '[:space:]' <"$DISPLAY_FILE")"
+# Headless X for Electron: the one `check.sh` already made, or one of our own —
+# and a reason rather than a shrug when there is neither.
+ensure_display 800x600x24 60 || exit 1
 
 # A timeout well past the point where a shell that was going to exit has: the
 # failure this guards against is one that never exits at all, and `timeout`

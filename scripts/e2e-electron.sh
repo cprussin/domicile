@@ -6,6 +6,8 @@
 #   nix develop .#full -c ./scripts/e2e-electron.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/xvfb-display.sh
+. "$ROOT/scripts/xvfb-display.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
 # Built here rather than merely checked for. A binary that exists but predates
 # the source is the worst of both: every check runs, and every check reports on
@@ -21,7 +23,7 @@ export XDG_RUNTIME_DIR="/tmp/domicile-rt-xvfb"      # short: Unix socket path li
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/domicile-chrome.sock
 SOCK="$XDG_RUNTIME_DIR/domicile-chrome.sock"
-LOG="$(mktemp)"; ELOG="$(mktemp)"; DISPLAY_FILE=""
+LOG="$(mktemp)"; ELOG="$(mktemp)"
 # Named before the trap can fire. `set -u` turns a cleanup that runs before
 # these are assigned — any early `exit` — into "unbound variable", which
 # replaces whatever the real failure was with a line about the harness.
@@ -53,7 +55,7 @@ COMP=$!
 # `kill`, not `kill -9`: a SIGKILLed X server cannot unlink its socket or its
 # lock, and the corpse it leaves is indistinguishable to anything that tests
 # for the socket from a display that is up.
-cleanup() { kill "$COMP" "$EL" "$XVFB" "$FLOWER" 2>/dev/null; rm -f "$LOG" "$ELOG" "$DISPLAY_FILE"; }
+cleanup() { kill "$COMP" "$EL" ${XVFB:-} "$FLOWER" 2>/dev/null; rm -f "$LOG" "$ELOG"; }
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 
@@ -62,19 +64,12 @@ for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 ( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell ) \
   || { echo "shell build failed"; exit 1; }
 
-# Headless X for Electron, on a display the *server* picks and waited for
-# rather than slept at. A fixed number collides with whatever a previous run
-# left behind, and there is no way from a shell to tell a live X server from a
-# dead one's socket — `-displayfd` hands that question to the thing that can
-# answer it, which checks each lock's pid for liveness. Electron given a
-# display that is not up does not wait; it dies, and a dead Electron looks
-# exactly like a chrome that failed to hand shake.
-DISPLAY_FILE="$(mktemp)"
-Xvfb -displayfd 3 -screen 0 1280x800x24 3>"$DISPLAY_FILE" >/dev/null 2>&1 &
-XVFB=$!
-for _ in $(seq 1 100); do [ -s "$DISPLAY_FILE" ] && break; sleep 0.1; done
-[ -s "$DISPLAY_FILE" ] || { echo "FAIL: Xvfb never came up"; exit 1; }
-export DISPLAY=":$(tr -d '[:space:]' <"$DISPLAY_FILE")"
+# Headless X for Electron: the one `check.sh` already made, or one of our own.
+# Electron given a display that is not up does not wait; it dies, and a dead
+# Electron looks exactly like a chrome that failed to hand shake — so a display
+# that never arrived has to say why it did not, which is `ensure_display`'s
+# whole job.
+ensure_display 1280x800x24 60 || exit 1
 
 DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/apps/shell" >"$ELOG" 2>&1 &
 EL=$!
