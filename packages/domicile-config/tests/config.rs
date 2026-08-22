@@ -4,7 +4,7 @@
 //! file on disk must NEVER take down the compositor — the last known-good
 //! config stays active and the error is surfaced.
 
-use domicile_config::{Config, ConfigError, ConfigStore, ShellRef};
+use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig, ShellRef};
 use std::path::{Path, PathBuf};
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -309,4 +309,215 @@ fn max_scale_must_leave_a_usable_scale() {
         format!("{err}").contains("output.max_scale"),
         "the message should name the setting: {err}"
     );
+}
+
+// ---- statically described displays -----------------------------------------
+
+#[test]
+fn no_displays_configured_means_the_output_follows_domiciles_window() {
+    // The nested backend's original behaviour, and the only thing it can do
+    // without being told: one output, sized by whatever window Domicile got.
+    assert_eq!(Config::parse("").unwrap().output.displays, vec![]);
+}
+
+#[test]
+fn parses_a_side_by_side_desktop() {
+    let text = r##"
+        [[output.displays]]
+        name = "left"
+        position = [0, 0]
+        size = [1920, 1080]
+
+        [[output.displays]]
+        name = "right"
+        position = [1920, 0]
+        size = [2560, 1440]
+        scale = 2
+    "##;
+    let displays = Config::parse(text)
+        .expect("a described desktop should parse")
+        .output
+        .displays;
+    assert_eq!(
+        displays,
+        vec![
+            DisplayConfig {
+                name: "left".into(),
+                position: (0, 0),
+                scale: 1,
+                size: (1920, 1080),
+            },
+            DisplayConfig {
+                name: "right".into(),
+                position: (1920, 0),
+                scale: 2,
+                size: (2560, 1440),
+            },
+        ]
+    );
+}
+
+#[test]
+fn a_display_sits_at_the_origin_unless_placed() {
+    // The one-display case, where there is nothing for a position to be
+    // relative to.
+    let displays = Config::parse("[[output.displays]]\nname = \"only\"\nsize = [800, 600]\n")
+        .unwrap()
+        .output
+        .displays;
+    assert_eq!(displays[0].position, (0, 0));
+}
+
+#[test]
+fn a_display_needs_a_name_the_shell_can_tell_apart() {
+    // The name is how the chrome addresses one window rather than another, so
+    // two displays answering to it is not a preference the shell can resolve.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"hdmi\"\nsize = [800, 600]\n\
+         [[output.displays]]\nname = \"hdmi\"\nposition = [800, 0]\nsize = [800, 600]\n",
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, ConfigError::Validation(_)),
+        "a duplicate name should fail validation, not parsing: {err:?}"
+    );
+    assert!(
+        format!("{err}").contains("hdmi"),
+        "the message should name the collision: {err}"
+    );
+}
+
+#[test]
+fn a_display_name_may_not_be_padded() {
+    // `left ` and `left` are one display to a reader and two to an exact-match
+    // lookup, and that lookup is how a chrome window says which display it is
+    // — so the space presents as "this chrome claims a display that does not
+    // exist" rather than as the typo it is. One entry, so what is pinned is
+    // the rejection rather than "these two do not both parse", which a
+    // trim-and-deduplicate would satisfy just as well.
+    let err =
+        Config::parse("[[output.displays]]\nname = \"left \"\nsize = [800, 600]\n").unwrap_err();
+    assert!(
+        matches!(err, ConfigError::Validation(_)),
+        "a padded name should fail validation, not parsing: {err:?}"
+    );
+    assert!(
+        format!("{err}").contains("padded"),
+        "the message should say what is wrong with the name: {err}"
+    );
+}
+
+#[test]
+fn a_display_named_nothing_is_rejected() {
+    // Reported by position: a display with no name has nothing else to be
+    // called, and the entry still has to be findable in a file with five.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"real\"\nsize = [800, 600]\n\
+         [[output.displays]]\nname = \"\"\nposition = [800, 0]\nsize = [800, 600]\n",
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, ConfigError::Validation(_)),
+        "a blank name should fail validation, not parsing: {err:?}"
+    );
+    assert!(
+        format!("{err}").contains("output.displays[1]"),
+        "the message should say which entry: {err}"
+    );
+}
+
+#[test]
+fn a_display_with_no_pixels_is_rejected() {
+    // Either axis: a display zero wide is as absent as one zero high.
+    for size in ["[1920, 0]", "[0, 1080]"] {
+        let err = Config::parse(&format!(
+            "[[output.displays]]\nname = \"dead\"\nsize = {size}\n"
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "size {size} should fail validation, not parsing: {err:?}"
+        );
+        assert!(
+            format!("{err}").contains("dead"),
+            "the message should name the display: {err}"
+        );
+    }
+}
+
+#[test]
+fn a_display_must_have_a_usable_scale() {
+    let err = Config::parse("[[output.displays]]\nname = \"tiny\"\nsize = [800, 600]\nscale = 0\n")
+        .unwrap_err();
+    assert!(
+        matches!(err, ConfigError::Validation(_)),
+        "a zero scale should fail validation, not parsing: {err:?}"
+    );
+    assert!(
+        format!("{err}").contains("scale"),
+        "the message should name the setting: {err}"
+    );
+}
+
+#[test]
+fn a_display_may_not_run_off_the_edge_of_the_desktop() {
+    // Its far corner has to be a coordinate too. The desktop's bounding box is
+    // computed from these, and an edge that is not representable is a layout
+    // nothing downstream can size a window from — so it is rejected where it
+    // is written rather than wrapping somewhere later.
+    for position in ["[2147483000, 0]", "[0, 2147483000]"] {
+        let err = Config::parse(&format!(
+            "[[output.displays]]\nname = \"far\"\nposition = {position}\nsize = [1920, 1080]\n"
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "position {position} should fail validation, not parsing: {err:?}"
+        );
+        assert!(
+            format!("{err}").contains("far"),
+            "the message should name the display: {err}"
+        );
+    }
+}
+
+#[test]
+fn displays_may_not_cover_the_same_ground() {
+    // Two outputs over one region has no answer for which one a point belongs
+    // to, so it is a typo in the layout rather than a desktop.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"left\"\nsize = [1920, 1080]\n\
+         [[output.displays]]\nname = \"right\"\nposition = [1900, 0]\nsize = [1920, 1080]\n",
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, ConfigError::Validation(_)),
+        "an overlap should fail validation, not parsing: {err:?}"
+    );
+    let message = format!("{err}");
+    assert!(
+        message.contains("left") && message.contains("right"),
+        "the message should name both displays: {err}"
+    );
+}
+
+#[test]
+fn displays_that_only_touch_are_a_desktop_rather_than_a_collision() {
+    // The two ordinary layouts: the second display starts exactly where the
+    // first ends, which is adjacency and not overlap, on each axis in turn.
+    //
+    // This pair is what holds the rectangle check honest. Each layout overlaps
+    // fully on the axis it does not extend along, so a check that has dropped
+    // either axis — or closed the interval — reports one of them as a
+    // collision and fails here.
+    Config::parse(
+        "[[output.displays]]\nname = \"left\"\nsize = [1920, 1080]\n\
+         [[output.displays]]\nname = \"right\"\nposition = [1920, 0]\nsize = [1920, 1080]\n",
+    )
+    .expect("side-by-side displays should parse");
+    Config::parse(
+        "[[output.displays]]\nname = \"top\"\nsize = [1920, 1080]\n\
+         [[output.displays]]\nname = \"bottom\"\nposition = [0, 1080]\nsize = [1920, 1080]\n",
+    )
+    .expect("stacked displays should parse");
 }
