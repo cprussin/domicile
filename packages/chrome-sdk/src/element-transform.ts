@@ -3,9 +3,10 @@
 //
 // `getBoundingClientRect` reports the *axis-aligned* box of an element after
 // its transform, which is not where the element's own coordinate system starts
-// once it rotates or skews. Composing the element's CSS transform (applied
-// about its `transform-origin`) with that box recovers the real mapping, which
-// is what both `place_portal` and surface-local pointer coordinates need.
+// once it rotates or skews. Composing the transform's linear part with that box
+// recovers the real mapping, which is what both `place_portal` and
+// surface-local pointer coordinates need. `transform-origin` is not part of it
+// — see `elementToScreen` for why it cannot be.
 
 import type { Matrix, Point } from "./matrix";
 import { apply, multiply, translate } from "./matrix";
@@ -14,9 +15,7 @@ import { apply, multiply, translate } from "./matrix";
 export type ElementGeometry = {
   /** The element's untransformed border-box size, in CSS pixels. */
   size: Point;
-  /** `transform-origin`, in the element's untransformed local pixels. */
-  origin: Point;
-  /** The element's own computed CSS `transform`, expressed about `origin`. */
+  /** The element's own computed CSS `transform`, linear part only. */
   linear: Matrix;
   /** Where the transformed element's bounding box sits on screen. */
   box: { left: number; top: number };
@@ -27,22 +26,24 @@ export type ElementGeometry = {
  *
  * Local coordinates run from `(0, 0)` at the element's untransformed top-left
  * corner to `size`, exactly as CSS pixels inside the element do.
+ *
+ * `transform-origin` is not a parameter, because it cannot change the answer.
+ * CSS applies a transform about its origin, which is the conjugation
+ * `T(o) · L · T(-o)` — and conjugating by a translation leaves the linear part
+ * `L` untouched, moving only the result. This then anchors that result to
+ * where `getBoundingClientRect` says the box is, which subtracts exactly the
+ * offset the origin introduced. The two cancel algebraically, not
+ * approximately: every origin gives the same affine. Passing one in cost a
+ * `getComputedStyle` string parse per window per frame and bought nothing.
  */
 export const elementToScreen = ({
   size,
-  origin,
   linear,
   box,
 }: ElementGeometry): Matrix => {
-  const aboutOrigin = transformAboutOrigin(linear, origin);
-  const [left, top] = boundingCorner(aboutOrigin, size);
-  return multiply(translate(box.left - left, box.top - top), aboutOrigin);
+  const [left, top] = boundingCorner(linear, size);
+  return multiply(translate(box.left - left, box.top - top), linear);
 };
-
-// CSS applies `transform` about `transform-origin`, so the raw matrix has to be
-// conjugated by a translation to express it in the element's local coordinates.
-const transformAboutOrigin = (linear: Matrix, [x, y]: Point): Matrix =>
-  multiply(multiply(translate(x, y), linear), translate(-x, -y));
 
 // The top-left of the transformed element's axis-aligned bounding box, in the
 // same local-origin-relative space the transform produces. Subtracting it from

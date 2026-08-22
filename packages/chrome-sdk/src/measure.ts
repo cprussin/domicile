@@ -1,11 +1,10 @@
 // How the chrome reports an `<domicile-app>`'s on-screen box to the host.
 
 import { elementToScreen } from "./element-transform";
-import type { Matrix, Point } from "./matrix";
-import { IDENTITY } from "./matrix";
+import type { Matrix } from "./matrix";
+import { accumulate, IDENTITY } from "./matrix";
 import type { Shadow } from "./shadow";
 import { parseShadow, ShadowKind } from "./shadow";
-import { parseTransformOrigin } from "./transform-origin";
 import type { Unsupported } from "./unsupported";
 import { unsupportedEffects } from "./unsupported";
 
@@ -40,13 +39,33 @@ export type Measure = (element: HTMLElement) => Measurement;
 /**
  * Default DOM measurement: element-local size plus an element->screen affine.
  *
- * The affine composes the element's own CSS transform (about its
- * `transform-origin`) with where `getBoundingClientRect` puts the result, so a
- * rotated or scaled app maps correctly in both directions. An *ancestor* that
- * rotates or skews is still missed — `getBoundingClientRect` only reports an
- * axis-aligned box, so there is nothing left to recover it from. The engine
+ * The affine composes the CSS transforms between this element and the screen
+ * — its own and each ancestor's along the flat tree — with where
+ * `getBoundingClientRect` puts the result, so an app maps correctly in both
+ * directions through a page that rotated, scaled or skewed it. The engine
  * integration, which knows each layer's transform outright, replaces this when
  * running inside the compositor.
+ *
+ * What it does not follow, and what that costs:
+ *
+ * - A **3D or perspective** ancestor, in the cases where flattening is not
+ *   what the engine does. Only the 2D part of each ancestor's transform is
+ *   composed. That is the right answer when the ancestor flattens — the
+ *   default — and the wrong one under `transform-style: preserve-3d` or a
+ *   `perspective` above it, where the descendant is projected rather than
+ *   flattened. The window still reports `native: true` either way, because
+ *   `unsupportedEffects` reads only the element's *own* style, so nothing
+ *   sends the wrong case down the copy path where it would be drawn
+ *   correctly.
+ * - **`zoom`** on the element or any ancestor. It scales the box but is not a
+ *   transform, so the linear part misses it while `getBoundingClientRect`
+ *   already includes it — the two disagree by exactly the zoom factor.
+ * - Anything **between the flat tree and the paint order** that neither
+ *   `assignedSlot` nor the shadow host explains.
+ *
+ * A window painted in the **top layer** — an open `<dialog>` or popover — is
+ * handled rather than missed: the walk stops there, because its ancestors'
+ * transforms do not apply to it.
  */
 export const defaultMeasure: Measure = (element) => {
   const box = element.getBoundingClientRect();
@@ -68,16 +87,110 @@ export const defaultMeasure: Measure = (element) => {
     takesPointer: takesThePointer(style),
     transform: elementToScreen({
       box,
-      linear: readElementTransform(style),
-      // An uncomputed origin means a DOM implementation that resolves no
-      // style, where the CSS initial value (the element's centre) applies.
-      origin: parseTransformOrigin(style.transformOrigin) ?? centreOf(size),
+      linear: chainToScreen(element, style),
       size,
     }),
     visible: isVisible(style, size),
     zIndex: readZIndex(style),
   };
 };
+
+/**
+ * The linear part of everything between this element's own pixels and the
+ * screen: its transform, then each ancestor's, outermost last.
+ *
+ * An ancestor that rotates or skews used to be missed entirely, because
+ * `getBoundingClientRect` reports only an axis-aligned box and the element's
+ * own transform cannot explain a box that a *parent* turned. A window inside a
+ * rotated container therefore stayed square while the page around it turned.
+ *
+ * Only the linear part is accumulated, and that is the whole trick. Each
+ * transform applies about its own element's `transform-origin`, in its own
+ * element's coordinates — so composing them properly would need every layout
+ * offset in between. But conjugating by an origin is a *translation*, and a
+ * translation does not change a linear part; and `elementToScreen` does not
+ * need the translation, because it solves for the one that puts the
+ * transformed box's corner where `getBoundingClientRect` says it is. Two
+ * affines with the same linear part and the same bounding-box corner are the
+ * same affine, so the offsets in between cancel exactly.
+ *
+ * Element-first, each ancestor after it — the order `accumulate` composes, so
+ * an ancestor's transform applies to the result of everything inside it.
+ *
+ * This is a `getComputedStyle` and a `matches` per ancestor, on a path that
+ * runs per window per animation frame — and again per `pointermove`, through
+ * `activeMeasure`, which `placement-timing` does not count. So the reported
+ * placement cost is a floor rather than the whole of it, and a page deep
+ * enough for this to matter would show it as pointer latency rather than in
+ * that line. The alternative is a window that does not follow the page, which
+ * is not a trade.
+ */
+const chainToScreen = (
+  element: HTMLElement,
+  style: CSSStyleDeclaration,
+): Matrix => {
+  const chain = [readElementTransform(style)];
+  // Nothing above a top-layer element contributes, so the walk does not start.
+  if (!inTopLayer(element)) {
+    for (
+      let above = paintedInside(element);
+      above !== undefined;
+      above = paintedInside(above)
+    ) {
+      chain.push(readElementTransform(getComputedStyle(above)));
+      // Its own transform applies — the element is inside it — but its
+      // ancestors' do not, because it is painted outside them.
+      if (inTopLayer(above)) {
+        break;
+      }
+    }
+  }
+  return accumulate(chain);
+};
+
+/**
+ * What this element is painted inside, which is not always its parent element.
+ *
+ * `parentElement` is null at a shadow boundary and points at the *written*
+ * parent for slotted content, so both stop or mislead a walk that is asking
+ * where something ends up on screen. A `<domicile-app>` is a custom element,
+ * so a chrome that puts one in a shadow tree — or slots one — is not exotic.
+ */
+const paintedInside = (element: Element): HTMLElement | undefined => {
+  // Absent rather than null in some DOM implementations, so both are "no slot"
+  // — reading only one of them stopped the walk at the first element.
+  const slot: HTMLSlotElement | null | undefined = element.assignedSlot;
+  const parent: Node | null = element.parentNode;
+  if (slot !== null && slot !== undefined) {
+    // Slotted content is painted where the slot is, not where it is written.
+    return slot;
+  } else if (parent === null) {
+    return undefined;
+  } else if (parent instanceof ShadowRoot) {
+    // A shadow root is not an element, and what holds it is where its content
+    // is drawn.
+    return parent.host instanceof HTMLElement ? parent.host : undefined;
+  } else {
+    return parent instanceof HTMLElement ? parent : undefined;
+  }
+};
+
+/**
+ * Whether this element is painted in the top layer.
+ *
+ * A modal dialog or an open popover is painted outside its ancestors
+ * entirely — their transforms do not apply to it, and walking up as if they
+ * did puts the window somewhere the page never drew it. This was right by
+ * accident before the walk existed, and the walk is what breaks it.
+ *
+ * Asked as one selector list, and unguarded. An engine that has never heard of
+ * `:popover-open` throws on the whole list rather than on the half it does not
+ * know — so swallowing that would report every element as outside the top
+ * layer, silently restoring the misplacement this exists to prevent. Louder is
+ * better: an engine this cannot ask is one whose answers cannot be trusted.
+ */
+const inTopLayer = (element: Element): boolean =>
+  element.matches(":modal, :popover-open");
 
 /**
  * `border-radius` as one number of pixels.
@@ -322,8 +435,8 @@ const firstNonZero = (preferred: number, fallback: number): number =>
  * anywhere to notice it.
  *
  * CSS applies them in a fixed order — translate, then rotate, then scale, then
- * `transform` — all about the same `transform-origin`, which is why they can be
- * composed here and the origin left to `elementToScreen`.
+ * `transform` — all about the same origin, which is why their linear parts can
+ * be composed here at all.
  *
  * `translate` is deliberately absent. It is a pure translation, so it cannot
  * change the linear part, and the position it does contribute is already in the
@@ -457,8 +570,6 @@ const unreadable = (property: string, value: string | undefined): undefined => {
   reportUnreadable(property, value ?? "", "this window is drawn without it");
   return undefined;
 };
-
-const centreOf = ([width, height]: Point): Point => [width / 2, height / 2];
 
 // `z-index: auto` parses to NaN, which the host reads as the default layer.
 const readZIndex = (style: CSSStyleDeclaration): number => {
