@@ -27,3 +27,15 @@ else
   echo "  the matrix's column order, or the output's Y direction."
   exit 1
 fi
+
+echo
+echo "== reading an area back off the GPU =="
+if cargo test -p domicile-compositor -- --ignored dmabuf_import::readback; then
+  echo "PASS: a readback gives the rows it was asked for, packed tight"
+else
+  echo "FAIL: the readback is not the pixels the region names."
+  echo "  The region arithmetic is tested without a renderer; a failure here"
+  echo "  with those passing means the copy out of the framebuffer: the"
+  echo "  rectangle's origin, or the stride the mapping is packed at."
+  exit 1
+fi
