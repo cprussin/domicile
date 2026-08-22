@@ -11,6 +11,10 @@
 //! [`ConfigStore`]; the store is the single source of truth for the live
 //! configuration. All of this is pure logic and unit-tested.
 
+mod desktop;
+
+pub use desktop::{Desktop, Display};
+
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -198,9 +202,10 @@ pub struct InputConfig {
 /// `wl_output`, and a region of the one chrome page that spans the desktop;
 /// `name` is what the shell addresses that region by.
 ///
-/// `position` and `size` are logical units, in one desktop-wide coordinate
-/// space — `position` is where this display's top-left corner sits in it, which
-/// is what puts two displays side by side rather than on top of each other.
+/// `position` and `size` are logical units. `position` is where this display's
+/// top-left corner sits in the config's own space, which is what puts two
+/// displays side by side rather than on top of each other — see [`Desktop`]
+/// for the space that reaches the rest of Domicile.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DisplayConfig {
@@ -209,7 +214,13 @@ pub struct DisplayConfig {
     /// Matched exactly, in both directions, which is why a padded one is
     /// rejected rather than trimmed.
     pub name: String,
-    /// The top-left corner, in desktop coordinates.
+    /// The top-left corner, in the *config's* coordinate space.
+    ///
+    /// Wherever the user finds it natural to put it — negative included, since
+    /// "to the left of that one" is the obvious way to describe a second
+    /// monitor. Not the desktop's space, which [`Desktop`] normalises this
+    /// into and which is what the compositor advertises and the chrome is
+    /// told; these numbers do not leave this crate.
     #[serde(default)]
     pub position: (i32, i32),
     /// The `wl_output` scale to advertise for clients on this display.
@@ -270,6 +281,15 @@ impl DisplayConfig {
                 self.name
             )));
         }
+        if i64::from(width) > i64::from(i32::MAX) || i64::from(height) > i64::from(i32::MAX) {
+            return Err(ConfigError::Validation(format!(
+                "{at} size for {} is {width}x{height}, wider or taller than a \
+                 position on one desktop can reach: normalising puts this \
+                 display's near edge at zero, so its far edge has to be a \
+                 position",
+                self.name
+            )));
+        }
         let (_, right) = span(self.position.0, width);
         let (_, bottom) = span(self.position.1, height);
         if right > i64::from(i32::MAX) || bottom > i64::from(i32::MAX) {
@@ -283,7 +303,7 @@ impl DisplayConfig {
     }
 }
 
-/// One display's half-open extent along one axis, in desktop coordinates.
+/// One display's half-open extent along one axis, in the config's own space.
 ///
 /// Widened, because a display placed far out along an axis has an end that is
 /// not an `i32` — and rejecting that layout is [`DisplayConfig::validate`]'s
@@ -338,6 +358,24 @@ impl Default for OutputConfig {
 }
 
 impl OutputConfig {
+    /// The desktop these displays make up, placed about its own top-left.
+    ///
+    /// `None` when none are configured, which is not an empty desktop but the
+    /// absence of a described one — the case where the single output follows
+    /// whatever window Domicile itself was given.
+    ///
+    /// That `None` is what has to become both `compositor.nested_size` and the
+    /// wire's *empty* `displays` list, which `HostMessage::Displays` is
+    /// equally clear is an answer rather than an absence. Both are right for
+    /// their layer, and whoever writes the host side owes them one decision
+    /// rather than two.
+    ///
+    /// Rebuilt on each call, names and all. Fine for a list the config states
+    /// once; not something to put on a frame path.
+    pub fn desktop(&self) -> Option<Desktop> {
+        Desktop::of(&self.displays)
+    }
+
     fn validate(&self) -> Result<(), ConfigError> {
         if self.max_scale == 0 {
             return Err(ConfigError::Validation(
@@ -361,7 +399,79 @@ impl OutputConfig {
                 }
             }
         }
+        // Last, because it is the least specific thing that can be wrong with
+        // a layout: a single display whose own far corner does not fit is an
+        // error about *that display*, and running this first would answer it
+        // with "the displays span N across", which names nobody and is not
+        // even true of one.
+        self.validate_extent()
+    }
+
+    /// Whether the displays together span a desktop that is a coordinate space.
+    ///
+    /// Only ever two *different* displays: a lone one spans its own size,
+    /// which `DisplayConfig::validate` has already bounded, so the message
+    /// below can name a pair without ever naming one display twice.
+    ///
+    /// Each entry's own far corner fitting an `i32` is not enough: two that
+    /// each fit can still be four billion apart. The desktop is placed about
+    /// its own top-left corner, so a display's normalised position is the
+    /// distance between two of those corners — and `i32` is what a position
+    /// is. Checked here rather than left to `Desktop::of`, which does that
+    /// subtraction and would overflow doing it.
+    fn validate_extent(&self) -> Result<(), ConfigError> {
+        for axis in [Axis::Horizontal, Axis::Vertical] {
+            let furthest = self.displays.iter().max_by_key(|d| axis.reach(d));
+            let nearest = self.displays.iter().min_by_key(|d| axis.near(d));
+            let (Some(furthest), Some(nearest)) = (furthest, nearest) else {
+                continue;
+            };
+            let extent = axis.reach(furthest) - i64::from(axis.near(nearest));
+            if extent > i64::from(i32::MAX) {
+                return Err(ConfigError::Validation(format!(
+                    "output.displays span {extent} {axis}, from {} to {} — \
+                     further than a position on one desktop can describe",
+                    nearest.name, furthest.name
+                )));
+            }
+        }
         Ok(())
+    }
+}
+
+/// One axis of the desktop, so the extent check reads once rather than twice.
+#[derive(Debug, Clone, Copy)]
+enum Axis {
+    Horizontal,
+    Vertical,
+}
+
+impl Axis {
+    /// This display's near edge along the axis, in the config's own space.
+    fn near(self, display: &DisplayConfig) -> i32 {
+        match self {
+            Axis::Horizontal => display.position.0,
+            Axis::Vertical => display.position.1,
+        }
+    }
+
+    /// Its far edge, widened — the near edge fits an `i32` and the sum need
+    /// not, which is what makes this worth checking at all.
+    fn reach(self, display: &DisplayConfig) -> i64 {
+        let length = match self {
+            Axis::Horizontal => display.size.0,
+            Axis::Vertical => display.size.1,
+        };
+        i64::from(self.near(display)) + i64::from(length)
+    }
+}
+
+impl std::fmt::Display for Axis {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Axis::Horizontal => "across",
+            Axis::Vertical => "down",
+        })
     }
 }
 
