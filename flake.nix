@@ -105,6 +105,7 @@
           meta.description = "Run scripts/${script} with no checkout";
         })
         {
+          check = "check.sh";
           prototype = "run-prototype.sh";
           native = "run-native.sh";
           measure = "measure.sh";

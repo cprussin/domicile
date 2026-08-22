@@ -58,6 +58,11 @@ compositor_trouble() {
   # A compositor that is alive but not answering has blocked its event loop —
   # usually on the GPU — and a client waiting for a frame callback looks exactly
   # like a client that never drew. Binding a global proves the loop still turns.
+  elif ! command -v wayland-info >/dev/null 2>&1; then
+    # Without the tool there is no evidence either way, and the branch below
+    # would read `command not found` as a blocked event loop — accusing the
+    # compositor on the strength of a missing package.
+    echo "  (no wayland-info here, so whether it is still answering is unknown)"
   elif WAYLAND_DISPLAY=wayland-1 timeout 5 wayland-info >/dev/null 2>&1; then
     echo "  (the compositor is alive and still answering clients)"
   else
@@ -117,10 +122,14 @@ else
   exit 1
 fi
 
+# 77, not 0. A skip that exits 0 is indistinguishable from a check that ran
+# and passed — `scripts/check.sh` tallies it as `ok`, `DOMICILE_CHECK_STRICT`
+# cannot see it, and a green CI run reported nine suites as ten. 77 is
+# automake's convention for it and is what `check.sh` reads.
 if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
   echo "SKIP: no DRM render node, so no client can allocate a dmabuf here."
   echo "      Run this on a machine with a GPU to exercise the import itself."
-  exit 0
+  exit 77
 fi
 # Any client that renders through EGL allocates a dmabuf once the global is up.
 # `weston-simple-dmabuf-egl` is the most focused one, but nixpkgs builds weston
@@ -139,7 +148,7 @@ elif command -v kitty >/dev/null 2>&1; then
               sh -c 'while :; do date; sleep 0.2; done')
 else
   echo "SKIP: no GPU client on PATH (wanted weston-simple-dmabuf-egl or kitty)."
-  exit 0
+  exit 77
 fi
 echo "== driving ${GPU_CLIENT[0]} =="
 
