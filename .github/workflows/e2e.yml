@@ -111,4 +111,9 @@ jobs:
             printf '%-16s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
           done
 
-      - run: ./scripts/check.sh e2e
+      # `shell` alongside `e2e` because it is the group holding the tests of
+      # the harness itself — `xvfb_verdict`, which decides what this job says
+      # when a display never arrives. It needs no graphics stack and takes
+      # under a second, and this is the only job that invokes `check.sh` at
+      # all, so anywhere else it would be a check that never runs.
+      - run: ./scripts/check.sh shell e2e
