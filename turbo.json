@@ -76,7 +76,8 @@
       "dependsOn": ["//#build", "^prepare", "prepare"]
     },
     "test:unit": {
-      "dependsOn": ["//#build", "^prepare", "prepare"]
+      "dependsOn": ["//#build", "^prepare", "prepare"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/**"]
     }
   },
   "ui": "tui"

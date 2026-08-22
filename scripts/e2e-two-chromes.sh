@@ -12,6 +12,8 @@
 # all of them look the same when there is only one. This runs two.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/harness.sh
+. "$ROOT/scripts/lib/harness.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
 cargo build -p domicile-compositor >/dev/null 2>&1 || {
   echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
@@ -49,34 +51,43 @@ cat "$OUT"
 
 FIRST="$(sed -n 's/^first: //p' "$OUT")"
 SECOND="$(sed -n 's/^second: //p' "$OUT")"
-# Before the verdict, because both routes to an empty string look identical
-# here and only one of them is about focus: a probe that never printed its
-# lines at all — a missing dependency, a socket it could not open — would
-# otherwise be reported as a chrome that was told nothing, which is three
-# lines of confident prose about the wrong thing.
-if [ -z "$FIRST" ] || [ -z "$SECOND" ]; then
-  echo "ERROR: the probe printed no focus lines; see its output above."
-  echo "  That is this script's harness, not the compositor's delivery."
-  exit 99
-fi
 # Each has to end knowing the keyboard came back to the chrome, and each has to
 # have seen the window take it on the way. Trailing, not exact: a chrome
 # connecting is caught up with the current holder, so the leading entries differ
 # between the two by construction.
+DECIDED=0
 for who in first second; do
   case "$who" in
     first) told="$FIRST" ;;
     *) told="$SECOND" ;;
   esac
-  case "$told" in
-    *"app-1 chrome")
-      echo "OK: the $who chrome saw the window take the keyboard and give it back" ;;
-    *)
-      echo "FAIL: the $who chrome was told '$told'"
-      echo "  It has to end on 'app-1 chrome': the window took the keyboard and"
-      echo "  then gave it back. A chrome missing either move marks the wrong"
-      echo "  window active, and nothing will correct it."
-      exit 1 ;;
-  esac
+  # One decision per chrome, and every arm of it ends in a helper that exits or
+  # in the pass — an `if` chain rather than a `case`, so the premise can be the
+  # first arm rather than a guard above it. A guard is a placement: a bail that
+  # turned into a no-op would drop past it into the arm below and convict the
+  # compositor of a probe that printed nothing.
+  if ! after "$DECIDED"; then
+    harness_fault "$COMP" "the check before this one reached a verdict" \
+      "ERROR: a check before this one did not reach a verdict, so nothing" \
+      "  below it is a statement about the compositor."
+  elif [ -z "$told" ]; then
+    harness_fault "$COMP" "the probe printed a line for the $who chrome" \
+      "ERROR: nothing was read for the $who chrome; see its output above." \
+      "  Both routes to an empty string look alike here and only one is" \
+      "  about focus: a probe that never ran is not a chrome told nothing."
+  else
+    case "$told" in
+      *"app-1 chrome")
+        passed "the $who chrome saw the window take the keyboard and give it back" ;;
+      *)
+        compositor_verdict "$COMP" \
+          "FAIL: the $who chrome was told '$told'" \
+          "  It has to end on 'app-1 chrome': the window took the keyboard and" \
+          "  then gave it back. A chrome missing either move marks the wrong" \
+          "  window active, and nothing will correct it." ;;
+    esac
+  fi
+  DECIDED=$((DECIDED + 1))
 done
-echo "PASS: a focus change reaches every chrome, not just the one that caused it"
+
+every_check_ran 2

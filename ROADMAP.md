@@ -609,8 +609,11 @@ tracking, clipboard/data-device, touch and a security review all live here too.
   `ClientRequest::KeyboardFocus` moves before the brain is consulted at all. So
   the brain's `Scene::focus` never leaves the chrome and nothing notices.
   Fixing it widens what that check covers, which is its own change.
-- **One output.** The scene has a single `surface_to_output`; the desktop's size
-  follows Domicile's window, which is all a nested compositor can do.
+- **One scene output.** The compositor advertises a `wl_output` per configured
+  display, but the scene still has a single `surface_to_output`, so which
+  display a window is *on* is not yet a thing it can answer. With no
+  `[[output.displays]]` the desktop is Domicile's window, which is all a nested
+  compositor can do unaided.
 - **Fractional scaling.** Non-integer ratios round *up* to the next integer scale:
   a client drawing more pixels than the display has is downscaled and stays sharp,
   while one drawing fewer is stretched. Matching a ratio exactly needs

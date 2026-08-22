@@ -583,58 +583,36 @@ fn a_display_too_big_on_its_own_is_reported_as_itself() {
     // display whose own far corner does not fit is an error about that
     // display, and "the displays span N across" names nobody and is not even
     // true of one.
+    //
+    // Sized so the *mode* check lets it through — a billion at scale 1 is a
+    // representable mode — because that check runs first and would otherwise
+    // answer for this one, leaving the branch this test is named after
+    // reachable by nothing.
     let err = Config::parse(
-        "[[output.displays]]\nname = \"huge\"\nposition = [2000000000, 0]\nsize = [4000000000, 1080]\n",
-    )
-    .unwrap_err();
-    assert!(
-        format!("{err}").contains("output.displays[0]"),
-        "the message should name the display rather than the layout: {err}"
-    );
-}
-
-#[test]
-fn a_display_wider_than_a_position_can_reach_is_rejected_as_itself() {
-    // Its own far corner fits — placed far enough left, a display three
-    // billion wide still ends inside the space. What does not fit is the
-    // display: normalising puts its near edge at zero, so its far edge would
-    // have to be a position, and no position is three billion. That is a fact
-    // about one display rather than about the layout, and it has to be
-    // reported that way — the layout-wide message would otherwise say a
-    // display is that far from itself.
-    let err = Config::parse(
-        "[[output.displays]]\nname = \"wide\"\nposition = [-2000000000, 0]\nsize = [3000000000, 1080]\n",
+        "[[output.displays]]\nname = \"huge\"\nposition = [2000000000, 0]\nsize = [1000000000, 1080]\n",
     )
     .unwrap_err();
     let message = format!("{err}");
     assert!(
-        message.contains("output.displays[0]") && message.contains("wide"),
-        "the message should name the display, not the layout: {err}"
-    );
-    assert!(
-        !message.contains("wide and wide"),
-        "one display cannot be a distance from itself: {err}"
+        message.contains("output.displays[0]") && message.contains("far corner"),
+        "the message should name the display and its own far corner: {err}"
     );
 
-    // The other axis, which is the same bug: without it a display three
-    // billion tall walks back through to the layout check and is reported as
-    // a distance from itself, downwards.
+    // And with a second display, which is the only arrangement where the
+    // *order* of the two checks is observable: this layout spans too far and
+    // `far`'s own corner overflows, so whichever check runs first decides the
+    // message. Per-display first, because "from west to far across" is a fact
+    // about the pair and names `west`, which is not the one at fault.
     let err = Config::parse(
-        "[[output.displays]]\nname = \"tall\"\nposition = [0, -2000000000]\nsize = [1080, 3000000000]\n",
+        "[[output.displays]]\nname = \"west\"\nposition = [-2000000000, 0]\nsize = [1920, 1080]\n\
+         [[output.displays]]\nname = \"far\"\nposition = [2147483000, 0]\nsize = [1920, 1080]\n",
     )
     .unwrap_err();
     let message = format!("{err}");
     assert!(
-        message.contains("output.displays[0]") && !message.contains("tall and tall"),
-        "the message should name the display, not the layout: {err}"
+        message.contains("far corner") && message.contains("far's"),
+        "the display at fault should be named, not the pair: {err}"
     );
-
-    // And the boundary, because `>` is the right choice: a display exactly as
-    // wide as a position can reach normalises to a far edge that is one.
-    Config::parse(
-        "[[output.displays]]\nname = \"exact\"\nposition = [-2147483648, 0]\nsize = [2147483647, 1080]\n",
-    )
-    .expect("a display exactly as wide as a position can reach should parse");
 }
 
 #[test]
@@ -656,5 +634,159 @@ fn the_desktop_as_a_whole_must_fit_the_coordinate_space() {
     assert!(
         message.contains("from west to east") && message.contains("across"),
         "the message should name the outliers near-to-far, and the axis: {err}"
+    );
+}
+
+#[test]
+fn a_displays_mode_must_fit_the_coordinate_space() {
+    // The `wl_output` mode is physical pixels — the logical size times the
+    // scale — so a size and a scale that each fit on their own can still
+    // multiply past what a coordinate is. Rejected here rather than left to
+    // overflow where the mode is computed, which is arithmetic in the Smithay
+    // backend where nothing can test it.
+    //
+    // This is also what bounds the logical size on its own: the scale is at
+    // least 1, so a mode that fits means a size that fits, which is the
+    // invariant `Desktop` asserts when it normalises. There is no separate
+    // size check to test — it was unreachable, and every input that would
+    // have reached it arrives here instead.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"dense\"\nsize = [1920, 1080]\nscale = 2000000\n",
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, ConfigError::Validation(_)),
+        "an unrepresentable mode should fail validation, not parsing: {err:?}"
+    );
+    let message = format!("{err}");
+    assert!(
+        message.contains("output.displays[0]") && message.contains("dense"),
+        "the message should name the display: {err}"
+    );
+    // A display that does not fit is a fact about that display. The
+    // layout-wide message compares two displays near-to-far, and with only
+    // one of them it would say a display is that far from itself.
+    assert!(
+        !message.contains("dense and dense"),
+        "one display cannot be a distance from itself: {err}"
+    );
+
+    // The boundary, exactly: `>` is the right comparison and a `>=` would
+    // reject a legal desktop. `i32::MAX` is a Mersenne prime, so scale 1 is
+    // the only way to land on it — at scale 2 the nearest mode below is one
+    // short, which is why the earlier version of this case tested nothing.
+    Config::parse("[[output.displays]]\nname = \"exact\"\nsize = [2147483647, 1080]\n")
+        .expect("a mode exactly as wide as a coordinate should parse");
+    Config::parse("[[output.displays]]\nname = \"over\"\nsize = [2147483648, 1080]\n")
+        .expect_err("one pixel more than a coordinate should not");
+
+    // Each axis on its own, and each with the *other* axis comfortably inside
+    // the bound: a case that trips both halves at once cannot tell whether
+    // either is checked.
+    let err =
+        Config::parse("[[output.displays]]\nname = \"wide\"\nsize = [2147483647, 1]\nscale = 2\n")
+            .unwrap_err();
+    assert!(
+        format!("{err}").contains("wide"),
+        "the width half is checked with a height that fits: {err}"
+    );
+    let err =
+        Config::parse("[[output.displays]]\nname = \"tall\"\nsize = [1, 2147483647]\nscale = 2\n")
+            .unwrap_err();
+    assert!(
+        format!("{err}").contains("tall"),
+        "the height half is checked with a width that fits: {err}"
+    );
+
+    // The largest inputs the types allow. Written in `i64` this check panicked
+    // on them in debug, which `ConfigStore` cannot have.
+    //
+    // Asserted on the *message*, not merely on `Validation(_)`: this display's
+    // far corner is also off the coordinate space, so a version of the mode
+    // check that wrapped would still be rejected here — by that check, with
+    // that reason. Only naming the mode pins the mode check.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"huge\"\nsize = [4294967295, 4294967295]\nscale = 4294967295\n",
+    )
+    .unwrap_err();
+    let ConfigError::Validation(message) = &err else {
+        panic!("the biggest mode the types allow is rejected, not a panic or a wrap: {err:?}");
+    };
+    assert!(
+        message.contains("a mode of"),
+        "rejected for its mode rather than for its far corner: {message}"
+    );
+}
+
+#[test]
+fn the_nested_desktops_mode_must_fit_the_coordinate_space() {
+    // The same arithmetic on the other path. With no displays described, the
+    // desktop is `compositor.nested_size` and the scale climbs to
+    // `output.max_scale` — so those two multiply into a mode exactly as the
+    // described ones do, and the product has to be a coordinate.
+    let err = Config::parse(
+        "[compositor]\nnested_size = [2000000000, 800]\n\n[output]\nmax_scale = 10\n",
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, ConfigError::Validation(_)),
+        "an unrepresentable nested mode should fail validation: {err:?}"
+    );
+    let message = format!("{err}");
+    assert!(
+        message.contains("nested_size") && message.contains("max_scale"),
+        "the message should name both settings, since neither is wrong alone: {err}"
+    );
+
+    // Either alone is fine, which is why the check is on the product. The cap
+    // has to be stated: it defaults to 2, and this desktop does not fit twice.
+    Config::parse("[compositor]\nnested_size = [2000000000, 800]\n\n[output]\nmax_scale = 1\n")
+        .expect("a large desktop at scale 1 is representable");
+    Config::parse("[output]\nmax_scale = 10\n").expect("a high cap on a small desktop is fine");
+
+    // The boundary, exactly, and one past it.
+    Config::parse("[compositor]\nnested_size = [2147483647, 1]\n\n[output]\nmax_scale = 1\n")
+        .expect("a mode exactly as wide as a coordinate should parse");
+    Config::parse("[compositor]\nnested_size = [2147483648, 1]\n\n[output]\nmax_scale = 1\n")
+        .expect_err("one pixel more than a coordinate should not");
+
+    // Each axis with the other comfortably inside the bound, so neither case
+    // can pass on the strength of the half it is not about.
+    let err =
+        Config::parse("[compositor]\nnested_size = [2147483647, 1]\n\n[output]\nmax_scale = 2\n")
+            .unwrap_err();
+    assert!(
+        format!("{err}").contains("nested_size"),
+        "the width half is checked with a height that fits: {err}"
+    );
+    let err =
+        Config::parse("[compositor]\nnested_size = [1, 2147483647]\n\n[output]\nmax_scale = 2\n")
+            .unwrap_err();
+    assert!(
+        format!("{err}").contains("nested_size"),
+        "the height half is checked with a width that fits: {err}"
+    );
+
+    // Rejected even when displays are described, where neither setting is
+    // read: a config is checked for what it says, not for which of it this run
+    // happens to use, so adding a display must not quietly legalise a nested
+    // size that was rejected a moment ago. Scoping the check to the
+    // no-displays case passes every other test here.
+    Config::parse(
+        "[compositor]\nnested_size = [2000000000, 800]\n\n[output]\nmax_scale = 10\n\
+         [[output.displays]]\nname = \"only\"\nsize = [1920, 1080]\n",
+    )
+    .expect_err("an unrepresentable nested mode is rejected whatever else is configured");
+
+    // The largest inputs the types allow, which an `i64` product wrapped or
+    // panicked on. A panic here would also break `ConfigStore`'s guarantee
+    // that a bad config can never take the compositor down.
+    let err = Config::parse(
+        "[compositor]\nnested_size = [4294967295, 4294967295]\n\n[output]\nmax_scale = 4294967295\n",
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, ConfigError::Validation(_)),
+        "the biggest nested mode the types allow is rejected, not a panic or a wrap: {err:?}"
     );
 }

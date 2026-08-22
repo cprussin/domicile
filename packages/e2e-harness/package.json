@@ -3,7 +3,7 @@
     "@domicile/chrome-sdk": "workspace:*",
     "zod": "catalog:"
   },
-  "description": "Headless chrome stand-ins that drive the repo's end-to-end scripts.",
+  "description": "Headless chrome stand-ins that drive the repo's end-to-end scripts, and the check on those scripts' own machinery.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@types/bun": "catalog:",

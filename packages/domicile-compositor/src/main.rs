@@ -86,13 +86,14 @@ use smithay::{
     delegate_compositor, delegate_cursor_shape, delegate_data_device, delegate_dmabuf,
     delegate_output, delegate_seat, delegate_shm, delegate_xdg_shell,
 };
-use tracing::info;
+use tracing::{debug, info, warn};
 
 mod compose;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod outbound;
 mod scale;
+mod screens;
 mod shortcut;
 mod straight_alpha;
 mod timing_window;
@@ -102,6 +103,7 @@ use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::scale::{logical_size, output_scale};
+use crate::screens::Screens;
 use crate::shortcut::{Modifiers, Shortcuts};
 use crate::timing_window::TimingWindow;
 use domicile_bridge::BridgeRegistry;
@@ -115,6 +117,31 @@ use domicile_scene::{
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{Color32F, Frame as _, ImportMem as _, Renderer as _};
 use smithay::backend::winit::WinitGraphicsBackend;
+
+/// The log messages *this change's* scripts grep for, pinned to the scripts.
+///
+/// Each is the only trace some code path leaves, so a script asserts on the
+/// *spelling*. Renaming one in place leaves the script passing on the arms a
+/// clean run takes and lying on the arm it does not — a verdict against the
+/// compositor for a string that moved.
+///
+/// `the_grepped_log_messages_are_what_the_scripts_expect` reads the scripts
+/// themselves, so a rename here fails against the file that has to agree with
+/// it rather than against a second copy in this one, which would rename along
+/// with the first.
+///
+/// Three of at least nine: `e2e-chrome-layer.sh` and `e2e-dmabuf.sh` grep for
+/// `toplevel mapped`, `broadcast app frame`, `chrome client connected` and
+/// more, none of them named or pinned. Those predate this change; these three
+/// are the ones it introduced or newly depended on.
+mod grepped {
+    /// `e2e-two-displays.sh` phase 3: told a density it could not read.
+    pub const UNPARSEABLE: &str = "unparseable chrome message";
+    /// `e2e-two-displays.sh` phase 3: the guarded return in `set_output_scale`.
+    pub const DENSITY_REFUSED: &str = "a described desktop keeps its own scale";
+    /// `e2e-hidpi.sh`: the logical size it derives the expected mode from.
+    pub const ADVERTISING: &str = "advertising output scale";
+}
 
 /// The renderer client buffers are imported on, and the policy that chose it.
 ///
@@ -782,14 +809,6 @@ struct FrameReport {
     throttled: usize,
 }
 
-/// The virtual output's size in *logical* units — what a client that sizes
-/// itself to the screen gets, and what stays fixed as the scale changes.
-///
-/// A `wl_output` mode is in physical pixels, so the mode is this multiplied by
-/// the scale. Advertising a fixed mode instead would shrink the desktop every
-/// time the density went up, which a client feels as a smaller screen.
-const OUTPUT_LOGICAL_SIZE: (i32, i32) = (1280, 800);
-
 /// How often the writer thread reports. Long enough that the line is not noise,
 /// short enough to watch while typing.
 const REPORT_EVERY: Duration = Duration::from_secs(5);
@@ -1044,7 +1063,26 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
             // No catch-all: every message is named above, so a new one is a
             // compile error here rather than a silent trip to the brain that
             // skips whatever compositor-level effect it also wanted.
-            Err(_) => Vec::new(),
+            //
+            // A message that will not parse is dropped — there is nothing else
+            // to do with it, and a chrome one version out of step must not
+            // take the compositor down — but it is said out loud. Silently is
+            // how it was, and a chrome whose message the compositor could not
+            // read is indistinguishable from one that never sent it: the frame
+            // is logged above, before this, so the log shows the message
+            // arriving and nothing showing what became of it.
+            Err(err) => {
+                // The error names the field, which is what identifies the
+                // drift. The frame itself is *not* repeated here: it is
+                // already logged at debug a few lines up, and a `ChromeMessage`
+                // carries `Key`'s keycodes and `Spawn`'s argv — a chrome one
+                // version out of step is exactly when this fires, so at a level
+                // the default subscriber shows, that would put every forwarded
+                // keystroke in the log. It would also be one line per frame:
+                // `pointer_motion` drifting is 60 a second.
+                warn!(%err, "{}", grepped::UNPARSEABLE);
+                Vec::new()
+            }
         };
         // Whatever that message did, it may have moved the keyboard — a focus
         // message obviously, a placement less so, since hiding the focused
@@ -1083,9 +1121,15 @@ struct DomicileCompositor {
     /// Kept alive so the xdg-output manager global persists.
     #[allow(dead_code)]
     output_manager_state: OutputManagerState,
-    /// The single virtual output. Every app surface is on it — a client asks
-    /// which output it is on to learn its scale, and blocks until told.
-    output: Output,
+    /// Every advertised output, in the order [`Screens`] lists them.
+    ///
+    /// Every surface enters all of them, portal or no portal: a toolkit that
+    /// scales asks which output it is on and blocks until told, and "none" is
+    /// not an answer. Narrowing that to the outputs a window actually covers
+    /// is the placement item's, not this one's.
+    outputs: Vec<Output>,
+    /// What the outputs above are, and who gets to change them.
+    screens: Screens,
     /// Drag-and-drop and the clipboard.
     ///
     /// Advertised because a desktop without it is not one — but the reason it
@@ -1185,13 +1229,16 @@ struct DomicileCompositor {
     /// What the chrome's last frame looked like, so the line describing it is
     /// printed when it changes rather than sixty times a second.
     chrome_frame_shape: Option<((f64, f64), bool, bool)>,
-    /// The highest output scale to advertise, whatever a display reports.
+    /// The highest output scale to advertise, whatever the window's is.
+    ///
+    /// `adopt_window_scale`'s bound, and only its: the chrome's reported
+    /// density is bounded by [`ChromeHub::max_scale`], which is where the
+    /// chrome connections are. Applies only where nothing described a desktop
+    /// — a configured display states its own scale, and neither number is
+    /// weighed against it.
     max_scale: u32,
     /// The key combinations the chrome has claimed for the desktop.
     shortcuts: Shortcuts,
-    /// The desktop's size in logical units. Follows the window where there is
-    /// one; [`OUTPUT_LOGICAL_SIZE`] is what a headless run is stuck with.
-    output_logical: (i32, i32),
     /// Whether anything has changed since the last frame was drawn.
     ///
     /// Compositing does not happen where the change is noticed. Submitting a
@@ -1706,7 +1753,7 @@ impl DomicileCompositor {
         let size = backend.window_size();
         // The scene is in the chrome's logical units and the window is in
         // device pixels, and on a scaled display those are not the same number.
-        let to_window = logical_to_window(self.output_logical, (size.w, size.h));
+        let to_window = logical_to_window(self.screens.size(), (size.w, size.h));
         // A window on the copy path is drawn by the engine, into the canvas in
         // its own hole. Drawing it here as well would put the compositor's
         // picture over the engine's — two versions of the same window, the
@@ -1815,6 +1862,12 @@ impl DomicileCompositor {
     /// one — and the host compositor stretches the result over a denser screen.
     /// It does not look like the wrong scale, it looks like a blurry desktop.
     fn adopt_window_scale(&mut self, scale_factor: f64) {
+        // Only where nothing described the desktop. With displays configured
+        // it is a fact about the user's screens, so dragging Domicile's window
+        // shows more or less of it rather than resizing it.
+        if !self.screens.follows_the_window() {
+            return;
+        }
         let physical = self.window_size();
         let scale = output_scale(scale_factor, self.max_scale);
         // The desktop is the window: a client asking how big the screen is
@@ -1835,33 +1888,76 @@ impl DomicileCompositor {
     /// *we* gave the chrome, so believing it back would pin the scale at
     /// whatever it started as. The window's is the one that comes from outside.
     fn set_output_scale(&mut self, scale: i32) {
-        let logical = self.output_logical;
+        // As above: a described display states its own scale, and the chrome's
+        // reported density is not a thing to weigh against it.
+        if !self.screens.follows_the_window() {
+            // Logged because refusing is otherwise invisible: someone who
+            // sets a `devicePixelRatio` and sees nothing happen has no way to
+            // tell a config that overrode them from a message that never
+            // arrived. It is also the only trace this path leaves for a test,
+            // which cannot otherwise distinguish "the density was refused"
+            // from "no chrome ever spoke".
+            debug!(scale, "{}", grepped::DENSITY_REFUSED);
+            return;
+        }
+        let logical = self.screens.size();
         self.set_output(logical, scale);
     }
 
     /// Advertise the desktop's size and density together, because a mode is
     /// both and neither can be changed without restating the other.
+    ///
+    /// Only for a window-following desktop. Everything below assumes one
+    /// output, and on a described desktop it would rewrite `self.screens` to a
+    /// single `Advertised` while `self.outputs` kept the rest — a desktop and
+    /// its outputs disagreeing, with nothing to say so. The callers guard, and
+    /// this asserts it: the `expect`s further down only find the list
+    /// non-empty, which a described desktop is too.
     fn set_output(&mut self, logical: (i32, i32), scale: i32) {
-        if self.output_logical == logical && self.output.current_scale().integer_scale() == scale {
+        assert!(
+            self.screens.follows_the_window(),
+            "a described desktop is the config's, not this function's to replace"
+        );
+        // Both halves from `Screens`, which carries them together. Reading the
+        // scale off the Smithay `Output` instead would be one fact from two
+        // places, and it is what made this need a borrow it could not have.
+        let advertised = self
+            .screens
+            .outputs()
+            .next()
+            .expect("a window-following desktop advertises its one output");
+        if self.screens.size() == logical && advertised.scale == scale {
             return;
         }
         info!(
             width = logical.0,
             height = logical.1,
             scale,
-            "advertising output scale"
+            "{}",
+            grepped::ADVERTISING
         );
-        self.output_logical = logical;
+        self.screens = Screens::following_the_window(logical, scale);
         // The mode is physical pixels, so it grows with the scale to
         // hold the logical size still: a denser display is a sharper
-        // desktop, not a smaller one.
+        // desktop, not a smaller one. Read back off the *new* `Screens`, not
+        // the one the staleness check above looked at, which is the desktop
+        // this call is replacing.
         let mode = OutputMode {
-            size: (logical.0 * scale, logical.1 * scale).into(),
+            size: self
+                .screens
+                .outputs()
+                .next()
+                .expect("a window-following desktop advertises its one output")
+                .mode()
+                .into(),
             refresh: 60_000,
         };
-        self.output
-            .change_current_state(Some(mode), None, Some(Scale::Integer(scale)), None);
-        self.output.set_preferred(mode);
+        let output = self
+            .outputs
+            .first()
+            .expect("a window-following desktop advertises its one output");
+        output.change_current_state(Some(mode), None, Some(Scale::Integer(scale)), None);
+        output.set_preferred(mode);
         // A client only redraws at the new scale once something
         // asks it to, and its own size is unchanged — so re-send
         // the configure it already has to prompt one.
@@ -1990,7 +2086,7 @@ impl DomicileCompositor {
             InputEvent::PointerMotionAbsolute { event } => {
                 let window = self.window_size();
                 let position = event.position_transformed(window.into());
-                let logical = window_to_logical(self.output_logical, (window.0, window.1))
+                let logical = window_to_logical(self.screens.size(), (window.0, window.1))
                     .apply(ScenePoint::new(position.x, position.y));
                 let (focus, location) = self.pointer_target(logical, &surface);
                 let pointer = self.seat.get_pointer().unwrap();
@@ -2175,7 +2271,7 @@ impl DomicileCompositor {
                 let size = backend.window_size();
                 (size.w, size.h)
             })
-            .unwrap_or(self.output_logical)
+            .unwrap_or(self.screens.size())
     }
 
     /// Inject a forwarded input event into the appropriate client via the seat.
@@ -3657,12 +3753,14 @@ impl XdgShellHandler for DomicileCompositor {
         // <app> element for itself, inside itself.
         if is_chrome_surface(surface.wl_surface()) {
             info!("the chrome mapped its toplevel -> compositing it over the apps");
-            self.output.enter(surface.wl_surface());
+            for output in &self.outputs {
+                output.enter(surface.wl_surface());
+            }
             // It covers the desktop, because it *is* the desktop. A size it did
             // not ask for is exactly what a compositor gives a fullscreen
             // window, and the portals it reports back are in these units.
             surface.with_pending_state(|state| {
-                state.size = Some(self.output_logical.into());
+                state.size = Some(self.screens.size().into());
             });
             self.chrome_toplevel = Some(surface);
             self.focus_chrome();
@@ -3679,7 +3777,9 @@ impl XdgShellHandler for DomicileCompositor {
             // Tell the client which output it is on. Toolkits that scale their
             // content (GLFW, and so kitty) wait for this before drawing their
             // first frame, so without it the window maps and stays blank.
-            self.output.enter(surface.wl_surface());
+            for output in &self.outputs {
+                output.enter(surface.wl_surface());
+            }
             // The engine texture id is stable for the element's whole life, so
             // it is claimed here rather than on the app's first GPU frame.
             self.bridge.register(&app_id);
@@ -4113,30 +4213,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     seat.add_pointer();
 
-    // Advertise one virtual output. Many clients (e.g. weston-terminal) wait for
-    // a wl_output before they will map a toplevel.
+    // Advertise an output per described display, or the one that follows
+    // Domicile's own window where nothing described any. Many clients (e.g.
+    // weston-terminal) wait for a wl_output before they will map a toplevel,
+    // so this happens before there is a socket for anything to arrive on.
     let output_manager_state = OutputManagerState::new_with_xdg_output::<DomicileCompositor>(&dh);
-    let output = Output::new(
-        "domicile-0".to_string(),
-        PhysicalProperties {
-            size: (300, 200).into(),
-            subpixel: Subpixel::Unknown,
-            make: "Domicile".into(),
-            model: "Virtual".into(),
-        },
-    );
-    output.create_global::<DomicileCompositor>(&dh);
-    let mode = OutputMode {
-        size: OUTPUT_LOGICAL_SIZE.into(),
-        refresh: 60_000,
+    let screens = match config.output.desktop() {
+        Some(desktop) => Screens::described(&desktop),
+        None => Screens::nested(config.compositor.nested_size),
     };
-    output.change_current_state(
-        Some(mode),
-        Some(Transform::Normal),
-        None,
-        Some((0, 0).into()),
-    );
-    output.set_preferred(mode);
+    let outputs: Vec<Output> = screens
+        .outputs()
+        .map(|advertised| {
+            let output = Output::new(
+                advertised.name.clone(),
+                PhysicalProperties {
+                    // Fiction, and knowingly the same fiction on every
+                    // display: nothing tells a nested compositor how many
+                    // millimetres a described screen is. A client computing
+                    // DPI from it gets a wrong answer — now a differently
+                    // wrong one per display, since they no longer share a
+                    // size. Whatever fixes that wants a real number in the
+                    // config, which nothing has asked for.
+                    size: (300, 200).into(),
+                    subpixel: Subpixel::Unknown,
+                    make: "Domicile".into(),
+                    model: "Virtual".into(),
+                },
+            );
+            output.create_global::<DomicileCompositor>(&dh);
+            let mode = OutputMode {
+                size: advertised.mode().into(),
+                refresh: 60_000,
+            };
+            output.change_current_state(
+                Some(mode),
+                Some(Transform::Normal),
+                Some(Scale::Integer(advertised.scale)),
+                Some(advertised.position.into()),
+            );
+            output.set_preferred(mode);
+            output
+        })
+        .collect();
 
     // Bind the Wayland socket before anything can ask us to put a client on
     // it. A chrome that connects the moment its own socket appears may send a
@@ -4247,7 +4366,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         data_device_state,
         seat,
         output_manager_state,
-        output,
+        outputs,
         // Modern toolkits ask for cursors by name through this global, which
         // maps straight onto CSS cursor keywords.
         cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
@@ -4270,7 +4389,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_texture: None,
         chrome_frame_shape: None,
         max_scale: config.output.max_scale,
-        output_logical: OUTPUT_LOGICAL_SIZE,
+        screens,
         shortcuts: Shortcuts::default(),
         needs_present: false,
         window_input_seen: HashSet::new(),
@@ -4392,6 +4511,60 @@ mod tests {
 
     use domicile_protocol::{ChromeMessage, HostMessage};
     use domicile_scene::{Portal, Scene, Style as SceneStyle, Transform as SceneTransform};
+
+    /// Each grepped message, against the exact pattern its script greps for.
+    ///
+    /// The scripts are the other half of the contract, so they are what this
+    /// reads. A test that spelled the strings out again would live in the same
+    /// file as the constants and rename along with them, which is the whole
+    /// failure it exists to catch.
+    ///
+    /// A row per *pair*, not per constant: `UNPARSEABLE` is grepped by two
+    /// scripts, and a table keyed on the constant alone left the second pair
+    /// unpinned — renaming it in `e2e-hidpi.sh` stayed green.
+    ///
+    /// The pattern is *built from* the constant rather than searched for in
+    /// the file, because both weaker forms let a rename through. Spelling the
+    /// strings again missed a one-file `sed`; `script.contains(message)` missed
+    /// a constant *shortened* to a prefix, which changes what is logged while
+    /// the script goes on grepping for the whole of the old text. Building the
+    /// pattern means any edit to the constant that the script does not match
+    /// leaves nothing for this to find.
+    #[test]
+    fn the_grepped_log_messages_are_what_the_scripts_expect() {
+        for (pattern, script, name) in [
+            (
+                crate::grepped::UNPARSEABLE.to_string(),
+                include_str!("../../../scripts/e2e-two-displays.sh"),
+                "e2e-two-displays.sh",
+            ),
+            (
+                crate::grepped::UNPARSEABLE.to_string(),
+                include_str!("../../../scripts/e2e-hidpi.sh"),
+                "e2e-hidpi.sh",
+            ),
+            (
+                crate::grepped::DENSITY_REFUSED.to_string(),
+                include_str!("../../../scripts/e2e-two-displays.sh"),
+                "e2e-two-displays.sh",
+            ),
+            (
+                // The one whose script reads fields off the line as well, so
+                // the tail is part of what has to agree.
+                format!(
+                    "{} width=[0-9]+ height=[0-9]+ scale=[0-9]+",
+                    crate::grepped::ADVERTISING
+                ),
+                include_str!("../../../scripts/e2e-hidpi.sh"),
+                "e2e-hidpi.sh",
+            ),
+        ] {
+            assert!(
+                script.contains(&format!("\"{pattern}\"")),
+                "{name} greps for no such pattern as {pattern:?}; renaming the constant here left the script asserting on the old spelling"
+            );
+        }
+    }
 
     /// A frame committed one millisecond after the last one, so only the path
     /// decides whether it is drawn, sent or dropped.
