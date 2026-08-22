@@ -13,27 +13,52 @@ import { defaultMeasure } from "./measure";
 import type { ObservePlacement } from "./observe-placement";
 import { defaultObservePlacement } from "./observe-placement";
 
-let bridge: BridgeClient | undefined;
-let measure: Measure = defaultMeasure;
-let observePlacement: ObservePlacement = defaultObservePlacement;
+/**
+ * What the SDK was bound with, as one cell that outlives the binding.
+ *
+ * Handed to whatever `registerElements` installs, rather than read back per
+ * call: the document-level input listeners exist only because a bind created
+ * them, so for them there is no unbound case to represent — and a bridge that
+ * cannot be `undefined` is a release that cannot be silently dropped.
+ *
+ * Mutable, and the same object across binds, because those listeners are
+ * installed once and a rebind has to reach them.
+ */
+export type ElementContext = {
+  bridge: BridgeClient;
+  measure: Measure;
+  observePlacement: ObservePlacement;
+};
+
+let context: ElementContext | undefined;
 let focusedAppId: string | undefined;
 
 export const bindElementContext = (
-  nextBridge: BridgeClient,
-  nextMeasure: Measure = defaultMeasure,
-  nextObservePlacement: ObservePlacement = defaultObservePlacement,
-): void => {
-  bridge = nextBridge;
-  measure = nextMeasure;
-  observePlacement = nextObservePlacement;
+  bridge: BridgeClient,
+  measure: Measure = defaultMeasure,
+  observePlacement: ObservePlacement = defaultObservePlacement,
+): ElementContext => {
+  const bound = context ?? { bridge, measure, observePlacement };
+  bound.bridge = bridge;
+  bound.measure = measure;
+  bound.observePlacement = observePlacement;
+  context = bound;
+  return bound;
 };
 
-/** The bound bridge, or `undefined` before `registerElements` has run. */
-export const activeBridge = (): BridgeClient | undefined => bridge;
+/**
+ * The bound bridge, or `undefined` before `registerElements` has run.
+ *
+ * For the element classes, which the DOM constructs and which therefore cannot
+ * be handed a context. Anything `registerElements` installs itself takes the
+ * `ElementContext` instead.
+ */
+export const activeBridge = (): BridgeClient | undefined => context?.bridge;
 
-export const activeMeasure = (): Measure => measure;
+export const activeMeasure = (): Measure => context?.measure ?? defaultMeasure;
 
-export const activeObservePlacement = (): ObservePlacement => observePlacement;
+export const activeObservePlacement = (): ObservePlacement =>
+  context?.observePlacement ?? defaultObservePlacement;
 
 /**
  * The app currently receiving keyboard input. Keyboard events are delivered to

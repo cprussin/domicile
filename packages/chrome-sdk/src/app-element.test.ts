@@ -866,6 +866,11 @@ describe("<domicile-app>", () => {
       new KeyboardEvent("keydown", { bubbles: true, code: "KeyA" }),
     );
     expect(bridge.calls).toContainEqual(["key", "term", 30, true]);
+    // Released, because a key left down is left down for the whole suite: the
+    // page holds it until its release, which is the point of the tests below.
+    document.dispatchEvent(
+      new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
+    );
   });
 
   it("ignores the browser's auto-repeat while a key is held", () => {
@@ -899,6 +904,114 @@ describe("<domicile-app>", () => {
       ["key", "term", 30, true],
       ["key", "term", 30, false],
     ]);
+  });
+
+  it("releases a key wherever the keyboard went between its press and its release", () => {
+    // The compositor's xkb state outlives every window, and it only unlocks a
+    // lock key on the release of the press it saw lock it. Under
+    // `caps:swapescape` the physical Escape key *is* Caps_Lock (evdev 1), so a
+    // press forwarded without its release latches capitals into every Wayland
+    // client there will ever be — no later press of that key can clear it,
+    // while the page's own webviews, which never touch that state, keep
+    // typing normally.
+    const element = mountApp("term");
+    element.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
+    );
+    bridge.calls.length = 0;
+
+    // The keyboard goes back to the chrome while the key is still down.
+    document.body.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    document.dispatchEvent(
+      new KeyboardEvent("keyup", { bubbles: true, code: "Escape" }),
+    );
+
+    expect(bridge.calls).toContainEqual(["key", "term", 1, false]);
+  });
+
+  it("releases what it is holding when the page loses the keyboard", () => {
+    // A window the user alt-tabs away from is never told the key came up, so
+    // the release has to be sent on the way out. Otherwise the key is held
+    // down in the compositor for as long as the desktop runs.
+    const element = mountApp("term");
+    element.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
+    );
+    bridge.calls.length = 0;
+
+    globalThis.window.dispatchEvent(new Event("blur"));
+
+    expect(bridge.calls).toEqual([["key", "term", 1, false]]);
+  });
+
+  it("releases onto the bridge that is connected now", () => {
+    // The release is for the compositor's sake — its seat is what holds the
+    // key down — so it belongs on the connection to that compositor, not on
+    // whichever bridge object happened to be bound when the key went down.
+    const element = mountApp("term");
+    element.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
+    );
+    const rebound = new FakeBridge();
+    registerElements(rebound as unknown as BridgeClient, {
+      measure: stubMeasure,
+      observePlacement: frames.observe,
+    });
+    bridge.calls.length = 0;
+
+    document.dispatchEvent(
+      new KeyboardEvent("keyup", { bubbles: true, code: "Escape" }),
+    );
+
+    expect(rebound.calls).toEqual([["key", "term", 1, false]]);
+    expect(bridge.calls).toEqual([]);
+  });
+
+  it("releases what it is holding when the page goes away", () => {
+    // A reload never delivers the keyup, and blur is not what fires when the
+    // page is navigated away from.
+    const element = mountApp("term");
+    element.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
+    );
+    bridge.calls.length = 0;
+
+    globalThis.window.dispatchEvent(new Event("pagehide"));
+
+    expect(bridge.calls).toEqual([["key", "term", 1, false]]);
+  });
+
+  it("does not release a key it never forwarded a press for", () => {
+    // Pressed while the chrome had the keyboard: the client never saw the key
+    // go down, and a release for it is a key event that never happened.
+    const element = mountApp("term");
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
+    );
+    element.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    bridge.calls.length = 0;
+
+    document.dispatchEvent(
+      new KeyboardEvent("keyup", { bubbles: true, code: "Escape" }),
+    );
+
+    expect(bridge.calls).toEqual([]);
   });
 
   it("clicking off every app returns keyboard focus to the chrome", () => {
