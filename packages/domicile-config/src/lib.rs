@@ -114,6 +114,10 @@ impl Default for ShellConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct CompositorConfig {
     /// Size of the nested output used by the `winit` dev backend (width, height).
+    ///
+    /// Will be used only while [`OutputConfig::displays`] is empty: once the
+    /// desktop is described, its bounding box is what the nested window is
+    /// sized to. Nothing reads `displays` yet, so today it is used either way.
     pub nested_size: (u32, u32),
 }
 
@@ -187,10 +191,124 @@ pub struct InputConfig {
     pub keyboard: KeyboardConfig,
 }
 
+/// One display, described in the config rather than discovered.
+///
+/// A nested compositor has no monitors to enumerate and no DRM to ask, so the
+/// desktop's shape is whatever the config says it is. Each display becomes a
+/// `wl_output`, and a region of the one chrome page that spans the desktop;
+/// `name` is what the shell addresses that region by.
+///
+/// `position` and `size` are logical units, in one desktop-wide coordinate
+/// space — `position` is where this display's top-left corner sits in it, which
+/// is what puts two displays side by side rather than on top of each other.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DisplayConfig {
+    /// How the chrome and the compositor name this display to each other.
+    ///
+    /// Matched exactly, in both directions, which is why a padded one is
+    /// rejected rather than trimmed.
+    pub name: String,
+    /// The top-left corner, in desktop coordinates.
+    #[serde(default)]
+    pub position: (i32, i32),
+    /// The `wl_output` scale to advertise for clients on this display.
+    ///
+    /// Stated outright rather than capped: [`OutputConfig::max_scale`] governs
+    /// the display Domicile's own window landed on, which a described display
+    /// is not.
+    #[serde(default = "one")]
+    pub scale: u32,
+    /// Width and height in logical units.
+    ///
+    /// Logical, so a `wl_output` mode — which is physical pixels — is this
+    /// multiplied by `scale`.
+    pub size: (u32, u32),
+}
+
+fn one() -> u32 {
+    1
+}
+
+impl DisplayConfig {
+    /// Whether this display and `other` cover any of the same ground.
+    ///
+    /// Both axes, because a rectangle that overlaps along only one of them is
+    /// the display next to it rather than the display on top of it.
+    fn overlaps(&self, other: &DisplayConfig) -> bool {
+        overlap(
+            span(self.position.0, self.size.0),
+            span(other.position.0, other.size.0),
+        ) && overlap(
+            span(self.position.1, self.size.1),
+            span(other.position.1, other.size.1),
+        )
+    }
+
+    fn validate(&self, index: usize) -> Result<(), ConfigError> {
+        let at = format!("output.displays[{index}]");
+        if self.name.trim().is_empty() {
+            return Err(ConfigError::Validation(format!("{at} must have a name")));
+        }
+        if self.name.trim() != self.name {
+            return Err(ConfigError::Validation(format!(
+                "{at} name {:?} is padded with whitespace; \
+                 the name is matched exactly, so the padding would have to be typed everywhere",
+                self.name
+            )));
+        }
+        let (width, height) = self.size;
+        if width == 0 || height == 0 {
+            return Err(ConfigError::Validation(format!(
+                "{at} size for {} must be non-zero, got {width}x{height}",
+                self.name
+            )));
+        }
+        if self.scale == 0 {
+            return Err(ConfigError::Validation(format!(
+                "{at} scale for {} must be at least 1",
+                self.name
+            )));
+        }
+        let (_, right) = span(self.position.0, width);
+        let (_, bottom) = span(self.position.1, height);
+        if right > i64::from(i32::MAX) || bottom > i64::from(i32::MAX) {
+            return Err(ConfigError::Validation(format!(
+                "{at} puts {}'s far corner at ({right}, {bottom}), off the edge of the \
+                 coordinate space the desktop is measured in",
+                self.name
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// One display's half-open extent along one axis, in desktop coordinates.
+///
+/// Widened, because a display placed far out along an axis has an end that is
+/// not an `i32` — and rejecting that layout is [`DisplayConfig::validate`]'s
+/// job rather than something wrapping arithmetic decides silently here.
+fn span(start: i32, length: u32) -> (i64, i64) {
+    (i64::from(start), i64::from(start) + i64::from(length))
+}
+
+/// Whether two half-open spans of one axis intersect.
+///
+/// Half-open, so spans that share an endpoint — the ordinary side-by-side or
+/// stacked desktop — are adjacent rather than overlapping.
+fn overlap((start, end): (i64, i64), (other_start, other_end): (i64, i64)) -> bool {
+    start < other_end && other_start < end
+}
+
 /// Output settings.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct OutputConfig {
+    /// The displays that make up the desktop.
+    ///
+    /// Empty means the one output a nested compositor can manage without being
+    /// told: sized by whatever window Domicile itself was given.
+    pub displays: Vec<DisplayConfig>,
     /// The highest `wl_output` scale to advertise, whatever the chrome's
     /// display actually is.
     ///
@@ -199,6 +317,11 @@ pub struct OutputConfig {
     /// the GPU, written down a socket and copied across the Electron process
     /// boundary — so sharpness is bought with latency, in the square. `1`
     /// turns scaling off entirely and restores the old behaviour.
+    ///
+    /// Governs the single output that follows Domicile's own window, so it
+    /// will apply only while [`displays`](OutputConfig::displays) is empty: a
+    /// described display states its own `scale` and has no ratio to cap.
+    /// Nothing reads `displays` yet, so today it applies either way.
     pub max_scale: u32,
 }
 
@@ -207,7 +330,10 @@ impl Default for OutputConfig {
         // 2 covers the ordinary retina laptop, which is the display that makes
         // unscaled text look wrong; past that the frame gets expensive faster
         // than it gets better.
-        OutputConfig { max_scale: 2 }
+        OutputConfig {
+            displays: Vec::new(),
+            max_scale: 2,
+        }
     }
 }
 
@@ -217,6 +343,23 @@ impl OutputConfig {
             return Err(ConfigError::Validation(
                 "output.max_scale must be at least 1".into(),
             ));
+        }
+        for (index, display) in self.displays.iter().enumerate() {
+            display.validate(index)?;
+            for earlier in &self.displays[..index] {
+                if earlier.name == display.name {
+                    return Err(ConfigError::Validation(format!(
+                        "two output.displays are both named {}",
+                        display.name
+                    )));
+                }
+                if earlier.overlaps(display) {
+                    return Err(ConfigError::Validation(format!(
+                        "output.displays {} and {} cover the same ground",
+                        earlier.name, display.name
+                    )));
+                }
+            }
         }
         Ok(())
     }
