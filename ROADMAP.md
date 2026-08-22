@@ -607,10 +607,24 @@ tracking, clipboard/data-device, touch and a security review all live here too.
   a client drawing more pixels than the display has is downscaled and stays sharp,
   while one drawing fewer is stretched. Matching a ratio exactly needs
   `wp_fractional_scale_v1`, which is a separate protocol and not done.
-- **The full transform chain.** An *ancestor* element that rotates or skews is
-  missed on the copy path — `getBoundingClientRect` gives only an axis-aligned
-  box. The native path does not have this problem, because the matrix the chrome
-  reports is the one the compositor draws through.
+- **3D transforms above a window.** `defaultMeasure` walks the flat tree and
+  composes every 2D transform between an element and the screen, so a rotated or
+  skewed *ancestor* is followed. Only the 2D part of a `matrix3d` above one
+  survives — which is what the engine draws where that ancestor flattens, the
+  default, and is not where `transform-style: preserve-3d` or a `perspective`
+  above it projects the descendant instead. `unsupportedEffects` reads the
+  element's own style, so the wrong case still claims it can be drawn natively.
+  Closing that is now cheap rather than impossible — the walk already holds
+  each ancestor's computed style — but it is the same decision as reporting an
+  ancestor's `filter`, which would take every window inside a filtered
+  container off the native path.
+- **`zoom`, on a window or above it.** It scales the box but is not a
+  transform, so nothing composes it. The element's own `zoom: 2` is reported as
+  no scale at all *and* at half the size the page paints, so the compositor is
+  told two wrong things about one window. An ancestor's is worse than a scale
+  error: the anchoring subtracts an un-zoomed bounding corner from a zoomed
+  rect, so the window is mispositioned too — 40px out for `zoom: 2` over a
+  `rotate(30deg)`.
 - **Hot-swapping the chrome package** needs the daemon to own that process, which
   it does not; the config watcher half is wired.
 

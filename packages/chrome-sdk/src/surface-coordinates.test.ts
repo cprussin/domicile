@@ -25,7 +25,6 @@ describe("surfaceLocal", () => {
     const matrix = elementToScreen({
       box: { left: 10, top: 20 },
       linear: rotate(Math.PI / 2),
-      origin: [50, 25],
       size: [100, 50],
     });
     const local = surfaceLocal(matrix, [100, 50], [100, 50], [60, 20]);

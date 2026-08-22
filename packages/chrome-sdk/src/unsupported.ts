@@ -46,8 +46,15 @@ export type Unsupported = {
  * deal from an element's own computed style: an ancestor's `filter`, an
  * ancestor's `opacity`, an `overflow: hidden` clip on a parent, and chrome
  * stacked between two windows are all dropped by the compositor and none of
- * them is visible here. Finding an ancestor's would mean walking the tree on
- * every measurement, which is a different and more expensive piece of work.
+ * them is visible here.
+ *
+ * Finding an ancestor's is no longer expensive — `defaultMeasure` walks the
+ * flat tree and already holds each ancestor's computed style — but it is a
+ * different question rather than a longer version of this one. Reporting an
+ * ancestor's `filter` would take every window inside a filtered container off
+ * the native path, which is a decision about a great many more windows than
+ * any of these, and one nothing has measured. The gap is recorded in ROADMAP
+ * rather than closed here.
  *
  * Two kinds of thing are named. Effects the shader has no equivalent for at
  * all — a filter, a clip path — and effects it implements only in part, where
