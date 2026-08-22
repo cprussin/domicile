@@ -32,7 +32,7 @@ compositor is headless, reads each client's frame back off the GPU, and sends
 the pixels to the chrome over a Unix socket to be drawn into a `<canvas>`.
 Correct everywhere, and four full-frame copies per frame.
 
-The wire protocol is at `PROTOCOL_VERSION = 13`.
+The wire protocol is at `PROTOCOL_VERSION = 14`.
 
 Run the suites for their counts rather than reading one here. A number written
 down goes stale on the next commit that adds a test, and this one went stale
@@ -66,6 +66,11 @@ cargo test -p domicile-compositor
 ./scripts/e2e-hidpi.sh           # a 2x chrome makes a client draw at 2x, and the frame says so
 ./scripts/e2e-chrome-layer.sh    # the chrome is told from the apps, and keeps the keyboard
 ./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel
+./scripts/e2e-close.sh           # a close request reaches the client, and the window leaves when it goes
+./scripts/e2e-no-compositor.sh   # the daemon serves the protocol with no compositor behind it
+./scripts/e2e-two-displays.sh    # one wl_output per configured display, at its own size and scale
+./scripts/e2e-displays-on-hello.sh # a chrome is told the desktop at the handshake
+./scripts/e2e-desktop-changed.sh # a desktop that changes is re-described to every chrome
 ./scripts/probe-transparency.sh  # the engine, as our client, commits real alpha
 
 # Needs a real display — run on the user's machine.

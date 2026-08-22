@@ -19,10 +19,11 @@ const DisplayContext = createContext<
  * Holds the desktop the host described, for the `<Screen>`s below.
  *
  * One provider per page, mounted around the shell's root. The host describes
- * the desktop once per connection, so this reads what the source has already
- * been told as well as registering for what it is told next — a provider that
- * only listened would miss the description whenever it mounted after the
- * handshake, which is the usual order.
+ * the desktop on connecting and again whenever it changes, latest wins — so
+ * this reads what the source has already been told as well as registering for
+ * what it says next. A provider that only listened would render an empty
+ * desktop from mounting until the next change, which on a desktop nobody is
+ * resizing is for good.
  *
  * `source` is read on mount and re-read whenever its identity changes: it is
  * the connection, and a new one is a new desktop, which may already have been

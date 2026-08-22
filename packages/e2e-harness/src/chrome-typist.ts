@@ -16,6 +16,7 @@
 // page hearing about it — which is inside what `rt_ms` claims to measure.
 
 import { z } from "zod";
+import { rest } from "./waiting";
 
 /** evdev `a`, and the DOM code the SDK maps it from. A printable character. */
 const KEY_A = { code: "KeyA", key: "a", windowsVirtualKeyCode: 65 };
@@ -101,9 +102,6 @@ const attach = async (port: number): Promise<Cdp> => {
     },
   };
 };
-
-const rest = (ms: number): Promise<void> =>
-  new Promise((done) => setTimeout(done, ms));
 
 /**
  * Click the window before typing at it.

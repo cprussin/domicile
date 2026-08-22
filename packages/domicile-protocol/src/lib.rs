@@ -9,6 +9,24 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v14 is the same shape as v13 and a different promise: the host answers
+/// every `hello` with `displays`, and re-sends it whenever the desktop
+/// changes. v12 added the message and nothing sent it; a v13 host is still one
+/// that may never describe a desktop at all.
+///
+/// A bump although no message changed. What separates a host that keeps this
+/// promise from one that does not is host behaviour with no message of its
+/// own, so it reaches the chrome only as silence: it waits for a `displays`
+/// that is not coming, and nothing anywhere says why. `negotiate` matching
+/// exactly is what lets the version carry that difference — turning the
+/// silence into a chrome that refuses to start and says so, which is the
+/// difference between a shell laying out `<Screen>`s against a host that has
+/// not described the desktop *yet* and one that never will.
+///
+/// This entry argues only its own bump. Earlier attempts to justify it from
+/// what some set of other bumps had in common were each false about an entry
+/// below, and no property other bumps share is what justifies this one.
+///
 /// v13 added `close_app`: the chrome can ask a client to close its window, so
 /// a native window's tab gets the same X button a chrome's own window has.
 ///
@@ -28,9 +46,8 @@ use serde::{Deserialize, Serialize};
 /// chrome as silence — and a chrome that never hears `displays` cannot tell a
 /// single-display desktop from a host too old to describe one.
 ///
-/// That last ambiguity is what the bump *will* remove rather than what it
-/// removes today: nothing sends `displays` yet, so at v12 a chrome still hears
-/// silence. The guarantee arrives with the host side.
+/// The bump made room for the message; it did not make the promise. No v12 or
+/// v13 host ever answered `hello` with `displays` — that is v14.
 ///
 /// v11 added `focus_changed`: the chrome is told who holds the keyboard, which
 /// it could not work out for itself once a click or a closing window moved
@@ -109,7 +126,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 13;
+pub const PROTOCOL_VERSION: u32 = 14;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -374,11 +391,24 @@ pub enum HostMessage {
     ///
     /// The chrome is a single page spanning every display, and a display is a
     /// region of that page — so this is what tells it where those regions are.
-    /// Sent once per connection, after `welcome`.
     ///
-    /// Empty is an answer rather than an absence: it is the desktop that
-    /// follows Domicile's own window, which is all a nested compositor can
-    /// manage without being told otherwise.
+    /// Answered to `hello`, after `welcome`, and sent again whenever the
+    /// desktop changes: with no displays configured it is Domicile's own
+    /// window, so resizing that window or changing its density re-describes it.
+    ///
+    /// Latest wins, and that is the only ordering guaranteed. A change
+    /// broadcast goes out to every connection, including one accepted but not
+    /// yet welcomed, so it can arrive before the `welcome` that a handshake
+    /// answer follows — a chrome that reads this before agreeing a version is
+    /// reading a desktop it will be told again.
+    ///
+    /// Empty is a desktop of no screens. The *compositor* never sends it: it
+    /// describes at least one output, and the window-following case is a
+    /// display named `domicile-0` rather than an absence. It is the state of a
+    /// `Host` nobody has described a desktop to — unit tests, and the
+    /// `domicile` daemon, which serves this protocol from a bare `Session` and
+    /// never describes one. A chrome told an empty list has no screens to lay
+    /// out on, which is the honest answer from a host that never asked for any.
     Displays { displays: Vec<DisplayInfo> },
 
     /// The compositor has taken this window back and is drawing the client's

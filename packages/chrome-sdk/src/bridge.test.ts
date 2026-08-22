@@ -449,8 +449,9 @@ describe("BridgeClient", () => {
     });
 
     it("is retained, so everything that asks gets it", () => {
-      // `displays` arrives once per connection, and `on` hands a held message to
-      // the *first* handler and then forgets it. A page with two `<Screen>`s
+      // `displays` arrives at least once per connection — and again on every
+      // desktop change — and `on` hands a held message to the *first* handler
+      // and then forgets it. A page with two `<Screen>`s
       // registering separately would leave the second with nothing — silently,
       // as an empty region, which is what a `<Screen>` for an absent display is
       // supposed to look like.
@@ -460,8 +461,10 @@ describe("BridgeClient", () => {
     });
 
     it("keeps an empty desktop as an empty one", () => {
-      // The output that follows Domicile's own window. An answer, so it has to
-      // displace `undefined` rather than read as "not told yet".
+      // A desktop of no screens. Not what the compositor sends — it describes
+      // at least one output, and the window-following case is a display named
+      // `domicile-0` rather than an absence — but it is an *answer*, so it has
+      // to displace `undefined` rather than read as "not told yet".
       transport.push({ displays: [], type: "displays" });
       expect(bridge.displays).toStrictEqual([]);
     });
@@ -491,10 +494,11 @@ describe("BridgeClient", () => {
     });
 
     it("is the desktop the host described most recently", () => {
-      // Latest wins, not first. Nothing rebuilds a `BridgeClient` today, so
-      // there is no second `displays` in the running system — but a config
-      // reload is what this message exists to carry eventually, and keeping the
-      // first would silently lay the shell out against a desktop that is gone.
+      // Latest wins, not first. A second `displays` is routine rather than
+      // hypothetical: with no displays configured the desktop is Domicile's
+      // own window, so every resize and every density change re-describes it.
+      // Keeping the first would silently lay the shell out against a desktop
+      // that is gone.
       const RIGHT: DisplayInfo = {
         name: "right",
         position: [1920, 0],

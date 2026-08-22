@@ -119,8 +119,10 @@ describe("useDisplays", () => {
   });
 
   it("reads displays the source was told before it mounted", () => {
-    // `displays` arrives once per connection, and a provider that only
-    // listened would miss it for good whenever the chrome connected first.
+    // The host describes the desktop on connecting and again on every change,
+    // latest wins — so a provider that only listened would lay out against an
+    // empty desktop from mounting until the next change, and on a desktop
+    // nobody is resizing there is no next change.
     render(
       <DisplayProvider source={alreadyTold([LEFT, RIGHT])}>
         <Reader />

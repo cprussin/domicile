@@ -393,11 +393,10 @@ impl OutputConfig {
     /// absence of a described one — the case where the single output follows
     /// whatever window Domicile itself was given.
     ///
-    /// That `None` is what has to become both `compositor.nested_size` and the
-    /// wire's *empty* `displays` list, which `HostMessage::Displays` is
-    /// equally clear is an answer rather than an absence. Both are right for
-    /// their layer, and whoever writes the host side owes them one decision
-    /// rather than two.
+    /// That `None` becomes `compositor.nested_size` and, on the wire, a
+    /// display named `domicile-0` — the one output that follows the window.
+    /// Not an empty `displays` list: an empty list is a desktop of *no*
+    /// screens, and a chrome told one would lay out against nothing.
     ///
     /// Rebuilt on each call, names and all. Fine for a list the config states
     /// once; not something to put on a frame path.

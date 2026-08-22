@@ -67,8 +67,8 @@ where its `<domicile-app>` is laid out.
 **Where it lives.** `@domicile/chrome-sdk` is framework-agnostic — no React, no
 `.tsx` — so it gets the data only: `BridgeClient.displays`, retained rather
 than merely delivered, because the hold answers the *first* handler to
-register for a type and then forgets — right for a stream, wrong for a fact
-that arrives once per connection. `useDisplays` and `<Screen>` are React, so
+register for a type and then forgets — right for a stream, wrong for a fact.
+Latest wins, for the reason below. `useDisplays` and `<Screen>` are React, so
 they go in `@domicile/component-library` with the rest of the chrome's
 components, and `useDisplays` reads a `DisplayProvider` mounted **once**: `on`
 is a single slot, so a hook that registered per component would unregister
@@ -89,9 +89,9 @@ struct DisplayInfo {
 }
 ```
 
-`PROTOCOL_VERSION` goes to 12 (11 is #72's `FocusChanged`); `negotiate` is
-exact-match, so an old chrome is refused rather than left to infer a desktop.
-`ChromeMessage` is unchanged.
+`PROTOCOL_VERSION` goes to 12 for the message and 14 for the guarantee that it
+is always sent; `negotiate` is exact-match, so an old chrome is refused rather
+than left to infer a desktop. `ChromeMessage` is unchanged.
 
 **Ordering is the SDK's, not the socket's.** `Displays` is written on the
 connection thread with `Welcome`, but that does not order it against
@@ -101,6 +101,46 @@ messages by type until a handler is registered, which is the existing mechanism
 for exactly this — `hello` precedes every `on()` on every startup already — and
 it also retains the last `displays`, so anything that asks later gets it
 without a handler at all.
+
+**The desktop is re-described when it changes**, which on the configured path
+it never does and on the no-displays path it does whenever the window is
+resized or its density changes — the desktop *is* Domicile's own window.
+`set_output` therefore does both — updates the retained answer, so the next
+chrome to connect is told the current desktop, and broadcasts, so the pages
+already connected are not left laying out against one that is gone. Two
+mechanisms because they fail separately — and neither is distinguishable by the
+chrome that asked for the change, which a broadcast reaches and which a message
+sent only to it would have reached too. Telling the two apart takes a chrome
+that was connected and did not ask.
+
+Only the density half is driveable headlessly — a resize needs a window — so
+that is the half the e2e pins, and the resize half rides on the same
+`set_output`.
+
+That broadcast goes out on the writer thread while the handshake answer is
+written by the connection thread, so the two can interleave on a socket that
+connected in the same instant as a change. Only one order is a problem — the
+new `displays` written first and the answer's own copy after it — and
+latest-wins is exactly what makes it one: on a desktop nobody resizes again,
+nothing later corrects it.
+
+What keeps a stale `displays` from being last in the ordinary case is *not*
+the writer lock, which a broadcast is serialised before taking. (`freshened`'s
+docstring argues this too, and deliberately: two copies, because this doc is
+where the subsystem is read from and a bare pointer would not survive it being
+read on its own. Whoever changes one should change both, and this file goes
+away when its plan completes.) It is that
+`set_output` describes and then broadcasts that same desktop, on one thread,
+into a queue one writer drains in order — so every stale line has a newer one
+queued behind it. The handshake answer is the exception, written by another
+thread with nothing queued behind it, so it reads the desktop as it writes
+rather than carrying the copy it was built with. That leaves *describe without
+broadcast* as the way to break this, and there is exactly one: the startup
+describe, safe only because no socket thread exists yet.
+
+The other order needs nothing: a broadcast reaching a connection registered at
+accept but not yet welcomed is followed by the handshake answer, which carries
+the desktop as of when it is written.
 
 ### Which output a surface is on
 
@@ -235,10 +275,14 @@ its own change.
       not assert against the all-outputs interim: a client placed on *each*
       display, asserting each entered its own output and neither entered the
       other
-- [ ] `domicile-host`: the display list on the responses side, so
+- [x] `domicile-host`: the display list on the responses side, so
       `apply_chrome_message` can answer `Hello` with `Displays` — `ChromeHub`
       already carries `max_scale` / `wayland_display` / `presenting` for the
-      same reason
+      same reason (#84)
+- [x] `domicile-compositor`: describe the desktop to the host at startup and
+      from `set_output` thereafter, per "The desktop is re-described when it
+      changes" above. `Advertised::described` is the retyping, `as_measure`
+      the assertion that a size or a scale is never negative (#84)
 - [x] `@domicile/component-library`: `useDisplays` and `<Screen>`. A provider
       rather than `useDisplays(bridge)` per component — `on` is a single slot,
       so a hook that registered per component would unregister every one
@@ -260,6 +304,14 @@ its own change.
       globals cannot answer and no unit test reaches (#82). The criterion this
       item was written with is stated on the `wl_surface.enter` item above,
       since it cannot be asserted until that rule exists (#82)
+- [x] `scripts/e2e-displays-on-hello.sh`: the same two displays, asserting a
+      real chrome is told them over a real socket at the handshake, positions
+      and scales intact (#84). The other half of the same config: one script
+      is what the Wayland side advertises, this one is what the page lays out
+      against, and neither implies the other
+- [x] `scripts/e2e-desktop-changed.sh`: the *other* config, where the desktop
+      is Domicile's own window and so changes at runtime — three chromes, one
+      per way of being told, per the same section (#84)
 - [ ] delete this doc and its AGENTS.md index row; drop "One scene output"
       from ROADMAP's known gaps and multi-output from phase 3, leaving
       per-monitor scanout there

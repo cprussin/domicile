@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 13;
+export const PROTOCOL_VERSION = 14;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
@@ -172,9 +172,17 @@ const displayInfoSchema = z.looseObject({
   size: z.tuple([z.int().positive(), z.int().positive()]),
 });
 
-// Sent once per connection, after `welcome`. An empty list is the desktop that
-// follows Domicile's own window — an answer, not an absence, so a shell must
-// not wait for a longer one.
+// Answered to `hello` after `welcome`, and sent again whenever the desktop
+// changes — with no displays configured the desktop is Domicile's own window,
+// so resizing it or changing its density re-describes it.
+//
+// Latest wins, and that is the only ordering guaranteed: a change broadcast
+// reaches every connection, including one accepted but not yet welcomed, so it
+// can arrive before the `welcome` the handshake answer follows.
+//
+// An empty list is a desktop of no screens, which the compositor does not
+// send: it describes at least one output, and the window-following case is a
+// display named `domicile-0` rather than an absence.
 const displaysSchema = z.looseObject({
   displays: z.array(displayInfoSchema),
   type: z.literal("displays"),

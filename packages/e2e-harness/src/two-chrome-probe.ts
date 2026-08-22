@@ -17,12 +17,10 @@ import {
 } from "@domicile/chrome-sdk/chrome-message";
 
 import { connectChromeSocket, requireSocketPath } from "./chrome-socket";
+import { rest } from "./waiting";
 
 /** Long enough for a message to cross the socket and be handled. */
 const SETTLE_MS = 600;
-
-const rest = (ms: number): Promise<void> =>
-  new Promise((done) => setTimeout(done, ms));
 
 const path = requireSocketPath(Bun.env);
 /** Which of the two chromes a line belongs to. Nothing external picks one. */

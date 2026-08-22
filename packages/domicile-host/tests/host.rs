@@ -6,8 +6,9 @@
 //! geometry), so these tests exercise the whole pipeline end to end without any
 //! Wayland or GPU dependency.
 
+use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Host, HostError, InputDelivery};
-use domicile_protocol::{ChromeMessage, HostMessage, Shadow};
+use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Shadow, PROTOCOL_VERSION};
 use domicile_scene::KeyboardTarget;
 
 fn place(
@@ -613,4 +614,82 @@ fn a_portal_that_styles_nothing_is_square_and_opaque() {
     let portal = host.scene().get(&app_id).expect("the portal is placed");
     assert_eq!(portal.style, domicile_scene::Style::default());
     assert_eq!(portal.style.opacity, 1.0);
+}
+
+// ---- the desktop the chrome is told about --------------------------------
+
+#[test]
+fn the_displays_are_answered_after_the_welcome() {
+    // Order matters on this path: a chrome that read the handshake's `displays`
+    // before it knew the version agreed would be acting on a message from a
+    // host it has not finished negotiating with. Only on this path — a change
+    // broadcast reaches a connection that has not been welcomed, which is what
+    // latest-wins retention is for.
+    let mut host = Host::new();
+    host.describe_displays(vec![DisplayInfo {
+        name: "left".into(),
+        position: [0, 0],
+        size: [1920, 1080],
+        scale: 1,
+    }]);
+    let mut ready = false;
+    let answered = apply_chrome_message(
+        &mut host,
+        &mut ready,
+        ChromeMessage::Hello {
+            protocol_version: PROTOCOL_VERSION,
+        },
+    );
+    assert_eq!(
+        answered,
+        vec![
+            HostMessage::Welcome {
+                protocol_version: PROTOCOL_VERSION,
+            },
+            HostMessage::Displays {
+                displays: vec![DisplayInfo {
+                    name: "left".into(),
+                    position: [0, 0],
+                    size: [1920, 1080],
+                    scale: 1,
+                }],
+            },
+        ]
+    );
+}
+
+#[test]
+fn a_desktop_described_again_replaces_the_one_before_it() {
+    // The compositor re-describes whenever the desktop changes at runtime,
+    // which with no displays configured is every time Domicile's own window is
+    // resized or its density changes. Appending would leave a chrome laying
+    // out against every size the window has ever been.
+    //
+    // Asserted on `describe_desktop` rather than through a handshake: replacing
+    // is a property of `describe_displays`, and driving it through
+    // `apply_chrome_message` would make this fail for a handshake bug too.
+    let mut host = Host::new();
+    host.describe_displays(vec![DisplayInfo {
+        name: "old".into(),
+        position: [0, 0],
+        size: [800, 600],
+        scale: 1,
+    }]);
+    host.describe_displays(vec![DisplayInfo {
+        name: "new".into(),
+        position: [0, 0],
+        size: [1920, 1080],
+        scale: 2,
+    }]);
+    assert_eq!(
+        host.describe_desktop(),
+        HostMessage::Displays {
+            displays: vec![DisplayInfo {
+                name: "new".into(),
+                position: [0, 0],
+                size: [1920, 1080],
+                scale: 2,
+            }],
+        }
+    );
 }

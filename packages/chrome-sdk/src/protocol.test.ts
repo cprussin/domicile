@@ -119,9 +119,10 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes a desktop of no displays as an empty one, not a missing one", () => {
-    // The no-displays case is the output that follows Domicile's own window.
-    // A shell that treated it as absent would wait forever for a layout that
-    // had already arrived.
+    // A desktop with no screens on it, which the compositor does not send —
+    // the window-following case is a display named `domicile-0` rather than an
+    // empty list. The shape still has to decode: a shell that treated it as
+    // absent would wait forever for a layout that had already arrived.
     expect(
       parseHostMessage(JSON.stringify({ displays: [], type: "displays" })),
     ).toStrictEqual({ displays: [], type: "displays" });
