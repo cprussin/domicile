@@ -9,6 +9,20 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v12 added `displays`: the desktop is a list of displays the shell lays out
+/// against, rather than one screen it can only assume. The chrome is one page
+/// spanning all of them and puts things on one by position, so without this it
+/// has nothing to position against.
+///
+/// A bump although nothing a v11 chrome sends changes, for the reason v11 had:
+/// `negotiate` matches exactly, so a new host message is observable to an older
+/// chrome as silence — and a chrome that never hears `displays` cannot tell a
+/// single-display desktop from a host too old to describe one.
+///
+/// That last ambiguity is what the bump *will* remove rather than what it
+/// removes today: nothing sends `displays` yet, so at v12 a chrome still hears
+/// silence. The guarantee arrives with the host side.
+///
 /// v11 added `focus_changed`: the chrome is told who holds the keyboard, which
 /// it could not work out for itself once a click or a closing window moved
 /// focus without it asking.
@@ -86,7 +100,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 11;
+pub const PROTOCOL_VERSION: u32 = 12;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -338,6 +352,17 @@ pub enum HostMessage {
     /// `<app>` exactly as it would over any other web content.
     AppCursor { app_id: String, cursor: CursorShape },
 
+    /// What the desktop is made of, so the shell can lay out against it.
+    ///
+    /// The chrome is a single page spanning every display, and a display is a
+    /// region of that page — so this is what tells it where those regions are.
+    /// Sent once per connection, after `welcome`.
+    ///
+    /// Empty is an answer rather than an absence: it is the desktop that
+    /// follows Domicile's own window, which is all a nested compositor can
+    /// manage without being told otherwise.
+    Displays { displays: Vec<DisplayInfo> },
+
     /// The compositor has taken this window back and is drawing the client's
     /// own buffer; the chrome should drop any pixels it holds for it.
     ///
@@ -372,6 +397,28 @@ pub enum HostMessage {
         /// `None` means the chrome holds the keyboard.
         app_id: Option<String>,
     },
+}
+
+/// One display of the desktop, as the chrome is told about it.
+///
+/// All of it logical — the CSS pixels the chrome lays out in — and all of it in
+/// one desktop-wide coordinate space whose origin is the top-left corner of the
+/// displays' bounding box. The config may place a display anywhere, negative
+/// included; what reaches here is normalised, because the page it describes
+/// starts at zero.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DisplayInfo {
+    /// What the shell addresses this display by, e.g. `<Screen name="left">`.
+    pub name: String,
+    /// Its top-left corner in the desktop's coordinate space.
+    pub position: [i32; 2],
+    /// Its width and height, logical. A `wl_output` mode is this times `scale`.
+    pub size: [u32; 2],
+    /// The `wl_output` scale advertised to clients on this display.
+    ///
+    /// It governs what *clients* draw at. The chrome is one page at one
+    /// `devicePixelRatio`, so it is not what the chrome itself renders at.
+    pub scale: u32,
 }
 
 /// A cursor a client can ask for, named as the CSS `cursor` keyword the chrome

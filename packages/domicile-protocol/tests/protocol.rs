@@ -7,7 +7,7 @@
 //!     so we pin the tag/field names explicitly.
 
 use domicile_protocol::{
-    negotiate, ChromeMessage, CursorShape, HostMessage, Shadow, PROTOCOL_VERSION,
+    negotiate, ChromeMessage, CursorShape, DisplayInfo, HostMessage, Shadow, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -148,6 +148,52 @@ fn cursor_shapes_are_css_keywords() {
     assert_eq!(shape(CursorShape::NotAllowed), "not-allowed");
     assert_eq!(shape(CursorShape::NwseResize), "nwse-resize");
     assert_eq!(shape(CursorShape::ZoomIn), "zoom-in");
+}
+
+#[test]
+fn the_desktop_is_described_to_the_chrome() {
+    // Everything the chrome needs to lay a display out and address it. The
+    // wire shape is pinned as well as round-tripped, because a shell reads
+    // these field names directly.
+    let displays = HostMessage::Displays {
+        displays: vec![
+            DisplayInfo {
+                name: "left".into(),
+                position: [0, 0],
+                size: [1920, 1080],
+                scale: 1,
+            },
+            DisplayInfo {
+                name: "right".into(),
+                position: [1920, 0],
+                size: [2560, 1440],
+                scale: 2,
+            },
+        ],
+    };
+    host_round_trip(&displays);
+
+    let v = serde_json::to_value(displays).unwrap();
+    assert_eq!(v["type"], "displays");
+    assert_eq!(v["displays"][0]["name"], "left");
+    assert_eq!(v["displays"][0]["position"], serde_json::json!([0, 0]));
+    assert_eq!(v["displays"][1]["name"], "right");
+    assert_eq!(v["displays"][1]["position"][0], 1920);
+    assert_eq!(v["displays"][1]["size"][1], 1440);
+    assert_eq!(v["displays"][1]["scale"], 2);
+}
+
+#[test]
+fn a_desktop_of_no_displays_is_a_message_rather_than_a_silence() {
+    // The no-displays case — one output following Domicile's own window — is
+    // an answer the chrome has to be able to receive, not the absence of one.
+    // Asserted on the wire rather than through a round trip, which cannot see
+    // the difference: an empty `Vec` that serialises to nothing at all and one
+    // that serialises to `[]` both come back empty, and only the second is a
+    // desktop the chrome can parse.
+    let v = serde_json::to_value(HostMessage::Displays { displays: vec![] }).unwrap();
+    assert_eq!(v["type"], "displays");
+    assert_eq!(v["displays"], serde_json::json!([]));
 }
 
 #[test]

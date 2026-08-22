@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
@@ -145,6 +145,41 @@ const focusChangedSchema = z.looseObject({
   type: z.literal("focus_changed"),
 });
 
+// One display of the desktop. All logical — the CSS pixels the chrome lays out
+// in — and all in one desktop-wide space whose origin is the top-left of the
+// displays' bounding box, so `position` is directly where a `<Screen>` goes on
+// the page.
+const displayInfoSchema = z.looseObject({
+  // Non-empty, as `DisplayConfig::validate` requires: the name is what a
+  // `<Screen name="…">` matches on, and one that is not there matches nothing
+  // and renders an empty region rather than an error.
+  name: z.string().min(1),
+  // Signed, because it mirrors `xdg_output.logical_position` and the
+  // compositor's normalisation subtracts. Integer, because a display sits on a
+  // pixel.
+  position: z.tuple([z.int(), z.int()]),
+  // What clients on this display draw at. Not what the chrome renders at: the
+  // chrome is one page over every display, at one `devicePixelRatio`. Integer
+  // because `wl_output` scale is — a fractional one needs
+  // `wp_fractional_scale_v1`, which is its own protocol. Positive rather than
+  // merely non-negative, because both the config and `wl_output` say so, and a
+  // display at scale 0 would render as an empty region rather than an error.
+  scale: z.int().positive(),
+  // Its own, not `sizeSchema`: that one is a client's size in logical units
+  // and is `[f64; 2]` in Rust, where a display's is `[u32; 2]`. Sharing a
+  // validator would make tightening either wait on the other. Positive for the
+  // same reason the config rejects a zero-sized display: it is not a screen.
+  size: z.tuple([z.int().positive(), z.int().positive()]),
+});
+
+// Sent once per connection, after `welcome`. An empty list is the desktop that
+// follows Domicile's own window — an answer, not an absence, so a shell must
+// not wait for a longer one.
+const displaysSchema = z.looseObject({
+  displays: z.array(displayInfoSchema),
+  type: z.literal("displays"),
+});
+
 const appCursorSchema = z.looseObject({
   app_id: z.string(),
   cursor: cursorShapeSchema,
@@ -164,6 +199,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appClosedSchema,
   appCompositedSchema,
   appCursorSchema,
+  displaysSchema,
   focusChangedSchema,
   shortcutMessageSchema,
 ]);
@@ -192,8 +228,12 @@ export type AppFrameMessage = z.infer<typeof appFrameSchema> & {
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCompositedMessage = z.infer<typeof appCompositedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
+export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
+
+/** One display of the desktop, in the coordinates the shell lays out in. */
+export type DisplayInfo = z.infer<typeof displayInfoSchema>;
 
 /** A CSS `cursor` keyword a client can ask the chrome to show over its app. */
 export type CursorShape = z.infer<typeof cursorShapeSchema>;

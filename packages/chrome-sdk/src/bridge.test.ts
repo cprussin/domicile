@@ -8,6 +8,7 @@ import {
   HandshakeFailure,
 } from "./bridge";
 import { BTN_LEFT } from "./input";
+import type { DisplayInfo } from "./protocol";
 
 // A fake transport: records outgoing JSON and lets the test push incoming.
 class FakeTransport implements Transport {
@@ -381,6 +382,80 @@ describe("BridgeClient", () => {
       transport.push(...frame("term"));
 
       expect(timed.hop.take()).toBeUndefined();
+    });
+  });
+
+  describe("the desktop the host described", () => {
+    const LEFT: DisplayInfo = {
+      name: "left",
+      position: [0, 0],
+      scale: 1,
+      size: [1920, 1080],
+    };
+
+    it("is nothing until the host says", () => {
+      // Distinct from a desktop of no displays, which is an answer. A shell that
+      // could not tell them apart would lay out against a screen it had not been
+      // told the shape of.
+      expect(bridge.displays).toBeUndefined();
+    });
+
+    it("is retained, so everything that asks gets it", () => {
+      // `displays` arrives once per connection, and `on` hands a held message to
+      // the *first* handler and then forgets it. A page with two `<Screen>`s
+      // registering separately would leave the second with nothing — silently,
+      // as an empty region, which is what a `<Screen>` for an absent display is
+      // supposed to look like.
+      transport.push({ displays: [LEFT], type: "displays" });
+      expect(bridge.displays).toStrictEqual([LEFT]);
+      expect(bridge.displays).toStrictEqual([LEFT]);
+    });
+
+    it("keeps an empty desktop as an empty one", () => {
+      // The output that follows Domicile's own window. An answer, so it has to
+      // displace `undefined` rather than read as "not told yet".
+      transport.push({ displays: [], type: "displays" });
+      expect(bridge.displays).toStrictEqual([]);
+    });
+
+    it("still reaches a handler that registers late", () => {
+      // The retained copy is in addition to the hold, not instead of it: a shell
+      // that wants to re-render when the desktop changes registers a handler,
+      // and it must not have to poll the accessor to learn about the first one.
+      transport.push({ displays: [LEFT], type: "displays" });
+      const seen: unknown[] = [];
+      bridge.on("displays", (message) => seen.push(message.displays));
+      expect(seen).toStrictEqual([[LEFT]]);
+    });
+
+    it("is already the new desktop when the handler runs", () => {
+      // The accessor is set before the message is delivered, so a handler that
+      // reads it sees this desktop rather than the one before it. Registering
+      // *first* is what tests that: a handler that registers after the push is
+      // replayed out of the hold, where the assignment has already happened
+      // wherever it sits.
+      let seen: readonly DisplayInfo[] | undefined;
+      bridge.on("displays", () => {
+        seen = bridge.displays;
+      });
+      transport.push({ displays: [LEFT], type: "displays" });
+      expect(seen).toStrictEqual([LEFT]);
+    });
+
+    it("is the desktop the host described most recently", () => {
+      // Latest wins, not first. Nothing rebuilds a `BridgeClient` today, so
+      // there is no second `displays` in the running system — but a config
+      // reload is what this message exists to carry eventually, and keeping the
+      // first would silently lay the shell out against a desktop that is gone.
+      const RIGHT: DisplayInfo = {
+        name: "right",
+        position: [1920, 0],
+        scale: 2,
+        size: [2560, 1440],
+      };
+      transport.push({ displays: [LEFT], type: "displays" });
+      transport.push({ displays: [LEFT, RIGHT], type: "displays" });
+      expect(bridge.displays).toStrictEqual([LEFT, RIGHT]);
     });
   });
 });
