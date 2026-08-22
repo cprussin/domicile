@@ -521,3 +521,140 @@ fn displays_that_only_touch_are_a_desktop_rather_than_a_collision() {
     )
     .expect("stacked displays should parse");
 }
+
+#[test]
+fn a_desktop_may_reach_exactly_as_far_as_a_position_can_and_no_further() {
+    // The boundary the check is written against, pinned because it is where a
+    // future tightening would land: a far corner at exactly `i32::MAX`
+    // normalises to a position of exactly `i32::MAX`, which is a position.
+    //
+    // Both axes, and each sized so that reading the *other* axis's length
+    // would tip it over — which is the only way a test can tell a vertical
+    // check that reads heights from one that reads widths.
+    Config::parse(
+        "[[output.displays]]\nname = \"here\"\nsize = [1920, 1080]\n\
+         [[output.displays]]\nname = \"far\"\nposition = [2147479647, 2000]\nsize = [4000, 8000]\n",
+    )
+    .expect("a desktop exactly as wide as a position can describe should parse");
+    // One pixel past it, which is what pins the display's *length* as part of
+    // the reach. The near display sits at -1 so that the far one's own corner
+    // still fits — otherwise the per-display check rejects this first and the
+    // layout check is never asked. Without the length, the far position alone
+    // is under the limit and this desktop is accepted.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"here\"\nposition = [-1, 0]\nsize = [10, 10]\n\
+         [[output.displays]]\nname = \"far\"\nposition = [2147479647, 2000]\nsize = [4000, 8000]\n",
+    )
+    .unwrap_err();
+    assert!(
+        format!("{err}").contains("from here to far"),
+        "the layout check should be the one that answers, not the per-display one: {err}"
+    );
+    Config::parse(
+        "[[output.displays]]\nname = \"here\"\nsize = [1920, 1080]\n\
+         [[output.displays]]\nname = \"below\"\nposition = [3000, 2147482567]\nsize = [1920, 1080]\n",
+    )
+    .expect("a desktop exactly as tall as a position can describe should parse");
+}
+
+#[test]
+fn the_desktop_must_fit_the_coordinate_space_on_both_axes() {
+    // Stacked rather than side by side. The horizontal case cannot tell
+    // whether the vertical one reads the right fields — or is checked at all.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"north\"\nposition = [0, -2000000000]\nsize = [1920, 1080]\n\
+         [[output.displays]]\nname = \"south\"\nposition = [0, 2000000000]\nsize = [1920, 1080]\n",
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, ConfigError::Validation(_)),
+        "an unrepresentable desktop should fail validation, not parsing: {err:?}"
+    );
+    let message = format!("{err}");
+    assert!(
+        message.contains("from north to south") && message.contains("down"),
+        "the message should name the outliers near-to-far, and the axis: {err}"
+    );
+}
+
+#[test]
+fn a_display_too_big_on_its_own_is_reported_as_itself() {
+    // The specific diagnosis has to survive the layout-wide one: a single
+    // display whose own far corner does not fit is an error about that
+    // display, and "the displays span N across" names nobody and is not even
+    // true of one.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"huge\"\nposition = [2000000000, 0]\nsize = [4000000000, 1080]\n",
+    )
+    .unwrap_err();
+    assert!(
+        format!("{err}").contains("output.displays[0]"),
+        "the message should name the display rather than the layout: {err}"
+    );
+}
+
+#[test]
+fn a_display_wider_than_a_position_can_reach_is_rejected_as_itself() {
+    // Its own far corner fits — placed far enough left, a display three
+    // billion wide still ends inside the space. What does not fit is the
+    // display: normalising puts its near edge at zero, so its far edge would
+    // have to be a position, and no position is three billion. That is a fact
+    // about one display rather than about the layout, and it has to be
+    // reported that way — the layout-wide message would otherwise say a
+    // display is that far from itself.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"wide\"\nposition = [-2000000000, 0]\nsize = [3000000000, 1080]\n",
+    )
+    .unwrap_err();
+    let message = format!("{err}");
+    assert!(
+        message.contains("output.displays[0]") && message.contains("wide"),
+        "the message should name the display, not the layout: {err}"
+    );
+    assert!(
+        !message.contains("wide and wide"),
+        "one display cannot be a distance from itself: {err}"
+    );
+
+    // The other axis, which is the same bug: without it a display three
+    // billion tall walks back through to the layout check and is reported as
+    // a distance from itself, downwards.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"tall\"\nposition = [0, -2000000000]\nsize = [1080, 3000000000]\n",
+    )
+    .unwrap_err();
+    let message = format!("{err}");
+    assert!(
+        message.contains("output.displays[0]") && !message.contains("tall and tall"),
+        "the message should name the display, not the layout: {err}"
+    );
+
+    // And the boundary, because `>` is the right choice: a display exactly as
+    // wide as a position can reach normalises to a far edge that is one.
+    Config::parse(
+        "[[output.displays]]\nname = \"exact\"\nposition = [-2147483648, 0]\nsize = [2147483647, 1080]\n",
+    )
+    .expect("a display exactly as wide as a position can reach should parse");
+}
+
+#[test]
+fn the_desktop_as_a_whole_must_fit_the_coordinate_space() {
+    // Each display's own far corner fitting is not enough: two that each fit
+    // can still be four billion apart, and the desktop is placed about its own
+    // top-left corner, so that span is what everything downstream is sized
+    // and positioned in.
+    let err = Config::parse(
+        "[[output.displays]]\nname = \"west\"\nposition = [-2000000000, 0]\nsize = [1920, 1080]\n\
+         [[output.displays]]\nname = \"east\"\nposition = [2000000000, 0]\nsize = [1920, 1080]\n",
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, ConfigError::Validation(_)),
+        "an unrepresentable desktop should fail validation, not parsing: {err:?}"
+    );
+    let message = format!("{err}");
+    assert!(
+        message.contains("from west to east") && message.contains("across"),
+        "the message should name the outliers near-to-far, and the axis: {err}"
+    );
+}
