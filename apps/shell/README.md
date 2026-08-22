@@ -34,10 +34,12 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<domicile-webview>`. |
 | `src/Clock.tsx` | The rail footer's live clock. |
 | `src/window-styles.ts` | What every window on the stage shares. |
-| `src/main.ts` | Electron main process: opens the window, and prints and exits on the renderer's behalf. |
+| `src/main.ts` | Electron main process: opens the window, takes the chrome's own key combinations out of the pages it embeds, and prints and exits on the renderer's behalf. |
 | `src/preload.ts` | Holds the Unix socket to the compositor and exposes it to the page as `window.domicileTransport`. |
 | `src/socket-path.ts` | Where that socket is, off the renderer's own command line. |
 | `src/socket-failure.ts` | What a dead compositor socket costs the shell. |
+| `src/guest-shortcuts.ts` | The combinations the page claimed from a `<webview>`, which delivers its keys to nobody else. |
+| `src/chord.ts` | A key combination as a page names its keys — what the shortcut channels carry. |
 | `src/ipc-channels.ts` | The channel names main and preload agree on. |
 | `src/domicile-elements.d.ts` | The SDK's custom elements, as JSX. |
 
@@ -59,6 +61,14 @@ that swaps nodes out from under the reconciler is not something React tolerates.
   the stage. Its address bar navigates on Enter (an address typed without a
   scheme is loaded over https) and follows the page wherever it goes; the
   window's tab is labelled with the site it is showing.
+
+Both combinations are claimed three times over, because three different things
+can be holding the keyboard when the user presses one. The page listens for its
+own `keydown`; the compositor is asked to take the combination before a Wayland
+client is given it (`grab_shortcut`); and the Electron host is asked to take it
+before an embedded page is — a `<webview>` is a browsing context of its own, so
+the keys pressed on a site the shell is showing reach neither the page nor, on
+the copy path, Domicile. Exactly one of the three fires for any press.
 
 A tab reorders by drag, or by Alt+Up / Alt+Shift+Up (and their Down
 counterparts) on a focused row. A browser window's tab closes it; a client's

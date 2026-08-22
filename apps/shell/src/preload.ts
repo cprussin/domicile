@@ -26,9 +26,12 @@ import net from "node:net";
 import { postHostMessages } from "@domicile/chrome-sdk/host-transport";
 import { contextBridge, ipcRenderer } from "electron";
 
+import type { Chord } from "./chord";
 import {
   CHROME_DIAGNOSTIC_CHANNEL,
   CHROME_FAILURE_CHANNEL,
+  CHROME_GRAB_SHORTCUT_CHANNEL,
+  CHROME_SHORTCUT_CHANNEL,
 } from "./ipc-channels";
 import { socketFailed } from "./socket-failure";
 import { socketPathFrom } from "./socket-path";
@@ -126,6 +129,27 @@ orDie(() => {
   contextBridge.exposeInMainWorld("domicileDiagnostics", {
     report: (line: string) => {
       ipcRenderer.send(CHROME_DIAGNOSTIC_CHANNEL, line);
+    },
+  });
+
+  // The other half of the same: the page claims a key combination from the
+  // pages it embeds, and hears the presses the main process took out of one.
+  // A `<webview>` never delivers a key to its embedder, so without this the
+  // desktop's own combinations stop working the moment a site has the
+  // keyboard. See `guest-shortcuts`.
+  contextBridge.exposeInMainWorld("domicileGuestShortcuts", {
+    grab: (chord: Chord) => {
+      ipcRenderer.send(CHROME_GRAB_SHORTCUT_CHANNEL, chord);
+    },
+    // One listener, replaced rather than added to — the same contract the
+    // SDK's `on` has, and for the same reason: the page registers this from an
+    // effect, and an `ipcRenderer.on` that stacked would open a window per
+    // registration for a single press.
+    onPressed: (listener: (chord: Chord) => void) => {
+      ipcRenderer.removeAllListeners(CHROME_SHORTCUT_CHANNEL);
+      ipcRenderer.on(CHROME_SHORTCUT_CHANNEL, (_event, chord: Chord) => {
+        listener(chord);
+      });
     },
   });
 });

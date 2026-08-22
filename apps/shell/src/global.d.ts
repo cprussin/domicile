@@ -1,5 +1,7 @@
 import type { HostChannel } from "@domicile/chrome-sdk/host-transport";
 
+import type { Chord } from "./chord";
+
 declare global {
   // biome-ignore lint/style/useConsistentTypeDefinitions: declaration-merging Window requires interface
   interface Window {
@@ -16,6 +18,19 @@ declare global {
      */
     domicileDiagnostics?: {
       report: (line: string) => void;
+    };
+    /**
+     * The Electron host's grab on the pages this one embeds. A `<webview>` is
+     * a browsing context of its own, so a key pressed in one never reaches
+     * this page — the host takes the claimed combinations out of the guest's
+     * stream and hands each press back here. Injected by the Electron preload
+     * only: a plain browser embeds nothing, and where Domicile composites this
+     * window the compositor's own grab is what takes the key.
+     */
+    domicileGuestShortcuts?: {
+      grab: (chord: Chord) => void;
+      /** There is one listener: registering replaces it. */
+      onPressed: (listener: (chord: Chord) => void) => void;
     };
   }
 }
