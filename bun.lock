@@ -87,6 +87,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@domicile/chrome-sdk": "workspace:*",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",

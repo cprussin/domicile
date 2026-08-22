@@ -23,12 +23,13 @@
 // four fields of that line cover the same five seconds; having nowhere to print
 // them meanwhile is the price of it.
 
+import type { RoundTripReport } from "@domicile/chrome-sdk/round-trip";
 import type { SampleReport } from "@domicile/chrome-sdk/sample-window";
 
 /** Everything one reporting interval collected. */
 export type Timings = {
-  /** Keystroke to pixels, when a key was pressed. */
-  trip: SampleReport | undefined;
+  /** Keystroke to pixels, over the whole run, when a key was pressed. */
+  trip: RoundTripReport | undefined;
   /** The host's bytes arriving in this process, to reaching this page. */
   ipc: SampleReport | undefined;
   /** Putting those pixels on the canvas. */
@@ -48,9 +49,17 @@ export const diagnosticLines = ({
     ? []
     : [
         [
-          `round trip keys=${trip.count.toString()}`,
-          `rt_ms=${round(trip.averageMs)} rt_worst_ms=${round(trip.worstMs)}`,
-          `frames=${(ipc?.count ?? 0).toString()}`,
+          // `sent` alongside `answered` because they differ exactly when
+          // something is wrong, and the old line printed only the second —
+          // so a desktop swallowing keystrokes reported fewer samples rather
+          // than worse ones.
+          `round trip keys=${trip.answered.toString()}/${trip.sent.toString()}`,
+          `rt_ms=${round(trip.averageMs)} rt_median_ms=${round(trip.medianMs)}`,
+          `rt_p95_ms=${round(trip.p95Ms)} rt_worst_ms=${round(trip.worstMs)}`,
+          // Host messages, not frames: `hop` records every message that
+          // carries an arrival stamp. Named for what it counts so the average
+          // beside it is not read as a per-frame cost.
+          `msgs=${(ipc?.count ?? 0).toString()}`,
           `ipc_ms=${round(ipc?.averageMs)} ipc_worst_ms=${round(ipc?.worstMs)}`,
           `draw_ms=${round(draw?.averageMs)} draw_worst_ms=${round(draw?.worstMs)}`,
         ].join(" "),

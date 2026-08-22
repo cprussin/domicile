@@ -77,7 +77,10 @@ if (diagnostics !== undefined) {
       draw: appElements.drawTiming.take(),
       ipc: bridge.hop.take(),
       place: placementTiming.take(),
-      trip: bridge.roundTrip.take(),
+      // Not drained: the round trip is reported for the whole run, so the
+      // last line printed is the answer rather than whichever few seconds a
+      // reader's `tail` happened to catch.
+      trip: bridge.roundTrip.report(performance.now()),
     });
     for (const line of lines) {
       diagnostics.report(line);

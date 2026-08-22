@@ -215,9 +215,10 @@ describe("BridgeClient", () => {
       clock = 120;
       transport.push(...frame("term"));
 
-      expect(timed.roundTrip.take()).toEqual({
+      expect(timed.roundTrip.report(120)).toMatchObject({
+        answered: 1,
         averageMs: 120,
-        count: 1,
+        sent: 1,
         worstMs: 120,
       });
     });
@@ -238,7 +239,7 @@ describe("BridgeClient", () => {
       clock = 500;
       transport.push(...frame("term"));
 
-      expect(timed.roundTrip.take()).toBeUndefined();
+      expect(timed.roundTrip.report(500)).toBeUndefined();
     });
 
     it("takes the measurement after the frame is drawn, not before", () => {
@@ -258,7 +259,7 @@ describe("BridgeClient", () => {
       clock = 10;
       transport.push(...frame("term"));
 
-      expect(timed.roundTrip.take()?.worstMs).toBe(50);
+      expect(timed.roundTrip.report(50)?.worstMs).toBe(50);
     });
   });
 
