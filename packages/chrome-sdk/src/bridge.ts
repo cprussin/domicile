@@ -133,11 +133,29 @@ export class BridgeClient {
    * between is a live, drawing client with no window on screen, and there is
    * no second chance — nothing ever re-sends `app_appeared` for it.
    *
-   * Unbounded on purpose. {@link parseHostMessage} has already dropped the
-   * types this chrome does not know, so what can pile up here is only a type
-   * the page does register — and it registers all of them in one mount.
+   * Unbounded on purpose, and bounded in time by {@link #released}: what can
+   * pile up here is only a type the page does register — {@link
+   * parseHostMessage} has already dropped the ones it does not know — and only
+   * before it has registered it, which it does for all of them in one mount.
    */
   readonly #held = new Map<HostMessageType, unknown[]>();
+  /**
+   * The types the page has listened for and stopped listening for.
+   *
+   * {@link #held} exists for the gap before a page has *ever* listened. An
+   * {@link off} says it listened and chose to stop, so holding for it again
+   * would pile up with nothing to drain it — for `app_frame`, a buffer the
+   * size of the screen every frame.
+   *
+   * The cost is that what arrives between an {@link off} and a later
+   * {@link on} is gone. Fine for anything the page can read back — `displays`
+   * is retained on {@link displays}, so a provider that unmounts and remounts
+   * still sees the current desktop — and not fine for a lifecycle event, which
+   * is announced once: nothing re-sends `app_appeared`, so a page that lets go
+   * of it and takes it up again has missed whatever mapped in between. Let go
+   * of a type only where the page can recover the state some other way.
+   */
+  readonly #released = new Set<HostMessageType>();
   readonly #now: typeof monotonicNow;
   #welcome: ((agreed: Result<number, HandshakeFailure>) => void) | undefined;
   #displays: readonly DisplayInfo[] | undefined;
@@ -219,6 +237,33 @@ export class BridgeClient {
     this.#held.delete(type);
     for (const message of waiting ?? []) {
       handler(message as HostMessageOf<T>);
+    }
+    return this;
+  }
+
+  /**
+   * Stop delivering `type` to `handler`.
+   *
+   * Only if `handler` is still the one registered. {@link on} is a single
+   * slot, so a later registration has already displaced an earlier one — and a
+   * teardown that removed whatever it found would then silence the live
+   * handler on behalf of the dead one. Which caller does that is not this
+   * class's business to predict: it takes the handler rather than the type
+   * alone so that letting one go is safe in any order, the way `off` on an
+   * event target is.
+   *
+   * Nothing is held for this type again — see {@link #released}. The hold is
+   * for the gap before a page has ever listened, and this says it listened and
+   * stopped. There is nothing to clear: {@link on} empties the hold as it
+   * registers, so by the time this runs it is already empty.
+   */
+  off<T extends HostMessageType>(
+    type: T,
+    handler: (message: HostMessageOf<T>) => void,
+  ): this {
+    if (this.#handlers.get(type) === handler) {
+      this.#handlers.delete(type);
+      this.#released.add(type);
     }
     return this;
   }
@@ -344,18 +389,24 @@ export class BridgeClient {
     }
   }
 
-  /** Hand a message to its handler, or hold it until one registers. */
+  /**
+   * Hand a message to its handler, or hold it until one registers.
+   *
+   * A {@link #released} type has neither: nobody is listening and that is
+   * deliberate, so it is dropped rather than kept for a handler that may never
+   * come.
+   */
   #deliver(type: HostMessageType, message: unknown): void {
     const handler = this.#handlers.get(type);
-    if (handler === undefined) {
+    if (handler !== undefined) {
+      handler(message as never);
+    } else if (!this.#released.has(type)) {
       const waiting = this.#held.get(type);
       if (waiting === undefined) {
         this.#held.set(type, [message]);
       } else {
         waiting.push(message);
       }
-    } else {
-      handler(message as never);
     }
   }
 

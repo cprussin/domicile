@@ -46,14 +46,19 @@ const displays = useDisplays();
 
 <Screen name="left"><Dock /></Screen>
 <Screen match={(d) => d.size[0] > 2000}><Wallpaper /></Screen>
-<Screen all><Clock /></Screen>
+<Screen everywhere><Clock /></Screen>
 ```
 
 `<Screen>` absolutely-positions its children over the display's rectangle. It
-renders once per matching display, so `all` and `match` can produce several and
-a `name` that matches nothing renders nothing — a display that is not plugged
-in should cost the shell an empty region, not an error. `name`, `match` and
-`all` are mutually exclusive.
+renders once per matching display, so `everywhere` and `match` can produce
+several and a `name` that matches nothing renders nothing — a display that is
+not plugged in should cost the shell an empty region, not an error. `name`,
+`match` and `everywhere` are mutually exclusive.
+
+`everywhere` rather than `all`, which is what this said first: Panda's
+extractor reads JSX props on capitalised tags as style props, and `all` is a
+real CSS property, so `<Screen all>` emitted `all: true` into the shell's
+stylesheet and failed the CSS minifier.
 
 That is the whole per-display API. One page means one `BridgeClient` and one
 copy of the shell's state, so moving a window between displays is changing
@@ -65,9 +70,12 @@ than merely delivered, because the hold answers the *first* handler to
 register for a type and then forgets — right for a stream, wrong for a fact
 that arrives once per connection. `useDisplays` and `<Screen>` are React, so
 they go in `@domicile/component-library` with the rest of the chrome's
-components, and `useDisplays` registers `bridge.on("displays")` **once**, as a
-provider: `on` is a single slot, so a hook that registered per component would
-unregister every one before it.
+components, and `useDisplays` reads a `DisplayProvider` mounted **once**: `on`
+is a single slot, so a hook that registered per component would unregister
+every one before it. The provider reaches the bridge through a `DisplaySource`
+port — the retained `displays`, plus an `onDisplays` returning its teardown —
+so the component library keeps no protocol dependency, and the shell writes the
+few lines that adapt one to the other.
 
 ```rust
 HostMessage::Displays { displays: Vec<DisplayInfo> }
@@ -223,11 +231,14 @@ its own change.
       `apply_chrome_message` can answer `Hello` with `Displays` — `ChromeHub`
       already carries `max_scale` / `wayland_display` / `presenting` for the
       same reason
-- [ ] `@domicile/component-library`: `useDisplays` and `<Screen>`. A provider
+- [x] `@domicile/component-library`: `useDisplays` and `<Screen>`. A provider
       rather than `useDisplays(bridge)` per component — `on` is a single slot,
       so a hook that registered per component would unregister every one
-      before it. What is left to decide is how the provider reaches the
-      `BridgeClient`: the package has no `@domicile/*` dependency today
+      before it. It reaches the `BridgeClient` through a `DisplaySource` port
+      — the retained `displays` plus an `onDisplays` registration — rather
+      than a dependency on `@domicile/chrome-sdk`: the shell writes the four
+      lines that adapt one to the other, and the library keeps knowing nothing
+      about the protocol
 - [ ] `apps/shell`: put the rail and the clock on named screens; size the
       Electron window from the desktop, which is cross-process — the desktop
       size arrives on the renderer's bridge and the window is the main
