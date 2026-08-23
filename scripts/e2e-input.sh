@@ -23,17 +23,64 @@ rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 export SOCK="$XDG_RUNTIME_DIR/c.sock"
 APP="$(mktemp)"
 CHROME="$(mktemp)"
+# `CLI` empty rather than unset, because `cleanup` names it and the handshake
+# bail below exits between the trap being installed and the client being
+# started. `set -u` would turn that into "CLI: unbound variable" on the way
+# out — the last line a reader sees, and nothing to do with why the run
+# stopped. `kill -9 ""` simply fails. `INJ` needs no such thing: it is assigned
+# before the first line that can leave.
+CLI=""
 
 "$BIN" --chrome-socket "$SOCK" >/dev/null 2>&1 &
 COMP=$!
 cleanup() { kill -9 "$COMP" "$INJ" "$CLI" 2>/dev/null; rm -f "$APP" "$CHROME"; }
 trap cleanup EXIT
+
+# Both bails, so that neither kind of failure is reported as the other:
+# `harness_fault` re-checks the compositor before blaming this script's own
+# machinery, and `compositor_verdict` re-checks it before naming a check as the
+# thing that failed. See `packages/e2e-harness/src/verdicts.test.ts`.
+#
+# Not the counting discipline that goes with them. `every_check_ran` exists
+# because a bail that turns into a no-op leaves its decision undecided, and the
+# count is what turns the resulting silence into a failure — this script has no
+# `passed` calls and no count, so its checks are sequential `if`s rather than
+# arms of one decision. Every arm here ends in a helper that exits, so nothing
+# is undecided today; the note is here because sourcing this file is the signal
+# a reader would otherwise take for the whole discipline.
+. "$ROOT/scripts/lib/harness.sh"
 for _ in $(seq 1 200); do { [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && [ -S "$SOCK" ]; } && break; sleep 0.05; done
 
-# Connect the injector first so it's subscribed before the app appears.
+# Connect the injector first so it's subscribed before the app appears — and
+# wait for the handshake it prints rather than for long enough that it has
+# probably happened. The injector only forwards input once it has seen an
+# `app_frame`, so a `bun` slower than the guess misses the client's frames
+# entirely and every check below reports a compositor that delivered no input
+# at all.
 DOMICILE_CHROME_SOCK="$SOCK" bun "$ROOT/packages/e2e-harness/src/input-injector.ts" >"$CHROME" 2>&1 &
 INJ=$!
-sleep 0.5
+# Bounded under the injector's own 5s `RUN_MS`, so this cannot outlive the
+# process it is waiting on and spend the tail polling a writer that has already
+# exited.
+# `displays` rather than `welcome`, because a `welcome` is not agreement: the
+# host answers a version it refuses with one too, so that the chrome can say
+# which two versions disagreed. The desktop rides only with the handshake it
+# accepted, so it is the line that means this connection will be listened to.
+# Waiting on the welcome would let a version-mismatched injector through, have
+# every message it sends dropped, and end the run on the compositor verdict
+# below — the misattribution this whole change is about.
+for _ in $(seq 1 80); do grep -q '"type":"displays"' "$CHROME" && break; sleep 0.05; done
+# And said out loud through the bail that re-checks the compositor. A wait that
+# merely gives up is the same fault one step later, and blaming the harness
+# without asking is its mirror image: a compositor that binds both sockets and
+# then dies produces exactly this silence, and `connectChromeSocket` swallows
+# the connection error, so it would be reported as a `bun` that would not start.
+if ! grep -q '"type":"displays"' "$CHROME"; then
+  harness_fault "$COMP" "the injector could complete its handshake" \
+    "ERROR: the injector never handshook, so nothing below it was tested;" \
+    "  its output was:" \
+    "$(cat "$CHROME")"
+fi
 
 # WAYLAND_DEBUG makes the client log every protocol event it receives. It names
 # objects `wl_keyboard@14` on current libwayland and `wl_keyboard#14` on older
@@ -53,7 +100,8 @@ btn_ok=$(grep -cE "wl_pointer[#@][0-9]+\.button\(" "$APP")
 if [ "$key_ok" -ge 1 ] && [ "$btn_ok" -ge 1 ]; then
   echo "PASS: forwarded keyboard + pointer input reached the client"
 else
-  echo "FAIL: keyboard=$key_ok pointer_button=$btn_ok"; exit 1
+  compositor_verdict "$COMP" \
+    "FAIL: keyboard=$key_ok pointer_button=$btn_ok"
 fi
 
 # The pointer entering a surface makes the client ask for a cursor, which the
@@ -72,7 +120,7 @@ grep -m1 '"app_cursor"' "$CHROME"
 if grep -q '"app_cursor"' "$CHROME"; then
   echo "PASS: the client's cursor request reached the chrome"
 else
-  echo "FAIL: no app_cursor reached the chrome"; exit 1
+  compositor_verdict "$COMP" "FAIL: no app_cursor reached the chrome"
 fi
 
 # And who holds the keyboard. The chrome asked for this focus, so this proves
@@ -99,8 +147,8 @@ grep -m1 '"app_id":"app-1","type":"focus_changed"' "$CHROME"
 if grep -q '"app_id":"app-1","type":"focus_changed"' "$CHROME"; then
   echo "PASS: the chrome was told which window has the keyboard"
 else
-  echo "FAIL: no focus_changed naming the focused app reached the chrome"
-  echo "  Without it a desktop's active-window marker is right until the first"
-  echo "  click and wrong afterwards."
-  exit 1
+  compositor_verdict "$COMP" \
+    "FAIL: no focus_changed naming the focused app reached the chrome" \
+    "  Without it a desktop's active-window marker is right until the first" \
+    "  click and wrong afterwards."
 fi
