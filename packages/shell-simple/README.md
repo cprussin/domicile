@@ -44,7 +44,43 @@ portal, draw the frames the host pushes, forward the pointer and the keyboard,
 and keep the host told what density the display is (which changes when the
 window moves to another screen, or the page is zoomed).
 
-## Build & run
+## Run it
+
+Nothing to clone and nothing to install but Nix — it fetches the repo itself:
+
+```sh
+nix run github:cprussin/domicile#prototype -- simple
+```
+
+That builds Domicile's headless Wayland compositor and this shell, starts both,
+and puts the desktop on your display. The `-- simple` names the directory under
+`packages/shell-*`; without it you get the reference chrome
+([`@domicile/shell-manganese`](../shell-manganese/README.md)) instead.
+
+Nothing appears in it yet — this shell has no launcher, so the first client has
+to come from outside. In another terminal:
+
+```sh
+nix shell nixpkgs#weston -c \
+  env XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 weston-flower
+```
+
+A window appears. Hold **Alt** and drag it to move it; hold Alt and drag with
+the right button to resize it. Run the command again for a second window, and
+Alt-press either to raise it.
+
+Nix hands the app the source read-only in the store while the build writes into
+the tree, so it first stages the fetched source under
+`~/.cache/domicile/<revision>` — set `DOMICILE_RUN_DIR` to put it elsewhere —
+and builds there. Re-running the same revision reuses those artifacts.
+
+## Build & run from a checkout
+
+```sh
+nix develop .#full -c ./scripts/run-prototype.sh simple
+```
+
+does the same thing against your working tree. To build the shell alone:
 
 ```sh
 bun run turbo build:vite --filter @domicile/shell-simple

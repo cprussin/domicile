@@ -28,7 +28,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 
 import { CHROME_DIAGNOSTIC_CHANNEL } from "./diagnostic-channel";
 import { takeGuestShortcuts } from "./guest-shortcuts";
-import { sizeToDesktop } from "./size-to-desktop";
+import { sizeToDesktopUnlessComposited } from "./size-to-desktop";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -77,16 +77,9 @@ const createWindow = (): void => {
   // And the window's size, which the page is the only half to know: the
   // desktop is described over the socket the *renderer* holds. What
   // `openChromeWindow` opened at is for the moment before the handshake
-  // answers, and for a chrome with no compositor behind it at all.
-  //
-  // Not where Domicile is compositing this window, which is the one case where
-  // the size is not ours to set: the compositor gives that window the whole
-  // desktop whatever is asked for, so a `setContentSize` would be a request
-  // fighting a configure it always loses to. The page asks either way — it
-  // cannot tell the two apart — and here is where the difference is known.
-  if (!composited) {
-    sizeToDesktop(win, ipcMain);
-  }
+  // answers, and for a chrome with no compositor behind it at all. Whether we
+  // are the half that sets it is `size-to-desktop`'s to decide.
+  sizeToDesktopUnlessComposited(composited, win, ipcMain);
   loadChromePage(
     win,
     path.join(dirname, "../renderer/main_window/index.html"),

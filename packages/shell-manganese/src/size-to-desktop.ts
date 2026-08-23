@@ -33,7 +33,29 @@ type Ipc = {
 };
 
 /**
- * Resize `window` whenever its own page says how big the desktop is.
+ * Size the window to the desktop, except where Domicile is compositing it.
+ *
+ * That is the one case where the size is not ours to set: the compositor gives
+ * that window the whole output whatever is asked for, so a `setContentSize`
+ * would be a request fighting a configure it always loses to. The page asks
+ * either way — it holds the socket the desktop is described over, and cannot
+ * tell the two paths apart — so this is where the difference is known.
+ *
+ * @param composited - Whether Domicile is drawing this window's clients itself.
+ */
+export const sizeToDesktopUnlessComposited = (
+  composited: boolean,
+  window: Window,
+  ipc: Ipc,
+): void => {
+  if (!composited) {
+    sizeToDesktop(window, ipc);
+  }
+};
+
+/**
+ * Resize `window` whenever its own page says how big the desktop is — the half
+ * of {@link sizeToDesktopUnlessComposited} that runs when the size is ours.
  *
  * `ipcMain` is the whole process's, so the sizes another window asked for are
  * on this channel too — they are that window's wiring's, and this one takes
@@ -41,7 +63,7 @@ type Ipc = {
  * Otherwise a second window would resize the first, and every window that
  * ever existed would keep being resized by the next one.
  */
-export const sizeToDesktop = (window: Window, ipc: Ipc): void => {
+const sizeToDesktop = (window: Window, ipc: Ipc): void => {
   const asked: Ask = (event, width, height) => {
     if (event.sender === window.webContents) {
       window.setContentSize(width, height);

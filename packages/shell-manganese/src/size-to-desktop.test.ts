@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { CHROME_DESKTOP_SIZE_CHANNEL } from "./desktop-size-channel";
-import { sizeToDesktop } from "./size-to-desktop";
+import { sizeToDesktopUnlessComposited } from "./size-to-desktop";
 
 type Listener = (event: { sender: unknown }, ...args: number[]) => void;
 
@@ -55,14 +55,18 @@ class FakeWindow {
   }
 }
 
-/** One window wired to `ipc`, which every window in the process shares. */
+/**
+ * One window wired to `ipc`, which every window in the process shares.
+ *
+ * Down the copy path, which is the one where a size is ours to set at all.
+ */
 const hosting = (ipc = new FakeIpc()) => {
   const window = new FakeWindow();
-  sizeToDesktop(window, ipc);
+  sizeToDesktopUnlessComposited(false, window, ipc);
   return { ipc, window };
 };
 
-describe("sizeToDesktop", () => {
+describe("sizeToDesktopUnlessComposited", () => {
   it("resizes the window to the size its own page asked for", () => {
     const { ipc, window } = hosting();
 
@@ -90,6 +94,20 @@ describe("sizeToDesktop", () => {
     const { ipc, window } = hosting();
 
     window.destroy();
+    ipc.ask(window.webContents, 3840, 1080);
+
+    expect(window.sizes).toStrictEqual([]);
+  });
+
+  it("leaves the size alone where Domicile composites the window", () => {
+    // The compositor gives that window the whole output whatever is asked for,
+    // so a `setContentSize` is a request fighting a configure it always loses
+    // to. The page asks either way — it holds the socket the desktop is
+    // described over, and cannot tell the two paths apart.
+    const ipc = new FakeIpc();
+    const window = new FakeWindow();
+
+    sizeToDesktopUnlessComposited(true, window, ipc);
     ipc.ask(window.webContents, 3840, 1080);
 
     expect(window.sizes).toStrictEqual([]);
