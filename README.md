@@ -73,9 +73,13 @@ keyboard + pointer input over it are forwarded to the Wayland client
 (surface-local coords, evdev keycodes).
 
 The rail and its launchers below are manganese's alone — `shell-simple` has no
-rail, claims no keyboard combination, and so cannot launch anything itself
-([its README](packages/shell-simple/README.md) says what it deliberately leaves
-out). Everything after them is either shell's.
+rail, claims no keyboard combination, and so cannot launch anything itself. Its
+README says what it deliberately leaves out, and how to
+[put an app on its desktop](packages/shell-simple/README.md#launch-an-app-into-it)
+without one: the two environment variables above are the whole mechanism, and
+they point any Wayland client at Domicile — a terminal included, and every app
+you start from that terminal inherits them. Everything after the launchers is
+either shell's.
 
 Manganese shows one window at a time and switches between them from the rail of
 tabs down its left edge. The rail launches new ones:
