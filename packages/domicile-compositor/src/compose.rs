@@ -151,6 +151,46 @@ pub fn draw_layers(
     Ok(())
 }
 
+/// Where a layer's shadow lands, or `None` when none is drawn.
+///
+/// The one definition of that, because two would drift: the compositor draws
+/// the shadow through this and `damage::covered` boxes it through this, and a
+/// shadow reported somewhere other than where it is drawn is a trail of stale
+/// pixels behind a window that moved.
+///
+/// Not the window's own quad grown by an axis-aligned margin, which is the
+/// obvious wrong answer. The quad is built in the window's own space and put
+/// back through the layer's transform with the scale divided out, so a rotated
+/// window rotates *its shadow's offset* too — a shadow thrown to the right of
+/// an upright window is thrown downward when the window is turned a quarter
+/// turn.
+pub fn shadow_quad(
+    surface_to_output: Transform,
+    shadow: Shadow,
+) -> Option<(Transform, (f32, f32))> {
+    let (width, height) = on_screen_size(surface_to_output);
+    // Room for the blur to fade out in on every side. Too little and the
+    // shadow is cut off square, which looks like a bug and is one. The blur
+    // reaches half its radius past the shadow's edge, because that is where
+    // the shader's falloff ends.
+    let margin = shadow.blur * 0.5 + shadow.spread.max(0.0);
+    // A spread that eats more than half the window leaves no shape to cast, so
+    // nothing is drawn and nothing has to be covered.
+    if width + shadow.spread * 2.0 <= 0.0 || height + shadow.spread * 2.0 <= 0.0 {
+        return None;
+    }
+    // The size goes back with the placement rather than being recomputed by
+    // the caller: the shader is told this as `quad_size`, and a size that did
+    // not match the quad it was placed as would draw the falloff at the wrong
+    // scale.
+    let quad = (width + margin * 2.0, height + margin * 2.0);
+    let grown = Transform::scale(f64::from(quad.0), f64::from(quad.1)).then(Transform::translate(
+        f64::from(shadow.dx - margin),
+        f64::from(shadow.dy - margin),
+    ));
+    Some((placed_like(surface_to_output, grown), quad))
+}
+
 /// Draw one window's shadow: a quad big enough to hold the blur, with the
 /// window's own shape cut out of it by the shader.
 ///
@@ -164,24 +204,14 @@ fn draw_shadow(
     (width, height): (f32, f32),
     shadow: Shadow,
 ) -> Result<(), GlesError> {
-    // Room for the blur to fade out in on every side. Too little and the
-    // shadow is cut off square, which looks like a bug and is one. The blur
-    // reaches half its radius past the shadow's edge, because that is where
-    // the shader's falloff ends.
-    let margin = shadow.blur * 0.5 + shadow.spread.max(0.0);
-    let quad = (width + margin * 2.0, height + margin * 2.0);
-    // A spread that eats more than half the window leaves no shape to cast.
-    // Clamping the size to zero instead would leave the SDF measuring distance
-    // from a point, and the blur would paint a faint disc where CSS paints
-    // nothing at all.
+    // A spread that eats more than half the window leaves no shape to cast, so
+    // `shadow_quad` hands back nothing to place. Clamping the size to zero
+    // instead would leave the SDF measuring distance from a point, and the
+    // blur would paint a faint disc where CSS paints nothing at all.
     let (spread_width, spread_height) = (width + shadow.spread * 2.0, height + shadow.spread * 2.0);
-    if spread_width <= 0.0 || spread_height <= 0.0 {
+    let Some((grown, quad)) = shadow_quad(layer.surface_to_output, shadow) else {
         return Ok(());
-    }
-    let grown = Transform::scale(f64::from(quad.0), f64::from(quad.1)).then(Transform::translate(
-        f64::from(shadow.dx - margin),
-        f64::from(shadow.dy - margin),
-    ));
+    };
     frame.render_texture(
         layer.texture,
         // Identity, not the layer's: this quad never samples the texture, so
@@ -191,7 +221,7 @@ fn draw_shadow(
         // otherwise have its cut-out placed at `+dy` instead of `-dy` and the
         // shadow drawn straight through the middle of the window.
         Matrix3::from_scale(1.0),
-        matrix3(placed_like(layer.surface_to_output, grown)),
+        matrix3(grown),
         None::<Option<_>>,
         layer.alpha,
         Some(&shaders.shadow),
