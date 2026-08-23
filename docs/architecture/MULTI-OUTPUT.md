@@ -291,7 +291,7 @@ its own change.
       than a dependency on `@domicile/chrome-sdk`: the shell writes the four
       lines that adapt one to the other, and the library keeps knowing nothing
       about the protocol
-- [ ] `apps/shell`: put the rail and the clock on named screens; size the
+- [x] `apps/shell`: put the rail and the clock on named screens; size the
       Electron window from the desktop, which is cross-process — the desktop
       size arrives on the renderer's bridge and the window is the main
       process's, so it goes over the existing `ipc-channels` pair; and stop

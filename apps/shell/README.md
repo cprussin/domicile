@@ -13,6 +13,18 @@ rail is its `TabRail`, the launchers and a browser window's controls are its
 theme toggle its `ThemeSwitch`. Styling is Panda CSS from the library's preset —
 the shell defines no stylesheet of its own.
 
+The page is the whole desktop, however many displays that is. The chrome goes on
+the first display the config names — the names are the user's, so the shell
+cannot pick one — and every other display gets a clock, which is what makes a
+screen the config describes visibly there. Nothing is drawn until a desktop has
+been described, which is the handshake's worth of blank window: a chrome laid
+out over the page and then moved onto a screen is a different element in that
+slot, and React would take every open window down with it. Opened in a plain
+browser for styling work there is no host to describe one, so the shell
+describes the window itself. A host that describes a desktop with *no* screens
+is a third thing again — there is nowhere to lay the chrome out — and the page
+says so rather than staying blank.
+
 A window is either a Wayland client the host announced or a browser window the
 shell opened itself; both get a tab, and the rail is what switches between them.
 Only the window on the stage has a box, so the SDK reports the rest to the host
@@ -25,19 +37,25 @@ client's keyboard goes to the host, a browser window's to its page.
 | Path | What |
 |---|---|
 | `src/renderer.tsx` | Renderer entry: applies the theme, builds the `BridgeClient`, registers the SDK's custom elements, mounts `<Shell>`, reports the frame timing. |
-| `src/Shell.tsx` | The chrome: the rail, the launchers, the stage, and the keybindings. |
+| `src/Shell.tsx` | The chrome: the rail, the launchers, the stage, the keybindings, and which screen each of them is on. |
+| `src/display-source.ts` | The `BridgeClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
+| `src/viewport-display.ts` | The same, for a shell with no host: the window is the only display there is. |
+| `src/desktop-size.ts` | How big the desktop the displays make up is: the bounding box, gaps included. |
+| `src/useWindowSizedToDesktop.ts` | Keeping the window that size, which is the main process's to do. |
 | `src/useShellWindows.ts` | Wires host events and user actions into the reducer, and the host's frames into the portal elements. |
 | `src/shell-state.ts` | Every change the window list can undergo, as one pure reduction. |
 | `src/shell-window.ts` | The window model: a client's portal or a browser window. |
 | `src/app-elements.ts` | The live `<domicile-app>` elements by app id — where frames, resizes and cursors are applied. |
 | `src/AppWindow.tsx` | A Wayland client's window: one `<domicile-app>` portal. |
 | `src/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<domicile-webview>`. |
-| `src/Clock.tsx` | The rail footer's live clock. |
+| `src/Clock.tsx` | The live clock: in the rail's footer, and alone on every display the rail is not on. |
 | `src/window-styles.ts` | What every window on the stage shares. |
 | `src/main.ts` | Electron main process: opens the window, takes the chrome's own key combinations out of the pages it embeds, and prints and exits on the renderer's behalf. |
 | `src/preload.ts` | Holds the Unix socket to the compositor and exposes it to the page as `window.domicileTransport`. |
 | `src/socket-path.ts` | Where that socket is, off the renderer's own command line. |
 | `src/socket-failure.ts` | What a dead compositor socket costs the shell. |
+| `src/handshake-failure.ts` | And what a refused handshake costs it: the same conclusion, seen from the page. |
+| `src/size-to-desktop.ts` | The main process's half of that: it resizes on its own page's ask and nobody else's. |
 | `src/guest-shortcuts.ts` | The combinations the page claimed from a `<webview>`, which delivers its keys to nobody else. |
 | `src/chord.ts` | A key combination as a page names its keys — what the shortcut channels carry. |
 | `src/ipc-channels.ts` | The channel names main and preload agree on. |

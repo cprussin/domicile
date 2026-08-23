@@ -3,12 +3,22 @@ import { defineConfig } from "@pandacss/dev";
 
 export default defineConfig({
   exclude: [],
-  // The chrome is the whole viewport and nothing in it scrolls the page: the
-  // rail and the stage divide the height between them, and a window fills the
-  // stage. That has to be said on the elements React does not render.
+  // The page is the desktop and nothing in it scrolls: the rail and the stage
+  // divide a screen's height between them, and a window fills the stage. That
+  // has to be said on the elements React does not render.
+  //
+  // `clip` rather than `hidden`, and on the root rather than the body, because
+  // the desktop is not the viewport: it spans every display, so it is wider
+  // than a window showing one of them. A `hidden` viewport is still a scroll
+  // container — focusing something off to the right scrolls it, with no bar to
+  // show for it — and everything the shell places is placed from a
+  // `getBoundingClientRect`, which is viewport-relative and so is off by the
+  // scroll offset from then on. That puts every portal somewhere the user is
+  // not looking, and the chrome that placed it there looks correct. A clipped
+  // box is not a scroll container at all.
   globalCss: {
-    body: {
-      overflow: "hidden",
+    html: {
+      overflow: "clip",
     },
     "html, body, #root": {
       blockSize: "100%",

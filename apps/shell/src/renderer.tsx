@@ -18,7 +18,10 @@ import { createRoot } from "react-dom/client";
 
 import { AppElements } from "./app-elements";
 import { diagnosticLines } from "./diagnostic-lines";
+import { displaysFrom } from "./display-source";
+import { handshakeFailed } from "./handshake-failure";
 import { Shell } from "./Shell";
+import { viewportDisplays } from "./viewport-display";
 
 import "./global.css";
 
@@ -40,6 +43,14 @@ const transport =
     : postedTransport(window, host);
 
 const bridge = new BridgeClient(transport);
+
+// And where the desktop comes from, which is the same question one answer
+// later: a host describes one, and with no host nothing ever will, so the
+// window is the only geometry there is. Built here rather than in the chrome
+// because this is where the host's absence is already known, and once rather
+// than per render because a source is the connection.
+const displays =
+  host === undefined ? viewportDisplays(window) : displaysFrom(bridge);
 const appElements = new AppElements();
 registerElements(bridge);
 
@@ -50,7 +61,7 @@ if (container === null) {
   throw new Error("shell: index.html is missing #root");
 } else {
   createRoot(container).render(
-    <Shell appElements={appElements} bridge={bridge} />,
+    <Shell appElements={appElements} bridge={bridge} displays={displays} />,
   );
 }
 
@@ -104,6 +115,13 @@ const reportDevicePixelRatio = (): void => {
     .addEventListener("change", reportDevicePixelRatio, { once: true });
 };
 
+// Where a refused handshake is said out loud and acted on. Built here, beside
+// the connect it belongs to, and absent in a plain browser — which has nothing
+// to stop and, with a no-op transport, no handshake to refuse.
+const stopping = window.domicileFailure;
+const refused =
+  stopping === undefined ? undefined : handshakeFailed(stopping.report);
+
 // The handshake's failure is a value, so it is reported rather than thrown:
 // this used to `.catch` and rethrow, which inside a promise handler is an
 // unhandled rejection — the desktop failed to start and said so nowhere a user
@@ -123,6 +141,14 @@ bridge
       Err: (failure) => {
         // biome-ignore lint/suspicious/noConsole: the desktop has not started
         console.error(`domicile: ${describeHandshakeFailure(failure)}`);
+        // And on stderr, followed by stopping — which is what a dead socket
+        // already does, and this is the same kind of dead. The chrome draws
+        // nothing until it has been told a desktop and a refused handshake
+        // carries none, so reporting alone would leave a blank window that
+        // exited zero, explained on a devtools console nobody has open.
+        if (refused !== undefined) {
+          refused(failure);
+        }
       },
       Ok: () => {
         // After the handshake: the host ignores everything sent before it.

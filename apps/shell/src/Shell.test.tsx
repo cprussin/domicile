@@ -5,12 +5,32 @@ import {
   APP_TAG_NAME,
   registerElements,
 } from "@domicile/chrome-sdk/register-elements";
+import type { Display } from "@domicile/component-library/display-source";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AppElements } from "./app-elements";
 import type { Chord } from "./chord";
+import { displaysFrom } from "./display-source";
 import { Shell } from "./Shell";
+
+const LEFT: Display = {
+  name: "left",
+  position: [0, 0],
+  scale: 1,
+  size: [1920, 1080],
+};
+
+const RIGHT: Display = {
+  name: "right",
+  position: [1920, 0],
+  scale: 1,
+  size: [1280, 1024],
+};
+
+/** The region a `<Screen>` renders for the display of this name. */
+const screenNamed = (container: HTMLElement, name: string): Element | null =>
+  container.querySelector(`[data-screen="${name}"]`);
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
@@ -19,11 +39,34 @@ type Call = readonly [kind: string, ...args: unknown[]];
 class FakeBridge {
   readonly calls: Call[] = [];
 
+  /**
+   * The desktop, retained the way the real bridge retains it: a description is
+   * a fact rather than an event, and the chrome reads it as often as it is
+   * told it.
+   */
+  displays: readonly Display[] | undefined;
+
   readonly #handlers = new Map<string, (message: unknown) => void>();
 
   on(type: string, handler: (message: never) => void): this {
     this.#handlers.set(type, handler as (message: unknown) => void);
     return this;
+  }
+
+  // Only if it is still the registered one: `on` is a single slot, so a
+  // teardown that removed whatever it found could silence the handler that
+  // displaced it.
+  off(type: string, handler: (message: never) => void): this {
+    if (this.#handlers.get(type) === handler) {
+      this.#handlers.delete(type);
+    }
+    return this;
+  }
+
+  /** The host describing the desktop, which it does at least once. */
+  describes(displays: readonly Display[]): void {
+    this.displays = displays;
+    this.emit("displays", { displays });
   }
 
   emit(type: string, message: Record<string, unknown>): void {
@@ -109,8 +152,17 @@ class FakeGuestShortcuts {
 
 let bridge: FakeBridge;
 
-const renderShell = () => {
+/**
+ * Renders the chrome on a desktop of `desktop`.
+ *
+ * Described *before* the first render by default, the way a shell that has
+ * completed its handshake is: the chrome renders nothing until there is a
+ * desktop to put it on. The tests that care about the gap pass `undefined` and
+ * describe one themselves.
+ */
+const renderingShell = (desktop: readonly Display[] | undefined) => {
   bridge = new FakeBridge();
+  bridge.displays = desktop;
   const client = bridge as unknown as BridgeClient;
   registerElements(client, {
     measure: stubMeasure,
@@ -121,8 +173,27 @@ const renderShell = () => {
       // Never turned: nothing here tests what happens when a window moves.
     },
   });
-  return render(<Shell appElements={new AppElements()} bridge={client} />);
+  return render(
+    <Shell
+      appElements={new AppElements()}
+      bridge={client}
+      displays={displaysFrom(client)}
+    />,
+  );
 };
+
+/** The chrome on a desktop the host has already described. */
+const renderShell = (desktop: readonly Display[] = [LEFT]) =>
+  renderingShell(desktop);
+
+/**
+ * The chrome before any desktop has been described — the gap between the page
+ * loading and the host answering, and the whole of a shell that has no host.
+ *
+ * Its own function rather than `renderUndescribedShell()`, which a default
+ * parameter would quietly turn back into a described desktop.
+ */
+const renderUndescribedShell = () => renderingShell(undefined);
 
 // The shell opened in a plain browser has no Electron host, so nothing
 // installs this; the tests that want one put it back.
@@ -136,9 +207,150 @@ const renderHostedShell = () => {
 beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
   delete window.domicileGuestShortcuts;
+  delete window.domicileWindow;
 });
 
 describe("Shell", () => {
+  describe("across the displays", () => {
+    it("puts the chrome on the first display the host named", () => {
+      // Not on a name of the shell's choosing: the names are the user's, out
+      // of the config, and the shell has never seen it.
+      const { container } = renderShell([LEFT, RIGHT]);
+
+      expect(
+        screenNamed(container, "left")?.querySelector("main"),
+      ).toBeInTheDocument();
+      expect(screenNamed(container, "right")?.querySelector("main")).toBeNull();
+    });
+
+    it("puts a clock on every other display", () => {
+      // An empty region and a region that is not there look identical, so the
+      // screens without the chrome on them have to show something.
+      const { container } = renderShell([LEFT, RIGHT]);
+
+      expect(screenNamed(container, "right")).toHaveTextContent(/\d/);
+    });
+
+    it("says so when the host describes a desktop with no screens", () => {
+      // `undefined` and `[]` are different things, and without this they look
+      // identical from the outside: a blank window. The `domicile` daemon
+      // serves the chrome protocol from a bare `Session` and describes no
+      // displays at all, so this is what a chrome pointed at it gets.
+      renderShell([]);
+
+      expect(
+        screen.getByRole("heading", { name: "No screens" }),
+      ).toBeInTheDocument();
+    });
+
+    it("says nothing of the kind before the host has described anything", () => {
+      // Not having been told yet is a moment, not a desktop with no screens on
+      // it — and a "no screens" card for the length of the handshake would be
+      // on screen every time the shell starts.
+      renderUndescribedShell();
+
+      expect(
+        screen.queryByRole("heading", { name: "No screens" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("renders nothing until the desktop is described", () => {
+      // A chrome laid out over the page and then moved onto a screen is two
+      // different elements in that slot, and the switch takes the whole
+      // subtree with it. Waiting costs the handshake's worth of blank window;
+      // a shell that will never be told has `viewport-display` instead.
+      const { container } = renderUndescribedShell();
+
+      expect(container.querySelector("main")).toBeNull();
+    });
+
+    it("mounts the chrome once, over the windows already open", () => {
+      // A chrome that reloads against a compositor with clients open is told
+      // about them, and nothing makes the host answer the handshake first. A
+      // chrome built before the desktop and rebuilt after it would take those
+      // windows down with it — every portal re-created blank, every embedded
+      // page reloaded to the URL its window was opened at.
+      const { container } = renderUndescribedShell();
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+
+      bridge.describes([LEFT]);
+
+      expect(
+        screenNamed(container, "left")?.querySelector(APP_TAG_NAME),
+      ).toBeInTheDocument();
+      expect(bridge.calls).not.toContainEqual(["remove", "term"]);
+    });
+
+    it("follows the desktop when it changes", () => {
+      // The desktop is re-described whenever it changes — with no displays
+      // configured it is Domicile's own window, so every resize produces
+      // another description — and the chrome moves to whatever is first now.
+      const { container } = renderShell([LEFT, RIGHT]);
+
+      const stage = screenNamed(container, "left")?.querySelector("main");
+      bridge.describes([RIGHT]);
+
+      expect(
+        screenNamed(container, "right")?.querySelector("main"),
+      ).toBeInTheDocument();
+      expect(screenNamed(container, "left")).toBeNull();
+      // The same stage, moved, and not a new one: a chrome rebuilt on a
+      // re-description reloads every embedded page to where it started and
+      // re-creates every portal blank, with nothing on screen to show for it.
+      expect(screenNamed(container, "right")?.querySelector("main")).toBe(
+        stage ?? null,
+      );
+    });
+  });
+
+  describe("the window it is drawn in", () => {
+    it("is sized to the whole desktop, not to one display", () => {
+      // The page is the desktop, and the SDK places every portal from a
+      // `getBoundingClientRect`. A window narrower than the desktop leaves the
+      // right-hand screens off the end of the viewport, still laying out and
+      // still reporting positions the compositor honours.
+      const sizes: (readonly number[])[] = [];
+      window.domicileWindow = {
+        sizeToDesktop: (width, height) => {
+          sizes.push([width, height]);
+        },
+      };
+
+      renderShell([LEFT, RIGHT]);
+
+      expect(sizes).toContainEqual([3200, 1080]);
+    });
+
+    it("is left alone for a desktop of no screens", () => {
+      // `0 x 0` is not a window, and it is what the bounding box of nothing
+      // comes to. The chrome renders nothing at all for that same desktop, so
+      // a window resized to nothing would be the one part of the shell acting
+      // on it.
+      const sizes: (readonly number[])[] = [];
+      window.domicileWindow = {
+        sizeToDesktop: (width, height) => {
+          sizes.push([width, height]);
+        },
+      };
+
+      renderShell([]);
+
+      expect(sizes).toStrictEqual([]);
+    });
+
+    it("is left alone where there is no Electron host", () => {
+      // The shell opened in a plain browser has no window of its own to size.
+      // (Where Domicile composites this one the ask is made and not answered —
+      // that is `main.ts`, which is the half that knows.)
+      const { container } = renderUndescribedShell();
+
+      expect(() => {
+        bridge.describes([LEFT, RIGHT]);
+      }).not.toThrow();
+      expect(screenNamed(container, "left")).toBeInTheDocument();
+    });
+  });
+
   describe("with nothing open", () => {
     it("says how to open something", () => {
       renderShell();
