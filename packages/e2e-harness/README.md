@@ -22,6 +22,7 @@ can be verified in CI and on a headless box.
 | `src/keystroke-driver.ts` | `measure.sh` | Types over the host socket at a steady rate, so the latency numbers are measured against a known count of keystrokes. |
 | `src/chrome-typist.ts` | `measure-round-trip.sh` | Types with real input events into the chrome's own window instead, which is what puts the chrome's own clock back in the measured loop. |
 | `src/displays-probe.ts` | `e2e-displays-on-hello.sh` | Reports the desktop a chrome is told at the handshake, keeping "told nothing" and "not told" apart — only one of those is a bug. |
+| `src/one-window-per-display-probe.ts` | `e2e-one-window-per-display.sh` | Places one window on each display, so each client can be asked which screen it was told it is on — the placement is what narrows the set, and only a chrome can send one. |
 | `src/redescribe-probe.ts` | `e2e-desktop-changed.sh` | Reports what three chromes are told when the desktop changes under them: one connected and asked, one connected and did not, one that connects after. |
 
 `src/verdicts.ts` is the odd one out: not a harness but a check *on* the

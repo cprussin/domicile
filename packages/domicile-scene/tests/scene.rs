@@ -513,3 +513,88 @@ fn whatever_is_drawn_last_is_what_a_click_reaches() {
 
     assert_eq!(drawn_last, clicked.app_id);
 }
+
+// ---- which screen a window reaches ----------------------------------------
+
+/// The box `portal` reaches, as `(min x, min y, max x, max y)`.
+fn box_of(portal: &Portal) -> (f64, f64, f64, f64) {
+    let bounds = portal.bounds();
+    (bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y)
+}
+
+#[test]
+fn a_placed_window_reaches_its_own_rectangle() {
+    let portal = Portal::new("term", (800.0, 600.0), Transform::translate(100.0, 50.0), 0);
+
+    assert_eq!(box_of(&portal), (100.0, 50.0, 900.0, 650.0));
+}
+
+#[test]
+fn a_scaled_window_reaches_what_the_scale_made_of_it() {
+    // The size is the app's own pixels and the transform is what the page did
+    // with them, so neither alone is where the window is.
+    let portal = Portal::new(
+        "term",
+        (800.0, 600.0),
+        Transform::scale(2.0, 0.5).then(Transform::translate(100.0, 0.0)),
+        0,
+    );
+
+    assert_eq!(box_of(&portal), (100.0, 0.0, 1700.0, 300.0));
+}
+
+#[test]
+fn a_rotated_window_reaches_the_box_around_it() {
+    // Deliberately larger than the window: a quarter turn about the origin
+    // puts the far corner where no edge of the window is. Squaring that off
+    // is the over-report `Bounds` documents — the alternative is a window
+    // reported off a screen it is visibly on.
+    let portal = Portal::new(
+        "term",
+        (100.0, 100.0),
+        Transform::rotate(std::f64::consts::FRAC_PI_4),
+        0,
+    );
+
+    let (min_x, min_y, max_x, max_y) = box_of(&portal);
+    let half_diagonal = (100.0_f64 * 100.0 + 100.0 * 100.0).sqrt() / 2.0;
+    assert!((min_x + half_diagonal).abs() < EPS, "left edge: {min_x}");
+    assert!(min_y.abs() < EPS, "top edge: {min_y}");
+    assert!((max_x - half_diagonal).abs() < EPS, "right edge: {max_x}");
+    assert!(
+        (max_y - half_diagonal * 2.0).abs() < EPS,
+        "bottom edge: {max_y}"
+    );
+}
+
+#[test]
+fn a_flipped_window_reaches_a_box_the_right_way_up() {
+    // A negative scale swaps which corner is which. Built from the origin and
+    // the far corner alone this comes out inside-out — `min` past `max` — and
+    // a box like that overlaps nothing, which reads as a window on no screen
+    // at all.
+    let portal = Portal::new("term", (800.0, 600.0), Transform::scale(-1.0, -1.0), 0);
+
+    assert_eq!(box_of(&portal), (-800.0, -600.0, 0.0, 0.0));
+}
+
+#[test]
+fn two_windows_side_by_side_do_not_overlap() {
+    // Abutting is not overlapping: displays are laid out edge to edge, so a
+    // window ending exactly on the seam is on the screen it is in rather than
+    // on both.
+    let left = Portal::new("left", (100.0, 100.0), Transform::identity(), 0);
+    let right = Portal::new("right", (100.0, 100.0), Transform::translate(100.0, 0.0), 0);
+
+    assert!(!left.bounds().overlaps(&right.bounds()));
+    assert!(!right.bounds().overlaps(&left.bounds()));
+}
+
+#[test]
+fn two_windows_over_each_other_overlap() {
+    let under = Portal::new("under", (100.0, 100.0), Transform::identity(), 0);
+    let over = Portal::new("over", (100.0, 100.0), Transform::translate(99.0, 99.0), 0);
+
+    assert!(under.bounds().overlaps(&over.bounds()));
+    assert!(over.bounds().overlaps(&under.bounds()));
+}

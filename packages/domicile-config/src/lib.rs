@@ -123,8 +123,15 @@ pub struct CompositorConfig {
     /// so nothing sizes that from here. This is the single output's logical
     /// size, advertised on every run with no displays — headless included.
     ///
-    /// Used only while [`OutputConfig::displays`] is empty: once the desktop is
-    /// described, it is what the outputs make up rather than what this says.
+    /// Two jobs, and the second only looks like the first. While
+    /// [`OutputConfig::displays`] is empty this *is* the desktop — the single
+    /// output's logical size. Once the desktop is described it is the largest
+    /// window Domicile will ask a host for: the desktop is shown at its own
+    /// size where it fits inside this and scaled to fit where it does not, so
+    /// a wall of 4K displays does not ask for a window no screen can hold.
+    ///
+    /// The desktop itself is what the outputs make up either way. This never
+    /// changes what a client is told.
     pub nested_size: (u32, u32),
 }
 
