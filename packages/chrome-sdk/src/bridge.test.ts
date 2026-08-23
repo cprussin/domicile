@@ -388,6 +388,51 @@ describe("BridgeClient", () => {
     });
   });
 
+  describe("letting a handler go", () => {
+    it("stops delivering to a handler that has been taken off", () => {
+      // A page that unmounts the thing that registered has to be able to say
+      // so. Without it the handler outlives its tree and is called into
+      // whatever is left of it.
+      const seen: unknown[] = [];
+      const handler = (message: { app_id: string }) =>
+        seen.push(message.app_id);
+      bridge.on("app_closed", handler);
+      bridge.off("app_closed", handler);
+      transport.push({ app_id: "gone", type: "app_closed" });
+      expect(seen).toStrictEqual([]);
+    });
+
+    it("drops what arrives after it rather than piling it up", () => {
+      // The hold is for the gap before the page has *ever* listened for a
+      // type — see `#held`. An `off` says the page listened and stopped, so
+      // holding again would accumulate forever with nothing to drain it, which
+      // for `app_frame` is a pile of buffers the size of the screen.
+      const handler = () => undefined;
+      bridge.on("app_closed", handler);
+      bridge.off("app_closed", handler);
+      transport.push({ app_id: "gone", type: "app_closed" });
+
+      const seen: unknown[] = [];
+      bridge.on("app_closed", (message) => seen.push(message.app_id));
+      expect(seen).toStrictEqual([]);
+    });
+
+    it("leaves a handler that replaced it alone", () => {
+      // `on` is a single slot, so the second registration already displaced
+      // the first. A teardown that ran afterwards and removed whatever it
+      // found would silence the live handler on behalf of a dead one. Which
+      // caller does that is not this class's business to predict: taking the
+      // handler is what makes letting one go safe in any order.
+      const seen: unknown[] = [];
+      const first = () => seen.push("first");
+      bridge.on("app_closed", first);
+      bridge.on("app_closed", () => seen.push("second"));
+      bridge.off("app_closed", first);
+      transport.push({ app_id: "gone", type: "app_closed" });
+      expect(seen).toStrictEqual(["second"]);
+    });
+  });
+
   describe("the desktop the host described", () => {
     const LEFT: DisplayInfo = {
       name: "left",

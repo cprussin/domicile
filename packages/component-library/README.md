@@ -27,6 +27,9 @@ consume it — don't fork. See [/docs/guidelines/STYLING.md](../../docs/guidelin
 | `@domicile/component-library/SlideOver` | Edge-anchored drawer (base-ui Dialog). |
 | `@domicile/component-library/Avatar` | Avatar with initials / gradient fallback. |
 | `@domicile/component-library/Kbd` | Keyboard-shortcut key cap. |
+| `@domicile/component-library/Screen` | Lays its children over one of the desktop's displays, once per display it selects. |
+| `@domicile/component-library/DisplayProvider` | The desktop the host described, for the `<Screen>`s below it. |
+| `@domicile/component-library/display-source` | The `Display` / `DisplaySource` types a `DisplayProvider` is fed. |
 | `@domicile/component-library/Provider` | base-ui `DirectionProvider` wrapper every app roots its tree in. |
 | `@domicile/component-library/ThemeProvider` | Theme state (`light` / `dark` / `system`) and the `<html data-theme>` side effect. |
 | `@domicile/component-library/ThemeSwitch` | The toggle that cycles the theme preference. |
