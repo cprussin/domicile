@@ -2068,11 +2068,23 @@ impl DomicileCompositor {
                             shift: modifiers.shift,
                             logo: modifiers.logo,
                         };
-                        match state.shortcuts.pressed(key.raw(), held) {
-                            // Releases are swallowed too, so a client never sees
-                            // half of a chord it was not given the start of.
-                            Some(shortcut) => FilterResult::Intercept(pressed.then_some(shortcut)),
-                            None => FilterResult::Forward,
+                        // Releases are swallowed too, so a client never sees
+                        // half of a chord it was not given the start of — but
+                        // on the record of what was taken rather than on the
+                        // chord the release would match now. The modifiers
+                        // move in between: an Enter forwarded on its own, let
+                        // go of while alt happens to be down, matches
+                        // Alt+Enter and would have had its release swallowed,
+                        // leaving that client a key it can never lift.
+                        if pressed {
+                            match state.shortcuts.press(key.raw(), held) {
+                                Some(shortcut) => FilterResult::Intercept(Some(shortcut)),
+                                None => FilterResult::Forward,
+                            }
+                        } else if state.shortcuts.release(key.raw()) {
+                            FilterResult::Intercept(None)
+                        } else {
+                            FilterResult::Forward
                         }
                     },
                 );
@@ -2417,19 +2429,33 @@ impl DomicileCompositor {
         let time = self.now_ms();
         for key in pressed {
             let serial = SERIAL_COUNTER.next_serial();
-            // Forwarded even for a key a claimed shortcut took out of the
-            // stream, which `pressed_keys` includes: smithay records the press
-            // before it runs the filter, and keeps the set that would tell
-            // them apart to itself. Asking `shortcuts` again here would be
-            // worse than the unmatched release it saves, because it answers
-            // for the modifiers held *now* — an Enter forwarded on its own,
-            // released while alt happens to be down, would match Alt+Enter and
-            // be swallowed, leaving that client a key it can never let go of.
-            // A release for a press a client did not see is what
-            // `wl_keyboard.leave` already tells it to expect.
-            keyboard.input::<(), _>(self, key, KeyState::Released, serial, time, |_, _, _| {
-                FilterResult::Forward
-            });
+            keyboard.input::<(), _>(
+                self,
+                key,
+                KeyState::Released,
+                serial,
+                time,
+                |state, _, _| {
+                    // Taken here if its press was taken. `pressed_keys` includes
+                    // the keys a claimed chord kept from the client — smithay
+                    // records a press before it runs the filter, and keeps the set
+                    // that would tell them apart to itself — and a client that was
+                    // never given a key going down must not be given it coming up.
+                    // The seat's own state is updated either way, which is the
+                    // half of this that clears a stuck lock.
+                    //
+                    // The other direction is not worth a record: once this
+                    // pass has let a key go, the physical release that arrives
+                    // afterwards is forwarded to a client that no longer holds
+                    // it. A release for a press a client is not holding is
+                    // what `wl_keyboard.leave` already tells it to expect.
+                    if state.shortcuts.release(key.raw()) {
+                        FilterResult::Intercept(())
+                    } else {
+                        FilterResult::Forward
+                    }
+                },
+            );
         }
     }
 }
