@@ -119,7 +119,7 @@ export const defaultMeasure: Measure = (element) => {
  *
  * This is a `getComputedStyle` and a `matches` per ancestor, on a path that
  * runs per window per animation frame — and again per `pointermove`, through
- * `activeMeasure`, which `placement-timing` does not count. So the reported
+ * the bound `measure`, which `placement-timing` does not count. So the reported
  * placement cost is a floor rather than the whole of it, and a page deep
  * enough for this to matter would show it as pointer latency rather than in
  * that line. The alternative is a window that does not follow the page, which

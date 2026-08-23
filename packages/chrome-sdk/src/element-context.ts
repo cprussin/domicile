@@ -1,11 +1,12 @@
-// Page-level state the custom elements read.
+// What the chrome bound the SDK with, and which app has the keyboard.
 //
 // A custom element is constructed by the DOM (`document.createElement`), so it
 // cannot take its collaborators as constructor arguments the way the rest of
 // the SDK does. This module is the seam instead: the chrome binds a bridge (and
 // optionally a measurement strategy) once at startup via `registerElements`,
-// and the element classes read it from here. Tests bind their own to inject a
-// double, which is why the setters are exported.
+// which hands the resulting context to the listeners it installs and to the
+// element class it builds. Tests bind their own to inject a double, which is
+// why the setter is exported.
 
 import type { BridgeClient } from "./bridge";
 import type { Measure } from "./measure";
@@ -16,13 +17,14 @@ import { defaultObservePlacement } from "./observe-placement";
 /**
  * What the SDK was bound with, as one cell that outlives the binding.
  *
- * Handed to whatever `registerElements` installs, rather than read back per
- * call: the document-level input listeners exist only because a bind created
- * them, so for them there is no unbound case to represent — and a bridge that
- * cannot be `undefined` is a release that cannot be silently dropped.
+ * Handed to everything `registerElements` builds, rather than read back per
+ * call. None of it — the document-level input listeners, the `<domicile-app>`
+ * class — exists before the bind that created it, so for them there is no
+ * unbound case to represent, and a bridge that cannot be `undefined` is a
+ * message that cannot be silently dropped.
  *
- * Mutable, and the same object across binds, because those listeners are
- * installed once and a rebind has to reach them.
+ * Mutable, and the same object across binds, because those are built once and
+ * a rebind has to reach them.
  */
 export type ElementContext = {
   bridge: BridgeClient;
@@ -45,20 +47,6 @@ export const bindElementContext = (
   context = bound;
   return bound;
 };
-
-/**
- * The bound bridge, or `undefined` before `registerElements` has run.
- *
- * For the element classes, which the DOM constructs and which therefore cannot
- * be handed a context. Anything `registerElements` installs itself takes the
- * `ElementContext` instead.
- */
-export const activeBridge = (): BridgeClient | undefined => context?.bridge;
-
-export const activeMeasure = (): Measure => context?.measure ?? defaultMeasure;
-
-export const activeObservePlacement = (): ObservePlacement =>
-  context?.observePlacement ?? defaultObservePlacement;
 
 /**
  * The app currently receiving keyboard input. Keyboard events are delivered to
