@@ -45,7 +45,7 @@ pub enum ConfigError {
 pub enum ShellRef {
     /// A named package, e.g. `"simple"`, resolved under the shells directory.
     Name(String),
-    /// A filesystem path to a chrome package, e.g. `"./apps/shell"`.
+    /// A filesystem path to a chrome package, e.g. `"./packages/shell-manganese"`.
     Path(PathBuf),
 }
 

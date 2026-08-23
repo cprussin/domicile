@@ -1,7 +1,7 @@
 // A minimal headless stand-in for the chrome, used by the repo's e2e scripts.
-// The real chrome is the Electron app in `apps/shell`; this connects to the
-// same compositor socket, speaks the same newline-delimited JSON framing, and
-// lets a script drive it.
+// The real chrome is the Electron app in `packages/shell-manganese`; this
+// connects to the same compositor socket, speaks the same newline-delimited
+// JSON framing, and lets a script drive it.
 
 import net from "node:net";
 

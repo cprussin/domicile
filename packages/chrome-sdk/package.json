@@ -15,6 +15,7 @@
     "./app-element": "./src/app-element.ts",
     "./bridge": "./src/bridge.ts",
     "./chrome-message": "./src/chrome-message.ts",
+    "./device-pixel-ratio": "./src/device-pixel-ratio.ts",
     "./element-transform": "./src/element-transform.ts",
     "./host-stream": "./src/host-stream.ts",
     "./host-transport": "./src/host-transport.ts",

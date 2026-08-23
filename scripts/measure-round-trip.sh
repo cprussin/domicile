@@ -33,7 +33,7 @@ BIN="$ROOT/target/release/domicile-compositor"
 echo "== building (release) =="
 cargo build --release -p domicile-compositor || exit 1
 bun install --frozen-lockfile >/dev/null 2>&1 || true
-bun run turbo build:vite --filter @domicile/shell >/dev/null 2>&1 || {
+bun run turbo build:vite --filter @domicile/shell-manganese >/dev/null 2>&1 || {
   echo "the shell failed to build"; exit 1;
 }
 
@@ -83,7 +83,7 @@ PROFILE="$(mktemp -d)"
 DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu \
   --disable-dev-shm-usage --remote-debugging-port=0 \
   --user-data-dir="$PROFILE" \
-  "$ROOT/apps/shell" >"$CHROMELOG" 2>&1 &
+  "$ROOT/packages/shell-manganese" >"$CHROMELOG" 2>&1 &
 CHROME=$!
 for _ in $(seq 1 900); do [ -s "$PROFILE/DevToolsActivePort" ] && break; sleep 0.1; done
 PORT="$(head -1 "$PROFILE/DevToolsActivePort" 2>/dev/null)"

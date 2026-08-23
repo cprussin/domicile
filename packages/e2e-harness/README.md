@@ -2,10 +2,10 @@
 
 Headless chrome stand-ins for the scripts in `/scripts` — the `e2e-*.sh`
 checks, the `measure*.sh` benchmarks, and `probe-transparency.sh` — plus the
-check on those scripts' own machinery. The real
-chrome is the Electron app in [`apps/shell`](../../apps/shell/README.md); these
-speak the same protocol over the same socket without needing a display, so the
-message plane can be verified in CI and on a headless box.
+check on those scripts' own machinery. The real chrome is the Electron app in
+[`packages/shell-manganese`](../shell-manganese/README.md); these speak the same
+protocol over the same socket without needing a display, so the message plane
+can be verified in CI and on a headless box.
 
 | Entry | Used by | What it does |
 |---|---|---|

@@ -20,7 +20,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/scripts/xvfb-display.sh"
 export NO_COLOR=1
 
-( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell ) >/dev/null 2>&1 \
+( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell-manganese ) >/dev/null 2>&1 \
   || { echo "the shell did not build"; exit 1; }
 
 # Electron is not on `PATH` under `nix develop`, and a missing one exits 127 —
@@ -55,7 +55,7 @@ ensure_display 800x600x24 60 || exit 1
 # failure this guards against is one that never exits at all, and `timeout`
 # reports 124 for it, which is not the 1 the check wants either way.
 DOMICILE_CHROME_SOCKET="$SOCK" timeout 30 \
-  electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/apps/shell" \
+  electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/packages/shell-manganese" \
   >"$LOG" 2>&1
 STATUS=$?
 

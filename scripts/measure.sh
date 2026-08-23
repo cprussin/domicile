@@ -32,7 +32,7 @@ cd "$ROOT"
 echo "== building (release) =="
 cargo build --release -p domicile-compositor || exit 1
 bun install --frozen-lockfile >/dev/null 2>&1 || true
-bun run turbo build:vite --filter @domicile/shell >/dev/null 2>&1 || {
+bun run turbo build:vite --filter @domicile/shell-manganese >/dev/null 2>&1 || {
   echo "the shell failed to build"; exit 1;
 }
 BIN="$ROOT/target/release/domicile-compositor"
@@ -74,10 +74,10 @@ run_path() {
     chrome_display="$(sed -n '/the chrome connects here/s/.*display="\([^"]*\)".*/\1/p' "$COMPLOG" | head -1)"
     WAYLAND_DISPLAY="$chrome_display" DOMICILE_COMPOSITED=1 \
       DOMICILE_CHROME_SOCKET="$sock" \
-      electron --no-sandbox --ozone-platform=wayland "$ROOT/apps/shell" >"$CHROMELOG" 2>&1 &
+      electron --no-sandbox --ozone-platform=wayland "$ROOT/packages/shell-manganese" >"$CHROMELOG" 2>&1 &
   else
     DOMICILE_CHROME_SOCKET="$sock" \
-      electron --no-sandbox "$ROOT/apps/shell" >"$CHROMELOG" 2>&1 &
+      electron --no-sandbox "$ROOT/packages/shell-manganese" >"$CHROMELOG" 2>&1 &
   fi
   CHROME=$!
   # A run whose chrome never connected measures a compositor with no desktop

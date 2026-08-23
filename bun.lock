@@ -9,33 +9,6 @@
         "turbo": "catalog:",
       },
     },
-    "apps/shell": {
-      "name": "@domicile/shell",
-      "version": "0.0.0",
-      "dependencies": {
-        "@domicile/chrome-sdk": "workspace:*",
-        "@domicile/component-library": "workspace:*",
-        "@phosphor-icons/react": "catalog:",
-        "react": "catalog:",
-        "react-dom": "catalog:",
-      },
-      "devDependencies": {
-        "@cprussin/tsconfig": "catalog:",
-        "@domicile/test-support": "workspace:*",
-        "@pandacss/dev": "catalog:",
-        "@pandacss/preset-panda": "catalog:",
-        "@testing-library/react": "catalog:",
-        "@testing-library/user-event": "catalog:",
-        "@types/bun": "catalog:",
-        "@types/react": "catalog:",
-        "@types/react-dom": "catalog:",
-        "@vitejs/plugin-react": "catalog:",
-        "electron": "catalog:",
-        "postcss": "catalog:",
-        "typescript": "catalog:",
-        "vite": "catalog:",
-      },
-    },
     "packages/chrome-sdk": {
       "name": "@domicile/chrome-sdk",
       "version": "0.0.0",
@@ -93,6 +66,64 @@
         "@cprussin/tsconfig": "catalog:",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
+      },
+    },
+    "packages/electron-chrome-host": {
+      "name": "@domicile/electron-chrome-host",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "electron": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/shell-manganese": {
+      "name": "@domicile/shell-manganese",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile/chrome-sdk": "workspace:*",
+        "@domicile/component-library": "workspace:*",
+        "@domicile/electron-chrome-host": "workspace:*",
+        "@phosphor-icons/react": "catalog:",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile/test-support": "workspace:*",
+        "@pandacss/dev": "catalog:",
+        "@pandacss/preset-panda": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@testing-library/user-event": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "@vitejs/plugin-react": "catalog:",
+        "electron": "catalog:",
+        "postcss": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
+    "packages/shell-simple": {
+      "name": "@domicile/shell-simple",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile/chrome-sdk": "workspace:*",
+        "@domicile/component-library": "workspace:*",
+        "@domicile/electron-chrome-host": "workspace:*",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile/test-support": "workspace:*",
+        "@pandacss/dev": "catalog:",
+        "@pandacss/preset-panda": "catalog:",
+        "@types/bun": "catalog:",
+        "electron": "catalog:",
+        "postcss": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
       },
     },
     "packages/test-support": {
@@ -223,7 +254,11 @@
 
     "@domicile/e2e-harness": ["@domicile/e2e-harness@workspace:packages/e2e-harness"],
 
-    "@domicile/shell": ["@domicile/shell@workspace:apps/shell"],
+    "@domicile/electron-chrome-host": ["@domicile/electron-chrome-host@workspace:packages/electron-chrome-host"],
+
+    "@domicile/shell-manganese": ["@domicile/shell-manganese@workspace:packages/shell-manganese"],
+
+    "@domicile/shell-simple": ["@domicile/shell-simple@workspace:packages/shell-simple"],
 
     "@domicile/test-support": ["@domicile/test-support@workspace:packages/test-support"],
 

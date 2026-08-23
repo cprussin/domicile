@@ -16,11 +16,22 @@ TypeScript side; the Rust side is in
 
 ## Layout
 
-The TypeScript code in this repo is divided into bun workspaces. In general,
-the workspaces go in one of the following top-level directories:
+Every bun workspace in this repo lives in `/packages`, whether it is a library
+(`chrome-sdk`, `component-library`, `test-support`, `e2e-harness`,
+`electron-chrome-host`) or a shell — a runnable chrome package, named `shell-*`
+(`shell-manganese`, `shell-simple`). A shell is not an "app" in its own
+directory because it is not the thing that runs: the compositor is, and a shell
+is the chrome package its config points at.
 
-- `/apps` — bun workspaces that define user-facing apps (`shell`)
-- `/packages` — libraries (`chrome-sdk`, `test-support`, `e2e-harness`)
+The `shell-` prefix is a directory convention, not part of a shell's identity:
+`packages/` is shared with the cargo crates, and the prefix is what keeps the
+shells together in one tree. A shell's own name is what its
+`domicile.shell.json` says — `simple`, `manganese` — which is the name
+`ShellRef::Name` looks up under the compositor's shells directory once shells
+are installed somewhere. A checkout is not that directory, and `packages/`
+is not a `shells_dir`: point a config at a shell in this repo by path
+(`package = "./packages/shell-simple"`), which is what `ShellRef::Path` is for.
+See `packages/domicile-config`.
 
 `/packages` is shared with the Rust side: the `domicile-*` crates live there
 too, as members of the cargo workspace declared in the root `Cargo.toml`. One
@@ -34,7 +45,7 @@ languages.
 
 ## Package READMEs
 
-Every package or app in `/apps/` and `/packages/` should have a `README.md`.
+Every package in `/packages/` should have a `README.md`.
 It should orient a new contributor: what the package does, why it exists, its
 dependencies, how to use it, and how to test it. Be comprehensive but
 succinct — enough to get someone productive without re-reading the source.
@@ -93,8 +104,8 @@ crate — without confirming with the developer that this is the intent.
 
 All TypeScript code should pass all checks run via
 `bun run turbo test -- --ui stream`. This runs linting, formatting,
-typechecking, and unit tests, and builds the shell's Vite bundles so a green
-run means the app actually builds. If code is failing, first try
+typechecking, and unit tests, and builds the shells' Vite bundles so a green
+run means they actually build. If code is failing, first try
 `bun run turbo fix -- --ui stream` to apply auto-fixes.
 
 **Important:** the `bun run turbo` alias may resolve to a package-scoped turbo
