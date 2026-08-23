@@ -89,10 +89,11 @@ MOCK=$!
 # handshook had the welcome in it. Bounded, so a chrome that genuinely never
 # handshakes still reaches that arm with what it did produce.
 #
-# Not the first line the chrome writes, either: a broadcast reaching a
-# connection registered at accept but not yet welcomed is followed by the
-# handshake answer — see docs/architecture/MULTI-OUTPUT.md — so this waits for
-# the line rather than for the file to be non-empty.
+# Not the first line the chrome writes, either. A connection is registered when
+# it is accepted and answered when it says hello, so a broadcast in between
+# reaches it ahead of its own handshake answer — which is why that answer
+# carries the desktop as of when it is written. This waits for the line rather
+# than for the file to be non-empty.
 for _ in $(seq 1 200); do grep -q '"type":"welcome"' "$CHROME" && break; sleep 0.05; done
 for _ in $(seq 1 200); do plain | grep -q "advertising output scale" && break; sleep 0.05; done
 
