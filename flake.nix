@@ -90,8 +90,15 @@
             # The e2e and smoke scripts expect target/debug/domicile-compositor
             # to exist already; run-prototype.sh builds its own release binary,
             # so the debug build below is only for the checks.
+            # The script's own arguments reach it in two hops, which is what
+            # lets `nix run .#prototype -- simple` pick a shell. `\$@` is escaped
+            # so the *inner* bash expands it from its own positional parameters
+            # rather than this one baking the words in; those parameters are the
+            # trailing `"$@"`, since `bash -c CMD name args...` is how a `-c`
+            # command is given any.
             exec nix develop "${self}#full" --command bash -c \
-              "bun install --frozen-lockfile && cargo build -p domicile-compositor && exec ./scripts/${script}"
+              "bun install --frozen-lockfile && cargo build -p domicile-compositor && exec ./scripts/${script} \"\$@\"" \
+              domicile-${name} "$@"
           '';
         };
 

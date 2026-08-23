@@ -35,10 +35,25 @@ app first stages the fetched source under `~/.cache/domicile/<revision>` — set
 `DOMICILE_RUN_DIR` to put it elsewhere — and builds there. Re-running the same
 revision reuses those artifacts; a new one starts clean.
 
+That boots the reference chrome,
+[`shell-manganese`](packages/shell-manganese/README.md). Name a shell to boot a
+different one:
+
+```sh
+nix run github:cprussin/domicile#prototype -- simple
+```
+
+[`shell-simple`](packages/shell-simple/README.md) is the smallest chrome that is
+still a desktop — hold **Alt** and drag a window to move it, Alt and the right
+button to resize it, and that is the entire user interface. It is the one to
+read first if you want to know what a shell actually has to do. The argument
+names a directory under `packages/shell-*`; an unknown one lists what is there.
+
 From a checkout, run the script directly instead (it builds in your working tree):
 
 ```sh
-nix develop .#full -c ./scripts/run-prototype.sh
+nix develop .#full -c ./scripts/run-prototype.sh          # manganese
+nix develop .#full -c ./scripts/run-prototype.sh simple   # the simple shell
 ```
 
 Then, in another terminal, put an app onto Domicile's display:
@@ -50,15 +65,20 @@ nix shell nixpkgs#weston -c \
 
 (from a checkout, `nix develop .#full` already has `weston-flower` on `PATH`).
 
-An `<app>` portal appears in the chrome window, with a tab for it in the shell's
-tab rail.
+An `<app>` portal appears in the chrome window — in manganese with a tab for it
+in the shell's tab rail; in simple as a bare window you can Alt-drag around.
 
-App windows are **interactive**: clicking an `<app>` focuses it, and keyboard +
-pointer input over it are forwarded to the Wayland client (surface-local coords,
-evdev keycodes).
+App windows are **interactive** in either: clicking an `<app>` focuses it, and
+keyboard + pointer input over it are forwarded to the Wayland client
+(surface-local coords, evdev keycodes).
 
-The demo shell shows one window at a time and switches between them from the
-rail of tabs down its left edge. The rail launches new ones:
+The rail and its launchers below are manganese's alone — `shell-simple` has no
+rail, claims no keyboard combination, and so cannot launch anything itself
+([its README](packages/shell-simple/README.md) says what it deliberately leaves
+out). Everything after them is either shell's.
+
+Manganese shows one window at a time and switches between them from the rail of
+tabs down its left edge. The rail launches new ones:
 
 - **Terminal** (or **Alt+Enter**) — launch a terminal (`kitty`) onto Domicile.
   GPU clients render through the `zwp_linux_dmabuf_v1` path (their buffer is
