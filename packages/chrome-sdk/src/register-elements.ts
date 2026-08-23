@@ -1,7 +1,7 @@
 // Wiring the SDK to a bridge: bind the element context, install the
 // document-level input listeners, and define the custom elements.
 
-import { DomicileAppElement } from "./app-element";
+import { createAppElement } from "./app-element";
 import type { BridgeClient } from "./bridge";
 import type { ElementContext } from "./element-context";
 import {
@@ -36,8 +36,9 @@ export const registerElements = (
   bridge: BridgeClient,
   { measure, observePlacement }: RegisterOptions = {},
 ): void => {
-  installGlobalInput(bindElementContext(bridge, measure, observePlacement));
-  defineElements();
+  const context = bindElementContext(bridge, measure, observePlacement);
+  installGlobalInput(context);
+  defineElements(context);
 };
 
 // Keyboard events land on the document, not on an element, so they are routed
@@ -138,10 +139,16 @@ const releaseFocusOffApp =
 // `customElements` is absent when the SDK is loaded outside a browsing context
 // (a unit test of the message layer, say); binding the bridge is still useful
 // there, defining the elements is not.
-const defineElements = (): void => {
+//
+// The app element is built here, against the context, because that is what
+// lets it hold a bridge it cannot doubt. A second call with a different bridge
+// does not build it again — a tag name can only be defined once — and does not
+// need to: the context is one cell, and rebinding writes through it to the
+// class already registered.
+const defineElements = (context: ElementContext): void => {
   if (typeof customElements !== "undefined") {
     if (customElements.get(APP_TAG_NAME) === undefined) {
-      customElements.define(APP_TAG_NAME, DomicileAppElement);
+      customElements.define(APP_TAG_NAME, createAppElement(context));
     }
     if (customElements.get(WEBVIEW_TAG_NAME) === undefined) {
       customElements.define(WEBVIEW_TAG_NAME, DomicileWebviewElement);
