@@ -117,11 +117,14 @@ impl Default for ShellConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CompositorConfig {
-    /// Size of the nested output used by the `winit` dev backend (width, height).
+    /// The desktop's size when nothing describes one (width, height).
     ///
-    /// Will be used only while [`OutputConfig::displays`] is empty: once the
-    /// desktop is described, its bounding box is what the nested window is
-    /// sized to. Nothing reads `displays` yet, so today it is used either way.
+    /// Not the winit window's: `winit::init()` is called with no attributes,
+    /// so nothing sizes that from here. This is the single output's logical
+    /// size, advertised on every run with no displays — headless included.
+    ///
+    /// Used only while [`OutputConfig::displays`] is empty: once the desktop is
+    /// described, it is what the outputs make up rather than what this says.
     pub nested_size: (u32, u32),
 }
 
@@ -281,13 +284,40 @@ impl DisplayConfig {
                 self.name
             )));
         }
-        if i64::from(width) > i64::from(i32::MAX) || i64::from(height) > i64::from(i32::MAX) {
+        // The `wl_output` mode is physical pixels, which is this times the
+        // scale — so a size and a scale that each fit on their own can still
+        // multiply past what a coordinate is. Checked here rather than where
+        // the mode is built, which is arithmetic in the Smithay backend that
+        // nothing can test and that would wrap in release.
+        //
+        // `u64`, not `i64`: two `u32`s multiply to just under `u64::MAX` and
+        // to nearly twice `i64::MAX`, so the check written in `i64` panicked
+        // on the largest inputs in debug — which `ConfigStore` cannot have,
+        // since a bad config must never take the compositor down.
+        //
+        // On *this* path that is the whole of it: wrapping needs a width past
+        // `i32::MAX`, and no such display survives — the far-corner check just
+        // below rejects one whose corner lands off the coordinate space, and
+        // `validate_extent` rejects the rest by the span they put between two
+        // displays. So an `i64` version here would have wrapped and been
+        // convicted by one of those anyway. The nested check has no backstop
+        // at all, and there a wrapped product really does land back under the
+        // bound and admit what the check exists to reject.
+        //
+        // This subsumes bounding the logical size on its own: the scale is at
+        // least 1 by the check above, so a mode that fits means a size that
+        // fits, which is the invariant `Desktop` asserts when it normalises.
+        let mode = (
+            u64::from(width) * u64::from(self.scale),
+            u64::from(height) * u64::from(self.scale),
+        );
+        let reach = u64::try_from(i32::MAX).expect("`i32::MAX` is positive");
+        if mode.0 > reach || mode.1 > reach {
             return Err(ConfigError::Validation(format!(
-                "{at} size for {} is {width}x{height}, wider or taller than a \
-                 position on one desktop can reach: normalising puts this \
-                 display's near edge at zero, so its far edge has to be a \
-                 position",
-                self.name
+                "{at} size for {} is {width}x{height} at scale {}, a mode of \
+                 {}x{} — more pixels across or down than a coordinate can \
+                 describe",
+                self.name, self.scale, mode.0, mode.1
             )));
         }
         let (_, right) = span(self.position.0, width);
@@ -338,10 +368,9 @@ pub struct OutputConfig {
     /// boundary — so sharpness is bought with latency, in the square. `1`
     /// turns scaling off entirely and restores the old behaviour.
     ///
-    /// Governs the single output that follows Domicile's own window, so it
-    /// will apply only while [`displays`](OutputConfig::displays) is empty: a
+    /// Governs the single output that follows Domicile's own window, and so
+    /// applies only while [`displays`](OutputConfig::displays) is empty: a
     /// described display states its own `scale` and has no ratio to cap.
-    /// Nothing reads `displays` yet, so today it applies either way.
     pub max_scale: u32,
 }
 
@@ -400,10 +429,13 @@ impl OutputConfig {
             }
         }
         // Last, because it is the least specific thing that can be wrong with
-        // a layout: a single display whose own far corner does not fit is an
-        // error about *that display*, and running this first would answer it
-        // with "the displays span N across", which names nobody and is not
-        // even true of one.
+        // a layout. A display whose own far corner does not fit is an error
+        // about *that display*, and running this first would answer it with
+        // "the displays span N across" — which is a fact about a pair, and so
+        // names the wrong display when one of the pair is the one at fault.
+        //
+        // Only observable with two or more: a lone display's extent is its own
+        // size, which `DisplayConfig::validate` bounds first anyway.
         self.validate_extent()
     }
 
@@ -510,6 +542,34 @@ impl Config {
         if w == 0 || h == 0 {
             return Err(ConfigError::Validation(format!(
                 "compositor.nested_size must be non-zero, got {w}x{h}"
+            )));
+        }
+        // The nested desktop's mode, for the same reason a described display's
+        // is checked: with no displays configured the desktop is
+        // `nested_size` and its scale climbs to `max_scale`, so those two
+        // multiply into physical pixels that have to be a coordinate. Neither
+        // is wrong alone, which is why the check is on the product and the
+        // message names both.
+        //
+        // Unconditional, though a config that describes displays never reaches
+        // either setting: a config is checked for what it says, not for which
+        // of it this run happens to use, so adding a display does not quietly
+        // legalise a nested size that was rejected a moment ago.
+        // `u64` for the same reason as a display's: two `u32`s multiply past
+        // `i64::MAX`, so an `i64` product panics in debug and wraps in
+        // release — and a wrapped one lands back under the bound, which turns
+        // this check into the thing that admits what it exists to reject. A
+        // panic here would also break `ConfigStore`'s guarantee that a bad
+        // config can never take the compositor down.
+        let widest = u64::from(w) * u64::from(self.output.max_scale);
+        let tallest = u64::from(h) * u64::from(self.output.max_scale);
+        let reach = u64::try_from(i32::MAX).expect("`i32::MAX` is positive");
+        if widest > reach || tallest > reach {
+            return Err(ConfigError::Validation(format!(
+                "compositor.nested_size {w}x{h} at output.max_scale {} is a \
+                 mode of {widest}x{tallest} — more pixels across or down than \
+                 a coordinate can describe",
+                self.output.max_scale
             )));
         }
         self.input.keyboard.validate()?;

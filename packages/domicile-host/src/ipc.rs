@@ -67,6 +67,10 @@ impl Session {
 pub fn handle_chrome_line(host: &mut Host, ready: &mut bool, line: &str) -> Vec<HostMessage> {
     match parse_chrome(line.trim()) {
         Ok(message) => apply_chrome_message(host, ready, message),
+        // Dropped, because a chrome one version out of step must not take the
+        // host down. The compositor says so out loud where it does the same
+        // thing; this crate has no logging dependency at all, and adding one
+        // is its own change rather than a rider on the one that noticed.
         Err(_) => Vec::new(),
     }
 }

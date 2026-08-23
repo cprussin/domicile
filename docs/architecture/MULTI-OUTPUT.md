@@ -6,10 +6,10 @@ shell puts things on one with `<Screen name="left">`.
 
 ## Problem
 
-Domicile has one output. The desktop's size is `OUTPUT_LOGICAL_SIZE`, the scene
-has a single `surface_to_output`, and there is nowhere for a shell to ask how
-many screens there are — so a shell cannot put a panel on one monitor and a
-launcher on another, which is the first thing a shell wants to do.
+Domicile had one output, of a hardcoded size; the scene has a single
+`surface_to_output`; and there is nowhere for a shell to ask how many screens
+there are — so a shell cannot put a panel on one monitor and a launcher on
+another, which is the first thing a shell wants to do.
 
 A nested compositor has no monitors to enumerate and no DRM to ask, so the
 layout comes from the config until there is a DRM backend.
@@ -104,7 +104,7 @@ without a handler at all.
 
 ### Which output a surface is on
 
-`new_toplevel` does an unconditional `self.output.enter(...)`. With N outputs:
+`new_toplevel` enters every output unconditionally. Which one it *should* be:
 
 | The surface | Enters |
 |---|---|
@@ -159,13 +159,14 @@ carry no output identity and stay the no-displays path.
 
 ### The nested window
 
-Sized to the displays' bounding box, which replaces `OUTPUT_LOGICAL_SIZE`.
-`compositor.nested_size` becomes the fallback when no displays are configured —
-today it is config the compositor never reads.
+`compositor.nested_size` is the fallback when no displays are configured,
+replacing the hardcoded size — shipped. Sizing the window itself to the
+displays' bounding box is not; see the plan item below.
 
-`WinitEvent::Resized` currently calls `adopt_window_scale`, which sets
-`output_logical` *from the window*: today the window is the desktop. With
-displays configured the desktop is fixed and the window shows it scaled.
+`WinitEvent::Resized` calls `adopt_window_scale`, which sets the desktop *from
+the window* — right where nothing described one, since then the window is the
+desktop. With displays configured the desktop is fixed and the window shows it
+scaled.
 `logical_to_window` scales the axes independently, so a host that will not give
 a window the desktop's aspect ratio stretches it. Left as is: a dev backend
 that shows a two-display desktop distorted is still driveable, and letterboxing
@@ -217,16 +218,23 @@ its own change.
 - [x] `domicile-protocol` + `@domicile/chrome-sdk/protocol`:
       `HostMessage::Displays`, `DisplayInfo`, `PROTOCOL_VERSION` 12, decoded
       onto `BridgeClient` (#76)
-- [ ] `domicile-compositor`: normalise the configured layout to a
+- [x] `domicile-compositor`: normalise the configured layout to a
       top-left-origin desktop; one `Output` per display, positioned; the
-      bounding box as the desktop; `compositor.nested_size` as the no-displays
-      fallback; `adopt_window_scale` no longer redefining the desktop; and
+      bounding box as the desktop; `adopt_window_scale` no longer redefining
+      the desktop; `compositor.nested_size` as the no-displays fallback; and
       `DisplayConfig::position`'s doc comment saying it is the *config's*
-      space, now that "desktop coordinates" names the normalised one
-- [ ] `domicile-compositor`: `self.output` becomes the set of them, across the
-      call sites that assume one
+      space (#77, #82)
+- [x] `domicile-compositor`: `self.output` becomes the set of them, across the
+      call sites that assume one (#82)
 - [ ] `domicile-compositor`: `wl_surface.enter` / `leave` per the table above,
-      including the all-outputs fallback for a surface with no portal
+      including the all-outputs fallback for a surface with no portal; and
+      `winit::init()` given window attributes sized to the desktop — it is
+      called with none, so a described desktop is shown at winit's default
+      size, and `Screens::size` is already the geometry to pass. The e2e for
+      it is the criterion the two-display script was written with and could
+      not assert against the all-outputs interim: a client placed on *each*
+      display, asserting each entered its own output and neither entered the
+      other
 - [ ] `domicile-host`: the display list on the responses side, so
       `apply_chrome_message` can answer `Hello` with `Displays` — `ChromeHub`
       already carries `max_scale` / `wayland_display` / `presenting` for the
@@ -246,11 +254,15 @@ its own change.
       the page scrolling, since a document wider than its viewport offsets
       every `getBoundingClientRect` and puts every portal somewhere else with
       no symptom
-- [ ] `scripts/e2e-two-displays.sh`: two displays, a client placed on each,
-      asserting each entered its own output and neither entered the other
-- [ ] delete this doc and its AGENTS.md index row; drop "One output" from
-      ROADMAP's known gaps and multi-output from phase 3, leaving per-monitor
-      scanout there
+- [x] `scripts/e2e-two-displays.sh`: two configured displays, asserting a real
+      Wayland client is told both — names, positions, scales and modes — and
+      that its own surface enters both rather than only the first, which the
+      globals cannot answer and no unit test reaches (#82). The criterion this
+      item was written with is stated on the `wl_surface.enter` item above,
+      since it cannot be asserted until that rule exists (#82)
+- [ ] delete this doc and its AGENTS.md index row; drop "One scene output"
+      from ROADMAP's known gaps and multi-output from phase 3, leaving
+      per-monitor scanout there
 
 ## Open questions
 

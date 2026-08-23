@@ -150,7 +150,7 @@ auto-fixable half of the TypeScript checks. See
 | `packages/chrome-sdk` | `<domicile-app>` / `<domicile-webview>` custom elements + bridge client | bun |
 | `packages/component-library` | React UI primitives + the Panda CSS design system every chrome package extends | bun |
 | `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers + RTL cleanup) | bun |
-| `packages/e2e-harness` | headless chrome stand-ins driving the `scripts/e2e-*.sh` checks | bun |
+| `packages/e2e-harness` | headless chrome stand-ins driving the scripts in `/scripts`, and the check on those scripts' own machinery | bun |
 | `apps/shell`         | the bundled reference chrome (Electron host + Vite-built renderer) | bun |
 
 Both languages share one package tree: a package under `packages/` is a cargo
