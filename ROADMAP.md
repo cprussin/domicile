@@ -649,13 +649,39 @@ clipboard/data-device, touch and a security review all live here too.
 
   Every display at the same `scale` costs nothing regardless; unequal ones mean
   one screen is drawn for the other's until phase 3.
-- **A configured display list is fixed at startup.** The compositor does a
-  single `Config::load` and has no `ConfigStore`. Reloading the list means
-  creating and destroying `wl_output` globals, re-entering every client and
-  resizing the window, so it is its own change. The *unconfigured* case is the
-  opposite and deliberately so: with no `[[output.displays]]` the desktop is
-  Domicile's own window, so it follows every resize and density change — which
-  is all a nested compositor can do unaided.
+- **A reloaded display list does not resize Domicile's own window.** The list
+  itself is no longer fixed at startup: the compositor watches its config, and
+  a display added, removed, renamed or reshaped is taken up while it runs —
+  `Screens::rearranged_into` decides which `wl_output`s survive, and a display
+  that only changed shape keeps the one it had rather than being unplugged and
+  plugged back in. `e2e-reload-displays.sh` drives it end to end.
+
+  What a reload does not do is ask the host for a bigger window. The desktop is
+  scaled into whatever window there is (`logical_to_window`), so adding a second
+  monitor to the config shows the whole wider desktop, smaller, rather than
+  growing the window to suit. `Screens::window_showing_it` already computes the
+  window a desktop wants and is used at startup; calling it again on reload is
+  a one-liner with nothing headless to test it, which is why it is not written.
+
+  The *unconfigured* case is left alone, and now deliberately rather than
+  incidentally: with no `[[output.displays]]` the window is the desktop, and
+  its size and density come from the host, which the config does not know. So
+  `Screens::reloaded_into` answers "leave it be" there instead of rebuilding
+  from the file — which it did at first, quietly undoing an adopted scale 2 on
+  any save in the config's directory.
+
+  **Only the display list is acted on.** A reloaded `output.max_scale`, keymap
+  or chrome package is stored and keeps its startup value. `max_scale` is the
+  one that looks like it should work and does not.
+
+  Two smaller edges, both in the direction of doing too little rather than the
+  wrong thing. A config that *stops* describing displays hands the desktop back
+  to the window as `compositor.nested_size` at scale 1 — not at the window's
+  actual size and density, which only `adopt_window_scale` knows and which it
+  applies on the next resize, whenever that is. And a retired display's global
+  is removed without a `wl_surface.leave` first, so a client on it learns
+  through `wl_registry.global_remove` alone; toolkits cope, but a compositor
+  with a screen to test against should send the leave.
 - **Fractional scaling.** Non-integer ratios round *up* to the next integer scale:
   a client drawing more pixels than the display has is downscaled and stays sharp,
   while one drawing fewer is stretched. Matching a ratio exactly needs

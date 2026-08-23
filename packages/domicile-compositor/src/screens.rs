@@ -103,6 +103,43 @@ impl Advertised {
     }
 }
 
+/// Where one output of a rearranged desktop comes from.
+///
+/// One per display of the *new* desktop, in its order, so applying a
+/// [`Rearrangement`] is a walk down the new list with an answer for each entry
+/// rather than a search per display.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Slot {
+    /// The `wl_output` at this index of the old list, restated in place.
+    ///
+    /// Restated rather than replaced even when its size or scale changed:
+    /// destroying the global and making another takes the output away from
+    /// every client on that display and hands back a different one, which a
+    /// toolkit reads as the monitor being unplugged rather than resized.
+    Kept(usize),
+    /// No old output is this display, so one has to be created.
+    New,
+}
+
+/// What has to happen to the advertised outputs to become another desktop.
+///
+/// Matched by name, which is identity in both directions: it is what the
+/// chrome addresses a `<Screen>` by and what the compositor matches back. A
+/// display that changed name is one the shell can no longer name, so it is a
+/// different display however much of its shape it kept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rearrangement {
+    /// One per display of the new desktop, in its order.
+    pub slots: Vec<Slot>,
+    /// Indices into the *old* list whose globals have to be destroyed,
+    /// ascending.
+    ///
+    /// Everything no slot kept. Separate from `slots` because it is indexed
+    /// into the other list: the two cannot be one walk, and a caller that
+    /// tried would destroy an output it was about to reuse.
+    pub retired: Vec<usize>,
+}
+
 /// Every output the compositor advertises, and the desktop they make up.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Screens {
@@ -178,6 +215,63 @@ impl Screens {
     /// The outputs, in the order the config wrote them.
     pub fn outputs(&self) -> impl Iterator<Item = &Advertised> {
         self.outputs.iter()
+    }
+
+    /// The desktop a reloaded config makes, or `None` to leave this one be.
+    ///
+    /// The config is not always the authority, and that is the whole of this.
+    /// With displays described it is: the user said what their screens are, and
+    /// a reload is them saying it again. With none described the *window* is —
+    /// its size and density come from the host through `adopt_window_scale`,
+    /// and the config knows neither. Rebuilding from the config anyway hands
+    /// back `nested_size` at scale 1, so a desktop that had come up to scale 2
+    /// drops to 1 and every client redraws for the wrong screen, with nothing
+    /// to say why: the file was read correctly, it just does not describe this.
+    ///
+    /// Not a rare path. The watcher watches the config's *directory*, because
+    /// that is how a save by atomic rename is caught, so an unrelated file
+    /// written beside it is a reload too — and on an undescribed desktop every
+    /// one of those was undoing the window's own density.
+    ///
+    /// A desktop that *stopped* being described is the other direction and does
+    /// change: it was the config's, the config no longer claims it, and
+    /// `nested_size` is where the window takes over again.
+    pub fn reloaded_into(
+        &self,
+        described: Option<&Desktop>,
+        nested: (u32, u32),
+    ) -> Option<Screens> {
+        match described {
+            Some(desktop) => Some(Screens::described(desktop)),
+            None if self.follows_the_window() => None,
+            None => Some(Screens::nested(nested)),
+        }
+    }
+
+    /// How to become `next` without disturbing the displays that stayed.
+    ///
+    /// The whole point is what it does *not* do: a display whose name is in
+    /// both desktops keeps its `wl_output`, whatever else about it changed.
+    /// Rebuilding the list wholesale would be far simpler and would unplug
+    /// every monitor on every config reload — every client on one is told it
+    /// left, then told it entered a different output with the same geometry,
+    /// and a toolkit that reloads its scale on that will do so for a desktop
+    /// that did not change.
+    pub fn rearranged_into(&self, next: &Screens) -> Rearrangement {
+        let slots: Vec<Slot> = next
+            .outputs
+            .iter()
+            .map(|wanted| {
+                self.outputs
+                    .iter()
+                    .position(|had| had.name == wanted.name)
+                    .map_or(Slot::New, Slot::Kept)
+            })
+            .collect();
+        let retired = (0..self.outputs.len())
+            .filter(|index| !slots.contains(&Slot::Kept(*index)))
+            .collect();
+        Rearrangement { slots, retired }
     }
 
     /// Which outputs a window with these bounds is on, in [`outputs`] order.
@@ -666,5 +760,161 @@ mod tests {
         );
         assert_eq!(screens.size(), (1280, 800));
         assert!(screens.follows_the_window());
+    }
+
+    fn described(text: &str) -> Screens {
+        Screens::described(&desktop(text))
+    }
+
+    const LEFT: &str = "[[output.displays]]\nname = \"left\"\nsize = [1920, 1080]\n";
+    const RIGHT: &str =
+        "[[output.displays]]\nname = \"right\"\nposition = [1920, 0]\nsize = [2560, 1440]\n";
+
+    #[test]
+    fn a_desktop_that_did_not_change_rearranges_into_nothing() {
+        let before = described(&format!("{LEFT}{RIGHT}"));
+        let after = described(&format!("{LEFT}{RIGHT}"));
+        assert_eq!(
+            before.rearranged_into(&after),
+            Rearrangement {
+                slots: vec![Slot::Kept(0), Slot::Kept(1)],
+                retired: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn a_display_that_was_added_is_a_new_slot() {
+        let before = described(LEFT);
+        let after = described(&format!("{LEFT}{RIGHT}"));
+        assert_eq!(
+            before.rearranged_into(&after),
+            Rearrangement {
+                slots: vec![Slot::Kept(0), Slot::New],
+                retired: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn a_display_that_went_away_is_retired() {
+        let before = described(&format!("{LEFT}{RIGHT}"));
+        let after = described(LEFT);
+        assert_eq!(
+            before.rearranged_into(&after),
+            Rearrangement {
+                slots: vec![Slot::Kept(0)],
+                retired: vec![1],
+            }
+        );
+    }
+
+    #[test]
+    fn a_display_that_only_changed_shape_keeps_its_output() {
+        // The one that matters. Destroying the global and making another
+        // would take the `wl_output` away from every client on that display
+        // and hand back a different one — which a toolkit reads as the monitor
+        // being unplugged, not resized. It keeps its slot and is restated.
+        let before = described(LEFT);
+        let after =
+            described("[[output.displays]]\nname = \"left\"\nsize = [3840, 2160]\nscale = 2\n");
+        assert_eq!(
+            before.rearranged_into(&after),
+            Rearrangement {
+                slots: vec![Slot::Kept(0)],
+                retired: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn a_renamed_display_is_a_different_display() {
+        // Name is identity, in both directions: it is what the chrome
+        // addresses a `<Screen>` by and what the compositor matches it back
+        // to. A display that changed name is one the shell can no longer name,
+        // so pretending it is the same one would leave a `<Screen name>`
+        // pointing at nothing while its window stayed put.
+        let before = described(LEFT);
+        let after = described("[[output.displays]]\nname = \"main\"\nsize = [1920, 1080]\n");
+        assert_eq!(
+            before.rearranged_into(&after),
+            Rearrangement {
+                slots: vec![Slot::New],
+                retired: vec![0],
+            }
+        );
+    }
+
+    #[test]
+    fn displays_that_swapped_places_keep_the_outputs_they_had() {
+        // Matched by name rather than by position, so writing the same two
+        // displays in the other order moves each client's `wl_output` with the
+        // display it named — not onto whichever display now sits at its index.
+        let before = described(&format!("{LEFT}{RIGHT}"));
+        let after = described(&format!("{RIGHT}{LEFT}"));
+        assert_eq!(
+            before.rearranged_into(&after),
+            Rearrangement {
+                slots: vec![Slot::Kept(1), Slot::Kept(0)],
+                retired: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn a_desktop_that_stopped_being_described_retires_every_display() {
+        // Removing the last `[[output.displays]]` is not an empty desktop but
+        // the absence of a described one, and the single window-following
+        // output is a different output with a different name.
+        let before = described(&format!("{LEFT}{RIGHT}"));
+        let after = Screens::nested((1280, 800));
+        assert_eq!(
+            before.rearranged_into(&after),
+            Rearrangement {
+                slots: vec![Slot::New],
+                retired: vec![0, 1],
+            }
+        );
+    }
+
+    #[test]
+    fn a_reload_that_describes_displays_replaces_the_window_desktop() {
+        let now = Screens::following_the_window((1280, 800), 2);
+        let described = desktop(LEFT);
+        assert_eq!(
+            now.reloaded_into(Some(&described), (1280, 800)),
+            Some(Screens::described(&described))
+        );
+    }
+
+    #[test]
+    fn a_reload_that_describes_no_displays_leaves_the_window_desktop_alone() {
+        // The regression. With no `[[output.displays]]` the window is the
+        // desktop, and its size and density are what `adopt_window_scale`
+        // negotiated with the host — facts the config does not know. Rebuilding
+        // from the config anyway hands back `nested_size` at scale 1, so a
+        // desktop that had come up to scale 2 silently dropped to 1 and every
+        // client redrew for the wrong screen. Nothing said so, because the
+        // config was read correctly; it simply is not the authority here.
+        //
+        // Reached by editing any unrelated field, and by a save of a file that
+        // merely lives beside the config: the watcher watches the directory,
+        // because that is how an atomic rename is caught.
+        let now = Screens::following_the_window((1920, 1200), 2);
+        assert_eq!(now.reloaded_into(None, (1280, 800)), None);
+    }
+
+    #[test]
+    fn a_reload_that_stopped_describing_displays_hands_the_desktop_back() {
+        // The other direction, and not the same as the case above: this
+        // desktop was the config's, the config has stopped claiming it, and
+        // there is nothing to keep. `nested_size` is where the window takes
+        // over — its next resize or density change corrects it, which is
+        // exactly what an undescribed desktop is.
+        let now = Screens::described(&desktop(&format!("{LEFT}{RIGHT}")));
+        assert_eq!(
+            now.reloaded_into(None, (1280, 800)),
+            Some(Screens::nested((1280, 800)))
+        );
     }
 }

@@ -90,6 +90,7 @@ use smithay::{
 };
 use tracing::{debug, info, warn};
 
+mod coalesce;
 mod compose;
 mod dmabuf_descriptor;
 mod dmabuf_import;
@@ -100,16 +101,17 @@ mod shortcut;
 mod straight_alpha;
 mod timing_window;
 
+use crate::coalesce::last_of_burst;
 use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer, Shaders, Shadow};
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::scale::{logical_size, output_scale};
-use crate::screens::{Advertised, Screens};
+use crate::screens::{Advertised, Screens, Slot};
 use crate::shortcut::{Modifiers, Shortcuts};
 use crate::timing_window::TimingWindow;
 use domicile_bridge::BridgeRegistry;
-use domicile_config::Config;
+use domicile_config::{Config, ConfigError, ConfigStore};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Shortcut};
@@ -1179,16 +1181,33 @@ struct DomicileCompositor {
     /// Every advertised output, in the order [`Screens`] lists them.
     ///
     /// **In that order, and one for one.** Built from `screens.outputs()` at
-    /// startup, and the only thing that replaces either — `set_output` — is
-    /// asserted to the single-output case. That is what lets
-    /// [`Screens::entered_by`]'s answer be zipped against this: it is one
-    /// decision per output, positional, with nothing naming which is which.
+    /// startup. Two things change it afterwards and neither can break the
+    /// pairing: `set_output` restates the one output it is asserted to have,
+    /// in place, so the length cannot move; and
+    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) rebuilds
+    /// this list and `screens` from one `Rearrangement`, so they are replaced
+    /// together or not at all. That is what lets [`Screens::entered_by`]'s
+    /// answer be zipped against this: it is one decision per output,
+    /// positional, with nothing naming which is which.
     ///
     /// Which of them a surface enters is [`Screens::entered_by`]: the outputs
     /// its portal reaches, and every one of them for a surface that has no
     /// portal or reaches none. See
     /// [`enter_the_displays_each_window_is_on`](DomicileCompositor::enter_the_displays_each_window_is_on).
-    outputs: Vec<Output>,
+    outputs: Vec<LiveOutput>,
+    /// The live config, and the last edit that would not parse.
+    ///
+    /// A store rather than a `Config`, because the file is watched: an edit
+    /// that does not parse leaves the live one in place and is remembered,
+    /// which is the guarantee `ConfigStore` makes and this type would have to
+    /// reimplement. Only the display list is acted on — see
+    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) — so the
+    /// rest of a reloaded config is stored and not yet obeyed.
+    ///
+    /// Note what this does *not* cover: a save caught half-written parses
+    /// perfectly, it just says less. Keeping that from reaching the desktop is
+    /// the coalescing on the watcher thread, not the store.
+    config: ConfigStore,
     /// What the outputs above are, and who gets to change them.
     screens: Screens,
     /// Drag-and-drop and the clipboard.
@@ -1508,8 +1527,12 @@ impl DomicileCompositor {
     /// seeing an `enter` for a screen it is already on.
     ///
     /// The chrome's own toplevel is not here. It is the desktop rather than a
-    /// window on it, and `new_toplevel` puts it on every output once and for
-    /// all.
+    /// window on it, so it belongs on every output rather than on the ones some
+    /// portal reaches. `new_toplevel` puts it on the outputs there are when it
+    /// maps, and
+    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) puts it on
+    /// the ones a reload adds — which is why that is not "once and for all",
+    /// as this said while the display list could not change.
     fn enter_the_displays_each_window_is_on(&self) {
         let host = self.hub.host.lock().unwrap();
         let scene = host.scene();
@@ -1553,7 +1576,8 @@ impl DomicileCompositor {
     /// and [`Screens::entered_by`]'s answer is one decision per output — see
     /// the `outputs` field, which says what keeps the two in step.
     fn enter_only(&self, surface: &WlSurface, bounds: Option<domicile_scene::Bounds>) {
-        for (output, entered) in self.outputs.iter().zip(self.screens.entered_by(bounds)) {
+        for (live, entered) in self.outputs.iter().zip(self.screens.entered_by(bounds)) {
+            let output = &live.output;
             if entered {
                 output.enter(surface);
             } else {
@@ -2119,10 +2143,11 @@ impl DomicileCompositor {
                 .into(),
             refresh: 60_000,
         };
-        let output = self
+        let output = &self
             .outputs
             .first()
-            .expect("a window-following desktop advertises its one output");
+            .expect("a window-following desktop advertises its one output")
+            .output;
         output.change_current_state(Some(mode), None, Some(Scale::Integer(scale)), None);
         output.set_preferred(mode);
         // A client only redraws at the new scale once something
@@ -2152,6 +2177,118 @@ impl DomicileCompositor {
         // one thread. Both halves are load-bearing and `freshened` explains
         // why: they are what puts a newer line behind every stale one on every
         // socket, and a describe without a broadcast breaks it.
+        let desktop = {
+            let mut host = self.hub.host.lock().unwrap();
+            host.describe_displays(self.screens.outputs().map(Advertised::described).collect());
+            host.describe_desktop()
+        };
+        self.hub.broadcast(desktop);
+    }
+
+    /// Take up a desktop the config now describes, keeping the displays that
+    /// stayed.
+    ///
+    /// The counterpart to [`set_output`](DomicileCompositor::set_output),
+    /// which is the *window*-following desktop changing under its own steam.
+    /// This is the described one changing because the file did, so it is the
+    /// only path that can add or remove a display rather than restate the one
+    /// there is — and unlike `set_output` it holds for either kind of desktop,
+    /// including a config that stopped describing one at all.
+    ///
+    /// Nothing happens when the desktop did not change. A config file is
+    /// rewritten for all sorts of reasons — a chrome package, a keymap, a
+    /// stray newline — and an editor's atomic-rename save produces several
+    /// events for one edit. Re-advertising the same displays each time would
+    /// have every client redraw for nothing.
+    ///
+    /// The display list is the only thing a reload acts on. `output.max_scale`,
+    /// the keymap and the rest are stored and keep their startup values, which
+    /// is a gap rather than a decision — `ROADMAP.md` carries it.
+    fn adopt_the_desktop(&mut self, dh: &DisplayHandle, screens: Screens) {
+        if screens == self.screens {
+            return;
+        }
+        let plan = self.screens.rearranged_into(&screens);
+        info!(
+            displays = screens.outputs().count(),
+            retired = plan.retired.len(),
+            "taking up a reloaded desktop"
+        );
+        // Every old output moved out first, so the new list can take the ones
+        // it keeps and what is left is exactly what nothing kept. Taking them
+        // in place instead would need the old list borrowed while the new one
+        // is built out of it.
+        let mut had: Vec<Option<LiveOutput>> = self.outputs.drain(..).map(Some).collect();
+        let outputs: Vec<LiveOutput> = plan
+            .slots
+            .iter()
+            .zip(screens.outputs())
+            .map(|(slot, advertised)| match slot {
+                Slot::Kept(index) => {
+                    // Unreachable: `OutputConfig::validate` rejects two
+                    // displays with one name and `Screens`' fields are
+                    // private, so no public path builds one with duplicates —
+                    // and `rearranged_into` matches on the name, so each index
+                    // is kept at most once. Asserted rather than coped with
+                    // because the alternative is advertising one `wl_output`
+                    // as two displays, silently.
+                    let live = had[*index]
+                        .take()
+                        .expect("no two displays share one output");
+                    restate_output(&live.output, advertised);
+                    live
+                }
+                Slot::New => advertise_output(dh, advertised),
+            })
+            .collect();
+        // `retired` is exactly the indices no slot kept, by construction, so
+        // this cannot reach an output the list above is using and the order of
+        // the two loops does not matter. Written after it for reading rather
+        // than for safety: what is destroyed is easier to check against a list
+        // that is already built.
+        for retired in plan.retired {
+            let live = had[retired]
+                .take()
+                .expect("a retired output is one no slot kept");
+            // The global rather than the `Output`. Dropping the `Output` frees
+            // our own record and leaves the global bound, so the display stays
+            // advertised to every client for the rest of the run — a monitor
+            // that was unplugged and that nothing can be told about.
+            dh.remove_global::<DomicileCompositor>(live.global);
+        }
+        self.outputs = outputs;
+        self.screens = screens;
+        // The chrome is on every display, because it *is* the desktop — so a
+        // display that just appeared is one it has to be told it is on, and a
+        // toolkit picks its density from exactly this.
+        if let Some(chrome) = self.chrome_toplevel.clone() {
+            for live in &self.outputs {
+                live.output.enter(chrome.wl_surface());
+            }
+            // And it covers the new desktop. Sent unconditionally rather
+            // than on a size change, because the desktop can differ without
+            // its *size* differing at all: a display renamed, or one whose
+            // scale alone moved, leaves the logical bounding box byte for
+            // byte the same. The early return above compares whole `Screens`,
+            // not sizes. A configure the chrome already has is a no-op to it.
+            chrome.with_pending_state(|state| {
+                state.size = Some(self.screens.size().into());
+            });
+            chrome.send_configure();
+        }
+        // Every window re-narrowed to the displays it is now over. A window
+        // that did not move can still be on a different set of them: the
+        // displays moved under it.
+        self.enter_the_displays_each_window_is_on();
+        // A client redraws at a new scale only when something asks it to, and
+        // its own size has not changed.
+        for (_, toplevel) in &self.toplevels {
+            toplevel.send_configure();
+        }
+        // And the desktop the chrome lays `<Screen>` out against. Described
+        // and then broadcast, in that order and on this one thread, for the
+        // reason `set_output` gives: that is what puts a newer line behind
+        // every stale one on every socket.
         let desktop = {
             let mut host = self.hub.host.lock().unwrap();
             host.describe_displays(self.screens.outputs().map(Advertised::described).collect());
@@ -3939,6 +4076,75 @@ delegate_cursor_shape!(DomicileCompositor);
 
 // ---- output (clients wait for a wl_output before mapping) -----------------
 
+/// The desktop a config describes, at startup.
+///
+/// Startup only. A *reload* asks a different question — see
+/// [`Screens::reloaded_into`], which is allowed to answer "leave it alone":
+/// nothing has negotiated with the host yet when this runs, so there is
+/// nothing here for a config to overwrite.
+fn screens_at_startup(config: &Config) -> Screens {
+    match config.output.desktop() {
+        Some(desktop) => Screens::described(&desktop),
+        None => Screens::nested(config.compositor.nested_size),
+    }
+}
+
+/// One advertised `wl_output`, and the global clients see it through.
+///
+/// The global's id is kept because a desktop can stop describing a display.
+/// Destroying the global is how a client learns the monitor is gone, and
+/// `DisplayHandle::remove_global` is the only thing that does it — dropping
+/// the `Output` alone leaves the global bound and the display advertised for
+/// the rest of the run.
+struct LiveOutput {
+    output: Output,
+    global: smithay::reexports::wayland_server::backend::GlobalId,
+}
+
+/// Advertise `advertised` as a new `wl_output`.
+///
+/// The one place an output is created, so startup and a config reload cannot
+/// advertise two different things from the same description.
+fn advertise_output(dh: &DisplayHandle, advertised: &Advertised) -> LiveOutput {
+    let output = Output::new(
+        advertised.name.clone(),
+        PhysicalProperties {
+            // Fiction, and knowingly the same fiction on every display:
+            // nothing tells a nested compositor how many millimetres a
+            // described screen is. A client computing DPI from it gets a wrong
+            // answer — now a differently wrong one per display, since they no
+            // longer share a size. Whatever fixes that wants a real number in
+            // the config, which nothing has asked for.
+            size: (300, 200).into(),
+            subpixel: Subpixel::Unknown,
+            make: "Domicile".into(),
+            model: "Virtual".into(),
+        },
+    );
+    let global = output.create_global::<DomicileCompositor>(dh);
+    restate_output(&output, advertised);
+    LiveOutput { output, global }
+}
+
+/// Restate an existing output's mode, scale and position.
+///
+/// Apart from creating one because a display that only changed shape keeps the
+/// `wl_output` it had — see [`Slot::Kept`], which says what destroying it
+/// instead would tell a client.
+fn restate_output(output: &Output, advertised: &Advertised) {
+    let mode = OutputMode {
+        size: advertised.mode().into(),
+        refresh: 60_000,
+    };
+    output.change_current_state(
+        Some(mode),
+        Some(Transform::Normal),
+        Some(Scale::Integer(advertised.scale)),
+        Some(advertised.position.into()),
+    );
+    output.set_preferred(mode);
+}
+
 impl OutputHandler for DomicileCompositor {}
 delegate_output!(DomicileCompositor);
 
@@ -3955,8 +4161,8 @@ impl XdgShellHandler for DomicileCompositor {
         // <app> element for itself, inside itself.
         if is_chrome_surface(surface.wl_surface()) {
             info!("the chrome mapped its toplevel -> compositing it over the apps");
-            for output in &self.outputs {
-                output.enter(surface.wl_surface());
+            for live in &self.outputs {
+                live.output.enter(surface.wl_surface());
             }
             // It covers the desktop, because it *is* the desktop. A size it did
             // not ask for is exactly what a compositor gives a fullscreen
@@ -3986,8 +4192,8 @@ impl XdgShellHandler for DomicileCompositor {
             // Narrowed to the displays it is actually over by
             // `enter_the_displays_each_window_is_on`, on the first placement
             // and every one after it.
-            for output in &self.outputs {
-                output.enter(surface.wl_surface());
+            for live in &self.outputs {
+                live.output.enter(surface.wl_surface());
             }
             // The engine texture id is stable for the element's whole life, so
             // it is claimed here rather than on the app's first GPU frame.
@@ -4441,43 +4647,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // weston-terminal) wait for a wl_output before they will map a toplevel,
     // so this happens before there is a socket for anything to arrive on.
     let output_manager_state = OutputManagerState::new_with_xdg_output::<DomicileCompositor>(&dh);
-    let screens = match config.output.desktop() {
-        Some(desktop) => Screens::described(&desktop),
-        None => Screens::nested(config.compositor.nested_size),
-    };
-    let outputs: Vec<Output> = screens
+    let screens = screens_at_startup(&config);
+    let outputs: Vec<LiveOutput> = screens
         .outputs()
-        .map(|advertised| {
-            let output = Output::new(
-                advertised.name.clone(),
-                PhysicalProperties {
-                    // Fiction, and knowingly the same fiction on every
-                    // display: nothing tells a nested compositor how many
-                    // millimetres a described screen is. A client computing
-                    // DPI from it gets a wrong answer — now a differently
-                    // wrong one per display, since they no longer share a
-                    // size. Whatever fixes that wants a real number in the
-                    // config, which nothing has asked for.
-                    size: (300, 200).into(),
-                    subpixel: Subpixel::Unknown,
-                    make: "Domicile".into(),
-                    model: "Virtual".into(),
-                },
-            );
-            output.create_global::<DomicileCompositor>(&dh);
-            let mode = OutputMode {
-                size: advertised.mode().into(),
-                refresh: 60_000,
-            };
-            output.change_current_state(
-                Some(mode),
-                Some(Transform::Normal),
-                Some(Scale::Integer(advertised.scale)),
-                Some(advertised.position.into()),
-            );
-            output.set_preferred(mode);
-            output
-        })
+        .map(|advertised| advertise_output(&dh, advertised))
         .collect();
 
     // Bind the Wayland socket before anything can ask us to put a client on
@@ -4616,6 +4789,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         seat,
         output_manager_state,
         outputs,
+        config: ConfigStore::new(config.clone()),
         // Modern toolkits ask for cursors by name through this global, which
         // maps straight onto CSS cursor keywords.
         cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
@@ -4679,6 +4853,101 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             data.state.handle_client_request(input);
         }
     })?;
+
+    // How long the config file has to stop changing before a reload is taken
+    // as final. Long enough to cover a save's own writes, short enough that a
+    // deliberate edit feels immediate.
+    const SETTLE: Duration = Duration::from_millis(150);
+    // And how long a burst may go on being coalesced regardless. Without it a
+    // directory written to faster than `SETTLE` never settles, and the reload
+    // is not late but lost.
+    const BURST: Duration = Duration::from_secs(2);
+
+    // The config file, so a display list is not fixed for the run.
+    //
+    // Two hops rather than one. `domicile_config::watch` hands back an
+    // `std::sync::mpsc::Receiver` fed by the notify thread, and the desktop can
+    // only be changed where the outputs and surfaces are — this thread. So a
+    // forwarding thread moves each parse onto a calloop channel, which is the
+    // same shape `request_rx` uses and for the same reason.
+    //
+    // A watcher that cannot start is logged and left: it means the displays
+    // stay as they are, which is exactly the behaviour this replaces, and it is
+    // not a reason to refuse to run a desktop.
+    match domicile_config::watch(config_path()) {
+        Ok(watcher) => {
+            let (reload_tx, reload_rx) = channel::<Result<Config, ConfigError>>();
+            thread::spawn(move || {
+                // The whole watcher, named so it is captured whole. A `move`
+                // closure in edition 2021 captures the *fields* it mentions,
+                // so writing only `watcher.rx` below takes the receiver and
+                // leaves the OS watcher behind to be dropped at the end of the
+                // enclosing scope — which closes the channel, so the first
+                // `recv` returns `Err`, this thread ends before anything is
+                // ever edited, and the config appears simply not to be
+                // watched. It cost an afternoon; `e2e-reload-displays.sh` is
+                // what catches it coming back.
+                let watcher = watcher;
+                // Ends when the watcher is dropped with this thread, or when
+                // the event loop has gone and nothing is listening.
+                while let Ok(first) = watcher.rx.recv() {
+                    // One save is several events, and the ones in the middle
+                    // are of a file that is halfway written. `ConfigStore`
+                    // does not catch that: a truncated config *parses*, it
+                    // just describes no displays — which is a legal desktop
+                    // meaning "follow Domicile's window". So a plain
+                    // write-then-write save was taking the whole desktop down
+                    // to `domicile-0` and putting it back a moment later, and
+                    // every client on it was told its monitor had gone and
+                    // come back.
+                    //
+                    // So: take the last parse of a burst rather than each one.
+                    //
+                    // Bounded by a deadline on the whole burst, not only by the
+                    // quiet between events. `recv_timeout(SETTLE)` alone starts
+                    // its budget again on every event, so a config in a
+                    // directory that is written to more often than that — the
+                    // default is `domicile.toml` in the working directory, and
+                    // the watch is on the directory because that is how an
+                    // atomic rename is caught — defers the reload for as long
+                    // as the writing goes on. Not late: never.
+                    let latest = last_of_burst(&watcher.rx, first, SETTLE, BURST);
+                    if reload_tx.send(latest).is_err() {
+                        return;
+                    }
+                }
+            });
+            handle.insert_source(reload_rx, |event, _, data: &mut CalloopData| {
+                let ChannelEvent::Msg(parsed) = event else {
+                    return;
+                };
+                // Through the store, which is what keeps a half-written save
+                // from taking the desktop down: a config that does not parse
+                // leaves the live one in place and is remembered as the last
+                // error rather than applied.
+                if let Err(err) = data.state.config.apply_watch(parsed) {
+                    tracing::warn!(%err, "keeping the last config that parsed");
+                    return;
+                }
+                // `None` means the reload has nothing to say about the
+                // desktop — an undescribed config, where the window is the
+                // authority and rebuilding from the file would undo the
+                // density it negotiated.
+                let config = data.state.config.current();
+                let Some(screens) = data.state.screens.reloaded_into(
+                    config.output.desktop().as_ref(),
+                    config.compositor.nested_size,
+                ) else {
+                    return;
+                };
+                let dh = data.display.handle();
+                data.state.adopt_the_desktop(&dh, screens);
+            })?;
+        }
+        Err(err) => {
+            tracing::warn!(%err, "not watching the config; its displays are fixed for this run");
+        }
+    }
 
     // The window's own events: what the user does to Domicile rather than what
     // a chrome asked us to do. Without this the window is a picture — it draws

@@ -641,6 +641,19 @@ impl ConfigStore {
 
 /// A live watcher over a config file.
 ///
+/// **Keep the whole `ConfigWatcher` for as long as you read `rx`.** The OS
+/// watcher is the field beside it and owns the sending half, so dropping the
+/// struct closes the channel: `recv` then returns `Err` rather than blocking,
+/// which reads as a file nobody is editing rather than as a watcher nobody
+/// kept — no error, no event, nothing to find.
+///
+/// Easier to do by accident than it looks, and it has been done twice here. A
+/// `move` closure in edition 2021 captures the *fields* it names, so both
+/// `thread::spawn(move || … watcher.rx.recv() …)` and
+/// `thread::spawn(move || for r in watcher.rx …)` take the receiver alone and
+/// leave the watcher to be dropped where it stood. Name the whole struct
+/// inside the closure — `let watcher = watcher;` — to move it in.
+///
 /// Keeps the underlying OS watcher alive and delivers a freshly parsed
 /// [`Config`] (or a [`ConfigError`]) on `rx` each time the file changes. Wire
 /// `rx` into a [`ConfigStore`] via [`ConfigStore::apply`] to get safe
