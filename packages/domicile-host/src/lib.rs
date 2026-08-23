@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 
-use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage};
 
 pub mod ipc;
 use domicile_scene::{KeyboardTarget, PointerTarget, Portal, Scene, Style, Transform};
@@ -64,11 +64,44 @@ pub struct Host {
     /// The keyboard holder as the chromes were last told it, so that
     /// [`Host::focus_change`] can say nothing when nothing moved.
     told_focus: Option<AppId>,
+    /// What the desktop is made of, as every chrome is told — on connecting,
+    /// and again whenever it changes under them.
+    ///
+    /// Empty until something describes one, which is a desktop of no screens
+    /// and nothing else. The compositor always describes at least one output,
+    /// so a chrome on *it* never sees this — but a `Host` nobody has told is a
+    /// real configuration, and the `domicile` daemon is one: it serves this
+    /// protocol from a bare `Session` and never describes a desktop to it.
+    /// Saying "no screens" beats inventing a display it never asked for.
+    displays: Vec<DisplayInfo>,
 }
 
 impl Host {
     pub fn new() -> Self {
         Host::default()
+    }
+
+    /// Say what the desktop is made of, for every chrome that connects after.
+    ///
+    /// Replaces whatever was described before rather than adding to it: the
+    /// argument is the desktop, not a display joining one. The compositor
+    /// re-describes on the path where the desktop changes at runtime — with no
+    /// displays configured it is Domicile's own window, and resizing that
+    /// window resizes it — so a chrome connecting after has to be told the
+    /// current desktop rather than whichever was first.
+    pub fn describe_displays(&mut self, displays: Vec<DisplayInfo>) {
+        self.displays = displays;
+    }
+
+    /// The desktop, in the message a chrome is told it as.
+    ///
+    /// Two callers and they are not the same event: the handshake answers a
+    /// connecting chrome with it, and the compositor broadcasts it to the
+    /// chromes already connected when the desktop changes under them.
+    pub fn describe_desktop(&self) -> HostMessage {
+        HostMessage::Displays {
+            displays: self.displays.clone(),
+        }
     }
 
     /// Register a newly-mapped Wayland toplevel. Returns its assigned id and the

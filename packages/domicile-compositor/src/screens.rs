@@ -10,6 +10,7 @@
 //! arithmetic and naming, and none of it needs a `wl_display`.
 
 use domicile_config::Desktop;
+use domicile_protocol::DisplayInfo;
 
 /// One `wl_output`, in the form the compositor advertises it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +53,25 @@ impl Advertised {
                 .checked_mul(self.scale)
                 .expect("a display's mode fits a coordinate"),
         )
+    }
+
+    /// This output in the shape the chrome is told about it.
+    ///
+    /// The same four facts, retyped for the wire — the compositor speaks
+    /// tuples and signed coordinates, the protocol speaks arrays and unsigned
+    /// measures, and neither is worth changing to match the other.
+    ///
+    /// A size or a scale that is negative is asserted rather than folded to
+    /// its magnitude: no output has one, `as_coordinate` is what refuses to
+    /// build one, and turning a negative into a plausible positive here is the
+    /// silent wrong answer that check exists to prevent.
+    pub fn described(&self) -> DisplayInfo {
+        DisplayInfo {
+            name: self.name.clone(),
+            position: [self.position.0, self.position.1],
+            scale: as_measure(self.scale),
+            size: [as_measure(self.logical.0), as_measure(self.logical.1)],
+        }
     }
 }
 
@@ -161,6 +181,16 @@ fn as_coordinate(measure: u32) -> i32 {
     i32::try_from(measure).expect("a validated desktop measures within an i32")
 }
 
+/// A coordinate back as the `u32` the protocol measures sizes and scales in.
+///
+/// The inverse of [`as_coordinate`], and asserted for the same reason: a size
+/// or a scale is a count, so a negative one is not a big number but a bug one
+/// layer up, and `unsigned_abs` would hand the chrome a plausible screen built
+/// out of it.
+fn as_measure(coordinate: i32) -> u32 {
+    u32::try_from(coordinate).expect("a size or a scale is never negative")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,6 +256,103 @@ mod tests {
             panicked.downcast_ref::<String>().map(String::as_str),
             Some("a display's mode fits a coordinate"),
             "the panic should name the invariant rather than be an incidental overflow"
+        );
+    }
+
+    #[test]
+    fn an_output_is_described_to_the_chrome_field_for_field() {
+        // Every field is one the shell lays out against: the name is what a
+        // `<Screen>` matches, the position is where it goes on the page, the
+        // size is how big that region is, and the scale is what clients on it
+        // draw at. A pair swapped here is a shell that puts the dock on the
+        // wrong screen with nothing to say so.
+        // Two, because a lone display normalises to the origin, and `[0, 0]` is
+        // what a `described` that dropped the position would produce anyway.
+        let screens = Screens::described(&desktop(
+            "[[output.displays]]\nname = \"left\"\nsize = [1920, 1080]\n\
+             [[output.displays]]\nname = \"right\"\nposition = [1920, 120]\nsize = [2560, 1440]\nscale = 2\n",
+        ));
+        assert_eq!(
+            screens
+                .outputs()
+                .nth(1)
+                .expect("the second display")
+                .described(),
+            DisplayInfo {
+                name: "right".into(),
+                position: [1920, 120],
+                scale: 2,
+                size: [2560, 1440],
+            }
+        );
+    }
+
+    #[test]
+    fn a_negative_measure_says_so_rather_than_becoming_a_big_one() {
+        // `Advertised` is constructible without a validated config, and the
+        // protocol measures sizes and scales unsigned. Folding a negative to
+        // its magnitude would describe a plausible screen to the chrome — the
+        // silent wrong answer, which is what `as_coordinate` refuses one layer
+        // up and what this refuses on the way out.
+        let bogus = Advertised {
+            logical: (-1920, 1080),
+            name: "impossible".into(),
+            position: (0, 0),
+            scale: 1,
+        };
+        let panicked = std::panic::catch_unwind({
+            let bogus = bogus.clone();
+            move || bogus.described()
+        })
+        .expect_err("a negative size must not be described to the chrome");
+        // `starts_with`, because `expect` on a `Result` appends the error it
+        // unwrapped. The invariant is the part being asserted.
+        assert!(
+            panicked
+                .downcast_ref::<String>()
+                .is_some_and(|said| said.starts_with("a size or a scale is never negative")),
+            "the panic should name the invariant rather than be an incidental \
+             conversion, and it said {:?}",
+            panicked.downcast_ref::<String>()
+        );
+
+        // The height. Not the same fixture with both axes negative: the width
+        // is converted first and panics there, so the height's call site would
+        // never be reached.
+        let squashed = Advertised {
+            logical: (1920, -1080),
+            name: "impossible".into(),
+            position: (0, 0),
+            scale: 1,
+        };
+        let panicked = std::panic::catch_unwind(move || squashed.described())
+            .expect_err("a negative height must not be described to the chrome");
+        assert!(
+            panicked
+                .downcast_ref::<String>()
+                .is_some_and(|said| said.starts_with("a size or a scale is never negative")),
+            "the height half asserts the same invariant, and it said {:?}",
+            panicked.downcast_ref::<String>()
+        );
+
+        // And the scale. `described` reaches `as_measure` three times and a
+        // mutation at any one of them is its own wrong answer — a negative
+        // scale folded to its magnitude is a display the chrome draws at some
+        // enormous density.
+        let inverted = Advertised {
+            logical: (1920, 1080),
+            name: "impossible".into(),
+            position: (0, 0),
+            scale: -2,
+        };
+        let panicked = std::panic::catch_unwind(move || inverted.described())
+            .expect_err("a negative scale must not be described to the chrome");
+        assert!(
+            panicked
+                .downcast_ref::<String>()
+                .is_some_and(|said| said.starts_with("a size or a scale is never negative")),
+            "the scale half asserts the same invariant, and it said {:?}",
+            panicked.downcast_ref::<String>()
         );
     }
 

@@ -27,8 +27,9 @@ pub fn parse_chrome(line: &str) -> Result<ChromeMessage, serde_json::Error> {
 /// A single chrome connection: owns a [`Host`] and drives the handshake.
 ///
 /// Feed inbound lines to [`ingest`](Session::ingest); it returns any messages
-/// to send back to the chrome (currently just the handshake `Welcome`). App
-/// lifecycle events originate on the Wayland side via [`Session::host_mut`].
+/// to send back to the chrome — the handshake `Welcome`, and the `Displays`
+/// describing the desktop that follows it. App lifecycle events originate on
+/// the Wayland side via [`Session::host_mut`].
 #[derive(Debug, Default)]
 pub struct Session {
     host: Host,
@@ -88,9 +89,17 @@ pub fn apply_chrome_message(
         ChromeMessage::Hello { protocol_version } => match negotiate(protocol_version) {
             Ok(agreed) => {
                 *ready = true;
-                vec![HostMessage::Welcome {
-                    protocol_version: agreed,
-                }]
+                // The desktop rides with the handshake, after the `Welcome`
+                // that agreed the version it is written in. A chrome has no
+                // other way to learn what it is laying out against, and one
+                // that reloads has to be told again — so it cannot be a change
+                // the chrome might have missed.
+                vec![
+                    HostMessage::Welcome {
+                        protocol_version: agreed,
+                    },
+                    host.describe_desktop(),
+                ]
             }
             Err(_) => Vec::new(),
         },

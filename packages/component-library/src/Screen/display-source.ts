@@ -20,10 +20,10 @@ export type Display = {
 /**
  * Where a `DisplayProvider` gets the desktop from.
  *
- * Two halves, because the host describes the desktop exactly once per
- * connection: `displays` is what it has already said — which a provider
- * mounting after the handshake would otherwise never hear — and `onDisplays`
- * for every description after that, on a reconnect or a re-describe.
+ * Two halves, because a provider does not necessarily mount in time to hear
+ * the description it needs: `displays` is what the host has already said, and
+ * `onDisplays` is every description after that — the desktop is described on
+ * connecting and again whenever it changes, latest wins.
  *
  * The two overlap rather than partition: `BridgeClient` replays anything it is
  * holding for a type to the first handler that registers, so an adapter over

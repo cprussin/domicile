@@ -13,7 +13,11 @@ use domicile_host::ipc::{parse_chrome, to_line, Session};
 use domicile_protocol::{ChromeMessage, HostMessage, PROTOCOL_VERSION};
 
 #[test]
-fn hello_completes_the_handshake_with_a_welcome() {
+fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
+    // Two messages, in this order. The desktop rides with the handshake
+    // because a chrome has no other way to learn what it is laying out
+    // against — and it comes second, after the version it is written in has
+    // been agreed.
     let mut session = Session::new();
     assert!(!session.is_ready());
 
@@ -23,9 +27,12 @@ fn hello_completes_the_handshake_with_a_welcome() {
     assert!(session.is_ready());
     assert_eq!(
         out,
-        vec![HostMessage::Welcome {
-            protocol_version: PROTOCOL_VERSION
-        }]
+        vec![
+            HostMessage::Welcome {
+                protocol_version: PROTOCOL_VERSION
+            },
+            HostMessage::Displays { displays: vec![] },
+        ]
     );
 }
 

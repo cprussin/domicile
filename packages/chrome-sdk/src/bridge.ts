@@ -183,15 +183,21 @@ export class BridgeClient {
    *
    * Retained rather than only delivered, because {@link #held} answers the
    * *first* handler to register for a type and then forgets — which is right
-   * for a stream and wrong for a fact. `displays` arrives once per connection,
-   * so a page whose components each register their own handler would leave
-   * every one after the first with nothing, and silently: a component with no
-   * displays renders the same empty region as one for a display that is not
-   * there.
+   * for a stream and wrong for a fact. `displays` arrives at least once per
+   * connection, so a page whose components each register their own handler
+   * would leave every one after the first with nothing, and silently: a
+   * component with no displays renders the same empty region as one for a
+   * display that is not there.
    *
-   * `undefined` is "not told yet" and `[]` is "told, and the desktop is the
-   * one that follows Domicile's own window". A shell that collapsed the two
-   * would lay out against a screen whose shape it had not been given.
+   * `undefined` is "not told yet" and `[]` is a desktop of no screens. The
+   * compositor does not send `[]` — it describes at least one output, and the
+   * window-following case is a display named `domicile-0` rather than an
+   * absence — but a shell that collapsed the two would render its "no screens"
+   * case for the moment before the answer arrives.
+   *
+   * Latest wins, because the desktop is re-described when it changes: with no
+   * displays configured it is Domicile's own window, so every resize and every
+   * density change produces another `displays`.
    *
    * This fixes the replay half of that problem and not the other half:
    * {@link on} is a single-slot registry, so a second `on("displays")` still

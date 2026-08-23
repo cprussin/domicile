@@ -103,7 +103,7 @@ use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::scale::{logical_size, output_scale};
-use crate::screens::Screens;
+use crate::screens::{Advertised, Screens};
 use crate::shortcut::{Modifiers, Shortcuts};
 use crate::timing_window::TimingWindow;
 use domicile_bridge::BridgeRegistry;
@@ -634,6 +634,63 @@ fn announce_open_apps(hub: &ChromeHub) {
     }
 }
 
+/// Writes one message's answers to the connection that asked, in order.
+///
+/// False if the socket is gone, which ends the connection.
+///
+/// A function rather than a loop inside `read_chrome_messages` so that the
+/// [`freshened`] call has a seam: the answers and the desktop they were built
+/// against are handed in separately here, which *is* the interleaving, with no
+/// threads and no timing.
+fn write_responses(
+    hub: &ChromeHub,
+    writer: &Arc<Mutex<UnixStream>>,
+    responses: Vec<HostMessage>,
+) -> bool {
+    let mut writer = writer.lock().unwrap();
+    for message in responses {
+        let message = freshened(hub, message);
+        if writer.write_all(to_line(&message).as_bytes()).is_err() {
+            return false;
+        }
+        let _ = writer.flush();
+    }
+    true
+}
+
+/// The desktop as it is *now*, for a `displays` about to go on the wire.
+///
+/// `responses` is built under the `host` lock and written later under the
+/// writer lock, and `set_output` can land in between: it describes a new
+/// desktop and broadcasts it, and the broadcast goes out on the writer thread.
+/// Writing the handshake's own copy afterwards would put the desktop that is
+/// gone last on the socket, where latest-wins leaves it — and on a desktop
+/// nobody is resizing again there is no next message to correct it.
+///
+/// What makes the last `displays` on a socket the last one described is not
+/// this function alone. It is that [`DomicileCompositor::set_output`] describes
+/// and then broadcasts *that* desktop, on the one Wayland thread, into a queue
+/// one writer thread drains in order — so a line carrying a desktop that has
+/// since been replaced always has the newer one queued behind it. A broadcast
+/// is serialised before the writer lock is taken, so the writer lock is not
+/// what orders those; the FIFO is.
+///
+/// Re-reading here closes the one case the FIFO does not: the answer, written
+/// by a different thread, landing last with nothing queued after it.
+///
+/// That leaves a describe without a broadcast as the way to break this, and
+/// there is one — the startup describe in `main`, safe only because no socket
+/// thread exists yet. A second would reintroduce exactly the bug this closes.
+///
+/// Any other message passes through: this is the only one whose content is a
+/// fact about the world rather than an answer to what was asked.
+fn freshened(hub: &ChromeHub, message: HostMessage) -> HostMessage {
+    if !matches!(message, HostMessage::Displays { .. }) {
+        return message;
+    }
+    hub.host.lock().unwrap().describe_desktop()
+}
+
 /// Encode and write everything bound for the chrome, off the Wayland thread.
 ///
 /// This is the only place that blocks on a chrome socket. Before it existed a
@@ -1101,12 +1158,8 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
         if let Some(message) = moved {
             hub.broadcast(message);
         }
-        let mut writer = writer.lock().unwrap();
-        for message in responses {
-            if writer.write_all(to_line(&message).as_bytes()).is_err() {
-                return;
-            }
-            let _ = writer.flush();
+        if !write_responses(hub, writer, responses) {
+            return;
         }
     }
 }
@@ -1972,6 +2025,25 @@ impl DomicileCompositor {
             });
             chrome.send_configure();
         }
+        // And the desktop the chrome *lays out* against, which is a different
+        // fact from the size of its own surface: `<Screen>` positions come
+        // from the display list. This path is the one where that changes at
+        // runtime — a window resized, or a density adopted — so it does both
+        // halves. The retained answer, so the next chrome to connect is told
+        // the current desktop rather than the one Domicile started on; and a
+        // message now, so the pages already connected are not left laying out
+        // against a desktop that is gone.
+        //
+        // Describe and then broadcast *that* desktop, in that order and on this
+        // one thread. Both halves are load-bearing and `freshened` explains
+        // why: they are what puts a newer line behind every stale one on every
+        // socket, and a describe without a broadcast breaks it.
+        let desktop = {
+            let mut host = self.hub.host.lock().unwrap();
+            host.describe_displays(self.screens.outputs().map(Advertised::described).collect());
+            host.describe_desktop()
+        };
+        self.hub.broadcast(desktop);
     }
 
     /// Ask the session Domicile's window is in for the cursor a client wants.
@@ -4292,6 +4364,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         socket_name.clone(),
         presenting(),
     );
+    // Before any chrome can connect: the desktop rides with the handshake, so
+    // a page that arrives in the same millisecond as the socket still gets it.
+    hub.host
+        .lock()
+        .unwrap()
+        .describe_displays(screens.outputs().map(Advertised::described).collect());
     {
         let hub = hub.clone();
         thread::spawn(move || serve_chrome(hub, chrome_socket));
@@ -4487,6 +4565,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use std::ffi::{OsStr, OsString};
+    use std::io::{BufRead, BufReader};
     use std::os::unix::net::UnixStream;
     use std::sync::Mutex;
     use std::thread;
@@ -4500,10 +4579,10 @@ mod tests {
     use super::{
         announce_open_apps, answers_keystroke, bgra_to_rgba, broadcast_closed,
         broadcast_focus_decision, channel, chrome_connection, client_command, cursor_shape,
-        disposition, drawn_by_the_compositor, draws_natively, frame_is_due, hand_back, hand_over,
-        keep_frame, pixels_to_hand_over, record_present, shadow_in_pixels, unmounts_the_element,
-        ChromeHub, ClientRequest, Committer, Disposition, Drawn, FrameTimings, HandOver, LastFrame,
-        Outbound, Placed, Refusals,
+        disposition, drawn_by_the_compositor, draws_natively, frame_is_due, freshened, hand_back,
+        hand_over, keep_frame, pixels_to_hand_over, record_present, shadow_in_pixels, to_line,
+        unmounts_the_element, write_responses, ChromeHub, ClientRequest, Committer, Disposition,
+        Drawn, FrameTimings, HandOver, LastFrame, Outbound, Placed, Refusals,
     };
 
     use std::collections::HashMap;
@@ -4605,6 +4684,157 @@ mod tests {
         assert!(
             hub.chromes.lock().unwrap().is_empty(),
             "the writer for a chrome that disconnected is not kept"
+        );
+    }
+
+    #[test]
+    fn a_socket_that_has_gone_away_ends_the_connection() {
+        // The `false` is what stops `read_chrome_messages` reading on from a
+        // peer that is not there. Written as a return value when the loop moved
+        // out of that function, and this is the callee half of it. The caller's
+        // `if !write_responses(…) { return; }` is not pinned by anything and
+        // deliberately so: it is the bare `return` the extraction moved, was
+        // equally unpinned before, and is close to inert — a peer that closed
+        // both ends gives the read loop EOF on the next pass regardless, so
+        // only a half-close makes it observable.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (page, compositor) = UnixStream::pair().expect("a socket pair");
+        let writer = Arc::new(Mutex::new(
+            compositor.try_clone().expect("the stream clones"),
+        ));
+        drop(page);
+
+        assert!(
+            !write_responses(
+                &hub,
+                &writer,
+                vec![HostMessage::Welcome {
+                    protocol_version: domicile_protocol::PROTOCOL_VERSION,
+                }],
+            ),
+            "a write to a peer that is gone ends the connection rather than looping"
+        );
+    }
+
+    #[test]
+    fn the_answer_on_the_wire_carries_the_desktop_as_of_when_it_was_written() {
+        // The whole point of `freshened`, at the seam where it is called. The
+        // answers are built under `host` and written later under the writer
+        // lock, so handing in answers built against an older desktop is the
+        // interleaving — without having to win a race to produce it.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (page, compositor) = UnixStream::pair().expect("a socket pair");
+        let writer = Arc::new(Mutex::new(
+            compositor.try_clone().expect("the stream clones"),
+        ));
+
+        let booted = vec![domicile_protocol::DisplayInfo {
+            name: "domicile-0".to_string(),
+            position: [0, 0],
+            size: [1280, 800],
+            scale: 1,
+        }];
+        hub.host.lock().unwrap().describe_displays(booted);
+        let answers = vec![
+            HostMessage::Welcome {
+                protocol_version: domicile_protocol::PROTOCOL_VERSION,
+            },
+            hub.host.lock().unwrap().describe_desktop(),
+        ];
+
+        // And now the desktop changes, after the answers were built and before
+        // they are written — which is `set_output` landing in the gap.
+        let now = vec![domicile_protocol::DisplayInfo {
+            name: "domicile-0".to_string(),
+            position: [0, 0],
+            size: [1280, 800],
+            scale: 2,
+        }];
+        hub.host.lock().unwrap().describe_displays(now.clone());
+
+        assert!(
+            write_responses(&hub, &writer, answers),
+            "the socket is open"
+        );
+        drop(writer);
+        drop(compositor);
+
+        // Compared as the bytes that went out, through the same encoder the
+        // caller uses: this is about what a chrome reads off the socket.
+        let written: Vec<String> = BufReader::new(page)
+            .lines()
+            .map(|line| line.expect("a line"))
+            .collect();
+        let expected: Vec<String> = [
+            HostMessage::Welcome {
+                protocol_version: domicile_protocol::PROTOCOL_VERSION,
+            },
+            HostMessage::Displays { displays: now },
+        ]
+        .iter()
+        .map(|message| to_line(message).trim_end().to_string())
+        .collect();
+        assert_eq!(
+            written, expected,
+            "the welcome is the answer it was built as, and the desktop is the current one"
+        );
+    }
+
+    #[test]
+    fn a_stale_desktop_in_a_handshake_answer_is_replaced_before_it_is_written() {
+        // The answer is built under the `host` lock and written later under the
+        // writer lock, and `set_output` can land in between — describing a new
+        // desktop and broadcasting it on the writer thread. Written as built,
+        // the answer's own copy lands last on the socket, and latest-wins
+        // leaves the chrome on the desktop that is gone.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let described = vec![domicile_protocol::DisplayInfo {
+            name: "domicile-0".to_string(),
+            position: [0, 0],
+            size: [1280, 800],
+            scale: 2,
+        }];
+        hub.host
+            .lock()
+            .unwrap()
+            .describe_displays(described.clone());
+
+        let built_earlier = HostMessage::Displays {
+            displays: vec![domicile_protocol::DisplayInfo {
+                name: "domicile-0".to_string(),
+                position: [0, 0],
+                size: [1280, 800],
+                scale: 1,
+            }],
+        };
+
+        assert_eq!(
+            freshened(&hub, built_earlier),
+            HostMessage::Displays {
+                displays: described
+            },
+            "the desktop written is the one described now, not the one the answer was built from"
+        );
+    }
+
+    #[test]
+    fn the_rest_of_a_handshake_answer_is_written_as_it_was_built() {
+        // Only `displays` is a fact about the world. `welcome` is an answer to
+        // what this chrome asked, and a version re-derived at write time would
+        // be a different chrome's answer on this chrome's socket.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let welcome = HostMessage::Welcome {
+            protocol_version: domicile_protocol::PROTOCOL_VERSION,
+        };
+
+        assert_eq!(
+            freshened(&hub, welcome.clone()),
+            welcome,
+            "a message that is not the desktop passes through untouched"
         );
     }
 

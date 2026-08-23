@@ -188,8 +188,13 @@ fn the_desktop_is_described_to_the_chrome() {
 
 #[test]
 fn a_desktop_of_no_displays_is_a_message_rather_than_a_silence() {
-    // The no-displays case — one output following Domicile's own window — is
-    // an answer the chrome has to be able to receive, not the absence of one.
+    // A desktop with no screens on it is an answer the chrome has to be able
+    // to receive, not the absence of one. The compositor never sends it — it
+    // describes at least one output, and the window-following case is a
+    // display named `domicile-0` rather than an empty list — but a `Host`
+    // nobody has described a desktop to does, and the `domicile` daemon is
+    // one. "Told nothing" and "not told" are different states, and the shape
+    // has to survive the wire for a chrome to tell them apart.
     // Asserted on the wire rather than through a round trip, which cannot see
     // the difference: an empty `Vec` that serialises to nothing at all and one
     // that serialises to `[]` both come back empty, and only the second is a
@@ -313,4 +318,41 @@ fn version_negotiation_accepts_matching_version() {
 #[test]
 fn version_negotiation_rejects_mismatch() {
     assert!(negotiate(PROTOCOL_VERSION + 1).is_err());
+}
+
+/// `ROADMAP.md` states the version as a literal, and this pins it.
+///
+/// Nothing pinned it before, and the habit that produced is worth naming
+/// without counting, since any count includes the commit doing the counting.
+/// The line spent most of its life stale: it was caught up in batches long
+/// after the fact, once by a commit that bumped no version at all, and bumps
+/// that edited `ROADMAP.md` in the same breath still walked past it. So
+/// "remember to update the roadmap" was never the missing habit — a number
+/// written down in prose is a copy of the constant, and it belongs to the
+/// crate that owns the constant.
+#[test]
+fn the_roadmap_states_the_version_this_build_speaks() {
+    // The path climbs out of the crate, which the crate itself never does. A
+    // test that reads a repo file is not the portable description of the
+    // protocol that `lib.rs` is; it is the check that the repo's prose about
+    // it is true, and there is nowhere else for that to live.
+    let roadmap = include_str!("../../../ROADMAP.md");
+    let stated: Vec<&str> = roadmap
+        .match_indices("`PROTOCOL_VERSION = ")
+        .map(|(at, _)| &roadmap[at..])
+        .collect();
+
+    // Every mention, not merely one that agrees: a roadmap that says 13 in one
+    // place and 14 in another satisfies "contains the right number" and is
+    // still wrong wherever a reader happens to look.
+    assert_eq!(
+        stated.len(),
+        1,
+        "ROADMAP.md states the protocol version {} times; it is one line",
+        stated.len()
+    );
+    assert!(
+        stated[0].starts_with(&format!("`PROTOCOL_VERSION = {PROTOCOL_VERSION}`")),
+        "ROADMAP.md does not say `PROTOCOL_VERSION = {PROTOCOL_VERSION}`; a bump left it behind"
+    );
 }
