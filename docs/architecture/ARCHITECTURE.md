@@ -44,6 +44,32 @@ but C/C++ and no advantage over CEF for our purposes).
 - `winit` backend runs the whole compositor *nested inside a window* for dev
   and tests, so we don't need DRM/KMS hardware to iterate.
 
+### One chrome page spanning every display, not one window per display
+
+The desktop is a list of displays in the config, one `wl_output` each, and one
+page across all of them. A display is a *region* of that page, which the shell
+addresses with `<Screen name="left">`.
+
+The rejected alternative is worth stating, because it looks like the obvious
+one. A chrome window is two connections — a host-protocol connection the
+preload opens per renderer, and a Wayland client, which is the whole engine
+process with N toplevels on it — and nothing correlates them. Every way of
+naming which display a toplevel is on fails or costs: the `xdg_toplevel` title
+is set by the page and identical for every window (and arrives after the
+output is entered anyway), `app_id` is process-wide, and a chrome socket per
+display works at the price of one engine process per monitor.
+
+Beyond naming, N pages means N copies of the shell's state, each with its own
+window list disagreeing with the others. It also needs portal ownership per
+app, unicast frames, display identity on every request, and shortcuts
+delivered to one connection rather than fired N times.
+
+What one page costs is mixed density: it rasterises at a single
+`devicePixelRatio`, the maximum of the outputs its toplevel entered, so on a
+desktop of unequal scales one screen is drawn for the other's. `<Screen>` is
+the seam — a shell written against it compiles unchanged if this is
+revisited — so the decision is reversible without touching shell code.
+
 ### Dev environment: Nix flake
 - Nothing is installed globally; Nix pins the whole toolchain reproducibly.
 - `nix develop` → core (Rust) shell; `nix develop .#full` adds Wayland/DRM/GL.

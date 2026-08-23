@@ -599,8 +599,10 @@ falloff the shadow uses, is the next candidate to move it.
 
 ### Phase 3 — own the display
 
-DRM/KMS backend and direct scanout for a fullscreen app. Multi-output, damage
-tracking, clipboard/data-device, touch and a security review all live here too.
+DRM/KMS backend and direct scanout for a fullscreen app, and per-monitor
+scanout — one composite clipped per output, which is what a single spanning
+page implies once there is real hardware under it. Damage tracking,
+clipboard/data-device, touch and a security review all live here too.
 
 ### Known gaps in what is built
 
@@ -614,15 +616,20 @@ tracking, clipboard/data-device, touch and a security review all live here too.
   `ClientRequest::KeyboardFocus` moves before the brain is consulted at all. So
   the brain's `Scene::focus` never leaves the chrome and nothing notices.
   Fixing it widens what that check covers, which is its own change.
-- **One scene composite.** The compositor advertises a `wl_output` per
-  configured display and tells each client which of them its window is on, but
-  the scene still has a single `surface_to_output`: the desktop is composited
-  once, at the window's scale, rather than once per display at each display's.
-  A mixed-density desktop is drawn at one density and shown at the others. Per
-  monitor scanout is phase 3's, and it clips one desktop-sized composite per
-  output, which is what a single spanning page already implies. With no
-  `[[output.displays]]` the desktop is Domicile's window, which is all a nested
-  compositor can do unaided.
+- **A mixed-density desktop is drawn at one density.** The chrome is one page
+  spanning every display (see ARCHITECTURE's decision on that), so it
+  rasterises at a single `devicePixelRatio` — the largest of the outputs its
+  toplevel entered — and the scene is composited once at the window's scale
+  rather than once per display at each display's. Every display at the same
+  `scale` costs nothing; unequal ones mean one screen is drawn for the other's.
+  Per-monitor scanout in phase 3 is what clips a composite per output.
+- **A configured display list is fixed at startup.** The compositor does a
+  single `Config::load` and has no `ConfigStore`. Reloading the list means
+  creating and destroying `wl_output` globals, re-entering every client and
+  resizing the window, so it is its own change. The *unconfigured* case is the
+  opposite and deliberately so: with no `[[output.displays]]` the desktop is
+  Domicile's own window, so it follows every resize and density change — which
+  is all a nested compositor can do unaided.
 - **Fractional scaling.** Non-integer ratios round *up* to the next integer scale:
   a client drawing more pixels than the display has is downscaled and stays sharp,
   while one drawing fewer is stretched. Matching a ratio exactly needs

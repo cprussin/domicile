@@ -113,7 +113,6 @@ working in its area; it is context, not compliance.
 |---|---|
 | [/docs/architecture/ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md) | Why Domicile is a compositor whose renderer is a web engine: the portal model, the host brain, the chrome protocol, and how a Wayland client becomes a styleable `<app>` element. |
 | [/docs/architecture/WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) | How native windows reach parity with an ordinary Wayland compositor: composite client dmabufs in the compositor and punch a transparent hole in the page, rather than pushing pixels through the engine. |
-| [/docs/architecture/MULTI-OUTPUT.md](/docs/architecture/MULTI-OUTPUT.md) | How the desktop becomes more than one screen: displays described in the config, one `wl_output` each, and one chrome page spanning them that the shell addresses with `<Screen>`. |
 
 [`/ROADMAP.md`](/ROADMAP.md) carries the current state and the ordered plan;
 read it before starting anything substantial.
