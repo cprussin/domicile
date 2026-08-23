@@ -293,14 +293,47 @@ fn texture_matrix(y_inverted: bool) -> Matrix3<f32> {
 /// device pixels; on a display that is not at scale 1 those are different
 /// numbers, and drawing the one as if it were the other puts every window in a
 /// corner of the output at a quarter size.
+///
+/// The nested window is one [target](desktop_to_target) that shows the whole
+/// desktop, and this says so rather than repeating the arithmetic: a second
+/// copy is a second thing to keep in step, and the two disagreeing would mean
+/// the nested path and the per-display path draw different desktops.
 pub fn logical_to_window(logical: (i32, i32), window: (i32, i32)) -> Transform {
-    // A zero-sized output is a window being closed or not yet mapped. Dividing
-    // by it would put every layer at infinity, which the renderer cannot draw
-    // and which reads as a blank frame rather than as the missing output it is.
-    Transform::scale(
-        f64::from(window.0) / f64::from(logical.0.max(1)),
-        f64::from(window.1) / f64::from(logical.1.max(1)),
-    )
+    desktop_to_target((0, 0), logical, window)
+}
+
+/// Maps the desktop's logical units onto one target's own pixels.
+///
+/// A *target* is a thing being drawn into and the part of the desktop it shows:
+/// `shows_at`/`shows_size` is that region in the desktop's logical units, and
+/// `resolution` is the target's own size in physical pixels. The nested window
+/// is the target that shows everything; a monitor is a target that shows its
+/// own display.
+///
+/// Two jobs, and only the first is obvious. The translation is what makes a
+/// display's own corner pixel zero of its own framebuffer rather than wherever
+/// it sits on the desktop. The scale is where a mixed-density desktop stops
+/// being drawn at one density: `resolution` is that display's *mode* — its
+/// logical size in physical pixels — so a scale-2 display draws one logical
+/// unit as two pixels while its scale-1 neighbour draws it as one, in the same
+/// frame, from the same scene.
+///
+/// Compositing the desktop once cannot do that. One transform has one scale,
+/// so the denser display is drawn at whatever the target it shares is, and the
+/// density it advertised to its clients is thrown away at the last step.
+pub fn desktop_to_target(
+    shows_at: (i32, i32),
+    shows_size: (i32, i32),
+    resolution: (i32, i32),
+) -> Transform {
+    // A zero-sized region is an output being brought up or taken down, and it
+    // has one for a frame either way. Dividing by it would put every layer at
+    // infinity, which the renderer cannot draw and which reads as a blank
+    // frame rather than as the missing output it is.
+    Transform::translate(-f64::from(shows_at.0), -f64::from(shows_at.1)).then(Transform::scale(
+        f64::from(resolution.0) / f64::from(shows_size.0.max(1)),
+        f64::from(resolution.1) / f64::from(shows_size.1.max(1)),
+    ))
 }
 
 /// Maps the window's device pixels back onto the chrome's logical units.
@@ -337,7 +370,7 @@ mod tests {
     use cgmath::Vector3;
     use domicile_scene::{Point, Transform};
 
-    use super::{logical_to_window, matrix3, window_to_logical};
+    use super::{desktop_to_target, logical_to_window, matrix3, window_to_logical};
 
     /// Where the renderer's matrix sends a point, so it can be compared with
     /// where [`Transform::apply`] says it should go.
@@ -410,6 +443,38 @@ mod tests {
         assert!((mapped.x - 1280.0).abs() < 1e-9 && (mapped.y - 800.0).abs() < 1e-9);
     }
 
+    // The whole-desktop cases are not repeated for `desktop_to_target`:
+    // `logical_to_window` *is* that call, so `an_unscaled_window_draws_the_scene_as_it_is`
+    // and `an_output_with_no_size_yet_does_not_send_everything_to_infinity`
+    // above already exercise it. What is left is the two things only a
+    // per-display target does.
+    #[test]
+    fn a_target_showing_the_second_display_puts_its_near_edge_at_the_origin() {
+        // The right-hand display of a 1920 + 2560 desktop. Its own top-left is
+        // 1920 across the desktop and pixel zero of its own framebuffer —
+        // which is the whole difference between compositing per display and
+        // compositing the desktop once.
+        let mapped =
+            desktop_to_target((1920, 0), (2560, 1440), (2560, 1440)).apply(Point::new(1920.0, 0.0));
+        assert!(
+            mapped.x.abs() < 1e-9 && mapped.y.abs() < 1e-9,
+            "the display's own corner landed at {mapped:?}",
+        );
+    }
+
+    #[test]
+    fn a_denser_display_draws_its_own_logical_units_at_its_own_scale() {
+        // The mixed-density case, and the reason this exists. Two displays
+        // side by side, 1920 logical each: the left at scale 1, the right at
+        // scale 2. Each target is that display's *mode* — its logical size in
+        // physical pixels — so one logical unit is one pixel on the left and
+        // two on the right.
+        let left = desktop_to_target((0, 0), (1920, 1080), (1920, 1080));
+        let right = desktop_to_target((1920, 0), (1920, 1080), (3840, 2160));
+        assert!((left.a - 1.0).abs() < 1e-9, "left drew at {}", left.a);
+        assert!((right.a - 2.0).abs() < 1e-9, "right drew at {}", right.a);
+    }
+
     #[test]
     fn mapping_into_the_window_and_back_lands_where_it_started() {
         let there = logical_to_window((1280, 800), (1920, 1200));
@@ -466,7 +531,7 @@ mod pixels {
     };
     use smithay::utils::{Point, Rectangle, Size, Transform as OutputTransform};
 
-    use super::{draw_layers, Layer, Shaders, Shadow};
+    use super::{desktop_to_target, draw_layers, Layer, Shaders, Shadow};
 
     const OUTPUT: (i32, i32) = (64, 48);
 
@@ -526,9 +591,23 @@ mod pixels {
 
     /// Compose the layers and hand back the output as row-major RGBA.
     fn composed(renderer: &mut GlesRenderer, layers: &[Layer<'_>]) -> Vec<u8> {
+        composed_into(renderer, layers, OUTPUT)
+    }
+
+    /// The same, into a target of a stated size.
+    ///
+    /// A target is a framebuffer and the part of the desktop it shows, so its
+    /// size is that display's mode rather than the desktop's — which is the
+    /// whole of how a mixed-density desktop is drawn at each display's own
+    /// density. `composed` is the case where the one target shows everything.
+    fn composed_into(
+        renderer: &mut GlesRenderer,
+        layers: &[Layer<'_>],
+        size: (i32, i32),
+    ) -> Vec<u8> {
         let shaders = Shaders::compile(renderer).expect("the compositor's shader compiles");
-        let buffer_size = Size::from(OUTPUT);
-        let physical = Size::from(OUTPUT);
+        let buffer_size = Size::from(size);
+        let physical = Size::from(size);
         let mut target: GlesTexture = renderer
             .create_buffer(Fourcc::Abgr8888, buffer_size)
             .expect("an offscreen buffer");
@@ -610,7 +689,16 @@ mod pixels {
 
     /// The pixel at `(x, y)`, counting down from the top-left.
     fn pixel(output: &[u8], x: i32, y: i32) -> [u8; 4] {
-        let at = ((y * OUTPUT.0 + x) * 4) as usize;
+        pixel_of(output, OUTPUT.0, x, y)
+    }
+
+    /// The pixel at `(x, y)` of an output `stride` pixels across.
+    ///
+    /// `pixel` assumes the whole-desktop target every other test here draws
+    /// into; a per-display target is its display's mode and so has a stride of
+    /// its own.
+    fn pixel_of(output: &[u8], stride: i32, x: i32, y: i32) -> [u8; 4] {
+        let at = ((y * stride + x) * 4) as usize;
         [output[at], output[at + 1], output[at + 2], output[at + 3]]
     }
 
@@ -621,6 +709,71 @@ mod pixels {
     const RED: [u8; 4] = [255, 0, 0, 255];
     const BLUE: [u8; 4] = [0, 0, 255, 255];
     const BLACK: [u8; 4] = [0, 0, 0, 255];
+
+    #[test]
+    #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
+    fn a_display_is_drawn_into_a_target_of_its_own_at_its_own_density() {
+        // The mixed-density case, through the real renderer.
+        //
+        // A 64x48 desktop of two 32x48 displays side by side. The right one is
+        // at scale 2, so its own target is its mode — 64x96 — while the whole
+        // desktop at scale 1 would be 64x48. One window covers the *left half*
+        // of the right display: desktop x 32..48.
+        //
+        // Where that window's far edge lands is what tells the two apart. Into
+        // the right display's own target it is at pixel 32 of 64, because that
+        // target shows 32 logical units across 64 pixels. Composited once over
+        // the whole desktop it would be at pixel 48 — the desktop coordinate
+        // itself, one pixel per unit.
+        //
+        // So the three assertions bracket the edge rather than any one of them
+        // carrying the test. Drawing this display at the desktop's density
+        // instead — `(32, 48)` for the target below — puts the edge at pixel
+        // 16, and it is the *inside* assertion at 24 that goes red; the
+        // background one at 40 still passes, because 40 is past the edge under
+        // either density. Checked, both ways round.
+        let mut renderer = renderer();
+        let red = solid(&mut renderer, RED);
+        // Bound once: the stride the pixels are read back at is this target's
+        // own width, and two literals that have to agree are two literals that
+        // can stop agreeing.
+        const TARGET: (i32, i32) = (64, 96);
+        let to_target = desktop_to_target((32, 0), (32, 48), TARGET);
+        let output = composed_into(
+            &mut renderer,
+            &[Layer {
+                alpha: 1.0,
+                clip: &[],
+                corner_radius: 0.0,
+                shadow: None,
+                // The window in desktop coordinates, then onto this display's
+                // own target — the same two steps `present` composes, with the
+                // second one per display rather than once.
+                surface_to_output: Transform::scale(16.0, 48.0)
+                    .then(Transform::translate(32.0, 0.0))
+                    .then(to_target),
+                texture: &red,
+                y_inverted: false,
+            }],
+            TARGET,
+        );
+        assert_eq!(
+            pixel_of(&output, TARGET.0, 8, 8),
+            RED,
+            "the window should cover this display's left half",
+        );
+        assert_eq!(
+            pixel_of(&output, TARGET.0, 24, 8),
+            RED,
+            "still inside the window, at 3/4 of the way to its edge",
+        );
+        assert_eq!(
+            pixel_of(&output, TARGET.0, 40, 8),
+            BLACK,
+            "past the window's edge under either density — the pair with the \
+             assertion above is what pins where that edge is",
+        );
+    }
 
     #[test]
     #[ignore = "needs a working EGL/GLES stack; run via scripts/e2e-compose.sh"]
