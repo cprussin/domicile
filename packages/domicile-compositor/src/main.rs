@@ -43,7 +43,9 @@ use smithay::input::{
     Seat, SeatHandler, SeatState,
 };
 use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Scale, Subpixel};
+use smithay::reexports::winit::dpi::LogicalSize;
 use smithay::reexports::winit::window::Cursor;
+use smithay::reexports::winit::window::Window as WinitWindow;
 use smithay::reexports::{
     calloop::{
         channel::{channel, Event as ChannelEvent, Sender},
@@ -1176,10 +1178,16 @@ struct DomicileCompositor {
     output_manager_state: OutputManagerState,
     /// Every advertised output, in the order [`Screens`] lists them.
     ///
-    /// Every surface enters all of them, portal or no portal: a toolkit that
-    /// scales asks which output it is on and blocks until told, and "none" is
-    /// not an answer. Narrowing that to the outputs a window actually covers
-    /// is the placement item's, not this one's.
+    /// **In that order, and one for one.** Built from `screens.outputs()` at
+    /// startup, and the only thing that replaces either — `set_output` — is
+    /// asserted to the single-output case. That is what lets
+    /// [`Screens::entered_by`]'s answer be zipped against this: it is one
+    /// decision per output, positional, with nothing naming which is which.
+    ///
+    /// Which of them a surface enters is [`Screens::entered_by`]: the outputs
+    /// its portal reaches, and every one of them for a surface that has no
+    /// portal or reaches none. See
+    /// [`enter_the_displays_each_window_is_on`](DomicileCompositor::enter_the_displays_each_window_is_on).
     outputs: Vec<Output>,
     /// What the outputs above are, and who gets to change them.
     screens: Screens,
@@ -1481,6 +1489,112 @@ impl DomicileCompositor {
     /// [`draws_natively`] against the scene the chrome has placed.
     fn draws_natively(&self, app_id: &str) -> bool {
         draws_natively(self.hub.host.lock().unwrap().scene(), app_id)
+    }
+
+    /// Tell every client which displays its surfaces are on, and which they
+    /// are not — every window, and every menu over one.
+    ///
+    /// Run whenever a placement changes rather than only when a window maps,
+    /// because a window moves: the chrome drags an `<app>` element across the
+    /// page and the display under it changes with no Wayland event of its own.
+    /// [`Screens::entered_by`] is the rule and this is only its application —
+    /// every output, every window, enter or leave, so a window that left a
+    /// screen is told that too.
+    ///
+    /// Both halves are idempotent in Smithay: an output keeps the set of
+    /// surfaces on it and sends `wl_surface.enter`/`leave` only when that set
+    /// changes. So this can run on every placement without the compositor
+    /// keeping a second copy of the same bookkeeping, and without a client
+    /// seeing an `enter` for a screen it is already on.
+    ///
+    /// The chrome's own toplevel is not here. It is the desktop rather than a
+    /// window on it, and `new_toplevel` puts it on every output once and for
+    /// all.
+    fn enter_the_displays_each_window_is_on(&self) {
+        let host = self.hub.host.lock().unwrap();
+        let scene = host.scene();
+        let where_it_is = |app_id: &str| scene.get(app_id).map(domicile_scene::Portal::bounds);
+        for (app_id, toplevel) in &self.toplevels {
+            self.enter_only(toplevel.wl_surface(), where_it_is(app_id));
+        }
+        // And a popup goes where its parent's window goes. Decided on every
+        // pass rather than once when the popup is created, because the window
+        // under it moves: a menu left holding the screen its window used to be
+        // on is a client drawing it at that screen's density over a window now
+        // at another's.
+        //
+        // Smithay's own list rather than one of ours: it is pushed to before
+        // `new_popup` is dispatched and popped from when the popup goes away,
+        // so a second copy here would be a lifecycle to keep in step for
+        // nothing.
+        //
+        // The *root* rather than the immediate parent, because a submenu's
+        // parent is another popup: resolved one step, a nested menu would fall
+        // through to every display and be drawn at the largest scale of them —
+        // which is the failure this narrowing exists to prevent, arrived at by
+        // going one level deeper into the same menu.
+        //
+        // `None` — a popup whose chain does not end at a window this
+        // compositor announced, or one whose window has no portal — takes the
+        // every-display fallback, which is where a surface with nothing to
+        // place it by belongs.
+        for popup in self.xdg_shell_state.popup_surfaces() {
+            let on = self
+                .window_under(popup)
+                .and_then(|app_id| where_it_is(&app_id));
+            self.enter_only(popup.wl_surface(), on);
+        }
+    }
+
+    /// Put `surface` on the displays `bounds` reaches, and take it off the
+    /// rest.
+    ///
+    /// Zipped, because `self.outputs` is built from `self.screens` in order
+    /// and [`Screens::entered_by`]'s answer is one decision per output — see
+    /// the `outputs` field, which says what keeps the two in step.
+    fn enter_only(&self, surface: &WlSurface, bounds: Option<domicile_scene::Bounds>) {
+        for (output, entered) in self.outputs.iter().zip(self.screens.entered_by(bounds)) {
+            if entered {
+                output.enter(surface);
+            } else {
+                output.leave(surface);
+            }
+        }
+    }
+
+    /// The window a popup ultimately belongs to, through any submenus.
+    ///
+    /// A popup's parent is either the window it hangs off or the menu it hangs
+    /// off, so this walks until it reaches something announced as a window.
+    /// Resolving one step instead would leave every *nested* menu with no
+    /// window, and so on every display at the largest scale of them — the
+    /// failure the narrowing exists to prevent, one level deeper into the same
+    /// menu.
+    ///
+    /// Bounded by the number of live popups, which is what a chain can be at
+    /// its longest. `xdg_shell` forbids a cycle, and a bound is what keeps a
+    /// client that made one anyway from taking the compositor with it.
+    fn window_under(&self, popup: &PopupSurface) -> Option<String> {
+        let popups = self.xdg_shell_state.popup_surfaces();
+        let mut surface = popup.get_parent_surface()?;
+        for _ in 0..=popups.len() {
+            if let Some(app_id) = self.app_id_of(&surface) {
+                return Some(app_id);
+            }
+            surface = popups
+                .iter()
+                .find(|above| above.wl_surface() == &surface)?
+                .get_parent_surface()?;
+        }
+        None
+    }
+
+    /// The window this surface is, if it is one this compositor announced.
+    fn app_id_of(&self, surface: &WlSurface) -> Option<String> {
+        self.toplevels
+            .iter()
+            .find(|(_, toplevel)| toplevel.wl_surface() == surface)
+            .map(|(app_id, _)| app_id.clone())
     }
 
     /// Turn a client's newly-attached buffer into pixels for the chrome,
@@ -2498,7 +2612,12 @@ impl DomicileCompositor {
                 info!(key = shortcut.key, "the chrome claimed a shortcut");
                 self.shortcuts.grab(shortcut);
             }
-            ClientRequest::ScenePlaced => self.needs_present = true,
+            ClientRequest::ScenePlaced => {
+                // A placement is also a window possibly having moved to
+                // another screen, and nothing else tells the client that.
+                self.enter_the_displays_each_window_is_on();
+                self.needs_present = true;
+            }
             ClientRequest::ChromeHello => {
                 // A page has started, and whatever the page before it was
                 // holding down is gone along with it: nothing will ever send
@@ -2528,6 +2647,17 @@ impl DomicileCompositor {
                 self.held.remove(&app_id);
                 // And nothing is owed to a canvas that no longer exists.
                 self.pending_damage.remove(&app_id);
+                // A window with no portal is on every display, and this
+                // window has just lost one: its element left the page, so
+                // there is nothing laid out to place it by. Told nothing, it
+                // would keep the screen it was last on and draw at that
+                // density wherever the chrome mounts it next.
+                //
+                // Not the backgrounding case, which never reaches here — a
+                // backgrounded tab is laid out invisibly, which arrives as a
+                // `place_portal` and so as `ScenePlaced`. `unmounts_the_element`
+                // is what tells the two apart.
+                self.enter_the_displays_each_window_is_on();
                 self.needs_present = true;
             }
             ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
@@ -3846,9 +3976,16 @@ impl XdgShellHandler for DomicileCompositor {
             let mut host = self.hub.host.lock().unwrap();
             let (app_id, announce) = host.app_appeared(None, (0.0, 0.0));
             info!(%app_id, "toplevel mapped -> Host::app_appeared");
-            // Tell the client which output it is on. Toolkits that scale their
+            // Tell the client which outputs it is on — every one of them, at
+            // this point: the chrome has not placed the window yet, so there
+            // is no portal to say where it is. Toolkits that scale their
             // content (GLFW, and so kitty) wait for this before drawing their
-            // first frame, so without it the window maps and stays blank.
+            // first frame, so without it the window maps and stays blank, and
+            // "none of them" is not an answer either.
+            //
+            // Narrowed to the displays it is actually over by
+            // `enter_the_displays_each_window_is_on`, on the first placement
+            // and every one after it.
             for output in &self.outputs {
                 output.enter(surface.wl_surface());
             }
@@ -3919,6 +4056,20 @@ impl XdgShellHandler for DomicileCompositor {
         if let Err(err) = surface.send_configure() {
             tracing::warn!(%err, "could not configure a popup");
         }
+        // A popup has no portal of its own — it is the client's own menu,
+        // positioned against its parent rather than laid out in the page — but
+        // it is drawn over that parent, so the screen the window is on is the
+        // screen the menu is on. Entering every display instead would tell a
+        // menu whose window is on the 1x screen that it is also on the 2x one,
+        // and a toolkit takes the largest scale it was entered onto: a menu
+        // drawn for the wrong density over a correctly-scaled window, on the
+        // desktop this whole rule is for.
+        //
+        // The whole pass rather than this one surface: smithay pushes a popup
+        // onto `popup_surfaces` before dispatching this, so it is already in
+        // there, and one rule applied in one place is what stops the answer a
+        // popup gets here drifting from the one a later placement gives it.
+        self.enter_the_displays_each_window_is_on();
     }
 
     fn reposition_request(
@@ -4388,7 +4539,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // rather than something that happens to you.
     let mut window_events = None;
     let mut gpu = if presenting() {
-        match smithay::backend::winit::init::<GlesRenderer>() {
+        // Sized to show the desktop rather than to winit's default. `init()`
+        // is called with no attributes and opens a 1280x800 window titled
+        // "Smithay", so a two-display desktop was shown in a window the size
+        // of neither of them — and since a configured desktop does not follow
+        // the window, what that cost was the rest of it, scaled down.
+        //
+        // Bounded by `compositor.nested_size`, so a desktop that fits is shown
+        // at its own size and one that does not is scaled to fit, shape
+        // intact. Unbounded, four 4K displays would ask a host for a
+        // 15360-wide window — off the screen, or past what GL will allocate,
+        // and worse than the fixed size this replaced.
+        //
+        // A request rather than a guarantee: a window manager is free to give
+        // us something else, `WinitEvent::Resized` is what says what we got,
+        // and `logical_to_window` scales the desktop into whatever that is.
+        let window = screens.window_showing_it(config.compositor.nested_size);
+        let attributes = WinitWindow::default_attributes()
+            .with_inner_size(LogicalSize::new(f64::from(window.0), f64::from(window.1)))
+            .with_title("Domicile")
+            .with_visible(true);
+        match smithay::backend::winit::init_from_attributes::<GlesRenderer>(attributes) {
             Ok((backend, events)) => {
                 info!(size = ?backend.window_size(), "presenting to a window");
                 window_events = Some(events);

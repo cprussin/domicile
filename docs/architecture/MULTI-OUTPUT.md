@@ -200,8 +200,12 @@ carry no output identity and stay the no-displays path.
 ### The nested window
 
 `compositor.nested_size` is the fallback when no displays are configured,
-replacing the hardcoded size — shipped. Sizing the window itself to the
-displays' bounding box is not; see the plan item below.
+replacing the hardcoded size. It is also the bound on the window itself: with
+displays configured, Domicile asks for a window showing the desktop at its own
+size where that fits inside `nested_size`, and scaled to fit — both axes by the
+same factor — where it does not. Asking for the bounding box unbounded would
+have four 4K displays request a 15360-wide window, which a host either puts
+mostly off the screen or refuses to allocate.
 
 `WinitEvent::Resized` calls `adopt_window_scale`, which sets the desktop *from
 the window* — right where nothing described one, since then the window is the
@@ -266,7 +270,7 @@ its own change.
       space (#77, #82)
 - [x] `domicile-compositor`: `self.output` becomes the set of them, across the
       call sites that assume one (#82)
-- [ ] `domicile-compositor`: `wl_surface.enter` / `leave` per the table above,
+- [x] `domicile-compositor`: `wl_surface.enter` / `leave` per the table above,
       including the all-outputs fallback for a surface with no portal; and
       `winit::init()` given window attributes sized to the desktop — it is
       called with none, so a described desktop is shown at winit's default

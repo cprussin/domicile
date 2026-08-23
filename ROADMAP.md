@@ -614,9 +614,13 @@ tracking, clipboard/data-device, touch and a security review all live here too.
   `ClientRequest::KeyboardFocus` moves before the brain is consulted at all. So
   the brain's `Scene::focus` never leaves the chrome and nothing notices.
   Fixing it widens what that check covers, which is its own change.
-- **One scene output.** The compositor advertises a `wl_output` per configured
-  display, but the scene still has a single `surface_to_output`, so which
-  display a window is *on* is not yet a thing it can answer. With no
+- **One scene composite.** The compositor advertises a `wl_output` per
+  configured display and tells each client which of them its window is on, but
+  the scene still has a single `surface_to_output`: the desktop is composited
+  once, at the window's scale, rather than once per display at each display's.
+  A mixed-density desktop is drawn at one density and shown at the others. Per
+  monitor scanout is phase 3's, and it clips one desktop-sized composite per
+  output, which is what a single spanning page already implies. With no
   `[[output.displays]]` the desktop is Domicile's window, which is all a nested
   compositor can do unaided.
 - **Fractional scaling.** Non-integer ratios round *up* to the next integer scale:

@@ -266,6 +266,32 @@ impl Portal {
         Transform::scale(self.size.0, self.size.1).then(self.transform)
     }
 
+    /// The screen-space box this window reaches.
+    ///
+    /// Every corner is transformed rather than just the origin and the far
+    /// corner: a rotation or a flip moves which corner is which, so a box
+    /// built from two of them can come out inside-out — `min` above `max` —
+    /// and overlap nothing at all.
+    pub fn bounds(&self) -> Bounds {
+        let (w, h) = self.size;
+        let corners = [
+            self.transform.apply(Point::new(0.0, 0.0)),
+            self.transform.apply(Point::new(w, 0.0)),
+            self.transform.apply(Point::new(0.0, h)),
+            self.transform.apply(Point::new(w, h)),
+        ];
+        // `f64::min`/`max` rather than a comparison chain, so a `NaN` from a
+        // degenerate transform folds to the other corner instead of ordering
+        // arbitrarily.
+        let mut min = corners[0];
+        let mut max = corners[0];
+        for corner in &corners[1..] {
+            min = Point::new(min.x.min(corner.x), min.y.min(corner.y));
+            max = Point::new(max.x.max(corner.x), max.y.max(corner.y));
+        }
+        Bounds { min, max }
+    }
+
     /// If `screen` falls within this portal, return the app-local coordinate.
     fn local_hit(&self, screen: Point) -> Option<Point> {
         let local = self.transform.inverse()?.apply(screen);
@@ -275,6 +301,35 @@ impl Portal {
         } else {
             None
         }
+    }
+}
+
+/// The rectangle a portal reaches on screen, as its two extreme corners.
+///
+/// Axis-aligned, which for a rotated window is larger than the window: the
+/// corners are transformed and the box is drawn around them. That is the
+/// deliberate answer where this is used to decide which outputs a window is
+/// on — a window said to be on a screen it only reaches the corner of costs
+/// that screen a redraw it did not need, and one *not* said to be on a screen
+/// it covers costs the client the scale it should have drawn at.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bounds {
+    pub min: Point,
+    pub max: Point,
+}
+
+impl Bounds {
+    /// Whether this box and `other` share any area.
+    ///
+    /// Touching edges do not count. Two displays laid out side by side abut
+    /// exactly, so a window ending on the seam is on the screen it is *in*
+    /// rather than on both — and a zero-width overlap is not somewhere a
+    /// window can be seen.
+    pub fn overlaps(&self, other: &Bounds) -> bool {
+        self.min.x < other.max.x
+            && other.min.x < self.max.x
+            && self.min.y < other.max.y
+            && other.min.y < self.max.y
     }
 }
 

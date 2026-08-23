@@ -11,6 +11,7 @@
 
 use domicile_config::Desktop;
 use domicile_protocol::DisplayInfo;
+use domicile_scene::{Bounds, Point};
 
 /// One `wl_output`, in the form the compositor advertises it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +54,33 @@ impl Advertised {
                 .checked_mul(self.scale)
                 .expect("a display's mode fits a coordinate"),
         )
+    }
+
+    /// The rectangle this output occupies on the desktop.
+    ///
+    /// Logical units, like everything the desktop is laid out in, so this is
+    /// directly comparable with a portal's own box — a `wl_output`'s mode is
+    /// physical and is not what a window is placed against.
+    pub fn bounds(&self) -> Bounds {
+        // `checked_add` for the reason [`mode`](Advertised::mode) gives:
+        // `Advertised` is publicly constructible and nothing validates one, so
+        // a far edge past `i32::MAX` is a display no coordinate can describe.
+        // A wrap here is worse than a panic — it puts `max` below `min`, which
+        // overlaps nothing, which is indistinguishable from a window in a gap
+        // and so silently lands every window on every screen.
+        let far = |at: i32, size: i32| {
+            f64::from(
+                at.checked_add(size)
+                    .expect("a display's far edge fits a coordinate"),
+            )
+        };
+        Bounds {
+            min: Point::new(f64::from(self.position.0), f64::from(self.position.1)),
+            max: Point::new(
+                far(self.position.0, self.logical.0),
+                far(self.position.1, self.logical.1),
+            ),
+        }
     }
 
     /// This output in the shape the chrome is told about it.
@@ -152,6 +180,92 @@ impl Screens {
         self.outputs.iter()
     }
 
+    /// Which outputs a window with these bounds is on, in [`outputs`] order.
+    ///
+    /// [`outputs`]: Screens::outputs
+    ///
+    /// Two fallbacks, both to *every* output, and they are the load-bearing
+    /// half rather than the tidy edge cases:
+    ///
+    /// - `None` is a surface with no portal — a window never mounted, one
+    ///   backgrounded, or a popup, which never has one at all. A backgrounded
+    ///   tab is *placed invisibly* rather than removed — the shell keeps every
+    ///   window mounted and toggles `hidden`, which arrives as a placement
+    ///   with `visible: false` and drops the portal from the scene. So the
+    ///   fallback has to key on having a portal now, not on having been told
+    ///   one went away: keyed on the removal, every hidden-but-mounted window
+    ///   would stay pinned to the display it was last on.
+    /// - An empty intersection is a portal in a gap between displays or off
+    ///   the desktop's edge. Both are legal — the page spans a hole — and
+    ///   "no output" is not an answer a client can use: a toolkit that scales
+    ///   its content asks which output it is on and blocks until told, so a
+    ///   window told none maps blank and stays that way.
+    ///
+    /// A `Vec` in the outputs' own order rather than a set of names, because
+    /// the caller has one `wl_output` per entry in the same order and has to
+    /// enter *and leave* each of them — the answer is a decision per output,
+    /// not a list of the interesting ones.
+    pub fn entered_by(&self, bounds: Option<Bounds>) -> Vec<bool> {
+        let everywhere = || vec![true; self.outputs.len()];
+        match bounds {
+            None => everywhere(),
+            Some(bounds) => {
+                let touched: Vec<bool> = self
+                    .outputs
+                    .iter()
+                    .map(|output| output.bounds().overlaps(&bounds))
+                    .collect();
+                if touched.contains(&true) {
+                    touched
+                } else {
+                    everywhere()
+                }
+            }
+        }
+    }
+
+    /// The window to ask a host for, showing this desktop inside `within`.
+    ///
+    /// The desktop itself where it fits, so a single 1920x1080 display opens a
+    /// window that shows it pixel for pixel. Scaled down to fit where it does
+    /// not: four 4K displays side by side are a 15360-wide desktop, and asking
+    /// a host for a window that wide gets one mostly off the screen, or past
+    /// what the GL implementation will allocate a renderbuffer for. Which is
+    /// worse than the fixed 1280x800 this replaced, since that at least showed
+    /// the whole desktop.
+    ///
+    /// Never enlarged: a desktop smaller than `within` is shown at its own
+    /// size rather than blown up, because a window bigger than the desktop is
+    /// letterboxing that nothing draws.
+    ///
+    /// Both axes by the same factor, so the shape survives. `logical_to_window`
+    /// scales them independently and will stretch the desktop into whatever
+    /// window it is actually given — asking for the right shape is what keeps
+    /// it from having to.
+    pub fn window_showing_it(&self, within: (u32, u32)) -> (u32, u32) {
+        let (width, height) = (as_measure(self.size.0), as_measure(self.size.1));
+        // Rationals rather than a float ratio: this is a size in pixels, and
+        // `width * within.1` against `height * within.0` is the same comparison
+        // without asking which way a rounded division went.
+        let by_width = u64::from(width) * u64::from(within.1);
+        let by_height = u64::from(height) * u64::from(within.0);
+        let shrink = |measure: u32, numerator: u32, denominator: u32| {
+            // At most `measure`, so the "never enlarged" half needs no branch
+            // of its own: a `within` larger than the desktop is not applied.
+            u32::try_from(u64::from(measure) * u64::from(numerator) / u64::from(denominator))
+                .unwrap_or(u32::MAX)
+                .max(1)
+        };
+        if width <= within.0 && height <= within.1 {
+            (width, height)
+        } else if by_width > by_height {
+            // Wider than the box in proportion, so the width is what binds.
+            (within.0, shrink(height, within.0, width))
+        } else {
+            (shrink(width, within.1, height), within.1)
+        }
+    }
+
     /// The desktop's size in logical units — the bounding box of the outputs.
     pub fn size(&self) -> (i32, i32) {
         self.size
@@ -195,6 +309,7 @@ fn as_measure(coordinate: i32) -> u32 {
 mod tests {
     use super::*;
     use domicile_config::Config;
+    use domicile_scene::{Portal, Transform};
 
     fn desktop(text: &str) -> Desktop {
         Config::parse(text)
@@ -354,6 +469,160 @@ mod tests {
             "the scale half asserts the same invariant, and it said {:?}",
             panicked.downcast_ref::<String>()
         );
+    }
+
+    /// The two-display desktop the entered-output cases are argued against.
+    fn side_by_side() -> Screens {
+        Screens::described(&desktop(
+            "[[output.displays]]\nname = \"left\"\nsize = [1920, 1080]\n\
+             [[output.displays]]\nname = \"right\"\nposition = [1920, 0]\nsize = [1280, 1024]\n",
+        ))
+    }
+
+    /// A window of `size` at `at`, as the chrome would have placed it.
+    fn window_at(at: (f64, f64), size: (f64, f64)) -> Bounds {
+        Portal::new("app", size, Transform::translate(at.0, at.1), 0).bounds()
+    }
+
+    #[test]
+    fn a_window_is_on_the_display_it_is_over() {
+        let screens = side_by_side();
+
+        assert_eq!(
+            screens.entered_by(Some(window_at((100.0, 100.0), (800.0, 600.0)))),
+            vec![true, false]
+        );
+        assert_eq!(
+            screens.entered_by(Some(window_at((2000.0, 100.0), (800.0, 600.0)))),
+            vec![false, true]
+        );
+    }
+
+    #[test]
+    fn a_window_straddling_two_displays_is_on_both() {
+        // What the whole per-output rule is for: a window dragged across the
+        // seam is being shown by both screens, and a client told only one of
+        // them draws at one density for a window visible at two.
+        let screens = side_by_side();
+
+        assert_eq!(
+            screens.entered_by(Some(window_at((1800.0, 0.0), (400.0, 400.0)))),
+            vec![true, true]
+        );
+    }
+
+    #[test]
+    fn a_window_ending_on_the_seam_is_on_one_of_them() {
+        // Displays abut exactly, so a window whose right edge is the boundary
+        // touches the second without being on it. Counted as an overlap, every
+        // maximised window on the left-hand screen would be on both.
+        let screens = side_by_side();
+
+        assert_eq!(
+            screens.entered_by(Some(window_at((1120.0, 0.0), (800.0, 600.0)))),
+            vec![true, false]
+        );
+    }
+
+    #[test]
+    fn a_window_with_no_portal_is_on_every_display() {
+        // Never mounted, backgrounded, or a popup. A backgrounded tab is
+        // placed *invisibly* rather than removed, which drops its portal from
+        // the scene, so keying this on having a portal would take every
+        // backgrounded window off every screen.
+        let screens = side_by_side();
+
+        assert_eq!(screens.entered_by(None), vec![true, true]);
+    }
+
+    #[test]
+    fn a_window_over_no_display_at_all_is_on_every_display() {
+        // A portal in a gap between displays, or off the desktop's edge. Both
+        // are legal — the page spans a hole — and "no output" is not an answer
+        // a client can use: a toolkit that scales asks which output it is on
+        // and blocks until told, so a window told none maps blank.
+        let screens = side_by_side();
+
+        assert_eq!(
+            screens.entered_by(Some(window_at((-4000.0, -4000.0), (100.0, 100.0)))),
+            vec![true, true]
+        );
+    }
+
+    #[test]
+    fn a_display_whose_far_edge_does_not_fit_says_so_rather_than_wrapping() {
+        // The same invariant `a_mode_too_big_to_describe_says_so_rather_than_wrapping`
+        // asserts one field over, and the failure is worse here: a wrapped far
+        // edge puts `max` below `min`, which overlaps nothing, which is
+        // indistinguishable from a window in a gap — so every window would
+        // land on every screen with nothing to show why.
+        let past_the_end = Advertised {
+            logical: (1920, 1080),
+            name: "impossible".into(),
+            position: (i32::MAX - 1, 0),
+            scale: 1,
+        };
+
+        let panicked = std::panic::catch_unwind(move || past_the_end.bounds())
+            .expect_err("a far edge past i32::MAX must not wrap");
+
+        assert!(
+            panicked
+                .downcast_ref::<String>()
+                .is_some_and(|said| said.starts_with("a display's far edge")),
+            "it said {:?}",
+            panicked.downcast_ref::<String>()
+        );
+    }
+
+    #[test]
+    fn a_desktop_that_fits_is_shown_at_its_own_size() {
+        // The point of asking for it at all: one 1920x1080 display opens a
+        // window showing it pixel for pixel, rather than winit's default with
+        // the desktop scaled into it.
+        let screens = Screens::described(&desktop(
+            "[[output.displays]]\nname = \"only\"\nsize = [1920, 1080]\n",
+        ));
+
+        assert_eq!(screens.window_showing_it((2560, 1440)), (1920, 1080));
+    }
+
+    #[test]
+    fn a_desktop_too_wide_for_the_box_is_scaled_to_its_width() {
+        // Four 4K displays side by side. Asked for at its own size this is a
+        // window mostly off the screen, or past what the GL implementation
+        // will allocate — worse than the fixed size it replaced, which at
+        // least showed the whole desktop.
+        let screens = Screens::described(&desktop(
+            "[[output.displays]]\nname = \"a\"\nsize = [3840, 2160]\n\
+             [[output.displays]]\nname = \"b\"\nposition = [3840, 0]\nsize = [3840, 2160]\n",
+        ));
+
+        // 7680x2160 into 1280 wide: the height follows by the same factor, so
+        // the shape survives rather than the desktop being squashed.
+        assert_eq!(screens.window_showing_it((1280, 800)), (1280, 360));
+    }
+
+    #[test]
+    fn a_desktop_too_tall_for_the_box_is_scaled_to_its_height() {
+        // Stacked rather than side by side, which is the axis the width case
+        // cannot tell you anything about.
+        let screens = Screens::described(&desktop(
+            "[[output.displays]]\nname = \"a\"\nsize = [1600, 1200]\n\
+             [[output.displays]]\nname = \"b\"\nposition = [0, 1200]\nsize = [1600, 1200]\n",
+        ));
+
+        assert_eq!(screens.window_showing_it((1280, 800)), (533, 800));
+    }
+
+    #[test]
+    fn a_desktop_smaller_than_the_box_is_not_blown_up_to_fill_it() {
+        // A window bigger than the desktop is letterboxing nothing draws.
+        let screens = Screens::described(&desktop(
+            "[[output.displays]]\nname = \"only\"\nsize = [640, 480]\n",
+        ));
+
+        assert_eq!(screens.window_showing_it((1280, 800)), (640, 480));
     }
 
     #[test]
