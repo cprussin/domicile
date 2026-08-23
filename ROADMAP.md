@@ -58,6 +58,7 @@ cargo test -p domicile-compositor
 ./scripts/e2e-late-chrome.sh     # a chrome arriving to a client already running (reload)
 ./scripts/e2e-spawn.sh           # a spawned client is aimed at *our* display
 ./scripts/e2e-input.sh           # keyboard + pointer reach a client (copy path)
+./scripts/e2e-stuck-key.sh       # a key held when the page reloads is not left down in the seat
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
 ./scripts/e2e-slow-chrome.sh     # a chrome that stops reading does not freeze the compositor
 ./scripts/e2e-two-chromes.sh     # a focus change reaches every chrome, not just the one that moved it

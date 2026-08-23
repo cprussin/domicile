@@ -2320,6 +2320,18 @@ impl DomicileCompositor {
             }
             ClientRequest::ScenePlaced => self.needs_present = true,
             ClientRequest::ChromeHello => {
+                // A page has started, and whatever the page before it was
+                // holding down is gone along with it: nothing will ever send
+                // those releases, and the seat keeps a key down until
+                // something does.
+                //
+                // `hello` is the signal there is rather than the one to want.
+                // Every new connection sends one, so on a two-chrome desktop a
+                // page starting anywhere drops the keys a user is holding
+                // through another — and a chrome that dies and never comes
+                // back leaves them down until some page connects. `held` is
+                // cleared here on the same terms and for the same reason.
+                self.release_pressed_keys();
                 // Nothing is held and nothing is owed. The windows a chrome
                 // needs are re-supplied by the hand-over pass in `present`,
                 // which is what an empty `held` asks for.
@@ -2369,6 +2381,55 @@ impl DomicileCompositor {
                 // configure the client acknowledged.
                 toplevel.send_pending_configure();
             }
+        }
+    }
+
+    /// Every key the seat still has down, released.
+    ///
+    /// A key only comes up because something says so, and the two things that
+    /// can say so both go away mid-press: the page that forwarded the press
+    /// (a reload or a crash delivers no `keyup` for it, and a crash delivers
+    /// nothing at all) and the window the compositor reads its own keys from.
+    /// The seat outlives both, so the key stays down in it for the rest of the
+    /// session.
+    ///
+    /// For an ordinary key that is a modifier nobody can let go of. For a lock
+    /// key it cannot be recovered from at all: xkb unlocks one only on the
+    /// release of the press it saw lock it, so while that press is unfinished
+    /// every later press of the key is a refcount on the filter already
+    /// holding the lock rather than a new toggle. `caps:swapescape` — the
+    /// desktop's own default — puts `Caps_Lock` on the physical Escape key, so
+    /// one lost release is every window typing in capitals, including the
+    /// windows opened afterwards, until Domicile is restarted.
+    ///
+    /// Releasing a key the user is still physically holding costs that key's
+    /// repeat and nothing else: the release that eventually arrives finds
+    /// nothing down and changes no state.
+    fn release_pressed_keys(&mut self) {
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let pressed = keyboard.pressed_keys();
+        if !pressed.is_empty() {
+            info!(
+                count = pressed.len(),
+                "releasing the keys the seat had down"
+            );
+        }
+        let time = self.now_ms();
+        for key in pressed {
+            let serial = SERIAL_COUNTER.next_serial();
+            // Forwarded even for a key a claimed shortcut took out of the
+            // stream, which `pressed_keys` includes: smithay records the press
+            // before it runs the filter, and keeps the set that would tell
+            // them apart to itself. Asking `shortcuts` again here would be
+            // worse than the unmatched release it saves, because it answers
+            // for the modifiers held *now* — an Enter forwarded on its own,
+            // released while alt happens to be down, would match Alt+Enter and
+            // be swallowed, leaving that client a key it can never let go of.
+            // A release for a press a client did not see is what
+            // `wl_keyboard.leave` already tells it to expect.
+            keyboard.input::<(), _>(self, key, KeyState::Released, serial, time, |_, _, _| {
+                FilterResult::Forward
+            });
         }
     }
 }
@@ -4256,7 +4317,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // A window that has just been given the keyboard: assert the
             // chrome's focus, in case it bound its keyboard after mapping.
             WinitEvent::Focus(true) => data.state.focus_chrome(),
-            WinitEvent::Focus(false) => {}
+            // The window stops receiving keys the moment it loses focus, so
+            // the releases for whatever is held now are never coming.
+            WinitEvent::Focus(false) => data.state.release_pressed_keys(),
         })?;
     }
 
