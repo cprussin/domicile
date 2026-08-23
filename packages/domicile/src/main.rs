@@ -68,6 +68,13 @@ fn watch_config(mut store: ConfigStore, config_path: PathBuf, shells_dir: PathBu
     eprintln!("domicile: watching {}", config_path.display());
 
     thread::spawn(move || {
+        // The whole watcher, named so it is captured whole: a `move` closure in
+        // edition 2021 captures the fields it names, and `for result in
+        // watcher.rx` names only the receiver — so the OS watcher was dropped
+        // when `watch_config` returned, the channel closed, and this loop ended
+        // before the first edit. Hot-reload said it was on and was not. See
+        // `ConfigWatcher`'s own doc, which now carries the warning.
+        let watcher = watcher;
         for result in watcher.rx {
             match apply_reload(&mut store, &shells_dir, result) {
                 Reload::ShellChanged(path) => {

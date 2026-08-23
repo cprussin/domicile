@@ -3,9 +3,16 @@
 //
 // `rest` is shared for the reason `desktop-line.ts` gives: a second copy is a
 // chance for one to drift while the scripts around it keep asserting as if it
-// had not. Two of the four modules that import this one had a byte-identical
-// copy of `rest` before it existed; the two display probes are new, and import
-// `settle` rather than `rest`.
+// had not. Two of the modules importing this one had a byte-identical copy of
+// `rest` before it existed.
+//
+// Which of the two a probe wants follows from what it is measuring, not from
+// what kind of probe it is: `displays-probe` and `redescribe-probe` take
+// `settle`, because they are waiting for an answer to arrive and can stop as
+// soon as it has, while `reload-displays-probe` takes `rest` — it is waiting
+// for a *second* description that has no arrival it can settle on, so it holds
+// the socket open for a stated window instead. Counting the importers here is
+// what went stale the first time; the rule does not.
 //
 // `keystroke-driver.ts` and `reload-typist.ts` still spell their own as
 // `sleep`. Left alone — this diff has no business in them — so this is
