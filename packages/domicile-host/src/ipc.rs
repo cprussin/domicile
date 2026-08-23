@@ -7,7 +7,7 @@
 //! [`Host`] brain. Keeping it stream-agnostic lets it be tested over an
 //! in-memory string or a real `UnixStream` alike.
 
-use domicile_protocol::{negotiate, ChromeMessage, HostMessage};
+use domicile_protocol::{negotiate, ChromeMessage, HostMessage, PROTOCOL_VERSION};
 use serde::Serialize;
 
 use crate::Host;
@@ -63,8 +63,8 @@ impl Session {
 /// This is the reusable core behind [`Session::ingest`]. The compositor uses it
 /// directly so a single shared `Host` can be driven by both the Wayland side
 /// and any number of chrome connections. Before the handshake only `Hello` is
-/// honoured; malformed lines and version mismatches are ignored rather than
-/// tearing anything down.
+/// honoured; a malformed line is ignored rather than tearing anything down, and
+/// a version mismatch is refused *out loud* — see [`apply_chrome_message`].
 pub fn handle_chrome_line(host: &mut Host, ready: &mut bool, line: &str) -> Vec<HostMessage> {
     match parse_chrome(line.trim()) {
         Ok(message) => apply_chrome_message(host, ready, message),
@@ -101,7 +101,21 @@ pub fn apply_chrome_message(
                     host.describe_desktop(),
                 ]
             }
-            Err(_) => Vec::new(),
+            // Answered, and with *this* build's version rather than nothing.
+            // The chrome has a version-mismatch failure it can report — it
+            // names both halves — and the only thing that can trigger it is
+            // being told what the other half speaks. Silence leaves the page
+            // waiting on a `welcome` that is never coming, so the one message
+            // written for this case can never be printed: a desktop that does
+            // not start and does not say why.
+            //
+            // `ready` stays false, so this is a refusal and not a handshake.
+            // A `Welcome` is safe to send to a peer of any version: it is the
+            // message whose whole job is carrying the number they disagree
+            // about.
+            Err(_) => vec![HostMessage::Welcome {
+                protocol_version: PROTOCOL_VERSION,
+            }],
         },
         other if *ready => {
             // Placement/focus errors (e.g. an unknown app) are non-fatal.

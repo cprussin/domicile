@@ -37,13 +37,26 @@ fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
 }
 
 #[test]
-fn version_mismatch_does_not_complete_the_handshake() {
+fn version_mismatch_is_refused_out_loud() {
+    // Refused — `ready` stays false and no desktop follows — but answered.
+    // The chrome's own version-mismatch failure names both halves, and the
+    // only thing that can trigger it is being told what this half speaks.
+    // Answering with nothing leaves the page waiting on a `welcome` that is
+    // never coming: a desktop that does not start and does not say why.
     let mut session = Session::new();
+
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: 999,
     }));
+
     assert!(!session.is_ready());
-    assert!(out.is_empty(), "a mismatched hello gets no welcome");
+    assert_eq!(
+        out,
+        vec![HostMessage::Welcome {
+            protocol_version: PROTOCOL_VERSION
+        }],
+        "a mismatched hello is told what this build speaks, and nothing else"
+    );
 }
 
 #[test]

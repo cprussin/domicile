@@ -48,3 +48,15 @@ export const CHROME_GRAB_SHORTCUT_CHANNEL = "domicile:grab-shortcut";
  * Wayland client.
  */
 export const CHROME_SHORTCUT_CHANNEL = "domicile:shortcut";
+
+/**
+ * Chrome → host: make the window this size, in logical pixels.
+ *
+ * The page is the desktop and the desktop is the compositor's, described to
+ * the renderer over its own socket — but the window it is drawn in belongs to
+ * the main process. A window smaller than the desktop leaves the right-hand
+ * screens off the end of the viewport, still laying out and still reporting
+ * positions the compositor honours, so the size has to cross back. See
+ * `desktop-size`.
+ */
+export const CHROME_DESKTOP_SIZE_CHANNEL = "domicile:desktop-size";

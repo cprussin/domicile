@@ -29,10 +29,21 @@ const describing = (
 });
 
 /** Renders `children` on a desktop of `displays`. */
-const on = (displays: readonly Display[] | undefined, children: ReactNode) =>
-  render(
+const on = (displays: readonly Display[] | undefined, children: ReactNode) => {
+  const { rerender } = render(
     <DisplayProvider source={describing(displays)}>{children}</DisplayProvider>,
   );
+  return {
+    /** The same tree on a desktop that has since been described again. */
+    redescribed: (described: readonly Display[]) => {
+      rerender(
+        <DisplayProvider source={describing(described)}>
+          {children}
+        </DisplayProvider>,
+      );
+    },
+  };
+};
 
 /**
  * The regions `<Screen>` laid out, in order, each as its rectangle.
@@ -99,6 +110,26 @@ describe("Screen", () => {
   it("renders once per display a `match` accepts", () => {
     on([LEFT, RIGHT], <Screen match={(d) => d.scale > 1}>wallpaper</Screen>);
     expect(screen.getAllByText("wallpaper")).toHaveLength(1);
+    expect(regions()).toEqual(["1920px,120px+2560pxx1440px"]);
+  });
+
+  it("keeps a region where it is when the desktop is described again", () => {
+    // The desktop is re-described whenever it changes, and a region is the
+    // same children placed over a display: a region keyed by which display it
+    // is would be torn down and built again the moment a monitor is unplugged
+    // or a config is reloaded. For a shell whose chrome is on one screen that
+    // is an embedded page reloaded to where it started and every portal
+    // re-created blank, with nothing on the page to show that it happened.
+    const { redescribed } = on(
+      [LEFT, RIGHT],
+      <Screen everywhere>stuff</Screen>,
+    );
+    const first = document.querySelector("[data-screen]");
+
+    redescribed([RIGHT]);
+
+    expect(document.querySelector("[data-screen]")).toBe(first);
+    expect(first?.getAttribute("data-screen")).toBe("right");
     expect(regions()).toEqual(["1920px,120px+2560pxx1440px"]);
   });
 

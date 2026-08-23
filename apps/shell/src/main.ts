@@ -20,6 +20,7 @@ import {
   CHROME_DIAGNOSTIC_CHANNEL,
   CHROME_FAILURE_CHANNEL,
 } from "./ipc-channels";
+import { sizeToDesktop } from "./size-to-desktop";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +81,19 @@ const createWindow = (): void => {
   // is given it, which is the only place it can be taken from a site holding
   // the keyboard.
   takeGuestShortcuts(win.webContents, ipcMain);
+  // And the window's size, which the page is the only half to know: the
+  // desktop is described over the socket the *renderer* holds. The dimensions
+  // above are what the window opens at, for the moment before the handshake
+  // answers and for a chrome with no compositor behind it at all.
+  //
+  // Not where Domicile is compositing this window, which is the one case where
+  // the size is not ours to set: the compositor gives that window the whole
+  // desktop whatever is asked for, so a `setContentSize` would be a request
+  // fighting a configure it always loses to. The page asks either way — it
+  // cannot tell the two apart — and here is where the difference is known.
+  if (!composited) {
+    sizeToDesktop(win, ipcMain);
+  }
   win
     .loadFile(path.join(dirname, "../renderer/main_window/index.html"))
     .catch((failure: unknown) => {

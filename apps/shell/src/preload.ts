@@ -28,6 +28,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import type { Chord } from "./chord";
 import {
+  CHROME_DESKTOP_SIZE_CHANNEL,
   CHROME_DIAGNOSTIC_CHANNEL,
   CHROME_FAILURE_CHANNEL,
   CHROME_GRAB_SHORTCUT_CHANNEL,
@@ -129,6 +130,28 @@ orDie(() => {
   contextBridge.exposeInMainWorld("domicileDiagnostics", {
     report: (line: string) => {
       ipcRenderer.send(CHROME_DIAGNOSTIC_CHANNEL, line);
+    },
+  });
+
+  // And the window itself, which is this process's rather than the page's.
+  // The page is the only half that knows how big the desktop is — it is
+  // described over the socket held here — and the only half that cannot act
+  // on it.
+  contextBridge.exposeInMainWorld("domicileWindow", {
+    sizeToDesktop: (width: number, height: number) => {
+      ipcRenderer.send(CHROME_DESKTOP_SIZE_CHANNEL, width, height);
+    },
+  });
+
+  // And saying why and stopping, which is `fail` above reached from the page
+  // rather than from here. The renderer holds the socket, so the preload is
+  // what learns the compositor is gone — but the *page* is what learns the two
+  // halves cannot talk to each other, and it can no more write to stderr or
+  // stop the app than this half can. Once either way: `fail` reports the first
+  // failure and ignores what follows it.
+  contextBridge.exposeInMainWorld("domicileFailure", {
+    report: (line: string, code: number) => {
+      fail(line, code);
     },
   });
 
