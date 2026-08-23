@@ -619,10 +619,36 @@ clipboard/data-device, touch and a security review all live here too.
 - **A mixed-density desktop is drawn at one density.** The chrome is one page
   spanning every display (see ARCHITECTURE's decision on that), so it
   rasterises at a single `devicePixelRatio` — the largest of the outputs its
-  toplevel entered — and the scene is composited once at the window's scale
-  rather than once per display at each display's. Every display at the same
-  `scale` costs nothing; unequal ones mean one screen is drawn for the other's.
-  Per-monitor scanout in phase 3 is what clips a composite per output.
+  toplevel entered, which is the right one to pick. What is lost is the last
+  step: `present` composites once into the nested window, so every display is
+  drawn at that window's scale rather than at its own.
+
+  The arithmetic for the fix exists and is proven pixel-wise —
+  `compose::desktop_to_target` maps the desktop onto *one target*: a
+  framebuffer and the region of the desktop it shows, at that target's own
+  resolution. `logical_to_window` is now the case where the one target shows
+  everything, so the nested path and a per-display path cannot drift apart.
+  `a_display_is_drawn_into_a_target_of_its_own_at_its_own_density` renders a
+  scale-2 display into its own mode and fails if it is drawn at the desktop's
+  density instead.
+
+  What is missing is a framebuffer per monitor to point it at, which is
+  per-monitor scanout in phase 3.
+
+  The loop in `present` is not written yet, and not only because it would gain
+  nothing against a single window — though it would not: that window has one
+  resolution, so each display's region gets the pixels it occupies whichever
+  way it is drawn. The other half is that clipping to display regions is not a
+  no-op. `Screens::size` is the *bounding box* of the outputs and gaps between
+  them are legal — two monitors of unequal height leave one, which is the
+  common case rather than an exotic one — and today everything in that gap is
+  drawn, including the chrome's own background. A per-display loop rasterises
+  the union of the displays instead, so the gap stops being drawn. That is a
+  decision about what a desktop *is* between its screens, and it wants making
+  where it can be seen rather than inferred from an offscreen buffer.
+
+  Every display at the same `scale` costs nothing regardless; unequal ones mean
+  one screen is drawn for the other's until phase 3.
 - **A configured display list is fixed at startup.** The compositor does a
   single `Config::load` and has no `ConfigStore`. Reloading the list means
   creating and destroying `wl_output` globals, re-entering every client and
