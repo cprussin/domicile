@@ -58,6 +58,15 @@ fi
 
 # The pointer entering a surface makes the client ask for a cursor, which the
 # host hands back to the chrome as a CSS keyword for that app's element.
+#
+# Waited for in the injector's own output, because that is what is read below.
+# The client's key event above is the wrong evidence for it: the cursor is a
+# request the client makes on pointer enter, so it is still travelling back out
+# through the host while the key is already in the client's log — and the two
+# lines are two processes writing two files. Bounded, so a cursor that never
+# reaches the chrome fails here rather than hanging.
+for _ in $(seq 1 60); do grep -q '"app_cursor"' "$CHROME" && break; sleep 0.1; done
+
 echo "== cursor the client asked the chrome for =="
 grep -m1 '"app_cursor"' "$CHROME"
 if grep -q '"app_cursor"' "$CHROME"; then
@@ -71,6 +80,16 @@ fi
 # compositor volunteers it — the click that moves focus *without* the chrome
 # asking arrives through Domicile's own window, which needs a display and so is
 # covered by the host's unit tests instead.
+# Its own wait, rather than leaning on the cursor's above: the two lines land
+# in that order today only because the injector asks for the focus before it
+# moves the pointer, and a check whose premise is the order of somebody else's
+# messages fails here the day that changes — as a chrome that was never told
+# who holds the keyboard.
+for _ in $(seq 1 60); do
+  grep -q '"app_id":"app-1","type":"focus_changed"' "$CHROME" && break
+  sleep 0.1
+done
+
 echo
 echo "== who the chrome was told holds the keyboard =="
 # The one the assertion is about, not the first on the wire: a chrome is caught

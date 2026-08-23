@@ -81,6 +81,19 @@ fail() { compositor_verdict "$COMP" "FAIL: $1" "${@:2}"; }
 DOMICILE_CHROME_LISTEN_MS=20000 DOMICILE_CHROME_SOCK="$SOCK" DOMICILE_CHROME_DPR=2 \
   bun "$ROOT/packages/e2e-harness/src/mock-chrome.ts" >"$CHROME" 2>&1 &
 MOCK=$!
+# Both files, because the decision below reads both and two processes write
+# them. The compositor's line says it acted on the density; the chrome's says
+# the handshake it answered came back. Waiting only for the compositor's is
+# what made this script fail in CI: the welcome was a moment behind it, the
+# first arm fired, and the output it dumped to prove the chrome never
+# handshook had the welcome in it. Bounded, so a chrome that genuinely never
+# handshakes still reaches that arm with what it did produce.
+#
+# Not the first line the chrome writes, either: a broadcast reaching a
+# connection registered at accept but not yet welcomed is followed by the
+# handshake answer — see docs/architecture/MULTI-OUTPUT.md — so this waits for
+# the line rather than for the file to be non-empty.
+for _ in $(seq 1 200); do grep -q '"type":"welcome"' "$CHROME" && break; sleep 0.05; done
 for _ in $(seq 1 200); do plain | grep -q "advertising output scale" && break; sleep 0.05; done
 
 echo "== the scale the compositor advertised =="
@@ -119,7 +132,19 @@ fi
 # name and the event, and every grep below reads the log as plain text.
 NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 20 weston-terminal >"$CLILOG" 2>&1 &
 CLI=$!
-for _ in $(seq 1 300); do grep -qc '"app_frame"' "$CHROME" && break; sleep 0.1; done
+# The client's own log, which is what the decision below reads — not the
+# frames reaching the chrome, which are a third process's account of a
+# different thing. A client learns the scale from `wl_surface.enter`, so one
+# that commits its first buffer before that arrives commits it at scale 1: the
+# frame lands, the wait ends, and the redraw this decision is about has not
+# happened yet. The verdict for that is "the client never set a buffer scale
+# of 2", which is the one line here that would send someone into the
+# compositor. Bounded, so a client that genuinely never redraws still reaches
+# the `fail` below with the output events it did see.
+for _ in $(seq 1 300); do
+  grep -qE "wl_surface[#@][0-9]+\.set_buffer_scale\(2\)" "$CLILOG" && break
+  sleep 0.1
+done
 
 echo "== what the client did about it =="
 grep -oE "wl_surface[#@][0-9]+\.set_buffer_scale\([0-9]+\)" "$CLILOG" | head -1
@@ -183,6 +208,21 @@ else
        "--- the modes it was told:" \
        "$(grep -aoE 'wl_output[#@][0-9]+\.mode\([^)]*\)' "$CLILOG" | sort -u | tr '\n' ' ')"
 fi
+
+# Back to the chrome's file, because the two decisions below read it and the
+# wait above is one process's word about another. The client's log says it
+# redrew; that redraw still has to be committed, imported and broadcast before
+# the chrome has written anything down about it, and without this the arms
+# below read a file that has none of it yet. The pattern is the one the arm
+# below asserts rather than any app_frame: a first buffer committed before the
+# client knew the scale carries scale 1, and stopping on that frame is
+# stopping before the answer. The `app_resized` the last decision pairs with
+# the frame rides the same commit, broadcast ahead of it, so it is here once
+# this line is.
+for _ in $(seq 1 300); do
+  grep -q '"type":"app_frame".*"scale":2' "$CHROME" && break
+  sleep 0.1
+done
 
 echo "== the frame that reached the chrome =="
 grep -oE '"type":"app_frame","app_id":"[^"]*","width":[0-9]+,"height":[0-9]+,"scale":[0-9]+' "$CHROME" | head -1
