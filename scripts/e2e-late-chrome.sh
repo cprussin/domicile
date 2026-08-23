@@ -18,6 +18,8 @@
 #   nix develop .#full -c ./scripts/e2e-late-chrome.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/xvfb-display.sh
+. "$ROOT/scripts/xvfb-display.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
 cargo build -p domicile-compositor >/dev/null 2>&1 || {
   echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
@@ -36,9 +38,20 @@ wait_for() { local file="$1" pat="$2" n="${3:-150}"; for _ in $(seq 1 "$n"); do 
 
 RUST_LOG="info,domicile_compositor=debug" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
+# Named before the trap that reads them: under `set -u` a trap firing before
+# the last of them is assigned — a compositor that never binds its socket, a
+# Ctrl-C during the shell build — died with `unbound variable` instead of
+# cleaning up, which is how a run of this script left a live Electron behind.
+EL=""; XVFB=""; FLOWER=""
 # By pid only — see `e2e-electron.sh` for why `pkill -f` is not this script's
-# to use.
-cleanup() { kill -9 "$COMP" "$EL" "$XVFB" "$FLOWER" 2>/dev/null; rm -f "$LOG" "$ELOG"; }
+# to use. TERM rather than KILL for the X server, and only for it: a `kill -9`d
+# X server cannot unlink its socket or its lock, and `e2e-no-compositor.sh`
+# records what that corpse then costs the next run.
+cleanup() {
+  kill -9 "$COMP" ${EL:-} ${FLOWER:-} 2>/dev/null
+  kill ${XVFB:-} 2>/dev/null
+  rm -f "$LOG" "$ELOG"
+}
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 
@@ -54,11 +67,12 @@ if ! wait_for "$LOG" "toplevel mapped" 100; then echo "FAIL: client never mapped
 grep -q '"type":"hello"' "$LOG" && { echo "FAIL: a chrome connected before the client mapped; this tests nothing"; exit 1; }
 echo "OK: Wayland client mapped a toplevel with no chrome listening"
 
-# Headless X for Electron.
-Xvfb :98 -screen 0 1280x800x24 >/dev/null 2>&1 &
-XVFB=$!
-export DISPLAY=:98
-sleep 0.8
+# Headless X for Electron: the one `check.sh` already made, or one of our own.
+# This used to be `Xvfb :98` and a `sleep 0.8` — a number picked and hoped for,
+# and a guess in place of a wait. `check.sh`'s own comment blames that pattern
+# for a stale `/tmp/.X11-unix/X97` becoming an Electron segfault that looked
+# like a bug in the shell.
+ensure_display 1280x800x24 60 || exit 1
 
 # 2) Now start the chrome.
 DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/apps/shell" >"$ELOG" 2>&1 &
