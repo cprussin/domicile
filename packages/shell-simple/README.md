@@ -57,22 +57,63 @@ and puts the desktop on your display. The `-- simple` names the directory under
 `packages/shell-*`; without it you get the reference chrome
 ([`@domicile/shell-manganese`](../shell-manganese/README.md)) instead.
 
-Nothing appears in it yet — this shell has no launcher, so the first client has
-to come from outside. In another terminal:
+Nix hands the app the source read-only in the store while the build writes into
+the tree, so it first stages the fetched source under
+`~/.cache/domicile/<revision>` — set `DOMICILE_RUN_DIR` to put it elsewhere —
+and builds there. Re-running the same revision reuses those artifacts.
+
+The desktop comes up empty, and stays that way until you put something on it —
+this shell has no launcher of its own, which is the next section.
+
+## Launch an app into it
+
+Domicile is a Wayland compositor, so an app joins the desktop the ordinary way:
+by connecting to its display instead of your session's. Two environment
+variables are the whole of it.
+
+```sh
+XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 <any wayland app>
+```
+
+The runtime dir is Domicile's own — kept separate so its display does not clash
+with the one your real desktop is already using — and `wayland-1` is the
+display inside it. (Not `wayland-0`: the first socket is deliberately skipped,
+so a client that ignores `WAYLAND_DISPLAY` cannot land here by accident.) The
+prototype prints both when it starts, and the compositor logs the display it
+actually bound.
+
+**Something instant**, to see a window arrive:
 
 ```sh
 nix shell nixpkgs#weston -c \
   env XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 weston-flower
 ```
 
-A window appears. Hold **Alt** and drag it to move it; hold Alt and drag with
-the right button to resize it. Run the command again for a second window, and
-Alt-press either to raise it.
+**A terminal**, which is the one worth having — anything you start from it
+inherits those two variables, so it lands on Domicile too and you never type
+them again:
 
-Nix hands the app the source read-only in the store while the build writes into
-the tree, so it first stages the fetched source under
-`~/.cache/domicile/<revision>` — set `DOMICILE_RUN_DIR` to put it elsewhere —
-and builds there. Re-running the same revision reuses those artifacts.
+```sh
+nix shell nixpkgs#kitty -c \
+  env XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 kitty
+```
+
+From a checkout inside `nix develop .#full`, both are already on `PATH` and the
+`nix shell` prefix is unnecessary.
+
+Each window a client maps becomes one `<domicile-app>` — a client that maps two
+gets two, which the terminal above will do the moment you ask it for a second
+OS window. Hold **Alt** and drag one to move it, Alt and the right button to
+resize it, and Alt-press it to raise it — that is the entire user interface.
+New windows cascade rather than stack on each other. A window leaves when its
+client exits, and there is no way to close one from the desktop, so quit apps
+from inside them.
+
+The app has to speak Wayland: there is no XWayland here, so an X11-only client
+will not connect. Most toolkits do — GTK, Qt, and Electron given
+`--ozone-platform=wayland` — and a client that silently opens on your normal
+desktop instead has almost always fallen back to the display in your own
+environment.
 
 ## Build & run from a checkout
 
