@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["bun", "@domicile/test-support"]
+  },
+  "extends": "@cprussin/tsconfig/dom.json",
+  "include": [
+    "src",
+    "panda.config.ts",
+    "vite.main.config.ts",
+    "vite.preload.config.ts",
+    "vite.renderer.config.ts"
+  ]
+}

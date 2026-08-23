@@ -40,7 +40,7 @@ rm -f "$CHROME_SOCK"
 cd "$ROOT"
 cargo build -p domicile-compositor || exit 1
 ( cd "$ROOT" && bun install --frozen-lockfile >/dev/null 2>&1 || true )
-bun run turbo build:vite --filter @domicile/shell >/dev/null 2>&1 || {
+bun run turbo build:vite --filter @domicile/shell-manganese >/dev/null 2>&1 || {
   echo "the shell failed to build"; exit 1;
 }
 
@@ -97,7 +97,7 @@ fi
 WAYLAND_DISPLAY="$CHROME_DISPLAY" \
   DOMICILE_COMPOSITED=1 \
   DOMICILE_CHROME_SOCKET="$CHROME_SOCK" \
-  electron --no-sandbox --ozone-platform=wayland "$ROOT/apps/shell" &
+  electron --no-sandbox --ozone-platform=wayland "$ROOT/packages/shell-manganese" &
 CHROME=$!
 
 echo

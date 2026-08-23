@@ -3,9 +3,9 @@
 Index of context files for this repo. Domicile is mixed-language, and both
 languages share one package tree: `packages/*` holds the Rust crates that make
 up the compositor and host (`domicile-*`) alongside the TypeScript libraries
-for the chrome, and `apps/*` holds the user-facing apps. A package is a cargo
-crate or a bun workspace depending on whether it carries a `Cargo.toml` or a
-`package.json`. Each entry below is tagged with an authority level so its
+for the chrome and the shell packages that use them (`shell-*`). A package is a
+cargo crate or a bun workspace depending on whether it carries a `Cargo.toml`
+or a `package.json`. Each entry below is tagged with an authority level so its
 weight is unambiguous.
 
 ## Authority levels
@@ -159,7 +159,7 @@ Three things this cannot reach, so do not read a green run as covering them:
 
 ## Per-package addenda
 
-When working on any package in `/apps/` or `/packages/`, you MUST check for
+When working on any package in `/packages/`, you MUST check for
 and load package-specific agent instructions in `{package}/docs/AGENTS.md`,
 if such a file exists. These hold rules specific to the package and augment —
 never weaken — the root docs. On conflict, package rules win. They are

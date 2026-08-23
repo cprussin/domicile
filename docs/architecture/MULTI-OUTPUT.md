@@ -232,7 +232,7 @@ mechanism for naming a toplevel's display fails or costs:
 
 | Mechanism | Why not |
 |---|---|
-| `xdg_toplevel` title | `apps/shell/index.html` sets `<title>`, which overrides `BrowserWindow`'s, so every window claims the same name — and `new_toplevel` fires before `set_title`, after `output.enter` and `focus_chrome()` have already run |
+| `xdg_toplevel` title | `packages/shell-manganese/index.html` sets `<title>`, which overrides `BrowserWindow`'s, so every window claims the same name — and `new_toplevel` fires before `set_title`, after `output.enter` and `focus_chrome()` have already run |
 | `app_id` | process-wide in Electron |
 | A chrome Wayland socket per display | works, and costs N Electron processes |
 
@@ -291,13 +291,13 @@ its own change.
       than a dependency on `@domicile/chrome-sdk`: the shell writes the four
       lines that adapt one to the other, and the library keeps knowing nothing
       about the protocol
-- [x] `apps/shell`: put the rail and the clock on named screens; size the
-      Electron window from the desktop, which is cross-process — the desktop
-      size arrives on the renderer's bridge and the window is the main
-      process's, so it goes over the existing `ipc-channels` pair; and stop
-      the page scrolling, since a document wider than its viewport offsets
-      every `getBoundingClientRect` and puts every portal somewhere else with
-      no symptom
+- [x] `packages/shell-manganese`: put the rail and the clock on named screens;
+      size the Electron window from the desktop, which is cross-process — the
+      desktop size arrives on the renderer's bridge and the window is the main
+      process's, so it goes over a channel pair of its own; and stop the page
+      scrolling, since a document wider than its viewport offsets every
+      `getBoundingClientRect` and puts every portal somewhere else with no
+      symptom
 - [x] `scripts/e2e-two-displays.sh`: two configured displays, asserting a real
       Wayland client is told both — names, positions, scales and modes — and
       that its own surface enters both rather than only the first, which the

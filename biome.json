@@ -14,7 +14,6 @@
   "files": {
     "ignoreUnknown": true,
     "includes": [
-      "apps/**/*",
       "packages/**/*",
       "package.json",
       "biome.json",

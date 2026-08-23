@@ -90,7 +90,8 @@ Hardware/engine crates (join via `nix develop .#full`):
 
 Web side:
 - `packages/chrome-sdk` — TypeScript: the `<app>`/`<webview>` custom elements + bridge client.
-- `apps/shell` — the bundled reference chrome.
+- `packages/shell-manganese` — the bundled reference chrome.
+- `packages/shell-simple` — the smallest chrome that works, for reading rather than using.
 
 ## Testing strategy (TDD)
 

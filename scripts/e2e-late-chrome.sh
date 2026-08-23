@@ -55,7 +55,7 @@ cleanup() {
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 
-( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell ) \
+( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell-manganese ) \
   || { echo "shell build failed"; exit 1; }
 
 # 1) Map a real Wayland client with *no chrome connected*. This is what makes
@@ -75,7 +75,7 @@ echo "OK: Wayland client mapped a toplevel with no chrome listening"
 ensure_display 1280x800x24 60 || exit 1
 
 # 2) Now start the chrome.
-DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/apps/shell" >"$ELOG" 2>&1 &
+DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/packages/shell-manganese" >"$ELOG" 2>&1 &
 EL=$!
 if ! wait_for "$LOG" '"type":"hello"' 200; then echo "FAIL: Electron renderer never handshook"; exit 1; fi
 echo "OK: Electron renderer connected and handshook"

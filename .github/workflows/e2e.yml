@@ -99,8 +99,8 @@ jobs:
       # reported `no electron` for a package that was installed.
       - name: Fetch the Electron binary
         run: |
-          node apps/shell/node_modules/electron/install.js
-          echo "$PWD/apps/shell/node_modules/.bin" >> "$GITHUB_PATH"
+          node packages/shell-manganese/node_modules/electron/install.js
+          echo "$PWD/packages/shell-manganese/node_modules/.bin" >> "$GITHUB_PATH"
 
       # Which clients and libraries actually arrived. When a suite fails on a
       # runner nobody can log into, the first question is always whether it

@@ -1,0 +1,32 @@
+{
+  "dependencies": {
+    "@domicile/chrome-sdk": "workspace:*",
+    "@domicile/component-library": "workspace:*",
+    "@domicile/electron-chrome-host": "workspace:*"
+  },
+  "description": "The smallest Domicile chrome that works: floating windows moved and resized with the Alt key, and nothing else.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile/test-support": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@pandacss/preset-panda": "catalog:",
+    "@types/bun": "catalog:",
+    "electron": "catalog:",
+    "postcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "main": ".vite/build/main.js",
+  "name": "@domicile/shell-simple",
+  "private": true,
+  "productName": "domicile-shell-simple",
+  "scripts": {
+    "build:vite": "vite build -c vite.main.config.ts && vite build -c vite.preload.config.ts && vite build -c vite.renderer.config.ts",
+    "prepare": "panda codegen --silent && panda cssgen --silent",
+    "start:dev": "vite -c vite.renderer.config.ts",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

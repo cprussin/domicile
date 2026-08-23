@@ -39,7 +39,7 @@ fn default_matches_parsed_empty() {
 fn parses_a_full_config() {
     let text = r##"
         [shell]
-        package = "./apps/shell"
+        package = "./packages/shell-manganese"
 
         [shell.settings]
         accent = "#ff0088"
@@ -51,7 +51,7 @@ fn parses_a_full_config() {
     let cfg = Config::parse(text).expect("valid config should parse");
     assert_eq!(
         cfg.shell.package,
-        ShellRef::Path(PathBuf::from("./apps/shell"))
+        ShellRef::Path(PathBuf::from("./packages/shell-manganese"))
     );
     assert_eq!(cfg.compositor.nested_size, (1920, 1080));
     // Shell settings are opaque and passed through to the chrome package.

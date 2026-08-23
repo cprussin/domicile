@@ -49,7 +49,6 @@
   },
   "type": "module",
   "workspaces": [
-    "apps/*",
     "packages/*"
   ]
 }

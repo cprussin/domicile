@@ -49,9 +49,10 @@ wait_for() { local file="$1" pat="$2" n="${3:-150}"; for _ in $(seq 1 "$n"); do 
 
 RUST_LOG="info,domicile_compositor=debug" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
-# By pid only. `pkill -f apps/shell` would also take out a chrome someone was
-# running in another terminal, which is not this script's to end — the same
-# hazard that had `measure.sh` killing the terminal it was started from.
+# By pid only. `pkill -f packages/shell-manganese` would also take out a chrome
+# someone was running in another terminal, which is not this script's to end —
+# the same hazard that had `measure.sh` killing the terminal it was started
+# from.
 # `kill`, not `kill -9`: a SIGKILLed X server cannot unlink its socket or its
 # lock, and the corpse it leaves is indistinguishable to anything that tests
 # for the socket from a display that is up.
@@ -61,7 +62,7 @@ for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 
 # The chrome is a TypeScript app now: build its Vite bundles before Electron
 # resolves package.json's `main` (.vite/build/main.js).
-( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell ) \
+( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell-manganese ) \
   || { echo "shell build failed"; exit 1; }
 
 # Headless X for Electron: the one `check.sh` already made, or one of our own.
@@ -71,7 +72,7 @@ for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 # whole job.
 ensure_display 1280x800x24 60 || exit 1
 
-DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/apps/shell" >"$ELOG" 2>&1 &
+DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/packages/shell-manganese" >"$ELOG" 2>&1 &
 EL=$!
 
 # 1) Wait for the Electron *renderer* to be up (it sends hello after loading).

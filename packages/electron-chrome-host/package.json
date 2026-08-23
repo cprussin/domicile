@@ -1,0 +1,26 @@
+{
+  "description": "The Electron host's half of a Domicile chrome: the window it is drawn in, the compositor socket, and the channel a renderer cannot serve itself.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@types/bun": "catalog:",
+    "electron": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./chrome-failure": "./src/chrome-failure.ts",
+    "./chrome-window": "./src/chrome-window.ts",
+    "./compositor-socket": "./src/compositor-socket.ts",
+    "./socket-path": "./src/socket-path.ts"
+  },
+  "files": [
+    "src/**/*"
+  ],
+  "name": "@domicile/electron-chrome-host",
+  "private": true,
+  "scripts": {
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

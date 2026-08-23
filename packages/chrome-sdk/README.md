@@ -25,6 +25,11 @@ It provides four things:
   content navigates, and fires `domicile-navigate` when it lands), `goBack` /
   `goForward` / `stop` / `reload` are what a chrome's address bar drives it
   with, and `focus` puts the keyboard on the embedded page.
+- **`reportDevicePixelRatio`** (`./device-pixel-ratio`) — tell the host what
+  density the page is drawing at, and keep telling it. The ratio changes when
+  the window moves to another display or the page is zoomed, and the page is
+  the only part of Domicile that can see either; a chrome that reported it once
+  would leave every client drawing at the old resolution.
 - **Pure helpers** — affine `./matrix` math mirroring the Rust
   `domicile-scene::Transform`, `./chrome-message` builders for the wire format,
   `./protocol` schemas for decoding host frames, `./input` keycode mapping,

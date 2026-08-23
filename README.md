@@ -151,7 +151,9 @@ auto-fixable half of the TypeScript checks. See
 | `packages/component-library` | React UI primitives + the Panda CSS design system every chrome package extends | bun |
 | `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers + RTL cleanup) | bun |
 | `packages/e2e-harness` | headless chrome stand-ins driving the scripts in `/scripts`, and the check on those scripts' own machinery | bun |
-| `apps/shell`         | the bundled reference chrome (Electron host + Vite-built renderer) | bun |
+| `packages/electron-chrome-host` | the Electron host's half of a chrome: the window it is drawn in, the compositor socket, and the channel a renderer cannot serve itself | bun |
+| `packages/shell-manganese` | the bundled reference chrome: a tab rail and a stage (Electron host + Vite-built renderer) | bun |
+| `packages/shell-simple` | the smallest chrome that works: floating windows, Alt-dragged | bun |
 
 Both languages share one package tree: a package under `packages/` is a cargo
 crate when it carries a `Cargo.toml` and a bun workspace when it carries a
