@@ -88,10 +88,12 @@
             # that simply never connected.
             #
             # The e2e and smoke scripts expect target/debug/domicile-compositor
-            # to exist already; run-prototype.sh builds its own release binary,
-            # so the debug build below is only for the checks.
+            # to exist already, which is what the debug build below is for.
+            # run-native.sh and measure.sh build their own release binaries —
+            # both are interactive or timed, and debug is a 4fps ceiling on any
+            # client that takes the copy path.
             # The script's own arguments reach it in two hops, which is what
-            # lets `nix run .#prototype -- simple` pick a shell. `\$@` is escaped
+            # lets `nix run .#native -- simple` pick a shell. `\$@` is escaped
             # so the *inner* bash expands it from its own positional parameters
             # rather than this one baking the words in; those parameters are the
             # trailing `"$@"`, since `bash -c CMD name args...` is how a `-c`
@@ -102,9 +104,10 @@
           '';
         };
 
-      # `nix run .#<attr>` → `scripts/<script>.sh`. `prototype` is also the
-      # default app, so a bare `nix run github:cprussin/domicile` boots the
-      # prototype.
+      # `nix run .#<attr>` → `scripts/<script>.sh`. `native` is also the default
+      # app, so a bare `nix run github:cprussin/domicile` starts the compositor
+      # — which is the only thing here that is one. The copy path is reached
+      # through it, not instead of it.
       scriptApps = pkgs.lib.mapAttrs
         (name: script: {
           type = "app";
@@ -113,7 +116,6 @@
         })
         {
           check = "check.sh";
-          prototype = "run-prototype.sh";
           native = "run-native.sh";
           measure = "measure.sh";
           measure-round-trip = "measure-round-trip.sh";
@@ -134,7 +136,7 @@
         };
     in
     {
-      apps.${system} = scriptApps // { default = scriptApps.prototype; };
+      apps.${system} = scriptApps // { default = scriptApps.native; };
 
       devShells.${system} = {
         # Default shell: everything needed for the TDD pure-logic core.

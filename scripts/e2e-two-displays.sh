@@ -201,8 +201,11 @@ fi
 #
 # `set_output_scale`'s guard is the one this reaches. `adopt_window_scale`'s
 # fires on `WinitEvent::Resized`, which needs a winit window, which needs
-# `--present`, which no script here passes — so deleting *that* guard passes
-# this phase. Left uncovered rather than silently claimed.
+# `--present` — so deleting *that* guard passes this phase.
+# `e2e-chrome-fills-a-window.sh` is what drives it: it runs `--present` under
+# an Xvfb and resizes the window with `xdotool`. What is still uncovered is
+# this guard's own case, a `--present` run with displays *configured*, where
+# the window must not redescribe them.
 #
 # What this also does not reach: the chrome branch of `new_toplevel` — not just
 # its `enter` loop, which is a second copy of the one phase 2 covers, but also

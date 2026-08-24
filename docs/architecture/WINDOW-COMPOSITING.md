@@ -112,12 +112,13 @@ than a rewrite: the copy path already works and stays as the slow path.
 
 ## What has to change structurally
 
-Electron is currently a client of the *host's* compositor — `run-prototype.sh`
-lets it inherit `WAYLAND_DISPLAY` — and talks to Domicile only over a Unix
-socket. Domicile is headless: no window, no presentation, no access to the
-page's pixels. Compositing app windows under the page inverts that:
+Electron was a client of the *host's* compositor — it inherited
+`WAYLAND_DISPLAY` from the session that started it — and talked to Domicile only
+over a Unix socket. Domicile was headless: no window, no presentation, no
+access to the page's pixels. Compositing app windows under the page inverts
+that:
 
-| | Today | After |
+| | Before | After |
 |---|---|---|
 | Electron's `WAYLAND_DISPLAY` | the host's | Domicile's |
 | Electron's window | a surface the host composites | a `wl_surface` Domicile owns |

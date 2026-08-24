@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# Run the compositor with a window, drawing client surfaces itself.
+# Run Domicile: the compositor, in a window, drawing client surfaces itself.
 #
-#   nix develop .#full -c ./scripts/run-native.sh
+#   nix develop .#full -c ./scripts/run-native.sh             # manganese
+#   nix develop .#full -c ./scripts/run-native.sh simple      # the simple shell
+#
+# The argument is a shell's directory suffix under `packages/shell-*`, which is
+# this repo's naming convention rather than the shell's own name — `packages/`
+# is shared with the cargo crates, so the chrome packages carry a prefix. A
+# shell installed anywhere else is pointed at by path; see WORKSPACE.md.
 #
 # Needs a display — it opens a window on whatever compositor you are already
 # running. What appears in that window is Domicile compositing a Wayland
@@ -16,11 +22,40 @@
 # The Unix socket is still there and still carries the geometry: `place_portal`
 # is what this draws with. What it no longer carries is pixels.
 #
-# The comparison this exists for: `scripts/run-prototype.sh` is the same thing
-# on the copy path. Its `frames` line reports readback_ms and the chrome's
-# reports ipc_ms; both should be absent here, because neither step happens.
+# This is the only way to run Domicile. The copy path — pixels read back and
+# drawn into a canvas — is still there and is still reached from here: it is
+# the fallback for a window the shaders cannot draw, and `disposition` sends
+# every `wl_shm` client down it whatever this window is doing. It is a path
+# *through* the compositor rather than a way to start one. It had its own
+# runner for as long as it was the only thing that worked; a second entry point
+# for an internal path is a second thing to keep true, and the one it had went
+# wrong in a way this cannot: with no window of its own it could only *ask*
+# Electron to size itself to a fixed desktop, and a window manager that refused
+# left the desktop in the corner of a larger window. Here the window is the
+# compositor's and `adopt_window_scale` makes the desktop follow it.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# One argument at most. Silently ignoring the rest would make a typo invisible
+# in exactly the case the name check below exists to make loud — and `nix run
+# .#native -- simple --foo` is easy to type.
+if [ "$#" -gt 1 ]; then
+  echo "domicile: expected at most one shell name, got $#: $*" >&2
+  exit 1
+fi
+
+SHELL_NAME="${1:-manganese}"
+SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
+if [ ! -f "$SHELL_DIR/domicile.shell.json" ]; then
+  echo "domicile: no shell '$SHELL_NAME' — packages/shell-$SHELL_NAME is not a chrome package." >&2
+  echo "domicile: available:" >&2
+  for candidate in "$ROOT"/packages/shell-*/domicile.shell.json; do
+    [ -f "$candidate" ] || continue
+    candidate="${candidate%/domicile.shell.json}"
+    echo "  ${candidate##*/shell-}" >&2
+  done
+  exit 1
+fi
 
 if [ -z "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
   echo "No display. This one needs a screen — it opens a window."
@@ -38,14 +73,21 @@ CHROME_SOCK="$XDG_RUNTIME_DIR/domicile-native.sock"
 rm -f "$CHROME_SOCK"
 
 cd "$ROOT"
-cargo build -p domicile-compositor || exit 1
+# Release, unlike the e2e checks, because this is the interactive run and the
+# frame path is where the difference lands. Not only for the copy path, though
+# that is where it is worst — `disposition` hands every `wl_shm` client to the
+# socket even with a window open, and encoding one 1494x994 frame costs 264ms
+# unoptimised against 20ms optimised, which is the gap between a compositor
+# that drops most frames and one that keeps up. `weston-flower` and every other
+# shm client is that case.
+cargo build --release -p domicile-compositor || exit 1
 ( cd "$ROOT" && bun install --frozen-lockfile >/dev/null 2>&1 || true )
-bun run turbo build:vite --filter @domicile/shell-manganese >/dev/null 2>&1 || {
+bun run turbo build:vite --filter "@domicile/shell-$SHELL_NAME" >/dev/null 2>&1 || {
   echo "the shell failed to build"; exit 1;
 }
 
-# The compositor's own Wayland socket is auto-named; it logs which. Unlike the
-# headless prototype it cannot have a runtime dir to itself — presenting means
+# The compositor's own Wayland socket is auto-named; it logs which. It cannot
+# have a runtime dir to itself the way a headless run can — presenting means
 # being a client of *your* session, so it has to keep your XDG_RUNTIME_DIR to
 # find it, and its socket lands in there beside your compositor's.
 #
@@ -54,7 +96,7 @@ bun run turbo build:vite --filter @domicile/shell-manganese >/dev/null 2>&1 || {
 # watching tee, which outlives a compositor that died on startup.
 COMPLOG="$(mktemp)"
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=info}" \
-  ./target/debug/domicile-compositor --present --chrome-socket "$CHROME_SOCK" \
+  ./target/release/domicile-compositor --present --chrome-socket "$CHROME_SOCK" \
   >"$COMPLOG" 2>&1 &
 COMP=$!
 # Its output still reaches the terminal, just by way of the file.
@@ -97,7 +139,7 @@ fi
 WAYLAND_DISPLAY="$CHROME_DISPLAY" \
   DOMICILE_COMPOSITED=1 \
   DOMICILE_CHROME_SOCKET="$CHROME_SOCK" \
-  electron --no-sandbox --ozone-platform=wayland "$ROOT/packages/shell-manganese" &
+  electron --no-sandbox --ozone-platform=wayland "$SHELL_DIR" &
 CHROME=$!
 
 echo

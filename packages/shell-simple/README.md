@@ -49,11 +49,11 @@ window moves to another screen, or the page is zoomed).
 Nothing to clone and nothing to install but Nix — it fetches the repo itself:
 
 ```sh
-nix run github:cprussin/domicile#prototype -- simple
+nix run github:cprussin/domicile -- simple
 ```
 
-That builds Domicile's headless Wayland compositor and this shell, starts both,
-and puts the desktop on your display. The `-- simple` names the directory under
+That builds Domicile's Wayland compositor and this shell, starts both, and puts
+the desktop in a window on your display. The `-- simple` names the directory under
 `packages/shell-*`; without it you get the reference chrome
 ([`@domicile/shell-manganese`](../shell-manganese/README.md)) instead.
 
@@ -76,18 +76,20 @@ session's.
 
 ```sh
 nix shell nixpkgs#weston -c \
-  env XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 weston-flower
+  env XDG_RUNTIME_DIR=<as printed> WAYLAND_DISPLAY=<as printed> weston-flower
 ```
 
 `XDG_RUNTIME_DIR` and `WAYLAND_DISPLAY` are the whole mechanism — set those two
 in front of any Wayland client and it joins the desktop. The `nix shell` prefix
 only puts `weston-flower` on `PATH`.
 
-- `/tmp/domicile-rt` is Domicile's own runtime dir, kept separate so its display
-  does not clash with your real desktop's.
-- `wayland-1`, not `wayland-0`: the first socket is deliberately skipped, so a
-  client that ignores `WAYLAND_DISPLAY` cannot land here by accident. The
-  compositor logs the display it actually bound.
+- Both values are printed on startup (`apps on WAYLAND_DISPLAY=…, under
+  XDG_RUNTIME_DIR=…`) rather than fixed here. Domicile presents into a window,
+  which makes it a client of your session too, so it keeps your runtime dir to
+  find that session rather than taking one of its own.
+- Never `wayland-0`: the first socket is deliberately skipped, so a client that
+  ignores `WAYLAND_DISPLAY` cannot land here by accident. The compositor logs
+  the display it actually bound, which is the line above.
 - Inside `nix develop .#full`, `weston-flower` and `kitty` are already on `PATH`.
 - **No XWayland.** An X11-only client will not connect — it falls back to your
   own session's display, which looks like Domicile ignoring it.
@@ -99,7 +101,7 @@ client exits; there is no close button, so quit apps from inside them.
 ## Build & run from a checkout
 
 ```sh
-nix develop .#full -c ./scripts/run-prototype.sh simple
+nix develop .#full -c ./scripts/run-native.sh simple
 ```
 
 does the same thing against your working tree. To build the shell alone:
