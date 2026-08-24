@@ -77,6 +77,50 @@ describe("TabRail", () => {
     expect(await closed).toBe("a");
   });
 
+  it("closes a tab by its id when it is middle-clicked", async () => {
+    const closed = new Promise<string>((resolve) => {
+      renderRail({ onClose: resolve });
+    });
+    await middleClick(screen.getByRole("button", { name: "First" }));
+    expect(await closed).toBe("a");
+  });
+
+  it("ignores a middle-click on a tab marked not closable", async () => {
+    let closedId: string | undefined;
+    renderRail({
+      onClose: (id) => {
+        closedId = id;
+      },
+      tabs: [{ closable: false, id: "c", label: "Pinned" }],
+    });
+    await middleClick(screen.getByRole("button", { name: "Pinned" }));
+    expect(closedId).toBeUndefined();
+  });
+
+  it("ignores a right-click on a tab — `auxclick` fires for it too", async () => {
+    let closedId: string | undefined;
+    renderRail({
+      onClose: (id) => {
+        closedId = id;
+      },
+    });
+    await userEvent.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByRole("button", { name: "First" }),
+    });
+    expect(closedId).toBeUndefined();
+  });
+
+  it("suppresses the middle button's browser default, so the scrollable rail doesn't autoscroll", () => {
+    renderRail();
+    const tab = screen.getByRole("button", { name: "First" });
+    // `fireEvent` returns `dispatchEvent`'s verdict: `false` once the handler
+    // has called `preventDefault`. The primary button keeps its default, which
+    // is what focuses the row and starts a drag.
+    expect(fireEvent.mouseDown(tab, { button: 1 })).toBe(false);
+    expect(fireEvent.mouseDown(tab, { button: 0 })).toBe(true);
+  });
+
   it("reorders a tab by its id when it is dragged onto another", async () => {
     const dataTransfer = {
       dropEffect: "",
@@ -179,3 +223,8 @@ describe("TabRail", () => {
     await opened;
   });
 });
+
+/** A middle-click on `target` — the pointer press userEvent turns into the
+ *  `auxclick` the rail listens for. */
+const middleClick = (target: Element) =>
+  userEvent.pointer({ keys: "[MouseMiddle]", target });
