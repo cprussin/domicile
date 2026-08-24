@@ -101,18 +101,26 @@ revisited — so the decision is reversible without touching shell code.
 
 ## Crate layout
 
-Pure-logic crates (built & tested now, no GPU/engine needed):
+Pure-logic crates, in `cargo`'s default set — `cargo test` builds and runs these
+without a GPU, an engine or Smithay:
 - `domicile-config`  — config schema, parsing, hot-reload semantics, chrome-package
   resolution.
 - `domicile-scene`   — portal registry (app_id → geometry/transform), hit-testing,
   input routing. Pure geometry/logic.
 - `domicile-protocol`— message types shared between the host and the in-page bridge
   client (portal geometry, input, lifecycle).
+- `domicile-host`    — the orchestrator brain: what the compositor asks where to
+  deliver input and what to tell the chrome. Pure logic, no Wayland.
+- `domicile`         — the host daemon: boots from config and serves the chrome
+  protocol.
+- `domicile-bridge`  — AppTextureBridge bookkeeping (app → engine texture), for
+  the load-bearing spike: one Wayland client rendering as a CSS-styled element,
+  zero-copy.
 
-Hardware/engine crates (join via `nix develop .#full`):
-- `domicile-host`    — Smithay Wayland server, output, input, presentation.
-- `domicile-bridge`  — CEF embedding + AppTextureBridge (the load-bearing spike:
-  prove one Wayland client rendering as a CSS-styled element, zero-copy).
+Excluded from the default set, because it pulls Smithay and the native Wayland
+libraries — build it in `nix develop .#full`:
+- `domicile-compositor` — the headless Smithay Wayland server that drives the
+  brain. `cargo build -p domicile-compositor`.
 
 Web side:
 - `packages/chrome-sdk` — TypeScript: the `<app>`/`<webview>` custom elements + bridge client.

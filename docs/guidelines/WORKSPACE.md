@@ -40,12 +40,13 @@ package tree, two build systems — a package is a crate when it carries a
 this doc applies to the crates; see
 [/docs/guidelines/RUST.md](/docs/guidelines/RUST.md).
 
-See the [root README](/README.md) for the full package map across both
-languages.
+See [ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md#crate-layout) for
+the crates and what each one owns.
 
 ## Package READMEs
 
-Every package in `/packages/` should have a `README.md`.
+Every bun workspace in `/packages/` should have a `README.md`. (The crates
+document themselves in rustdoc.)
 It should orient a new contributor: what the package does, why it exists, its
 dependencies, how to use it, and how to test it. Be comprehensive but
 succinct — enough to get someone productive without re-reading the source.
