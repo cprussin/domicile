@@ -1,5 +1,5 @@
 {
-  "description": "The smallest Domicile chrome that works: Alt-drag to move, Alt-right-drag to resize",
+  "description": "The smallest Domicile chrome that works: Alt-drag to move, Alt-right-drag to resize, Alt+Enter for a terminal",
   "entry": ".vite/renderer/main_window/index.html",
   "name": "simple"
 }

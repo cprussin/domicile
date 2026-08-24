@@ -3,8 +3,8 @@
 The smallest Domicile chrome that is still a desktop. Every Wayland client the
 host announces gets a `<domicile-app>` element on the page; hold **Alt** and
 drag one to move it, hold Alt and drag with the **right button** to resize it,
-and either way it comes to the front. That is the whole user interface — no
-tabs, no panel, no launcher, no title bars.
+and either way it comes to the front. **Alt+Enter** opens a terminal. That is
+the whole user interface — no tabs, no panel, no title bars.
 
 It is [TinyWM](http://incise.org/tinywm.html) for Domicile, and for TinyWM's
 reason: a window manager with no widgets in it is the shortest honest answer to
@@ -16,9 +16,10 @@ reference chrome that shows what the model is *for*.
 
 | Path | What |
 |---|---|
-| `src/renderer.ts` | Renderer entry, and the whole of the wiring: build the `BridgeClient`, register the SDK's elements, open a window per client, install the gestures. |
+| `src/renderer.ts` | Renderer entry, and the whole of the wiring: build the `BridgeClient`, register the SDK's elements, open a window per client, install the gestures and the shortcut. |
 | `src/desktop.ts` | The windows on screen: one `<domicile-app>` per client, each at a box this module owns. All of the shell's state. |
 | `src/window-gestures.ts` | Alt and the pointer: what a press, a drag and a release do to the window under them. |
+| `src/terminal-shortcut.ts` | Alt+Enter: the one combination this shell claims, and the terminal it opens. |
 | `src/drag.ts` | Where a dragged window lands, as arithmetic — no DOM, so it is testable on its own. |
 | `src/window-box.ts` | A window's box, and where a newly-appeared client's window opens. |
 | `src/main.ts` | Electron main process: opens the window and loads the page into it, and exits with a reason on the renderer's behalf. Wires nothing else onto it — that is the difference from manganese's. |
@@ -30,10 +31,9 @@ reference chrome that shows what the model is *for*.
 - **No chrome.** Nothing is drawn that is not a client's window. A window that
   has no surface yet shows a placeholder label, and that is the only thing this
   shell paints.
-- **No keyboard of its own.** The SDK routes the keyboard to whichever window
-  was last clicked; this shell claims no combination, so there is nothing to
-  launch an app *from*. Start clients from a terminal already on the desktop,
-  or from the compositor's own runner.
+- **No keyboard of its own beyond Alt+Enter.** The SDK routes every other key
+  to whichever window was last clicked. One combination is the minimum: a
+  desktop with no way to start a terminal is a demo, not a desktop.
 - **No window list, no stacking policy beyond raise-on-Alt-press, no close
   button.** A window leaves when its client does.
 - **No `<domicile-webview>`.** The SDK's embedded-browser element is what a
@@ -62,58 +62,41 @@ the tree, so it first stages the fetched source under
 `~/.cache/domicile/<revision>` — set `DOMICILE_RUN_DIR` to put it elsewhere —
 and builds there. Re-running the same revision reuses those artifacts.
 
-The desktop comes up empty, and stays that way until you put something on it —
-this shell has no launcher of its own, which is the next section.
+The desktop comes up empty. **Alt+Enter** opens a terminal; the next section
+covers that and the ways in from outside.
 
 ## Launch an app into it
 
-Domicile is a Wayland compositor, so an app joins the desktop the ordinary way:
-by connecting to its display instead of your session's. Two environment
-variables are the whole of it.
+**Alt+Enter** opens a terminal (`kitty`), and everything you start from that
+terminal lands here too, inheriting its environment. That is the short answer.
+
+The long one, for launching from outside: Domicile is a Wayland compositor, so
+an app joins the desktop by connecting to its display rather than your
+session's.
+Two environment variables are the whole mechanism.
 
 ```sh
 XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 <any wayland app>
 ```
 
-The runtime dir is Domicile's own — kept separate so its display does not clash
-with the one your real desktop is already using — and `wayland-1` is the
-display inside it. (Not `wayland-0`: the first socket is deliberately skipped,
-so a client that ignores `WAYLAND_DISPLAY` cannot land here by accident.) The
-prototype prints both when it starts, and the compositor logs the display it
-actually bound.
-
-**Something instant**, to see a window arrive:
-
 ```sh
+# from outside the dev shell
 nix shell nixpkgs#weston -c \
   env XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 weston-flower
 ```
 
-**A terminal**, which is the one worth having — anything you start from it
-inherits those two variables, so it lands on Domicile too and you never type
-them again:
+- `/tmp/domicile-rt` is Domicile's own runtime dir, kept separate so its display
+  does not clash with your real desktop's.
+- `wayland-1`, not `wayland-0`: the first socket is deliberately skipped, so a
+  client that ignores `WAYLAND_DISPLAY` cannot land here by accident. The
+  compositor logs the display it actually bound.
+- Inside `nix develop .#full`, `weston-flower` and `kitty` are already on `PATH`.
+- **No XWayland.** An X11-only client will not connect — it falls back to your
+  own session's display, which looks like Domicile ignoring it.
 
-```sh
-nix shell nixpkgs#kitty -c \
-  env XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 kitty
-```
-
-From a checkout inside `nix develop .#full`, both are already on `PATH` and the
-`nix shell` prefix is unnecessary.
-
-Each window a client maps becomes one `<domicile-app>` — a client that maps two
-gets two, which the terminal above will do the moment you ask it for a second
-OS window. Hold **Alt** and drag one to move it, Alt and the right button to
-resize it, and Alt-press it to raise it — that is the entire user interface.
-New windows cascade rather than stack on each other. A window leaves when its
-client exits, and there is no way to close one from the desktop, so quit apps
-from inside them.
-
-The app has to speak Wayland: there is no XWayland here, so an X11-only client
-will not connect. Most toolkits do — GTK, Qt, and Electron given
-`--ozone-platform=wayland` — and a client that silently opens on your normal
-desktop instead has almost always fallen back to the display in your own
-environment.
+Each window a client maps becomes one `<domicile-app>`, so a client that maps
+two gets two. New windows cascade rather than stack. A window leaves when its
+client exits; there is no close button, so quit apps from inside them.
 
 ## Build & run from a checkout
 
