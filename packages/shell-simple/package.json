@@ -4,7 +4,7 @@
     "@domicile/component-library": "workspace:*",
     "@domicile/electron-chrome-host": "workspace:*"
   },
-  "description": "The smallest Domicile chrome that works: floating windows moved and resized with the Alt key, and nothing else.",
+  "description": "The smallest Domicile chrome that works: floating windows moved and resized with the Alt key, and Alt+Enter for a terminal.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile/test-support": "workspace:*",

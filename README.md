@@ -1,166 +1,126 @@
 # Domicile
 
-A Wayland compositor whose **renderer is a web engine**. All user chrome is
-web content; application windows are real Wayland clients composited *inside*
-the web engine as texture-backed DOM elements — so `<app>` supports the same
-CSS as `<div>`/`<webview>` (rounding, opacity, blur, transforms, z-index).
+A Wayland compositor whose **renderer is a web engine**. All user chrome is web
+content; application windows are real Wayland clients composited *inside* the
+web engine as texture-backed DOM elements — so `<app>` takes the same CSS as a
+`<div>`: rounding, opacity, blur, transforms, z-index.
 
-> Think "the compositor *is* the browser," not "an Electron app that wraps a
-> compositor." See
-> [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for
-> the why.
+The compositor *is* the browser, not an Electron app wrapping a compositor.
+[ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) says why.
 
-## Status
+**Status:** runnable prototype. A real Wayland client appears, with live pixels,
+as a styled `<app>` in the web chrome. Frames are still copied buffer → RGBA →
+canvas; making that zero-copy is the remaining work
+([WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md),
+[ROADMAP.md](ROADMAP.md)).
 
-A runnable end-to-end prototype exists: a headless Wayland compositor + an
-Electron chrome window, wired so a **real Wayland client appears — with its live
-pixels — as a styled `<app>` element in the web chrome**. The compositor copies
-each client buffer to RGBA and streams it to the chrome, which draws it into the
-`<domicile-app>` canvas (clients keep animating via frame callbacks). The remaining
-work is making that zero-copy via engine external textures / CEF
-([docs/architecture/WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md)). See [ROADMAP.md](ROADMAP.md).
+## Run it
 
-## Run the prototype
-
-Nothing to clone and nothing to install but Nix — it fetches the repo itself:
+Needs Nix and a display. Nothing to clone — Nix fetches the repo.
 
 ```sh
-nix run github:cprussin/domicile
+nix run github:cprussin/domicile                      # manganese, the reference chrome
+nix run github:cprussin/domicile#prototype -- simple   # shell-simple
 ```
 
-That starts Domicile's headless Wayland compositor and the Electron chrome window,
-so it needs a display. Nix hands the app the source read-only in the store while
-the build writes into the tree (cargo's `target/`, bun's `node_modules/`), so the
-app first stages the fetched source under `~/.cache/domicile/<revision>` — set
-`DOMICILE_RUN_DIR` to put it elsewhere — and builds there. Re-running the same
-revision reuses those artifacts; a new one starts clean.
+- **manganese** ([README](packages/shell-manganese/README.md)) — tab rail, stage,
+  address bar. The GUI explains itself.
+- **simple** ([README](packages/shell-simple/README.md)) — floating windows and
+  nothing else. Worth reading first if you want to know what a shell actually
+  has to do.
 
-That boots the reference chrome,
-[`shell-manganese`](packages/shell-manganese/README.md). Name a shell to boot a
-different one:
+The argument names a directory under `packages/shell-*`; an unknown one lists
+what is there.
 
-```sh
-nix run github:cprussin/domicile#prototype -- simple
-```
-
-[`shell-simple`](packages/shell-simple/README.md) is the smallest chrome that is
-still a desktop — hold **Alt** and drag a window to move it, Alt and the right
-button to resize it, and that is the entire user interface. It is the one to
-read first if you want to know what a shell actually has to do. The argument
-names a directory under `packages/shell-*`; an unknown one lists what is there.
-
-From a checkout, run the script directly instead (it builds in your working tree):
+From a checkout, run the script directly — it builds in your working tree:
 
 ```sh
 nix develop .#full -c ./scripts/run-prototype.sh          # manganese
-nix develop .#full -c ./scripts/run-prototype.sh simple   # the simple shell
+nix develop .#full -c ./scripts/run-prototype.sh simple
 ```
 
-Then, in another terminal, put an app onto Domicile's display:
+First run stages the fetched source under `~/.cache/domicile/<revision>` and
+builds there (`DOMICILE_RUN_DIR` moves it); re-running the same revision reuses
+those artifacts.
+
+## Open an app in it
+
+Both shells start empty.
+
+- **manganese** — the rail's **Terminal** button, or **Alt+Enter**.
+- **simple** — **Alt+Enter** opens a terminal (`kitty`). That is the only
+  combination it claims.
+
+Everything you start from that terminal lands on Domicile too, since it inherits
+the environment. To launch something from outside instead, point any Wayland
+client at Domicile's display:
 
 ```sh
 nix shell nixpkgs#weston -c \
   env XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 weston-flower
 ```
 
-(from a checkout, `nix develop .#full` already has `weston-flower` on `PATH`).
+Those two variables are the whole mechanism. There is no XWayland, so an
+X11-only client will not connect — it falls back to your own session's display,
+which looks like Domicile ignoring it.
 
-An `<app>` portal appears in the chrome window — in manganese with a tab for it
-in the shell's tab rail; in simple as a bare window you can Alt-drag around.
+Windows are interactive in either shell: clicking one focuses it, and pointer
+and keyboard input are forwarded to the client (surface-local coords, evdev
+keycodes).
 
-App windows are **interactive** in either: clicking an `<app>` focuses it, and
-keyboard + pointer input over it are forwarded to the Wayland client
-(surface-local coords, evdev keycodes).
+## Checks
 
-The rail and its launchers below are manganese's alone — `shell-simple` has no
-rail, claims no keyboard combination, and so cannot launch anything itself. Its
-README says what it deliberately leaves out, and how to
-[put an app on its desktop](packages/shell-simple/README.md#launch-an-app-into-it)
-without one: the two environment variables above are the whole mechanism, and
-they point any Wayland client at Domicile — a terminal included, and every app
-you start from that terminal inherits them. Everything after the launchers is
-either shell's.
-
-Manganese shows one window at a time and switches between them from the rail of
-tabs down its left edge. The rail launches new ones:
-
-- **Terminal** (or **Alt+Enter**) — launch a terminal (`kitty`) onto Domicile.
-  GPU clients render through the `zwp_linux_dmabuf_v1` path (their buffer is
-  imported into an offscreen GLES context), `wl_shm` clients through the
-  shared-memory one.
-- **+** (or **Alt+Shift+Enter**) — open a browser window: a `<webview>` the
-  engine renders directly, under an address bar with back / forward / stop /
-  reload.
-
-The message plane (Wayland client → compositor → host brain → chrome) is also
-covered by headless, reproducible checks that run without a display:
+Headless and reproducible — no display, no window:
 
 ```sh
-nix run github:cprussin/domicile#check           # rust + typescript + every e2e script, in one command
-nix run github:cprussin/domicile#measure-round-trip  # what a keystroke costs, end to end
-nix run github:cprussin/domicile#e2e-chrome      # message plane (mock chrome)
-nix run github:cprussin/domicile#e2e-electron    # full path incl. the real Electron renderer, under Xvfb
-nix run github:cprussin/domicile#e2e-no-compositor # a shell that cannot reach the compositor says so once and stops
-nix run github:cprussin/domicile#e2e-spawn       # a chrome `spawn` message launches a client
-nix run github:cprussin/domicile#e2e-input       # forwarded keyboard + pointer input reaches a client
-nix run github:cprussin/domicile#e2e-dmabuf      # the dmabuf global; with a GPU, a real GPU client's frames
-nix run github:cprussin/domicile#e2e-slow-chrome # a chrome that stops reading must not freeze the compositor
-nix run github:cprussin/domicile#e2e-two-chromes # a focus change reaches every chrome, not just the one that caused it
-nix run github:cprussin/domicile#e2e-window-alpha # a translucent client's alpha reaches the chrome undoubled
+nix run github:cprussin/domicile#check   # rust + typescript + every e2e script
 ```
 
-`e2e-dmabuf` is the one that wants real hardware: without a DRM render node it
-checks that the global is advertised and stops there, since no client can
-allocate a GPU buffer to import. Like the other checks it is headless — no
-window appears, because there is no chrome and no output; `prototype` is the
-one that opens a window.
+Individual checks run the same way — `#e2e-chrome`, `#e2e-input`, `#e2e-spawn`,
+`#e2e-dmabuf`, `#measure-round-trip` and the rest; the `apps` set in
+`flake.nix` is the list. Not every script has one, so from a checkout run any
+of them directly: `nix develop .#full -c ./scripts/<name>.sh`.
 
-To run an *unmerged branch* this way, name it with `?ref=` (branch names contain
-slashes, which the `owner/repo/ref` form cannot express) and pass `--refresh`.
-Without it Nix re-resolves a branch ref only once an hour, so a branch that was
-just force-pushed silently runs the revision you already had:
+`#e2e-dmabuf` is the only check that wants real hardware; without a DRM render
+node it confirms the global is advertised and stops.
+
+For an unmerged branch, name it with `?ref=` — branch names contain slashes,
+which `owner/repo/ref` cannot express — and pass `--refresh`, since Nix
+otherwise re-resolves a branch ref only hourly and silently runs a stale one:
 
 ```sh
-nix run --refresh 'github:cprussin/domicile?ref=some/branch#e2e-dmabuf'
+nix run --refresh 'github:cprussin/domicile?ref=some/branch#check'
 ```
-
-Each is one of the flake's apps — `prototype` (the default), `e2e-chrome`,
-`e2e-electron`, `e2e-late-chrome`, `e2e-no-compositor`, `e2e-spawn`, `e2e-input`,
-`e2e-dmabuf`, `e2e-slow-chrome`, `smoke-compositor` — and each runs the matching script under
-`scripts/`. From a checkout, run that script yourself:
-`nix develop .#full -c ./scripts/e2e-chrome.sh`, and so on.
-
-`e2e-electron.sh` runs the actual Electron chrome headlessly and confirms it
-connects, handshakes, and mounts a `<domicile-app>` (reporting its geometry back)
-when a real Wayland client maps a window. `e2e-late-chrome.sh` is the same path
-in the other order — the client is already running when the chrome arrives,
-which is what a page reload looks like from the compositor's side.
 
 ## Develop
 
-Nothing needs to be installed globally — Nix pins both toolchains. (Without a
-checkout, `nix develop github:cprussin/domicile` and
-`nix develop github:cprussin/domicile#full` give you the same two shells.)
+Nix pins both toolchains; nothing is installed globally.
 
 ```sh
-# Core shell: the pure-logic crates plus the whole TypeScript workspace
-nix develop
+nix develop            # core: pure-logic crates + the whole TypeScript workspace
+cargo test
+bun run turbo test     # lint, types, unit tests, shell builds
 
-cargo test                     # Rust: the crates in `default-members`
-bun run turbo test             # TypeScript: lint, types, unit tests, shell build
-
-# Full shell: adds Wayland/DRM/GL libs for the compositor + CEF bridge
-nix develop .#full
+nix develop .#full     # adds Wayland/DRM/GL for the compositor and CEF bridge
 ```
 
-Before opening a PR, run both, plus `cargo fmt --all --check` and
+Before a PR: both of the above, plus `cargo fmt --all --check` and
 `cargo clippy --all-targets -- -D warnings`. `bun run turbo fix` applies the
-auto-fixable half of the TypeScript checks. See
-[docs/guidelines/WORKSPACE.md](docs/guidelines/WORKSPACE.md) and
-[docs/guidelines/RUST.md](docs/guidelines/RUST.md) for the full workflow, and
-[AGENTS.md](AGENTS.md) for the code guidelines every change is held to.
+auto-fixable half. [AGENTS.md](AGENTS.md) holds the guidelines every change is
+held to; [WORKSPACE.md](docs/guidelines/WORKSPACE.md) and
+[RUST.md](docs/guidelines/RUST.md) the full workflow.
+
+The Smithay backend is out of the default workspace build:
+
+```sh
+nix develop .#full -c cargo build -p domicile-compositor
+nix develop .#full -c ./scripts/smoke-compositor.sh   # boots it; a client binds our globals
+```
 
 ## Layout
+
+One package tree for both languages: a package under `packages/` is a cargo
+crate if it has a `Cargo.toml` and a bun workspace if it has a `package.json`.
 
 | Path | What | Build |
 |------|------|-------|
@@ -168,32 +128,13 @@ auto-fixable half of the TypeScript checks. See
 | `packages/domicile-scene`    | portal registry, hit-testing, input routing | core |
 | `packages/domicile-protocol` | host ↔ in-page bridge messages | core |
 | `packages/domicile-host`     | orchestrator brain + host↔chrome IPC seam | core |
-| `packages/domicile`        | host daemon: boots from config, serves the chrome protocol | core |
+| `packages/domicile`          | host daemon: boots from config, serves the chrome protocol | core |
 | `packages/domicile-bridge`   | AppTextureBridge bookkeeping (app → engine texture) | core |
 | `packages/domicile-compositor` | headless Smithay Wayland server driving the brain | `.#full` |
-| `packages/chrome-sdk` | `<domicile-app>` / `<domicile-webview>` custom elements + bridge client | bun |
-| `packages/component-library` | React UI primitives + the Panda CSS design system every chrome package extends | bun |
-| `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers + RTL cleanup) | bun |
-| `packages/e2e-harness` | headless chrome stand-ins driving the scripts in `/scripts`, and the check on those scripts' own machinery | bun |
-| `packages/electron-chrome-host` | the Electron host's half of a chrome: the window it is drawn in, the compositor socket, and the channel a renderer cannot serve itself | bun |
-| `packages/shell-manganese` | the bundled reference chrome: a tab rail and a stage (Electron host + Vite-built renderer) | bun |
+| `packages/chrome-sdk` | `<domicile-app>` / `<domicile-webview>` elements + bridge client | bun |
+| `packages/component-library` | React primitives + the Panda CSS design system chromes extend | bun |
+| `packages/test-support` | shared bun test setup (happy-dom, jest-dom, RTL cleanup) | bun |
+| `packages/e2e-harness` | headless chrome stand-ins driving `/scripts`, and the check on their machinery | bun |
+| `packages/electron-chrome-host` | the Electron host's half of a chrome: its window, the compositor socket, the failure channel | bun |
+| `packages/shell-manganese` | the reference chrome: tab rail and stage | bun |
 | `packages/shell-simple` | the smallest chrome that works: floating windows, Alt-dragged | bun |
-
-Both languages share one package tree: a package under `packages/` is a cargo
-crate when it carries a `Cargo.toml` and a bun workspace when it carries a
-`package.json`. The TypeScript half is orchestrated by turbo, linted by biome,
-and typed against the `@cprussin/tsconfig` presets — the same setup as the
-sibling `argo-browser` repo.
-
-The Smithay backend is excluded from the default workspace build; build/run it in
-the full shell:
-
-```sh
-nix develop .#full -c cargo build -p domicile-compositor
-nix develop .#full -c ./scripts/smoke-compositor.sh   # boots it; a real client binds our globals
-```
-
-Without a checkout, the smoke test is `nix run github:cprussin/domicile#smoke-compositor`.
-
-The GPU-dependent AppTextureBridge proof (one rounded/blurred/rotated `<app>`)
-is a plan you execute on your hardware: [docs/architecture/WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md).

@@ -14,6 +14,7 @@ import { postedTransport } from "@domicile/chrome-sdk/host-transport";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
 import { Desktop } from "./desktop";
+import { openTerminalOnAltEnter } from "./terminal-shortcut";
 import { installWindowGestures } from "./window-gestures";
 
 import "./global.css";
@@ -32,6 +33,9 @@ registerElements(bridge);
 
 const desktop = new Desktop(document.body);
 installWindowGestures(document.body, desktop);
+// The one thing this shell claims the keyboard for: without a way to start a
+// terminal, nothing can reach the desktop except from outside Domicile.
+openTerminalOnAltEnter(bridge, document.body);
 
 bridge.on("app_appeared", ({ app_id, size }) => {
   desktop.open(app_id, size);
