@@ -7,6 +7,9 @@ import { hstack, stack } from "../../styled-system/patterns";
 
 import { Button } from "../Button/Button";
 
+/** `MouseEvent.button` for the middle mouse button — the one that closes a tab. */
+const MIDDLE_BUTTON = 1;
+
 /** Which side of a drop target a dragged tab lands on. */
 export type DropPosition = "before" | "after";
 
@@ -44,10 +47,11 @@ type Props = {
  * context, so the same rail drives a workspace, a file tree, or a playlist.
  *
  * Each `tabs` entry is a row: a label control that selects the tab (`onSelect`)
- * and, unless `closable` is `false`, a close button (`onClose`). Rows reorder by
- * drag or by Alt+Up / Alt+Down (switch) and Alt+Shift+Up / Alt+Shift+Down
- * (rearrange) on a focused row. The header pairs the app's `brand` with a built-in
- * new-tab button (`onNew`); the `footer` frames app chrome at the foot.
+ * and, unless `closable` is `false`, a close button (`onClose`) — a closable row
+ * also closes on a middle-click anywhere in it. Rows reorder by drag or by
+ * Alt+Up / Alt+Down (switch) and Alt+Shift+Up / Alt+Shift+Down (rearrange) on a
+ * focused row. The header pairs the app's `brand` with a built-in new-tab button
+ * (`onNew`); the `footer` frames app chrome at the foot.
  *
  * The close and new-tab controls are the shared {@link Button} (icon-only,
  * ghost). The tab-select control stays a purpose-built element: it needs the
@@ -163,9 +167,10 @@ type TabRowProps = {
 
 /**
  * One tab row: a label button that selects it and a close button that drops it
- * (unless `closable` is false). The row is the drag/keyboard reorder affordance —
- * it owns the pointer plumbing and calls the handlers with tab ids, so the parent
- * stays free of DOM-event details.
+ * (unless `closable` is false); a closable row also drops on a middle-click
+ * anywhere in it. The row is the drag/keyboard reorder affordance — it owns the
+ * pointer plumbing and calls the handlers with tab ids, so the parent stays free
+ * of DOM-event details.
  */
 const TabRow = memo(
   ({
@@ -191,6 +196,11 @@ const TabRow = memo(
         dragging && rowDraggingStyles,
       )}
       draggable
+      onAuxClick={(event) => {
+        if (closable && event.button === MIDDLE_BUTTON) {
+          onClose(tab.id);
+        }
+      }}
       onDragEnd={onDragEnd}
       onDragOver={(event) => {
         event.preventDefault();
@@ -204,6 +214,14 @@ const TabRow = memo(
       }}
       onKeyDown={(event) => {
         onKeyDown(event, index);
+      }}
+      // The rail scrolls, so a middle press would latch Chromium's autoscroll
+      // at the moment the `auxclick` above closes the tab. Only the middle
+      // button is suppressed — the primary button keeps its focus default.
+      onMouseDown={(event) => {
+        if (event.button === MIDDLE_BUTTON) {
+          event.preventDefault();
+        }
       }}
     >
       <button

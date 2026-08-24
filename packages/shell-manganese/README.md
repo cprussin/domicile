@@ -94,11 +94,12 @@ the keys pressed on a site the shell is showing reach neither the page nor, on
 the copy path, Domicile. Exactly one of the three fires for any press.
 
 A tab reorders by drag, or by Alt+Up / Alt+Shift+Up (and their Down
-counterparts) on a focused row. Every tab closes its window. A browser window
-goes at once, because the shell owns it; a client's window is the client's, so
-the X *asks* it to close — a terminal exits, an editor with unsaved work is
-free to put a dialog up and stay. That tab leaves the rail when the host says
-the client actually went (`app_closed`), not when the button is clicked.
+counterparts) on a focused row. Every tab closes its window — by its X, or by a
+middle-click anywhere on the row. A browser window goes at once, because the
+shell owns it; a client's window is the client's, so the X *asks* it to close —
+a terminal exits, an editor with unsaved work is free to put a dialog up and
+stay. That tab leaves the rail when the host says the client actually went
+(`app_closed`), not when the close is asked for.
 
 ## Build & run
 

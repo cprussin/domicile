@@ -126,7 +126,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "A vertical rail of tabs — the sidebar counterpart to the horizontal Tabs bar. Presentational and controlled (activeId + callbacks): a row per tab with select and gated close, drag and Alt+Arrow / Alt+Shift+Arrow reordering, a header pairing an app brand with a built-in new-tab button, and an optional footer for app chrome.",
+          "A vertical rail of tabs — the sidebar counterpart to the horizontal Tabs bar. Presentational and controlled (activeId + callbacks): a row per tab with select and gated close (by its close button or a middle-click on the row), drag and Alt+Arrow / Alt+Shift+Arrow reordering, a header pairing an app brand with a built-in new-tab button, and an optional footer for app chrome.",
       },
     },
   },
