@@ -116,7 +116,7 @@ bundle, so with a compositor running:
 electron packages/shell-manganese
 ```
 
-opens the chrome against it. `./scripts/run-prototype.sh` does the whole dance
+opens the chrome against it. `./scripts/run-native.sh` does the whole dance
 (compositor + chrome) from the repo root.
 
 `bun run --filter @domicile/shell-manganese start:dev` serves the renderer alone on

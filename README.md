@@ -4,7 +4,8 @@ A Wayland compositor whose renderer is a web engine. All user chrome is web
 content; app windows are real Wayland clients composited *inside* the engine as
 DOM elements, so `<app>` takes the same CSS as a `<div>`.
 
-Prototype stage — frames are still copied rather than shared as textures
+A GPU client's buffer is composited directly, with no copy; a `wl_shm` client's
+frames are still read back and sent to the engine
 ([why](docs/architecture/WINDOW-COMPOSITING.md)).
 [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) ·
 [ROADMAP.md](ROADMAP.md)
@@ -14,15 +15,15 @@ Prototype stage — frames are still copied rather than shared as textures
 Needs Nix and a display. Nothing to clone.
 
 ```sh
-nix run github:cprussin/domicile                       # manganese: tabs, stage, address bar
-nix run github:cprussin/domicile#prototype -- simple   # simple: floating windows only
+nix run github:cprussin/domicile              # manganese: tabs, stage, address bar
+nix run github:cprussin/domicile -- simple    # simple: floating windows only
 ```
 
 From a checkout:
 
 ```sh
-nix develop .#full -c ./scripts/run-prototype.sh          # manganese
-nix develop .#full -c ./scripts/run-prototype.sh simple
+nix develop .#full -c ./scripts/run-native.sh          # manganese
+nix develop .#full -c ./scripts/run-native.sh simple
 ```
 
 ## Open an app
@@ -30,11 +31,14 @@ nix develop .#full -c ./scripts/run-prototype.sh simple
 **Alt+Enter** opens a terminal in either shell. Anything started from it lands
 on the desktop too.
 
-From outside, point any Wayland client at Domicile's display:
+From outside, point any Wayland client at Domicile's display. Domicile prints
+both values on startup — `apps on WAYLAND_DISPLAY=…, under XDG_RUNTIME_DIR=…` —
+because it takes the runtime dir from your session and lets the socket name
+itself, so neither is a constant to write down here:
 
 ```sh
 nix shell nixpkgs#weston -c \
-  env XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 weston-flower
+  env XDG_RUNTIME_DIR=<as printed> WAYLAND_DISPLAY=<as printed> weston-flower
 ```
 
 No XWayland — an X11-only client silently opens on your own desktop instead.

@@ -5,7 +5,7 @@
 #   nix develop .#full -c ./scripts/e2e-dmabuf.sh
 #
 # Nothing appears on screen: this is a headless check of the message plane, with
-# no chrome and no output. `run-prototype.sh` is the one that opens a window.
+# no chrome and no output. `run-native.sh` is the one that opens a window.
 #
 # Unlike the other e2e scripts this one needs REAL GPU HARDWARE — a DRM render
 # node (/dev/dri/renderD*) the client can allocate against. Without one the

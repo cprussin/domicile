@@ -27,10 +27,11 @@ that path. Verified on real hardware (AMD Radeon 890M): the desktop renders, a
 terminal opens into it, and input reaches both.
 
 **The copy path** — the original prototype, still the fallback for any window
-the shaders cannot draw, and still what every headless check drives. The
-compositor is headless, reads each client's frame back off the GPU, and sends
-the pixels to the chrome over a Unix socket to be drawn into a `<canvas>`.
-Correct everywhere, and four full-frame copies per frame.
+the shaders cannot draw, still what a `wl_shm` client gets whatever the
+compositor is presenting to, and still what most of the headless checks drive.
+The compositor reads the client's frame back off the GPU and sends the pixels
+to the chrome over a Unix socket to be drawn into a `<canvas>`. Correct
+everywhere, and four full-frame copies per frame.
 
 The wire protocol is at `PROTOCOL_VERSION = 14`.
 
@@ -74,9 +75,8 @@ cargo test -p domicile-compositor
 ./scripts/probe-transparency.sh  # the engine, as our client, commits real alpha
 
 # Needs a real display — run on the user's machine.
-nix run 'github:cprussin/domicile#native'      # the native path: a window, composited
-nix run 'github:cprussin/domicile#prototype'   # the copy path, for comparison
-nix run 'github:cprussin/domicile#measure'     # both, with the numbers side by side
+nix run 'github:cprussin/domicile#native'      # Domicile: a window, composited
+nix run 'github:cprussin/domicile#measure'     # both paths, with the numbers side by side
 ```
 
 `e2e-compose.sh` needs a GL stack (it gets a software rasteriser where there is
