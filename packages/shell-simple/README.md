@@ -73,17 +73,15 @@ terminal lands here too, inheriting its environment. That is the short answer.
 The long one, for launching from outside: Domicile is a Wayland compositor, so
 an app joins the desktop by connecting to its display rather than your
 session's.
-Two environment variables are the whole mechanism.
 
 ```sh
-XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 <any wayland app>
-```
-
-```sh
-# from outside the dev shell
 nix shell nixpkgs#weston -c \
   env XDG_RUNTIME_DIR=/tmp/domicile-rt WAYLAND_DISPLAY=wayland-1 weston-flower
 ```
+
+`XDG_RUNTIME_DIR` and `WAYLAND_DISPLAY` are the whole mechanism — set those two
+in front of any Wayland client and it joins the desktop. The `nix shell` prefix
+only puts `weston-flower` on `PATH`.
 
 - `/tmp/domicile-rt` is Domicile's own runtime dir, kept separate so its display
   does not clash with your real desktop's.
