@@ -601,10 +601,29 @@ falloff the shadow uses, is the next candidate to move it.
 
 DRM/KMS backend and direct scanout for a fullscreen app, and per-monitor
 scanout — one composite clipped per output, which is what a single spanning
-page implies once there is real hardware under it. Damage tracking,
-clipboard/data-device, touch and a security review all live here too.
+page implies once there is real hardware under it. Clipboard/data-device, touch
+and a security review all live here too.
+
+Damage *reporting* is done: a frame says which rectangles changed rather than
+`None`. Drawing only the damage is the other half and is not — it needs buffer
+age, and it needs a screen before anyone should believe it.
 
 ### Known gaps in what is built
+
+- **A frame in which the chrome repainted reports the whole output as
+  damaged.** The chrome is one layer covering the desktop, so its commit
+  counter moving damages all of it — and it repaints for a clock, a caret, a
+  hover. Per-surface damage rectangles are already taken from every commit
+  (`take_damage`) and dropped for the chrome — but using them needs more than
+  plumbing at that call site: `Painted` holds one rectangle per layer, so
+  partial-layer damage is a shape `damage.rs` does not have, along with the
+  buffer-to-output mapping and the accumulation across frames `present` did not
+  run for.
+- **An empty damage list saves nothing on the nested path.** Smithay's winit
+  `submit` treats `Some(empty)` the same as `None` and swaps the whole buffer,
+  so an idle desktop costs what a busy one does. The distinction is real at the
+  protocol level and will be acted on by the DRM backend; today the saving is
+  only in frames that report *some* rectangles.
 
 - **A client that draws its own cursor into a surface gets a plain arrow.**
   Compositing that surface is the same work as compositing any other.

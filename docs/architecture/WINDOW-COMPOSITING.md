@@ -287,6 +287,23 @@ Phase 2 — the effects that make an app a CSS element:
 
 Phase 3 — own the display:
 
+- [x] damage *reporting* — the frame says which rectangles changed rather than
+      "all of it". `damage::between` diffs the painted layers of two frames;
+      `damage::reported` decides whether a difference can honestly be taken at
+      all, and it is *that* result `submit` is given, because the first frame
+      and a resize have nothing to differ against. Drawing only the damage is a
+      separate step and not this one: the frame is still composited in full, so
+      nothing here depends on what the previous buffer still holds, which is
+      the thing a swapchain does not promise.
+
+      Two things it does not yet buy. Smithay's winit backend treats an empty
+      damage list as "all of it", so an idle desktop costs the same there
+      today; the saving is in partial-rect frames, and in the DRM backend that
+      will act on the empty case. And the chrome is one layer covering the
+      whole output, so any frame in which the page repainted — a clock, a
+      caret — reports everything. Per-surface damage is already taken in
+      `commit` and dropped for the chrome.
+- [ ] partial redraw — needs buffer age, and needs a screen to be believed
 - [ ] DRM/KMS backend, direct scanout for a fullscreen app
 
 The chrome-as-a-texture step this phase used to carry is gone: the engine
@@ -359,8 +376,18 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
 - **What the number actually is.** Everything through the draw is in place and
   tested, but the only measurement so far is of the copy path. Phase 1 is not
   done until `rt_ms` says what this costs against it.
-- **The desktop is only as resizable as one window.** The output's logical size
-  follows Domicile's window and the chrome is reconfigured to match, which is
-  what a nested compositor can do. A real display is fixed until the DRM/KMS
-  backend of Phase 3, and more than one output is not modelled at all: the
-  scene has a single `surface_to_output`.
+- **The desktop is only as resizable as one window** — where no displays are
+  configured. There, the output's logical size follows Domicile's window and
+  the chrome is reconfigured to match, which is what a nested compositor can
+  do unaided.
+
+  More than one output *is* modelled now, which this used to deny: a config
+  can describe a desktop of several displays, each with its own position and
+  scale, and a window is entered onto the ones it is actually over
+  (`Screens::entered_by`) — or onto every one of them where it is over none,
+  which is a deliberate fallback rather than an omission: a toolkit told it is
+  on no output at all waits for one and maps blank. The list is no longer
+  fixed at startup either — the compositor watches its config and takes up a
+  changed one while running. What
+  is still fixed until the DRM/KMS backend of Phase 3 is a *real* display: the
+  described ones are regions of Domicile's own window.

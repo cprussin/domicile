@@ -92,6 +92,7 @@ use tracing::{debug, info, warn};
 
 mod coalesce;
 mod compose;
+mod damage;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod outbound;
@@ -102,7 +103,9 @@ mod straight_alpha;
 mod timing_window;
 
 use crate::coalesce::last_of_burst;
+use crate::compose::shadow_quad;
 use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer, Shaders, Shadow};
+use crate::damage::{covered, Look, Painted};
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
@@ -1247,6 +1250,21 @@ struct DomicileCompositor {
     /// only thing that can re-supply a window's pixels, and a window can need
     /// them at a moment no client knows anything about — see [`hand_over`].
     latest_frames: HashMap<String, LastFrame>,
+    /// How many times each surface has committed, keyed as [`painted_key`].
+    ///
+    /// Not the pixels, and it does not need to be: this is what tells a window
+    /// that redrew in place from one that merely stayed there, which nothing
+    /// about its geometry says. It is not the *only* thing that can differ
+    /// between two frames of a window that has not moved — `Look` and the draw
+    /// order are the others, and they are compared beside it.
+    /// A counter that wrapped would report a redraw as no change once in
+    /// 2^64 commits, which is not a number of frames anything here will see.
+    content: HashMap<String, u64>,
+    /// The last frame's layers, and the output they were measured against.
+    ///
+    /// `None` before the first frame, which is the one case that has to report
+    /// everything: there is no previous picture for a difference to be against.
+    painted: Option<damage::Frame>,
     /// Which apps the chrome holds a frame of, and at what buffer size.
     ///
     /// The compositor cannot see the page, so this is its own record rather
@@ -1976,7 +1994,59 @@ impl DomicileCompositor {
                 })
             })
             .collect();
+        // What each layer covers, from the same transform it is drawn with, so
+        // the reported box and the drawn pixels cannot describe different
+        // rectangles. Built here rather than from the scene, which is in
+        // logical units and would need the same mapping applied a second time.
+        let mut painted: Vec<Painted> = placements
+            .iter()
+            .filter(|(app_id, _, _)| self.textures.contains_key(app_id))
+            .map(|(app_id, surface_to_output, style)| {
+                let onto_output = surface_to_output.then(to_window);
+                // Where the shadow lands, from the same function that draws it
+                // — so the box and the pixels cannot describe different places.
+                let cast = style
+                    .shadow
+                    .and_then(|shadow| shadow_quad(onto_output, shadow_in_pixels(shadow, scale)))
+                    .map(|(quad, _)| quad);
+                Painted {
+                    app_id: app_id.clone(),
+                    rect: covered(onto_output, cast),
+                    placed: onto_output,
+                    // Present by construction: `textures` is only written
+                    // from inside `commit`, which bumps this first, and the
+                    // two are removed together when a window closes.
+                    content: self.content[app_id],
+                    // In the units the shader is handed, not the scene's:
+                    // both are scaled on the way to `draw_layers`, and the
+                    // logical numbers can stay put while the drawn ones move.
+                    look: Look {
+                        opacity: style.opacity,
+                        corner_radius: style.corner_radius * scale,
+                        shadow: style.shadow.map(|shadow| shadow_in_pixels(shadow, scale)),
+                    },
+                }
+            })
+            .collect();
         if let Some(chrome) = self.chrome_texture.as_ref() {
+            let chrome_onto_output =
+                SceneTransform::scale(chrome.logical_size.0, chrome.logical_size.1).then(to_window);
+            painted.push(Painted {
+                app_id: CHROME_LAYER.to_string(),
+                rect: covered(chrome_onto_output, None),
+                placed: chrome_onto_output,
+                // Not indexed like an app's: the chrome's texture outlives
+                // the page that drew it, so this map can legitimately have no
+                // entry for it after a reload cleared nothing.
+                content: self.content.get(CHROME_LAYER).copied().unwrap_or_default(),
+                // The desktop is never rounded, never translucent and casts
+                // nothing — the same three facts its `Layer` below states.
+                look: Look {
+                    opacity: 1.0,
+                    corner_radius: 0.0,
+                    shadow: None,
+                },
+            });
             layers.push(Layer {
                 alpha: 1.0,
                 clip: &[],
@@ -2037,10 +2107,39 @@ impl DomicileCompositor {
                     .as_mut()
                     .and_then(Gpu::window)
                     .expect("present returned early without a window to draw into");
+                // What actually changed, rather than `None` — which is
+                // always correct and always the most expensive thing to say:
+                // a nested host re-reads the whole surface for it, and a
+                // display controller can skip nothing.
+                // `damage::reported` is the rule for when `None` is still
+                // the honest answer.
+                let changed = damage::reported(self.painted.as_ref(), &painted, (size.w, size.h))
+                    .map(|rects| {
+                        rects
+                            .into_iter()
+                            .map(|rect| {
+                                Rectangle::new(
+                                    (rect.x, rect.y).into(),
+                                    (rect.width, rect.height).into(),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    });
+                let mut reached_the_screen = true;
                 record_present(&self.hub.timings, started, || {
-                    if let Err(err) = backend.submit(None) {
+                    if let Err(err) = backend.submit(changed.as_deref()) {
                         tracing::warn!(%err, "could not submit the frame");
+                        reached_the_screen = false;
                     }
+                });
+                // Only what was actually presented becomes the next frame's
+                // baseline. A submit that failed leaves the screen showing the
+                // frame before this one, so recording this one would take the
+                // next difference against a picture nobody ever saw — and
+                // everything this frame changed would be silently dropped.
+                self.painted = reached_the_screen.then_some(damage::Frame {
+                    into: (size.w, size.h),
+                    layers: painted,
                 });
             }
             Err(err) => tracing::warn!(%err, "could not draw the scene"),
@@ -2915,6 +3014,22 @@ struct SurfaceTexture {
     /// rather than show it.
     logical_size: (f64, f64),
 }
+
+/// What a surface is called in [`DomicileCompositor::content`] and in the
+/// painted frame.
+///
+/// The chrome is not an app and has no `app_id`, but it is a layer like any
+/// other and has to be diffed like one. A name no host-assigned id can collide
+/// with, because the two share one map: ids are `app-N`.
+fn painted_key(committer: &Committer) -> String {
+    match committer {
+        Committer::App(app_id) => app_id.clone(),
+        Committer::Chrome => CHROME_LAYER.to_string(),
+    }
+}
+
+/// See [`painted_key`].
+const CHROME_LAYER: &str = "<the chrome>";
 
 /// Which of the two kinds of client committed a buffer.
 #[derive(Debug)]
@@ -3890,6 +4005,14 @@ impl CompositorHandler for DomicileCompositor {
         let Some((committer, toplevel)) = self.committer(surface) else {
             return;
         };
+        // Before anything below can return early, which is deliberately the
+        // *over*-reporting choice: a commit that attaches no buffer, or one
+        // whose buffer we cannot use, moves this counter without changing a
+        // drawn pixel, and the frame after it damages this window for nothing.
+        // Bumping where the texture is actually replaced would be exact — and
+        // would have to be right in three places instead of one, with a stale
+        // pixel as the price of missing any of them.
+        *self.content.entry(painted_key(&committer)).or_default() += 1;
 
         // Send the initial configure once, so the client can map its buffer.
         let initial_configure_sent = with_states(surface, |states| {
@@ -4227,6 +4350,11 @@ impl XdgShellHandler for DomicileCompositor {
             self.last_frame.remove(&app_id);
             self.bridge.remove(&app_id);
             self.latest_frames.remove(&app_id);
+            // The commit counter too, which was the one sibling map this
+            // forgot. A stale entry could never be *read* — host ids are
+            // monotonic, so no later window takes this name — but it would sit
+            // there for the life of the process.
+            self.content.remove(&app_id);
             self.held.remove(&app_id);
             // And nothing is owed to a canvas that no longer exists.
             self.pending_damage.remove(&app_id);
@@ -4799,6 +4927,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         hub,
         bridge: BridgeRegistry::new(),
         latest_frames: HashMap::new(),
+        content: HashMap::new(),
+        painted: None,
         held: HashMap::new(),
         pending_damage: HashMap::new(),
         textures: HashMap::new(),
