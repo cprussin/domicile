@@ -103,6 +103,7 @@ mod straight_alpha;
 mod timing_window;
 
 use crate::coalesce::last_of_burst;
+use crate::compose::chrome_onto_output;
 use crate::compose::shadow_quad;
 use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer, Shaders, Shadow};
 use crate::damage::{covered, Look, Painted};
@@ -2029,8 +2030,7 @@ impl DomicileCompositor {
             })
             .collect();
         if let Some(chrome) = self.chrome_texture.as_ref() {
-            let chrome_onto_output =
-                SceneTransform::scale(chrome.logical_size.0, chrome.logical_size.1).then(to_window);
+            let chrome_onto_output = chrome_onto_output(chrome.logical_size, to_window);
             painted.push(Painted {
                 app_id: CHROME_LAYER.to_string(),
                 rect: covered(chrome_onto_output, None),
@@ -2054,15 +2054,10 @@ impl DomicileCompositor {
                 // casts nothing.
                 corner_radius: 0.0,
                 shadow: None,
-                // At its own size rather than stretched over the output: it is
-                // asked to be the output's size, and a chrome that has not
-                // taken that size yet should show as a gap it has not filled
-                // rather than as a picture quietly scaled to fit.
-                surface_to_output: SceneTransform::scale(
-                    chrome.logical_size.0,
-                    chrome.logical_size.1,
-                )
-                .then(to_window),
+                // The same placement the `Painted` above reports, and from
+                // the same call: drawn in one place and reported as damaged in
+                // another is a desktop that repaints the wrong rectangle.
+                surface_to_output: chrome_onto_output,
                 texture: &chrome.texture,
                 y_inverted: chrome.y_inverted,
             });

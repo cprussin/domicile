@@ -59,6 +59,18 @@ jobs:
       # that already exists rather than anything about the host — worth doing,
       # untested from here, and not on the way to this.
       #
+      # `libxkbcommon-x11-0` and `xdotool` are what make the *presented* path
+      # testable at all, and it was untested for exactly as long as they were
+      # missing. `--present` opens a winit window and winit `dlopen`s
+      # `libxkbcommon-x11.so.0` (xkbcommon-dl tries the versioned soname first,
+      # so the runtime package is the one needed and not `-dev`). It is its own
+      # library: `libxkbcommon0`, which the list already pulls in, never
+      # contained it. Without it the compositor dies in `xkbcommon-dl`'s
+      # `expect` — which does name the library, but out of a panic, so it reads
+      # as a compositor crash rather than as a missing dependency. There is no
+      # window manager on an Xvfb, so `xdotool` is what resizes the window in
+      # `e2e-chrome-fills-a-window.sh`.
+      #
       # Retried with a deadline per attempt, for the reason `cargo-test.yml`
       # spells out: a stalled apt mirror fails by hanging, so a plain
       # `apt-get` can burn the whole job budget getting nowhere.
@@ -68,6 +80,7 @@ jobs:
             sudo apt-get update && sudo apt-get install -y \
               libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev \
               libxrandr-dev libxi-dev \
+              libxkbcommon-x11-0 xdotool \
               libegl1-mesa-dev libgles2-mesa-dev libgbm-dev mesa-utils \
               libgl1-mesa-dri \
               weston wayland-utils \

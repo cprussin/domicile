@@ -332,6 +332,22 @@ pub fn logical_to_window(logical: (i32, i32), window: (i32, i32)) -> Transform {
     desktop_to_target((0, 0), logical, window)
 }
 
+/// Where the chrome lands, given the size it committed at.
+///
+/// At its own size rather than stretched over the output: the chrome is asked
+/// to be the desktop's size, and one that has not taken that size yet should
+/// show as a gap it has not filled rather than as a picture quietly scaled to
+/// fit. The price of that honesty is that the size has to arrive — a chrome
+/// still at its old one covers less of the desktop, and that is the shape of
+/// every report that the desktop stopped filling the screen.
+///
+/// `present` needs this twice — once to draw the chrome and once to say what
+/// it covered — and the two disagreeing would mean a desktop drawn in one
+/// place and reported as damaged in another.
+pub fn chrome_onto_output(committed: (f64, f64), to_window: Transform) -> Transform {
+    Transform::scale(committed.0, committed.1).then(to_window)
+}
+
 /// Maps the desktop's logical units onto one target's own pixels.
 ///
 /// A *target* is a thing being drawn into and the part of the desktop it shows:
@@ -400,7 +416,9 @@ mod tests {
     use cgmath::Vector3;
     use domicile_scene::{Point, Transform};
 
-    use super::{desktop_to_target, logical_to_window, matrix3, window_to_logical};
+    use super::{
+        chrome_onto_output, desktop_to_target, logical_to_window, matrix3, window_to_logical,
+    };
 
     /// Where the renderer's matrix sends a point, so it can be compared with
     /// where [`Transform::apply`] says it should go.
@@ -441,6 +459,31 @@ mod tests {
         // everywhere else: it inverts the sense of the turn.
         assert_agrees(Transform::rotate(std::f64::consts::FRAC_PI_3), 10.0, 0.0);
         assert_agrees(Transform::rotate(std::f64::consts::FRAC_PI_3), 0.0, 10.0);
+    }
+
+    #[test]
+    fn a_chrome_committed_at_the_desktop_size_fills_the_window() {
+        // The chrome is the desktop, so it has to reach the far corner of what
+        // it is drawn into.
+        let far = chrome_onto_output(
+            (1920.0, 1080.0),
+            logical_to_window((1920, 1080), (1280, 720)),
+        )
+        .apply(Point::new(1.0, 1.0));
+        assert!(
+            (far.x - 1280.0).abs() < 1e-9 && (far.y - 720.0).abs() < 1e-9,
+            "the chrome's far corner landed at {far:?}, not the window's",
+        );
+    }
+
+    #[test]
+    fn a_chrome_still_at_its_old_size_does_not_reach_the_far_corner() {
+        // The other half of the same rule, and what stops the one above being
+        // satisfied by a placement that stretched the chrome over the output
+        // whatever size it committed at: the gap is the point.
+        let far = chrome_onto_output((800.0, 600.0), logical_to_window((1920, 1080), (1280, 720)))
+            .apply(Point::new(1.0, 1.0));
+        assert!(far.x < 1280.0 && far.y < 720.0, "{far:?}");
     }
 
     #[test]

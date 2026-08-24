@@ -9,6 +9,7 @@ import type { Display } from "@domicile/component-library/display-source";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { css } from "../styled-system/css";
 import { AppElements } from "./app-elements";
 import type { Chord } from "./chord";
 import { displaysFrom } from "./display-source";
@@ -348,6 +349,57 @@ describe("Shell", () => {
         bridge.describes([LEFT, RIGHT]);
       }).not.toThrow();
       expect(screenNamed(container, "left")).toBeInTheDocument();
+    });
+  });
+
+  describe("filling the space it is given", () => {
+    // A `<Screen>` is a region of the page at the display's own rectangle, so
+    // everything inside it has to reach that rectangle's edges — nothing below
+    // here has a size of its own to fall back on. This has come apart more than
+    // once, and each time it looks the same from outside: content in a corner
+    // of a screen that is the right size.
+    //
+    // Declarations rather than class names, because Panda hashes them: the
+    // check is that the element carries *this rule*, which is what
+    // `Screen.test.tsx` does for the region itself.
+
+    it("gives the chrome the whole of the screen it is on", () => {
+      const { container } = renderShell([LEFT]);
+      const root = screenNamed(container, "left")?.firstElementChild;
+
+      expect(root?.className).toContain(css({ blockSize: "100%" }));
+    });
+
+    it("gives the stage what the rail leaves of it", () => {
+      const { container } = renderShell([LEFT]);
+      const stage = screenNamed(container, "left")?.querySelector("main");
+
+      expect(stage?.className).toContain(css({ flexGrow: 1 }));
+    });
+
+    it("gives a window the whole of the stage", () => {
+      // The portal is a hole in the page and has no pixels of its own to size
+      // it, so without this a client's surface is composited into whatever box
+      // the element happened to get — which for an empty replaced element is
+      // nothing at all.
+      renderShell([LEFT]);
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+
+      // One declaration per assertion: `css` with two of them returns two
+      // space-joined class names, and Panda emits them in the source object's
+      // key order — so a single `toContain` would need them adjacent and in
+      // that order, and any declaration inserted between the two in
+      // `window-styles.ts` would fail a rule that had not changed.
+      const portal = document.querySelector(APP_TAG_NAME);
+      expect(portal?.className).toContain(css({ position: "absolute" }));
+      expect(portal?.className).toContain(css({ inset: 0 }));
+    });
+
+    it("gives an idle screen's clock the whole of that screen", () => {
+      const { container } = renderShell([LEFT, RIGHT]);
+      const idle = screenNamed(container, "right")?.firstElementChild;
+
+      expect(idle?.className).toContain(css({ blockSize: "100%" }));
     });
   });
 
