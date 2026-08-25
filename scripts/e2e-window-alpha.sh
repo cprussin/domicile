@@ -34,7 +34,11 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
 command -v electron >/dev/null 2>&1 || {
-  echo "SKIP: no electron to run a translucent client with"; exit 0; }
+  # 77, not 0. `check.sh` has no special case for this script, so an `exit 0`
+  # here is indistinguishable from a run that happened and passed — a skipped
+  # check reporting green under `DOMICILE_CHECK_STRICT=1`, which is the one
+  # thing the strict mode exists to prevent.
+  echo "SKIP: no electron to run a translucent client with"; exit 77; }
 
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-straight"   # short: Unix socket path limit
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"

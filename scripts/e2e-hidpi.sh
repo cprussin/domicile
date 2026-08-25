@@ -33,11 +33,11 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 # run says nothing, and a check that ran and blamed the compositor for a client
 # it could not start says something false.
 command -v weston-terminal >/dev/null 2>&1 || {
-  echo "weston-terminal is the scale-aware client whose buffer scale this reads."
+  echo "SKIP: weston-terminal is the scale-aware client whose buffer scale this reads."
   exit 77
 }
 command -v bun >/dev/null 2>&1 || {
-  echo "bun runs the mock chrome, which is what reports the 2x density."
+  echo "SKIP: bun runs the mock chrome, which is what reports the 2x density."
   exit 77
 }
 

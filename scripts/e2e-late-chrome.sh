@@ -55,6 +55,20 @@ cleanup() {
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 
+# Both of these before anything starts, because a check that cannot run says
+# nothing and a check that ran and blamed the compositor for a client it could
+# not start says something false. Without them this script waited out its own
+# `wait_for` and convicted the compositor at `exit 1` — a missing dependency
+# reported as a code failure, which is what 77 exists to prevent.
+command -v weston-flower >/dev/null 2>&1 || {
+  echo "SKIP: no weston-flower, which is the client that maps before any chrome."
+  exit 77
+}
+command -v electron >/dev/null 2>&1 || {
+  echo "SKIP: no electron, which is the chrome that arrives late here."
+  exit 77
+}
+
 ( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell-manganese ) \
   || { echo "shell build failed"; exit 1; }
 
@@ -72,7 +86,12 @@ echo "OK: Wayland client mapped a toplevel with no chrome listening"
 # and a guess in place of a wait. `check.sh`'s own comment blames that pattern
 # for a stale `/tmp/.X11-unix/X97` becoming an Electron segfault that looked
 # like a bug in the shell.
-ensure_display 1280x800x24 60 || exit 1
+# 77 rather than 1, as `e2e-electron.sh` does for the same reason: no display
+# is a dependency this machine does not have, not a verdict on the compositor.
+ensure_display 1280x800x24 60 || {
+  echo "SKIP: no display for Electron to render into."
+  exit 77
+}
 
 # 2) Now start the chrome.
 DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/packages/shell-manganese" >"$ELOG" 2>&1 &

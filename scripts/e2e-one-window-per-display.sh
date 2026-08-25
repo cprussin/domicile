@@ -27,11 +27,11 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
 command -v weston-terminal >/dev/null 2>&1 || {
-  echo "weston-terminal is the real client whose surface has to enter one output and leave the other."
+  echo "SKIP: weston-terminal is the real client whose surface has to enter one output and leave the other."
   exit 77
 }
 command -v bun >/dev/null 2>&1 || {
-  echo "bun runs the chrome that places the windows; without one nothing narrows the set."
+  echo "SKIP: bun runs the chrome that places the windows; without one nothing narrows the set."
   exit 77
 }
 

@@ -48,12 +48,18 @@
         wayland-utils
         # A terminal to launch via the demo shell's Alt+Enter keybinding.
         kitty
-        # Electron hosts the chrome shell as a visible window for the prototype
-        # (the eventual target embeds CEF; Electron gets us a testable UI now).
+        # Electron runs the chrome, both as Domicile's own Wayland client and
+        # over the chrome protocol socket (the eventual target embeds CEF;
+        # Electron gets us a testable UI now).
         electron
         # Xvfb lets us exercise the Electron chrome headlessly in tests
         # (provides the `Xvfb` binary used by scripts/e2e-electron.sh).
         xvfb
+        # There is no window manager on an Xvfb, so `xdotool` is what resizes
+        # Domicile's own window in `e2e-chrome-fills-a-window.sh` — the one
+        # check that drives `--present`. Without it here that check skips, and
+        # `nix run .#e2e-chrome-fills-a-window` could never do anything else.
+        xdotool
       ];
 
       # The scripts under `scripts/` each drive Domicile out of a checkout:
@@ -130,6 +136,16 @@
           e2e-hidpi = "e2e-hidpi.sh";
           probe-transparency = "probe-transparency.sh";
           e2e-slow-chrome = "e2e-slow-chrome.sh";
+          e2e-close = "e2e-close.sh";
+          e2e-compose = "e2e-compose.sh";
+          e2e-stuck-key = "e2e-stuck-key.sh";
+          e2e-two-displays = "e2e-two-displays.sh";
+          e2e-displays-on-hello = "e2e-displays-on-hello.sh";
+          e2e-desktop-changed = "e2e-desktop-changed.sh";
+          e2e-reload-displays = "e2e-reload-displays.sh";
+          e2e-one-window-per-display = "e2e-one-window-per-display.sh";
+          e2e-chrome-fills-the-desktop = "e2e-chrome-fills-the-desktop.sh";
+          e2e-chrome-fills-a-window = "e2e-chrome-fills-a-window.sh";
           e2e-two-chromes = "e2e-two-chromes.sh";
           e2e-window-alpha = "e2e-window-alpha.sh";
           smoke-compositor = "smoke-compositor.sh";
