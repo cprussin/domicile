@@ -14,9 +14,10 @@ export default defineConfig({
     },
   },
   hash: true,
-  // No component-library sources: this chrome renders none of its components.
-  // It takes the preset for its tokens so the desktop is themed like the rest
-  // of Domicile, and draws nothing that a `Button` or an `Input` could be.
+  // No component-library sources: this chrome renders none of its components,
+  // because it has no React to render them with — it builds its DOM by hand,
+  // and the library is `.tsx`. It takes the preset for its tokens so the
+  // desktop is themed like the rest of Domicile.
   include: ["./src/**/*.ts"],
   outdir: "styled-system",
   preflight: true,

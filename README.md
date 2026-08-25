@@ -26,32 +26,11 @@ nix develop .#full -c ./scripts/run-native.sh          # manganese
 nix develop .#full -c ./scripts/run-native.sh simple
 ```
 
-## Open an app
-
-**Alt+Enter** opens a terminal in either shell. Anything started from it lands
-on the desktop too.
-
-From outside, point any Wayland client at Domicile's display. Domicile prints
-both values on startup — `apps on WAYLAND_DISPLAY=…, under XDG_RUNTIME_DIR=…` —
-because it takes the runtime dir from your session and lets the socket name
-itself, so neither is a constant to write down here:
-
-```sh
-nix shell nixpkgs#weston -c \
-  env XDG_RUNTIME_DIR=<as printed> WAYLAND_DISPLAY=<as printed> weston-flower
-```
-
-No XWayland — an X11-only client silently opens on your own desktop instead.
-
-## simple's controls
-
-| | |
-|---|---|
-| Alt + press | raise |
-| Alt + drag | move (and raise) |
-| Alt + right-drag | resize (and raise) |
-
-A window leaves when its client exits. There is no close button.
+Each shell's README has its keys: [simple](packages/shell-simple/README.md),
+[manganese](packages/shell-manganese/README.md). Joining the desktop from
+outside — a Wayland client pointed at Domicile's display — is
+[in simple's](packages/shell-simple/README.md#launch-an-app-into-it), and is
+the same mechanism under either shell.
 
 ## Check
 
