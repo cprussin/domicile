@@ -70,7 +70,7 @@ ensure_display 1920x1080x24 60 || exit 1
 # logical units are the same number, which is what makes the two comparable at
 # all — the same reason `e2e-chrome-fills-a-window.sh` pins it.
 NO_COLOR=1 RUST_LOG=info WINIT_X11_SCALE_FACTOR=1 \
-  "$BIN" --present --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+  "$BIN" --no-shell --present --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 cleanup() { kill "$COMP" ${XVFB:-} 2>/dev/null; wait 2>/dev/null; rm -f "$LOG" "$CONF"; }
 trap cleanup EXIT

@@ -75,7 +75,7 @@ ensure_display 1920x1080x24 60 || exit 1
 # session would otherwise get halves of two different things and read the
 # difference as a bug.
 NO_COLOR=1 RUST_LOG=info WINIT_X11_SCALE_FACTOR=1 \
-  "$BIN" --present --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+  "$BIN" --no-shell --present --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 # `kill`, not `kill -9`, for the chrome and the X server: Electron is a process
 # tree and a SIGKILLed one leaves bash reporting "Killed" on stderr as it reaps

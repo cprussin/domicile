@@ -12,7 +12,11 @@ use std::path::{Path, PathBuf};
 #[test]
 fn empty_config_uses_defaults() {
     let cfg = Config::parse("").expect("empty config should parse to defaults");
-    assert_eq!(cfg.shell.package, ShellRef::Name("simple".into()));
+    // No shell, rather than a default one. A config that names none is a
+    // question the compositor has to refuse rather than answer for itself:
+    // guessing means coming up wearing a chrome the user did not ask for, and
+    // the guess used to be `simple` whether or not it was installed.
+    assert_eq!(cfg.shell.package, None);
     assert_eq!(cfg.compositor.nested_size, (1280, 800));
 }
 
@@ -51,7 +55,7 @@ fn parses_a_full_config() {
     let cfg = Config::parse(text).expect("valid config should parse");
     assert_eq!(
         cfg.shell.package,
-        ShellRef::Path(PathBuf::from("./packages/shell-manganese"))
+        Some(ShellRef::Path(PathBuf::from("./packages/shell-manganese")))
     );
     assert_eq!(cfg.compositor.nested_size, (1920, 1080));
     // Shell settings are opaque and passed through to the chrome package.
@@ -789,4 +793,27 @@ fn the_nested_desktops_mode_must_fit_the_coordinate_space() {
         matches!(err, ConfigError::Validation(_)),
         "the biggest nested mode the types allow is rejected, not a panic or a wrap: {err:?}"
     );
+}
+
+#[test]
+fn shell_settings_must_be_a_table() {
+    // The shell is handed these as a JSON *object*, which is stated in the
+    // guide and relied on by every shell that reads them. A scalar here used to
+    // parse, travel the whole way, and land where an object was promised — so
+    // the refusal belongs at the boundary that reads the file, where the error
+    // can name it.
+    for bad in ["settings = 5", "settings = \"left\"", "settings = [1, 2]"] {
+        let err = Config::parse(&format!("[shell]\n{bad}\n")).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Parse(_)),
+            "{bad:?} was accepted: {err:?}"
+        );
+    }
+}
+
+#[test]
+fn shell_settings_are_carried_verbatim() {
+    let config = Config::parse("[shell.settings]\nrail = \"left\"\nclock = true\n").unwrap();
+    assert_eq!(config.shell.settings["rail"].as_str(), Some("left"));
+    assert_eq!(config.shell.settings["clock"].as_bool(), Some(true));
 }

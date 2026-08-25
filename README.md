@@ -32,6 +32,23 @@ outside — a Wayland client pointed at Domicile's display — is
 [in simple's](packages/shell-simple/README.md#launch-an-app-into-it), and is
 the same mechanism under either shell.
 
+## Write your own shell
+
+The shell is all the user chrome — panels, decorations, launcher — and it is
+swappable. `manganese` and `simple` ship here, but neither is privileged: a
+shell is an ordinary program in its own repository, built against
+`@domicile/chrome-sdk`, installed into `~/.local/share/domicile/shells/`, and
+named in your config.
+
+```toml
+[shell]
+package = "my-shell"
+```
+
+[docs/WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md) is the guide;
+[examples/minimal-shell](examples/minimal-shell) is a complete one in about a
+hundred lines.
+
 ## Check
 
 ```sh

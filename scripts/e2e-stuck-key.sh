@@ -44,7 +44,7 @@ SOCK="$XDG_RUNTIME_DIR/c.sock"
 APP="$(mktemp)"
 CHROME="$(mktemp)"
 
-"$BIN" --chrome-socket "$SOCK" >/dev/null 2>&1 &
+"$BIN" --no-shell --chrome-socket "$SOCK" >/dev/null 2>&1 &
 COMP=$!
 # `wait` after the kill, or every passing run ends with the shell reporting
 # "Killed" on stderr for a client that was still up — which reads like a

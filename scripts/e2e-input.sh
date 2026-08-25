@@ -31,7 +31,7 @@ CHROME="$(mktemp)"
 # before the first line that can leave.
 CLI=""
 
-"$BIN" --chrome-socket "$SOCK" >/dev/null 2>&1 &
+"$BIN" --no-shell --chrome-socket "$SOCK" >/dev/null 2>&1 &
 COMP=$!
 cleanup() { kill -9 "$COMP" "$INJ" "$CLI" 2>/dev/null; rm -f "$APP" "$CHROME"; }
 trap cleanup EXIT

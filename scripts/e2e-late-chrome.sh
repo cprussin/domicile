@@ -36,7 +36,7 @@ LOG="$(mktemp)"; ELOG="$(mktemp)"
 # Wait until $2 appears in file $1 (or time out). $3 = max 0.2s ticks.
 wait_for() { local file="$1" pat="$2" n="${3:-150}"; for _ in $(seq 1 "$n"); do grep -q "$pat" "$file" && return 0; sleep 0.2; done; return 1; }
 
-RUST_LOG="info,domicile_compositor=debug" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+RUST_LOG="info,domicile_compositor=debug" "$BIN" --no-shell --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 # Named before the trap that reads them: under `set -u` a trap firing before
 # the last of them is assigned — a compositor that never binds its socket, a

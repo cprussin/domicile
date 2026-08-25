@@ -1,5 +1,6 @@
 {
   "description": "Reference Domicile chrome: a tab rail and a stage that mounts app portals",
-  "entry": ".vite/renderer/main_window/index.html",
-  "name": "manganese"
+  "entry": ".vite/build/main.js",
+  "name": "manganese",
+  "protocol": 14
 }

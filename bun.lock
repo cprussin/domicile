@@ -11,7 +11,7 @@
     },
     "packages/chrome-sdk": {
       "name": "@domicile/chrome-sdk",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "zod": "catalog:",
@@ -70,12 +70,15 @@
     },
     "packages/electron-chrome-host": {
       "name": "@domicile/electron-chrome-host",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
         "@types/bun": "catalog:",
         "electron": "catalog:",
         "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "electron": "catalog:",
       },
     },
     "packages/shell-manganese": {

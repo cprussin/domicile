@@ -97,18 +97,29 @@ impl<'de> Deserialize<'de> for ShellRef {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ShellConfig {
-    /// Which chrome package to run.
-    pub package: ShellRef,
+    /// Which chrome package to run, if the config names one.
+    ///
+    /// `Option` with no default, rather than falling back to a name: the
+    /// compositor must not answer "which shell" for itself. A default meant a
+    /// config that said nothing still started something — `simple`, installed
+    /// or not — and a user who mistyped `package` got a desktop wearing a
+    /// chrome they had not asked for rather than a refusal naming the key.
+    pub package: Option<ShellRef>,
     /// Opaque settings handed to the chrome package verbatim. Domicile does not
     /// interpret these; each shell defines its own schema.
-    pub settings: toml::Value,
+    ///
+    /// A `Table` rather than a `Value`, so `settings = 5` is refused when the
+    /// config is parsed — naming the line it is on — rather than travelling all
+    /// the way to a shell and landing where an object was promised. The refusal
+    /// belongs at the boundary that reads the file.
+    pub settings: toml::Table,
 }
 
 impl Default for ShellConfig {
     fn default() -> Self {
         ShellConfig {
-            package: ShellRef::Name("simple".into()),
-            settings: toml::Value::Table(toml::map::Map::new()),
+            package: None,
+            settings: toml::Table::new(),
         }
     }
 }
@@ -526,8 +537,13 @@ pub struct Config {
 impl Config {
     /// Parse a config from TOML text, applying defaults and validating it.
     pub fn parse(text: &str) -> Result<Config, ConfigError> {
-        let config: Config =
-            toml::from_str(text).map_err(|e| ConfigError::Parse(e.message().to_string()))?;
+        // `to_string` rather than `message`: the latter is the bare complaint
+        // ("invalid type: integer `5`, expected a map") with the span thrown
+        // away, and the span is the actionable half. A rejected config is not
+        // merely reported — the compositor falls back to its defaults, so a
+        // stray line costs the *whole* file, `[shell] package` included. The
+        // reader has to be able to find the line from the log.
+        let config: Config = toml::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
         config.validate()?;
         Ok(config)
     }

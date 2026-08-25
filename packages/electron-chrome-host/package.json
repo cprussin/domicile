@@ -7,20 +7,39 @@
     "typescript": "catalog:"
   },
   "exports": {
-    "./chrome-failure": "./src/chrome-failure.ts",
-    "./chrome-window": "./src/chrome-window.ts",
-    "./compositor-socket": "./src/compositor-socket.ts",
-    "./socket-path": "./src/socket-path.ts"
+    "./chrome-failure": {
+      "types": "./dist/chrome-failure.d.ts",
+      "default": "./dist/chrome-failure.js"
+    },
+    "./chrome-window": {
+      "types": "./dist/chrome-window.d.ts",
+      "default": "./dist/chrome-window.js"
+    },
+    "./compositor-socket": {
+      "types": "./dist/compositor-socket.d.ts",
+      "default": "./dist/compositor-socket.js"
+    },
+    "./socket-path": {
+      "types": "./dist/socket-path.d.ts",
+      "default": "./dist/socket-path.js"
+    }
   },
   "files": [
-    "src/**/*"
+    "dist/**"
   ],
   "name": "@domicile/electron-chrome-host",
-  "private": true,
+  "peerDependencies": {
+    "electron": "catalog:"
+  },
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },
   "type": "module",
-  "version": "0.0.0"
+  "version": "0.1.0"
 }

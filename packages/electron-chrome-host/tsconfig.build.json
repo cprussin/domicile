@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    // Off, unlike the typecheck config this extends. The build's output is a
+    // directory turbo caches and restores, so a `.tsbuildinfo` that outlives a
+    // removed `dist` makes tsc skip emitting the files that are missing — and
+    // a partial `dist` is a package whose imports resolve for some modules and
+    // not others, which reads as the consumer's bug.
+    "incremental": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": []
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  "extends": "./tsconfig.json"
+}

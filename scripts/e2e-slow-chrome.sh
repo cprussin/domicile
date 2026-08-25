@@ -29,7 +29,7 @@ COMPLOG="$(mktemp)"
 STUCK=""; CLI=""
 
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
-  "$BIN" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+  "$BIN" --no-shell --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 disown "$COMP" 2>/dev/null || true
 cleanup() { kill -9 "$COMP" $STUCK $CLI 2>/dev/null; rm -f "$COMPLOG"; }

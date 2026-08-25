@@ -72,6 +72,36 @@ mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 CHROME_SOCK="$XDG_RUNTIME_DIR/domicile-native.sock"
 rm -f "$CHROME_SOCK"
 
+# A store build carries no setuid sandbox helper, so Electron refuses to start
+# without this — and `.#full` puts one on `PATH`, so being *found* says nothing
+# about whether it needs the flag. Unconditional for that reason, and because
+# every other script in this repo passes it unconditionally under the same
+# shell; this one dropped it for as long as the two were nested, which is a
+# shell that exits immediately under a window with no chrome in it.
+#
+# The machine's to say, not the shell's, which is why it is an environment
+# variable rather than anything a manifest can ask for. Overridable, so a real
+# system Electron that has its helper can be given `DOMICILE_SHELL_ARGS=`.
+DOMICILE_SHELL_ARGS="${DOMICILE_SHELL_ARGS---no-sandbox}"; export DOMICILE_SHELL_ARGS
+
+# Where Electron is, which is a separate question: under a bare `nix develop`
+# rather than `.#full` it is in the store and not on `PATH`, and the compositor
+# is what starts the shell now, so it is the thing that has to be told. Newest
+# by version rather than by store hash; see `check.sh`.
+if ! command -v electron >/dev/null 2>&1; then
+  ELECTRON_BIN="$(
+    ls -d /nix/store/*-electron-[0-9]*/bin 2>/dev/null |
+      sed 's|^.*-electron-\([^/]*\)/bin$|\1\t&|' |
+      sort -V | tail -1 | cut -f2
+  )"
+  if [ -n "$ELECTRON_BIN" ]; then
+    DOMICILE_ELECTRON="$ELECTRON_BIN/electron"; export DOMICILE_ELECTRON
+  else
+    echo "domicile: no electron to run the shell with." >&2
+    exit 1
+  fi
+fi
+
 cd "$ROOT"
 # Release, unlike the e2e checks, because this is the interactive run and the
 # frame path is where the difference lands. Not only for the copy path, though
@@ -95,13 +125,22 @@ bun run turbo build:vite --filter "@domicile/shell-$SHELL_NAME" >/dev/null 2>&1 
 # of its *last* command: with `| tee` the liveness check below would be
 # watching tee, which outlives a compositor that died on startup.
 COMPLOG="$(mktemp)"
+# `--shell` is what makes the compositor start the chrome itself: it resolves
+# the package, checks the protocol it declares against its own, and puts it on
+# the display it made for it. None of that is this script's to arrange any more
+# — which is the point, because an installed shell has no script.
+# Through `BIN` like every other script here, rather than by literal path. Not
+# style: `test-every-launch-names-a-shell.sh` finds launches by that name, so a
+# launch spelled any other way is invisible to it — and this is the script a
+# person is most likely to edit by hand.
+BIN="$ROOT/target/release/domicile-compositor"
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=info}" \
-  ./target/release/domicile-compositor --present --chrome-socket "$CHROME_SOCK" \
+  "$BIN" --present --shell "$SHELL_DIR" --chrome-socket "$CHROME_SOCK" \
   >"$COMPLOG" 2>&1 &
 COMP=$!
 # Its output still reaches the terminal, just by way of the file.
 tail -f "$COMPLOG" & TAILER=$!
-trap 'kill -9 "$COMP" "$TAILER" ${CHROME:-} 2>/dev/null; rm -f "$COMPLOG"' EXIT
+trap 'kill -9 "$COMP" "$TAILER" 2>/dev/null; rm -f "$COMPLOG"' EXIT
 for _ in $(seq 1 200); do [ -S "$CHROME_SOCK" ] && break; sleep 0.05; done
 
 # A compositor that died leaves its socket behind for a moment, so waiting for
@@ -126,21 +165,9 @@ fi
 # Which displays Domicile bound: one for the apps, one for the chrome. Which
 # socket a client arrives on is how the compositor tells the two apart, so the
 # chrome goes on the second and everything the compositor spawns on the first.
+# Read only to say so below — the compositor puts the chrome on its own.
 DOMICILE_DISPLAY="$(sed -n '/apps connect here/s/.*display="\([^"]*\)".*/\1/p' "$COMPLOG" | head -1)"
 CHROME_DISPLAY="$(sed -n '/the chrome connects here/s/.*display="\([^"]*\)".*/\1/p' "$COMPLOG" | head -1)"
-if [ -z "$CHROME_DISPLAY" ]; then
-  echo "The compositor did not report a chrome display; cannot put the chrome"
-  echo "on it. Its log is above."
-  exit 1
-fi
-
-# The chrome as our own client. `DOMICILE_COMPOSITED` is what makes its window
-# transparent — without it the page paints a desktop over the apps.
-WAYLAND_DISPLAY="$CHROME_DISPLAY" \
-  DOMICILE_COMPOSITED=1 \
-  DOMICILE_CHROME_SOCKET="$CHROME_SOCK" \
-  electron --no-sandbox --ozone-platform=wayland "$SHELL_DIR" &
-CHROME=$!
 
 echo
 echo "If the picture is wrong or nothing responds, the lines to look for above"

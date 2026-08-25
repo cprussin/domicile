@@ -77,8 +77,11 @@ fn watch_config(mut store: ConfigStore, config_path: PathBuf, shells_dir: PathBu
         let watcher = watcher;
         for result in watcher.rx {
             match apply_reload(&mut store, &shells_dir, result) {
-                Reload::ShellChanged(path) => {
+                Reload::ShellChanged(Some(path)) => {
                     eprintln!("domicile: chrome package -> {}", path.display());
+                }
+                Reload::ShellChanged(None) => {
+                    eprintln!("domicile: the config now names no chrome package");
                 }
                 Reload::Applied => eprintln!("domicile: config reloaded"),
                 Reload::Rejected(err) => {
@@ -102,11 +105,13 @@ fn main() {
         }
     };
 
-    let shell_path = config.shell.package.resolve(&args.shells_dir);
-    eprintln!(
-        "domicile: active chrome package -> {}",
-        shell_path.display()
-    );
+    match config.shell.package.as_ref() {
+        Some(package) => eprintln!(
+            "domicile: active chrome package -> {}",
+            package.resolve(&args.shells_dir).display()
+        ),
+        None => eprintln!("domicile: no chrome package configured"),
+    }
 
     watch_config(ConfigStore::new(config), args.config, args.shells_dir);
 
