@@ -360,6 +360,21 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
   buys chrome below a window when the chrome above it is opaque, which is worth
   having and is not the general case.
 
+  **Settled: region-clipped is built, and this restriction stands.**
+  `compositor/src/stacking.rs` is the ordering; `Layer::clip` was already the
+  confinement. It was almost not built, on the argument that the page resolves
+  chrome-against-window itself and only chrome *between two overlapping
+  windows* is left — an argument that holds for the two shells in this repo and
+  for no other reason. Both paint nothing behind an `<app>` element
+  (`window-styles.ts` says so outright), so today the hole really is
+  transparent and the flattening above never happens. Add a wallpaper and the
+  paragraph above is exact, with one window and no overlap.
+
+  So the split is: ordering fixes what ordering can, which is real and is not
+  the wallpaper case, and a shell that wants a translucent panel over a window
+  with anything painted behind it still needs a raster per band. Interleaving
+  does not close that and does not claim to.
+
   Escalating such a window to the copy path does fix it — the engine draws the
   window in the page at its element's true `z-index`, so it stacks correctly
   against all chrome by construction — but at the copy path's price, ~35ms a

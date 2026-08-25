@@ -99,6 +99,7 @@ mod outbound;
 mod scale;
 mod screens;
 mod shortcut;
+mod stacking;
 mod straight_alpha;
 mod timing_window;
 
@@ -218,8 +219,10 @@ enum LastFrame {
 }
 
 /// One window as the scene placed it: where its surface goes, how it is
-/// styled, and whether its chrome asked for it to be drawn natively.
-type Placed = (String, SceneTransform, SceneStyle, bool);
+/// styled, whether its chrome asked for it to be drawn natively, and how deep
+/// it sits — the last so the chrome can be interleaved with it rather than
+/// only drawn over it. See `stacking`.
+type Placed = (String, SceneTransform, SceneStyle, bool, i32);
 
 /// One placed window, and whether the compositor is in fact the one drawing
 /// it — which is not the same as its chrome having asked for that.
@@ -315,7 +318,7 @@ fn drawn_by_the_compositor<'a>(
 ) -> Vec<Drawn<'a>> {
     placed
         .iter()
-        .map(|(app_id, _, _, natively)| (app_id.as_str(), *natively && has_texture(app_id)))
+        .map(|(app_id, _, _, natively, _)| (app_id.as_str(), *natively && has_texture(app_id)))
         .collect()
 }
 
@@ -1926,12 +1929,17 @@ impl DomicileCompositor {
     /// yet is skipped rather than drawn empty: it has been announced but has
     /// not committed.
     ///
-    /// The chrome goes last and covers the output, and blending is what makes
-    /// that work rather than hide everything: it is transparent wherever an
-    /// `<app>` element is, so the app below shows through the hole, and opaque
-    /// wherever it has drawn a panel. Chrome *below* an app — a wallpaper —
-    /// means drawing this texture a second time, scissored; the open question
-    /// in docs/architecture/WINDOW-COMPOSITING.md is how far that goes.
+    /// The chrome covers the output, and blending is what makes that work
+    /// rather than hide everything: it is transparent wherever an `<app>`
+    /// element is *and nothing behind that element painted*, so the app shows
+    /// through the hole, and opaque wherever it has drawn a panel. Which of
+    /// its depths goes where among the windows is [`stacking::steps`]; today
+    /// nothing reports those depths, so it is one draw over the lot as before.
+    ///
+    /// A wallpaper is what that caveat is about, and it is why interleaving is
+    /// only half an answer: a chrome that paints behind its own `<app>`
+    /// element hands over a texel that is already wallpaper-under-panel, and
+    /// no ordering of one raster can put a window between the two.
     fn present(&mut self) {
         let started = Instant::now();
         let placed: Vec<Placed> = {
@@ -1945,6 +1953,7 @@ impl DomicileCompositor {
                         portal.surface_to_output(),
                         portal.style,
                         portal.draws_natively,
+                        portal.z_index,
                     )
                 })
                 .collect()
@@ -1970,15 +1979,34 @@ impl DomicileCompositor {
         // wrong one on top.
         let placements: Vec<_> = placed
             .into_iter()
-            .filter(|(_, _, _, natively)| *natively)
-            .map(|(app_id, surface_to_output, style, _)| (app_id, surface_to_output, style))
+            .filter(|(_, _, _, natively, _)| *natively)
+            .map(|(app_id, surface_to_output, style, _, z_index)| {
+                (app_id, surface_to_output, style, z_index)
+            })
             .collect();
         // Everything a style measures is in the chrome's logical units and the
         // shader works in output pixels.
         let scale = to_window.a;
+        // The depth of each window that made it into `layers`, in that order,
+        // so `stacking` places the chrome against the windows actually drawn
+        // rather than against the ones the scene offered.
+        let depths: Vec<i32> = placements
+            .iter()
+            .filter(|(app_id, _, _, _)| self.textures.contains_key(app_id))
+            .map(|(_, _, _, z_index)| *z_index)
+            .collect();
+        // Nothing reports these yet: the chrome knows its own depths and the
+        // protocol has no message for them, so today every frame is the
+        // all-above case. The interleaving exists first so that message has
+        // somewhere to arrive.
+        let bands: Vec<stacking::Band> = Vec::new();
+        // Where the chrome goes among the windows rather than only over them.
+        // Out here rather than beside its use because the clip rectangles are
+        // borrowed into the layers, so the plan has to outlive them.
+        let plan = stacking::steps(&depths, &bands);
         let mut layers: Vec<_> = placements
             .iter()
-            .filter_map(|(app_id, surface_to_output, style)| {
+            .filter_map(|(app_id, surface_to_output, style, _)| {
                 let surface = self.textures.get(app_id)?;
                 Some(Layer {
                     alpha: style.opacity as f32,
@@ -2001,8 +2029,8 @@ impl DomicileCompositor {
         // logical units and would need the same mapping applied a second time.
         let mut painted: Vec<Painted> = placements
             .iter()
-            .filter(|(app_id, _, _)| self.textures.contains_key(app_id))
-            .map(|(app_id, surface_to_output, style)| {
+            .filter(|(app_id, _, _, _)| self.textures.contains_key(app_id))
+            .map(|(app_id, surface_to_output, style, _)| {
                 let onto_output = surface_to_output.then(to_window);
                 // Where the shadow lands, from the same function that draws it
                 // — so the box and the pixels cannot describe different places.
@@ -2047,20 +2075,45 @@ impl DomicileCompositor {
                     shadow: None,
                 },
             });
-            layers.push(Layer {
-                alpha: 1.0,
-                clip: &[],
-                // The desktop itself is not a window: it is never rounded and
-                // casts nothing.
-                corner_radius: 0.0,
-                shadow: None,
-                // The same placement the `Painted` above reports, and from
-                // the same call: drawn in one place and reported as damaged in
-                // another is a desktop that repaints the wrong rectangle.
-                surface_to_output: chrome_onto_output,
-                texture: &chrome.texture,
-                y_inverted: chrome.y_inverted,
-            });
+            // `bands` is empty until a chrome reports its own depths, and
+            // with none `steps` puts every window down and the whole chrome
+            // over the lot — the frame the compositor has always drawn.
+            let mut drawn = Vec::with_capacity(plan.len());
+            for step in &plan {
+                match step {
+                    // Already in `layers`, in this order, from the loop
+                    // above: `depths` and `layers` are built from the same
+                    // vector under the same filter, so an index `steps`
+                    // produced by enumerating one addresses the other.
+                    stacking::Step::Window(at) => drawn.push(layers[*at].clone()),
+                    stacking::Step::Chrome(rects) => drawn.push(Layer {
+                        alpha: 1.0,
+                        // The whole quad as `&[]` rather than as one instance
+                        // covering it. Both draw the same pixels, but only the
+                        // empty one takes the path every frame took before
+                        // there were bands — and the test that covers the
+                        // other needs a GPU, so on a machine without one the
+                        // difference would go unwatched.
+                        clip: if rects == &[stacking::WHOLE] {
+                            &[]
+                        } else {
+                            rects
+                        },
+                        // The desktop itself is not a window: it is never
+                        // rounded and casts nothing.
+                        corner_radius: 0.0,
+                        shadow: None,
+                        // The same placement the `Painted` above reports, and
+                        // from the same call: drawn in one place and reported
+                        // as damaged in another is a desktop that repaints the
+                        // wrong rectangle.
+                        surface_to_output: chrome_onto_output,
+                        texture: &chrome.texture,
+                        y_inverted: chrome.y_inverted,
+                    }),
+                }
+            }
+            layers = drawn;
         }
 
         let Some(gpu) = self.gpu.as_mut() else {
@@ -5683,6 +5736,7 @@ mod tests {
             SceneTransform::identity(),
             SceneStyle::default(),
             natively,
+            0,
         )
     }
 
