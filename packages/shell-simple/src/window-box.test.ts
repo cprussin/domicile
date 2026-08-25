@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { openingBox } from "./window-box";
 
 describe("openingBox", () => {
-  it("opens the first window at the top left, the size the client asked for", () => {
+  it("opens the first window at the top left, the size the client committed to", () => {
     expect(openingBox(0, [640, 480])).toStrictEqual({
       height: 480,
       left: 0,
@@ -20,6 +20,14 @@ describe("openingBox", () => {
     const second = openingBox(1, [640, 480]);
     expect(second.left).toBeGreaterThan(first.left);
     expect(second.top).toBeGreaterThan(first.top);
+  });
+
+  it("opens a window its client has not sized yet at a size it can be seen at", () => {
+    // 0x0 is what `app_appeared` carries before the client has committed —
+    // see `hasCommitted`. A window opened at that size is invisible for good.
+    const box = openingBox(0, [0, 0]);
+    expect(box.width).toBeGreaterThan(0);
+    expect(box.height).toBeGreaterThan(0);
   });
 
   it("starts the cascade over rather than walking off the screen", () => {
