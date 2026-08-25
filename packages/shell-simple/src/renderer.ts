@@ -4,6 +4,8 @@
 // joins the SDK to it, puts a window on the desktop for every client the host
 // announces, and hands the pointer to `installWindowGestures`. There is nothing
 // else — no chrome around the windows, and no state that is not a window's box.
+// The keys go on the background behind them; what a window paints of its own is
+// `desktop.ts`'s.
 
 import {
   BridgeClient,
@@ -14,6 +16,7 @@ import { postedTransport } from "@domicile/chrome-sdk/host-transport";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
 import { Desktop } from "./desktop";
+import { installKeybindingBackground } from "./keybinding-background";
 import { openTerminalOnAltEnter } from "./terminal-shortcut";
 import { installWindowGestures } from "./window-gestures";
 
@@ -30,6 +33,12 @@ const transport =
 
 const bridge = new BridgeClient(transport);
 registerElements(bridge);
+
+// The one thing an empty desktop has to say — this shell is Alt and nothing
+// else. Before the windows rather than anywhere: what unpaints it over one is
+// a following-sibling selector, so it hides only for windows appended after
+// it.
+installKeybindingBackground(document.body);
 
 const desktop = new Desktop(document.body);
 installWindowGestures(document.body, desktop);

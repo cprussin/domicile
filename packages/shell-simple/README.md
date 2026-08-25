@@ -4,7 +4,10 @@ The smallest Domicile chrome that is still a desktop. Every Wayland client the
 host announces gets a `<domicile-app>` element on the page; hold **Alt** and
 drag one to move it, hold Alt and drag with the **right button** to resize it,
 and either way it comes to the front. **Alt+Enter** opens a terminal. That is
-the whole user interface — no tabs, no panel, no title bars.
+the whole user interface — no tabs, no panel, no title bars — and an empty
+desktop writes it on its own background, because a shell with nothing to click
+has nowhere else to say what it answers to. It is there whenever the desktop
+is empty: gone while a window is open, back when the last one leaves.
 
 It is [TinyWM](http://incise.org/tinywm.html) for Domicile, and for TinyWM's
 reason: a window manager with no widgets in it is the shortest honest answer to
@@ -16,9 +19,10 @@ reference chrome that shows what the model is *for*.
 
 | Path | What |
 |---|---|
-| `src/renderer.ts` | Renderer entry, and the whole of the wiring: build the `BridgeClient`, register the SDK's elements, open a window per client, install the gestures and the shortcut. |
+| `src/renderer.ts` | Renderer entry, and the whole of the wiring: build the `BridgeClient`, register the SDK's elements, open a window per client, draw the background, install the gestures and the shortcut. |
 | `src/desktop.ts` | The windows on screen: one `<domicile-app>` per client, each at a box this module owns. All of the shell's state. |
 | `src/window-gestures.ts` | Alt and the pointer: what a press, a drag and a release do to the window under them. |
+| `src/keybinding-background.ts` | The keys, on an empty desktop and unpainted while a window is on it: the desktop's own paint, and all of it when there is no window. |
 | `src/terminal-shortcut.ts` | Alt+Enter: the one combination this shell claims, and the terminal it opens. |
 | `src/drag.ts` | Where a dragged window lands, as arithmetic — no DOM, so it is testable on its own. |
 | `src/window-box.ts` | A window's box, and where a newly-appeared client's window opens. |
@@ -28,9 +32,10 @@ reference chrome that shows what the model is *for*.
 
 ## What it deliberately does not do
 
-- **No chrome.** Nothing is drawn that is not a client's window. A window that
-  has no surface yet shows a placeholder label, and that is the only thing this
-  shell paints.
+- **No chrome.** Nothing is drawn that a pointer can reach, and nothing that
+  is not a window's own once there are windows: the background naming the keys
+  takes no event and is not painted while any window is open, and the one thing
+  drawn over a window is its own placeholder label, until it has a surface.
 - **No keyboard of its own beyond Alt+Enter.** The SDK routes every other key
   to whichever window was last clicked. One combination is the minimum: a
   desktop with no way to start a terminal is a demo, not a desktop.
@@ -62,8 +67,8 @@ the tree, so it first stages the fetched source under
 `~/.cache/domicile/<revision>` — set `DOMICILE_RUN_DIR` to put it elsewhere —
 and builds there. Re-running the same revision reuses those artifacts.
 
-The desktop comes up empty. **Alt+Enter** opens a terminal; the next section
-covers that and the ways in from outside.
+The desktop comes up empty but for the keys it answers to. **Alt+Enter** opens
+a terminal; the next section covers that and the ways in from outside.
 
 ## Launch an app into it
 
