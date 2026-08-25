@@ -68,6 +68,12 @@ impl Shaders {
 }
 
 /// One surface to draw, and where.
+///
+/// `Clone` because the chrome is drawn more than once in a frame that
+/// interleaves it with the windows — the same texture at the same placement,
+/// confined to a different part of the screen each time. Everything here is a
+/// reference or a number, so a copy costs nothing and shares the texture.
+#[derive(Clone)]
 pub struct Layer<'a> {
     pub texture: &'a GlesTexture,
     /// Maps the unit square onto the output, from `Portal::surface_to_output`.

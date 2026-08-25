@@ -554,9 +554,17 @@ falloff the shadow uses, is the next candidate to move it.
   non-square `turned` fixture rather than another assertion on the one there.
 - interleave chrome and windows by CSS `z-index` — the shell writes `z-index`
   and the compositor honours it, in the stacking space the portals are already
-  reported in. Only chrome-*above* is free today, because the chrome is one
-  surface drawn last and a texture cannot be sliced by depth. The mechanism is
-  an open question in `docs/architecture/WINDOW-COMPOSITING.md`.
+  reported in. **Half done.** `compositor/src/stacking.rs` decides where the
+  chrome goes among the windows, and `Layer::clip` confines each of its depths
+  to the region that depth occupies. What is missing is the depths themselves:
+  the chrome knows them and the protocol carries no message for them, so every
+  frame is still the all-above case.
+
+  Ordering is not the whole answer and cannot be. Where chrome above a window
+  and chrome below it cover one pixel, the page flattened that texel before we
+  saw it — a translucent panel over a window with a wallpaper behind it, which
+  needs one window and no overlap. `WINDOW-COMPOSITING.md` costs out the raster
+  per band that closes it.
 - ~~follow a window that moves~~ — done. `<domicile-app>` re-measures on every
   animation frame rather than on a `ResizeObserver`, which sees a box change
   size and nothing else: moving a window, animating a transform, a `:hover`
