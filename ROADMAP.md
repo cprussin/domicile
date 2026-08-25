@@ -56,10 +56,12 @@ cargo build -p domicile-compositor    # the Smithay server (EXCLUDED from defaul
 cargo test -p domicile-compositor
 
 # Headless end-to-end. No display needed — use these to verify changes.
-# `./scripts/check.sh` runs all of them, and is the whole answer before a push.
+# `./scripts/check.sh` runs every `e2e-*.sh` and `test-*.sh`, and is the whole
+# answer before a push. `smoke-compositor` and `probe-transparency` are below
+# but not in that loop — run them by hand.
 # Most build the compositor first; `e2e-compose` drives cargo test directly and
-# `e2e-no-compositor` builds no Rust at all. Some have a flake app, so `nix run
-# .#<name>` runs them against a fresh checkout — `flake.nix` is the list.
+# `e2e-no-compositor` builds no Rust at all. Every one has a flake app, so
+# `nix run .#<name>` runs any of them against a fresh checkout.
 ./scripts/smoke-compositor.sh    # a real client binds our globals
 ./scripts/e2e-chrome.sh          # client -> host -> mock chrome, and the buffer release
 ./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow

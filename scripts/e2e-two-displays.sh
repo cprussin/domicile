@@ -24,11 +24,11 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
 command -v wayland-info >/dev/null 2>&1 || {
-  echo "wayland-info is what asks the compositor what it advertises."
+  echo "SKIP: wayland-info is what asks the compositor what it advertises."
   exit 77
 }
 command -v weston-terminal >/dev/null 2>&1 || {
-  echo "weston-terminal is the real client whose surface has to enter both."
+  echo "SKIP: weston-terminal is the real client whose surface has to enter both."
   exit 77
 }
 # Both `77`s are this script's own, which is the convention: a script that
