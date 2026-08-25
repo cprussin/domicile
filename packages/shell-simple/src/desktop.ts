@@ -38,22 +38,53 @@ export class Desktop {
     this.#root = root;
   }
 
-  /** Put a client the host has announced on the desktop, in front. */
+  /**
+   * Put a client the host has announced on the desktop, in front.
+   *
+   * A window this desktop already holds is left exactly as it is, because a
+   * client can be announced more than once: the compositor replays every open
+   * window to *every* chrome whenever any chrome shakes hands.
+   *
+   * Left as it is rather than merely not duplicated, and the reason is local
+   * rather than borrowed. A repeat can differ from the first announcement —
+   * the replay is rebuilt from live state, so its size is whatever the client
+   * has committed since — but nothing in it is news here: the size only ever
+   * seeds the opening box, this desktop owns where a window is from then on,
+   * and a client's real size arrives on `app_resized` regardless. So there is
+   * nothing to apply, and applying it would undo a drag.
+   *
+   * Opening a second element instead would leave the *first* connected and
+   * unreachable — the map holds the newer one, so every message from the host
+   * goes there. The orphan still places a portal for the window, so two
+   * elements place for one app id and the later measurement wins: a dragged
+   * window snapping back to its cascade slot. And it is never taken down,
+   * because `close` only knows the element in the map, so it outlives the
+   * client.
+   *
+   * What is on screen depends on which way the window is drawn. Down the copy
+   * path the new element is handed a frame and looks right, while the orphan
+   * sits over it holding a still of the window from before the reconnect.
+   * Where the compositor draws the client itself no frame is coming — the
+   * hand-over skips a natively-drawn window — so the new element never learns
+   * it has a surface and paints its placeholder over the live client for good.
+   */
   open(appId: string, size: readonly [width: number, height: number]): void {
-    const box = openingBox(this.#opened, size);
-    const element = document.createElement(APP_TAG_NAME);
-    element.className = windowStyles;
-    applyBox(element, box);
-    // The app id, the box and the stacking order all go on before the element
-    // is appended: it places its portal as it connects, reading all three off
-    // itself, and a placement sent without them is a window the host puts
-    // nowhere, at nothing, behind everything — drawn that way for a frame,
-    // until the next measurement corrects it.
-    element.appId = appId;
-    this.#windows.set(appId, { box, element });
-    this.#opened += 1;
-    this.raise(appId);
-    this.#root.append(element);
+    if (!this.#windows.has(appId)) {
+      const box = openingBox(this.#opened, size);
+      const element = document.createElement(APP_TAG_NAME);
+      element.className = windowStyles;
+      applyBox(element, box);
+      // The app id, the box and the stacking order all go on before the
+      // element is appended: it places its portal as it connects, reading all
+      // three off itself, and a placement sent without them is a window the
+      // host puts nowhere, at nothing, behind everything — drawn that way for
+      // a frame, until the next measurement corrects it.
+      element.appId = appId;
+      this.#windows.set(appId, { box, element });
+      this.#opened += 1;
+      this.raise(appId);
+      this.#root.append(element);
+    }
   }
 
   /** Take a window down, because its client is gone. */
