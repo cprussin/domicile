@@ -14,24 +14,29 @@ Built test-first, from the pure-logic core outward to the hardware glue.
 
 ### Current state
 
-There are **two paths**, and both work. Which one runs is decided by whether the
-compositor was given a window (`--present`).
+There are **two paths**, and both work. Which one a *window* takes is
+`disposition` (`main.rs`), and it is three things rather than one: the
+compositor was given a window (`--present`), **and** that client committed a
+dmabuf, **and** its CSS is something the shaders can draw. Anything else is the
+copy path, one window at a time.
 
 **The native path** — what the architecture is for. The compositor opens a
 `winit` window, the chrome connects as an ordinary Wayland client on a socket of
 its own, and the compositor draws the desktop itself: each app's dmabuf through
 the CSS matrix the chrome reported for its `<app>` element, then the chrome's own
 surface over the top. The chrome's page is transparent where an `<app>` is, so
-the client shows through the hole. No pixel is copied by the CPU anywhere in
-that path. Verified on real hardware (AMD Radeon 890M): the desktop renders, a
-terminal opens into it, and input reaches both.
+the client shows through the hole. No pixel is copied by the CPU. Verified on
+real hardware (AMD Radeon 890M): the desktop renders, a terminal opens into it,
+and input reaches both.
 
 **The copy path** — the original prototype, still the fallback for any window
-the shaders cannot draw, still what a `wl_shm` client gets whatever the
-compositor is presenting to, and still what most of the headless checks drive.
-The compositor reads the client's frame back off the GPU and sends the pixels
-to the chrome over a Unix socket to be drawn into a `<canvas>`. Correct
-everywhere, and four full-frame copies per frame.
+the shaders cannot draw, still what every `wl_shm` client gets however ordinary
+its CSS, and still what most of the headless checks drive. The compositor reads
+the client's frame back off the GPU and sends the pixels to the chrome over a
+Unix socket to be drawn into a `<canvas>`. Correct everywhere. Four full-frame
+copies per frame was its cost before damage tracking; a steady-state frame now
+reads and sends only what changed, and full-frame is what a first frame, a
+resize or a hand-over still costs.
 
 The wire protocol is at `PROTOCOL_VERSION = 14`.
 
@@ -51,8 +56,10 @@ cargo build -p domicile-compositor    # the Smithay server (EXCLUDED from defaul
 cargo test -p domicile-compositor
 
 # Headless end-to-end. No display needed — use these to verify changes.
-# Each builds the compositor first (e2e-compose drives cargo test directly);
-# `nix run .#<name>` runs any of them against a fresh checkout.
+# `./scripts/check.sh` runs all of them, and is the whole answer before a push.
+# Most build the compositor first; `e2e-compose` drives cargo test directly and
+# `e2e-no-compositor` builds no Rust at all. Some have a flake app, so `nix run
+# .#<name>` runs them against a fresh checkout — `flake.nix` is the list.
 ./scripts/smoke-compositor.sh    # a real client binds our globals
 ./scripts/e2e-chrome.sh          # client -> host -> mock chrome, and the buffer release
 ./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow
@@ -72,6 +79,10 @@ cargo test -p domicile-compositor
 ./scripts/e2e-two-displays.sh    # one wl_output per configured display, at its own size and scale
 ./scripts/e2e-displays-on-hello.sh # a chrome is told the desktop at the handshake
 ./scripts/e2e-desktop-changed.sh # a desktop that changes is re-described to every chrome
+./scripts/e2e-reload-displays.sh # a display *added* to the config is taken up while it runs
+./scripts/e2e-one-window-per-display.sh # a client is told the one output its window is on
+./scripts/e2e-chrome-fills-the-desktop.sh # a real chrome commits at the described desktop's size, and follows it
+./scripts/e2e-chrome-fills-a-window.sh # the same where the desktop *is* Domicile's window (--present)
 ./scripts/probe-transparency.sh  # the engine, as our client, commits real alpha
 
 # Needs a real display — run on the user's machine.
@@ -81,7 +92,9 @@ nix run 'github:cprussin/domicile#measure'     # both paths, with the numbers si
 
 `e2e-compose.sh` needs a GL stack (it gets a software rasteriser where there is
 no GPU) but no display: it composites into an offscreen buffer and reads the
-pixels back. Presentation is the part it cannot cover — see the transform gotcha
+pixels back. `e2e-chrome-fills-a-window.sh` is the one that opens a real window,
+on an Xvfb, and is the only script that passes `--present`. What neither covers
+is which way *up* the result is, which needs a screen: see the transform gotcha
 below.
 
 ### Environment gotchas (these will bite you — read them)
@@ -177,6 +190,13 @@ below.
   everything headless keeps working — it looks like a compositing bug and is a
   packaging one. `NoCompositor` is the different failure: the library loaded and
   there was no session to nest in.
+- **On X11 the missing library is a panic, not a report.** `--present` on an
+  X server also needs `libxkbcommon-x11.so.0` — its own library, which
+  `libxkbcommon0` never contained, and `xkbcommon-dl` tries the versioned soname
+  first, so the package is `libxkbcommon-x11-0` rather than `-dev`. Without it
+  the compositor dies in an `expect` that *does* name the library, but out of a
+  panic with a raw backtrace, so it reads as a compositor crash rather than a
+  missing dependency. Open: it should report the way `NoWaylandLib` does.
 - **libEGL is `dlopen`ed, not linked.** `mkShell` only wires *build-time* linkage,
   so `.#full` sets `LD_LIBRARY_PATH` (`/run/opengl-driver/lib` first, so NixOS's
   EGL vendor matches the running kernel driver). Without it the compositor logs
@@ -193,10 +213,21 @@ below.
   against a stale binary — which is exactly what happened once. Keep the build.
 - **`domicile-compositor` is excluded from `default-members`** (it pulls Smithay +
   native libs). Plain `cargo test`/`cargo build` skip it; build it explicitly.
-- **Verifying without nix**: the headless scripts need `libxkbcommon-dev`,
-  `weston` and `wayland-utils`. With those, everything except `e2e-electron.sh`
-  and `e2e-late-chrome.sh` runs outside the nix shell; those two also need
-  `electron` on `PATH`.
+- **Verifying without nix**: `libxkbcommon-dev`, `weston` and `wayland-utils`
+  get most of the headless scripts running outside the nix shell. On top of
+  that, and checked against the scripts rather than remembered:
+
+  | also needs | which scripts |
+  |---|---|
+  | `electron` | `e2e-electron`, `e2e-late-chrome`, `e2e-no-compositor`, `e2e-window-alpha`, both `e2e-chrome-fills-*` |
+  | `xvfb` | `e2e-electron`, `e2e-late-chrome`, `e2e-no-compositor`, `e2e-chrome-fills-a-window` |
+  | a GL/EGL stack | `e2e-compose` (a software rasteriser is enough) |
+  | `libxkbcommon-x11-0`, `xdotool` | `e2e-chrome-fills-a-window` — it opens a real window, and there is no WM on an Xvfb to resize it |
+
+  `.github/workflows/e2e.yml` installs a superset: Electron's own runtime libs
+  (`libnss3`, `libatk*`, `libcups2`, …) and the mesa packages are in there too.
+  Read that list rather than this one when a CI-only failure looks like a
+  missing package.
 - Reference material for Smithay: fetch from `github.com/Smithay/smithay` tag
   **`v0.7.0`** (smallvil + anvil examples, `src/input/*`, `src/wayland/*`).
 
@@ -263,11 +294,14 @@ frames sent=N composited=CN dropped=M fps=F mb_per_s=B write_ms=W \
        idle_ms=I response_ms=RS response_worst_ms=RSW throttled=T chromes=K
 ```
 
-- `readback_ms` — the GPU copy. **Zero on the native path**, because it does not
-  happen: that is the whole point. On the copy path everything it does is the
-  size of the region about to be sent — the offscreen it allocates, the blit
-  that resolves the client's format, and the copy out — so it scales with what
-  the client changed rather than with the size of its window. A full-window
+- `readback_ms` — the GPU copy. **Zero for a window drawn natively**, because it
+  does not happen: that is the whole point. Per window, not per run — so this
+  answers "what is still on the copy path" rather than "which path is running".
+
+  Everything it does is the size of the region about to be sent — the offscreen
+  it allocates, the blit that resolves the client's format, and the copy out —
+  so it scales with what the client changed rather than with the size of its
+  window. A full-window
   figure means a frame the chrome could not patch (a first frame, a resize, a
   hand-over) or a client that reported no damage.
 
@@ -392,12 +426,21 @@ falling.
 | `packages/chrome-sdk` | `<domicile-app>`/`<domicile-webview>` elements, `BridgeClient`, matrix/frame/input/protocol helpers | bun |
 | `packages/e2e-harness` | headless chrome stand-ins for the `scripts/e2e-*.sh` checks | bun |
 | `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers) | bun |
-| `scripts/` | e2e + smoke + the two launchers | — |
+| `packages/electron-chrome-host` | the Electron side a chrome package is built on: window, socket path, failure reporting | bun |
+| `packages/component-library` | the shared React components and Panda preset the shells are built from | bun |
+| `packages/shell-manganese` | the reference chrome: tabs, stage, rail, address bar | bun |
+| `packages/shell-simple` | the minimal chrome: floating windows only | bun |
+| `scripts/` | `check.sh` (runs everything), the e2e + smoke checks, `run-native.sh`, the two `measure` runs, and the `xvfb-*` helpers they share | — |
 
 Inside `domicile-compositor`: `compose.rs` is the drawing (layers, the CSS matrix
-as the renderer's, logical↔window mapping) and is where the offscreen pixel tests
-live; `dmabuf_import.rs` is the import and the readback; `scale.rs` is the output
-scale arithmetic; `outbound.rs` is the copy path's queueing policy.
+as the renderer's, desktop↔target mapping, where the chrome lands) and is where
+the offscreen pixel tests live; `screens.rs` is what the desktop is made of and
+how a reloaded display list is matched against the running one; `damage.rs` is
+which rectangles changed between two frames; `dmabuf_import.rs` is the import and
+the readback; `scale.rs` is the output scale arithmetic; `outbound.rs` is the copy
+path's queueing policy; `coalesce.rs` is the config watcher's settling;
+`shortcut.rs`, `straight_alpha.rs`, `timing_window.rs` and `dmabuf_descriptor.rs`
+are each one small thing named after it.
 
 ### How input & pixels actually flow
 
@@ -673,7 +716,8 @@ age, and it needs a screen before anyone should believe it.
   a display added, removed, renamed or reshaped is taken up while it runs —
   `Screens::rearranged_into` decides which `wl_output`s survive, and a display
   that only changed shape keeps the one it had rather than being unplugged and
-  plugged back in. `e2e-reload-displays.sh` drives it end to end.
+  plugged back in. `e2e-reload-displays.sh` drives the *added* display end to
+  end; reshape, rename and remove are `rearranged_into`'s unit tests only.
 
   What a reload does not do is ask the host for a bigger window. The desktop is
   scaled into whatever window there is (`logical_to_window`), so adding a second
