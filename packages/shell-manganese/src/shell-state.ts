@@ -38,6 +38,7 @@ export const EMPTY_SHELL: ShellState = {
 export enum ShellActionKind {
   AppAppeared,
   AppClosed,
+  AppTitled,
   BrowserOpened,
   FocusChanged,
   WindowClosed,
@@ -58,6 +59,20 @@ export const ShellAction = {
   AppClosed: (appId: string) => ({
     appId,
     kind: ShellActionKind.AppClosed as const,
+  }),
+
+  /**
+   * The client said what its window is called, or unset it.
+   *
+   * Separate from {@link ShellAction.AppAppeared} because a toplevel is
+   * announced when the client creates it, which is before `set_title` — and
+   * because it happens again whenever the name changes, which for a terminal
+   * is every command it runs.
+   */
+  AppTitled: (appId: string, title: string | undefined) => ({
+    appId,
+    kind: ShellActionKind.AppTitled as const,
+    title,
   }),
 
   /** The user asked for a browser window, pointed at `src`. */
@@ -120,6 +135,16 @@ export const reduceShell = (
     }
     case ShellActionKind.AppClosed: {
       return closeWindow(state, appWindowId(action.appId));
+    }
+    case ShellActionKind.AppTitled: {
+      // The same fallback the window opened with. A client that named its
+      // window nothing — `set_title("")`, which the SDK reads as no name —
+      // gets the app id, exactly as one that has not named it yet does.
+      return renameWindow(
+        state,
+        appWindowId(action.appId),
+        action.title ?? action.appId,
+      );
     }
     case ShellActionKind.BrowserOpened: {
       return openBrowser(state, action.src);

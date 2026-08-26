@@ -9,6 +9,16 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v17 added `app_titled`: a client names its window with `set_title` after it
+/// has one, so the name was never in the announcement and nothing carried it
+/// afterwards. Every window was nameless to a chrome that shows names.
+///
+/// A bump although the message is new rather than changed, for the reason v13
+/// and v14 give: what a host that does not send it looks like from a chrome is
+/// silence. A v17 chrome would sit with every tab reading `app-1` and nothing
+/// anywhere saying why. `negotiate` matching exactly is what turns that into a
+/// chrome that refuses to start and names the two versions that disagreed.
+///
 /// v16 made `app_appeared`'s `size` optional, because a client that has just
 /// mapped has not said one. It was `[0.0, 0.0]`, which is a size rather than
 /// the absence of one — and a chrome that read it as the client's answer
@@ -134,7 +144,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 16;
+pub const PROTOCOL_VERSION: u32 = 17;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -375,6 +385,24 @@ pub enum HostMessage {
         app_id: String,
         title: Option<String>,
         size: Option<[f64; 2]>,
+    },
+
+    /// A client said what its window is called, and says it again whenever
+    /// that changes — which for a terminal is every command it runs.
+    ///
+    /// Separate from [`HostMessage::AppAppeared`] because the announcement
+    /// comes first: a toplevel is announced when the client creates it, and
+    /// `set_title` is a request it makes afterwards, so the announcement
+    /// carries whatever was known then — which is nothing.
+    ///
+    /// `title` is optional to match [`HostMessage::AppAppeared`]'s, not
+    /// because a client can take its name back: xdg-shell has no request that
+    /// unsets one, so nothing here sends `None` today. What a client saying it
+    /// has no name actually looks like is `set_title("")`, which the chrome
+    /// reads as no name at all.
+    AppTitled {
+        app_id: String,
+        title: Option<String>,
     },
 
     /// A client's content size changed, in **logical** units — the CSS pixels

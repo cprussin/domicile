@@ -111,6 +111,26 @@ else
     "FAIL: the chrome was never told a client appeared"
 fi
 
+# And the name, which is the only coverage `title_changed` has: it needs a real
+# client making a real `set_title`, so nothing below the e2e level reaches it.
+#
+# Asked of the client's own protocol log rather than assumed, because whether
+# this client names itself is the client's business and not ours. If it sent a
+# `set_title` the chrome must have been told; if it never sent one there is
+# nothing here to check, and this says so rather than passing quietly — an
+# assertion on a request that was never made is one that holds for the wrong
+# reason, and would go on holding after the message stopped working.
+if grep -q 'set_title' "$CLIENT"; then
+  if grep -q '"app_titled"' "$OUT"; then
+    echo "PASS: the client named its window and the chrome was told"
+  else
+    compositor_verdict "$COMP" \
+      "FAIL: the client sent set_title and the chrome was never told the name"
+  fi
+else
+  echo "NOTE: this client never named its window, so nothing tested app_titled"
+fi
+
 # A client may not touch a buffer again until the compositor releases it, so a
 # compositor that never releases stalls any client that reuses one — the window
 # freezes after its first frame. Smithay only releases the previous buffer when

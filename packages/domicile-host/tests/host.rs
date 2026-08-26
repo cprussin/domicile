@@ -61,6 +61,39 @@ fn place_styled(
 // ---- app lifecycle --------------------------------------------------------
 
 #[test]
+fn a_window_says_what_it_is_called_when_the_client_says_it() {
+    // A toplevel is announced when the client creates it, which is before
+    // `set_title` — and the name changes again whenever the window's own idea
+    // of itself does, which for a terminal is every command it runs. Without
+    // this the title stayed whatever it was at announcement, which was
+    // nothing, and a chrome with a tab rail had nothing to write in it.
+    let mut host = Host::new();
+    let (app, _) = host.app_appeared(None, None);
+
+    assert_eq!(
+        host.app_titled(&app, Some("a terminal".to_string())),
+        Some(HostMessage::AppTitled {
+            app_id: app.clone(),
+            title: Some("a terminal".to_string()),
+        })
+    );
+    // And it is remembered, so the replay a reloading chrome gets says it too.
+    assert_eq!(
+        host.open_apps().first(),
+        Some(&HostMessage::AppAppeared {
+            app_id: app.clone(),
+            title: Some("a terminal".to_string()),
+            size: None,
+        })
+    );
+    // Saying the same thing again is not news — the contract this type keeps
+    // so its state and the chromes' stay in step whatever a caller repeats.
+    assert_eq!(host.app_titled(&app, Some("a terminal".to_string())), None);
+    // A client nobody has heard of is not an error to report to every chrome.
+    assert_eq!(host.app_titled("app-nowhere", None), None);
+}
+
+#[test]
 fn a_client_that_has_not_committed_is_announced_with_no_size() {
     // `app_appeared` goes out when the toplevel maps, which is before the
     // client has committed a buffer — so there is no size to announce. Saying

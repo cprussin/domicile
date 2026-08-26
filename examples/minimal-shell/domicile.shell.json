@@ -2,5 +2,5 @@
   "description": "The smallest shell that works: every app full-screen, newest on top",
   "entry": ".vite/build/main.js",
   "name": "minimal",
-  "protocol": 16
+  "protocol": 17
 }

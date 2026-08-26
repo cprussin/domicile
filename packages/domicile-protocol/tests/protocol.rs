@@ -121,6 +121,16 @@ fn host_messages_round_trip() {
         title: None,
         size: None,
     });
+    host_round_trip(&HostMessage::AppTitled {
+        app_id: "term".into(),
+        title: Some("a terminal".into()),
+    });
+    // A client saying it has no name, which is `set_title("")` and not an
+    // absent title: xdg-shell has no request that takes a name back.
+    host_round_trip(&HostMessage::AppTitled {
+        app_id: "term".into(),
+        title: Some(String::new()),
+    });
     host_round_trip(&HostMessage::AppResized {
         app_id: "term".into(),
         size: [800.0, 600.0],
