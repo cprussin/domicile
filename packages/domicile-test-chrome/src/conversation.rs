@@ -36,11 +36,13 @@ pub enum ChromeError {
 /// anything the host said before it.
 ///
 /// The welcome is waited for by *type* rather than by position, because the
-/// host is not obliged to send it first and observably does not: a chrome is
-/// added to the compositor's broadcast list when it connects, not when it
-/// handshakes, so a `focus_changed` for something that happened in between
-/// reaches the socket ahead of the reply. `@domicile/chrome-sdk` dispatches on
-/// type and holds what arrives early for the page; this does the same, and a
+/// host is not obliged to send it first and observably does not. A chrome now
+/// joins the compositor's broadcast list at the handshake rather than at the
+/// socket — so the window is narrower than it was — but it is not closed: the
+/// join happens inside the `hello` arm and the `welcome` is written after that
+/// arm returns, so a broadcast the handshake itself set off can still reach
+/// the socket ahead of the reply. `@domicile/chrome-sdk` dispatches on type
+/// and holds what arrives early for the page; this does the same, and a
 /// stand-in that insisted on position would fail a test about the desktop with
 /// a complaint about a greeting.
 ///

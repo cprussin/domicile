@@ -66,12 +66,17 @@ command -v wayland-info >/dev/null 2>&1 || {
 DOMICILE_CHROME_SOCK="$SOCK" bun "$ROOT/packages/e2e-harness/src/stuck-chrome.ts" >/dev/null 2>&1 &
 STUCK=$!
 disown "$STUCK" 2>/dev/null || true
+# On the chrome having *joined*, not merely connected. What this script wedges
+# the compositor with is a chrome it is trying to write to, and a chrome is only
+# written to once it has agreed the protocol — "chrome client connected" is now
+# the socket arriving, one `hello` earlier. Gating on that would start the clock
+# before there was anything to block on.
 for _ in $(seq 1 100); do
-  sed 's/\x1b\[[0-9;]*m//g' "$COMPLOG" | grep -aq "chrome client connected" && break
+  sed 's/\x1b\[[0-9;]*m//g' "$COMPLOG" | grep -aq "chrome agreed the protocol" && break
   sleep 0.05
 done
-if ! sed 's/\x1b\[[0-9;]*m//g' "$COMPLOG" | grep -aq "chrome client connected"; then
-  echo "ERROR: the stuck chrome never connected; nothing was tested."; exit 1
+if ! sed 's/\x1b\[[0-9;]*m//g' "$COMPLOG" | grep -aq "chrome agreed the protocol"; then
+  echo "ERROR: the stuck chrome never joined the desktop; nothing was tested."; exit 1
 fi
 
 WAYLAND_DISPLAY=wayland-1 timeout 20 "${CLIENT[@]}" >/dev/null 2>&1 &

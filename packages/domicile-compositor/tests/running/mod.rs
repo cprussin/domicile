@@ -11,6 +11,13 @@
 //! because a leaked compositor outlives the whole run: `cargo test` waits for
 //! its own children, and nothing else would ever reap it.
 
+// Each test binary compiles its own copy of this module and uses the part of
+// it that its own subject needs, so anything only one file calls is dead code
+// in every other. That is a fact about how integration tests are built rather
+// than about this fixture: `wait_for_log` has a caller, and so does `socket`,
+// just not in the same binary.
+#![allow(dead_code)]
+
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -95,6 +102,12 @@ impl Compositor {
         };
         compositor.await_session(&session_file);
         compositor
+    }
+
+    /// The chrome socket, for a test that has to play the chrome itself —
+    /// one whose whole subject is a handshake that does not happen.
+    pub fn socket(&self) -> &std::path::Path {
+        &self.session.chrome_socket
     }
 
     /// A stand-in chrome, connected and past the handshake.

@@ -60,6 +60,34 @@ fn version_mismatch_is_refused_out_loud() {
 }
 
 #[test]
+fn a_version_refused_after_one_was_agreed_takes_the_handshake_back() {
+    // A flag that only ever goes up says "some hello here was accepted", and
+    // the compositor reads it as "this connection is a peer" — it is what
+    // decides who gets broadcast to. A page that agreed a version and then
+    // announced one this build cannot speak has stopped being a peer, so
+    // leaving it up hands protocol it cannot read to a page that has just
+    // said so.
+    let mut session = Session::new();
+    session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+    assert!(session.is_ready(), "the first hello agreed");
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: 999,
+    }));
+
+    assert!(!session.is_ready(), "the second took the agreement back");
+    assert_eq!(
+        out,
+        vec![HostMessage::Welcome {
+            protocol_version: PROTOCOL_VERSION
+        }],
+        "and it is still answered, so the page can report the mismatch"
+    );
+}
+
+#[test]
 fn messages_before_the_handshake_are_ignored() {
     let mut session = Session::new();
     session.host_mut().app_appeared(None, Some((100.0, 100.0)));
