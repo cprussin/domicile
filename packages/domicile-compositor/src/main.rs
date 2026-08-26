@@ -2332,6 +2332,50 @@ impl DomicileCompositor {
         self.hub.broadcast(desktop);
     }
 
+    /// Ask the session Domicile's window is in to resize it to the desktop.
+    ///
+    /// The same question `window_showing_it` answers at startup, asked again
+    /// because the desktop is not the same one. Without it a config that
+    /// gained a display left the wider desktop scaled into the window it
+    /// already had — `logical_to_window` stretching to fit rather than the
+    /// window growing to suit, which is a desktop that went blurry and small
+    /// rather than one that grew.
+    ///
+    /// A request rather than a guarantee, exactly as at startup: a window
+    /// manager is free to give us something else, `WinitEvent::Resized` is what
+    /// says what we got, and the desktop is scaled into whatever that is. Some
+    /// return the new size and some answer with a later event, so the answer is
+    /// ignored here and the event is what is believed.
+    ///
+    /// Only where the desktop is described. Where it *follows* the window,
+    /// asking would be the tail wagging the dog: `adopt_window_scale` derives
+    /// the desktop from the window's size, so a resize from here would feed
+    /// its own answer back in.
+    ///
+    /// A real condition rather than a restated guarantee, because
+    /// `adopt_the_desktop` *is* reached with a window-following desktop.
+    /// `reloaded_into` has three arms, not two: a config that **stops**
+    /// describing displays hands the desktop back to the window as
+    /// `compositor.nested_size`, which follows the window and still goes
+    /// through here. Asserting instead of returning aborted the compositor on
+    /// that edit in a debug build, and in a release one — where the assert is
+    /// compiled out — snapped the user's window to `nested_size` for having
+    /// deleted a display from their config.
+    fn ask_for_a_window_showing_the_desktop(&mut self) {
+        if self.screens.follows_the_window() {
+            return;
+        }
+        let within = self.config.current().compositor.nested_size;
+        let (width, height) = self.screens.window_showing_it(within);
+        let Some(backend) = self.gpu.as_mut().and_then(Gpu::window) else {
+            return;
+        };
+        info!(width, height, "asking for a window that shows the desktop");
+        let _ = backend
+            .window()
+            .request_inner_size(LogicalSize::new(f64::from(width), f64::from(height)));
+    }
+
     /// Take up a desktop the config now describes, keeping the displays that
     /// stayed.
     ///
@@ -2442,6 +2486,11 @@ impl DomicileCompositor {
             host.describe_desktop()
         };
         self.hub.broadcast(desktop);
+        // And a window the size of the desktop it now shows. Last, because it
+        // is a request to the session outside rather than part of describing
+        // the desktop within: everything above has to hold whatever the
+        // window manager does with this.
+        self.ask_for_a_window_showing_the_desktop();
     }
 
     /// Ask the session Domicile's window is in for the cursor a client wants.

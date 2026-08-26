@@ -146,6 +146,7 @@
           e2e-one-window-per-display = "e2e-one-window-per-display.sh";
           e2e-chrome-fills-the-desktop = "e2e-chrome-fills-the-desktop.sh";
           e2e-chrome-fills-a-window = "e2e-chrome-fills-a-window.sh";
+          e2e-window-follows-the-desktop = "e2e-window-follows-the-desktop.sh";
           e2e-two-chromes = "e2e-two-chromes.sh";
           e2e-window-alpha = "e2e-window-alpha.sh";
           smoke-compositor = "smoke-compositor.sh";

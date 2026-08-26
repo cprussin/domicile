@@ -85,6 +85,7 @@ cargo test -p domicile-compositor
 ./scripts/e2e-one-window-per-display.sh # a client is told the one output its window is on
 ./scripts/e2e-chrome-fills-the-desktop.sh # a real chrome commits at the described desktop's size, and follows it
 ./scripts/e2e-chrome-fills-a-window.sh # the same where the desktop *is* Domicile's window (--present)
+./scripts/e2e-window-follows-the-desktop.sh # a described desktop that grows takes its window with it (--present)
 ./scripts/probe-transparency.sh  # the engine, as our client, commits real alpha
 
 # Needs a real display — run on the user's machine.
@@ -94,8 +95,9 @@ nix run 'github:cprussin/domicile#measure'     # both paths, with the numbers si
 
 `e2e-compose.sh` needs a GL stack (it gets a software rasteriser where there is
 no GPU) but no display: it composites into an offscreen buffer and reads the
-pixels back. `e2e-chrome-fills-a-window.sh` is the one that opens a real window,
-on an Xvfb, and is the only script that passes `--present`. What neither covers
+pixels back. `e2e-chrome-fills-a-window.sh` and
+`e2e-window-follows-the-desktop.sh` are the ones that open a real window, on an
+Xvfb, and the only two that pass `--present`. What neither covers
 is which way *up* the result is, which needs a screen: see the transform gotcha
 below.
 
@@ -222,9 +224,9 @@ below.
   | also needs | which scripts |
   |---|---|
   | `electron` | `e2e-electron`, `e2e-late-chrome`, `e2e-no-compositor`, `e2e-window-alpha`, both `e2e-chrome-fills-*` |
-  | `xvfb` | `e2e-electron`, `e2e-late-chrome`, `e2e-no-compositor`, `e2e-chrome-fills-a-window` |
+  | `xvfb` | `e2e-electron`, `e2e-late-chrome`, `e2e-no-compositor`, `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` |
   | a GL/EGL stack | `e2e-compose` (a software rasteriser is enough) |
-  | `libxkbcommon-x11-0`, `xdotool` | `e2e-chrome-fills-a-window` — it opens a real window, and there is no WM on an Xvfb to resize it |
+  | `libxkbcommon-x11-0`, `xdotool` | `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` — they open a real window, and there is no WM on an Xvfb to resize it or measure it |
 
   `.github/workflows/e2e.yml` installs a superset: Electron's own runtime libs
   (`libnss3`, `libatk*`, `libcups2`, …) and the mesa packages are in there too.
@@ -724,7 +726,7 @@ age, and it needs a screen before anyone should believe it.
 
   Every display at the same `scale` costs nothing regardless; unequal ones mean
   one screen is drawn for the other's until phase 3.
-- **A reloaded display list does not resize Domicile's own window.** The list
+- **A reloaded display list acts on the displays alone.** The list
   itself is no longer fixed at startup: the compositor watches its config, and
   a display added, removed, renamed or reshaped is taken up while it runs —
   `Screens::rearranged_into` decides which `wl_output`s survive, and a display
@@ -732,12 +734,14 @@ age, and it needs a screen before anyone should believe it.
   plugged back in. `e2e-reload-displays.sh` drives the *added* display end to
   end; reshape, rename and remove are `rearranged_into`'s unit tests only.
 
-  What a reload does not do is ask the host for a bigger window. The desktop is
-  scaled into whatever window there is (`logical_to_window`), so adding a second
-  monitor to the config shows the whole wider desktop, smaller, rather than
-  growing the window to suit. `Screens::window_showing_it` already computes the
-  window a desktop wants and is used at startup; calling it again on reload is
-  a one-liner with nothing headless to test it, which is why it is not written.
+  A reload now also asks the host for a window the size of the desktop it
+  describes — `Screens::window_showing_it`, the same question asked at startup,
+  asked again because the desktop is not the same one. Still bounded by
+  `compositor.nested_size`, so a desktop past that ceiling is shown scaled
+  rather than asked for at a size no screen holds.
+  `e2e-window-follows-the-desktop.sh` drives it: `--present` under an Xvfb, and
+  `xdotool` reads the window's size back off X rather than believing a log
+  line the compositor writes once at startup.
 
   The *unconfigured* case is left alone, and now deliberately rather than
   incidentally: with no `[[output.displays]]` the window is the desktop, and
