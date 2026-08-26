@@ -39,8 +39,9 @@ pub struct App {
     /// for an id with no number in it, and there is no such id.
     pub arrival: u64,
     pub title: Option<String>,
-    /// The client's own content size, as of its latest committed buffer.
-    pub size: (f64, f64),
+    /// The client's own content size, as of its latest committed buffer, and
+    /// `None` until it has committed one.
+    pub size: Option<(f64, f64)>,
     /// The size the chrome last laid its `<app>` element out at, which the
     /// compositor configures the client to. `None` until the chrome resizes it.
     pub requested_size: Option<(f64, f64)>,
@@ -110,7 +111,7 @@ impl Host {
     pub fn app_appeared(
         &mut self,
         title: Option<String>,
-        size: (f64, f64),
+        size: Option<(f64, f64)>,
     ) -> (AppId, HostMessage) {
         self.next_id += 1;
         let app_id = format!("app-{}", self.next_id);
@@ -127,7 +128,7 @@ impl Host {
         let message = HostMessage::AppAppeared {
             app_id: app_id.clone(),
             title,
-            size: [size.0, size.1],
+            size: size.map(wire_size),
         };
         (app_id, message)
     }
@@ -152,7 +153,7 @@ impl Host {
             .map(|app| HostMessage::AppAppeared {
                 app_id: app.app_id.clone(),
                 title: app.title.clone(),
-                size: [app.size.0, app.size.1],
+                size: app.size.map(wire_size),
             })
             // And who has the keyboard, which a page that has just loaded has
             // no other way to learn. After the windows: it names one of them.
@@ -199,10 +200,10 @@ impl Host {
     /// `None` if the app is unknown.
     pub fn app_resized(&mut self, app_id: &str, size: (f64, f64)) -> Option<HostMessage> {
         let app = self.apps.get_mut(app_id)?;
-        app.size = size;
+        app.size = Some(size);
         Some(HostMessage::AppResized {
             app_id: app_id.to_string(),
-            size: [size.0, size.1],
+            size: wire_size(size),
         })
     }
 
@@ -357,4 +358,10 @@ impl Host {
 /// Convert a wire affine `[a, b, c, d, e, f]` into a scene [`Transform`].
 fn transform_from_wire([a, b, c, d, e, f]: [f64; 6]) -> Transform {
     Transform { a, b, c, d, e, f }
+}
+
+/// A size as the wire carries it. The memory form is a tuple and the protocol's
+/// is a two-element array; this is the one place the two meet.
+fn wire_size((width, height): (f64, f64)) -> [f64; 2] {
+    [width, height]
 }

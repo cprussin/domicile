@@ -1476,7 +1476,7 @@ impl DomicileCompositor {
     fn note_content_size(&self, app_id: &str, width: u32, height: u32) -> Option<HostMessage> {
         let size = (f64::from(width), f64::from(height));
         let mut host = self.hub.host.lock().unwrap();
-        if host.app(app_id).map(|app| app.size) == Some(size) {
+        if host.app(app_id).and_then(|app| app.size) == Some(size) {
             None
         } else {
             host.app_resized(app_id, size)
@@ -4556,10 +4556,21 @@ impl XdgShellHandler for DomicileCompositor {
 
         // A client mapped a window. Register it with the shared brain (which
         // assigns an app id) and announce it to every connected chrome so it can
-        // mount an <app> element. Title/size arrive on later commits.
+        // mount an <app> element.
+        //
+        // With no size, because the client has not committed a buffer and so
+        // has not said one — how big it wants to be is something a Wayland
+        // client says by drawing. It arrives on the `app_resized` that follows
+        // its first commit. This used to announce `(0.0, 0.0)`, which reads as
+        // a size rather than as the absence of one, and a chrome that believed
+        // it opened a window with no box at all.
+        //
+        // The title is not sent here and is not sent later either: nothing
+        // reads `xdg_toplevel.set_title` back into the brain yet, so every
+        // window is nameless to a chrome that shows names.
         let announce = {
             let mut host = self.hub.host.lock().unwrap();
-            let (app_id, announce) = host.app_appeared(None, (0.0, 0.0));
+            let (app_id, announce) = host.app_appeared(None, None);
             info!(%app_id, "toplevel mapped -> Host::app_appeared");
             // Tell the client which outputs it is on — every one of them, at
             // this point: the chrome has not placed the window yet, so there
@@ -5748,8 +5759,12 @@ mod tests {
             .host
             .lock()
             .unwrap()
-            .app_appeared(Some("a terminal".to_string()), (640.0, 480.0));
-        let (second, _) = hub.host.lock().unwrap().app_appeared(None, (100.0, 200.0));
+            .app_appeared(Some("a terminal".to_string()), Some((640.0, 480.0)));
+        let (second, _) = hub
+            .host
+            .lock()
+            .unwrap()
+            .app_appeared(None, Some((100.0, 200.0)));
 
         announce_open_apps(&hub);
 
@@ -5906,7 +5921,7 @@ mod tests {
         let (hub, outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
         let app_id = {
             let mut host = hub.host.lock().unwrap();
-            let (app_id, _) = host.app_appeared(None, (100.0, 100.0));
+            let (app_id, _) = host.app_appeared(None, Some((100.0, 100.0)));
             host.handle_chrome_message(ChromeMessage::PlacePortal {
                 app_id: app_id.clone(),
                 corner_radius: 0.0,

@@ -60,9 +60,10 @@ export class Desktop {
    * window to *every* chrome whenever any chrome shakes hands.
    *
    * Left as it is rather than merely not duplicated, and the reason is local
-   * rather than borrowed. A repeat can differ from the first announcement —
-   * the replay is rebuilt from live state, so its size is whatever the client
-   * has committed since — but nothing in it is news here: the size only ever
+   * rather than borrowed. A repeat differs from the first announcement — that
+   * one carries no size at all, and the replay is rebuilt from live state, so
+   * it carries whatever the client has committed since — but nothing in it is
+   * news here: the size only ever
    * seeds the opening box, this desktop owns where a window is from then on,
    * and a client's real size arrives on `app_resized` regardless. So there is
    * nothing to apply, and applying it would undo a drag.
@@ -91,7 +92,10 @@ export class Desktop {
    * started from. See {@link #caughtUp} for the windows this does not apply
    * to.
    */
-  open(appId: string, size: readonly [width: number, height: number]): void {
+  open(
+    appId: string,
+    size: readonly [width: number, height: number] | undefined,
+  ): void {
     if (!this.#windows.has(appId)) {
       const box = openingBox(this.#opened, size);
       const element = document.createElement(APP_TAG_NAME);

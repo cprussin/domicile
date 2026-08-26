@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 15;
+export const PROTOCOL_VERSION = 16;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
@@ -68,7 +68,13 @@ const welcomeSchema = z.looseObject({
 // up with two for one client, the first of them orphaned.
 const appAppearedSchema = z.looseObject({
   app_id: z.string(),
-  size: sizeSchema,
+  // Absent until the client has committed a buffer, which it has not when this
+  // message goes out: a toplevel maps before it draws, and how big a Wayland
+  // client wants to be is something it says by drawing. The size arrives on
+  // the `app_resized` that follows. A chrome with none has to decide the
+  // window's size itself — believing a number here is what opened windows at
+  // nothing at all when the host sent `[0, 0]` for this case.
+  size: sizeSchema.nullish().transform((size) => size ?? undefined),
   // serde serialises `Option<String>::None` as JSON null; normalise it to
   // `undefined` at the boundary so no `null` leaks into the SDK.
   title: z

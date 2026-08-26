@@ -70,6 +70,23 @@ describe("parseHostMessage", () => {
     });
   });
 
+  it("normalises the size of a client that has not committed to undefined", () => {
+    // A toplevel maps before it draws, and how big a Wayland client wants to
+    // be is something it says by drawing — so the size is absent on the
+    // message that announces it, and arrives on the `app_resized` that
+    // follows. The host sends JSON null, the same way it does for a title it
+    // does not have.
+    const message = parseHostMessage(
+      '{"type":"app_appeared","app_id":"term","title":null,"size":null}',
+    );
+    expect(message).toEqual({
+      app_id: "term",
+      size: undefined,
+      title: undefined,
+      type: "app_appeared",
+    });
+  });
+
   it("keeps unknown fields so a newer host can add them", () => {
     const message = parseHostMessage(
       '{"type":"app_closed","app_id":"term","reason":"crashed"}',

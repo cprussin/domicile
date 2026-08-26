@@ -23,9 +23,10 @@ describe("openingBox", () => {
   });
 
   it("opens a window its client has not sized yet at a size it can be seen at", () => {
-    // 0x0 is what `app_appeared` carries before the client has committed —
-    // see `hasCommitted`. A window opened at that size is invisible for good.
-    const box = openingBox(0, [0, 0]);
+    // No size is what `app_appeared` carries before the client has committed,
+    // which is every client at the moment it is announced. A window opened at
+    // nothing is invisible for good.
+    const box = openingBox(0, undefined);
     expect(box.width).toBeGreaterThan(0);
     expect(box.height).toBeGreaterThan(0);
   });
