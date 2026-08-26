@@ -14,6 +14,9 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib/harness.sh
 . "$ROOT/scripts/lib/harness.sh"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+build_test_client || exit 1
 BIN="$ROOT/target/debug/domicile-compositor"
 cargo build -p domicile-compositor >/dev/null 2>&1 || {
   echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
@@ -40,7 +43,7 @@ done
 
 # A real client, so there is a window to focus. `focus_app` refuses an app the
 # host has never seen, which would make this pass for the wrong reason.
-WAYLAND_DISPLAY=wayland-1 weston-flower >/dev/null 2>&1 &
+WAYLAND_DISPLAY=wayland-1 "$TEST_CLIENT" --title app >/dev/null 2>&1 &
 APP=$!
 sleep 1
 

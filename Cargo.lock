@@ -417,6 +417,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "domicile-test-client"
+version = "0.0.0"
+dependencies = [
+ "thiserror 1.0.69",
+ "wayland-client",
+ "wayland-protocols",
+]
+
+[[package]]
 name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

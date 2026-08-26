@@ -8,6 +8,9 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/xvfb-display.sh
 . "$ROOT/scripts/xvfb-display.sh"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+build_test_client || exit 1
 BIN="$ROOT/target/debug/domicile-compositor"
 # Built here rather than merely checked for. A binary that exists but predates
 # the source is the worst of both: every check runs, and every check reports on
@@ -27,7 +30,7 @@ LOG="$(mktemp)"; ELOG="$(mktemp)"
 # Named before the trap can fire. `set -u` turns a cleanup that runs before
 # these are assigned — any early `exit` — into "unbound variable", which
 # replaces whatever the real failure was with a line about the harness.
-COMP=""; EL=""; XVFB=""; FLOWER=""
+COMP=""; EL=""; XVFB=""; APP=""
 
 # Electron is not on `PATH` outside `nix develop`, and its absence here reads
 # as a renderer that never handshook.
@@ -56,7 +59,7 @@ COMP=$!
 # `kill`, not `kill -9`: a SIGKILLed X server cannot unlink its socket or its
 # lock, and the corpse it leaves is indistinguishable to anything that tests
 # for the socket from a display that is up.
-cleanup() { kill "$COMP" "$EL" ${XVFB:-} "$FLOWER" 2>/dev/null; rm -f "$LOG" "$ELOG"; }
+cleanup() { kill "$COMP" "$EL" ${XVFB:-} "$APP" 2>/dev/null; rm -f "$LOG" "$ELOG"; }
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 
@@ -92,8 +95,8 @@ if ! wait_for "$LOG" '"type":"hello"' 200; then echo "FAIL: Electron renderer ne
 echo "OK: Electron renderer connected and handshook"
 
 # 2) Map a real Wayland client and wait until the compositor sees the toplevel.
-WAYLAND_DISPLAY=wayland-1 weston-flower >/dev/null 2>&1 &
-FLOWER=$!
+WAYLAND_DISPLAY=wayland-1 "$TEST_CLIENT" --title app >/dev/null 2>&1 &
+APP=$!
 if ! wait_for "$LOG" "toplevel mapped" 50; then echo "FAIL: client never mapped a toplevel"; exit 1; fi
 echo "OK: Wayland client mapped a toplevel (Host::app_appeared)"
 

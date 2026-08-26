@@ -1,0 +1,27 @@
+[package]
+name = "domicile-test-client"
+description = "A stand-in Wayland client: what a test opens a window with, in place of weston's demos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "domicile_test_client"
+path = "src/lib.rs"
+
+[[bin]]
+name = "domicile-test-client"
+path = "src/main.rs"
+
+# The pure-Rust backend, deliberately: no `system`, no `dlopen`, no
+# libwayland. A client that links nothing builds in the core dev shell and on
+# any machine that can run `cargo`, which is the whole point of replacing the
+# weston demos — those are what made ten checks skip.
+#
+# Both crates are already in `Cargo.lock`; Smithay pulls them for the
+# compositor's own server side, so this adds no new dependency to the tree.
+[dependencies]
+thiserror.workspace = true
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client"] }
