@@ -63,10 +63,12 @@ export class Desktop {
    * rather than borrowed. A repeat differs from the first announcement — that
    * one carries no size at all, and the replay is rebuilt from live state, so
    * it carries whatever the client has committed since — but nothing in it is
-   * news here: the size only ever
-   * seeds the opening box, this desktop owns where a window is from then on,
-   * and a client's real size arrives on `app_resized` regardless. So there is
-   * nothing to apply, and applying it would undo a drag.
+   * news to a window this desktop already holds. Both things the size does
+   * below have already happened to it: it took its opening box then and owns
+   * where it is from now on, and it was told what it had drawn — by the
+   * announcement it opened on, or by the `app_resized` that followed its
+   * first draw. So there is nothing to apply, and applying the box again
+   * would undo a drag.
    *
    * Opening a second element instead would leave the *first* connected and
    * unreachable — the map holds the newer one, so every message from the host
@@ -80,8 +82,9 @@ export class Desktop {
    * path the new element is handed a frame and looks right, while the orphan
    * sits over it holding a still of the window from before the reconnect.
    * Where the compositor draws the client itself no frame is coming — the
-   * hand-over skips a natively-drawn window — so the new element never learns
-   * it has a surface and paints its placeholder over the live client for good.
+   * hand-over skips a natively-drawn window — but the size the replay carries
+   * tells the new element it has a surface anyway, so what is wrong there is
+   * the placement fight above rather than anything painted over the client.
    *
    * A window that opens on a desktop past its catch-up takes the keyboard with
    * it, for the same reason it opens in front: it is the one the user just
@@ -107,6 +110,17 @@ export class Desktop {
       // host puts nowhere, at nothing, behind everything — drawn that way for
       // a frame, until the next measurement corrects it.
       element.appId = appId;
+      // A size means the client has drawn at least once, which makes this the
+      // replay a reloading chrome gets rather than a window that has just
+      // mapped — so the element has a surface behind it already and must not
+      // paint its placeholder over one. Nothing else would tell it: the
+      // hand-over the compositor does on a chrome's handshake skips a
+      // natively-drawn window, so no frame arrives, and `app_resized` fires
+      // only on a size that *changed*, so an idle client never sends one. The
+      // label would stay over the live window until the user resized it.
+      if (size !== undefined) {
+        element.setSurfaceSize(size[0], size[1]);
+      }
       this.#windows.set(appId, { box, element });
       this.#opened += 1;
       this.raise(appId);

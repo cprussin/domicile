@@ -29,6 +29,104 @@ const fakeElement = (calls: Call[]): DomicileAppElement =>
 const pixels = new Uint8Array([0, 0, 0, 255]);
 
 describe("AppElements", () => {
+  describe("a client that already had a surface", () => {
+    it("tells an element that mounts after the announcement", () => {
+      // The announcement carries a size only for a client that has committed
+      // at least once — the replay a reloading chrome gets — and the element
+      // does not exist yet when it arrives, because React mounts it a render
+      // later. Nothing else would tell it: where the compositor draws the
+      // client itself no frame comes, and `app_resized` answers only a size
+      // that changed, so an idle client sends neither. The placeholder would
+      // be painted over the live window until the user resized it.
+      const calls: Call[] = [];
+      const elements = new AppElements();
+      elements.announced("term", [640, 480]);
+      elements.register("term", fakeElement(calls));
+      expect(calls).toStrictEqual([["size", 640, 480]]);
+    });
+
+    it("tells one that is already mounted", () => {
+      const calls: Call[] = [];
+      const elements = new AppElements();
+      elements.register("term", fakeElement(calls));
+      elements.announced("term", [640, 480]);
+      expect(calls).toStrictEqual([["size", 640, 480]]);
+    });
+
+    it("says nothing to a mounted element about a client that has not drawn", () => {
+      // The replay goes out to every chrome whenever any chrome shakes hands,
+      // so this chrome hears about its own windows again — an undrawn one
+      // among them, announced with no size at all. Its element is mounted by
+      // then, so nothing downstream would shrug the message off.
+      const calls: Call[] = [];
+      const elements = new AppElements();
+      elements.register("term", fakeElement(calls));
+      elements.announced("term", undefined);
+      expect(calls).toStrictEqual([]);
+    });
+
+    it("remembers the size the client last drew at, not the announced one", () => {
+      // The record outlives the element, so it has to stay current: a client
+      // that resized after its announcement and then had its portal remounted
+      // would otherwise be handed a size it has left behind, and on the native
+      // path nothing is coming to correct it.
+      const calls: Call[] = [];
+      const elements = new AppElements();
+      elements.announced("term", [640, 480]);
+      elements.register("term", fakeElement(calls));
+      elements.resize({ app_id: "term", size: [800, 600] });
+      elements.unregister("term");
+
+      const remounted: Call[] = [];
+      elements.register("term", fakeElement(remounted));
+      expect(remounted).toStrictEqual([["size", 800, 600]]);
+    });
+
+    it("does not take a copied frame's physical pixels for the size", () => {
+      // A frame carries device pixels and the scale to divide them by, and
+      // only the element holds that conversion — so recording one here would
+      // put `1920x1080` behind a client whose surface is `960x540`, and the
+      // next portal to mount would map every click at twice its distance.
+      // Nothing is lost by leaving it: `note_content_size` runs on the
+      // logical size for a copied frame too, so a frame at a new size has
+      // already sent the `app_resized` that records it.
+      const elements = new AppElements();
+      elements.register("term", fakeElement([]));
+      elements.drawFrame({
+        app_id: "term",
+        height: 1080,
+        pixels,
+        scale: 2,
+        width: 1920,
+      });
+      elements.unregister("term");
+
+      const remounted: Call[] = [];
+      elements.register("term", fakeElement(remounted));
+      expect(remounted).toStrictEqual([]);
+    });
+
+    it("drops the record when the client goes", () => {
+      // Not when its portal unmounts: the shell stops rendering a window for
+      // reasons the client knows nothing about — an empty display list, say —
+      // and the client is still running and still drawn behind it.
+      const calls: Call[] = [];
+      const elements = new AppElements();
+      elements.announced("term", [640, 480]);
+      elements.register("term", fakeElement(calls));
+      elements.unregister("term");
+
+      const remounted: Call[] = [];
+      elements.register("term", fakeElement(remounted));
+      expect(remounted).toStrictEqual([["size", 640, 480]]);
+
+      elements.closed("term");
+      const afterClose: Call[] = [];
+      elements.register("term", fakeElement(afterClose));
+      expect(afterClose).toStrictEqual([]);
+    });
+  });
+
   describe("routing host events", () => {
     it("draws a frame onto the element registered for its app", () => {
       const calls: Call[] = [];

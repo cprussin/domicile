@@ -101,6 +101,27 @@ describe("Desktop", () => {
       expect(term.style.height).toBe("480px");
     });
 
+    it("takes the placeholder down for a window that arrives already drawn", () => {
+      // A size on the announcement means the client has committed at least
+      // once, which is the replay a reloading chrome gets. No frame is coming
+      // to say so: the hand-over skips a natively-drawn window, and
+      // `app_resized` fires only when the size *changes*, so an idle client
+      // never sends one. Without this the placeholder is painted over a live
+      // window until the user happens to resize it.
+      const root = freshRoot();
+      new Desktop(root).open("term", [640, 480]);
+      expect(windowFor(root, "term").classList).toContain("has-surface");
+    });
+
+    it("leaves it up for a client that has not drawn yet", () => {
+      // No size is a client that has not committed, which is every client at
+      // the moment it maps. That window really has nothing behind it, and the
+      // placeholder is what says so until its first frame or resize.
+      const root = freshRoot();
+      new Desktop(root).open("term", undefined);
+      expect(windowFor(root, "term").classList).not.toContain("has-surface");
+    });
+
     it("opens each window clear of the last", () => {
       const root = freshRoot();
       const desktop = new Desktop(root);
@@ -299,9 +320,13 @@ describe("Desktop", () => {
       // The one thing `app_resized` is load-bearing for here: where the
       // compositor draws the client's own surface no frame ever arrives, so
       // this is what says the window has something behind it.
+      //
+      // Opened undrawn, and that is the whole test: a window opened at a size
+      // already has the class before this line runs, so passing one here would
+      // assert nothing about `resizeSurface`.
       const root = freshRoot();
       const desktop = new Desktop(root);
-      desktop.open("term", [640, 480]);
+      desktop.open("term", undefined);
       desktop.resizeSurface({ app_id: "term", size: [640, 480] });
       expect(windowFor(root, "term").classList).toContain("has-surface");
     });
