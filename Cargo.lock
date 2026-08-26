@@ -360,6 +360,7 @@ dependencies = [
  "domicile-host",
  "domicile-protocol",
  "domicile-scene",
+ "domicile-shell",
  "libloading",
  "smithay",
  "thiserror 1.0.69",
@@ -401,6 +402,19 @@ dependencies = [
 [[package]]
 name = "domicile-scene"
 version = "0.0.0"
+
+[[package]]
+name = "domicile-shell"
+version = "0.0.0"
+dependencies = [
+ "domicile-config",
+ "domicile-protocol",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "toml",
+]
 
 [[package]]
 name = "downcast-rs"

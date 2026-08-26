@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "@domicile/chrome-sdk": "^0.1.0",
+    "@domicile/electron-chrome-host": "^0.1.0"
+  },
+  "description": "The worked example from docs/WRITING-A-SHELL.md: a Domicile shell built against the published SDK, with no dependency on this repo.",
+  "devDependencies": {
+    "electron": "^43.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1"
+  },
+  "name": "domicile-minimal-shell",
+  "private": true,
+  "scripts": {
+    "build": "vite build -c vite.main.config.ts && vite build -c vite.preload.config.ts && vite build -c vite.renderer.config.ts"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

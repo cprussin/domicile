@@ -18,6 +18,7 @@ domicile-config = { path = "../domicile-config" }
 domicile-host = { path = "../domicile-host" }
 domicile-protocol = { path = "../domicile-protocol" }
 domicile-scene = { path = "../domicile-scene" }
+domicile-shell = { path = "../domicile-shell" }
 # Same dlopen crate Smithay uses for EGL, so libEGL can be probed for before
 # Smithay loads it (it treats a missing library as fatal).
 libloading = "0.8"

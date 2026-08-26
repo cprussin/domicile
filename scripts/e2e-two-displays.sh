@@ -61,7 +61,7 @@ SOCK="$XDG_RUNTIME_DIR/c.sock"
 # The compositor's log is read in phase 3, which is the only place this script
 # needs positive evidence that something reached the compositor at all.
 RUST_LOG="info,domicile_compositor=debug" \
-  "$BIN" --config "$CONF" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+  "$BIN" --no-shell --config "$CONF" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 # `wait` after the kill so bash reaps the jobs quietly; without it it reports
 # "Killed" on stderr at exit, which reads like a failure in a passing run. Not
@@ -321,7 +321,7 @@ TOML
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-two-displays-nested"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-*
-"$BIN" --config "$NESTED_CONF" --chrome-socket "$XDG_RUNTIME_DIR/c.sock" >/dev/null 2>&1 &
+"$BIN" --no-shell --config "$NESTED_CONF" --chrome-socket "$XDG_RUNTIME_DIR/c.sock" >/dev/null 2>&1 &
 NCOMP=$!
 for _ in $(seq 1 200); do
   [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break

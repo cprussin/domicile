@@ -11,36 +11,100 @@
     "typescript": "catalog:"
   },
   "exports": {
-    "./alias-tags": "./src/alias-tags.ts",
-    "./app-element": "./src/app-element.ts",
-    "./bridge": "./src/bridge.ts",
-    "./chrome-message": "./src/chrome-message.ts",
-    "./device-pixel-ratio": "./src/device-pixel-ratio.ts",
-    "./element-transform": "./src/element-transform.ts",
-    "./host-stream": "./src/host-stream.ts",
-    "./host-transport": "./src/host-transport.ts",
-    "./input": "./src/input.ts",
-    "./matrix": "./src/matrix.ts",
-    "./measure": "./src/measure.ts",
-    "./newline-frames": "./src/newline-frames.ts",
-    "./observe-placement": "./src/observe-placement.ts",
-    "./placement-timing": "./src/placement-timing.ts",
-    "./protocol": "./src/protocol.ts",
-    "./register-elements": "./src/register-elements.ts",
-    "./round-trip": "./src/round-trip.ts",
-    "./sample-window": "./src/sample-window.ts",
-    "./surface-coordinates": "./src/surface-coordinates.ts",
-    "./webview-element": "./src/webview-element.ts"
+    "./alias-tags": {
+      "types": "./dist/alias-tags.d.ts",
+      "default": "./dist/alias-tags.js"
+    },
+    "./app-element": {
+      "types": "./dist/app-element.d.ts",
+      "default": "./dist/app-element.js"
+    },
+    "./bridge": {
+      "types": "./dist/bridge.d.ts",
+      "default": "./dist/bridge.js"
+    },
+    "./chrome-message": {
+      "types": "./dist/chrome-message.d.ts",
+      "default": "./dist/chrome-message.js"
+    },
+    "./device-pixel-ratio": {
+      "types": "./dist/device-pixel-ratio.d.ts",
+      "default": "./dist/device-pixel-ratio.js"
+    },
+    "./element-transform": {
+      "types": "./dist/element-transform.d.ts",
+      "default": "./dist/element-transform.js"
+    },
+    "./host-stream": {
+      "types": "./dist/host-stream.d.ts",
+      "default": "./dist/host-stream.js"
+    },
+    "./host-transport": {
+      "types": "./dist/host-transport.d.ts",
+      "default": "./dist/host-transport.js"
+    },
+    "./input": {
+      "types": "./dist/input.d.ts",
+      "default": "./dist/input.js"
+    },
+    "./matrix": {
+      "types": "./dist/matrix.d.ts",
+      "default": "./dist/matrix.js"
+    },
+    "./measure": {
+      "types": "./dist/measure.d.ts",
+      "default": "./dist/measure.js"
+    },
+    "./newline-frames": {
+      "types": "./dist/newline-frames.d.ts",
+      "default": "./dist/newline-frames.js"
+    },
+    "./observe-placement": {
+      "types": "./dist/observe-placement.d.ts",
+      "default": "./dist/observe-placement.js"
+    },
+    "./placement-timing": {
+      "types": "./dist/placement-timing.d.ts",
+      "default": "./dist/placement-timing.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "default": "./dist/protocol.js"
+    },
+    "./register-elements": {
+      "types": "./dist/register-elements.d.ts",
+      "default": "./dist/register-elements.js"
+    },
+    "./round-trip": {
+      "types": "./dist/round-trip.d.ts",
+      "default": "./dist/round-trip.js"
+    },
+    "./sample-window": {
+      "types": "./dist/sample-window.d.ts",
+      "default": "./dist/sample-window.js"
+    },
+    "./surface-coordinates": {
+      "types": "./dist/surface-coordinates.d.ts",
+      "default": "./dist/surface-coordinates.js"
+    },
+    "./webview-element": {
+      "types": "./dist/webview-element.d.ts",
+      "default": "./dist/webview-element.js"
+    }
   },
   "files": [
-    "src/**/*"
+    "dist/**"
   ],
   "name": "@domicile/chrome-sdk",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },
   "type": "module",
-  "version": "0.0.0"
+  "version": "0.1.0"
 }

@@ -67,7 +67,7 @@ echo "== the desktop =="
 # `place_portal` — the chrome saying it mounted the window — is logged at
 # debug. Asking for info and then waiting for it waits forever, and reports as
 # "no window ever appeared".
-RUST_LOG="info,domicile_compositor=debug" "$BIN" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+RUST_LOG="info,domicile_compositor=debug" "$BIN" --no-shell --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 [ -S "$SOCK" ] || { echo "the compositor never bound its socket"; tail -5 "$COMPLOG"; exit 1; }

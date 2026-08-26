@@ -26,7 +26,7 @@ SOCK="$XDG_RUNTIME_DIR/domicile-chrome.sock"
 OUT="$(mktemp)"
 CLIENT="$(mktemp)"
 
-"$BIN" --chrome-socket "$SOCK" >/dev/null 2>&1 &
+"$BIN" --no-shell --chrome-socket "$SOCK" >/dev/null 2>&1 &
 COMP=$!
 trap 'kill -9 "$COMP" "$MOCK" 2>/dev/null; rm -f "$OUT" "$CLIENT"' EXIT
 

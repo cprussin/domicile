@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>minimal</title>
+    <style>
+      html,
+      body {
+        block-size: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+      /* The page is the desktop. Transparent where no app covers it, so a
+         compositing Domicile shows the client through rather than this over. */
+      body {
+        background: transparent;
+      }
+      domicile-app {
+        display: block;
+        inset: 0;
+        position: absolute;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="/src/renderer.ts" type="module" ></script>
+  </body>
+</html>

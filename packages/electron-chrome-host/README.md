@@ -1,5 +1,10 @@
 # @domicile/electron-chrome-host
 
+> Published to npm, and usable outside this repo — see
+> [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md). It ships built
+> JavaScript and `.d.ts` from `dist/`, and takes `electron` as a peer
+> dependency: the shell embedding it brings its own.
+
 The process-side half of a Domicile chrome, for the Electron host the prototype
 runs on. [`@domicile/chrome-sdk`](../chrome-sdk/README.md) is what the *page*
 talks to the compositor with; this is what the Electron main process and its

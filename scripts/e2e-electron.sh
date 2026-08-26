@@ -47,7 +47,7 @@ fi
 # Wait until $2 appears in file $1 (or time out). $3 = max 0.2s ticks.
 wait_for() { local file="$1" pat="$2" n="${3:-150}"; for _ in $(seq 1 "$n"); do grep -q "$pat" "$file" && return 0; sleep 0.2; done; return 1; }
 
-RUST_LOG="info,domicile_compositor=debug" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+RUST_LOG="info,domicile_compositor=debug" "$BIN" --no-shell --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 # By pid only. `pkill -f packages/shell-manganese` would also take out a chrome
 # someone was running in another terminal, which is not this script's to end —

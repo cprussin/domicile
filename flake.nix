@@ -127,6 +127,7 @@
           measure-round-trip = "measure-round-trip.sh";
           e2e-chrome = "e2e-chrome.sh";
           e2e-electron = "e2e-electron.sh";
+          e2e-shell-launch = "e2e-shell-launch.sh";
           e2e-late-chrome = "e2e-late-chrome.sh";
           e2e-no-compositor = "e2e-no-compositor.sh";
           e2e-spawn = "e2e-spawn.sh";
@@ -150,6 +151,8 @@
           e2e-two-chromes = "e2e-two-chromes.sh";
           e2e-window-alpha = "e2e-window-alpha.sh";
           smoke-compositor = "smoke-compositor.sh";
+          test-out-of-tree-shell = "test-out-of-tree-shell.sh";
+          test-every-launch-names-a-shell = "test-every-launch-names-a-shell.sh";
         };
     in
     {

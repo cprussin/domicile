@@ -7,6 +7,7 @@ members = [
     "packages/domicile-host",
     "packages/domicile",
     "packages/domicile-bridge",
+    "packages/domicile-shell",
     "packages/domicile-compositor",
 ]
 
@@ -20,6 +21,7 @@ default-members = [
     "packages/domicile-host",
     "packages/domicile",
     "packages/domicile-bridge",
+    "packages/domicile-shell",
 ]
 
 # domicile-host's default build (the orchestrator) is pure logic and lives in the
@@ -35,6 +37,7 @@ rust-version = "1.75"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 toml = "0.8"
 thiserror = "1"
 notify = "6"

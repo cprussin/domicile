@@ -15,6 +15,7 @@
     "ignoreUnknown": true,
     "includes": [
       "packages/**/*",
+      "examples/**/*",
       "package.json",
       "biome.json",
       "turbo.json",
@@ -229,6 +230,21 @@
       }
     }
   },
+  "overrides": [
+    {
+      "assist": {
+        "actions": {
+          "source": {
+            "useSortedKeys": "off"
+          }
+        }
+      },
+      "includes": [
+        "packages/chrome-sdk/package.json",
+        "packages/electron-chrome-host/package.json"
+      ]
+    }
+  ],
   "root": true,
   "vcs": {
     "clientKind": "git",

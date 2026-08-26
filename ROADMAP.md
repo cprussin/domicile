@@ -431,6 +431,7 @@ falling.
 | `packages/e2e-harness` | headless chrome stand-ins for the `scripts/e2e-*.sh` checks | bun |
 | `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers) | bun |
 | `packages/electron-chrome-host` | the Electron side a chrome package is built on: window, socket path, failure reporting | bun |
+| `packages/domicile-shell` | the shell manifest, where a named shell is looked up, and what starts one (pure) | core |
 | `packages/component-library` | the shared React components and Panda preset the shells are built from | bun |
 | `packages/shell-manganese` | the reference chrome: tabs, stage, rail, address bar | bun |
 | `packages/shell-simple` | the minimal chrome: floating windows only | bun |

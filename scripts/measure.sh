@@ -55,9 +55,9 @@ run_path() {
   echo
   echo "== $name =="
   if [ "$mode" = "present" ]; then
-    RUST_LOG=info "$BIN" --present --chrome-socket "$sock" >"$COMPLOG" 2>&1 &
+    RUST_LOG=info "$BIN" --no-shell --present --chrome-socket "$sock" >"$COMPLOG" 2>&1 &
   else
-    RUST_LOG=info "$BIN" --chrome-socket "$sock" >"$COMPLOG" 2>&1 &
+    RUST_LOG=info "$BIN" --no-shell --chrome-socket "$sock" >"$COMPLOG" 2>&1 &
   fi
   COMP=$!
   for _ in $(seq 1 200); do [ -S "$sock" ] && break; sleep 0.05; done

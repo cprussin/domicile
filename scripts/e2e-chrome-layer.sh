@@ -39,7 +39,7 @@ wait_for() { local pat="$1" n="${2:-100}"; for _ in $(seq 1 "$n"); do grep -q "$
 # Wait for *another* occurrence beyond the count already seen.
 wait_for_more() { local pat="$1" seen="$2"; for _ in $(seq 1 100); do [ "$(grep -c "$pat" "$LOG")" -gt "$seen" ] && return 0; sleep 0.1; done; return 1; }
 
-RUST_LOG="info" "$BIN" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+RUST_LOG="info" "$BIN" --no-shell --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 # `wait` after the kill so bash reaps the jobs quietly; without it it reports
 # "Killed" on stderr at exit, which reads like a failure in a passing run.

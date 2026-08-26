@@ -98,6 +98,7 @@ mod dmabuf_import;
 mod outbound;
 mod scale;
 mod screens;
+mod shell_process;
 mod shortcut;
 mod stacking;
 mod straight_alpha;
@@ -949,17 +950,36 @@ impl FrameWindow {
 /// Serve the chrome protocol on a Unix socket: one thread per connection, all
 /// sharing the same [`Host`] via the hub. Runs on its own thread so it never
 /// blocks the Wayland event loop.
-fn serve_chrome(hub: Arc<ChromeHub>, path: PathBuf) {
-    let _ = std::fs::remove_file(&path);
-    let listener = match UnixListener::bind(&path) {
-        Ok(listener) => listener,
-        Err(err) => {
-            tracing::error!(?path, %err, "cannot bind chrome socket");
-            return;
-        }
-    };
+/// Bind the chrome protocol socket.
+///
+/// Separate from serving it, and called on the main thread, because a shell
+/// this compositor starts itself connects the moment it is up: a listener bound
+/// inside the serving thread is a race the shell loses by arriving first, and
+/// what it looks like from the shell is a compositor that is not there.
+///
+/// Moving it here also made it fatal, which it was not when it lived in the
+/// thread — a failed bind used to log and leave the thread, and the compositor
+/// carried on with no socket for any chrome to arrive on. That is the right way
+/// round: the chrome protocol is not an optional extra.
+///
+/// The path is carried in the error rather than only in the success line. It is
+/// what the commonest failure is *about* — `sun_path` caps a Unix socket near
+/// 108 bytes, so a deep `XDG_RUNTIME_DIR` fails here and nowhere else — and
+/// this error propagates out of `main`, where a bare `Os { code: 2 }` names
+/// nothing at all.
+fn bind_chrome_socket(path: &std::path::Path) -> Result<UnixListener, Box<dyn std::error::Error>> {
+    let _ = std::fs::remove_file(path);
+    let listener = UnixListener::bind(path).map_err(|err| {
+        format!(
+            "cannot bind the chrome protocol socket at {}: {err}",
+            path.display()
+        )
+    })?;
     info!(?path, "chrome protocol socket up");
+    Ok(listener)
+}
 
+fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener) {
     for stream in listener.incoming().flatten() {
         let writer = Arc::new(Mutex::new(match stream.try_clone() {
             Ok(w) => w,
@@ -4831,13 +4851,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --chrome-socket or DOMICILE_CHROME_SOCKET; defaults under XDG_RUNTIME_DIR.
     let chrome_socket = chrome_socket_path();
 
+    // Whether to start a shell, and which. Read before anything is bound so a
+    // mistyped reference costs nothing: `--shell ""` is a failure about the
+    // command line, and reporting it after the sockets are up buries it under
+    // a compositor's startup log.
+    let shell_request = domicile_shell::shell_request(std::env::args().skip(1))?;
+
     // Config is optional: a missing/invalid file means run with defaults rather
     // than refuse to boot, the same call the daemon makes.
-    let config = match Config::load(config_path()) {
-        Ok(config) => config,
+    // Kept, not just logged. The defaults name no shell, so a config that would
+    // not load reaches the shell decision looking exactly like one that named
+    // none — and the refusal would then tell its author to write a key their
+    // file very likely already has, two lines under the typo.
+    let config_file = config_path();
+    let (config, config_origin) = match Config::load(&config_file) {
+        Ok(config) => (config, domicile_shell::ConfigOrigin::AsWritten),
         Err(err) => {
             tracing::warn!(%err, "using the default config");
-            Config::default()
+            (
+                Config::default(),
+                domicile_shell::ConfigOrigin::Unreadable {
+                    path: config_file.display().to_string(),
+                    message: err.to_string(),
+                },
+            )
         }
     };
 
@@ -4919,10 +4956,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .lock()
         .unwrap()
         .describe_displays(screens.outputs().map(Advertised::described).collect());
+    // Bound here rather than in the serving thread: a shell this compositor
+    // starts connects the moment it is up, and would otherwise race the bind.
+    let chrome_listener = bind_chrome_socket(&chrome_socket)?;
     {
         let hub = hub.clone();
-        thread::spawn(move || serve_chrome(hub, chrome_socket));
+        thread::spawn(move || serve_chrome(hub, chrome_listener));
     }
+
     {
         let hub = hub.clone();
         thread::spawn(move || serve_outbound(hub, outbound_rx));
@@ -4996,6 +5037,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     };
+
     let mut dmabuf_state = DmabufState::new();
     let dmabuf_global = gpu.as_mut().map(|gpu| {
         let importer_device = gpu.importer.main_device();
@@ -5211,6 +5253,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // the releases for whatever is held now are never coming.
             WinitEvent::Focus(false) => data.state.release_pressed_keys(),
         })?;
+    }
+
+    // The shell, last of all, and that placement is the whole point: every
+    // fallible step of bringing the compositor up is now behind us, so there is
+    // no `?` left between starting an Electron and the event loop that serves
+    // it. Earlier — beside the socket bind, where it began — a window that
+    // would not open, a shader that would not compile, or any of the event
+    // sources failing to insert would each have returned from `main` leaving a
+    // shell running with nothing to talk to.
+    //
+    // The bind still has to come first, far above: a shell we start ourselves
+    // connects the moment it is up and would otherwise race its own socket. So
+    // the socket has been served since long before this line, and arriving
+    // ahead of the loop costs the shell nothing — its messages queue and drain
+    // when the loop runs.
+    //
+    // A shell built on the SDK would survive an orphaning anyway, since
+    // `connectToCompositor` treats the socket's FIN as fatal. The guide says
+    // using the SDK is optional, so that cannot be what this relies on.
+    //
+    // It reaps itself; see `start_shell`.
+    match shell_process::start_shell(
+        &shell_request,
+        &config,
+        &config_origin,
+        &domicile_shell::ChromeSession {
+            socket: chrome_socket.clone(),
+            wayland_display: chrome_socket_name.clone(),
+            composited: presenting(),
+            protocol_version: domicile_protocol::PROTOCOL_VERSION,
+            settings: config.shell.settings.clone(),
+        },
+    ) {
+        Ok(()) => {}
+        // Fatal, rather than a desktop with nothing drawn on it. A shell that
+        // was asked for and did not start is the one failure whose symptom —
+        // a window with no chrome in it — says nothing at all about its cause.
+        Err(err) => {
+            tracing::error!(%err, "the shell could not be started");
+            return Err(err.into());
+        }
     }
 
     // Flush after every loop iteration so events queued while handling input

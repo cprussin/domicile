@@ -44,7 +44,7 @@ size = [2560, 1440]
 scale = 2
 TOML
 
-"$BIN" --config "$CONF" --chrome-socket "$SOCK" >/dev/null 2>&1 &
+"$BIN" --no-shell --config "$CONF" --chrome-socket "$SOCK" >/dev/null 2>&1 &
 COMP=$!
 # `wait` after the kill so bash reaps the job quietly; without it it reports
 # "Killed" on stderr at exit, which reads like a failure in a passing run.

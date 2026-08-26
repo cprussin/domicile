@@ -27,11 +27,37 @@ The `shell-` prefix is a directory convention, not part of a shell's identity:
 `packages/` is shared with the cargo crates, and the prefix is what keeps the
 shells together in one tree. A shell's own name is what its
 `domicile.shell.json` says — `simple`, `manganese` — which is the name
-`ShellRef::Name` looks up under the compositor's shells directory once shells
-are installed somewhere. A checkout is not that directory, and `packages/`
-is not a `shells_dir`: point a config at a shell in this repo by path
-(`package = "./packages/shell-simple"`), which is what `ShellRef::Path` is for.
-See `packages/domicile-config`.
+`ShellRef::Name` looks up under `$XDG_DATA_HOME/domicile/shells` and the
+system data directories. A checkout is not one of those, and `packages/` is not
+a shells directory: point a config at a shell in this repo by path
+(`package = "./packages/shell-simple"`), or pass `--shell ./packages/shell-simple`
+— which is what `ShellRef::Path` is for. The end-to-end scripts pass
+`--no-shell`, since each drives a compositor whose chrome is a stand-in of its
+own.
+See `packages/domicile-shell`.
+
+Neither in-tree shell is privileged. Both are resolved and started by exactly
+the machinery an out-of-tree shell goes through, and
+[/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) is the contract they
+observe. `examples/minimal-shell` is that document's worked example: it sits
+outside the bun workspace on purpose, and
+`scripts/test-out-of-tree-shell.sh` builds it against the *published* SDK
+tarballs somewhere outside the repo — the only check that can catch an
+`exports` entry pointing at a file `files` does not ship, or a `catalog:` that
+survived into a published manifest.
+
+`@domicile/chrome-sdk` and `@domicile/electron-chrome-host` are published to
+npm and are the only two packages here that are not `private`. They are the one place `useSortedKeys` is turned off — for
+the whole manifest, in `biome.json`'s `overrides`, since the rule cannot be
+scoped to one key. It is the `exports` map that needs it: export conditions are matched top to bottom, so `"types"` must come
+before `"default"`, and sorting them alphabetically would make a lint rule
+enforce a semantic bug in an artifact that leaves this repo. It works today even
+sorted wrongly — TypeScript falls back to the sibling `.d.ts` — which is exactly
+why it would not have been noticed until the emit layout changed. They emit
+JavaScript and `.d.ts` into `dist/` via a `build` task, and their `exports` map
+points there rather than at `src/` — a consumer outside this repo has no
+TypeScript toolchain of ours to transpile our source with. Everything that
+depends on them therefore depends on `^build` in `turbo.json`.
 
 `/packages` is shared with the Rust side: the `domicile-*` crates live there
 too, as members of the cargo workspace declared in the root `Cargo.toml`. One

@@ -19,7 +19,6 @@
       "inputs": ["**/package.json", "bunfig.toml", "!**/dist/**"],
       "outputs": ["bun.lock"]
     },
-
     "//#fix": {
       "with": ["//#fix:lint"]
     },
@@ -27,7 +26,6 @@
       "cache": false,
       "dependsOn": ["//#build"]
     },
-
     "//#test": {
       "with": ["//#test:dependencies", "//#test:lint"]
     },
@@ -38,45 +36,44 @@
     "//#test:lint": {
       "dependsOn": ["//#build"]
     },
-
+    "build": {
+      "dependsOn": ["//#build", "^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md", "!**/*.test.*"],
+      "outputs": ["dist/**"]
+    },
     "build:storybook": {
-      "dependsOn": ["//#build", "^prepare", "prepare"],
+      "dependsOn": ["^build", "//#build", "^prepare", "prepare"],
       "inputs": ["$TURBO_DEFAULT$", "!README.md", "!**/*.test.*"],
       "outputs": ["storybook-static/**"]
     },
-
     "build:vite": {
-      "dependsOn": ["//#build", "^build:vite", "^prepare", "prepare"],
+      "dependsOn": ["^build", "//#build", "^build:vite", "^prepare", "prepare"],
       "inputs": ["$TURBO_DEFAULT$", "!README.md", "!**/*.test.*"],
       "outputs": [".vite/**"]
     },
-
     "prepare": {
-      "dependsOn": ["//#build"],
+      "dependsOn": ["^build", "//#build"],
       "inputs": ["panda.config.ts", "src/**/*.{ts,tsx}", "package.json"],
       "outputs": ["styled-system/**"]
     },
-
     "start:dev": {
       "cache": false,
-      "dependsOn": ["//#build", "^prepare", "prepare"],
+      "dependsOn": ["^build", "//#build", "^prepare", "prepare"],
       "persistent": true
     },
-
     "start:prod": {
       "cache": false,
       "dependsOn": ["build:storybook"],
       "persistent": true
     },
-
     "test": {
       "with": ["test:types", "test:unit", "build:vite"]
     },
     "test:types": {
-      "dependsOn": ["//#build", "^prepare", "prepare"]
+      "dependsOn": ["^build", "//#build", "^prepare", "prepare"]
     },
     "test:unit": {
-      "dependsOn": ["//#build", "^prepare", "prepare"],
+      "dependsOn": ["^build", "//#build", "^prepare", "prepare"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/**"]
     }
   },

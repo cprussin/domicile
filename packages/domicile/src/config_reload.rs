@@ -13,7 +13,8 @@ use domicile_config::{Config, ConfigError, ConfigStore};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reload {
     /// The edit is live and moved the active chrome package to this path.
-    ShellChanged(PathBuf),
+    /// `None` when the new config names no shell at all.
+    ShellChanged(Option<PathBuf>),
     /// The edit is live; the active chrome package is unchanged.
     Applied,
     /// The edit was rejected and the previous configuration is still live.
@@ -29,10 +30,20 @@ pub fn apply_reload(
     shells_dir: &Path,
     result: Result<Config, ConfigError>,
 ) -> Reload {
-    let before = store.current().shell.package.resolve(shells_dir);
+    let before = store
+        .current()
+        .shell
+        .package
+        .as_ref()
+        .map(|package| package.resolve(shells_dir));
     match store.apply_watch(result) {
         Ok(()) => {
-            let after = store.current().shell.package.resolve(shells_dir);
+            let after = store
+                .current()
+                .shell
+                .package
+                .as_ref()
+                .map(|package| package.resolve(shells_dir));
             if after == before {
                 Reload::Applied
             } else {

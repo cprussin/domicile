@@ -53,7 +53,7 @@ TOML
 # NO_COLOR because the fields below are read back out of this log, and
 # tracing writes SGR escapes *between* the field name and its value — a
 # pattern for `display="..."` matches nothing in a coloured one.
-NO_COLOR=1 RUST_LOG=info "$BIN" --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+NO_COLOR=1 RUST_LOG=info "$BIN" --no-shell --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 # `kill`, not `kill -9`, for the chrome: Electron is a process tree and a
 # SIGKILLed one leaves bash reporting "Killed" on stderr as it reaps it — the

@@ -1,5 +1,12 @@
 # @domicile/chrome-sdk
 
+> Published to npm, and usable outside this repo. If you are writing a shell,
+> start with [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) — this is the
+> reference for the package, that is the guide to using it.
+>
+> It ships built JavaScript and `.d.ts` from `dist/`, not the TypeScript in
+> `src/`: run `bun run build` before anything outside the workspace resolves it.
+
 The in-page half of Domicile. A Domicile chrome is ordinary web content; this
 package is what lets that content talk to the compositor and mount real Wayland
 clients as DOM elements.

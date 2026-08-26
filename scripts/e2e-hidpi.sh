@@ -52,7 +52,7 @@ MOCK=""; CLI=""
 # chrome that connected and sent no density looks exactly like a compositor
 # that ignored one, and only the log tells them apart.
 RUST_LOG="info,domicile_compositor=debug" \
-  "$BIN" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+  "$BIN" --no-shell --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 # `wait` after the kill so bash reaps the jobs quietly; without it it reports
 # "Killed" on stderr at exit, which reads like a failure in a passing run.

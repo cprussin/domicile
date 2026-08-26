@@ -23,6 +23,42 @@ const BYTES_PER_PIXEL = 4;
 const HAS_SURFACE_CLASS = "has-surface";
 
 /**
+ * What a `<domicile-app>` is, to everything holding one.
+ *
+ * Written out rather than derived from the class with `InstanceType` — which is
+ * what this was — because the class is an anonymous expression, and TypeScript
+ * will not name an anonymous class's `#private` fields in a `.d.ts`. Derived,
+ * this package cannot emit types at all, and a package that cannot emit types
+ * cannot be published for a shell outside this repo to build against.
+ *
+ * Writing it out is the better contract anyway: what a shell may call is now
+ * stated rather than being whatever the class happens to leave public.
+ */
+export type DomicileAppElement = HTMLElement & {
+  /** The host's name for the client this portal shows. */
+  get appId(): string | undefined;
+  set appId(value: string);
+  /** Tell the host the client should be this many logical pixels. */
+  setSurfaceSize(width: number, height: number): void;
+  /** Put the keyboard on this client without a click. */
+  focusApp(): void;
+  /** Give up the canvas: the compositor is drawing this client itself. */
+  dropSurface(): void;
+  applyCursor(cursor: CursorShape): void;
+  /**
+   * Draw a frame the host pushed. `region`, when given, is the part of the
+   * surface `pixels` covers; without it they are the whole surface.
+   */
+  drawFrame(
+    width: number,
+    height: number,
+    scale: number,
+    pixels: Uint8Array<ArrayBuffer>,
+    region?: readonly [x: number, y: number, width: number, height: number],
+  ): void;
+};
+
+/**
  * The `<domicile-app>` class, closed over what the SDK was bound with.
  *
  * A factory rather than a class because a custom element is constructed by the
@@ -32,7 +68,9 @@ const HAS_SURFACE_CLASS = "has-surface";
  * `registerElements` has bound one — so closing over the context is what makes
  * the case that cannot happen also impossible to write.
  */
-export const createAppElement = (context: ElementContext) =>
+export const createAppElement = (
+  context: ElementContext,
+): (new () => DomicileAppElement) =>
   class DomicileAppElement extends HTMLElement {
     static observedAttributes = ["app-id"];
 
@@ -424,11 +462,6 @@ export const createAppElement = (context: ElementContext) =>
       }
     }
   };
-
-/** An instance of what `createAppElement` builds. */
-export type DomicileAppElement = InstanceType<
-  ReturnType<typeof createAppElement>
->;
 
 const createSurfaceCanvas = (): HTMLCanvasElement => {
   const canvas = document.createElement("canvas");

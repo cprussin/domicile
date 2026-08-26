@@ -59,7 +59,7 @@ TOML
 
 SOCK="$XDG_RUNTIME_DIR/c.sock"
 RUST_LOG="info,domicile_compositor=debug" \
-  "$BIN" --config "$CONF" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+  "$BIN" --no-shell --config "$CONF" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 cleanup() {
   kill -9 "$COMP" "$ONE" "$TWO" 2>/dev/null; wait 2>/dev/null
