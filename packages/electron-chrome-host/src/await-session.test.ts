@@ -50,12 +50,16 @@ describe("awaitSession", () => {
   });
 
   it("does not take a session from a compositor that has stopped", async () => {
-    // Racing a publish against an exit: whatever it managed to write, a
-    // compositor that is gone cannot serve the desktop the document describes.
+    // The document is already there on the very first look — a compositor that
+    // publishes quickly, or a stop that arrived before the wait began — and it
+    // still is not a session: whatever it managed to write, a compositor that
+    // is gone cannot serve the desktop the document describes. This is the
+    // ordering the wait used to get wrong, because it only asked whether there
+    // was any point waiting when there had been nothing to read.
     const attempt = awaitSession({
       delay: immediately,
       failed: Promise.resolve("it was killed"),
-      read: appearsAfter(1),
+      read: () => Promise.resolve(published),
     });
     await expect(attempt).rejects.toThrow("it was killed");
   });
