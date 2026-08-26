@@ -131,7 +131,9 @@ export class BridgeClient {
    * later. Not a race it usually wins: rendering only *schedules* the effect,
    * so `hello` precedes every `on` on every startup. Dropping what lands in
    * between is a live, drawing client with no window on screen, and there is
-   * no second chance — nothing ever re-sends `app_appeared` for it.
+   * no second chance this page can count on: the host re-announces the open
+   * desktop only when *some* chrome shakes hands, which may never happen
+   * again.
    *
    * Unbounded on purpose, and bounded in time by {@link #released}: what can
    * pile up here is only a type the page does register — {@link
@@ -151,9 +153,10 @@ export class BridgeClient {
    * {@link on} is gone. Fine for anything the page can read back — `displays`
    * is retained on {@link displays}, so a provider that unmounts and remounts
    * still sees the current desktop — and not fine for a lifecycle event, which
-   * is announced once: nothing re-sends `app_appeared`, so a page that lets go
-   * of it and takes it up again has missed whatever mapped in between. Let go
-   * of a type only where the page can recover the state some other way.
+   * arrives once on this page's account: `app_appeared` comes again only if
+   * another chrome connects, so a page that lets go of it and takes it up
+   * again has missed whatever mapped in between. Let go of a type only where
+   * the page can recover the state some other way.
    */
   readonly #released = new Set<HostMessageType>();
   readonly #now: typeof monotonicNow;

@@ -91,6 +91,28 @@ describe("Desktop", () => {
       );
     });
 
+    it("holds one window for a client the host announces twice", () => {
+      // The compositor broadcasts its open-window replay to every chrome on
+      // any chrome's handshake, and states the invariant that makes that safe:
+      // "a chrome that already holds the window ignores a second announcement
+      // — the shell keys its windows by app id".
+      const root = freshRoot();
+      const desktop = new Desktop(root);
+      desktop.open("term", [640, 480]);
+      const moved = { height: 300, left: 10, top: 20, width: 400 };
+      desktop.place("term", moved);
+
+      desktop.open("term", [640, 480]);
+
+      expect(
+        root.querySelectorAll(`${APP_TAG_NAME}[app-id="term"]`).length,
+      ).toBe(1);
+      // And the one that is there is the one that was: a desktop that tore the
+      // window down and built it again would pass the count and still lose
+      // where the user had put it.
+      expect(desktop.boxOf("term")).toStrictEqual(moved);
+    });
+
     it("refuses to touch a window that is not on the desktop", () => {
       // Every caller has heard the host announce the client first — the bridge
       // holds `app_appeared` until this shell is listening — so an app id it

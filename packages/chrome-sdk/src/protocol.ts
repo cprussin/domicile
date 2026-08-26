@@ -61,6 +61,11 @@ const welcomeSchema = z.looseObject({
   type: z.literal("welcome"),
 });
 
+// Not once per client. The host replays every window already running to every
+// connected chrome whenever any chrome shakes hands, so a page can be told
+// about a window it already holds — and is expected to ignore that, keying its
+// windows by app id. A chrome that mounts an element per message instead ends
+// up with two for one client, the first of them orphaned.
 const appAppearedSchema = z.looseObject({
   app_id: z.string(),
   size: sizeSchema,
