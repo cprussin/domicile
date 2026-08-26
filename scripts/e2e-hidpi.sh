@@ -17,6 +17,12 @@
 # every pointer coordinate is off by a factor of the scale.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+# 1, not 77. A client this repo builds and cannot build is a broken tree, which
+# is a failure; 77 is for what the *machine* is missing, and this needs nothing
+# the machine has to supply.
+build_test_client || exit 1
 # shellcheck source=scripts/lib/harness.sh
 . "$ROOT/scripts/lib/harness.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
@@ -32,10 +38,6 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 # 77 is skipped, which is what a missing dependency is: a check that did not
 # run says nothing, and a check that ran and blamed the compositor for a client
 # it could not start says something false.
-command -v weston-terminal >/dev/null 2>&1 || {
-  echo "SKIP: weston-terminal is the scale-aware client whose buffer scale this reads."
-  exit 77
-}
 command -v bun >/dev/null 2>&1 || {
   echo "SKIP: bun runs the mock chrome, which is what reports the 2x density."
   exit 77
@@ -128,10 +130,12 @@ else
        "$(plain | grep -aE 'WARN|ERROR|scale' | tail -5)"
 fi
 
-# weston-terminal is scale-aware: it reads wl_output.scale and redraws at it.
-# NO_COLOR because libwayland otherwise writes SGR escapes between the interface
-# name and the event, and every grep below reads the log as plain text.
-NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 20 weston-terminal >"$CLILOG" 2>&1 &
+# `--trace` makes the client report the protocol it is handed and the requests
+# it makes back, which is where every grep below reads. The client is
+# scale-aware: it keeps each output's scale, and when `wl_surface.enter` says
+# which screen it is on it sets a buffer scale to match and remakes its pixels
+# at that density.
+WAYLAND_DISPLAY=wayland-1 timeout 20 "$TEST_CLIENT" --title app --trace >"$CLILOG" 2>&1 &
 CLI=$!
 # The client's own log, which is what the decision below reads — not the
 # frames reaching the chrome, which are a third process's account of a
@@ -157,8 +161,8 @@ elif ! grep -qE "wl_registry[#@][0-9]+\.global\([0-9]+, \"wl_output\"" "$CLILOG"
   harness_fault "$COMP" "the client could bind an output" \
     "ERROR: the client never saw a wl_output global; its log begins:" \
     "$(head -5 "$CLILOG")" \
-    "  A weston-terminal that could not start looks exactly like a client" \
-    "  that ignored the scale it was given."
+    "  A client that could not start looks exactly like a client that" \
+    "  ignored the scale it was given."
 elif grep -qE "wl_surface[#@][0-9]+\.set_buffer_scale\(2\)" "$CLILOG"; then
   passed "the client redrew at buffer scale 2"
 else

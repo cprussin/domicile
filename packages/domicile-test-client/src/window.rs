@@ -10,6 +10,7 @@
 use std::os::fd::AsFd as _;
 use std::os::unix::fs::FileExt as _;
 
+use wayland_client::backend::ObjectId;
 use wayland_client::protocol::{
     wl_buffer, wl_callback, wl_compositor, wl_keyboard, wl_output, wl_pointer, wl_registry,
     wl_seat, wl_shm, wl_shm_pool, wl_surface,
@@ -112,12 +113,34 @@ struct Client {
     // NOTE: still an Option because the pointer it names does not exist until
     // the seat says there is one. `open` refuses a compositor with no manager
     // to make it from, so a `None` here is a seat with no pointer.
+    /// What each output said its scale is, as it said so.
+    ///
+    /// Kept per output rather than as one number because a surface can be on
+    /// two screens of different densities, and the answer is then the larger
+    /// of them — a buffer drawn for the coarser one is visibly soft on the
+    /// finer, where the reverse only wastes pixels.
+    scales: Vec<(ObjectId, i32)>,
+    /// Which outputs the surface is currently on.
+    entered: Vec<ObjectId>,
+    /// The registry name each bound output arrived under.
+    ///
+    /// `wl_registry.global_remove` names a screen by that rather than by the
+    /// object, so without this a display that went away would leave its scale
+    /// and its entry behind — and `e2e-reload-displays` swaps the display list
+    /// while the client runs, so they would accumulate for the life of it.
+    outputs: Vec<(u32, ObjectId)>,
 }
 
 /// The surface and the pixels behind it, which exist together or not at all.
 struct Window {
     surface: wl_surface::WlSurface,
     pixels: Pixels,
+    /// The buffer scale these pixels were made for.
+    ///
+    /// The surface stays [`SIZE`] however dense the screen is; what changes is
+    /// how many buffer pixels cover it. That is what `set_buffer_scale` means
+    /// and what a check about density reads.
+    scale: i32,
 }
 
 /// Two buffers over one shared file, alternating.
@@ -168,6 +191,9 @@ impl Client {
             configured: false,
             frame: 0,
             cursor: None,
+            scales: Vec::new(),
+            entered: Vec::new(),
+            outputs: Vec::new(),
         }
     }
 
@@ -249,12 +275,83 @@ impl Client {
         // is one a shell cannot address. The title is the human name; this is
         // the one programs match on.
         toplevel.set_app_id("dev.domicile.test-client".to_string());
+        // Scale 1 here, not whatever the outputs have said: the surface has
+        // not entered one yet — that only happens once it is mapped — so there
+        // is no screen whose density this window is on. `follow` raises it
+        // when `wl_surface.enter` says which.
         let pixels = Pixels::new(shm, handle, SIZE.0, SIZE.1)?;
         // The commit that starts the handshake, and it must carry no buffer:
         // the compositor answers it with the size the surface may use, and
         // attaching before that is asking for a size nobody agreed to.
         surface.commit();
-        self.window = Some(Window { surface, pixels });
+        self.window = Some(Window {
+            surface,
+            pixels,
+            scale: 1,
+        });
+        Ok(())
+    }
+
+    /// The density of the screens this surface is on, if it is on any.
+    ///
+    /// `None` when it is on none. That is every moment before the first
+    /// `wl_surface.enter` — a client cannot know what it is being shown on
+    /// until it is told — and also the moment a mapped window is told it left
+    /// its last output, which occlusion, a workspace switch or a screen going
+    /// away all produce. Answering "1" for the second case would rebuild the
+    /// buffers at 1x and then again at 2x on the next `enter`, so the caller
+    /// keeps the density it had instead.
+    fn wanted_scale(&self) -> Option<i32> {
+        self.entered
+            .iter()
+            .filter_map(|on| self.scales.iter().find(|(id, _)| id == on))
+            .map(|(_, scale)| *scale)
+            .max()
+    }
+
+    /// Redraw for the screen this window is on, if that has changed.
+    ///
+    /// This is the half of being scale-aware that a check can see: a client
+    /// that only reads `wl_output.scale` and never acts on it is a client that
+    /// draws a 1x picture on a 2x screen, which is exactly the blurry window
+    /// `e2e-hidpi` exists to catch. The buffer grows; the surface does not.
+    fn follow(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
+        // On no screen: keep what we have. See [`Client::wanted_scale`].
+        let Some(wanted) = self.wanted_scale() else {
+            return Ok(());
+        };
+        // Before `open`, which is where the outputs' first `scale` events
+        // arrive: there is no surface to set a scale on yet, and `open` makes
+        // its pixels at 1 because the surface is on no screen until it maps.
+        let Some(window) = self.window.as_mut() else {
+            return Ok(());
+        };
+        if window.scale == wanted {
+            return Ok(());
+        }
+        let shm = self
+            .globals
+            .shm
+            .as_ref()
+            .expect("open() proved there is a wl_shm before there was a window");
+
+        window.surface.set_buffer_scale(wanted);
+        domicile_test_client::say!(window.surface.id(), "set_buffer_scale({})", wanted);
+        // Destroyed, not dropped. Dropping a `wayland-client` proxy sends no
+        // destructor, so the old buffers would stay alive on both sides: they
+        // would go on delivering `release` into a handler keyed on an index
+        // into the *new* pool — measured, six stale releases each clearing a
+        // different buffer's slot — and they are the only thing holding the
+        // old pool's mapping, since the pool itself is destroyed at creation.
+        // That is a leak of 614 KB at 1x and 2.4 MB at 2x per rescale.
+        //
+        // Destroying says we will not use them again; the compositor keeps
+        // whatever it still needs to finish reading them.
+        for buffer in &window.pixels.buffers {
+            buffer.destroy();
+        }
+        window.pixels = Pixels::new(shm, handle, SIZE.0 * wanted as u32, SIZE.1 * wanted as u32)?;
+        window.scale = wanted;
         Ok(())
     }
 
@@ -401,6 +498,20 @@ fn draw_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     }
 }
 
+/// Follow the screen's density, or end the process saying why.
+///
+/// The mirror of [`draw_or_stop`], and for the same reason: the callers are
+/// event handlers that cannot return a `Result`, and a client that failed to
+/// remake its pixels has no buffers left to draw into. Carrying on would show
+/// a check a window that stopped redrawing, which reads as a compositor that
+/// stopped sending frames.
+fn follow_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
+    if let Err(err) = client.follow(handle) {
+        eprintln!("domicile-test-client: {err}");
+        std::process::exit(1);
+    }
+}
+
 impl Dispatch<wl_registry::WlRegistry, ()> for Client {
     fn event(
         client: &mut Client,
@@ -410,33 +521,52 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Client {
         _: &Connection,
         handle: &QueueHandle<Client>,
     ) {
-        if let wl_registry::Event::Global {
-            name,
-            interface,
-            version,
-        } = event
-        {
-            domicile_test_client::say!(
-                registry.id(),
-                "global({}, \"{}\", {})",
+        match event {
+            wl_registry::Event::Global {
                 name,
                 interface,
-                version
-            );
-            // Outputs are bound here rather than with the rest, because they
-            // are the one global that arrives after startup: plugging a
-            // display in announces a new one, and a compositor cannot tell a
-            // client its window is on a screen the client never bound. A
-            // window open across that change would go on being told about the
-            // screen it started on and no other.
-            //
-            // Safe to do from the event, unlike `wl_seat`, because an output's
-            // version comes with its announcement rather than having to be
-            // weighed against the rest of the list.
-            if interface == "wl_output" {
-                let _: wl_output::WlOutput = registry.bind(name, version.min(2), handle, ());
+                version,
+            } => {
+                domicile_test_client::say!(
+                    registry.id(),
+                    "global({}, \"{}\", {})",
+                    name,
+                    interface,
+                    version
+                );
+                // Outputs are bound here rather than with the rest, because
+                // they are the one global that arrives after startup: plugging
+                // a display in announces a new one, and a compositor cannot
+                // tell a client its window is on a screen the client never
+                // bound. A window open across that change would go on being
+                // told about the screen it started on and no other.
+                //
+                // Safe to do from the event, unlike `wl_seat`, because an
+                // output's version comes with its announcement rather than
+                // having to be weighed against the rest of the list.
+                if interface == "wl_output" {
+                    let output: wl_output::WlOutput =
+                        registry.bind(name, version.min(2), handle, ());
+                    client.outputs.push((name, output.id()));
+                }
+                client.globals.named.push((name, interface, version));
             }
-            client.globals.named.push((name, interface, version));
+            wl_registry::Event::GlobalRemove { name } => {
+                // A screen that went away. The compositor sends no
+                // `wl_surface.leave` for one, so without this the client would
+                // sit at a dead screen's density for the rest of the run —
+                // and `scales`, `entered` and `outputs` would grow with the
+                // desktop's history rather than its shape.
+                client.globals.named.retain(|(named, _, _)| named != &name);
+                let Some(at) = client.outputs.iter().position(|(named, _)| named == &name) else {
+                    return;
+                };
+                let (_, gone) = client.outputs.remove(at);
+                client.scales.retain(|(id, _)| id != &gone);
+                client.entered.retain(|id| id != &gone);
+                follow_or_stop(client, handle);
+            }
+            _ => {}
         }
     }
 }
@@ -531,7 +661,39 @@ impl Dispatch<wl_buffer::WlBuffer, usize> for Client {
                 .window
                 .as_mut()
                 .expect("a buffer was cut from this window's pool");
-            window.pixels.held[*index] = false;
+            // Checked, not assumed. `index` is baked into the udata of the
+            // buffer this event is *about*, which after a rescale may be one
+            // from the pool before it: `follow` destroys those, but a release
+            // the compositor had already sent still arrives afterwards.
+            // Clearing on the index alone then marks a live buffer free while
+            // the compositor is displaying it, and the next frame draws over
+            // the picture.
+            //
+            // Measured rather than reasoned about, and destroying the old
+            // buffers is not enough on its own: with `destroy` in place and
+            // this check absent, forcing a rescale produced one such release
+            // per rescale, every one naming a buffer that is not the one in
+            // that slot. (How many depends on how hard the rescale is
+            // driven — it is one per swap with a buffer in flight, not a
+            // fixed number.)
+            //
+            // Latent rather than visible today: this compositor imports and
+            // releases before the next attach lands, so the slot being
+            // wrongly cleared is already `false`. Against one that holds a
+            // buffer across the swap it is a live buffer marked free.
+            //
+            // Comparing ids and not wire numbers, which matters more than it
+            // reads: `destroy` frees the numbers and a later pool takes them
+            // back — a `delete_id` round-trip later rather than at once, so it
+            // is the pool after next that reuses them, and it reuses them
+            // *reversed*. That is the shape a wire-number comparison cannot
+            // survive: a stale release naming `@17` would match the new
+            // `buffers[0]` by number while being a different object.
+            // `ObjectId` equality carries a generation (`id`, `serial` and
+            // interface), so the stale one still compares unequal.
+            if window.pixels.buffers[*index].id() == buffer.id() {
+                window.pixels.held[*index] = false;
+            }
         }
     }
 }
@@ -578,68 +740,114 @@ delegate_noop!(Client: ignore wp_cursor_shape_device_v1::WpCursorShapeDeviceV1);
 
 /// Which outputs the window is on.
 ///
-/// Reported rather than acted on. A compositor that never sends these leaves a
-/// scale-aware client mapped and blank, and leaves the checks that ask which
-/// screen a window landed on with nothing to read.
+/// Reported *and* acted on: this is what tells the client which screen's
+/// density to draw for, so `follow` runs on every change. A compositor that
+/// never sends these leaves a scale-aware client drawing 1x pixels forever,
+/// and leaves the checks that ask which screen a window landed on with
+/// nothing to read.
 impl Dispatch<wl_surface::WlSurface, ()> for Client {
     fn event(
-        _: &mut Client,
+        client: &mut Client,
         surface: &wl_surface::WlSurface,
         event: wl_surface::Event,
         (): &(),
         _: &Connection,
-        _: &QueueHandle<Client>,
+        handle: &QueueHandle<Client>,
     ) {
         match event {
             wl_surface::Event::Enter { output } => {
                 domicile_test_client::say!(surface.id(), "enter({})", output.id());
+                let on = output.id();
+                if !client.entered.contains(&on) {
+                    client.entered.push(on);
+                }
             }
             wl_surface::Event::Leave { output } => {
                 domicile_test_client::say!(surface.id(), "leave({})", output.id());
+                let off = output.id();
+                client.entered.retain(|on| on != &off);
             }
-            _ => {}
+            _ => return,
         }
+        // Which screens the surface is on is half of what its density depends
+        // on; the other half is what those screens said their scale was.
+        follow_or_stop(client, handle);
     }
 }
 
-/// Where each screen is.
+/// What each screen is, where it is, and how dense.
 ///
-/// `geometry` only: its x and y are what says which screen a window is on once
+/// `geometry`'s x and y say which screen a window is on once
 /// `wl_surface.enter` has named the output, which is what `screens_of` in
-/// `e2e-one-window-per-display` reads. `mode`, `scale` and `done` are grepped
-/// only by `e2e-hidpi`, which still drives weston, so they arrive with it.
+/// `e2e-one-window-per-display` reads. `mode` is the physical size a check
+/// about density reads back. `scale` is the one this client acts on, and
+/// `done` is when it acts: the events above it are one description delivered
+/// in pieces, and redrawing on `scale` alone would redraw against half of
+/// one.
 impl Dispatch<wl_output::WlOutput, ()> for Client {
     fn event(
-        _: &mut Client,
+        client: &mut Client,
         output: &wl_output::WlOutput,
         event: wl_output::Event,
         (): &(),
         _: &Connection,
-        _: &QueueHandle<Client>,
+        handle: &QueueHandle<Client>,
     ) {
-        if let wl_output::Event::Geometry {
-            x,
-            y,
-            physical_width,
-            physical_height,
-            subpixel,
-            make,
-            model,
-            transform,
-        } = event
-        {
-            domicile_test_client::say!(
-                output.id(),
-                "geometry({}, {}, {}, {}, {}, \"{}\", \"{}\", {})",
+        match event {
+            wl_output::Event::Geometry {
                 x,
                 y,
                 physical_width,
                 physical_height,
-                number(subpixel),
+                subpixel,
                 make,
                 model,
-                number(transform)
-            );
+                transform,
+            } => {
+                domicile_test_client::say!(
+                    output.id(),
+                    "geometry({}, {}, {}, {}, {}, \"{}\", \"{}\", {})",
+                    x,
+                    y,
+                    physical_width,
+                    physical_height,
+                    number(subpixel),
+                    make,
+                    model,
+                    number(transform)
+                );
+            }
+            wl_output::Event::Mode {
+                flags,
+                width,
+                height,
+                refresh,
+            } => {
+                domicile_test_client::say!(
+                    output.id(),
+                    "mode({}, {}, {}, {})",
+                    number(flags),
+                    width,
+                    height,
+                    refresh
+                );
+            }
+            wl_output::Event::Scale { factor } => {
+                domicile_test_client::say!(output.id(), "scale({})", factor);
+                let of = output.id();
+                match client.scales.iter_mut().find(|(id, _)| id == &of) {
+                    Some((_, scale)) => *scale = factor,
+                    None => client.scales.push((of, factor)),
+                }
+            }
+            wl_output::Event::Done => {
+                domicile_test_client::say!(output.id(), "done()");
+                // The event that says the batch above is complete, which is
+                // when a client is meant to act on it. Acting on `scale`
+                // directly would redraw against a half-applied description.
+                follow_or_stop(client, handle);
+            }
+            _ => {}
         }
     }
 }

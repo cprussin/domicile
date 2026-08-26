@@ -323,21 +323,6 @@ for script in scripts/e2e-*.sh; do
         label "$name"; skip "$name" "$NO_DISPLAY"; continue
       fi
       ;;
-    # `e2e-hidpi` is the last one gated on weston, and on the binary it
-    # actually drives. `weston-flower` used to stand in for "weston is
-    # installed", which is a property of one distribution's packaging rather
-    # than of what these scripts run — so the guard passed while `e2e-hidpi`
-    # and `e2e-input` failed with compositor-shaped verdicts on a missing
-    # client. Every other script here opens its window with
-    # `domicile-test-client` and builds it rather than looking for it; a guard
-    # on weston would skip them on exactly the machines that client exists
-    # for. The scripts that own a `77` for their own client
-    # (`e2e-slow-chrome`, `e2e-dmabuf`) are left to say so themselves.
-    e2e-hidpi)
-      if ! command -v weston-terminal >/dev/null 2>&1; then
-        label "$name"; skip "$name" "no weston-terminal"; continue
-      fi
-      ;;
   esac
   run "$name" "$script"
 done
