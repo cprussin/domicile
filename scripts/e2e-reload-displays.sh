@@ -17,6 +17,12 @@
 # real window open across the reload to prove the new output reached it.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+# 1, not 77. A client this repo builds and cannot build is a broken tree, which
+# is a failure; 77 is for what the *machine* is missing, and this needs nothing
+# the machine has to supply.
+build_test_client || exit 1
 # shellcheck source=scripts/lib/harness.sh
 . "$ROOT/scripts/lib/harness.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
@@ -26,18 +32,12 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
 
-# The client whose `wl_surface.enter` check 3 reads. Skipped rather than failed
-# when it is absent: a check that cannot run must say so — see check.sh — and
-# without this the missing binary reaches check 3 as a client that never bound
-# an output, which is a harness fault reported as a client-visible one.
-command -v weston-terminal >/dev/null 2>&1 || {
-  echo "SKIP: no weston-terminal, which is the window this opens across the reload."
-  exit 77
-}
-# The other dependency, and it needs its own: without bun the probe writes
-# nothing, the handshake guard below fires `harness_fault`, and the run exits
-# 99 — which `check.sh` counts as a failure and prints as this script's own
-# machinery having broken. Which it has not; it was never installed.
+# The one dependency this script skips for rather than builds: without bun the
+# probe writes nothing, the handshake guard below fires `harness_fault`, and the
+# run exits 99 — which `check.sh` counts as a failure and prints as this
+# script's own machinery having broken. Which it has not; it was never
+# installed. (The client whose `wl_surface.enter` check 3 reads is built above,
+# and a tree that cannot build it is a failure rather than a skip.)
 command -v bun >/dev/null 2>&1 || {
   echo "SKIP: no bun, which runs the probe that reads the descriptions."
   exit 77
@@ -164,7 +164,7 @@ fi
 # content reads `wl_surface.enter` to decide what density to draw at. Started
 # before the edit so it is a window the reload finds, not one that mapped onto
 # the finished desktop and would have entered both anyway.
-NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 40 weston-terminal >"$CLIENT" 2>&1 &
+WAYLAND_DISPLAY=wayland-1 timeout 40 "$TEST_CLIENT" --title app --trace >"$CLIENT" 2>&1 &
 APP=$!
 for _ in $(seq 1 50); do
   grep -qE "wl_surface[#@][0-9]+\.enter\(" "$CLIENT" && break

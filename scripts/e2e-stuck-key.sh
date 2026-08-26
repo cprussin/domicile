@@ -20,6 +20,12 @@
 #   nix develop .#full -c ./scripts/e2e-stuck-key.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+# 1, not 77. A client this repo builds and cannot build is a broken tree, which
+# is a failure; 77 is for what the *machine* is missing, and this needs nothing
+# the machine has to supply.
+build_test_client || exit 1
 BIN="$ROOT/target/debug/domicile-compositor"
 # Built here rather than merely checked for. A binary that exists but predates
 # the source is the worst of both: every check runs, and every check reports on
@@ -29,13 +35,6 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
   exit 1
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
-
-# A client that binds a keyboard and logs what it receives. Skipped rather than
-# failed when it is absent: a check that cannot run must say so — see check.sh.
-command -v weston-eventdemo >/dev/null 2>&1 || {
-  echo "SKIP: no weston-eventdemo, which is the client that reports its modifiers."
-  exit 77
-}
 
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-stuck"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
@@ -65,12 +64,19 @@ CLI=""
 . "$ROOT/scripts/lib/harness.sh"
 for _ in $(seq 1 200); do { [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && [ -S "$SOCK" ]; } && break; sleep 0.05; done
 
-# NO_COLOR and the `[#@]` alternation for the same reasons as e2e-input.sh:
-# libwayland writes SGR escapes into these lines, and names objects `@14` on
-# current releases and `#14` on older ones.
-NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 20 weston-eventdemo >"$APP" 2>&1 &
+# `--trace` for the same reason as e2e-input.sh: the client reports the
+# messages it is handed, in the shape these greps read.
+WAYLAND_DISPLAY=wayland-1 timeout 20 "$TEST_CLIENT" --title app --trace >"$APP" 2>&1 &
 CLI=$!
-for _ in $(seq 1 100); do grep -q "xdg_surface" "$APP" && break; sleep 0.1; done
+# On an event the client actually reports. This waited on `xdg_surface`, which
+# was in weston-eventdemo's `WAYLAND_DEBUG` log and is in nothing this client
+# writes — so the loop ran its full budget every time and the window was ready
+# only because ten seconds is long enough. A wait that cannot succeed is a
+# sleep wearing a condition's clothes.
+for _ in $(seq 1 100); do
+  grep -qE "wl_surface[#@][0-9]+\.enter\(" "$APP" && break
+  sleep 0.1
+done
 
 DOMICILE_CHROME_SOCK="$SOCK" timeout 20 bun "$ROOT/packages/e2e-harness/src/reload-typist.ts" >"$CHROME" 2>&1 &
 TYPIST=$!

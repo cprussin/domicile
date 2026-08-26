@@ -5,3 +5,4 @@
 //! business of the checks in `scripts/`, which have one to point at.
 
 pub mod arguments;
+pub mod trace;

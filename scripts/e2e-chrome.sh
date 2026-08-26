@@ -5,9 +5,15 @@
 #   nix develop .#full -c ./scripts/e2e-chrome.sh
 #
 # Boots the compositor, connects a headless mock chrome, maps a real toplevel
-# (weston-flower), and asserts the chrome receives app_appeared.
+# (domicile-test-client), and asserts the chrome receives app_appeared.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+# 1, not 77. A client this repo builds and cannot build is a broken tree, which
+# is a failure; 77 is for what the *machine* is missing, and this needs nothing
+# the machine has to supply.
+build_test_client || exit 1
 BIN="$ROOT/target/debug/domicile-compositor"
 # Built here rather than merely checked for. A binary that exists but predates
 # the source is the worst of both: every check runs, and every check reports on
@@ -83,13 +89,13 @@ if ! grep -q '"type":"displays"' "$OUT"; then
     "  tested; its output was:" \
     "$(cat "$OUT")"
 fi
-# WAYLAND_DEBUG logs every event the client receives, which is the only place
-# a buffer release is visible — it produces no output of its own. NO_COLOR
-# because libwayland otherwise writes SGR escapes *between* the interface name
-# and the event (`wl_surface` ESC `#12` ESC `.enter`), and every check below
-# reads the log as plain text — a coloured log matches nothing and passes
-# nothing, which is a guard that silently guards.
-NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 2 weston-flower >"$CLIENT" 2>&1
+# `--trace` makes the client report the protocol messages it receives, which is
+# the only place these are visible — it produces no output of its own. Its own
+# report rather than `WAYLAND_DEBUG`: the backend it speaks prints
+# `wl_surface@12.enter, (Some(wl_output@7))`, and the greps below want
+# libwayland's `wl_surface@12.enter(wl_output@7)`, which is the shape the
+# client writes.
+WAYLAND_DISPLAY=wayland-1 timeout 2 "$TEST_CLIENT" --title app --trace >"$CLIENT" 2>&1
 # The client has exited, which says nothing about the chrome having been told
 # about it: the announcement crosses the compositor and a second socket after
 # the client is gone. Waiting a fixed moment and then killing the chrome makes
@@ -114,21 +120,21 @@ fi
 # And the name, which is the only coverage `title_changed` has: it needs a real
 # client making a real `set_title`, so nothing below the e2e level reaches it.
 #
-# Asked of the client's own protocol log rather than assumed, because whether
-# this client names itself is the client's business and not ours. If it sent a
-# `set_title` the chrome must have been told; if it never sent one there is
-# nothing here to check, and this says so rather than passing quietly — an
-# assertion on a request that was never made is one that holds for the wrong
-# reason, and would go on holding after the message stopped working.
-if grep -q 'set_title' "$CLIENT"; then
-  if grep -q '"app_titled"' "$OUT"; then
-    echo "PASS: the client named its window and the chrome was told"
-  else
-    compositor_verdict "$COMP" \
-      "FAIL: the client sent set_title and the chrome was never told the name"
-  fi
+# The premise is still checked rather than assumed, but it is now a harness
+# fault rather than a note: this client is ours and always names its window, so
+# a run with no `set_title` in its log means the client did not get that far,
+# and the `app_titled` assertion below would be holding for the wrong reason.
+# It used to be a `NOTE` because weston-flower's naming was its own business.
+if ! grep -q 'set_title' "$CLIENT"; then
+  harness_fault "$COMP" "the client named its window" \
+    "ERROR: the client never sent set_title, so nothing below tests app_titled." \
+    "  Its log begins:" \
+    "$(head -5 "$CLIENT")"
+elif grep -q '"app_titled"' "$OUT"; then
+  echo "PASS: the client named its window and the chrome was told"
 else
-  echo "NOTE: this client never named its window, so nothing tested app_titled"
+  compositor_verdict "$COMP" \
+    "FAIL: the client sent set_title and the chrome was never told the name"
 fi
 
 # A client may not touch a buffer again until the compositor releases it, so a

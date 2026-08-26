@@ -12,7 +12,7 @@
 //! `Cargo.lock`, because Smithay pulls them for the compositor's own server
 //! side.
 
-use domicile_test_client::arguments;
+use domicile_test_client::{arguments, trace};
 
 mod window;
 
@@ -23,10 +23,14 @@ fn main() -> ExitCode {
         Ok(asked) => asked,
         Err(err) => {
             eprintln!("domicile-test-client: {err}");
-            eprintln!("usage: domicile-test-client [--title NAME]");
+            eprintln!("usage: domicile-test-client [--title NAME] [--trace]");
             return ExitCode::from(2);
         }
     };
+
+    if asked.trace {
+        trace::wanted();
+    }
 
     // `run` only returns a failure — a window's job here lasts as long as the
     // check that opened it, and every caller ends it with a signal.

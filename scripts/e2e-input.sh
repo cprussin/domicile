@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 # Prove forwarded input reaches a real client, keyboard AND pointer. Runs
-# `weston-eventdemo` on Domicile with WAYLAND_DEBUG so we can see the exact protocol
+# `domicile-test-client --trace` on Domicile, so we can see the exact protocol
 # events it receives, and forwards a focus+pointer+key sequence via the chrome
 # protocol.
 #   nix develop .#full -c ./scripts/e2e-input.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+# 1, not 77. A client this repo builds and cannot build is a broken tree, which
+# is a failure; 77 is for what the *machine* is missing, and this needs nothing
+# the machine has to supply.
+build_test_client || exit 1
 BIN="$ROOT/target/debug/domicile-compositor"
 # Built here rather than merely checked for. A binary that exists but predates
 # the source is the worst of both: every check runs, and every check reports on
@@ -82,12 +88,15 @@ if ! grep -q '"type":"displays"' "$CHROME"; then
     "$(cat "$CHROME")"
 fi
 
-# WAYLAND_DEBUG makes the client log every protocol event it receives. It names
-# objects `wl_keyboard@14` on current libwayland and `wl_keyboard#14` on older
-# releases, so the greps below accept either. NO_COLOR because current
-# libwayland also writes SGR escapes between the interface name and the event,
-# which no plain-text grep can match.
-NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 6 weston-eventdemo >"$APP" 2>&1 &
+# `--trace` makes the client report the protocol messages it receives, which is
+# the only place these are visible — it produces no output of its own. Its own
+# report rather than `WAYLAND_DEBUG`: the backend it speaks prints
+# `wl_surface@12.enter, (Some(wl_output@7))`, and the greps below want
+# libwayland's `wl_surface@12.enter(wl_output@7)`, which is the shape the
+# client writes.
+# The `[#@]` in the greps below is older libwayland's spelling, kept because it
+# costs nothing and these checks may yet be pointed at another client.
+WAYLAND_DISPLAY=wayland-1 timeout 6 "$TEST_CLIENT" --title app --trace >"$APP" 2>&1 &
 CLI=$!
 # Wait for a real key event: `.key(` and not `.keymap`, which arrives at once
 # and would end the wait before any input had been forwarded.
@@ -100,8 +109,18 @@ btn_ok=$(grep -cE "wl_pointer[#@][0-9]+\.button\(" "$APP")
 if [ "$key_ok" -ge 1 ] && [ "$btn_ok" -ge 1 ]; then
   echo "PASS: forwarded keyboard + pointer input reached the client"
 else
+  # The client's own last words with it, because the counts alone name the
+  # wrong thing when the client never started: it refuses a compositor with no
+  # `wl_shm` and no cursor manager, and both look from here like input that was
+  # not forwarded. The reason is in `$APP` and nothing else prints it — the
+  # grep above is empty in exactly that case.
+  #
+  # `tail`, not `head`: under `--trace` the head of that file is the registry
+  # listing, and the refusal is the last line written.
   compositor_verdict "$COMP" \
-    "FAIL: keyboard=$key_ok pointer_button=$btn_ok"
+    "FAIL: keyboard=$key_ok pointer_button=$btn_ok" \
+    "  The client's log ends:" \
+    "$(tail -3 "$APP")"
 fi
 
 # The pointer entering a surface makes the client ask for a cursor, which the
