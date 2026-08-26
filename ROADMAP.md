@@ -563,8 +563,11 @@ falloff the shadow uses, is the next candidate to move it.
   Ordering is not the whole answer and cannot be. Where chrome above a window
   and chrome below it cover one pixel, the page flattened that texel before we
   saw it — a translucent panel over a window with a wallpaper behind it, which
-  needs one window and no overlap. `WINDOW-COMPOSITING.md` costs out the raster
-  per band that closes it.
+  needs one window and no overlap. A raster per band is what closes that, and
+  its transport is now settled in `WINDOW-COMPOSITING.md`: the page cannot tag
+  its own commits, because the Wayland connection belongs to Chromium rather
+  than to the page, so the compositor asks for one band at a time and the next
+  commit is that band by construction. Not built.
 - ~~follow a window that moves~~ — done. `<domicile-app>` re-measures on every
   animation frame rather than on a `ResizeObserver`, which sees a box change
   size and nothing else: moving a window, animating a transform, a `:hover`

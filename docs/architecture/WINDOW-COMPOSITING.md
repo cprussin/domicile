@@ -385,9 +385,38 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
 
   **Raster per band is where this goes** if the shell wants translucent chrome
   over a window with anything behind it, because nothing is pre-flattened. Its
-  open part is transport, not rendering. Settle that before building region
-  clipping if the shell's panels are translucent; region clipping is the
-  cheaper first step only if they are not.
+  open part is transport, not rendering.
+
+  **Settled: the page cannot tag its own commits, so the compositor drives.**
+  The obvious design is for the chrome to render each band and label it —
+  "this frame is band 2" — and that cannot be built here. The chrome is a page
+  in Electron; the Wayland connection is *Chromium's*, not the page's, so the
+  page cannot add a request to the stream its own commit rides on. A label sent
+  over the chrome protocol socket instead crosses a different transport, and
+  nothing orders a Unix-socket write against a Wayland commit: the compositor
+  would be matching frames to labels by arrival and would eventually get it
+  wrong, silently, in a way that looks like a stacking bug.
+
+  Three ways out, and only the third is both correct and affordable:
+
+  | | ordering | cost |
+  |---|---|---|
+  | **N surfaces** — one Electron window per band | solved by construction: each band is its own `wl_surface` | N renderer processes, each holding the shell's state, and the shell's own state sync between them |
+  | **Tag over the socket** | unordered against the commit; matched by arrival | cheap and wrong |
+  | **The compositor asks, one band at a time** | one outstanding request, so the next chrome commit *is* that band | a socket round trip per band, per chrome repaint |
+
+  The third makes the ambiguity impossible rather than unlikely: with one
+  request outstanding there is only one band the next commit can be. It costs
+  latency on a chrome repaint — N round trips where there is one now — and
+  nothing on an idle desktop, which is most of them. It also keeps one renderer
+  and one copy of the shell's state, which is the thing the architecture is
+  for.
+
+  What it needs: a request on the chrome protocol (`render_band`), a reply the
+  compositor treats as "the next commit is this", a texture per band rather
+  than the single `chrome_texture`, and a policy for what to draw while a band
+  is still being asked for — the last frame's texture for that band, which is
+  why they are cached rather than requested per frame.
 
 - **What the number actually is.** Everything through the draw is in place and
   tested, but the only measurement so far is of the copy path. Phase 1 is not
