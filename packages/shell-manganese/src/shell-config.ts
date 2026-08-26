@@ -13,6 +13,27 @@ import { z } from "zod";
 /** Where this shell keeps its configuration, under `$XDG_CONFIG_HOME`. */
 const RELATIVE = path.join("domicile", "manganese.json");
 
+/**
+ * The keyboard this desktop comes up on when its config does not say.
+ *
+ * Programmer's Dvorak, with Caps Lock and Escape swapped. A preference rather
+ * than a neutral choice, and it lives *here* for that reason: the compositor
+ * carries the same defaults, but a compositor is what every shell starts, and
+ * one person's layout reaching a desktop that never asked for it is the bug
+ * `keyboardDocument` was changed to stop. What a shell states for itself is
+ * nobody else's business.
+ *
+ * Replaced whole by a `keyboard` in the config file rather than merged into,
+ * because a variant belongs to a layout: someone who writes
+ * `{ "layout": "de" }` is asking for a German keyboard, and quietly keeping
+ * `dvp` under it would produce a keymap that is neither.
+ */
+const KEYBOARD = {
+  layout: "us",
+  options: ["caps:swapescape"],
+  variant: "dvp",
+} as const;
+
 /** The environment as a process has it, which is all-optional by nature. */
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -58,7 +79,11 @@ export const configPath = ({ HOME, XDG_CONFIG_HOME }: Environment): string => {
  */
 export const parseShellConfig = (text: string): ShellConfig => {
   const written = shellConfig.parse(JSON.parse(text));
-  return { desktop: parseDesktop(written.desktop), present: written.present };
+  const desktop = parseDesktop(written.desktop);
+  return {
+    desktop: { ...desktop, keyboard: desktop.keyboard ?? KEYBOARD },
+    present: written.present,
+  };
 };
 
 /**

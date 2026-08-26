@@ -15,7 +15,8 @@
   "name": "domicile-minimal-shell",
   "private": true,
   "scripts": {
-    "build": "vite build -c vite.launch.config.ts && vite build -c vite.main.config.ts && vite build -c vite.preload.config.ts && vite build -c vite.renderer.config.ts"
+    "build": "vite build -c vite.launch.config.ts && vite build -c vite.main.config.ts && vite build -c vite.preload.config.ts && vite build -c vite.renderer.config.ts && bun run build:manifest",
+    "build:manifest": "node -e \"require('fs').writeFileSync('.vite/build/package.json','{\\\"type\\\":\\\"module\\\"}\\n')\""
   },
   "type": "module",
   "version": "0.1.0"

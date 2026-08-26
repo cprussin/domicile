@@ -51,9 +51,10 @@ export const chromeEnvironment = (
 /**
  * The arguments to start the chrome's Electron process with.
  *
- * `extra` is the machine's, not the shell's: a nix store build carries no
- * setuid sandbox helper and needs `--no-sandbox`, and a shell that could name
- * its own flags could turn its own sandbox off.
+ * `extra` is the machine's, not the shell's: a host that cannot give Chromium
+ * a usable namespace sandbox needs `--no-sandbox` and only the machine knows
+ * whether it is one, and a shell that could name its own flags could turn its
+ * own sandbox off.
  */
 export const chromeArguments = (
   session: CompositorSession,

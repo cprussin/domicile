@@ -49,10 +49,17 @@ else
   DOMICILE_ELECTRON="$ELECTRON_BIN/electron"
 fi
 export DOMICILE_ELECTRON
-# What this machine needs Electron started with. A store build has no setuid
-# sandbox helper; a container has no usable /dev/shm and no GPU. All three are
-# the machine's business rather than the shell's, which is why they arrive here
+# What this machine needs Electron started with, and all three are the
+# machine's business rather than the shell's — which is why they arrive here
 # and not in anything a shell declares.
+#
+# `--no-sandbox` because the places this is driven from cannot give Chromium a
+# usable namespace sandbox: this repo's dev container runs as root, which
+# Electron refuses outright, and a CI runner image may restrict unprivileged
+# user namespaces. Not because it is a store build — that helper is indeed not
+# setuid, but Chromium falls back to the namespace sandbox and a store-built
+# shell comes up sandboxed as an ordinary user on an ordinary host. The other
+# two are a container with no usable /dev/shm and no GPU.
 export DOMICILE_ELECTRON_ARGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
 
 ( cd "$ROOT" && bun run turbo build:vite --filter "@domicile/shell-$SHELL_NAME" ) >/dev/null 2>&1 \

@@ -101,6 +101,29 @@ a terminal exits, an editor with unsaved work is free to put a dialog up and
 stay. That tab leaves the rail when the host says the client actually went
 (`app_closed`), not when the close is asked for.
 
+## Configure
+
+`$XDG_CONFIG_HOME/domicile/manganese.json`, and nothing of Domicile's: this
+shell owns the file, and what the compositor needs is derived from it.
+
+```json
+{
+  "present": true,
+  "desktop": {
+    "displays": [{ "name": "left", "size": [1920, 1080] }],
+    "keyboard": { "layout": "us", "variant": "dvp", "options": ["caps:swapescape"] }
+  }
+}
+```
+
+Everything is optional; a missing file is a first run rather than a mistake.
+`keyboard` is the exception worth knowing about: unset, this desktop comes up
+on Programmer's Dvorak with Caps Lock and Escape swapped, which is a preference
+rather than a neutral default. Naming one replaces it whole rather than merging
+into it — a variant belongs to a layout, so `{ "layout": "de" }` is a German
+keyboard and not a German one with `dvp` still under it. For an ordinary US
+layout, say so: `{ "layout": "us" }`.
+
 ## Build & run
 
 ```sh

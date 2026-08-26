@@ -66,8 +66,9 @@ describe("chromeArguments", () => {
   });
 
   it("passes on what the machine asked for", () => {
-    // A nix store build carries no setuid sandbox helper. The machine's to
-    // say, which is why it is not something a shell can ask for itself.
+    // Whether a host can give Chromium a usable namespace sandbox is the
+    // machine's to say, which is why it is not something a shell can ask for
+    // itself.
     expect(chromeArguments(session, ["--no-sandbox"])).toContain(
       "--no-sandbox",
     );
