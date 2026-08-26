@@ -21,9 +21,7 @@ can be verified in CI and on a headless box.
 | `src/straight-alpha-probe.ts` | `e2e-window-alpha.sh` | Reports whether frames reaching a chrome carry *straight* alpha, i.e. that the compositor divided out what the client premultiplied. |
 | `src/keystroke-driver.ts` | `measure.sh` | Types over the host socket at a steady rate, so the latency numbers are measured against a known count of keystrokes. |
 | `src/chrome-typist.ts` | `measure-round-trip.sh` | Types with real input events into the chrome's own window instead, which is what puts the chrome's own clock back in the measured loop. |
-| `src/displays-probe.ts` | `e2e-displays-on-hello.sh` | Reports the desktop a chrome is told at the handshake, keeping "told nothing" and "not told" apart — only one of those is a bug. |
 | `src/one-window-per-display-probe.ts` | `e2e-one-window-per-display.sh` | Places one window on each display, so each client can be asked which screen it was told it is on — the placement is what narrows the set, and only a chrome can send one. |
-| `src/redescribe-probe.ts` | `e2e-desktop-changed.sh` | Reports what three chromes are told when the desktop changes under them: one connected and asked, one connected and did not, one that connects after. |
 
 `src/verdicts.ts` is the odd one out: not a harness but a check *on* the
 scripts, run from `verdicts.test.ts` in the `typescript` group. `exit 99` in a
@@ -88,13 +86,13 @@ All of this exists because the same misattribution kept being shipped, and
 each fix produced the next instance of it somewhere the last one had not been
 looked at.
 
-`src/desktop-line.ts` is the format the two display probes print, shared so the
-`EXPECTED` strings in their scripts cannot drift apart. `src/waiting.ts` is the
-waiting the probes share: `rest` for a probe with nothing to poll, and `settle`
-for one waiting on something that has to cross a socket — a deadline on a
-condition rather than a fixed sleep, since a sleep long enough on an idle box
-is a race on a loaded one, and a chrome told late would be reported as a chrome
-told nothing.
+`src/desktop-line.ts` is the format a display probe prints. It was shared so
+the `EXPECTED` strings in two scripts could not drift apart; since the desktop
+assertions moved into `packages/domicile-compositor/tests/desktop.rs` there is
+one caller left, `reload-displays-probe.ts`, and nothing left for it to drift
+apart *from*. Kept for now on the expectation that the client-driven probes
+grow back, and worth inlining if they do not. `src/waiting.ts` is `rest`, the
+sleep a probe with nothing to poll takes.
 
 `src/chrome-socket.ts` is the shared connection: newline-delimited JSON framing
 from [`@domicile/chrome-sdk/newline-frames`](../chrome-sdk/README.md), the

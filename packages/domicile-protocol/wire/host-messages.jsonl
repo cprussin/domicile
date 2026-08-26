@@ -1,0 +1,16 @@
+{"type":"welcome","protocol_version":17}
+{"type":"render_band","band":2}
+{"type":"shortcut","shortcut":{"key":24,"alt":false,"ctrl":true,"shift":false,"logo":true}}
+{"type":"app_appeared","app_id":"app-1","title":null,"size":null}
+{"type":"app_appeared","app_id":"app-2","title":"kitty","size":[800.0,600.0]}
+{"type":"app_titled","app_id":"app-2","title":"~/src"}
+{"type":"app_resized","app_id":"app-2","size":[1024.0,768.0]}
+{"type":"app_frame","app_id":"app-2","width":1024,"height":768,"scale":2,"format":"argb8888","bytes":3145728}
+{"type":"app_frame","app_id":"app-2","width":1024,"height":768,"scale":1,"format":"xrgb8888","bytes":4096,"region":[0,0,32,32]}
+{"type":"app_closed","app_id":"app-1"}
+{"type":"app_composited","app_id":"app-2"}
+{"type":"app_cursor","app_id":"app-2","cursor":"vertical-text"}
+{"type":"displays","displays":[{"name":"left","position":[0,0],"size":[1920,1080],"scale":1},{"name":"right","position":[1920,0],"size":[2560,1440],"scale":2}]}
+{"type":"displays","displays":[{"name":"domicile-0","position":[0,0],"size":[1280,800],"scale":1}]}
+{"type":"focus_changed","app_id":"app-2"}
+{"type":"focus_changed","app_id":null}

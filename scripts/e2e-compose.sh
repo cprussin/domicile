@@ -30,16 +30,39 @@ cd "$ROOT"
 # count as tests are added; it has to be high enough that a filter which
 # stopped matching cannot slip under it.
 run_filtered() {
-  local filter="$1" least="$2" log ran
+  local filter="$1" least="$2" log ran ran_ok
   log="$(mktemp)"
-  if ! cargo test -p domicile-compositor -- --ignored "$filter" 2>&1 | tee "$log"; then
+  # `PIPESTATUS` rather than the pipeline's own status, which is `tee`'s — and
+  # `tee` succeeds whenever it can write the file. Without this a failing
+  # `cargo test` fell through to the count below, where a binary that printed
+  # `test result: FAILED` contributed nothing to the sum and tripped the floor
+  # instead: the right verdict reached by the wrong route, reported as a
+  # renamed module when what was actually wrong was the pixels.
+  cargo test -p domicile-compositor -- --ignored "$filter" 2>&1 | tee "$log"
+  ran_ok="${PIPESTATUS[0]}"
+  if [ "$ran_ok" -ne 0 ]; then
     rm -f "$log"; return 1
   fi
-  ran="$(sed -n 's/^test result: ok\. \([0-9]*\) passed.*/\1/p' "$log" | tail -1)"
+  # Summed across every test binary rather than taken from the last one.
+  # `cargo test -p` runs the crate's unit tests *and* everything in `tests/`,
+  # and an integration binary the filter does not name reports `ok. 0 passed`
+  # after them — so `tail -1` read the count as zero the moment this crate
+  # grew its first `tests/` file, and this guard fired about a rename that had
+  # not happened.
+  #
+  # The sum takes any `--ignored` test from any binary in the crate, so the
+  # floor assumes the ignored set lives in the unit tests. It does today: the
+  # `tests/` files ignore nothing. The first `#[ignore]`d test added to one
+  # whose name contains a filter substring inflates `ran` and lifts this floor
+  # off the thing it guards, so raise it deliberately then.
+  #
+  # `awk` prints on every input, empty included, so `$ran` is always a number.
+  ran="$(sed -n 's/^test result: ok\. \([0-9]*\) passed.*/\1/p' "$log" |
+    awk '{ total += $1 } END { print total + 0 }')"
   rm -f "$log"
-  if [ -z "$ran" ] || [ "$ran" -lt "$least" ]; then
+  if [ "$ran" -lt "$least" ]; then
     echo
-    echo "FAIL: '$filter' matched ${ran:-no} tests, and this suite has at least $least."
+    echo "FAIL: '$filter' matched $ran tests, and this suite has at least $least."
     echo "  cargo treats a filter that matches nothing as a pass, so a renamed"
     echo "  module stops running every test under it and still exits 0. Either"
     echo "  the filter no longer names the module, or tests were removed and"

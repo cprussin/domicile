@@ -130,7 +130,7 @@ use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{Color32F, Frame as _, ImportMem as _, Renderer as _};
 use smithay::backend::winit::WinitGraphicsBackend;
 
-/// The log messages *this change's* scripts grep for, pinned to the scripts.
+/// The log messages *this change's* scripts and tests grep for, pinned to them.
 ///
 /// Each is the only trace some code path leaves, so a script asserts on the
 /// *spelling*. Renaming one in place leaves the script passing on the arms a
@@ -140,7 +140,9 @@ use smithay::backend::winit::WinitGraphicsBackend;
 /// `the_grepped_log_messages_are_what_the_scripts_expect` reads the scripts
 /// themselves, so a rename here fails against the file that has to agree with
 /// it rather than against a second copy in this one, which would rename along
-/// with the first.
+/// with the first. `tests/desktop.rs` spells one of these out too, and is not
+/// read by that test — but it lives in another file, so no rename catches both
+/// at once and the disagreement still surfaces as a failure.
 ///
 /// Three of at least nine: `e2e-chrome-layer.sh` and `e2e-dmabuf.sh` grep for
 /// `toplevel mapped`, `broadcast app frame`, `chrome client connected` and
@@ -149,7 +151,9 @@ use smithay::backend::winit::WinitGraphicsBackend;
 mod grepped {
     /// `e2e-two-displays.sh` phase 3: told a density it could not read.
     pub const UNPARSEABLE: &str = "unparseable chrome message";
-    /// `e2e-two-displays.sh` phase 3: the guarded return in `set_output_scale`.
+    /// `e2e-two-displays.sh` phase 3 and
+    /// `tests/desktop.rs::a_described_desktop_refuses_a_chromes_density`: the
+    /// guarded return in `set_output_scale`.
     pub const DENSITY_REFUSED: &str = "a described desktop keeps its own scale";
     /// `e2e-hidpi.sh`: the logical size it derives the expected mode from.
     pub const ADVERTISING: &str = "advertising output scale";

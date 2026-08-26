@@ -351,8 +351,10 @@ dependencies = [
  "domicile-launch",
  "domicile-protocol",
  "domicile-scene",
+ "domicile-test-chrome",
  "libloading",
  "smithay",
+ "tempfile",
  "thiserror 1.0.69",
  "tracing",
  "tracing-subscriber",
@@ -402,6 +404,17 @@ dependencies = [
 [[package]]
 name = "domicile-scene"
 version = "0.0.0"
+
+[[package]]
+name = "domicile-test-chrome"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-protocol",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "downcast-rs"
