@@ -49,13 +49,19 @@ export const useShellWindows = (
   const [state, dispatch] = useReducer(reduceShell, EMPTY_SHELL);
 
   useEffect(() => {
-    bridge.on("app_appeared", ({ app_id, title }) => {
+    bridge.on("app_appeared", ({ app_id, size, title }) => {
+      // The portal for this window mounts a render later, so the size waits
+      // in `AppElements` until it registers. See `AppElements.announced`.
+      appElements.announced(app_id, size);
       dispatch(ShellAction.AppAppeared(app_id, title));
     });
     bridge.on("app_titled", ({ app_id, title }) => {
       dispatch(ShellAction.AppTitled(app_id, title));
     });
     bridge.on("app_closed", ({ app_id }) => {
+      // The client going is what ends the record, not the portal unmounting.
+      // See `AppElements.closed`.
+      appElements.closed(app_id);
       dispatch(ShellAction.AppClosed(app_id));
     });
     bridge.on("app_frame", (message) => {

@@ -429,6 +429,52 @@ describe("Shell", () => {
       expect(container.querySelector(APP_TAG_NAME)).toBeNull();
     });
 
+    it("does not cover a window that arrived already drawn with a placeholder", () => {
+      // A size on the announcement is the replay a reloading chrome gets, and
+      // the portal it mounts is never sent a frame or a resize where the
+      // compositor draws the client itself — so the label would sit over a
+      // live window. The portal mounts a render after the message, which is
+      // why the size waits in `AppElements` rather than being applied on the
+      // spot.
+      const { container } = renderShell();
+      bridge.emit("app_appeared", {
+        app_id: "term",
+        size: [640, 480],
+        title: "Terminal",
+      });
+      expect(container.querySelector(APP_TAG_NAME)?.classList).toContain(
+        "has-surface",
+      );
+    });
+
+    it("forgets what a client had drawn once it is gone", () => {
+      // The record is the client's, so it ends with the client rather than
+      // with the portal — a portal comes and goes for reasons the client knows
+      // nothing about, and one kept for the session is one per window the
+      // session ever opened. Observed by announcing the id a second time,
+      // which the host will not do (its ids only count up); what is pinned is
+      // that the drop happens on the close rather than on the unmount.
+      const { container } = renderShell();
+      bridge.emit("app_appeared", {
+        app_id: "term",
+        size: [640, 480],
+        title: "Terminal",
+      });
+      bridge.emit("app_closed", { app_id: "term" });
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      expect(container.querySelector(APP_TAG_NAME)?.classList).not.toContain(
+        "has-surface",
+      );
+    });
+
+    it("leaves the placeholder up for a client that has not drawn yet", () => {
+      const { container } = renderShell();
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      expect(container.querySelector(APP_TAG_NAME)?.classList).not.toContain(
+        "has-surface",
+      );
+    });
+
     it("renames the tab when the client says what its window is called", () => {
       // The one place the wire message meets the reducer. A toplevel is
       // announced when the client creates it, which is before `set_title`, so
