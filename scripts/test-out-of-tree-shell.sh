@@ -62,9 +62,9 @@ done
 echo "PASS: no catalog: or workspace:* survived into a published manifest"
 
 # Every `exports` target, not merely the ones the example imports. The example
-# reaches 8 of `chrome-sdk`'s 21 subpaths, so without this the other 13 could
-# point at nothing and this script would still be green — and the entry a shell
-# author reaches for first is as likely to be one of those.
+# reaches a handful of the two packages' 33 subpaths, so without this the rest
+# could point at nothing and this script would still be green — and the entry a
+# shell author reaches for first is as likely to be one of those.
 echo "== every exports target is actually shipped =="
 for tarball in "$SDK" "$HOST"; do
   tar xzOf "$tarball" package/package.json >"$WORK/pj.json"
@@ -93,24 +93,6 @@ PYTHON
   fi
 done
 echo "PASS: every exports target is present in both tarballs"
-
-# The example is a shell, and the manifest check that keeps the in-tree shells
-# in step with the compositor cannot see it: `shipped_shells.rs` globs
-# `packages/shell-*`, and this one is deliberately outside the workspace. So the
-# guide's own worked example would silently rot on the next PROTOCOL_VERSION
-# bump — which is precisely the drift that test was written to prevent.
-echo "== the example speaks this compositor's protocol =="
-HOST_PROTOCOL="$(sed -n 's/^pub const PROTOCOL_VERSION: u32 = \([0-9]*\);.*/\1/p' \
-  "$ROOT/packages/domicile-protocol/src/lib.rs")"
-SHELL_PROTOCOL="$(sed -n 's/.*"protocol": *\([0-9]*\).*/\1/p' "$EXAMPLE/domicile.shell.json")"
-[ -n "$HOST_PROTOCOL" ] || { echo "FAIL: could not read PROTOCOL_VERSION from the protocol crate"; exit 1; }
-[ -n "$SHELL_PROTOCOL" ] || { echo "FAIL: the example's manifest declares no protocol"; exit 1; }
-if [ "$HOST_PROTOCOL" != "$SHELL_PROTOCOL" ]; then
-  echo "FAIL: the example declares protocol $SHELL_PROTOCOL, this compositor speaks $HOST_PROTOCOL."
-  echo "  Bumping PROTOCOL_VERSION means bumping the example the guide is written around."
-  exit 1
-fi
-echo "PASS: the example declares protocol $SHELL_PROTOCOL, the same as the compositor"
 
 # Outside the repo, so nothing resolves by climbing out of it.
 echo "== building the example shell outside the repo =="
@@ -161,25 +143,30 @@ if ! ( cd "$SHELL_DIR" && bun run build >"$WORK/build.log" 2>&1 ); then
   exit 1
 fi
 
-# The manifest names what runs, so the build has to have produced it. A shell
-# that builds but emits nothing at `entry` is one the compositor refuses to
-# start, which is a failure a build alone does not show.
-ENTRY="$(sed -n 's/.*"entry": *"\([^"]*\)".*/\1/p' "$SHELL_DIR/domicile.shell.json")"
-[ -n "$ENTRY" ] || { echo "FAIL: the example's manifest names no entry"; exit 1; }
-if [ ! -f "$SHELL_DIR/$ENTRY" ]; then
-  echo "FAIL: the build emitted nothing at the manifest's entry ($ENTRY). It has:"
-  find "$SHELL_DIR/.vite" -type f 2>/dev/null | sed "s|$SHELL_DIR/|    |" | head -10
-  exit 1
-fi
-# The manifest names only `entry`, but `main.ts` joins to the preload and the
-# renderer's page — so a renderer build that emitted nothing still leaves a
-# shell that starts and shows a blank window.
-for artifact in ".vite/build/preload.cjs" ".vite/renderer/main_window/index.html"; do
+# `bin/` names what runs, so the build has to have produced everything it
+# reaches: the launcher it execs, the Electron main bundle the launcher starts,
+# the preload that main names, and the page. A shell that builds but emits none
+# of them still starts and shows a blank window — or nothing at all — which is
+# a failure a green build does not show.
+for artifact in \
+  ".vite/build/launch.js" \
+  ".vite/build/main.js" \
+  ".vite/build/preload.cjs" \
+  ".vite/renderer/main_window/index.html"; do
   if [ ! -f "$SHELL_DIR/$artifact" ]; then
-    echo "FAIL: the build emitted no $artifact, which the entry point loads at runtime. It has:"
+    echo "FAIL: the build emitted no $artifact, which running the shell reaches. It has:"
     find "$SHELL_DIR/.vite" -type f 2>/dev/null | sed "s|$SHELL_DIR/|    |" | head -10
     exit 1
   fi
 done
 
-echo "PASS: a shell outside this repo builds against the published SDK and emits everything it loads"
+# The stub is what a user runs and what an installed shell puts on `PATH`, so
+# a shell whose `bin` entry is missing or unexecutable is one nothing can start
+# — and `bun install` is what would have marked it executable for a consumer.
+STUB="$SHELL_DIR/$(sed -n 's/.*"minimal": *"\.\/\([^"]*\)".*/\1/p' "$SHELL_DIR/package.json")"
+if [ ! -x "$STUB" ]; then
+  echo "FAIL: the example's bin entry is missing or not executable ($STUB)"
+  exit 1
+fi
+
+echo "PASS: a shell outside this repo builds against the published SDK and emits everything running it reaches"

@@ -1,0 +1,26 @@
+#!/bin/sh
+# The manganese shell.
+#
+# This is what a user runs, and as far as they are concerned it *is* the
+# desktop: it starts the compositor itself and there is nothing of Domicile's
+# to run or configure separately. Configuration is this shell's own, at
+# $XDG_CONFIG_HOME/domicile/manganese.json.
+#
+# ELECTRON_RUN_AS_NODE runs Electron's bundled Node rather than Electron, so no
+# separate Node install is needed and, more importantly, no display connection
+# is made yet: the launcher has to start the compositor and learn which display
+# the chrome goes on *before* an Electron process settles that for itself.
+set -eu
+# Nothing here reads arguments, so nothing may be given: an argument that goes
+# nowhere is a request that silently did not happen, and `manganese --headless`
+# starting an ordinary desktop is exactly the failure the compositor's own
+# command line goes out of its way to refuse.
+if [ "$#" -gt 0 ]; then
+  echo "manganese: takes no arguments, got: $*" >&2
+  echo "manganese: what this desktop does is its config file's to say; see its README." >&2
+  exit 2
+fi
+here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ELECTRON_RUN_AS_NODE=1
+export ELECTRON_RUN_AS_NODE
+exec "${DOMICILE_ELECTRON:-electron}" "$here/.vite/build/launch.js"

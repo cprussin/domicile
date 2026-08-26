@@ -416,8 +416,31 @@ mod tests {
     #[test]
     fn a_described_desktop_advertises_one_output_per_display() {
         let screens = Screens::described(&desktop(
-            "[[output.displays]]\nname = \"left\"\nsize = [1920, 1080]\n\
-             [[output.displays]]\nname = \"right\"\nposition = [1920, 0]\nsize = [2560, 1440]\nscale = 2\n",
+            r#"{
+  "output": {
+    "displays": [
+      {
+        "name": "left",
+        "size": [
+          1920,
+          1080
+        ]
+      },
+      {
+        "name": "right",
+        "position": [
+          1920,
+          0
+        ],
+        "size": [
+          2560,
+          1440
+        ],
+        "scale": 2
+      }
+    ]
+  }
+}"#,
         ));
         assert_eq!(
             screens.outputs().cloned().collect::<Vec<_>>(),
@@ -445,7 +468,20 @@ mod tests {
         // is what the client actually draws, and a display that reports its
         // logical size as its mode is a blurry one.
         let screens = Screens::described(&desktop(
-            "[[output.displays]]\nname = \"retina\"\nsize = [2560, 1440]\nscale = 2\n",
+            r#"{
+  "output": {
+    "displays": [
+      {
+        "name": "retina",
+        "size": [
+          2560,
+          1440
+        ],
+        "scale": 2
+      }
+    ]
+  }
+}"#,
         ));
         let retina = screens.outputs().next().expect("the one display");
         assert_eq!(retina.mode(), (5120, 2880));
@@ -478,8 +514,31 @@ mod tests {
         // Two, because a lone display normalises to the origin, and `[0, 0]` is
         // what a `described` that dropped the position would produce anyway.
         let screens = Screens::described(&desktop(
-            "[[output.displays]]\nname = \"left\"\nsize = [1920, 1080]\n\
-             [[output.displays]]\nname = \"right\"\nposition = [1920, 120]\nsize = [2560, 1440]\nscale = 2\n",
+            r#"{
+  "output": {
+    "displays": [
+      {
+        "name": "left",
+        "size": [
+          1920,
+          1080
+        ]
+      },
+      {
+        "name": "right",
+        "position": [
+          1920,
+          120
+        ],
+        "size": [
+          2560,
+          1440
+        ],
+        "scale": 2
+      }
+    ]
+  }
+}"#,
         ));
         assert_eq!(
             screens
@@ -568,8 +627,30 @@ mod tests {
     /// The two-display desktop the entered-output cases are argued against.
     fn side_by_side() -> Screens {
         Screens::described(&desktop(
-            "[[output.displays]]\nname = \"left\"\nsize = [1920, 1080]\n\
-             [[output.displays]]\nname = \"right\"\nposition = [1920, 0]\nsize = [1280, 1024]\n",
+            r#"{
+  "output": {
+    "displays": [
+      {
+        "name": "left",
+        "size": [
+          1920,
+          1080
+        ]
+      },
+      {
+        "name": "right",
+        "position": [
+          1920,
+          0
+        ],
+        "size": [
+          1280,
+          1024
+        ]
+      }
+    ]
+  }
+}"#,
         ))
     }
 
@@ -675,7 +756,19 @@ mod tests {
         // window showing it pixel for pixel, rather than winit's default with
         // the desktop scaled into it.
         let screens = Screens::described(&desktop(
-            "[[output.displays]]\nname = \"only\"\nsize = [1920, 1080]\n",
+            r#"{
+  "output": {
+    "displays": [
+      {
+        "name": "only",
+        "size": [
+          1920,
+          1080
+        ]
+      }
+    ]
+  }
+}"#,
         ));
 
         assert_eq!(screens.window_showing_it((2560, 1440)), (1920, 1080));
@@ -688,8 +781,30 @@ mod tests {
         // will allocate — worse than the fixed size it replaced, which at
         // least showed the whole desktop.
         let screens = Screens::described(&desktop(
-            "[[output.displays]]\nname = \"a\"\nsize = [3840, 2160]\n\
-             [[output.displays]]\nname = \"b\"\nposition = [3840, 0]\nsize = [3840, 2160]\n",
+            r#"{
+  "output": {
+    "displays": [
+      {
+        "name": "a",
+        "size": [
+          3840,
+          2160
+        ]
+      },
+      {
+        "name": "b",
+        "position": [
+          3840,
+          0
+        ],
+        "size": [
+          3840,
+          2160
+        ]
+      }
+    ]
+  }
+}"#,
         ));
 
         // 7680x2160 into 1280 wide: the height follows by the same factor, so
@@ -702,8 +817,30 @@ mod tests {
         // Stacked rather than side by side, which is the axis the width case
         // cannot tell you anything about.
         let screens = Screens::described(&desktop(
-            "[[output.displays]]\nname = \"a\"\nsize = [1600, 1200]\n\
-             [[output.displays]]\nname = \"b\"\nposition = [0, 1200]\nsize = [1600, 1200]\n",
+            r#"{
+  "output": {
+    "displays": [
+      {
+        "name": "a",
+        "size": [
+          1600,
+          1200
+        ]
+      },
+      {
+        "name": "b",
+        "position": [
+          0,
+          1200
+        ],
+        "size": [
+          1600,
+          1200
+        ]
+      }
+    ]
+  }
+}"#,
         ));
 
         assert_eq!(screens.window_showing_it((1280, 800)), (533, 800));
@@ -713,7 +850,19 @@ mod tests {
     fn a_desktop_smaller_than_the_box_is_not_blown_up_to_fill_it() {
         // A window bigger than the desktop is letterboxing nothing draws.
         let screens = Screens::described(&desktop(
-            "[[output.displays]]\nname = \"only\"\nsize = [640, 480]\n",
+            r#"{
+  "output": {
+    "displays": [
+      {
+        "name": "only",
+        "size": [
+          640,
+          480
+        ]
+      }
+    ]
+  }
+}"#,
         ));
 
         assert_eq!(screens.window_showing_it((1280, 800)), (640, 480));
@@ -737,7 +886,19 @@ mod tests {
         // The point of describing one: a window dragged smaller shows less of
         // the desktop rather than making the desktop smaller.
         let screens = Screens::described(&desktop(
-            "[[output.displays]]\nname = \"only\"\nsize = [800, 600]\n",
+            r#"{
+  "output": {
+    "displays": [
+      {
+        "name": "only",
+        "size": [
+          800,
+          600
+        ]
+      }
+    ]
+  }
+}"#,
         ));
         assert!(!screens.follows_the_window());
     }
@@ -762,18 +923,23 @@ mod tests {
         assert!(screens.follows_the_window());
     }
 
-    fn described(text: &str) -> Screens {
-        Screens::described(&desktop(text))
+    /// The screens a desktop made of `entries` describes.
+    ///
+    /// `entries` is the display list rather than a whole config: these tests
+    /// build desktops by naming which displays are in them, and in what order.
+    fn described(entries: &str) -> Screens {
+        Screens::described(&desktop(&format!(
+            r#"{{ "output": {{ "displays": [{entries}] }} }}"#
+        )))
     }
 
-    const LEFT: &str = "[[output.displays]]\nname = \"left\"\nsize = [1920, 1080]\n";
-    const RIGHT: &str =
-        "[[output.displays]]\nname = \"right\"\nposition = [1920, 0]\nsize = [2560, 1440]\n";
+    const LEFT: &str = r#"{ "name": "left", "size": [1920, 1080] }"#;
+    const RIGHT: &str = r#"{ "name": "right", "position": [1920, 0], "size": [2560, 1440] }"#;
 
     #[test]
     fn a_desktop_that_did_not_change_rearranges_into_nothing() {
-        let before = described(&format!("{LEFT}{RIGHT}"));
-        let after = described(&format!("{LEFT}{RIGHT}"));
+        let before = described(&format!("{LEFT}, {RIGHT}"));
+        let after = described(&format!("{LEFT}, {RIGHT}"));
         assert_eq!(
             before.rearranged_into(&after),
             Rearrangement {
@@ -786,7 +952,7 @@ mod tests {
     #[test]
     fn a_display_that_was_added_is_a_new_slot() {
         let before = described(LEFT);
-        let after = described(&format!("{LEFT}{RIGHT}"));
+        let after = described(&format!("{LEFT}, {RIGHT}"));
         assert_eq!(
             before.rearranged_into(&after),
             Rearrangement {
@@ -798,7 +964,7 @@ mod tests {
 
     #[test]
     fn a_display_that_went_away_is_retired() {
-        let before = described(&format!("{LEFT}{RIGHT}"));
+        let before = described(&format!("{LEFT}, {RIGHT}"));
         let after = described(LEFT);
         assert_eq!(
             before.rearranged_into(&after),
@@ -816,8 +982,7 @@ mod tests {
         // and hand back a different one — which a toolkit reads as the monitor
         // being unplugged, not resized. It keeps its slot and is restated.
         let before = described(LEFT);
-        let after =
-            described("[[output.displays]]\nname = \"left\"\nsize = [3840, 2160]\nscale = 2\n");
+        let after = described(r#"{ "name": "left", "size": [3840, 2160], "scale": 2 }"#);
         assert_eq!(
             before.rearranged_into(&after),
             Rearrangement {
@@ -835,7 +1000,7 @@ mod tests {
         // so pretending it is the same one would leave a `<Screen name>`
         // pointing at nothing while its window stayed put.
         let before = described(LEFT);
-        let after = described("[[output.displays]]\nname = \"main\"\nsize = [1920, 1080]\n");
+        let after = described(r#"{ "name": "main", "size": [1920, 1080] }"#);
         assert_eq!(
             before.rearranged_into(&after),
             Rearrangement {
@@ -850,8 +1015,8 @@ mod tests {
         // Matched by name rather than by position, so writing the same two
         // displays in the other order moves each client's `wl_output` with the
         // display it named — not onto whichever display now sits at its index.
-        let before = described(&format!("{LEFT}{RIGHT}"));
-        let after = described(&format!("{RIGHT}{LEFT}"));
+        let before = described(&format!("{LEFT}, {RIGHT}"));
+        let after = described(&format!("{RIGHT}, {LEFT}"));
         assert_eq!(
             before.rearranged_into(&after),
             Rearrangement {
@@ -863,10 +1028,10 @@ mod tests {
 
     #[test]
     fn a_desktop_that_stopped_being_described_retires_every_display() {
-        // Removing the last `[[output.displays]]` is not an empty desktop but
+        // Removing the last `output.displays` is not an empty desktop but
         // the absence of a described one, and the single window-following
         // output is a different output with a different name.
-        let before = described(&format!("{LEFT}{RIGHT}"));
+        let before = described(&format!("{LEFT}, {RIGHT}"));
         let after = Screens::nested((1280, 800));
         assert_eq!(
             before.rearranged_into(&after),
@@ -880,7 +1045,7 @@ mod tests {
     #[test]
     fn a_reload_that_describes_displays_replaces_the_window_desktop() {
         let now = Screens::following_the_window((1280, 800), 2);
-        let described = desktop(LEFT);
+        let described = desktop(&format!(r#"{{ "output": {{ "displays": [{LEFT}] }} }}"#));
         assert_eq!(
             now.reloaded_into(Some(&described), (1280, 800)),
             Some(Screens::described(&described))
@@ -889,7 +1054,7 @@ mod tests {
 
     #[test]
     fn a_reload_that_describes_no_displays_leaves_the_window_desktop_alone() {
-        // The regression. With no `[[output.displays]]` the window is the
+        // The regression. With no `output.displays` the window is the
         // desktop, and its size and density are what `adopt_window_scale`
         // negotiated with the host — facts the config does not know. Rebuilding
         // from the config anyway hands back `nested_size` at scale 1, so a
@@ -911,7 +1076,7 @@ mod tests {
         // there is nothing to keep. `nested_size` is where the window takes
         // over — its next resize or density change corrects it, which is
         // exactly what an undescribed desktop is.
-        let now = Screens::described(&desktop(&format!("{LEFT}{RIGHT}")));
+        let now = described(&format!("{LEFT}, {RIGHT}"));
         assert_eq!(
             now.reloaded_into(None, (1280, 800)),
             Some(Screens::nested((1280, 800)))

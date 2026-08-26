@@ -19,25 +19,24 @@ TypeScript side; the Rust side is in
 Every bun workspace in this repo lives in `/packages`, whether it is a library
 (`chrome-sdk`, `component-library`, `test-support`, `e2e-harness`,
 `electron-chrome-host`) or a shell — a runnable chrome package, named `shell-*`
-(`shell-manganese`, `shell-simple`). A shell is not an "app" in its own
-directory because it is not the thing that runs: the compositor is, and a shell
-is the chrome package its config points at.
+(`shell-manganese`, `shell-simple`). A shell *is* the thing that runs: it is
+the program a user starts, and it starts the compositor underneath itself.
 
 The `shell-` prefix is a directory convention, not part of a shell's identity:
 `packages/` is shared with the cargo crates, and the prefix is what keeps the
-shells together in one tree. A shell's own name is what its
-`domicile.shell.json` says — `simple`, `manganese` — which is the name
-`ShellRef::Name` looks up under `$XDG_DATA_HOME/domicile/shells` and the
-system data directories. A checkout is not one of those, and `packages/` is not
-a shells directory: point a config at a shell in this repo by path
-(`package = "./packages/shell-simple"`), or pass `--shell ./packages/shell-simple`
-— which is what `ShellRef::Path` is for. The end-to-end scripts pass
-`--no-shell`, since each drives a compositor whose chrome is a stand-in of its
-own.
-See `packages/domicile-shell`.
+shells together in one tree. A shell's own name is what its `bin/` entry is
+called — `simple`, `manganese` — which is what a user types. Out of a checkout
+there is no install step: run `packages/shell-simple/bin/simple`, or
+`scripts/run-native.sh simple`, which builds both halves first and points
+`DOMICILE_COMPOSITOR` at the build. The end-to-end scripts mostly drive the
+compositor directly with a stand-in chrome of their own, which is why they name
+a `--chrome-socket` and a `--session` and start no shell at all; the one that
+covers the launcher is `scripts/e2e-shell-launch.sh`.
+See `packages/domicile-launch`, which is both halves of the boundary between a
+shell and the compositor it runs.
 
-Neither in-tree shell is privileged. Both are resolved and started by exactly
-the machinery an out-of-tree shell goes through, and
+Neither in-tree shell is privileged. Both start a compositor through exactly
+the machinery an out-of-tree shell uses, and
 [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) is the contract they
 observe. `examples/minimal-shell` is that document's worked example: it sits
 outside the bun workspace on purpose, and

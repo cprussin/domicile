@@ -44,7 +44,7 @@ SOCK="$XDG_RUNTIME_DIR/c.sock"
 APP="$(mktemp)"
 CHROME="$(mktemp)"
 
-"$BIN" --no-shell --chrome-socket "$SOCK" >/dev/null 2>&1 &
+"$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >/dev/null 2>&1 &
 COMP=$!
 # `wait` after the kill, or every passing run ends with the shell reporting
 # "Killed" on stderr for a client that was still up — which reads like a
@@ -149,16 +149,15 @@ elif [ "$mods" -lt 5 ]; then
     "  cannot tell those apart, which is why it is not the verdict here."
 elif ! lock_states | grep -qvE '^0$'; then
   # It has to lock before clearing means anything. A run where the press was
-  # never `Caps_Lock` at all ends on `locked=0` too, and that is reachable
-  # without touching this file: the compositor reads `domicile.toml` from the
-  # working directory, so a checkout that grows one with different
-  # `xkb_options` would turn this into a check that tests nothing.
+  # never `Caps_Lock` at all ends on `locked=0` too, and this check cannot tell
+  # the two apart — so it says which it could not rule out rather than
+  # reporting a pass.
   harness_fault "$COMP" "the keyboard locked at all" \
     "ERROR: the keyboard never locked, so the toggle below proves nothing." \
-    "  evdev 1 is Caps_Lock under the default keymap's caps:swapescape." \
-    "  A domicile.toml in the working directory would be enough to change" \
-    "  that, and this check cannot tell the difference from the lock it is" \
-    "  looking for."
+    "  evdev 1 is Caps_Lock under the default keymap's caps:swapescape, which" \
+    "  is what this run gets: no --config is passed, so the compositor is on" \
+    "  its own defaults. A keymap change would make this check test nothing," \
+    "  and it cannot tell that from the lock it is looking for."
 elif [ "$(lock_states | tail -1)" = "0" ]; then
   # And the last line is where the keyboard ended up.
   passed "the lock cleared, so the key the reload interrupted was not left down"

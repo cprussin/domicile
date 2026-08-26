@@ -1,38 +1,11 @@
-// Where the compositor's chrome socket is, from both sides of the Electron
-// host: the main process resolves it from the environment, and the preload
-// reads it back off the command line the main process started it with.
-
-import path from "node:path";
+// Where the compositor's chrome socket is, as the renderer learns it.
+//
+// The *launcher* chose it (`start-compositor`), the main process was handed it
+// in the session (`session-from-environment`), and the main process passes it
+// down here on the renderer's command line. This is that last reading half.
 
 /** The switch the main process passes the renderer the socket path on. */
 const SWITCH = "--domicile-chrome-socket=";
-
-/** What the socket is called when nothing named it. */
-const SOCKET_NAME = "domicile-chrome.sock";
-
-/**
- * The environment as the main process has it.
- *
- * An index signature rather than the two names below, because that is the shape
- * `process.env` has: a type of nothing but optional properties is a weak one,
- * which TypeScript refuses an object that shares no key with it — which
- * `ProcessEnv`, being an index signature, technically does not.
- */
-export type ChromeEnvironment = Readonly<Record<string, string | undefined>>;
-
-/**
- * The compositor socket the main process should connect the chrome to.
- *
- * `XDG_RUNTIME_DIR` must stay short: a Unix socket path is capped near 108
- * bytes (SUN_LEN), which a deep scratch directory blows past. Neither variable
- * being set is not a failure — it is a chrome started from the directory the
- * compositor is running in, which is how the prototype scripts do it.
- */
-export const chromeSocketPath = ({
-  DOMICILE_CHROME_SOCKET,
-  XDG_RUNTIME_DIR,
-}: ChromeEnvironment): string =>
-  DOMICILE_CHROME_SOCKET ?? path.join(XDG_RUNTIME_DIR ?? ".", SOCKET_NAME);
 
 /**
  * The compositor socket the main process picked, out of the renderer's argv.

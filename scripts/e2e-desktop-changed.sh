@@ -36,15 +36,21 @@ rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 export SOCK="$XDG_RUNTIME_DIR/c.sock"
 OUT="$(mktemp)"; CONF="$(mktemp)"; COMP=""
 
-# No `[[output.displays]]`, which is the whole point: this is the path where
+# No `output.displays`, which is the whole point: this is the path where
 # the window is the desktop. The size is stated rather than defaulted so the
 # expectation below is about the config rather than about a constant.
-cat >"$CONF" <<'TOML'
-[compositor]
-nested_size = [1280, 800]
-TOML
+cat >"$CONF" <<'JSON'
+{
+  "compositor": {
+    "nested_size": [
+      1280,
+      800
+    ]
+  }
+}
+JSON
 
-"$BIN" --no-shell --config "$CONF" --chrome-socket "$SOCK" >/dev/null 2>&1 &
+"$BIN" --session "$SOCK.session" --config "$CONF" --chrome-socket "$SOCK" >/dev/null 2>&1 &
 COMP=$!
 # `wait` after the kill so bash reaps the job quietly; without it it reports
 # "Killed" on stderr at exit, which reads like a failure in a passing run.
@@ -76,7 +82,7 @@ LATECOMER="$(sed -n 's/^latecomer: //p' "$OUT")"
 # `@2` needs `output.max_scale` to allow it — it defaults to 2, and the config
 # above does not restate it, so a change to that default would make this assert
 # something else. Stated here rather than pinned, since restating it in the
-# TOML would stop this covering the default at all.
+# config would stop this covering the default at all.
 EXPECTED="domicile-0@0,0+1280x800@2"
 DECIDED=0
 for who in witness asker latecomer; do

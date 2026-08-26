@@ -42,7 +42,7 @@ export XDG_RUNTIME_DIR="/tmp/domicile-rt-window"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 SOCK="$XDG_RUNTIME_DIR/c.sock"
-LOG="$(mktemp)"; ELOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.toml"
+LOG="$(mktemp)"; ELOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.json"
 COMP=""; EL=""
 
 # No displays, so the window is still the desktop and this is still the
@@ -52,10 +52,9 @@ COMP=""; EL=""
 # the first check below would pass without the compositor having done anything.
 WIN_W=1440
 WIN_H=920
-cat >"$CONF" <<TOML
-[compositor]
-nested_size = [$WIN_W, $WIN_H]
-TOML
+cat >"$CONF" <<JSON
+{ "compositor": { "nested_size": [$WIN_W, $WIN_H] } }
+JSON
 
 ( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell-manganese ) >/dev/null 2>&1 \
   || { echo "the shell did not build"; exit 1; }
@@ -75,7 +74,7 @@ ensure_display 1920x1080x24 60 || exit 1
 # session would otherwise get halves of two different things and read the
 # difference as a bug.
 NO_COLOR=1 RUST_LOG=info WINIT_X11_SCALE_FACTOR=1 \
-  "$BIN" --no-shell --present --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+  "$BIN" --session "$SOCK.session" --present --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 # `kill`, not `kill -9`, for the chrome and the X server: Electron is a process
 # tree and a SIGKILLed one leaves bash reporting "Killed" on stderr as it reaps
@@ -113,10 +112,24 @@ window_now() {
 WINDOW="$(window_now)"
 
 CHROME_DISPLAY="$(sed -n 's/.*the chrome connects here.*display="\([^"]*\)".*/\1/p' "$LOG" | head -1)"
-WAYLAND_DISPLAY="$CHROME_DISPLAY" DOMICILE_COMPOSITED=1 \
-  DOMICILE_CHROME_SOCKET="$SOCK" \
+# The session the compositor published, which is what a shell's own launcher
+# would have read and passed down. Started by hand here rather than through
+# `bin/manganese`, because this drives one arrangement of the chrome rather
+# than the launcher — `e2e-shell-launch.sh` is the check that covers that.
+# The session file, not the socket. `publish()` is the last statement in the
+# compositor's `main()` — after every bind, the GPU probe and the whole event
+# loop's construction — so the socket exists long before the document does, and
+# a `cat` that ran on the socket's appearance would hand the chrome an empty
+# `DOMICILE_SESSION`.
+for _ in $(seq 1 400); do [ -s "$SOCK.session" ] && break; sleep 0.05; done
+if [ ! -s "$SOCK.session" ]; then
+  echo "FAIL: the compositor never published a session; nothing can be started against it."
+  exit 1
+fi
+WAYLAND_DISPLAY="$CHROME_DISPLAY" \
+  DOMICILE_SESSION="$(cat "$SOCK.session")" \
   electron --no-sandbox --ozone-platform=wayland --disable-gpu \
-  "$ROOT/packages/shell-manganese" >"$ELOG" 2>&1 &
+  "$ROOT/packages/shell-manganese/.vite/build/main.js" >"$ELOG" 2>&1 &
 EL=$!
 still_running() { kill -0 "$EL" 2>/dev/null; }
 

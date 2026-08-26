@@ -67,7 +67,7 @@ echo "== the desktop =="
 # `place_portal` — the chrome saying it mounted the window — is logged at
 # debug. Asking for info and then waiting for it waits forever, and reports as
 # "no window ever appeared".
-RUST_LOG="info,domicile_compositor=debug" "$BIN" --no-shell --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+RUST_LOG="info,domicile_compositor=debug" "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 [ -S "$SOCK" ] || { echo "the compositor never bound its socket"; tail -5 "$COMPLOG"; exit 1; }
@@ -80,10 +80,20 @@ for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 # Electron holds the port: the typist then attaches to *that* browser and types
 # into a different desktop.
 PROFILE="$(mktemp -d)"
-DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu \
+# The session file, not the socket. `publish()` is the last statement in the
+# compositor's `main()` — after every bind, the GPU probe and the whole event
+# loop's construction — so the socket exists long before the document does, and
+# a `cat` that ran on the socket's appearance would hand the chrome an empty
+# `DOMICILE_SESSION`.
+for _ in $(seq 1 400); do [ -s "$SOCK.session" ] && break; sleep 0.05; done
+if [ ! -s "$SOCK.session" ]; then
+  echo "FAIL: the compositor never published a session; nothing can be started against it."
+  exit 1
+fi
+DOMICILE_SESSION="$(cat "$SOCK.session")" electron --no-sandbox --disable-gpu \
   --disable-dev-shm-usage --remote-debugging-port=0 \
   --user-data-dir="$PROFILE" \
-  "$ROOT/packages/shell-manganese" >"$CHROMELOG" 2>&1 &
+  "$ROOT/packages/shell-manganese/.vite/build/main.js" >"$CHROMELOG" 2>&1 &
 CHROME=$!
 for _ in $(seq 1 900); do [ -s "$PROFILE/DevToolsActivePort" ] && break; sleep 0.1; done
 PORT="$(head -1 "$PROFILE/DevToolsActivePort" 2>/dev/null)"

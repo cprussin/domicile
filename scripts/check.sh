@@ -312,7 +312,7 @@ echo "== end to end =="
 for script in scripts/e2e-*.sh; do
   name="$(basename "$script" .sh)"
   case "$name" in
-    e2e-electron|e2e-no-compositor|e2e-shell-launch)
+    e2e-electron|e2e-chrome-without-a-host|e2e-shell-launch)
       if ! command -v electron >/dev/null 2>&1; then
         label "$name"; skip "$name" "no electron"; continue
       fi

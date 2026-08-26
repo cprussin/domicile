@@ -1,11 +1,15 @@
 {
+  "bin": {
+    "manganese": "./bin/manganese"
+  },
   "dependencies": {
     "@domicile/chrome-sdk": "workspace:*",
     "@domicile/component-library": "workspace:*",
     "@domicile/electron-chrome-host": "workspace:*",
     "@phosphor-icons/react": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "zod": "catalog:"
   },
   "description": "The bundled reference Domicile chrome: a tab rail and a stage that mounts app portals.",
   "devDependencies": {
@@ -24,12 +28,11 @@
     "typescript": "catalog:",
     "vite": "catalog:"
   },
-  "main": ".vite/build/main.js",
   "name": "@domicile/shell-manganese",
   "private": true,
   "productName": "domicile-shell-manganese",
   "scripts": {
-    "build:vite": "vite build -c vite.main.config.ts && vite build -c vite.preload.config.ts && vite build -c vite.renderer.config.ts",
+    "build:vite": "vite build -c vite.launch.config.ts && vite build -c vite.main.config.ts && vite build -c vite.preload.config.ts && vite build -c vite.renderer.config.ts",
     "prepare": "panda codegen --silent && panda cssgen --silent",
     "start:dev": "vite -c vite.renderer.config.ts",
     "test:types": "tsc --noEmit",

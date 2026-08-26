@@ -28,8 +28,9 @@ emit to `.d.ts`, or a `catalog:` that survived into a published manifest.
 
 | File | What |
 |---|---|
-| `domicile.shell.json` | The manifest. `entry` is what Domicile runs — not `package.json`'s `main`. |
-| `src/main.ts` | The Electron main process: open the window, die with a reason. Everything a page cannot do for itself, and only that. |
+| `bin/minimal` | What a user runs, and what an install puts on `PATH`. Runs the launcher under Electron's Node. |
+| `src/launch.ts` | The launcher: start the compositor, then start the chrome inside it. A shell is the program on top. |
+| `src/main.ts` | The Electron main process: read the session, open the window, die with a reason. Everything a page cannot do for itself, and only that. |
 | `src/preload.ts` | Holds the compositor socket and hands the page its messages. The socket lives here rather than in the main process so frames do not cross Electron's IPC. |
 | `src/renderer.ts` | The page: mount a `<domicile-app>` per announced app. The whole of this shell's behaviour. |
 
@@ -40,16 +41,12 @@ bun install
 bun run build
 ```
 
-Then point a Domicile config at it and start the compositor:
-
-```toml
-[shell]
-package = "/path/to/examples/minimal-shell"
-```
+Then run it — there is nothing else to start:
 
 ```sh
-domicile-compositor --present
+./bin/minimal
 ```
 
-A path reference needs no install step and may be called anything; installing it
-by name is described in the guide.
+It needs `domicile-compositor` on `PATH`, or named in `DOMICILE_COMPOSITOR`.
+Installing it properly means whatever puts `bin/minimal` on a user's `PATH`;
+there is no shells directory and nothing of Domicile's to register with.

@@ -4,9 +4,9 @@ import { defineConfig } from "vite";
 // runtime, not bundled.
 export default defineConfig({
   build: {
-    // The three builds share `.vite/`, so only the renderer (built last)
-    // clears its own directory.
-    emptyOutDir: true,
+    // The four builds share `.vite/`, so only the launcher (built first)
+    // clears the directory.
+    emptyOutDir: false,
     lib: {
       entry: "src/main.ts",
       fileName: () => "[name].js",
