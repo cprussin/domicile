@@ -30,21 +30,31 @@ export const awaitSession = async (
   wait: SessionWait,
 ): Promise<CompositorSession> => {
   const text = await wait.read();
-  if (text === undefined) {
-    // Whichever comes first: the next look, or there being no point looking.
-    // A compositor that published and then died is *not* a session — the
-    // document describes sockets nothing is serving any more.
-    const why = await Promise.race([
-      wait.delay().then(() => undefined),
-      wait.failed,
-    ]);
-    if (why === undefined) {
-      return awaitSession(wait);
-    } else {
-      throw new Error(
-        `domicile: the compositor never published a session — ${why}`,
-      );
-    }
+  // How much longer there is any point waiting, raced against there being no
+  // point at all: another look away when there was nothing to read, and no
+  // time at all when there was. A document in hand is not a reason to skip
+  // this. A compositor that published and then died is *not* a session — the
+  // document describes sockets nothing is serving any more — and neither is
+  // one published by a run the caller has already asked to stop.
+  //
+  // `failed` goes first because `Promise.race` settles on the earliest
+  // *already-settled* argument in order, so a decision that was taken before
+  // the read finished beats a document that happened to be on disk by then.
+  // Asking it this way rather than awaiting it is what keeps the ordinary
+  // path — where nothing ever goes wrong and `failed` never settles — from
+  // waiting on a promise that will never answer.
+  const why = await Promise.race([
+    wait.failed,
+    text === undefined
+      ? wait.delay().then(() => undefined)
+      : Promise.resolve(undefined),
+  ]);
+  if (why !== undefined) {
+    throw new Error(
+      `domicile: the compositor never published a session — ${why}`,
+    );
+  } else if (text === undefined) {
+    return awaitSession(wait);
   } else {
     return parseSession(text);
   }
