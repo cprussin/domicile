@@ -429,6 +429,19 @@ describe("Shell", () => {
       expect(container.querySelector(APP_TAG_NAME)).toBeNull();
     });
 
+    it("renames the tab when the client says what its window is called", () => {
+      // The one place the wire message meets the reducer. A toplevel is
+      // announced when the client creates it, which is before `set_title`, so
+      // the tab opens showing the app id and is renamed afterwards.
+      renderShell();
+      bridge.emit("app_appeared", { app_id: "term", title: undefined });
+      expect(tabNames()).toStrictEqual(["term"]);
+
+      bridge.emit("app_titled", { app_id: "term", title: "~/domicile" });
+
+      expect(tabNames()).toStrictEqual(["~/domicile"]);
+    });
+
     it("shows one window at a time, the newest of them", () => {
       const { container } = renderShell();
       bridge.emit("app_appeared", { app_id: "a", title: "A" });

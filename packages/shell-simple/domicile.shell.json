@@ -2,5 +2,5 @@
   "description": "The smallest Domicile chrome that works: Alt-drag to move, Alt-right-drag to resize, Alt+Enter for a terminal",
   "entry": ".vite/build/main.js",
   "name": "simple",
-  "protocol": 16
+  "protocol": 17
 }

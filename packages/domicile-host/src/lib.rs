@@ -207,6 +207,28 @@ impl Host {
         })
     }
 
+    /// Record what a client calls its window. Returns the chrome notification,
+    /// or `None` if the app is unknown or the name has not changed.
+    ///
+    /// Answering only a change is this type's contract rather than a filter
+    /// the caller depends on: what the chromes have been told and what is
+    /// recorded here stay in step however often a caller repeats itself.
+    /// Today's only production caller repeats nothing — Smithay drops a
+    /// `set_title` that does not change the title before the compositor ever
+    /// hears it — so this arm is held by the tests rather than by traffic.
+    pub fn app_titled(&mut self, app_id: &str, title: Option<String>) -> Option<HostMessage> {
+        let app = self.apps.get_mut(app_id)?;
+        if app.title == title {
+            None
+        } else {
+            app.title = title.clone();
+            Some(HostMessage::AppTitled {
+                app_id: app_id.to_string(),
+                title,
+            })
+        }
+    }
+
     /// Tear down a client: forget it and remove any portal. Returns the chrome
     /// notification, or `None` if the app was already gone.
     pub fn app_closed(&mut self, app_id: &str) -> Option<HostMessage> {

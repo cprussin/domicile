@@ -4565,9 +4565,10 @@ impl XdgShellHandler for DomicileCompositor {
         // a size rather than as the absence of one, and a chrome that believed
         // it opened a window with no box at all.
         //
-        // The title is not sent here and is not sent later either: nothing
-        // reads `xdg_toplevel.set_title` back into the brain yet, so every
-        // window is nameless to a chrome that shows names.
+        // With no title, for the same reason: a client names its window with
+        // `set_title`, which it sends after creating the toplevel this is
+        // announcing. That arrives at `title_changed`, which is also where a
+        // rename does.
         let announce = {
             let mut host = self.hub.host.lock().unwrap();
             let (app_id, announce) = host.app_appeared(None, None);
@@ -4592,6 +4593,42 @@ impl XdgShellHandler for DomicileCompositor {
             announce
         };
         self.hub.broadcast(announce);
+    }
+
+    /// A client named its window, or renamed it.
+    ///
+    /// Where the name has to come from: the announcement goes out when the
+    /// client *creates* the toplevel, and `set_title` is a request it makes
+    /// afterwards, so there is never a name to announce. A terminal renames
+    /// itself on every command it runs, so this is not a once-per-window
+    /// event either.
+    ///
+    /// Smithay drops a `set_title` that does not change the title before
+    /// calling this, so what arrives here is already a change.
+    fn title_changed(&mut self, surface: ToplevelSurface) {
+        // `None` for a toplevel the host never announced — the chrome's own
+        // window, which names itself and is not a window *on* the desktop.
+        let Some(app_id) = self.app_id_of(surface.wl_surface()) else {
+            return;
+        };
+        let title = with_states(surface.wl_surface(), |states| {
+            states
+                .data_map
+                .get::<XdgToplevelSurfaceData>()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .title
+                .clone()
+        });
+        // Bound by a `let` statement rather than asked for inside the `if let`:
+        // the guard is a temporary of the statement, so it is dropped at the
+        // `;` and the broadcast below runs with the host unlocked. Folded into
+        // an `if let` it would be held across the whole body.
+        let titled = self.hub.host.lock().unwrap().app_titled(&app_id, title);
+        if let Some(titled) = titled {
+            self.hub.broadcast(titled);
+        }
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {

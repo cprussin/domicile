@@ -87,6 +87,31 @@ describe("parseHostMessage", () => {
     });
   });
 
+  it("decodes what a client calls its window", () => {
+    // A toplevel is announced when the client creates it, which is before
+    // `set_title` — so the name arrives on its own message, and again whenever
+    // it changes.
+    expect(
+      parseHostMessage(
+        '{"type":"app_titled","app_id":"term","title":"a terminal"}',
+      ),
+    ).toStrictEqual({
+      app_id: "term",
+      title: "a terminal",
+      type: "app_titled",
+    });
+  });
+
+  it("reads a client that named its window nothing as having no name", () => {
+    // `set_title("")` is the only way a client can say it has no name —
+    // xdg-shell has no request that takes one back — so the empty string is
+    // the reachable case, and a chrome that drew it literally would render a
+    // nameless tab rather than fall back to the app id.
+    expect(
+      parseHostMessage('{"type":"app_titled","app_id":"term","title":""}'),
+    ).toStrictEqual({ app_id: "term", title: undefined, type: "app_titled" });
+  });
+
   it("keeps unknown fields so a newer host can add them", () => {
     const message = parseHostMessage(
       '{"type":"app_closed","app_id":"term","reason":"crashed"}',

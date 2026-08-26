@@ -10,9 +10,28 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 16;
+export const PROTOCOL_VERSION = 17;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
+
+/**
+ * What a client calls its window, and `undefined` for one with no name.
+ *
+ * Three shapes mean the same nothing, so they are one thing by the time a page
+ * sees them. `null` is serde's `Option<String>::None` — a window nobody has
+ * named yet. The empty string is a client that named it *nothing*, which
+ * `xdg_toplevel.set_title("")` is the only way to say, xdg-shell having no
+ * request that takes a name back. And an absent key is a host too old to send
+ * one. A chrome that draws names has one answer for all three, and this is
+ * where they become it, rather than at every place a name is drawn.
+ */
+const titleSchema = z
+  .string()
+  .nullish()
+  // serde's `Option<String>::None`, or a host too old to send the field.
+  .transform((title) => title ?? undefined)
+  // And a client that named its window nothing.
+  .transform((title) => (title === "" ? undefined : title));
 
 // The shapes `wp_cursor_shape_v1` defines, named as the CSS `cursor` keyword
 // the chrome assigns, plus `none` for a client that hides the cursor. Mirrors
@@ -75,13 +94,17 @@ const appAppearedSchema = z.looseObject({
   // window's size itself — believing a number here is what opened windows at
   // nothing at all when the host sent `[0, 0]` for this case.
   size: sizeSchema.nullish().transform((size) => size ?? undefined),
-  // serde serialises `Option<String>::None` as JSON null; normalise it to
-  // `undefined` at the boundary so no `null` leaks into the SDK.
-  title: z
-    .string()
-    .nullish()
-    .transform((title) => title ?? undefined),
+  title: titleSchema,
   type: z.literal("app_appeared"),
+});
+
+// A client names its window with `set_title`, which it sends after creating
+// the toplevel the announcement was for — so the name is not in the
+// announcement, and arrives here instead, again each time it changes.
+const appTitledSchema = z.looseObject({
+  app_id: z.string(),
+  title: titleSchema,
+  type: z.literal("app_titled"),
 });
 
 const appResizedSchema = z.looseObject({
@@ -223,6 +246,7 @@ const appCursorSchema = z.looseObject({
 export const hostMessageSchema = z.discriminatedUnion("type", [
   welcomeSchema,
   appAppearedSchema,
+  appTitledSchema,
   appResizedSchema,
   appFrameSchema,
   appClosedSchema,
@@ -247,6 +271,7 @@ export type HostMessage =
 export type HostMessageJson = z.infer<typeof hostMessageSchema>;
 export type WelcomeMessage = z.infer<typeof welcomeSchema>;
 export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
+export type AppTitledMessage = z.infer<typeof appTitledSchema>;
 export type AppResizedMessage = z.infer<typeof appResizedSchema>;
 /**
  * The header, plus the pixels that followed it on the socket. `bytes` is what

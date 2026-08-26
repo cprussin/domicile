@@ -52,6 +52,9 @@ export const useShellWindows = (
     bridge.on("app_appeared", ({ app_id, title }) => {
       dispatch(ShellAction.AppAppeared(app_id, title));
     });
+    bridge.on("app_titled", ({ app_id, title }) => {
+      dispatch(ShellAction.AppTitled(app_id, title));
+    });
     bridge.on("app_closed", ({ app_id }) => {
       dispatch(ShellAction.AppClosed(app_id));
     });
