@@ -23,6 +23,7 @@ reference chrome that shows what the model is *for*.
 | `src/desktop.ts` | The windows on screen: one `<domicile-app>` per client, each at a box this module owns. All of the shell's state. |
 | `src/window-gestures.ts` | Alt and the pointer: what a press, a drag and a release do to the window under them. |
 | `src/keybinding-background.ts` | The keys, on an empty desktop and unpainted while a window is on it: the desktop's own paint, and all of it when there is no window. |
+| `src/catch-up.ts` | The one line that decides whether reloading the desktop moves the user's keyboard: when the host has finished describing what was already running, so the next window to appear is one someone opened. |
 | `src/terminal-shortcut.ts` | Alt+Enter: the one combination this shell claims, and the terminal it opens. |
 | `src/drag.ts` | Where a dragged window lands, as arithmetic — no DOM, so it is testable on its own. |
 | `src/window-box.ts` | A window's box, and where a newly-appeared client's window opens. |
@@ -36,9 +37,10 @@ reference chrome that shows what the model is *for*.
   is not a window's own once there are windows: the background naming the keys
   takes no event and is not painted while any window is open, and the one thing
   drawn over a window is its own placeholder label, until it has a surface.
-- **No keyboard of its own beyond Alt+Enter.** The SDK routes every other key
-  to whichever window was last clicked. One combination is the minimum: a
-  desktop with no way to start a terminal is a demo, not a desktop.
+- **No keyboard of its own beyond Alt+Enter.** Every other key goes to the
+  window that has the keyboard: the one that opened most recently, or one
+  clicked since. One combination is the minimum: a desktop with no way to start
+  a terminal is a demo, not a desktop.
 - **No window list, no stacking policy beyond raise-on-Alt-press, no close
   button.** A window leaves when its client does.
 - **No `<domicile-webview>`.** The SDK's embedded-browser element is what a

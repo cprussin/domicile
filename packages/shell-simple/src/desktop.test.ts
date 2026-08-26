@@ -34,12 +34,32 @@ const stubMeasure: Measure = (element) => ({
   zIndex: Number.parseInt(element.style.zIndex, 10) || 0,
 });
 
-/** A bridge that keeps the placements the elements sent it. */
-const recordingBridge = (placements: Placement[]): BridgeClient =>
-  ({
+/**
+ * A desktop whose elements report to a bridge that keeps what they asked of the
+ * host — the placements themselves, and the calls as an ordered log.
+ *
+ * Ordered as well as kept, because for one of these suites the order *is* the
+ * behaviour: a portal has to reach the host before the focus that names it.
+ */
+const recordingDesktop = () => {
+  const placements: Placement[] = [];
+  const acted: string[] = [];
+  const bridge = {
     ...silentBridge,
-    placePortal: (placement: Placement) => placements.push(placement),
-  }) as unknown as BridgeClient;
+    focusApp: (appId: string) => acted.push(`focus:${appId}`),
+    placePortal: (placement: Placement) => {
+      placements.push(placement);
+      acted.push(`place:${placement.appId}`);
+    },
+  } as unknown as BridgeClient;
+  registerElements(bridge, {
+    measure: stubMeasure,
+    observePlacement: () => () => {
+      // Never turned: nothing here tests what happens when a window moves.
+    },
+  });
+  return { acted, desktop: new Desktop(freshRoot()), placements };
+};
 
 const pixels = new Uint8Array([0, 0, 0, 255]);
 
@@ -132,6 +152,44 @@ describe("Desktop", () => {
     });
   });
 
+  describe("the keyboard", () => {
+    it("gives it to a window opened on a desktop that is past its catch-up", () => {
+      // Nothing else will. The SDK routes keys to whichever window was last
+      // clicked, so without this Alt+Enter opens a terminal that hears nothing
+      // until the user clicks it — and this shell's whole argument for
+      // claiming that combination is that a desktop you cannot start anything
+      // from is a demo.
+      const { acted, desktop } = recordingDesktop();
+      desktop.caughtUp();
+      desktop.open("term", [640, 480]);
+      expect(acted).toContain("focus:term");
+    });
+
+    it("places the window before asking for it, because the other order does nothing", () => {
+      // `Scene::focus_app` refuses an app with no portal, silently, while
+      // `ClientRequest::KeyboardFocus` moves the seat regardless — so a focus
+      // that arrives first leaves the brain and the seat disagreeing, with
+      // nothing to notice. The portal is sent as the element connects, which
+      // is the append. See the `e2e-chrome-layer.sh` entry in the roadmap for
+      // the same no-op found the hard way.
+      const { acted, desktop } = recordingDesktop();
+      desktop.caughtUp();
+      desktop.open("term", [640, 480]);
+      expect(acted).toStrictEqual(["place:term", "focus:term"]);
+    });
+
+    it("leaves it alone for a window replayed while catching up", () => {
+      // Every chrome that connects is replayed every window already running,
+      // as if each had just appeared, and told who holds the keyboard at the
+      // end. Focusing those would move the desktop's keyboard onto whichever
+      // was replayed last and tell every other chrome so — throwing away an
+      // answer the compositor already had, on every reload.
+      const { acted, desktop } = recordingDesktop();
+      desktop.open("term", [640, 480]);
+      expect(acted).toStrictEqual(["place:term"]);
+    });
+  });
+
   describe("placement", () => {
     it("moves and resizes the window it is given a box for", () => {
       const root = freshRoot();
@@ -159,14 +217,7 @@ describe("Desktop", () => {
       // the stack — and on the composited path the compositor draws a frame of
       // the new window behind the old ones before the next measurement fixes
       // it.
-      const placements: Placement[] = [];
-      registerElements(recordingBridge(placements), {
-        measure: stubMeasure,
-        observePlacement: () => () => {
-          // Never turned, so every placement here is one `open` sent.
-        },
-      });
-      const desktop = new Desktop(freshRoot());
+      const { desktop, placements } = recordingDesktop();
       desktop.open("term", [640, 480]);
       desktop.open("editor", [640, 480]);
       const opened = placements.filter(({ appId }) => appId === "editor");

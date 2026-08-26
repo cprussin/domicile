@@ -15,6 +15,7 @@ import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio"
 import { postedTransport } from "@domicile/chrome-sdk/host-transport";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
+import { endCatchUpOnFocusChange } from "./catch-up";
 import { Desktop } from "./desktop";
 import { installKeybindingBackground } from "./keybinding-background";
 import { openTerminalOnAltEnter } from "./terminal-shortcut";
@@ -64,6 +65,9 @@ bridge.on("app_cursor", (message) => {
 bridge.on("app_composited", (message) => {
   desktop.dropSurface(message);
 });
+// And when the host has finished describing what was already running, which is
+// what makes the next window to appear one someone opened.
+endCatchUpOnFocusChange(bridge, desktop);
 
 // The handshake's failure is a value, so it is reported rather than thrown: a
 // version mismatch is the compositor and the chrome having been built from
