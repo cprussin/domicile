@@ -27,6 +27,25 @@ use serde::{Deserialize, Serialize};
 /// v15 chrome would read `null` where it expects two numbers, so the versions
 /// are not interchangeable.
 ///
+/// v15 added `declare_bands` and `render_band`: the chrome names the depths it
+/// draws at, and the compositor asks for one of them at a time — taking the
+/// page's next commit as the answer, because a page cannot label its own
+/// frames — so a window can be drawn between two of them.
+///
+/// A bump although the default is benign. A chrome that declares nothing is
+/// drawn as one layer over every window, which is what every chrome did before
+/// this existed, so a v14 chrome loses nothing against a v15 host. The other
+/// direction is what needs the version: a v15 chrome declares its depths, a
+/// v14 host does not know what was asked of it, and the chrome is drawn the
+/// only way that host can draw it — so a window the shell placed between two
+/// bands comes out under all of them. Nothing anywhere says so. `declare_bands`
+/// is not acknowledged, because the asking *is* the acknowledgement, so a
+/// declaration that fell on the floor and one that has simply not been acted on
+/// yet look identical from the page. `negotiate` matching exactly is what turns
+/// that into a chrome that refuses to start and names the two versions that
+/// disagreed, rather than a desktop whose windows are stacked wrongly with no
+/// way to find out why.
+///
 /// v14 is the same shape as v13 and a different promise: the host answers
 /// every `hello` with `displays`, and re-sends it whenever the desktop
 /// changes. v12 added the message and nothing sent it; a v13 host is still one
