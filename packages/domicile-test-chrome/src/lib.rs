@@ -28,4 +28,4 @@ mod connected;
 mod conversation;
 
 pub use connected::Chrome;
-pub use conversation::{greet, hear, ChromeError, Greeting};
+pub use conversation::{greet, hear, say, ChromeError, Greeting};

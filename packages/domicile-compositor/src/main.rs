@@ -1012,7 +1012,10 @@ fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener) {
             Ok(w) => w,
             Err(_) => continue,
         }));
-        hub.chromes.lock().unwrap().push(writer.clone());
+        // Connected, but not yet a broadcast target: what arrives on this
+        // socket next is a `hello` naming a protocol version, and until that
+        // is agreed there is no version to write to it in. `read_chrome_messages`
+        // adds it once there is.
         info!("chrome client connected");
         let hub = hub.clone();
         thread::spawn(move || chrome_connection(hub, stream, writer));
@@ -1039,6 +1042,10 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
 fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<Mutex<UnixStream>>) {
     let reader = BufReader::new(stream);
     let mut ready = false;
+    // Whether this connection is in the hub's broadcast list. Separate from
+    // `ready` only because a `hello` can arrive twice on one socket, and the
+    // list must not gain a second copy of the same writer.
+    let mut joined = false;
     for line in reader.lines() {
         let Ok(line) = line else { break };
         tracing::debug!(chrome_msg = %line.trim(), "chrome -> host");
@@ -1057,13 +1064,70 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
             // and for a client that then goes idle, a hole that stays until it
             // is resized.
             Ok(ChromeMessage::Hello { protocol_version }) => {
-                hub.send_request(ClientRequest::ChromeHello);
-                let mut host = hub.host.lock().unwrap();
-                apply_chrome_message(
-                    &mut host,
-                    &mut ready,
-                    ChromeMessage::Hello { protocol_version },
-                )
+                // Scoped so the `host` guard is dropped before `chromes` is
+                // taken below, and that is a deadlock and not a tidiness
+                // preference: `serve_outbound` takes `chromes` then a
+                // `writer`, and `write_responses` takes a `writer` then
+                // `host`, through `freshened`. Widening this block over the
+                // join — the obvious "why is this scoped?" simplification —
+                // closes that into `host` -> `chromes` -> `writer` -> `host`.
+                // Three threads, so it takes two chromes: this one's reader,
+                // `serve_outbound`, and a second connection's reader sitting
+                // in `write_responses` — an arrangement with an e2e check of
+                // its own, not a corner.
+                // The same holds for the `chromes` lock in the `else` arm.
+                let responses = {
+                    let mut host = hub.host.lock().unwrap();
+                    apply_chrome_message(
+                        &mut host,
+                        &mut ready,
+                        ChromeMessage::Hello { protocol_version },
+                    )
+                };
+                if ready {
+                    // Joined here rather than at accept. A broadcast is
+                    // written in *this* build's protocol, so sending one to a
+                    // page that has not said it speaks that is a guess — and
+                    // sending one to a page that has just been told it does
+                    // not is worse. A refused chrome gets its `welcome`
+                    // naming the disagreement, on its own socket, and nothing
+                    // else.
+                    if !joined {
+                        hub.chromes.lock().unwrap().push(writer.clone());
+                        joined = true;
+                        info!("chrome agreed the protocol; it now gets the desktop");
+                    }
+                    // *Then* the announcement, in that order: this is what has
+                    // the Wayland thread describe the windows already open,
+                    // and it describes them by broadcast — so a chrome not yet
+                    // in the list would miss exactly the windows it connected
+                    // too late to see map.
+                    //
+                    // Measured, with the caveat that matters: swapping these
+                    // two makes `e2e-late-chrome` fail with "the chrome came
+                    // up to an empty desktop with a client still drawing" —
+                    // but only once a delay is inserted between them to widen
+                    // the window. The unmodified swap still passed 3 runs of
+                    // 3. So a reader who swaps them, sees green and concludes
+                    // this comment is stale has reproduced nothing; the race
+                    // is narrow, not absent.
+                    hub.send_request(ClientRequest::ChromeHello);
+                } else if joined {
+                    // Taken back out. This connection agreed a version earlier
+                    // and has now named one this build cannot speak, so it has
+                    // stopped being a peer — and a list that only ever grew
+                    // would go on writing this build's protocol to it, which
+                    // is the whole thing this arm exists to prevent. The same
+                    // `retain` `chrome_connection` uses on disconnect, so a
+                    // later good `hello` re-joins it without duplicating.
+                    hub.chromes
+                        .lock()
+                        .unwrap()
+                        .retain(|held| !Arc::ptr_eq(held, writer));
+                    joined = false;
+                    info!("chrome took its protocol agreement back; it no longer gets the desktop");
+                }
+                responses
             }
             Ok(ChromeMessage::GrabShortcut { shortcut }) => {
                 hub.send_request(ClientRequest::GrabShortcut { shortcut });

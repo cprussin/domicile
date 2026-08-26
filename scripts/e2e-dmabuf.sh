@@ -195,8 +195,12 @@ DOMICILE_CHROME_LISTEN_MS=25000 DOMICILE_CHROME_SOCK="$SOCK" \
   bun "$ROOT/packages/e2e-harness/src/mock-chrome.ts" >"$CHROME" 2>&1 &
 MOCK=$!
 disown "$MOCK" 2>/dev/null || true
-# Nothing reaches a chrome the compositor has not accepted yet, and a harness
-# that died on startup is indistinguishable from one that saw no frames.
+# A harness that died on startup is indistinguishable from one that saw no
+# frames, so wait for the compositor to say it took the socket. That is one
+# `hello` short of the chrome being written to — the compositor joins its
+# broadcast list at the handshake — but nothing here rests on the difference:
+# what follows waits on frames, and a client that is drawing keeps producing
+# them, so a chrome that joins a moment later still catches two.
 for _ in $(seq 1 200); do
   plain | grep -aq "chrome client connected" && break
   sleep 0.05

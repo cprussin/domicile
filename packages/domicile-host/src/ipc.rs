@@ -109,13 +109,24 @@ pub fn apply_chrome_message(
             // written for this case can never be printed: a desktop that does
             // not start and does not say why.
             //
-            // `ready` stays false, so this is a refusal and not a handshake.
+            // `ready` is *cleared*, so this is a refusal and not a handshake.
+            // Cleared rather than merely left alone: a connection that agreed
+            // a version earlier and then names one this build cannot speak
+            // has stopped being a peer, and a flag that only ever went up
+            // would say it was still one. The compositor reads this flag to
+            // decide who it broadcasts to, so "some hello on this socket was
+            // accepted" is the wrong question — the right one is whether the
+            // last thing said was agreement.
+            //
             // A `Welcome` is safe to send to a peer of any version: it is the
             // message whose whole job is carrying the number they disagree
             // about.
-            Err(_) => vec![HostMessage::Welcome {
-                protocol_version: PROTOCOL_VERSION,
-            }],
+            Err(_) => {
+                *ready = false;
+                vec![HostMessage::Welcome {
+                    protocol_version: PROTOCOL_VERSION,
+                }]
+            }
         },
         other if *ready => {
             // Placement/focus errors (e.g. an unknown app) are non-fatal.
