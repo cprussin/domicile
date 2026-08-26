@@ -27,6 +27,9 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
     });
+    chrome_round_trip(&ChromeMessage::DeclareBands {
+        depths: vec![0, 5, -2],
+    });
     chrome_round_trip(&ChromeMessage::PlacePortal {
         app_id: "term".into(),
         transform: [2.0, 0.0, 0.0, 2.0, 50.0, 60.0],
@@ -102,6 +105,7 @@ fn spawn_wire_shape_is_pinned() {
 
 #[test]
 fn host_messages_round_trip() {
+    host_round_trip(&HostMessage::RenderBand { band: 2 });
     host_round_trip(&HostMessage::Welcome {
         protocol_version: PROTOCOL_VERSION,
     });

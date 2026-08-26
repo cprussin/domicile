@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 14;
+export const PROTOCOL_VERSION = 15;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
@@ -108,6 +108,16 @@ const shortcutSchema = z.looseObject({
   key: z.number(),
   logo: z.boolean(),
   shift: z.boolean(),
+});
+
+// Render only this band and commit it. The compositor asks for one at a time
+// and takes the chrome's next commit as the answer, because the page cannot
+// label its own frames — the Wayland connection belongs to Chromium rather
+// than to the page. One question outstanding is what makes the next commit
+// unambiguous.
+const renderBandSchema = z.looseObject({
+  band: z.number().int().nonnegative(),
+  type: z.literal("render_band"),
 });
 
 // A combination the chrome claimed, pressed. It arrives here rather than as a
@@ -210,6 +220,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   displaysSchema,
   focusChangedSchema,
   shortcutMessageSchema,
+  renderBandSchema,
 ]);
 
 /**
@@ -239,6 +250,7 @@ export type AppCursorMessage = z.infer<typeof appCursorSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
+export type RenderBandMessage = z.infer<typeof renderBandSchema>;
 
 /** One display of the desktop, in the coordinates the shell lays out in. */
 export type DisplayInfo = z.infer<typeof displayInfoSchema>;

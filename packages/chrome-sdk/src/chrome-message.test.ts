@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   closeAppMessage,
+  declareBandsMessage,
   focusAppMessage,
   focusChromeMessage,
   helloMessage,
@@ -11,6 +12,26 @@ import {
   resizeAppMessage,
   spawnMessage,
 } from "./chrome-message";
+
+describe("declareBandsMessage", () => {
+  it("carries the depths the chrome draws at", () => {
+    expect(declareBandsMessage([0, 5, -2])).toStrictEqual({
+      depths: [0, 5, -2],
+      type: "declare_bands",
+    });
+  });
+
+  it("copies the depths rather than holding the caller's array", () => {
+    // The caller's own list, which a chrome recomputes in place every time it
+    // relays out. Held rather than copied, a later mutation would change a
+    // message already sent.
+    const depths = [0, 5];
+    const message = declareBandsMessage(depths);
+    depths.push(9);
+
+    expect(message.depths).toStrictEqual([0, 5]);
+  });
+});
 
 describe("placePortalMessage", () => {
   it("matches the domicile-protocol wire shape", () => {

@@ -2,6 +2,23 @@ import { describe, expect, it } from "bun:test";
 
 import { PROTOCOL_VERSION, parseHostMessage } from "./protocol";
 
+describe("render_band", () => {
+  it("parses the band the compositor is asking for", () => {
+    expect(
+      parseHostMessage(JSON.stringify({ band: 2, type: "render_band" })),
+    ).toStrictEqual({ band: 2, type: "render_band" });
+  });
+
+  it("refuses a band that is not a whole number", () => {
+    // It indexes the depths the chrome declared, so a fraction is not a band
+    // that exists — and a chrome that rendered one anyway would answer a
+    // question nobody asked.
+    expect(() =>
+      parseHostMessage(JSON.stringify({ band: 1.5, type: "render_band" })),
+    ).toThrow();
+  });
+});
+
 describe("parseHostMessage", () => {
   it("decodes a welcome frame", () => {
     expect(

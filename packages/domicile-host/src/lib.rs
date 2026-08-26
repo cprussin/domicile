@@ -222,6 +222,12 @@ impl Host {
             ChromeMessage::Hello { .. } => {
                 // The handshake is handled by the connection layer; nothing to do here.
             }
+            ChromeMessage::DeclareBands { .. } => {
+                // What depths the chrome draws at is what the *compositor*
+                // interleaves windows with, and the brain models neither the
+                // chrome's own layers nor the order they are drawn in. Like
+                // the density below, it is intercepted before reaching here.
+            }
             ChromeMessage::SetDevicePixelRatio { .. } => {
                 // The scene is described in logical units, which do not change
                 // when the display's pixel density does. This is the
