@@ -62,7 +62,7 @@ fn version_mismatch_is_refused_out_loud() {
 #[test]
 fn messages_before_the_handshake_are_ignored() {
     let mut session = Session::new();
-    session.host_mut().app_appeared(None, (100.0, 100.0));
+    session.host_mut().app_appeared(None, Some((100.0, 100.0)));
     // Not ready yet: a place is dropped rather than applied.
     let _ = session.ingest(&to_line(&ChromeMessage::PlacePortal {
         app_id: "app-1".into(),
@@ -82,7 +82,7 @@ fn messages_before_the_handshake_are_ignored() {
 #[test]
 fn placement_after_handshake_reaches_the_host() {
     let mut session = Session::new();
-    let (id, _) = session.host_mut().app_appeared(None, (100.0, 100.0));
+    let (id, _) = session.host_mut().app_appeared(None, Some((100.0, 100.0)));
     session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
     }));

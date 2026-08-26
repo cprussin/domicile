@@ -9,6 +9,14 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
+/// v16 made `app_appeared`'s `size` optional, because a client that has just
+/// mapped has not said one. It was `[0.0, 0.0]`, which is a size rather than
+/// the absence of one — and a chrome that read it as the client's answer
+/// opened a window with no box: never composited, because a zero-sized element
+/// reports itself invisible, and never configured to a size to redraw at. A
+/// v15 chrome would read `null` where it expects two numbers, so the versions
+/// are not interchangeable.
+///
 /// v14 is the same shape as v13 and a different promise: the host answers
 /// every `hello` with `displays`, and re-sends it whenever the desktop
 /// changes. v12 added the message and nothing sent it; a v13 host is still one
@@ -126,7 +134,7 @@ use serde::{Deserialize, Serialize};
 /// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
 /// on `pointer_axis` — the last of which a v1 chrome does not send, so the
 /// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 15;
+pub const PROTOCOL_VERSION: u32 = 16;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -357,10 +365,16 @@ pub enum HostMessage {
 
     /// A new Wayland client wants a portal. The chrome decides where to mount
     /// its `<app id="…">` element.
+    ///
+    /// `size` is absent until the client has committed a buffer, which it has
+    /// not when this goes out: a toplevel maps before it draws, and how big it
+    /// wants to be is something it says by drawing. The size follows on
+    /// [`HostMessage::AppResized`]. A chrome that has none must decide the
+    /// window's size itself rather than believe a number here.
     AppAppeared {
         app_id: String,
         title: Option<String>,
-        size: [f64; 2],
+        size: Option<[f64; 2]>,
     },
 
     /// A client's content size changed, in **logical** units — the CSS pixels

@@ -38,6 +38,15 @@ export type WindowBox = {
  * Where the `index`th window to appear opens, at the size its client has
  * committed to — or at {@link OPENING_SIZE}, for one that has not committed.
  *
+ * `size` is absent for a client that has not drawn yet, which is every client
+ * at the moment it is announced: a toplevel maps before it draws, and how big
+ * a Wayland client wants to be is something it says by drawing. What arrives
+ * here instead is the replay a reloading chrome gets, where the size is
+ * whatever the client last committed — not what this shell configured it to,
+ * which is the separate `requested_size` the replay does not read, and the two
+ * part company for a client that rounds its configure as a terminal snapping
+ * to a cell grid does.
+ *
  * A Wayland client says nothing about where it goes — `app_appeared` carries
  * no position, because placing a window is the desktop's job. This does the
  * crudest thing that stays usable: a step down and right of the window before
@@ -46,30 +55,9 @@ export type WindowBox = {
  */
 export const openingBox = (
   index: number,
-  size: readonly [number, number],
+  size: readonly [number, number] | undefined,
 ): WindowBox => {
   const step = CASCADE_STEP * (index % CASCADE_LENGTH);
-  const [width, height] = hasCommitted(size) ? size : OPENING_SIZE;
+  const [width, height] = size ?? OPENING_SIZE;
   return { height, left: step, top: step, width };
 };
-
-/**
- * Whether the announced size is one the client has committed to.
- *
- * `app_appeared` goes out when the toplevel maps, which is before the client
- * has committed a buffer, so the compositor announces every new window as 0x0
- * and says how big it really is on the `app_resized` that follows. A nonzero
- * size means the client has committed at least once — the replay a reloading
- * chrome gets, where the size is whatever the client last committed. Not what
- * this shell configured it to: `open_apps` reads `App::size` and the chrome's
- * ask is the separate `requested_size`, and the two part company for a client
- * that rounds its configure, as a terminal snapping to a cell grid does.
- * A reload that races a client's first commit replays the 0x0 too.
- *
- * A window opened at 0x0 is invisible for the rest of its life rather than
- * merely at first: the shell tells the host that window is not visible, so
- * nothing is ever composited there, and the client is never configured to a
- * size to redraw at.
- */
-const hasCommitted = ([width, height]: readonly [number, number]): boolean =>
-  width > 0 && height > 0;

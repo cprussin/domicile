@@ -112,12 +112,14 @@ fn host_messages_round_trip() {
     host_round_trip(&HostMessage::AppAppeared {
         app_id: "term".into(),
         title: Some("Terminal".into()),
-        size: [640.0, 480.0],
+        size: Some([640.0, 480.0]),
     });
+    // A client that has not committed yet, which is every client at the
+    // moment this message goes out.
     host_round_trip(&HostMessage::AppAppeared {
         app_id: "x".into(),
         title: None,
-        size: [1.0, 1.0],
+        size: None,
     });
     host_round_trip(&HostMessage::AppResized {
         app_id: "term".into(),
@@ -266,10 +268,21 @@ fn wire_shape_is_pinned() {
     let v = serde_json::to_value(HostMessage::AppAppeared {
         app_id: "term".into(),
         title: None,
-        size: [1.0, 1.0],
+        size: Some([1.0, 1.0]),
     })
     .unwrap();
     assert_eq!(v["type"], "app_appeared");
+
+    // A size the client has not said is `null` on the wire rather than an
+    // absent key, which is the shape the chrome's schema parses: it reads
+    // `size` the way it already reads `title`, and both arrive as JSON null.
+    let v = serde_json::to_value(HostMessage::AppAppeared {
+        app_id: "term".into(),
+        title: None,
+        size: None,
+    })
+    .unwrap();
+    assert!(v["size"].is_null());
 
     let v = serde_json::to_value(ChromeMessage::ResizeApp {
         app_id: "term".into(),
