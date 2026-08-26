@@ -6,7 +6,7 @@ const published = JSON.stringify({
   chrome_socket: "/run/chrome.sock",
   chrome_wayland_display: "wayland-3-chrome",
   composited: false,
-  protocol: 17,
+  protocol: 1,
   wayland_display: "wayland-3",
 });
 

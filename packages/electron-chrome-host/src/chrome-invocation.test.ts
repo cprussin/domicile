@@ -10,7 +10,7 @@ const session = {
   chromeSocket: "/run/user/1000/domicile-abc/chrome.sock",
   chromeWaylandDisplay: "wayland-3-chrome",
   composited: true,
-  protocol: 17,
+  protocol: 1,
   waylandDisplay: "wayland-3",
 };
 

@@ -6,7 +6,7 @@ const published = JSON.stringify({
   chrome_socket: "/run/user/1000/domicile-abc/chrome.sock",
   chrome_wayland_display: "wayland-3-chrome",
   composited: true,
-  protocol: 17,
+  protocol: 1,
   wayland_display: "wayland-3",
 });
 
@@ -16,7 +16,7 @@ describe("parseSession", () => {
       chromeSocket: "/run/user/1000/domicile-abc/chrome.sock",
       chromeWaylandDisplay: "wayland-3-chrome",
       composited: true,
-      protocol: 17,
+      protocol: 1,
       waylandDisplay: "wayland-3",
     });
   });
@@ -31,9 +31,7 @@ describe("parseSession", () => {
 
   it("refuses a document that is not the shape it claims", () => {
     expect(() =>
-      parseSession(
-        JSON.stringify({ ...JSON.parse(published), protocol: "17" }),
-      ),
+      parseSession(JSON.stringify({ ...JSON.parse(published), protocol: "1" })),
     ).toThrow();
   });
 

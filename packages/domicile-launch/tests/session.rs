@@ -8,7 +8,7 @@ use domicile_launch::session::{publish, PublishError, Session};
 
 fn a_session() -> Session {
     Session {
-        protocol: 17,
+        protocol: 1,
         chrome_socket: "/run/user/1000/domicile/chrome.sock".into(),
         wayland_display: "wayland-3".into(),
         chrome_wayland_display: "wayland-3-chrome".into(),
