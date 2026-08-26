@@ -45,21 +45,37 @@ COMP=""; ONE=""; TWO=""
 # Side by side, and the right one at twice the density — so a client that was
 # told the wrong screen would also be drawing at the wrong scale, which is what
 # the rule is for.
-cat >"$CONF" <<'TOML'
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [1920, 0]
-size = [2560, 1440]
-scale = 2
-TOML
+cat >"$CONF" <<'JSON'
+{
+  "output": {
+    "displays": [
+      {
+        "name": "left",
+        "size": [
+          1920,
+          1080
+        ]
+      },
+      {
+        "name": "right",
+        "position": [
+          1920,
+          0
+        ],
+        "size": [
+          2560,
+          1440
+        ],
+        "scale": 2
+      }
+    ]
+  }
+}
+JSON
 
 SOCK="$XDG_RUNTIME_DIR/c.sock"
 RUST_LOG="info,domicile_compositor=debug" \
-  "$BIN" --no-shell --config "$CONF" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+  "$BIN" --session "$SOCK.session" --config "$CONF" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 cleanup() {
   kill -9 "$COMP" "$ONE" "$TWO" 2>/dev/null; wait 2>/dev/null

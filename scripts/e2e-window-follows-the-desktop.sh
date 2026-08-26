@@ -38,7 +38,7 @@ export XDG_RUNTIME_DIR="/tmp/domicile-rt-follows"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 SOCK="$XDG_RUNTIME_DIR/c.sock"
-LOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.toml"
+LOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.json"
 COMP=""
 
 # A desktop that is no default. Not sized to fit the screen: `ensure_display`
@@ -55,14 +55,10 @@ COMP=""
 # The first version of this check read that as the fix having failed.
 WIDTH=900
 HEIGHT=600
-cat >"$CONF" <<TOML
-[compositor]
-nested_size = [1920, 1080]
-
-[[output.displays]]
-name = "only"
-size = [$WIDTH, $HEIGHT]
-TOML
+cat >"$CONF" <<JSON
+{ "compositor": { "nested_size": [1920, 1080] },
+  "output": { "displays": [{ "name": "only", "size": [$WIDTH, $HEIGHT] }] } }
+JSON
 
 ensure_display 1920x1080x24 60 || exit 1
 
@@ -70,7 +66,7 @@ ensure_display 1920x1080x24 60 || exit 1
 # logical units are the same number, which is what makes the two comparable at
 # all — the same reason `e2e-chrome-fills-a-window.sh` pins it.
 NO_COLOR=1 RUST_LOG=info WINIT_X11_SCALE_FACTOR=1 \
-  "$BIN" --no-shell --present --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+  "$BIN" --session "$SOCK.session" --present --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 cleanup() { kill "$COMP" ${XVFB:-} 2>/dev/null; wait 2>/dev/null; rm -f "$LOG" "$CONF"; }
 trap cleanup EXIT
@@ -122,19 +118,13 @@ fi
 # for the difference.
 GREW_W=1500
 GREW_H=600
-cat >"$CONF" <<TOML
-[compositor]
-nested_size = [1920, 1080]
-
-[[output.displays]]
-name = "only"
-size = [900, 600]
-
-[[output.displays]]
-name = "second"
-position = [900, 0]
-size = [600, 600]
-TOML
+cat >"$CONF" <<'JSON'
+{ "compositor": { "nested_size": [1920, 1080] },
+  "output": { "displays": [
+    { "name": "only", "size": [900, 600] },
+    { "name": "second", "position": [900, 0], "size": [600, 600] }
+  ] } }
+JSON
 
 for _ in $(seq 1 200); do [ "$(window_now)" = "${GREW_W}x${GREW_H}" ] && break; sleep 0.1; done
 
@@ -170,10 +160,9 @@ fi
 # `compositor.nested_size` for the crime of deleting a display, and asserting
 # that it could not happen aborted the compositor instead.
 WAS="$(window_now)"
-cat >"$CONF" <<TOML
-[compositor]
-nested_size = [1920, 1080]
-TOML
+cat >"$CONF" <<'JSON'
+{ "compositor": { "nested_size": [1920, 1080] } }
+JSON
 
 for _ in $(seq 1 40); do
   grep -q "taking up a reloaded desktop displays=1 " "$LOG" && break

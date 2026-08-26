@@ -1,27 +1,72 @@
 {
-  "description": "The Electron host's half of a Domicile chrome: the window it is drawn in, the compositor socket, and the channel a renderer cannot serve itself.",
+  "description": "The Electron host's half of a Domicile shell: starting the compositor underneath it, the window the chrome is drawn in, and the channel a renderer cannot serve itself.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@types/bun": "catalog:",
+    "@types/node": "catalog:",
     "electron": "catalog:",
     "typescript": "catalog:"
   },
   "exports": {
+    "./await-session": {
+      "types": "./dist/await-session.d.ts",
+      "default": "./dist/await-session.js"
+    },
     "./chrome-failure": {
       "types": "./dist/chrome-failure.d.ts",
       "default": "./dist/chrome-failure.js"
+    },
+    "./chrome-invocation": {
+      "types": "./dist/chrome-invocation.d.ts",
+      "default": "./dist/chrome-invocation.js"
     },
     "./chrome-window": {
       "types": "./dist/chrome-window.d.ts",
       "default": "./dist/chrome-window.js"
     },
+    "./compositor-command": {
+      "types": "./dist/compositor-command.d.ts",
+      "default": "./dist/compositor-command.js"
+    },
+    "./compositor-config": {
+      "types": "./dist/compositor-config.d.ts",
+      "default": "./dist/compositor-config.js"
+    },
+    "./compositor-session": {
+      "types": "./dist/compositor-session.d.ts",
+      "default": "./dist/compositor-session.js"
+    },
     "./compositor-socket": {
       "types": "./dist/compositor-socket.d.ts",
       "default": "./dist/compositor-socket.js"
     },
+    "./desktop-config": {
+      "types": "./dist/desktop-config.d.ts",
+      "default": "./dist/desktop-config.js"
+    },
+    "./forward-stops": {
+      "types": "./dist/forward-stops.d.ts",
+      "default": "./dist/forward-stops.js"
+    },
+    "./launch-shell": {
+      "types": "./dist/launch-shell.d.ts",
+      "default": "./dist/launch-shell.js"
+    },
+    "./session-from-environment": {
+      "types": "./dist/session-from-environment.d.ts",
+      "default": "./dist/session-from-environment.js"
+    },
     "./socket-path": {
       "types": "./dist/socket-path.d.ts",
       "default": "./dist/socket-path.js"
+    },
+    "./start-compositor": {
+      "types": "./dist/start-compositor.d.ts",
+      "default": "./dist/start-compositor.js"
+    },
+    "./stop-signals": {
+      "types": "./dist/stop-signals.d.ts",
+      "default": "./dist/stop-signals.js"
     }
   },
   "files": [
@@ -41,5 +86,8 @@
     "test:unit": "bun test"
   },
   "type": "module",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "dependencies": {
+    "zod": "catalog:"
+  }
 }

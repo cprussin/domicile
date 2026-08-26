@@ -1,4 +1,4 @@
-// Electron host for the reference chrome shell.
+// The reference shell's Electron process, started by its launcher.
 //
 // This is the prototype's window: Electron renders the chrome (full CSS/JS) and
 // the *preload* owns the Unix socket to the compositor. (The eventual target
@@ -16,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   failHere,
+  orDie,
   orDieStarting,
   stopOnChromeFailure,
 } from "@domicile/electron-chrome-host/chrome-failure";
@@ -23,7 +24,8 @@ import {
   loadChromePage,
   openChromeWindow,
 } from "@domicile/electron-chrome-host/chrome-window";
-import { chromeSocketPath } from "@domicile/electron-chrome-host/socket-path";
+import type { CompositorSession } from "@domicile/electron-chrome-host/compositor-session";
+import { sessionFromEnvironment } from "@domicile/electron-chrome-host/session-from-environment";
 import { app, BrowserWindow, ipcMain } from "electron";
 
 import { CHROME_DIAGNOSTIC_CHANNEL } from "./diagnostic-channel";
@@ -31,15 +33,6 @@ import { takeGuestShortcuts } from "./guest-shortcuts";
 import { sizeToDesktopUnlessComposited } from "./size-to-desktop";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// biome-ignore lint/style/noProcessEnv: the main process is node; this is its only env source.
-const environment = process.env;
-const socketPath = chromeSocketPath(environment);
-
-// Whether Domicile is compositing this window's clients itself, rather than
-// sending their pixels here to be drawn into a canvas. Set by the runner that
-// puts us on Domicile's own display.
-const composited = environment.DOMICILE_COMPOSITED === "1";
 
 // Saying why and stopping. This process does it on a page's behalf, over
 // `CHROME_FAILURE_CHANNEL`, and on its own — a window whose page will not load
@@ -56,12 +49,12 @@ const sayAndStop = {
 };
 const fail = failHere(sayAndStop);
 
-const createWindow = (): void => {
+const createWindow = (session: CompositorSession): void => {
   const win = openChromeWindow(
     {
-      composited,
+      composited: session.composited,
       preload: path.join(dirname, "preload.cjs"),
-      socketPath,
+      socketPath: session.chromeSocket,
       // `<domicile-webview>` embeds a real Electron `<webview>`.
       webviewTag: true,
     },
@@ -79,7 +72,7 @@ const createWindow = (): void => {
   // `openChromeWindow` opened at is for the moment before the handshake
   // answers, and for a chrome with no compositor behind it at all. Whether we
   // are the half that sets it is `size-to-desktop`'s to decide.
-  sizeToDesktopUnlessComposited(composited, win, ipcMain);
+  sizeToDesktopUnlessComposited(session.composited, win, ipcMain);
   loadChromePage(
     win,
     path.join(dirname, "../renderer/main_window/index.html"),
@@ -101,17 +94,32 @@ const main = (): void => {
   app.on("window-all-closed", () => {
     app.quit();
   });
-  orDieStarting(
-    fail,
-    app.whenReady().then(() => {
-      printDiagnostics();
-      // The other half of the same problem: the renderer holds the socket, so
-      // it is the half that learns the compositor is gone — and it can neither
-      // write to stderr nor stop the app.
-      stopOnChromeFailure({ ...sayAndStop, ipc: ipcMain });
-      createWindow();
-    }),
-  );
+  // The compositor this chrome belongs to: which socket to speak to it on, and
+  // whether it is drawing client windows itself rather than sending their
+  // pixels here to be drawn into a canvas. Passed down by the launcher that
+  // started both halves — see `launch.ts`.
+  //
+  // Behind `orDie` rather than at module scope, where reading it used to be. A
+  // chrome started without a session — by hand, or by a launcher that skipped
+  // the compositor — is a mistake worth a sentence, and a *synchronous* throw
+  // in an Electron main process is not one: Electron's default handler puts up
+  // a message box and waits, which on the headless X these checks run under is
+  // a desktop that hangs rather than one that says why.
+  orDie(fail, () => {
+    // biome-ignore lint/style/noProcessEnv: the main process is node; this is its only env source.
+    const session = sessionFromEnvironment(process.env);
+    orDieStarting(
+      fail,
+      app.whenReady().then(() => {
+        printDiagnostics();
+        // The other half of the same problem: the renderer holds the socket, so
+        // it is the half that learns the compositor is gone — and it can neither
+        // write to stderr nor stop the app.
+        stopOnChromeFailure({ ...sayAndStop, ipc: ipcMain });
+        createWindow(session);
+      }),
+    );
+  });
 };
 
 main();

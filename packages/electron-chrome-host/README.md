@@ -5,10 +5,14 @@
 > JavaScript and `.d.ts` from `dist/`, and takes `electron` as a peer
 > dependency: the shell embedding it brings its own.
 
-The process-side half of a Domicile chrome, for the Electron host the prototype
-runs on. [`@domicile/chrome-sdk`](../chrome-sdk/README.md) is what the *page*
-talks to the compositor with; this is what the Electron main process and its
-preload need around that page, and it is the same for every shell in the tree.
+The process-side half of a Domicile shell.
+[`@domicile/chrome-sdk`](../chrome-sdk/README.md) is what the *page* talks to
+the compositor with; this is everything around that page — starting the
+compositor the shell runs on, opening the window, and dying with a reason — and
+it is the same for every shell in the tree.
+
+A shell is the program a user runs, and the compositor is what it starts
+underneath itself. `./launch-shell` is that inversion in one call.
 
 Electron is scaffolding. The eventual target embeds CEF directly, at which point
 the engine integration answers all of this and this package goes away — which is
@@ -21,7 +25,16 @@ that dies in an unusual way lands once.
 | Module | What |
 |---|---|
 | `./chrome-window` | `openChromeWindow` and `loadChromePage` — the window a chrome is drawn in, what it must and must not paint, and getting its page into it. |
-| `./socket-path` | Where the compositor's chrome socket is, from both sides: `chromeSocketPath` resolves it from the main process's environment, `socketPathFrom` reads it back off the renderer's command line. |
+| `./launch-shell` | `launchShell` — the whole of a shell's entry point: start the compositor, then start the chrome inside it. |
+| `./start-compositor` | `startCompositor` — the compositor alone, for a shell that arranges its own chrome process. |
+| `./compositor-config` | `CompositorConfig`: what a shell can tell the compositor about the desktop, and how it is written down. |
+| `./desktop-config` | `parseDesktop` — that section read out of a shell's *own* config file, with the compositor's rules applied where the user can still see the file they wrote. |
+| `./compositor-session` | The session a running compositor publishes: the sockets, the displays, and whether it is compositing. |
+| `./session-from-environment` | `sessionFromEnvironment` — the same, as the chrome's own process receives it. |
+| `./compositor-command` | The compositor's command line. The writing half of what `domicile-launch` parses. |
+| `./chrome-invocation` | The environment and arguments the chrome's Electron process is started with. |
+| `./await-session` | Waiting for a compositor to come up, or saying why it did not. |
+| `./socket-path` | `socketPathFrom` — the chrome socket read back off the renderer's command line. |
 | `./compositor-socket` | `connectToCompositor` — the socket's whole life, and everything that can go wrong with it. |
 | `./chrome-failure` | `CHROME_FAILURE_CHANNEL` and both its ends: `reportOnce`, `orDie` and `orDieStarting` for the page and the start, `stopOnChromeFailure` for the host — and `failHere`, for the host's own failures. |
 
@@ -36,12 +49,25 @@ one channel here.
 
 ## Usage
 
-The main process opens the window and passes the socket on the renderer's
-command line, because the preload has to connect before the page's first
-message. The window comes back with nothing in it, so a chrome can arrange
-whatever it needs of it before its page is there:
+A shell's launcher is the whole of its entry point:
 
 ```ts
+// src/launch.ts — run by the `bin/` stub, under Electron's Node
+process.exitCode = await launchShell({
+  config: myDesktop,                     // what to tell the compositor
+  main: path.join(dirname, "main.js"),   // the Electron bundle
+  present: true,
+});
+```
+
+Its Electron process then reads the session the launcher passed down, opens the
+window, and passes the socket on the renderer's command line — the preload has
+to connect before the page's first message. The window comes back with nothing
+in it, so a chrome can arrange whatever it needs of it before its page is there:
+
+```ts
+const session = sessionFromEnvironment(process.env);
+
 const sayAndStop = {
   exit: (code: number) => { app.exit(code); },
   write: (line: string) => { process.stderr.write(line); },
@@ -50,9 +76,9 @@ const fail = failHere(sayAndStop);
 
 const win = openChromeWindow(
   {
-    composited: process.env.DOMICILE_COMPOSITED === "1",
+    composited: session.composited,
     preload: path.join(dirname, "preload.cjs"),
-    socketPath: chromeSocketPath(process.env),
+    socketPath: session.chromeSocket,
     webviewTag: true,
   },
   (options) => new BrowserWindow(options),
@@ -145,9 +171,12 @@ without a compositor.
 
 ## Dependencies
 
-None at runtime. `node:net` and `node:path` are the runtime's, and Electron is
-imported for its types only — `BrowserWindow` arrives as a parameter, so every
-module here loads (and tests) outside Electron.
+One: `zod`, for the two modules that parse something written elsewhere — the
+session a compositor published (`./compositor-session`) and the desktop out of
+a shell's own config file (`./desktop-config`). Everything else is the
+runtime's: `node:net`, `node:path`, `node:child_process`. Electron is imported
+for its types only — `BrowserWindow` arrives as a parameter, so every module
+here loads (and tests) outside Electron.
 
 ## Test
 

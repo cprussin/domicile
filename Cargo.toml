@@ -5,9 +5,8 @@ members = [
     "packages/domicile-scene",
     "packages/domicile-protocol",
     "packages/domicile-host",
-    "packages/domicile",
     "packages/domicile-bridge",
-    "packages/domicile-shell",
+    "packages/domicile-launch",
     "packages/domicile-compositor",
 ]
 
@@ -19,9 +18,8 @@ default-members = [
     "packages/domicile-scene",
     "packages/domicile-protocol",
     "packages/domicile-host",
-    "packages/domicile",
     "packages/domicile-bridge",
-    "packages/domicile-shell",
+    "packages/domicile-launch",
 ]
 
 # domicile-host's default build (the orchestrator) is pure logic and lives in the

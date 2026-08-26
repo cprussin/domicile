@@ -52,36 +52,62 @@ OUT="$(mktemp)"; CLIENT="$(mktemp)"
 # watches the file's *parent*, because editors save by atomic rename and a
 # direct file watch misses it. Left in /tmp that would be every process on the
 # machine writing a temp file, and this run would reload on all of them.
-CONF="$XDG_RUNTIME_DIR/domicile.toml"
+CONF="$XDG_RUNTIME_DIR/domicile.json"
 COMP=""; PROBE=""; APP=""
 
 left() {
-  cat >"$CONF" <<'TOML'
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-TOML
+  cat >"$CONF" <<'JSON'
+{
+  "output": {
+    "displays": [
+      {
+        "name": "left",
+        "size": [
+          1920,
+          1080
+        ]
+      }
+    ]
+  }
+}
+JSON
 }
 
 # The second display is written beside the first at twice the density, so what
 # has to survive the reload is more than a name: the position is where a
 # `<Screen>` goes on the page and the scale is what clients on it draw at.
 both() {
-  cat >"$CONF" <<'TOML'
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [1920, 0]
-size = [2560, 1440]
-scale = 2
-TOML
+  cat >"$CONF" <<'JSON'
+{
+  "output": {
+    "displays": [
+      {
+        "name": "left",
+        "size": [
+          1920,
+          1080
+        ]
+      },
+      {
+        "name": "right",
+        "position": [
+          1920,
+          0
+        ],
+        "size": [
+          2560,
+          1440
+        ],
+        "scale": 2
+      }
+    ]
+  }
+}
+JSON
 }
 
 left
-"$BIN" --no-shell --config "$CONF" --chrome-socket "$SOCK" >/dev/null 2>&1 &
+"$BIN" --session "$SOCK.session" --config "$CONF" --chrome-socket "$SOCK" >/dev/null 2>&1 &
 COMP=$!
 # `wait` after the kill so bash reaps the jobs quietly; without it it reports
 # "Killed" on stderr at exit, which reads like a failure in a passing run.

@@ -54,7 +54,7 @@ CLI=""
 # or it had no toplevel to send it to — are what separate the two ways the
 # assertion below can fail: the message never reached the Wayland thread, or it
 # reached it and named nothing. Discarded, a failure here says only "no".
-RUST_LOG="info" "$BIN" --no-shell --chrome-socket "$SOCK" >"$COMP_LOG" 2>&1 &
+RUST_LOG="info" "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$COMP_LOG" 2>&1 &
 COMP=$!
 trap 'kill -9 "$COMP" ${PROBE:-} ${CLI:-} 2>/dev/null; rm -f "$OUT" "$CLIENT" "$COMP_LOG"' EXIT
 for _ in $(seq 1 200); do { [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && [ -S "$SOCK" ]; } && break; sleep 0.05; done

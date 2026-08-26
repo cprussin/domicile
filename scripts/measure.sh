@@ -55,9 +55,9 @@ run_path() {
   echo
   echo "== $name =="
   if [ "$mode" = "present" ]; then
-    RUST_LOG=info "$BIN" --no-shell --present --chrome-socket "$sock" >"$COMPLOG" 2>&1 &
+    RUST_LOG=info "$BIN" --session "$sock.session" --present --chrome-socket "$sock" >"$COMPLOG" 2>&1 &
   else
-    RUST_LOG=info "$BIN" --no-shell --chrome-socket "$sock" >"$COMPLOG" 2>&1 &
+    RUST_LOG=info "$BIN" --session "$sock.session" --chrome-socket "$sock" >"$COMPLOG" 2>&1 &
   fi
   COMP=$!
   for _ in $(seq 1 200); do [ -S "$sock" ] && break; sleep 0.05; done
@@ -66,18 +66,23 @@ run_path() {
     echo "the compositor exited:"; tail -5 "$COMPLOG"; return 1
   fi
 
+  # The session file, not the socket: `publish()` is the last statement in the
+  # compositor's `main()`, so the socket exists long before the document does.
+  for _ in $(seq 1 400); do [ -s "$sock.session" ] && break; sleep 0.05; done
+  [ -s "$sock.session" ] || { echo "the compositor never published a session"; return 1; }
+
   # The chrome. On the native path it is our own client and its window is
   # transparent; on the copy path it runs in the session it was started from and
   # receives pixels over the socket.
   if [ "$mode" = "present" ]; then
     local chrome_display
     chrome_display="$(sed -n '/the chrome connects here/s/.*display="\([^"]*\)".*/\1/p' "$COMPLOG" | head -1)"
-    WAYLAND_DISPLAY="$chrome_display" DOMICILE_COMPOSITED=1 \
-      DOMICILE_CHROME_SOCKET="$sock" \
-      electron --no-sandbox --ozone-platform=wayland "$ROOT/packages/shell-manganese" >"$CHROMELOG" 2>&1 &
+    WAYLAND_DISPLAY="$chrome_display" \
+      DOMICILE_SESSION="$(cat "$sock.session")" \
+      electron --no-sandbox --ozone-platform=wayland "$ROOT/packages/shell-manganese/.vite/build/main.js" >"$CHROMELOG" 2>&1 &
   else
-    DOMICILE_CHROME_SOCKET="$sock" \
-      electron --no-sandbox "$ROOT/packages/shell-manganese" >"$CHROMELOG" 2>&1 &
+    DOMICILE_SESSION="$(cat "$sock.session")" \
+      electron --no-sandbox "$ROOT/packages/shell-manganese/.vite/build/main.js" >"$CHROMELOG" 2>&1 &
   fi
   CHROME=$!
   # A run whose chrome never connected measures a compositor with no desktop

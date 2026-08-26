@@ -129,7 +129,7 @@
           e2e-electron = "e2e-electron.sh";
           e2e-shell-launch = "e2e-shell-launch.sh";
           e2e-late-chrome = "e2e-late-chrome.sh";
-          e2e-no-compositor = "e2e-no-compositor.sh";
+          e2e-chrome-without-a-host = "e2e-chrome-without-a-host.sh";
           e2e-spawn = "e2e-spawn.sh";
           e2e-input = "e2e-input.sh";
           e2e-dmabuf = "e2e-dmabuf.sh";

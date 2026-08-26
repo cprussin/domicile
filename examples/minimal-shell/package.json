@@ -1,4 +1,7 @@
 {
+  "bin": {
+    "minimal": "./bin/minimal"
+  },
   "dependencies": {
     "@domicile/chrome-sdk": "^0.1.0",
     "@domicile/electron-chrome-host": "^0.1.0"
@@ -12,7 +15,7 @@
   "name": "domicile-minimal-shell",
   "private": true,
   "scripts": {
-    "build": "vite build -c vite.main.config.ts && vite build -c vite.preload.config.ts && vite build -c vite.renderer.config.ts"
+    "build": "vite build -c vite.launch.config.ts && vite build -c vite.main.config.ts && vite build -c vite.preload.config.ts && vite build -c vite.renderer.config.ts"
   },
   "type": "module",
   "version": "0.1.0"

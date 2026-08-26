@@ -16,17 +16,25 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
   exit 1
 }
 
+# `wayland-info` is the client this asks its one question through. Without it
+# every global reads as unadvertised, which is a verdict against the compositor
+# for a program that was never installed — so this says it did not run (77)
+# rather than that the compositor failed.
+command -v wayland-info >/dev/null 2>&1 || {
+  echo "SKIP: no wayland-info, which is what asks the compositor what it advertises."
+  exit 77
+}
+
 WORK="$(mktemp -d)"
 export XDG_RUNTIME_DIR="$WORK"; chmod 700 "$WORK"
 trap 'kill -9 "$COMP" 2>/dev/null; rm -rf "$WORK"' EXIT
 
-# `--no-shell` because this asks one question — do our globals reach a real
-# client — and starting a chrome would answer a different one. Without it the
-# compositor takes the config's shell, finds no config here, and refuses to
-# start for want of one; the socket wait below still succeeds against the corpse
-# and this reports `wl_compositor is not advertised`, which is a verdict about
-# globals for a compositor that never served any.
-"$BIN" --no-shell > "$WORK/compositor.log" 2>&1 &
+# No chrome: this asks one question — do our globals reach a real client — and
+# nothing here connects to the chrome socket. It is still named, because the
+# compositor names every path rather than guessing any.
+SOCK="$WORK/chrome.sock"
+"$BIN" --chrome-socket "$SOCK" --session "$WORK/session.json" \
+  > "$WORK/compositor.log" 2>&1 &
 COMP=$!
 for _ in $(seq 1 100); do [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break; sleep 0.05; done
 

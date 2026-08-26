@@ -34,18 +34,16 @@ export XDG_RUNTIME_DIR="/tmp/domicile-rt-fills"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 SOCK="$XDG_RUNTIME_DIR/c.sock"
-LOG="$(mktemp)"; ELOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.toml"
+LOG="$(mktemp)"; ELOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.json"
 COMP=""; EL=""
 
 # A desktop that is not any default, so a chrome sized by anything other than
 # this config is visibly not the desktop's size.
 WIDTH=1600
 HEIGHT=900
-cat >"$CONF" <<TOML
-[[output.displays]]
-name = "only"
-size = [$WIDTH, $HEIGHT]
-TOML
+cat >"$CONF" <<JSON
+{ "output": { "displays": [{ "name": "only", "size": [$WIDTH, $HEIGHT] }] } }
+JSON
 
 ( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell-manganese ) >/dev/null 2>&1 \
   || { echo "the shell did not build"; exit 1; }
@@ -53,7 +51,7 @@ TOML
 # NO_COLOR because the fields below are read back out of this log, and
 # tracing writes SGR escapes *between* the field name and its value — a
 # pattern for `display="..."` matches nothing in a coloured one.
-NO_COLOR=1 RUST_LOG=info "$BIN" --no-shell --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+NO_COLOR=1 RUST_LOG=info "$BIN" --session "$SOCK.session" --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 # `kill`, not `kill -9`, for the chrome: Electron is a process tree and a
 # SIGKILLed one leaves bash reporting "Killed" on stderr as it reaps it — the
@@ -77,15 +75,43 @@ fi
 # As a Wayland client of ours, which is what `--ozone-platform=wayland` and
 # that display make it — not over the chrome protocol socket, which is the
 # copy path `e2e-electron.sh` already drives.
-# `DOMICILE_CHROME_SOCKET` as well as the display: the chrome is two
-# connections, and they are not the same socket. The Wayland one is what makes
-# it a client of ours; the protocol one is where the desktop is described, and
-# a chrome that cannot open it says so and exits — leaving a compositor that
-# looks like it never sized anything.
-WAYLAND_DISPLAY="$CHROME_DISPLAY" DOMICILE_COMPOSITED=1 \
-  DOMICILE_CHROME_SOCKET="$SOCK" \
+# The published session as well as the display: the chrome is two connections,
+# and they are not the same socket. The Wayland one is what makes it a client
+# of ours; the protocol one is where the desktop is described, and a chrome
+# that cannot open it says so and exits — leaving a compositor that looks like
+# it never sized anything. Both are in the session document, which is what a
+# shell's own launcher would have read and passed down.
+# `composited` overridden to true, which is the one thing the published
+# session cannot say here. The compositor publishes whether *it* got a window
+# (`--present`), and this one deliberately has none — but the chrome below is
+# still a Wayland client of ours whose surface we composite, so it must be
+# transparent and size itself to the desktop rather than paint a background
+# over the apps. That arrangement is this check's whole subject and no
+# launcher produces it, so the script says so itself.
+# The session file, not the socket. `publish()` is the last statement in the
+# compositor's `main()` — after every bind, the GPU probe and the whole event
+# loop's construction — so the socket exists long before the document does, and
+# a `cat` that ran on the socket's appearance would hand the chrome an empty
+# `DOMICILE_SESSION`.
+for _ in $(seq 1 400); do [ -s "$SOCK.session" ] && break; sleep 0.05; done
+if [ ! -s "$SOCK.session" ]; then
+  echo "FAIL: the compositor never published a session; nothing can be started against it."
+  exit 1
+fi
+COMPOSITED_SESSION="$(sed 's/"composited": false/"composited": true/' "$SOCK.session")"
+# Asserted rather than assumed: the substitution depends on the exact spelling
+# `serde_json::to_string_pretty` produces, and a serializer change would make
+# it a silent no-op — leaving this checking a chrome drawing the other path.
+case "$COMPOSITED_SESSION" in
+  *'"composited": true'*) ;;
+  *) echo "FAIL: could not mark the session composited; the document reads:"
+     cat "$SOCK.session" | sed 's/^/    /'
+     exit 1 ;;
+esac
+WAYLAND_DISPLAY="$CHROME_DISPLAY" \
+  DOMICILE_SESSION="$COMPOSITED_SESSION" \
   electron --no-sandbox --ozone-platform=wayland --disable-gpu \
-  "$ROOT/packages/shell-manganese" >"$ELOG" 2>&1 &
+  "$ROOT/packages/shell-manganese/.vite/build/main.js" >"$ELOG" 2>&1 &
 EL=$!
 
 # Alive before anything below is read as a verdict. A chrome that died after
@@ -139,16 +165,12 @@ fi
 # the same picture-in-the-corner as one that never grew.
 GREW_W=2880
 GREW_H=1024
-cat >"$CONF" <<TOML
-[[output.displays]]
-name = "only"
-size = [1600, 900]
-
-[[output.displays]]
-name = "second"
-position = [1600, 0]
-size = [1280, 1024]
-TOML
+cat >"$CONF" <<'JSON'
+{ "output": { "displays": [
+  { "name": "only", "size": [1600, 900] },
+  { "name": "second", "position": [1600, 0], "size": [1280, 1024] }
+] } }
+JSON
 
 for _ in $(seq 1 400); do
   grep -q "width=${GREW_W}\.0 height=${GREW_H}\.0" "$LOG" && break

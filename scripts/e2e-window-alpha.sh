@@ -48,7 +48,7 @@ PROBE="$(mktemp)"; COMPLOG="$(mktemp)"; APPLOG="$(mktemp)"
 APPDIR="$(mktemp -d)"
 PROBEPID=""; APP=""
 
-RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" "$BIN" --no-shell --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 cleanup() { kill -9 "$COMP" $PROBEPID $APP 2>/dev/null; rm -rf "$PROBE" "$COMPLOG" "$APPLOG" "$APPDIR"; }
 trap cleanup EXIT

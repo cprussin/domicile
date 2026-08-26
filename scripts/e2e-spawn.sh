@@ -32,7 +32,7 @@ rm -f "$SPAWNED"
 # session a presenting compositor would be a client of.
 export WAYLAND_DISPLAY="not-domicile"
 
-RUST_LOG="info" "$BIN" --no-shell --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+RUST_LOG="info" "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 trap 'kill -9 "$COMP" 2>/dev/null; rm -f "$LOG"' EXIT
 for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done

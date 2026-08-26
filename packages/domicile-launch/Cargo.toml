@@ -1,0 +1,15 @@
+[package]
+name = "domicile-launch"
+description = "The boundary between a shell and the compositor it runs: the command line the compositor is started with, and the session document it publishes once it is up"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,13 +1,17 @@
 //! Domicile compositor configuration.
 //!
 //! Responsibilities:
-//! - Define the on-disk config schema ([`Config`]).
+//! - Define the config schema ([`Config`]).
 //! - Parse it, apply defaults, and validate it ([`Config::parse`]).
-//! - Resolve which chrome package implements the shell ([`ShellRef`]).
-//! - Provide hot-reload that is *safe*: a bad edit keeps the last known-good
+//! - Provide hot-reload that is *safe*: a bad write keeps the last known-good
 //!   config live and surfaces the error rather than crashing ([`ConfigStore`]).
 //!
-//! The compositor watches the config file and feeds new file contents into a
+//! This is not a file a person edits. A Domicile desktop is started by its
+//! *shell*, the shell owns the configuration its users write, and what it
+//! hands the compositor is generated from that — so the schema here is the
+//! shell-to-compositor interface rather than a user interface, and it is JSON.
+//!
+//! The compositor watches the file and feeds new contents into a
 //! [`ConfigStore`]; the store is the single source of truth for the live
 //! configuration. All of this is pure logic and unit-tested.
 
@@ -16,7 +20,6 @@ mod desktop;
 pub use desktop::{Desktop, Display};
 
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use serde::Deserialize;
 
@@ -34,94 +37,6 @@ pub enum ConfigError {
 
     #[error("invalid config: {0}")]
     Validation(String),
-}
-
-/// A reference to the chrome package that implements the shell.
-///
-/// The shell is "all the user chrome" — panels, launchers, decorations — and is
-/// swappable via config. A reference is either a bare name (resolved under a
-/// well-known shells directory) or an explicit filesystem path.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ShellRef {
-    /// A named package, e.g. `"simple"`, resolved under the shells directory.
-    Name(String),
-    /// A filesystem path to a chrome package, e.g. `"./packages/shell-manganese"`.
-    Path(PathBuf),
-}
-
-impl ShellRef {
-    /// Resolve this reference to a concrete path.
-    ///
-    /// Named packages resolve under `shells_dir`; explicit paths are returned
-    /// as-is (the caller interprets any relative path against its own base).
-    pub fn resolve(&self, shells_dir: &Path) -> PathBuf {
-        match self {
-            ShellRef::Name(name) => shells_dir.join(name),
-            ShellRef::Path(path) => path.clone(),
-        }
-    }
-}
-
-impl FromStr for ShellRef {
-    type Err = ConfigError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim();
-        if s.is_empty() {
-            return Err(ConfigError::Validation(
-                "shell package reference must not be empty".into(),
-            ));
-        }
-        // Anything that looks like a path is a path; a bare identifier is a name.
-        let looks_like_path =
-            s.starts_with('/') || s.starts_with('~') || s.starts_with('.') || s.contains('/');
-        if looks_like_path {
-            Ok(ShellRef::Path(PathBuf::from(s)))
-        } else {
-            Ok(ShellRef::Name(s.to_string()))
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for ShellRef {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        s.parse().map_err(serde::de::Error::custom)
-    }
-}
-
-/// Configuration for the shell (the chrome package and its opaque settings).
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct ShellConfig {
-    /// Which chrome package to run, if the config names one.
-    ///
-    /// `Option` with no default, rather than falling back to a name: the
-    /// compositor must not answer "which shell" for itself. A default meant a
-    /// config that said nothing still started something — `simple`, installed
-    /// or not — and a user who mistyped `package` got a desktop wearing a
-    /// chrome they had not asked for rather than a refusal naming the key.
-    pub package: Option<ShellRef>,
-    /// Opaque settings handed to the chrome package verbatim. Domicile does not
-    /// interpret these; each shell defines its own schema.
-    ///
-    /// A `Table` rather than a `Value`, so `settings = 5` is refused when the
-    /// config is parsed — naming the line it is on — rather than travelling all
-    /// the way to a shell and landing where an object was promised. The refusal
-    /// belongs at the boundary that reads the file.
-    pub settings: toml::Table,
-}
-
-impl Default for ShellConfig {
-    fn default() -> Self {
-        ShellConfig {
-            package: None,
-            settings: toml::Table::new(),
-        }
-    }
 }
 
 /// Host-level compositor settings.
@@ -160,8 +75,8 @@ impl Default for CompositorConfig {
 /// verbatim, so sway's comma-separated multi-layout form (`xkb_layout =
 /// "us,de"` with `xkb_variant = "dvp,"`) works here too. Empty `xkb_rules` /
 /// `xkb_model` mean "whatever libxkbcommon defaults to". `xkb_options` is a
-/// list rather than a comma-separated string because TOML has one; it carries
-/// the common keyswaps (`caps:swapescape`, `compose:ralt`, …).
+/// list rather than a comma-separated string because the format has one; it
+/// carries the common keyswaps (`caps:swapescape`, `compose:ralt`, …).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct KeyboardConfig {
@@ -528,22 +443,24 @@ impl std::fmt::Display for Axis {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    pub shell: ShellConfig,
     pub compositor: CompositorConfig,
     pub input: InputConfig,
     pub output: OutputConfig,
 }
 
 impl Config {
-    /// Parse a config from TOML text, applying defaults and validating it.
+    /// Parse a config from JSON text, applying defaults and validating it.
+    ///
+    /// JSON rather than TOML because nobody writes this by hand: a shell owns
+    /// the configuration a *person* edits, and generates this from it. TOML is
+    /// a format for human authors; the one thing this file needs is a writer
+    /// on the other side that cannot get the escaping wrong.
     pub fn parse(text: &str) -> Result<Config, ConfigError> {
-        // `to_string` rather than `message`: the latter is the bare complaint
-        // ("invalid type: integer `5`, expected a map") with the span thrown
-        // away, and the span is the actionable half. A rejected config is not
-        // merely reported — the compositor falls back to its defaults, so a
-        // stray line costs the *whole* file, `[shell] package` included. The
-        // reader has to be able to find the line from the log.
-        let config: Config = toml::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        // `to_string` keeps serde_json's line and column, which is the
+        // actionable half of the complaint — and the reader is the shell
+        // author, debugging the config their own code emitted.
+        let config: Config =
+            serde_json::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
         config.validate()?;
         Ok(config)
     }
@@ -630,7 +547,7 @@ impl ConfigStore {
         self.last_error.as_ref()
     }
 
-    /// Attempt to replace the live config from TOML text.
+    /// Attempt to replace the live config from JSON text.
     pub fn reload_from_str(&mut self, text: &str) -> Result<(), ConfigError> {
         self.apply(Config::parse(text))
     }

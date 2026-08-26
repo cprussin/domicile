@@ -1,6 +1,6 @@
 [package]
 name = "domicile-config"
-description = "Domicile compositor configuration: schema, parsing, hot-reload, chrome-package resolution"
+description = "The compositor's configuration: the JSON schema a shell generates, parsing, validation, and safe hot-reload"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 serde.workspace = true
-toml.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 notify.workspace = true
 

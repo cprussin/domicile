@@ -34,16 +34,19 @@ the same mechanism under either shell.
 
 ## Write your own shell
 
-The shell is all the user chrome — panels, decorations, launcher — and it is
-swappable. `manganese` and `simple` ship here, but neither is privileged: a
-shell is an ordinary program in its own repository, built against
-`@domicile/chrome-sdk`, installed into `~/.local/share/domicile/shells/`, and
-named in your config.
+The shell is all the user chrome — panels, decorations, launcher — *and* the
+program that starts the compositor. `manganese` and `simple` ship here, but
+neither is privileged: a shell is an ordinary program in its own repository,
+built against `@domicile/chrome-sdk`, installed on your `PATH`, and run by
+name.
 
-```toml
-[shell]
-package = "my-shell"
+```sh
+my-shell
 ```
+
+Which is the whole interface. A shell owns its own configuration and starts
+`domicile-compositor` itself, so someone using your desktop never runs anything
+of Domicile's and never configures it directly.
 
 [docs/WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md) is the guide;
 [examples/minimal-shell](examples/minimal-shell) is a complete one in about a

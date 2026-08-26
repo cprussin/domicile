@@ -36,7 +36,7 @@ LOG="$(mktemp)"; ELOG="$(mktemp)"
 # Wait until $2 appears in file $1 (or time out). $3 = max 0.2s ticks.
 wait_for() { local file="$1" pat="$2" n="${3:-150}"; for _ in $(seq 1 "$n"); do grep -q "$pat" "$file" && return 0; sleep 0.2; done; return 1; }
 
-RUST_LOG="info,domicile_compositor=debug" "$BIN" --no-shell --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+RUST_LOG="info,domicile_compositor=debug" "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 # Named before the trap that reads them: under `set -u` a trap firing before
 # the last of them is assigned — a compositor that never binds its socket, a
@@ -45,7 +45,7 @@ COMP=$!
 EL=""; XVFB=""; FLOWER=""
 # By pid only — see `e2e-electron.sh` for why `pkill -f` is not this script's
 # to use. TERM rather than KILL for the X server, and only for it: a `kill -9`d
-# X server cannot unlink its socket or its lock, and `e2e-no-compositor.sh`
+# X server cannot unlink its socket or its lock, and `e2e-chrome-without-a-host.sh`
 # records what that corpse then costs the next run.
 cleanup() {
   kill -9 "$COMP" ${EL:-} ${FLOWER:-} 2>/dev/null
@@ -94,7 +94,19 @@ ensure_display 1280x800x24 60 || {
 }
 
 # 2) Now start the chrome.
-DOMICILE_CHROME_SOCKET="$SOCK" electron --no-sandbox --disable-gpu --disable-dev-shm-usage "$ROOT/packages/shell-manganese" >"$ELOG" 2>&1 &
+# The session file, not the socket. `publish()` is the last statement in the
+# compositor's `main()` — after every bind, the GPU probe and the whole event
+# loop's construction — so the socket exists long before the document does, and
+# a `cat` that ran on the socket's appearance would hand the chrome an empty
+# `DOMICILE_SESSION`.
+for _ in $(seq 1 400); do [ -s "$SOCK.session" ] && break; sleep 0.05; done
+if [ ! -s "$SOCK.session" ]; then
+  echo "FAIL: the compositor never published a session; nothing can be started against it."
+  exit 1
+fi
+DOMICILE_SESSION="$(cat "$SOCK.session")" \
+  electron --no-sandbox --disable-gpu --disable-dev-shm-usage \
+  "$ROOT/packages/shell-manganese/.vite/build/main.js" >"$ELOG" 2>&1 &
 EL=$!
 if ! wait_for "$LOG" '"type":"hello"' 200; then echo "FAIL: Electron renderer never handshook"; exit 1; fi
 echo "OK: Electron renderer connected and handshook"

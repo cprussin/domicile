@@ -71,9 +71,13 @@
     "packages/electron-chrome-host": {
       "name": "@domicile/electron-chrome-host",
       "version": "0.1.0",
+      "dependencies": {
+        "zod": "catalog:",
+      },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
         "@types/bun": "catalog:",
+        "@types/node": "catalog:",
         "electron": "catalog:",
         "typescript": "catalog:",
       },
@@ -84,6 +88,9 @@
     "packages/shell-manganese": {
       "name": "@domicile/shell-manganese",
       "version": "0.0.0",
+      "bin": {
+        "manganese": "./bin/manganese",
+      },
       "dependencies": {
         "@domicile/chrome-sdk": "workspace:*",
         "@domicile/component-library": "workspace:*",
@@ -91,6 +98,7 @@
         "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
@@ -112,10 +120,14 @@
     "packages/shell-simple": {
       "name": "@domicile/shell-simple",
       "version": "0.0.0",
+      "bin": {
+        "simple": "./bin/simple",
+      },
       "dependencies": {
         "@domicile/chrome-sdk": "workspace:*",
         "@domicile/component-library": "workspace:*",
         "@domicile/electron-chrome-host": "workspace:*",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
@@ -166,6 +178,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.3",
     "@types/bun": "^1.3.14",
+    "@types/node": "^24.10.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",

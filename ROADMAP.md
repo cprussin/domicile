@@ -60,7 +60,7 @@ cargo test -p domicile-compositor
 # answer before a push. `smoke-compositor` and `probe-transparency` are below
 # but not in that loop — run them by hand.
 # Most build the compositor first; `e2e-compose` drives cargo test directly and
-# `e2e-no-compositor` builds no Rust at all. Every one has a flake app, so
+# `e2e-chrome-without-a-host` builds no Rust at all. Every one has a flake app, so
 # `nix run .#<name>` runs any of them against a fresh checkout.
 ./scripts/smoke-compositor.sh    # a real client binds our globals
 ./scripts/e2e-chrome.sh          # client -> host -> mock chrome, and the buffer release
@@ -77,7 +77,7 @@ cargo test -p domicile-compositor
 ./scripts/e2e-chrome-layer.sh    # the chrome is told from the apps, and keeps the keyboard
 ./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel
 ./scripts/e2e-close.sh           # a close request reaches the client, and the window leaves when it goes
-./scripts/e2e-no-compositor.sh   # the daemon serves the protocol with no compositor behind it
+./scripts/e2e-chrome-without-a-host.sh   # a chrome whose host socket is dead says so once and stops
 ./scripts/e2e-two-displays.sh    # one wl_output per configured display, at its own size and scale
 ./scripts/e2e-displays-on-hello.sh # a chrome is told the desktop at the handshake
 ./scripts/e2e-desktop-changed.sh # a desktop that changes is re-described to every chrome
@@ -86,6 +86,7 @@ cargo test -p domicile-compositor
 ./scripts/e2e-chrome-fills-the-desktop.sh # a real chrome commits at the described desktop's size, and follows it
 ./scripts/e2e-chrome-fills-a-window.sh # the same where the desktop *is* Domicile's window (--present)
 ./scripts/e2e-window-follows-the-desktop.sh # a described desktop that grows takes its window with it (--present)
+./scripts/e2e-shell-launch.sh    # running the *shell* brings up a compositor and the chrome inside it
 ./scripts/probe-transparency.sh  # the engine, as our client, commits real alpha
 
 # Needs a real display — run on the user's machine.
@@ -223,8 +224,8 @@ below.
 
   | also needs | which scripts |
   |---|---|
-  | `electron` | `e2e-electron`, `e2e-late-chrome`, `e2e-no-compositor`, `e2e-window-alpha`, both `e2e-chrome-fills-*` |
-  | `xvfb` | `e2e-electron`, `e2e-late-chrome`, `e2e-no-compositor`, `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` |
+  | `electron` | `e2e-electron`, `e2e-late-chrome`, `e2e-chrome-without-a-host`, `e2e-window-alpha`, both `e2e-chrome-fills-*` |
+  | `xvfb` | `e2e-electron`, `e2e-late-chrome`, `e2e-chrome-without-a-host`, `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` |
   | a GL/EGL stack | `e2e-compose` (a software rasteriser is enough) |
   | `libxkbcommon-x11-0`, `xdotool` | `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` — they open a real window, and there is no WM on an Xvfb to resize it or measure it |
 
@@ -424,14 +425,13 @@ falling.
 | `packages/domicile-scene` | affine transforms + inverse, hit-testing, pointer routing, z-order, draw order (pure math) | core |
 | `packages/domicile-protocol` | host↔chrome wire messages (JSON), versioning | core |
 | `packages/domicile-host` | orchestrator `Host` brain + `ipc` (handshake, `apply_chrome_message`) | core |
-| `packages/domicile` | host daemon / control plane | core |
 | `packages/domicile-bridge` | app → external-image id + latest dmabuf bookkeeping (pure) | core |
 | `packages/domicile-compositor` | **the running compositor**: Smithay server, chrome socket, dmabuf/shm import, compositing, input | `.#full` |
 | `packages/chrome-sdk` | `<domicile-app>`/`<domicile-webview>` elements, `BridgeClient`, matrix/frame/input/protocol helpers | bun |
 | `packages/e2e-harness` | headless chrome stand-ins for the `scripts/e2e-*.sh` checks | bun |
 | `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers) | bun |
-| `packages/electron-chrome-host` | the Electron side a chrome package is built on: window, socket path, failure reporting | bun |
-| `packages/domicile-shell` | the shell manifest, where a named shell is looked up, and what starts one (pure) | core |
+| `packages/electron-chrome-host` | the shell's process side: starting the compositor, the launcher, the window, failure reporting | bun |
+| `packages/domicile-launch` | the boundary between a shell and the compositor it runs: the command line, and the session the compositor publishes (pure) | core |
 | `packages/component-library` | the shared React components and Panda preset the shells are built from | bun |
 | `packages/shell-manganese` | the reference chrome: tabs, stage, rail, address bar | bun |
 | `packages/shell-simple` | the minimal chrome: floating windows only | bun |
@@ -749,7 +749,7 @@ age, and it needs a screen before anyone should believe it.
   line the compositor writes once at startup.
 
   The *unconfigured* case is left alone, and now deliberately rather than
-  incidentally: with no `[[output.displays]]` the window is the desktop, and
+  incidentally: with no `output.displays` the window is the desktop, and
   its size and density come from the host, which the config does not know. So
   `Screens::reloaded_into` answers "leave it be" there instead of rebuilding
   from the file — which it did at first, quietly undoing an adopted scale 2 on
@@ -789,8 +789,13 @@ age, and it needs a screen before anyone should believe it.
   error: the anchoring subtracts an un-zoomed bounding corner from a zoomed
   rect, so the window is mispositioned too — 40px out for `zoom: 2` over a
   `rotate(30deg)`.
-- **Hot-swapping the chrome package** needs the daemon to own that process, which
-  it does not; the config watcher half is wired.
+- **Hot-swapping the chrome page** is the shell's to do now — it owns its own
+  Electron process — and no shell does it.
+- **A desktop that follows the shell's config** is wired on the compositor's
+  side (it watches the file it was given) and unreachable on the shell's:
+  `launchShell` writes that file into a private directory and returns no path
+  to it. `RunningCompositor` needs to carry the path, or `launchShell` needs to
+  take one.
 
 ---
 

@@ -2,7 +2,7 @@
   "compilerOptions": {
     "module": "esnext",
     "moduleResolution": "bundler",
-    "types": ["bun"]
+    "types": ["bun", "node"]
   },
   "extends": "@cprussin/tsconfig/dom.json",
   "include": ["src"]

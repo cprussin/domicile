@@ -45,23 +45,39 @@ COMP=""; APP=""; MOCK=""; NCOMP=""
 # density. Every field has to survive: the position is where the display sits
 # on the desktop, the size is what a client that fills the screen gets, and the
 # scale is what it draws at.
-cat >"$CONF" <<'TOML'
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [1920, 0]
-size = [2560, 1440]
-scale = 2
-TOML
+cat >"$CONF" <<'JSON'
+{
+  "output": {
+    "displays": [
+      {
+        "name": "left",
+        "size": [
+          1920,
+          1080
+        ]
+      },
+      {
+        "name": "right",
+        "position": [
+          1920,
+          0
+        ],
+        "size": [
+          2560,
+          1440
+        ],
+        "scale": 2
+      }
+    ]
+  }
+}
+JSON
 
 SOCK="$XDG_RUNTIME_DIR/c.sock"
 # The compositor's log is read in phase 3, which is the only place this script
 # needs positive evidence that something reached the compositor at all.
 RUST_LOG="info,domicile_compositor=debug" \
-  "$BIN" --no-shell --config "$CONF" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+  "$BIN" --session "$SOCK.session" --config "$CONF" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 # `wait` after the kill so bash reaps the jobs quietly; without it it reports
 # "Killed" on stderr at exit, which reads like a failure in a passing run. Not
@@ -314,14 +330,24 @@ fi
 # read once at startup, which is the whole reason the desktop is static.
 echo
 echo "== what a client is told when nothing described a desktop =="
-cat >"$NESTED_CONF" <<'TOML'
-[compositor]
-nested_size = [1600, 900]
-TOML
+cat >"$NESTED_CONF" <<'JSON'
+{
+  "compositor": {
+    "nested_size": [
+      1600,
+      900
+    ]
+  }
+}
+JSON
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-two-displays-nested"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-*
-"$BIN" --no-shell --config "$NESTED_CONF" --chrome-socket "$XDG_RUNTIME_DIR/c.sock" >/dev/null 2>&1 &
+# Both paths in this run's *own* runtime directory. `$SOCK` still names the
+# first compositor's, three phases up, so publishing there would have this one
+# write over a session document belonging to a compositor that is still going.
+NESTED_SOCK="$XDG_RUNTIME_DIR/c.sock"
+"$BIN" --session "$NESTED_SOCK.session" --config "$NESTED_CONF" --chrome-socket "$NESTED_SOCK" >/dev/null 2>&1 &
 NCOMP=$!
 for _ in $(seq 1 200); do
   [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break
@@ -351,7 +377,7 @@ elif [ "$UNDESCRIBED" = "$NESTED_EXPECTED" ]; then
 else
   compositor_verdict "$NCOMP" \
     "FAIL: a client was told '$UNDESCRIBED'" \
-    "  Expected '$NESTED_EXPECTED'. With no [[output.displays]] the desktop" \
+    "  Expected '$NESTED_EXPECTED'. With no output.displays the desktop" \
     "  is what compositor.nested_size says; a compositor still using the old" \
     "  hardcoded size looks identical at the default and wrong at every" \
     "  other value."

@@ -117,19 +117,22 @@ does the same thing against your working tree. To build the shell alone:
 bun run turbo build:vite --filter @domicile/shell-simple
 ```
 
-emits the Electron main bundle to `.vite/build/main.js`, the preload to
-`.vite/build/preload.cjs`, and the chrome to `.vite/renderer/main_window/`.
-`package.json`'s `main` points at the built bundle, so with a compositor
-running:
+emits the launcher to `.vite/build/launch.js`, the Electron main bundle to
+`.vite/build/main.js`, the preload to `.vite/build/preload.cjs`, and the chrome
+to `.vite/renderer/main_window/`. `bin/simple` runs the launcher, which starts
+the compositor and then the chrome inside it:
 
 ```sh
-electron packages/shell-simple
+packages/shell-simple/bin/simple
 ```
 
-opens this desktop against it. `DOMICILE_CHROME_SOCKET` says where the
-compositor's chrome socket is (`$XDG_RUNTIME_DIR/domicile-chrome.sock` by
-default), and `DOMICILE_COMPOSITED=1` makes the window transparent for the path
-where Domicile draws the clients itself rather than sending their pixels here.
+is the whole desktop. It needs `domicile-compositor` on `PATH`, or named in
+`DOMICILE_COMPOSITOR`; `scripts/run-native.sh simple` builds both halves out of
+a checkout and does that for you.
+
+Configuration is this shell's own, at `$XDG_CONFIG_HOME/domicile/simple.json`.
+Nothing of Domicile's is configured directly — what the compositor reads is
+generated from that file. A first run with no file takes the defaults.
 
 `bun run --filter @domicile/shell-simple start:dev` serves the renderer alone on
 Vite's dev server: with no host to inject a transport, no window ever appears —

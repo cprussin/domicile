@@ -22,7 +22,6 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -99,7 +98,6 @@ mod dmabuf_import;
 mod outbound;
 mod scale;
 mod screens;
-mod shell_process;
 mod shortcut;
 mod stacking;
 mod straight_alpha;
@@ -122,6 +120,8 @@ use domicile_bridge::BridgeRegistry;
 use domicile_config::{Config, ConfigError, ConfigStore};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
+use domicile_launch::arguments::arguments;
+use domicile_launch::session::{publish, Session};
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Shortcut};
 use domicile_scene::{
     Point as ScenePoint, PointerTarget, Scene, Style as SceneStyle, Transform as SceneTransform,
@@ -973,12 +973,14 @@ impl FrameWindow {
 /// blocks the Wayland event loop.
 /// Bind the chrome protocol socket.
 ///
-/// Separate from serving it, and called on the main thread, because a shell
-/// this compositor starts itself connects the moment it is up: a listener bound
-/// inside the serving thread is a race the shell loses by arriving first, and
-/// what it looks like from the shell is a compositor that is not there.
+/// Separate from serving it, and called on the main thread, because that is
+/// what makes a failed bind fatal. The race it was originally moved here to
+/// close — a shell this compositor started arriving before the listener
+/// existed — cannot happen any more: the shell picks this path itself and does
+/// not start its chrome until the session is published, which is the last
+/// thing `main` does.
 ///
-/// Moving it here also made it fatal, which it was not when it lived in the
+/// Being here is what made it fatal, which it was not when it lived in the
 /// thread — a failed bind used to log and leave the thread, and the compositor
 /// carried on with no socket for any chrome to arrive on. That is the right way
 /// round: the chrome protocol is not an optional extra.
@@ -4985,56 +4987,6 @@ fn cursor_shape(icon: CursorIcon) -> CursorShape {
     }
 }
 
-/// Resolve where the config file lives.
-///
-/// Mirrors [`chrome_socket_path`]: `--config PATH` wins, then
-/// `$DOMICILE_CONFIG`, then `domicile.toml` in the working directory.
-fn config_path() -> PathBuf {
-    let mut args = std::env::args().skip(1);
-    while let Some(arg) = args.next() {
-        if arg == "--config" {
-            if let Some(path) = args.next() {
-                return PathBuf::from(path);
-            }
-        }
-    }
-    std::env::var_os("DOMICILE_CONFIG")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("domicile.toml"))
-}
-
-/// Whether to open a window and draw client surfaces into it, rather than
-/// copying them out to the chrome.
-///
-/// `--present`, or `DOMICILE_PRESENT=1`. Off by default: the headless
-/// compositor is what the e2e scripts drive and what a machine with no display
-/// can run at all.
-fn presenting() -> bool {
-    std::env::args().skip(1).any(|arg| arg == "--present")
-        || std::env::var_os("DOMICILE_PRESENT").is_some_and(|value| value == "1")
-}
-
-/// Resolve where the chrome protocol socket lives.
-fn chrome_socket_path() -> PathBuf {
-    // --chrome-socket PATH wins, then $DOMICILE_CHROME_SOCKET, then a default under
-    // $XDG_RUNTIME_DIR (falling back to the current directory).
-    let mut args = std::env::args().skip(1);
-    while let Some(arg) = args.next() {
-        if arg == "--chrome-socket" {
-            if let Some(path) = args.next() {
-                return PathBuf::from(path);
-            }
-        }
-    }
-    if let Some(path) = std::env::var_os("DOMICILE_CHROME_SOCKET") {
-        return PathBuf::from(path);
-    }
-    let dir = std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    dir.join("domicile-chrome.sock")
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
         tracing_subscriber::fmt().with_env_filter(filter).init();
@@ -5042,35 +4994,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing_subscriber::fmt().init();
     }
 
-    // The chrome protocol socket: where a chrome shell connects. Overridable via
-    // --chrome-socket or DOMICILE_CHROME_SOCKET; defaults under XDG_RUNTIME_DIR.
-    let chrome_socket = chrome_socket_path();
+    // The whole command line, read before anything is bound: it is written by
+    // the shell that started us, so a mistake in it is a bug in a program
+    // rather than a typo at a prompt, and reporting it after the sockets are
+    // up buries it under a compositor's startup log.
+    let arguments = arguments(std::env::args_os().skip(1))?;
 
-    // Whether to start a shell, and which. Read before anything is bound so a
-    // mistyped reference costs nothing: `--shell ""` is a failure about the
-    // command line, and reporting it after the sockets are up buries it under
-    // a compositor's startup log.
-    let shell_request = domicile_shell::shell_request(std::env::args().skip(1))?;
-
-    // Config is optional: a missing/invalid file means run with defaults rather
-    // than refuse to boot, the same call the daemon makes.
-    // Kept, not just logged. The defaults name no shell, so a config that would
-    // not load reaches the shell decision looking exactly like one that named
-    // none — and the refusal would then tell its author to write a key their
-    // file very likely already has, two lines under the typo.
-    let config_file = config_path();
-    let (config, config_origin) = match Config::load(&config_file) {
-        Ok(config) => (config, domicile_shell::ConfigOrigin::AsWritten),
-        Err(err) => {
-            tracing::warn!(%err, "using the default config");
-            (
-                Config::default(),
-                domicile_shell::ConfigOrigin::Unreadable {
-                    path: config_file.display().to_string(),
-                    message: err.to_string(),
-                },
-            )
-        }
+    // A config that will not load is fatal, not a warning. The old fallback to
+    // defaults made sense while a person wrote this file by hand and might be
+    // mid-edit; a shell generates it now, so an unreadable one means the shell
+    // is broken — and coming up wearing settings nobody chose hides that
+    // behind a desktop that merely looks wrong.
+    let config = match &arguments.config {
+        Some(path) => Config::load(path)?,
+        None => Config::default(),
     };
 
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
@@ -5143,7 +5080,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         request_tx,
         config.output.max_scale,
         socket_name.clone(),
-        presenting(),
+        arguments.present,
     );
     // Before any chrome can connect: the desktop rides with the handshake, so
     // a page that arrives in the same millisecond as the socket still gets it.
@@ -5151,9 +5088,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .lock()
         .unwrap()
         .describe_displays(screens.outputs().map(Advertised::described).collect());
-    // Bound here rather than in the serving thread: a shell this compositor
-    // starts connects the moment it is up, and would otherwise race the bind.
-    let chrome_listener = bind_chrome_socket(&chrome_socket)?;
+    // Bound here rather than in the serving thread, so that a socket that
+    // cannot be bound ends the run rather than a thread. The shell is waiting
+    // on the session document, which is published long after this — so nothing
+    // can arrive before the listener exists, whatever order the rest takes.
+    let chrome_listener = bind_chrome_socket(&arguments.chrome_socket)?;
     {
         let hub = hub.clone();
         thread::spawn(move || serve_chrome(hub, chrome_listener));
@@ -5172,7 +5111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // a machine with no display can run, so a window is something you ask for
     // rather than something that happens to you.
     let mut window_events = None;
-    let mut gpu = if presenting() {
+    let mut gpu = if arguments.present {
         // Sized to show the desktop rather than to winit's default. `init()`
         // is called with no attributes and opens a 1280x800 window titled
         // "Smithay", so a two-display desktop was shown in a window the size
@@ -5339,80 +5278,86 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //
     // A watcher that cannot start is logged and left: it means the displays
     // stay as they are, which is exactly the behaviour this replaces, and it is
-    // not a reason to refuse to run a desktop.
-    match domicile_config::watch(config_path()) {
-        Ok(watcher) => {
-            let (reload_tx, reload_rx) = channel::<Result<Config, ConfigError>>();
-            thread::spawn(move || {
-                // The whole watcher, named so it is captured whole. A `move`
-                // closure in edition 2021 captures the *fields* it mentions,
-                // so writing only `watcher.rx` below takes the receiver and
-                // leaves the OS watcher behind to be dropped at the end of the
-                // enclosing scope — which closes the channel, so the first
-                // `recv` returns `Err`, this thread ends before anything is
-                // ever edited, and the config appears simply not to be
-                // watched. It cost an afternoon; `e2e-reload-displays.sh` is
-                // what catches it coming back.
-                let watcher = watcher;
-                // Ends when the watcher is dropped with this thread, or when
-                // the event loop has gone and nothing is listening.
-                while let Ok(first) = watcher.rx.recv() {
-                    // One save is several events, and the ones in the middle
-                    // are of a file that is halfway written. `ConfigStore`
-                    // does not catch that: a truncated config *parses*, it
-                    // just describes no displays — which is a legal desktop
-                    // meaning "follow Domicile's window". So a plain
-                    // write-then-write save was taking the whole desktop down
-                    // to `domicile-0` and putting it back a moment later, and
-                    // every client on it was told its monitor had gone and
-                    // come back.
-                    //
-                    // So: take the last parse of a burst rather than each one.
-                    //
-                    // Bounded by a deadline on the whole burst, not only by the
-                    // quiet between events. `recv_timeout(SETTLE)` alone starts
-                    // its budget again on every event, so a config in a
-                    // directory that is written to more often than that — the
-                    // default is `domicile.toml` in the working directory, and
-                    // the watch is on the directory because that is how an
-                    // atomic rename is caught — defers the reload for as long
-                    // as the writing goes on. Not late: never.
-                    let latest = last_of_burst(&watcher.rx, first, SETTLE, BURST);
-                    if reload_tx.send(latest).is_err() {
+    // not a reason to refuse to run a desktop. A run with no config file has
+    // nothing to watch at all, and says so rather than reporting a failure.
+    match arguments.config.as_ref() {
+        None => info!("no config file, so the desktop is fixed for this run"),
+        Some(path) => match domicile_config::watch(path) {
+            Ok(watcher) => {
+                let (reload_tx, reload_rx) = channel::<Result<Config, ConfigError>>();
+                thread::spawn(move || {
+                    // The whole watcher, named so it is captured whole. A `move`
+                    // closure in edition 2021 captures the *fields* it mentions,
+                    // so writing only `watcher.rx` below takes the receiver and
+                    // leaves the OS watcher behind to be dropped at the end of the
+                    // enclosing scope — which closes the channel, so the first
+                    // `recv` returns `Err`, this thread ends before anything is
+                    // ever edited, and the config appears simply not to be
+                    // watched. It cost an afternoon; `e2e-reload-displays.sh` is
+                    // what catches it coming back.
+                    let watcher = watcher;
+                    // Ends when the watcher is dropped with this thread, or when
+                    // the event loop has gone and nothing is listening.
+                    while let Ok(first) = watcher.rx.recv() {
+                        // One save is several events, and the ones in the middle
+                        // are of a file that is halfway written. `ConfigStore`
+                        // does not catch that: a truncated config *parses*, it
+                        // just describes no displays — which is a legal desktop
+                        // meaning "follow Domicile's window". So a plain
+                        // write-then-write save was taking the whole desktop down
+                        // to `domicile-0` and putting it back a moment later, and
+                        // every client on it was told its monitor had gone and
+                        // come back.
+                        //
+                        // So: take the last parse of a burst rather than each one.
+                        //
+                        // Bounded by a deadline on the whole burst, not only by the
+                        // quiet between events. `recv_timeout(SETTLE)` alone starts
+                        // its budget again on every event, so a config in a
+                        // directory that is written to more often than that defers
+                        // the reload for as long as the writing goes on. Not late:
+                        // never. And the directory is not hypothetical — the watch
+                        // is on it rather than on the file because that is how an
+                        // atomic rename is caught, and a shell puts the config in
+                        // the run directory beside the chrome socket and the
+                        // session document published into it.
+                        let latest = last_of_burst(&watcher.rx, first, SETTLE, BURST);
+                        if reload_tx.send(latest).is_err() {
+                            return;
+                        }
+                    }
+                });
+                handle.insert_source(reload_rx, |event, _, data: &mut CalloopData| {
+                    let ChannelEvent::Msg(parsed) = event else {
+                        return;
+                    };
+                    // Through the store, which is what keeps a half-written save
+                    // from taking the desktop down: a config that does not parse
+                    // leaves the live one in place and is remembered as the last
+                    // error rather than applied.
+                    if let Err(err) = data.state.config.apply_watch(parsed) {
+                        tracing::warn!(%err, "keeping the last config that parsed");
                         return;
                     }
-                }
-            });
-            handle.insert_source(reload_rx, |event, _, data: &mut CalloopData| {
-                let ChannelEvent::Msg(parsed) = event else {
-                    return;
-                };
-                // Through the store, which is what keeps a half-written save
-                // from taking the desktop down: a config that does not parse
-                // leaves the live one in place and is remembered as the last
-                // error rather than applied.
-                if let Err(err) = data.state.config.apply_watch(parsed) {
-                    tracing::warn!(%err, "keeping the last config that parsed");
-                    return;
-                }
-                // `None` means the reload has nothing to say about the
-                // desktop — an undescribed config, where the window is the
-                // authority and rebuilding from the file would undo the
-                // density it negotiated.
-                let config = data.state.config.current();
-                let Some(screens) = data.state.screens.reloaded_into(
-                    config.output.desktop().as_ref(),
-                    config.compositor.nested_size,
-                ) else {
-                    return;
-                };
-                let dh = data.display.handle();
-                data.state.adopt_the_desktop(&dh, screens);
-            })?;
-        }
-        Err(err) => {
-            tracing::warn!(%err, "not watching the config; its displays are fixed for this run");
-        }
+                    // `None` means the reload has nothing to say about the
+                    // desktop — an undescribed config, where the window is the
+                    // authority and rebuilding from the file would undo the
+                    // density it negotiated.
+                    let config = data.state.config.current();
+                    let Some(screens) = data.state.screens.reloaded_into(
+                        config.output.desktop().as_ref(),
+                        config.compositor.nested_size,
+                    ) else {
+                        return;
+                    };
+                    let dh = data.display.handle();
+                    data.state.adopt_the_desktop(&dh, screens);
+                })?;
+            }
+            Err(err) => {
+                tracing::warn!(%err, "not watching the config; its displays are fixed for this run");
+            }
+        },
     }
 
     // The window's own events: what the user does to Domicile rather than what
@@ -5452,46 +5397,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
     }
 
-    // The shell, last of all, and that placement is the whole point: every
-    // fallible step of bringing the compositor up is now behind us, so there is
-    // no `?` left between starting an Electron and the event loop that serves
-    // it. Earlier — beside the socket bind, where it began — a window that
-    // would not open, a shader that would not compile, or any of the event
-    // sources failing to insert would each have returned from `main` leaving a
-    // shell running with nothing to talk to.
+    // Last of all, and that placement is the whole point.
     //
-    // The bind still has to come first, far above: a shell we start ourselves
-    // connects the moment it is up and would otherwise race its own socket. So
-    // the socket has been served since long before this line, and arriving
-    // ahead of the loop costs the shell nothing — its messages queue and drain
-    // when the loop runs.
+    // The shell that started us is blocked on this file appearing, and takes
+    // its appearance as "everything named in it is live". So nothing that can
+    // fail may come after it: a window that would not open, a shader that
+    // would not compile, an event source that would not insert would each
+    // return from `main` — and a shell that had already read the document
+    // would be connecting to a compositor on its way out, with no reason
+    // given. Every one of those is behind us here, and the only `?` left is
+    // this call's own.
     //
-    // A shell built on the SDK would survive an orphaning anyway, since
-    // `connectToCompositor` treats the socket's FIN as fatal. The guide says
-    // using the SDK is optional, so that cannot be what this relies on.
-    //
-    // It reaps itself; see `start_shell`.
-    match shell_process::start_shell(
-        &shell_request,
-        &config,
-        &config_origin,
-        &domicile_shell::ChromeSession {
-            socket: chrome_socket.clone(),
-            wayland_display: chrome_socket_name.clone(),
-            composited: presenting(),
-            protocol_version: domicile_protocol::PROTOCOL_VERSION,
-            settings: config.shell.settings.clone(),
+    // The sockets themselves were bound far above, which is a separate
+    // ordering and still necessary: the chrome connects the moment it is told
+    // where to, and there has to be something listening when it does.
+    publish(
+        &Session {
+            protocol: domicile_protocol::PROTOCOL_VERSION,
+            chrome_socket: arguments.chrome_socket.clone(),
+            wayland_display: socket_name.to_string_lossy().into_owned(),
+            chrome_wayland_display: chrome_socket_name.clone(),
+            // What actually happened, not what was asked for. `--present` on a
+            // machine with no display leaves the compositor headless, and a
+            // shell told otherwise would open a transparent window over
+            // nothing rather than one it draws a desktop into.
+            composited: data.state.gpu.as_ref().is_some_and(Gpu::presenting),
         },
-    ) {
-        Ok(()) => {}
-        // Fatal, rather than a desktop with nothing drawn on it. A shell that
-        // was asked for and did not start is the one failure whose symptom —
-        // a window with no chrome in it — says nothing at all about its cause.
-        Err(err) => {
-            tracing::error!(%err, "the shell could not be started");
-            return Err(err.into());
-        }
-    }
+        &arguments.session,
+    )?;
 
     // Flush after every loop iteration so events queued while handling input
     // (which arrives off the wayland fd) reach clients promptly.
