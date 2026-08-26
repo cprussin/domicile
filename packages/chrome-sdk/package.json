@@ -75,6 +75,10 @@
       "types": "./dist/register-elements.d.ts",
       "default": "./dist/register-elements.js"
     },
+    "./render-bands": {
+      "types": "./dist/render-bands.d.ts",
+      "default": "./dist/render-bands.js"
+    },
     "./round-trip": {
       "types": "./dist/round-trip.d.ts",
       "default": "./dist/round-trip.js"

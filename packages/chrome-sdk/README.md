@@ -79,6 +79,39 @@ Custom element tag names must contain a hyphen, so the SDK registers
 `domicile-app` and `domicile-webview`. The engine integration layer aliases the
 bare `<app>` / `<webview>` names the compositor exposes.
 
+### Putting a window between two layers of chrome
+
+By default the chrome is one texture drawn over every window, so a window can
+never be in front of any part of it. Where the page can resolve that itself it
+already does — an `<domicile-app>` element paints nothing, so a panel above a
+window arrives as chrome pixels over transparent and blends correctly.
+
+Where it cannot, `render-bands` is the answer: the shell names the depths it
+draws at, and the compositor asks for one at a time and draws each between the
+windows it belongs between.
+
+```ts
+import { renderBands } from "@domicile/chrome-sdk/render-bands";
+
+const stop = renderBands(bridge, [0, 10], (band) => {
+  // Leave *only* this band painting. What the page commits next is the raster
+  // the compositor draws at that depth.
+  wallpaper.hidden = band !== 0;
+  panels.hidden = band !== 1;
+});
+```
+
+**What declaring bands obliges a shell to do:** commit nothing else while a
+band is outstanding. The compositor takes the page's next commit as the band it
+asked for — the page cannot label its own frames, because the Wayland
+connection belongs to Chromium rather than to the page — so a repaint of the
+chrome's own is a commit it cannot tell from the answer, and taking it as one
+files every later band under the wrong depth. `renderBands` causes no repaint
+of its own; a CSS animation or a video in the shell still would.
+
+A shell that never calls this declares nothing and is drawn as one layer over
+every window, which is what every chrome did before bands existed.
+
 ## Dependencies
 
 `zod`, used only at the host boundary: incoming frames are parsed against the
