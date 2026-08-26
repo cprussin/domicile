@@ -22,6 +22,7 @@ fn a_client_told_nothing_still_opens_a_window() {
     let asked = given(&[]).expect("nothing is a valid thing to say");
 
     assert_eq!(asked.title, "domicile-test-client");
+    assert!(!asked.trace, "a client nobody asked to report stays quiet");
 }
 
 #[test]
@@ -63,6 +64,28 @@ fn a_flag_given_twice_is_refused_rather_than_one_of_them_obeyed() {
         given(&["--title", "one", "--title", "two"]),
         Err(ArgumentError::Repeated {
             flag: "--title".to_string()
+        })
+    );
+}
+
+#[test]
+fn a_client_can_be_asked_to_report_what_it_sees() {
+    // What the checks that assert on the protocol rather than on the picture
+    // read, in place of the `WAYLAND_DEBUG` log they used to need one of
+    // weston's clients for.
+    let asked = given(&["--trace"]).expect("a request to report");
+
+    assert!(asked.trace);
+}
+
+#[test]
+fn asking_to_report_twice_is_refused_like_any_other_repeat() {
+    // A flag with no value still means a caller that thinks it said two
+    // things, and this one is a plausible thing to append twice by mistake.
+    assert_eq!(
+        given(&["--trace", "--trace"]),
+        Err(ArgumentError::Repeated {
+            flag: "--trace".to_string()
         })
     );
 }

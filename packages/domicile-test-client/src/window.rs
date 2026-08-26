@@ -11,10 +11,13 @@ use std::os::fd::AsFd as _;
 use std::os::unix::fs::FileExt as _;
 
 use wayland_client::protocol::{
-    wl_buffer, wl_callback, wl_compositor, wl_keyboard, wl_pointer, wl_registry, wl_seat, wl_shm,
-    wl_shm_pool, wl_surface,
+    wl_buffer, wl_callback, wl_compositor, wl_keyboard, wl_output, wl_pointer, wl_registry,
+    wl_seat, wl_shm, wl_shm_pool, wl_surface,
 };
-use wayland_client::{delegate_noop, Connection, Dispatch, QueueHandle, WEnum};
+use wayland_client::{delegate_noop, Connection, Dispatch, Proxy as _, QueueHandle, WEnum};
+use wayland_protocols::wp::cursor_shape::v1::client::{
+    wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1,
+};
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel, xdg_wm_base};
 
 /// What can go wrong being a client.
@@ -99,6 +102,16 @@ struct Client {
     configured: bool,
     /// Which of the two colours the next frame draws.
     frame: u32,
+    /// How this client asks for a cursor, made with the pointer it names.
+    ///
+    /// A shape rather than a surface of our own: `wp_cursor_shape_v1` is
+    /// modelled on the CSS keywords, which is what the compositor passes
+    /// through to the chrome — so a check can read the name the client asked
+    /// for rather than a picture nobody here can see.
+    cursor: Option<wp_cursor_shape_device_v1::WpCursorShapeDeviceV1>,
+    // NOTE: still an Option because the pointer it names does not exist until
+    // the seat says there is one. `open` refuses a compositor with no manager
+    // to make it from, so a `None` here is a seat with no pointer.
 }
 
 /// The surface and the pixels behind it, which exist together or not at all.
@@ -142,6 +155,7 @@ struct Globals {
     compositor: Option<wl_compositor::WlCompositor>,
     shm: Option<wl_shm::WlShm>,
     wm_base: Option<xdg_wm_base::XdgWmBase>,
+    cursor: Option<wp_cursor_shape_manager_v1::WpCursorShapeManagerV1>,
     named: Vec<(u32, String, u32)>,
 }
 
@@ -153,6 +167,7 @@ impl Client {
             window: None,
             configured: false,
             frame: 0,
+            cursor: None,
         }
     }
 
@@ -174,6 +189,9 @@ impl Client {
                 }
                 "xdg_wm_base" => {
                     self.globals.wm_base = Some(registry.bind(name, version.min(3), handle, ()));
+                }
+                "wp_cursor_shape_manager_v1" => {
+                    self.globals.cursor = Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 // Bound and dropped on purpose: a seat is what carries the
                 // keyboard and the pointer, and a compositor only sends input
@@ -209,11 +227,24 @@ impl Client {
             .shm
             .as_ref()
             .ok_or(ClientError::Missing { global: "wl_shm" })?;
+        // On the same footing as the three above, because it is now just as
+        // load-bearing: asking for a cursor is the only thing that tells the
+        // compositor there is one to pass to the chrome, and `e2e-input`
+        // asserts the chrome was told. Left as a silent `None`, a compositor
+        // that advertised no manager would fail that check through
+        // `compositor_verdict` — convicting the compositor of a gap that is
+        // this client's.
+        if self.globals.cursor.is_none() {
+            return Err(ClientError::Missing {
+                global: "wp_cursor_shape_manager_v1",
+            });
+        }
 
         let surface = compositor.create_surface(handle, ());
         let xdg = wm_base.get_xdg_surface(&surface, handle, ());
         let toplevel = xdg.get_toplevel(handle, ());
         toplevel.set_title(self.title.clone());
+        domicile_test_client::say!(toplevel.id(), "set_title(\"{}\")", self.title);
         // An app id is what a chrome keys a window by, so a window with none
         // is one a shell cannot address. The title is the human name; this is
         // the one programs match on.
@@ -373,11 +404,11 @@ fn draw_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
 impl Dispatch<wl_registry::WlRegistry, ()> for Client {
     fn event(
         client: &mut Client,
-        _: &wl_registry::WlRegistry,
+        registry: &wl_registry::WlRegistry,
         event: wl_registry::Event,
         (): &(),
         _: &Connection,
-        _: &QueueHandle<Client>,
+        handle: &QueueHandle<Client>,
     ) {
         if let wl_registry::Event::Global {
             name,
@@ -385,6 +416,26 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Client {
             version,
         } = event
         {
+            domicile_test_client::say!(
+                registry.id(),
+                "global({}, \"{}\", {})",
+                name,
+                interface,
+                version
+            );
+            // Outputs are bound here rather than with the rest, because they
+            // are the one global that arrives after startup: plugging a
+            // display in announces a new one, and a compositor cannot tell a
+            // client its window is on a screen the client never bound. A
+            // window open across that change would go on being told about the
+            // screen it started on and no other.
+            //
+            // Safe to do from the event, unlike `wl_seat`, because an output's
+            // version comes with its announcement rather than having to be
+            // weighed against the rest of the list.
+            if interface == "wl_output" {
+                let _: wl_output::WlOutput = registry.bind(name, version.min(2), handle, ());
+            }
             client.globals.named.push((name, interface, version));
         }
     }
@@ -465,7 +516,7 @@ impl Dispatch<wl_callback::WlCallback, ()> for Client {
 impl Dispatch<wl_buffer::WlBuffer, usize> for Client {
     fn event(
         client: &mut Client,
-        _: &wl_buffer::WlBuffer,
+        buffer: &wl_buffer::WlBuffer,
         event: wl_buffer::Event,
         index: &usize,
         _: &Connection,
@@ -475,6 +526,7 @@ impl Dispatch<wl_buffer::WlBuffer, usize> for Client {
         // into it. Without this the client runs out of buffers after two
         // frames and never draws again.
         if let wl_buffer::Event::Release = event {
+            domicile_test_client::say!(buffer.id(), "release()");
             let window = client
                 .window
                 .as_mut()
@@ -486,7 +538,7 @@ impl Dispatch<wl_buffer::WlBuffer, usize> for Client {
 
 impl Dispatch<wl_seat::WlSeat, ()> for Client {
     fn event(
-        _: &mut Client,
+        client: &mut Client,
         seat: &wl_seat::WlSeat,
         event: wl_seat::Event,
         (): &(),
@@ -504,7 +556,15 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
                 seat.get_keyboard(handle, ());
             }
             if capabilities.contains(wl_seat::Capability::Pointer) {
-                seat.get_pointer(handle, ());
+                let pointer = seat.get_pointer(handle, ());
+                // Made here rather than on the first `enter`: `set_shape` names
+                // the pointer it applies to, so the device has to exist before
+                // there is a serial to spend on it.
+                client.cursor = client
+                    .globals
+                    .cursor
+                    .as_ref()
+                    .map(|manager| manager.get_pointer(&pointer, handle, ()));
             }
         }
     }
@@ -513,6 +573,205 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
 delegate_noop!(Client: ignore wl_compositor::WlCompositor);
 delegate_noop!(Client: ignore wl_shm::WlShm);
 delegate_noop!(Client: ignore wl_shm_pool::WlShmPool);
-delegate_noop!(Client: ignore wl_surface::WlSurface);
-delegate_noop!(Client: ignore wl_keyboard::WlKeyboard);
-delegate_noop!(Client: ignore wl_pointer::WlPointer);
+delegate_noop!(Client: ignore wp_cursor_shape_manager_v1::WpCursorShapeManagerV1);
+delegate_noop!(Client: ignore wp_cursor_shape_device_v1::WpCursorShapeDeviceV1);
+
+/// Which outputs the window is on.
+///
+/// Reported rather than acted on. A compositor that never sends these leaves a
+/// scale-aware client mapped and blank, and leaves the checks that ask which
+/// screen a window landed on with nothing to read.
+impl Dispatch<wl_surface::WlSurface, ()> for Client {
+    fn event(
+        _: &mut Client,
+        surface: &wl_surface::WlSurface,
+        event: wl_surface::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            wl_surface::Event::Enter { output } => {
+                domicile_test_client::say!(surface.id(), "enter({})", output.id());
+            }
+            wl_surface::Event::Leave { output } => {
+                domicile_test_client::say!(surface.id(), "leave({})", output.id());
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Where each screen is.
+///
+/// `geometry` only: its x and y are what says which screen a window is on once
+/// `wl_surface.enter` has named the output, which is what `screens_of` in
+/// `e2e-one-window-per-display` reads. `mode`, `scale` and `done` are grepped
+/// only by `e2e-hidpi`, which still drives weston, so they arrive with it.
+impl Dispatch<wl_output::WlOutput, ()> for Client {
+    fn event(
+        _: &mut Client,
+        output: &wl_output::WlOutput,
+        event: wl_output::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let wl_output::Event::Geometry {
+            x,
+            y,
+            physical_width,
+            physical_height,
+            subpixel,
+            make,
+            model,
+            transform,
+        } = event
+        {
+            domicile_test_client::say!(
+                output.id(),
+                "geometry({}, {}, {}, {}, {}, \"{}\", \"{}\", {})",
+                x,
+                y,
+                physical_width,
+                physical_height,
+                number(subpixel),
+                make,
+                model,
+                number(transform)
+            );
+        }
+    }
+}
+
+/// Keys, as they arrive.
+///
+/// `modifiers` as well as `key`: a compositor that loses a key release leaves
+/// a modifier held for good, and the count of one against the other is what
+/// says so.
+impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
+    fn event(
+        _: &mut Client,
+        keyboard: &wl_keyboard::WlKeyboard,
+        event: wl_keyboard::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            wl_keyboard::Event::Key {
+                serial,
+                time,
+                key,
+                state,
+            } => {
+                domicile_test_client::say!(
+                    keyboard.id(),
+                    "key({}, {}, {}, {})",
+                    serial,
+                    time,
+                    key,
+                    number(state)
+                );
+            }
+            wl_keyboard::Event::Modifiers {
+                serial,
+                mods_depressed,
+                mods_latched,
+                mods_locked,
+                group,
+            } => {
+                domicile_test_client::say!(
+                    keyboard.id(),
+                    "modifiers({}, {}, {}, {}, {})",
+                    serial,
+                    mods_depressed,
+                    mods_latched,
+                    mods_locked,
+                    group
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The pointer, as far as a check needs it.
+impl Dispatch<wl_pointer::WlPointer, ()> for Client {
+    fn event(
+        client: &mut Client,
+        pointer: &wl_pointer::WlPointer,
+        event: wl_pointer::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            wl_pointer::Event::Enter {
+                serial,
+                surface,
+                surface_x,
+                surface_y,
+            } => {
+                domicile_test_client::say!(
+                    pointer.id(),
+                    "enter({}, {}, {}, {})",
+                    serial,
+                    surface.id(),
+                    surface_x,
+                    surface_y
+                );
+                // What a real client does the moment the pointer arrives, and
+                // the only way the compositor learns there is a cursor to tell
+                // the chrome about.
+                client
+                    .cursor
+                    .as_ref()
+                    .expect("the pointer that entered is the one the device names")
+                    .set_shape(serial, wp_cursor_shape_device_v1::Shape::Default);
+            }
+            wl_pointer::Event::Motion {
+                time,
+                surface_x,
+                surface_y,
+            } => {
+                domicile_test_client::say!(
+                    pointer.id(),
+                    "motion({}, {}, {})",
+                    time,
+                    surface_x,
+                    surface_y
+                );
+            }
+            wl_pointer::Event::Button {
+                serial,
+                time,
+                button,
+                state,
+            } => {
+                domicile_test_client::say!(
+                    pointer.id(),
+                    "button({}, {}, {}, {})",
+                    serial,
+                    time,
+                    button,
+                    number(state)
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The number behind an enum argument.
+///
+/// libwayland prints the wire value, and the checks that read these lines
+/// match on it. `WEnum` is either the value or the number a newer compositor
+/// sent that this client's protocol copy has no name for — and the number is
+/// what both cases have.
+fn number<T: Into<u32>>(stated: WEnum<T>) -> u32 {
+    match stated {
+        WEnum::Value(known) => known.into(),
+        WEnum::Unknown(raw) => raw,
+    }
+}

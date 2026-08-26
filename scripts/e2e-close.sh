@@ -28,9 +28,10 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
 
-# A protocol log is coloured even into a file, and tracing colours its own
-# output; every check below reads those logs as plain text, and an escape landing
-# mid-field is a grep that matches nothing and guards nothing.
+# Tracing colours its own output; every check below reads the compositor's log
+# as plain text, and an escape landing mid-field is a grep that matches nothing
+# and guards nothing. (The client's own protocol log carries no colour either
+# way — that clause was about libwayland, which this client does not use.)
 export NO_COLOR=1
 
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-close"   # short: Unix socket path limit

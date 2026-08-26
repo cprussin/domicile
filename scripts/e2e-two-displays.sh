@@ -17,6 +17,12 @@
 # Needs no chrome and no display.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+# 1, not 77. A client this repo builds and cannot build is a broken tree, which
+# is a failure; 77 is for what the *machine* is missing, and this needs nothing
+# the machine has to supply.
+build_test_client || exit 1
 BIN="$ROOT/target/debug/domicile-compositor"
 cargo build -p domicile-compositor >/dev/null 2>&1 || {
   echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
@@ -27,12 +33,10 @@ command -v wayland-info >/dev/null 2>&1 || {
   echo "SKIP: wayland-info is what asks the compositor what it advertises."
   exit 77
 }
-command -v weston-terminal >/dev/null 2>&1 || {
-  echo "SKIP: weston-terminal is the real client whose surface has to enter both."
-  exit 77
-}
-# Both `77`s are this script's own, which is the convention: a script that
-# needs a client says so itself rather than having `check.sh` keep a list.
+# That `77` is this script's own, which is the convention: a script that needs
+# something off the machine says so itself rather than having `check.sh` keep a
+# list. The client it opens a window with is built above instead — ours to
+# build, so failing to is a broken tree rather than a missing dependency.
 
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-two-displays"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
@@ -155,16 +159,14 @@ fi
 # scales its content reads `wl_surface.enter` to decide what density to draw
 # at, so a surface entered onto only the first output is drawn for the wrong
 # screen — and `wayland-info` cannot see this: it binds the globals and maps no
-# toplevel. WAYLAND_DEBUG makes the client log the events it receives; object
-# names are `wl_surface@12` on current libwayland and `wl_surface#12` on older
-# releases, and NO_COLOR stops libwayland writing SGR escapes into the middle
-# of them.
+# toplevel. `--trace` makes the client report the messages it is handed, in the
+# shape the greps below read.
 echo
 echo "== the outputs the client's own surface entered =="
 # The client outlives the poll budget — 20s against 6s — so a slow machine
 # fails on what the client was told rather than on the client being killed
 # mid-answer, which reads like a compositor that advertised one output.
-NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 20 weston-terminal >"$CLIENT" 2>&1 &
+WAYLAND_DISPLAY=wayland-1 timeout 20 "$TEST_CLIENT" --title app --trace >"$CLIENT" 2>&1 &
 APP=$!
 for _ in $(seq 1 60); do
   [ "$(grep -cE "wl_surface[#@][0-9]+\.enter\(" "$CLIENT")" -ge 2 ] && break

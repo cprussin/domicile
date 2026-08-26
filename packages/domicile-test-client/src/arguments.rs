@@ -18,6 +18,10 @@ pub struct Arguments {
     /// The toplevel's title, which is how a chrome names the window and how a
     /// check tells two of them apart.
     pub title: String,
+    /// Whether to report the protocol messages this client sees. Off by
+    /// default: a buffer release arrives every frame, and the checks that only
+    /// need a window open should not pay a write for each one.
+    pub trace: bool,
 }
 
 /// A command line the client will not run.
@@ -39,6 +43,7 @@ pub enum ArgumentError {
 /// Read a client command line, or say why it cannot be run.
 pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, ArgumentError> {
     let mut title = None;
+    let mut trace = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -47,12 +52,16 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--title" => {
                 take(&mut title, &flag, value(&mut args, &flag)?)?;
             }
+            "--trace" => {
+                take(&mut trace, &flag, true)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
 
     Ok(Arguments {
         title: title.unwrap_or_else(|| "domicile-test-client".to_string()),
+        trace: trace.unwrap_or(false),
     })
 }
 

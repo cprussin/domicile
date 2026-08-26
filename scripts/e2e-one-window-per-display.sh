@@ -20,16 +20,18 @@
 # narrows the set and only a chrome can send one.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+# 1, not 77. A client this repo builds and cannot build is a broken tree, which
+# is a failure; 77 is for what the *machine* is missing, and this needs nothing
+# the machine has to supply.
+build_test_client || exit 1
 BIN="$ROOT/target/debug/domicile-compositor"
 cargo build -p domicile-compositor >/dev/null 2>&1 || {
   echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
   exit 1
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
-command -v weston-terminal >/dev/null 2>&1 || {
-  echo "SKIP: weston-terminal is the real client whose surface has to enter one output and leave the other."
-  exit 77
-}
 command -v bun >/dev/null 2>&1 || {
   echo "SKIP: bun runs the chrome that places the windows; without one nothing narrows the set."
   exit 77
@@ -139,13 +141,13 @@ screens_of() {
 echo "== two clients, one placed on each screen =="
 # The clients outlive the poll budgets so a slow machine fails on what a client
 # was told rather than on the client being killed mid-answer.
-NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 30 weston-terminal >"$FIRST" 2>&1 &
+WAYLAND_DISPLAY=wayland-1 timeout 30 "$TEST_CLIENT" --title left --trace >"$FIRST" 2>&1 &
 ONE=$!
 for _ in $(seq 1 100); do
   [ "$(grep -c "toplevel mapped" "$COMPLOG")" -ge 1 ] && break
   sleep 0.1
 done
-NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 30 weston-terminal >"$SECOND" 2>&1 &
+WAYLAND_DISPLAY=wayland-1 timeout 30 "$TEST_CLIENT" --title right --trace >"$SECOND" 2>&1 &
 TWO=$!
 for _ in $(seq 1 100); do
   [ "$(grep -c "toplevel mapped" "$COMPLOG")" -ge 2 ] && break
