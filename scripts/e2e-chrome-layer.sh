@@ -18,6 +18,9 @@ set -u
 export NO_COLOR=1
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+build_test_client || exit 1
 BIN="$ROOT/target/debug/domicile-compositor"
 # Built here rather than merely checked for. A binary that exists but predates
 # the source is the worst of both: every check runs, and every check reports on
@@ -56,7 +59,7 @@ echo "apps on $APP_DISPLAY, the chrome on $CHROME_DISPLAY"
 # The chrome first, because it is the desktop the rest appears on — and because
 # a window taking the keyboard only means something once there is a chrome to
 # take it from.
-WAYLAND_DISPLAY="$CHROME_DISPLAY" weston-flower >/dev/null 2>&1 &
+WAYLAND_DISPLAY="$CHROME_DISPLAY" "$TEST_CLIENT" --title chrome-side >/dev/null 2>&1 &
 CHROME=$!
 if wait_for "the chrome mapped its toplevel"; then
   echo "PASS: a client on the chrome socket became the desktop, not a window on it"
@@ -97,7 +100,7 @@ DOMICILE_CHROME_SOCK="$SOCK" bun "$ROOT/packages/e2e-harness/src/focus-probe.ts"
 PROBE=$!
 sleep 0.5
 
-WAYLAND_DISPLAY="$APP_DISPLAY" weston-flower >/dev/null 2>&1 &
+WAYLAND_DISPLAY="$APP_DISPLAY" "$TEST_CLIENT" --title app-side >/dev/null 2>&1 &
 APP=$!
 if wait_for "toplevel mapped"; then
   echo "OK: a client on the app socket became a window on the desktop"

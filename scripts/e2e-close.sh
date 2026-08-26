@@ -12,15 +12,12 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/target/debug/domicile-compositor"
 
-# 77, not 0. A skip that exits 0 is indistinguishable from a check that ran and
-# passed — `scripts/check.sh` tallies it as `ok` and `DOMICILE_CHECK_STRICT`
-# cannot see it. Owned here rather than in `check.sh`'s guard block because the
-# client is this script's business: what it needs is any client that maps a
-# real toplevel, and it says so itself.
-if ! command -v weston-flower >/dev/null 2>&1; then
-  echo "SKIP: no weston-flower, and this needs a real client with a toplevel to close."
-  exit 77
-fi
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
+# 1, not 77. A client this repo builds and cannot build is a broken tree, which
+# is a failure; 77 is for what the *machine* is missing, and this needs nothing
+# the machine has to supply.
+build_test_client || exit 1
 # Built here rather than merely checked for. A binary that exists but predates
 # the source is the worst of both: every check runs, and every check reports on
 # code that is not the code in the tree. Incremental and near-free when there is
@@ -31,7 +28,7 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
 
-# libwayland colours WAYLAND_DEBUG even into a file, and tracing colours its own
+# A protocol log is coloured even into a file, and tracing colours its own
 # output; every check below reads those logs as plain text, and an escape landing
 # mid-field is a grep that matches nothing and guards nothing.
 export NO_COLOR=1
@@ -72,10 +69,15 @@ sleep 0.6
 # `xdg_toplevel.close` is visible — a client that is asked to go produces no
 # output of its own.
 #
+# The greps below read the object and the event name only, with no argument
+# list after them, so they match this client's `xdg_toplevel@11.close, ()` as
+# well as libwayland's `xdg_toplevel@11.close()`. That is why this script could
+# be converted and the eight that read event *arguments* could not.
+#
 # `timeout` is the backstop for a client that ignores the close, not the way
 # this ends: a run where the client is still there when it fires is a failure
 # below, not a pass that took longer.
-WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 15 weston-flower >"$CLIENT" 2>&1 &
+WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 15 "$TEST_CLIENT" --title closer >"$CLIENT" 2>&1 &
 CLI=$!
 
 for _ in $(seq 1 100); do grep -qE "xdg_toplevel[#@][0-9]+\.close" "$CLIENT" && break; sleep 0.1; done

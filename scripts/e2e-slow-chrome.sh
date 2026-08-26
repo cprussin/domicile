@@ -10,6 +10,8 @@
 # supersedes it anyway.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
 # Built here rather than merely checked for. A binary that exists but predates
 # the source is the worst of both: every check runs, and every check reports on
@@ -44,17 +46,13 @@ if ! { kill -0 "$COMP" 2>/dev/null && [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && [ -
 fi
 
 # Any client that keeps drawing will do; this check is about the chrome side.
-# nixpkgs builds weston with `simple-clients` off, so the full shell falls back
-# to kitty, kept busy so it redraws.
-if command -v weston-simple-shm >/dev/null 2>&1; then
-  CLIENT=(weston-simple-shm)
-elif command -v kitty >/dev/null 2>&1; then
-  CLIENT=(kitty --config NONE -o confirm_os_window_close=0
-          sh -c 'while :; do date; sleep 0.2; done')
-else
-  echo "SKIP: no continuously-drawing client on PATH (wanted weston-simple-shm or kitty)."
-  exit 77
-fi
+# It used to want `weston-simple-shm`, and nixpkgs builds weston with
+# `simple-clients` off — so the full shell fell to kitty, and a machine with
+# neither skipped a check about the compositor over a missing terminal
+# emulator. The workspace's own client asks for a frame callback and draws on
+# every one, which is the whole requirement.
+build_test_client || exit 1
+CLIENT=("$TEST_CLIENT" --title slow-chrome)
 
 # The verdict below is "did the compositor keep answering", and it is asked by
 # binding a global with `wayland-info`. Without it the answer is `command not

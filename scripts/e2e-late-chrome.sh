@@ -20,6 +20,8 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/xvfb-display.sh
 . "$ROOT/scripts/xvfb-display.sh"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
 cargo build -p domicile-compositor >/dev/null 2>&1 || {
   echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
@@ -42,13 +44,13 @@ COMP=$!
 # the last of them is assigned — a compositor that never binds its socket, a
 # Ctrl-C during the shell build — died with `unbound variable` instead of
 # cleaning up, which is how a run of this script left a live Electron behind.
-EL=""; XVFB=""; FLOWER=""
+EL=""; XVFB=""; APP=""
 # By pid only — see `e2e-electron.sh` for why `pkill -f` is not this script's
 # to use. TERM rather than KILL for the X server, and only for it: a `kill -9`d
 # X server cannot unlink its socket or its lock, and `e2e-chrome-without-a-host.sh`
 # records what that corpse then costs the next run.
 cleanup() {
-  kill -9 "$COMP" ${EL:-} ${FLOWER:-} 2>/dev/null
+  kill -9 "$COMP" ${EL:-} ${APP:-} 2>/dev/null
   kill ${XVFB:-} 2>/dev/null
   rm -f "$LOG" "$ELOG"
 }
@@ -60,10 +62,7 @@ for _ in $(seq 1 200); do [ -S "$SOCK" ] && break; sleep 0.05; done
 # not start says something false. Without them this script waited out its own
 # `wait_for` and convicted the compositor at `exit 1` — a missing dependency
 # reported as a code failure, which is what 77 exists to prevent.
-command -v weston-flower >/dev/null 2>&1 || {
-  echo "SKIP: no weston-flower, which is the client that maps before any chrome."
-  exit 77
-}
+build_test_client || exit 1
 command -v electron >/dev/null 2>&1 || {
   echo "SKIP: no electron, which is the chrome that arrives late here."
   exit 77
@@ -75,8 +74,8 @@ command -v electron >/dev/null 2>&1 || {
 # 1) Map a real Wayland client with *no chrome connected*. This is what makes
 #    the test what it is: the one `app_appeared` this client will ever cause
 #    goes out to nobody.
-WAYLAND_DISPLAY=wayland-1 weston-flower >/dev/null 2>&1 &
-FLOWER=$!
+WAYLAND_DISPLAY=wayland-1 "$TEST_CLIENT" --title early >/dev/null 2>&1 &
+APP=$!
 if ! wait_for "$LOG" "toplevel mapped" 100; then echo "FAIL: client never mapped a toplevel"; exit 1; fi
 grep -q '"type":"hello"' "$LOG" && { echo "FAIL: a chrome connected before the client mapped; this tests nothing"; exit 1; }
 echo "OK: Wayland client mapped a toplevel with no chrome listening"

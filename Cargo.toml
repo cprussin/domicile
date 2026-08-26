@@ -8,6 +8,7 @@ members = [
     "packages/domicile-bridge",
     "packages/domicile-launch",
     "packages/domicile-test-chrome",
+    "packages/domicile-test-client",
     "packages/domicile-compositor",
 ]
 
@@ -22,6 +23,7 @@ default-members = [
     "packages/domicile-bridge",
     "packages/domicile-launch",
     "packages/domicile-test-chrome",
+    "packages/domicile-test-client",
 ]
 
 # domicile-host's default build (the orchestrator) is pure logic and lives in the
