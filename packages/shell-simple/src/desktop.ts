@@ -34,6 +34,20 @@ export class Desktop {
   /** The stacking order handed out so far; the next raise takes one more. */
   #frontmost = 0;
 
+  /**
+   * Whether the desktop is past the catch-up a connecting chrome is given.
+   *
+   * Every chrome that connects is replayed every window already running — as
+   * if each had just appeared — and told at the end of that who actually holds
+   * the keyboard. A window replayed there is not a window the user just
+   * opened, and focusing it would move the desktop's keyboard onto whichever
+   * came last and broadcast that to every other chrome, throwing away an
+   * answer the compositor already had. So the replayed ones are placed and
+   * raised and otherwise left alone, and {@link caughtUp} — the `focus_changed`
+   * that ends the replay — is what makes the next one a window someone opened.
+   */
+  #caughtUp = false;
+
   constructor(root: HTMLElement) {
     this.#root = root;
   }
@@ -67,6 +81,15 @@ export class Desktop {
    * Where the compositor draws the client itself no frame is coming — the
    * hand-over skips a natively-drawn window — so the new element never learns
    * it has a surface and paints its placeholder over the live client for good.
+   *
+   * A window that opens on a desktop past its catch-up takes the keyboard with
+   * it, for the same reason it opens in front: it is the one the user just
+   * asked for. Nothing else would give it to them — the SDK routes keys to
+   * whichever window was last clicked, and a window nobody has clicked yet is
+   * not one of those — so without this Alt+Enter opens a terminal that hears
+   * nothing until it is clicked, which is not a terminal anything can be
+   * started from. See {@link #caughtUp} for the windows this does not apply
+   * to.
    */
   open(appId: string, size: readonly [width: number, height: number]): void {
     if (!this.#windows.has(appId)) {
@@ -84,7 +107,30 @@ export class Desktop {
       this.#opened += 1;
       this.raise(appId);
       this.#root.append(element);
+      // After the append, and that order is load-bearing rather than tidy: the
+      // element sends its portal as it connects, and `Scene::focus_app`
+      // refuses an app it has no portal for — silently, while the seat is
+      // moved anyway — so a focus that arrived first would leave the brain and
+      // the compositor disagreeing with nothing to notice. The roadmap records
+      // that exact no-op being found the hard way, in `e2e-chrome-layer.sh`.
+      if (this.#caughtUp) {
+        element.focusApp();
+      }
     }
+  }
+
+  /**
+   * The host has said who holds the keyboard, which ends the catch-up.
+   *
+   * That message is the last of the replay a connecting chrome is given, and
+   * it arrives whether or not anything is running — so it is the one signal
+   * that always separates "these windows were already here" from "the user
+   * opened this". What it *says* is not used: this shell draws nothing to show
+   * which window has the keyboard, and the SDK is already told by the click or
+   * the open that moved it.
+   */
+  caughtUp(): void {
+    this.#caughtUp = true;
   }
 
   /** Take a window down, because its client is gone. */
