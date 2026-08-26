@@ -2,7 +2,8 @@
 
 // Reports every desktop a chrome is told about, not just the first.
 //
-// Driven by scripts/e2e-reload-displays.sh. `displays-probe.ts` answers "what
+// Driven by scripts/e2e-reload-displays.sh. The desktop tests in
+// `packages/domicile-compositor/tests/desktop.rs` answer "what
 // is the desktop", which is one question with one answer and is why it exits
 // as soon as it has one. This answers "what did the desktop *become*", so it
 // stays connected and prints each description as it arrives — the second line

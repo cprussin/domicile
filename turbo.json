@@ -77,7 +77,11 @@
     },
     "test:unit": {
       "dependsOn": ["^build", "//#build", "^prepare", "prepare"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/**"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/scripts/**",
+        "$TURBO_ROOT$/packages/domicile-protocol/wire/**"
+      ]
     }
   },
   "ui": "tui"

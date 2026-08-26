@@ -1,0 +1,16 @@
+[package]
+name = "domicile-test-chrome"
+description = "A stand-in chrome: what a test connects to a compositor in place of a web engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-protocol = { path = "../domicile-protocol" }
+domicile-host = { path = "../domicile-host" }
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

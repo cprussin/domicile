@@ -46,3 +46,7 @@ features = [
     # why CI installs them.
     "backend_winit",
 ]
+
+[dev-dependencies]
+domicile-test-chrome = { path = "../domicile-test-chrome" }
+tempfile.workspace = true

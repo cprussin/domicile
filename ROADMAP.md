@@ -53,7 +53,8 @@ bun run turbo test              # TypeScript: lint, types, unit tests
 
 nix develop .#full              # adds wayland, mesa, weston, electron, xvfb, kitty
 cargo build -p domicile-compositor    # the Smithay server (EXCLUDED from default build)
-cargo test -p domicile-compositor
+cargo test -p domicile-compositor      # includes tests/ — a real compositor,
+                                       # driven by a stand-in chrome
 
 # Headless end-to-end. No display needed — use these to verify changes.
 # `./scripts/check.sh` runs every `e2e-*.sh` and `test-*.sh`, and is the whole
@@ -79,8 +80,6 @@ cargo test -p domicile-compositor
 ./scripts/e2e-close.sh           # a close request reaches the client, and the window leaves when it goes
 ./scripts/e2e-chrome-without-a-host.sh   # a chrome whose host socket is dead says so once and stops
 ./scripts/e2e-two-displays.sh    # one wl_output per configured display, at its own size and scale
-./scripts/e2e-displays-on-hello.sh # a chrome is told the desktop at the handshake
-./scripts/e2e-desktop-changed.sh # a desktop that changes is re-described to every chrome
 ./scripts/e2e-reload-displays.sh # a display *added* to the config is taken up while it runs
 ./scripts/e2e-one-window-per-display.sh # a client is told the one output its window is on
 ./scripts/e2e-chrome-fills-the-desktop.sh # a real chrome commits at the described desktop's size, and follows it

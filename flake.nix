@@ -141,8 +141,6 @@
           e2e-compose = "e2e-compose.sh";
           e2e-stuck-key = "e2e-stuck-key.sh";
           e2e-two-displays = "e2e-two-displays.sh";
-          e2e-displays-on-hello = "e2e-displays-on-hello.sh";
-          e2e-desktop-changed = "e2e-desktop-changed.sh";
           e2e-reload-displays = "e2e-reload-displays.sh";
           e2e-one-window-per-display = "e2e-one-window-per-display.sh";
           e2e-chrome-fills-the-desktop = "e2e-chrome-fills-the-desktop.sh";
