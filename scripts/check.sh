@@ -192,8 +192,11 @@ if bun install --frozen-lockfile >/dev/null 2>&1; then echo "ok"; else
   echo "FAILED"; echo "dependencies would not install" >&2; exit 1
 fi
 
-# Electron is not on `PATH` under `nix develop`, and hunting it out of the
-# store by hand is a thing to get wrong once per session.
+# `nix develop .#full` puts Electron on `PATH`; the bare `.#default` shell does
+# not, and neither does a machine that installed one some other way. So this is
+# the fallback rather than the normal path — and it is a rough one: `sort -V`
+# over the store answers with whatever major happens to be there, which is why
+# `.#full` names the version the packages ship rather than leaving it to this.
 if ! command -v electron >/dev/null 2>&1; then
   # Newest by version. `tail -1` on the bare glob orders by store *hash*, so
   # with two electrons in the store it picks an arbitrary one.

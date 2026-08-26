@@ -54,11 +54,13 @@ export NO_COLOR=1
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/domicile-rt-native}"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 
-# A store build carries no setuid sandbox helper, so Electron refuses to start
-# without this — and `.#full` puts one on `PATH`, so being *found* says nothing
-# about whether it needs the flag. The machine's to say, not the shell's, which
-# is why it is an environment variable. Overridable, so a real system Electron
-# that has its helper can be given `DOMICILE_ELECTRON_ARGS=`.
+# Defaulted on rather than needed everywhere. A store build's sandbox helper is
+# not setuid, but Chromium falls back to the namespace sandbox and comes up
+# fine wherever unprivileged user namespaces are enabled — which is most hosts.
+# What does need this is a host with them disabled, or a container running as
+# root, and this script is run in both. The machine's to say rather than the
+# shell's, which is why it is an environment variable and why the default is
+# overridable: `DOMICILE_ELECTRON_ARGS=` keeps the sandbox on.
 DOMICILE_ELECTRON_ARGS="${DOMICILE_ELECTRON_ARGS---no-sandbox}"
 export DOMICILE_ELECTRON_ARGS
 

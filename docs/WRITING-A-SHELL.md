@@ -80,7 +80,7 @@ rather than any shell's:
 |---|---|
 | `DOMICILE_COMPOSITOR` | Which compositor to run. Defaults to `domicile-compositor` on `PATH`. |
 | `DOMICILE_ELECTRON` | Which Electron to run. It is not always on `PATH`; under `nix develop` it lives in the store. |
-| `DOMICILE_ELECTRON_ARGS` | Extra arguments for it. A nix store build carries no setuid sandbox helper and needs `--no-sandbox`. |
+| `DOMICILE_ELECTRON_ARGS` | Extra arguments for it. What a *machine* needs, never what a shell wants — see below. |
 | `XDG_RUNTIME_DIR` | Where the run's private directory goes — the chrome socket, the config, the session. Falls back to the temp directory. Keep it short: a Unix socket path is capped near 108 bytes, and a deep one will not bind. |
 
 A shell cannot name its own interpreter or its own flags: one that could name
@@ -108,9 +108,13 @@ export ELECTRON_RUN_AS_NODE
 exec "${DOMICILE_ELECTRON:-electron}" "$here/.vite/build/launch.js"
 ```
 
-Name it after your shell, mark it executable, and point `package.json`'s `bin`
-at it. `ELECTRON_RUN_AS_NODE` is what keeps this a Node process: without it
-Electron would connect to a display before the compositor exists.
+Name it after your shell and mark it executable. Whether your project's
+`package.json` also points a `bin` field at it depends on how your shell gets
+installed — see
+[Distributing and running one](#distributing-and-running-one), which is also
+where the manifest an installed shell ships is described.
+`ELECTRON_RUN_AS_NODE` is what keeps this a Node process: without it Electron
+would connect to a display before the compositor exists.
 
 ## The configuration
 
@@ -303,7 +307,7 @@ launcher is a fourth:
 
 | Build | Output | Notes |
 |---|---|---|
-| launcher | `.vite/build/launch.js`, ESM | A **Node** bundle: `node:*` external, nothing else. This is what the `bin` stub runs. |
+| launcher | `.vite/build/launch.js`, ESM | A **Node** bundle: `node:*` external, `ssr.noExternal` for everything else. This is what the `bin` stub runs. |
 | main | `.vite/build/main.js`, ESM | `electron` and `node:*` stay external. |
 | preload | `.vite/build/preload.cjs`, **CJS** | Electron loads a preload as a sandboxed script, not a module. |
 | renderer | `.vite/renderer/main_window/`, with `base: "./"` | The page is opened over `file://`, where absolute asset URLs resolve against the filesystem root and load nothing. |
@@ -312,6 +316,16 @@ Only the main and preload builds mark `electron` external — the renderer must
 not import it at all. Everything the *page* needs is bundled, the SDK included:
 there is no `node_modules` beside an installed shell.
 
+**`ssr.noExternal` is what makes that true of the launcher**, and it is the one
+thing in this table you cannot infer from the prose. `build.ssr: true` leaves
+real dependencies as bare imports — that is what SSR externalisation is for —
+so a launcher built without `noExternal` ships `import … from "@domicile/…"`
+and dies on the first import once installed, with no `node_modules` to resolve
+from. Inside
+a workspace the SDK is symlinked source and gets bundled anyway, which is
+exactly why this survives a checkout and fails an install. Every shell in this
+repository had the bug until its packages were built for real.
+
 ## Distributing and running one
 
 A shell is a directory with a `bin/` entry:
@@ -319,21 +333,53 @@ A shell is a directory with a `bin/` entry:
 ```
 minimal/
   bin/minimal           ← on the user's PATH
-  package.json          ← for its "type" and "bin", see below
   .vite/
     build/launch.js
     build/main.js
     build/preload.cjs
+    build/package.json  ← for its "type", see below
     renderer/main_window/…
 ```
 
-`package.json` is in that list for two fields. `bin` is how a package manager
-puts the stub on `PATH`. `type` is what decides whether Node parses a `.js` file
-as ESM or CJS — the launcher and main bundles are ESM and use `import.meta.url`,
-and what settles that is the nearest `package.json` walking up from them, so
-shipping the bundles without one leaves it to Node's module detection rather
-than to you. (Emitting `.mjs` instead would settle it the other way, and then
-you need no `package.json` at all.)
+`package.json` is in that list for one field. `type` is what decides whether
+Node parses a `.js` file as ESM or CJS — the launcher and main bundles are ESM
+and use `import.meta.url`, and what settles that is the nearest `package.json`
+walking up from them, so shipping the bundles without one leaves it to Node's
+module detection rather than to you. (Emitting `.mjs` instead would settle it
+the other way, and then you need no `package.json` at all.)
+
+Beside the bundles rather than at the shell's root, which is where this file
+used to say to put it. Two reasons, and the first is the rule above: `type`
+has to reach `build/main.js` as well as `build/launch.js`, and only a manifest
+in `build/` is the nearest one for both. The second is that a regular file at
+the root of an installed tree is the one shape `nix profile` cannot merge, so
+two shells that each ship a root `package.json` cannot be installed into one
+profile — `nix profile add .#a .#b` fails on the conflict. (`nix build` is
+fine; it writes `result` and `result-1`.) The flake in this repo ships both
+`manganese` and `simple`, and found that out the hard way.
+
+**Write it after the four builds, not beside your source.** The launcher build
+is `emptyOutDir: true` — it is the one that clears `.vite/build/` — so a
+manifest committed there is deleted the next time you build. The worked example
+emits it as a `build:manifest` step the `build` script runs last; this repo's
+flake installs it into `$out` after the build for the same reason.
+
+A `bin` field is what a *package manager* uses to put the stub on `PATH`, and
+it wants your project's root `package.json` — which is a different file from
+the one above, and a fine place for it. The example ships one. What an
+installed shell's *tree* should not carry is a root manifest, which is why the
+nix packages here emit only the `type` one: nix links `$out/bin` itself, so a
+`bin` field would earn nothing and the root file would cost a profile.
+
+`DOMICILE_ELECTRON_ARGS` is the machine's, and it is worth saying what it is
+not. A nix store build's sandbox helper is not setuid and cannot be, so such a
+build is often said to need `--no-sandbox`. It does not: Chromium falls back to
+the namespace sandbox, and a store-built shell comes up sandboxed on any host
+with unprivileged user namespaces, which is the ordinary case. What needs the
+flag is a host with those disabled, or a container running as root. Both are
+the machine's business, which is why this is an environment variable and why no
+shell should put `--no-sandbox` in its own stub: a shell that could name its
+own flags could turn its own sandbox off.
 
 Install it however you install a program. There is no shells directory, nothing
 of Domicile's to register with, and no manifest: whatever puts `bin/minimal` on

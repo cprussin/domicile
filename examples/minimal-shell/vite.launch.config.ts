@@ -16,4 +16,10 @@ export default defineConfig({
     rollupOptions: { external: [/^node:/] },
     ssr: true,
   },
+  // What makes "everything else is bundled" true. `build.ssr` leaves real
+  // dependencies as bare imports, and an installed shell has no
+  // `node_modules` for them to resolve from — inside this workspace they are
+  // symlinked source and get bundled anyway, which is what hid this until the
+  // shells here were built as nix packages and died on the first import.
+  ssr: { noExternal: true },
 });

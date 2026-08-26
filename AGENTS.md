@@ -137,9 +137,10 @@ That is the whole answer, and using it is not optional politeness — it is how
 you find the things the unit tests cannot. It runs `fmt`, `clippy`, `cargo
 test`, `biome`, `turbo test` and every `scripts/test-*.sh` and
 `scripts/e2e-*.sh` there is, and it arranges what they need rather than
-assuming it: a fresh worktree has no `node_modules`, Electron is not on `PATH`
-under `nix develop`, and a display picked by number collides with the corpse a
-previous run left behind. Each of those has cost a session an hour and
+assuming it: a fresh worktree has no `node_modules`, Electron is on `PATH`
+only under `nix develop .#full` and has to be hunted out of the store
+otherwise, and a display picked by number collides with the corpse a previous
+run left behind. Each of those has cost a session an hour and
 produced failures that looked like findings.
 
 **Read a `skipped` line as loudly as a failure.** A skip means a check did not

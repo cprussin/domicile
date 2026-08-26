@@ -26,6 +26,25 @@ nix develop .#full -c ./scripts/run-native.sh          # manganese
 nix develop .#full -c ./scripts/run-native.sh simple
 ```
 
+To install one rather than run it out of the source, build the shell you want.
+There is no default and nothing called `domicile`: what you install is a
+desktop, and it starts the compositor itself.
+
+```sh
+nix profile install github:cprussin/domicile#manganese
+nix build github:cprussin/domicile#simple    # ./result/bin/simple
+```
+
+Configuration is the shell's own, at `$XDG_CONFIG_HOME/domicile/<shell>.json`
+— see its README.
+
+An installed shell runs sandboxed and needs no flags on an ordinary host. Where
+the machine cannot manage that — unprivileged user namespaces disabled, or a
+container running as root — Electron says so and stops, and the machine passes
+what it needs in `DOMICILE_ELECTRON_ARGS` (`--no-sandbox`, and `--disable-gpu`
+where there is no GPU). That is the machine's business rather than the shell's,
+so neither package bakes any in.
+
 Each shell's README has its keys: [simple](packages/shell-simple/README.md),
 [manganese](packages/shell-manganese/README.md). Joining the desktop from
 outside — a Wayland client pointed at Domicile's display — is

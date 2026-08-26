@@ -1,0 +1,118 @@
+name: Nix build
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A full Electron and mesa closure per run; a superseded push should not keep
+# fetching one.
+concurrency:
+  group: nix-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The only check that builds what a *user* installs.
+  #
+  # Every other job here is the checkout arrangement: `cargo test` and `turbo
+  # test` against the working tree, `e2e` driving scripts out of it. None of
+  # them would notice the flake breaking, and two things in it are guaranteed
+  # to break on their own schedule rather than when someone edits them:
+  #
+  #  - `nodeModules`'s `outputHash` goes stale the next time `bun.lock` moves,
+  #    and nothing in a checkout build reads it. Without this job the first
+  #    person to find out is whoever ran `nix profile install`.
+  #  - `bun install` is not deterministic, which is why that derivation
+  #    normalises its tree before hashing. A regression there is a hash that is
+  #    right most of the time — exactly the shape that reaches a user rather
+  #    than a reviewer.
+  #
+  # It is also the only check that runs an installed shell at all — bundles
+  # with no `node_modules` beside them, found through the stub's own idea of
+  # where it lives. That takes actually starting one, which is what the
+  # `DOMICILE_COMPOSITOR=/bin/false` step below is for: a build that succeeds
+  # says the derivation ran, and file existence says what it wrote, but
+  # neither would notice a bundle that cannot resolve its own imports.
+  packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # Named rather than `nix build` on its own: there is no default output,
+      # and that is the subject of this job as much as anything else — a
+      # `packages.default` appearing would make `nix build` build something,
+      # which is the arrangement this flake exists to refuse.
+      - name: Build both shells
+        run: nix build --print-build-logs .#manganese .#simple
+
+      # After the build, which is what gives this something to compare
+      # against: `--check` rebuilds an existing output, and errors rather
+      # than building one that is not there yet.
+      #
+      # The one derivation whose output is not a function of its inputs, so
+      # the only one where "it built" is not evidence it builds. `bun install`
+      # is not deterministic — it was measured at about one differing run in
+      # six before its tree was normalised — and one build per push would
+      # notice a regression one time in six. `--check` rebuilds it and
+      # compares, which is the thing that actually fails.
+      - name: The dependency tree is reproducible
+        run: |
+          set -eu
+          drv="$(nix path-info --derivation .#simple)"
+          nix-store --realise --check \
+            "$(nix-store -qR "$drv" | grep 'domicile-node-modules.*\.drv$' | head -1)"
+
+      # What the store output has to contain for an installed shell to run: the
+      # stub, the launcher bundle it execs, and the `package.json` that settles
+      # how Node parses it. Asserted rather than assumed — the build succeeding
+      # says the derivation ran, not that it installed the right things.
+      - name: Check what was installed
+        run: |
+          set -eu
+          for name in manganese simple; do
+            out="$(nix build --no-link --print-out-paths ".#$name")"
+            # `main.js` in particular: the manifest sits in `build/` so that
+            # `type` reaches it as well as the launcher, and no step in this
+            # job loads it — the launcher below dies on `/bin/false` before
+            # Electron is ever started. The renderer is a separate vite build
+            # reached only over `file://`, so it is the one a config change
+            # could drop with every other check still green.
+            for file in "bin/$name" \
+              .vite/build/launch.js .vite/build/main.js \
+              .vite/build/preload.cjs .vite/build/package.json \
+              .vite/renderer/main_window/index.html; do
+              [ -e "$out/$file" ] || { echo "$name: no $file in $out"; exit 1; }
+            done
+            # The refusal itself, not merely a non-zero exit: a stub that took
+            # the argument would also exit non-zero on a runner with no
+            # runtime dir and no display, so exit status alone stays green on
+            # the very shell this exists to catch.
+            if ! "$out/bin/$name" --nope 2>&1 | grep -q "takes no arguments"; then
+              echo "$name: took an argument it should have refused"
+              exit 1
+            fi
+          done
+
+      # The assertion that needs the bundles to actually load.
+      #
+      # Everything above is `[ -e ]` and a stub that exits in `/bin/sh` before
+      # Node starts. This runs the launcher for real and lets it fail on the
+      # *compositor* — which it only reaches by resolving every import in
+      # `launch.js` with no `node_modules` anywhere near it. A dependency left
+      # external instead of bundled dies before this message, which is exactly
+      # the bug that shipped once already.
+      - name: An installed shell loads its own bundles
+        run: |
+          set -eu
+          for name in manganese simple; do
+            out="$(nix build --no-link --print-out-paths ".#$name")"
+            DOMICILE_COMPOSITOR=/bin/false "$out/bin/$name" 2>&1 |
+              grep -q "the compositor never published a session" || {
+                echo "$name: the launcher did not get as far as its compositor"
+                exit 1
+              }
+          done

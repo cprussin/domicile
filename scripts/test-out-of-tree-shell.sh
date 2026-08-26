@@ -29,7 +29,7 @@ EXAMPLE="$ROOT/examples/minimal-shell"
 command -v bun >/dev/null 2>&1 || { echo "SKIP: no bun"; exit 77; }
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+trap 'if [ -n "${DOMICILE_KEEP_WORK:-}" ]; then echo "kept: $WORK" >&2; else rm -rf "$WORK"; fi' EXIT
 
 # The SDK as it would reach npm: built, packed, and read back out of the
 # tarball. `bun pm pack` is what resolves `catalog:` into a real range, so a
@@ -152,13 +152,63 @@ for artifact in \
   ".vite/build/launch.js" \
   ".vite/build/main.js" \
   ".vite/build/preload.cjs" \
-  ".vite/renderer/main_window/index.html"; do
+  ".vite/renderer/main_window/index.html" \
+  ".vite/build/package.json"; do
   if [ ! -f "$SHELL_DIR/$artifact" ]; then
     echo "FAIL: the build emitted no $artifact, which running the shell reaches. It has:"
     find "$SHELL_DIR/.vite" -type f 2>/dev/null | sed "s|$SHELL_DIR/|    |" | head -10
     exit 1
   fi
 done
+
+# The manifest exists for exactly one field, so its existence is not the claim
+# — an empty file or one with mangled quoting passes `[ -f ]` and settles
+# nothing about how Node parses the bundles beside it.
+if ! grep -q '"type"' "$SHELL_DIR/.vite/build/package.json"; then
+  echo "FAIL: .vite/build/package.json carries no \"type\", which is the only"
+  echo "  reason it is shipped. It contains:"
+  sed 's/^/    /' "$SHELL_DIR/.vite/build/package.json"
+  exit 1
+fi
+
+# And the thing every other check here passes without: that the launcher can
+# resolve its own imports with nothing beside it.
+#
+# This is the bug that shipped. `build.ssr` leaves real dependencies as bare
+# imports unless `ssr.noExternal` says otherwise, and inside the workspace the
+# SDK is symlinked source that gets bundled regardless — so a launcher missing
+# that switch builds, typechecks, emits all five artifacts, and dies on its
+# first import the moment it is installed somewhere without a `node_modules`.
+# Moving the directory away is what makes this an *installed* shell rather
+# than a built one.
+#
+# Run through `bun` rather than the stub: the stub execs
+# `${DOMICILE_ELECTRON:-electron}`, and nothing else here needs an Electron.
+# Bun rather than `node` for the same reason the rest of this script uses it —
+# it is the one runtime already guarded for at the top, and it resolves
+# `node_modules` the same way, so a machine with bun and no node gets this
+# check rather than a FAIL blaming the shell for something about the machine.
+# `/bin/false` as the compositor is how the launcher is made to fail on
+# something *after* module resolution — reaching that error is the assertion.
+echo
+echo "== the launcher resolves its imports with no node_modules =="
+mv "$SHELL_DIR/node_modules" "$SHELL_DIR/node_modules.away"
+LAUNCHED="$(
+  cd "$SHELL_DIR" \
+    && DOMICILE_COMPOSITOR=/bin/false bun .vite/build/launch.js 2>&1 || true
+)"
+mv "$SHELL_DIR/node_modules.away" "$SHELL_DIR/node_modules"
+case "$LAUNCHED" in
+  *"the compositor never published a session"*)
+    echo "PASS: it got as far as the compositor, so every import resolved"
+    ;;
+  *)
+    echo "FAIL: the launcher did not reach its compositor with node_modules gone."
+    echo "  A bare import here is a shell that cannot start once installed."
+    echo "$LAUNCHED" | sed 's/^/    /' | head -8
+    exit 1
+    ;;
+esac
 
 # The stub is what a user runs and what an installed shell puts on `PATH`, so
 # a shell whose `bin` entry is missing or unexecutable is one nothing can start

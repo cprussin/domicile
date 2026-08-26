@@ -50,8 +50,9 @@ export type LaunchShellOptions = {
   electron?: string | undefined;
   /**
    * Extra arguments for Electron. Defaults to `$DOMICILE_ELECTRON_ARGS`, split
-   * on whitespace — a nix store build carries no setuid sandbox helper and
-   * needs `--no-sandbox`. The machine's to say, not the shell's.
+   * on whitespace. The machine's to say, not the shell's — a host that cannot
+   * give Chromium a usable namespace sandbox needs `--no-sandbox`, and only
+   * the machine knows whether it is one.
    */
   electronArgs?: readonly string[] | undefined;
 };
