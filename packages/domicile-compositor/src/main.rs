@@ -90,6 +90,7 @@ use smithay::{
 };
 use tracing::{debug, info, warn};
 
+mod bands;
 mod coalesce;
 mod compose;
 mod damage;
@@ -104,6 +105,7 @@ mod stacking;
 mod straight_alpha;
 mod timing_window;
 
+use crate::bands::{Bands, Next};
 use crate::coalesce::last_of_burst;
 use crate::compose::chrome_onto_output;
 use crate::compose::shadow_quad;
@@ -217,6 +219,22 @@ enum LastFrame {
         height: u32,
         scale: u32,
     },
+}
+
+/// One band of the chrome, drawn whole at the depth it was declared at.
+///
+/// Unclipped, unlike a `stacking` band: this raster holds only that depth, so
+/// there is nothing of another depth in it to confine away.
+fn band_layer<'a>(texture: &'a SurfaceTexture, to_window: SceneTransform) -> Layer<'a> {
+    Layer {
+        alpha: 1.0,
+        clip: &[],
+        corner_radius: 0.0,
+        shadow: None,
+        surface_to_output: chrome_onto_output(texture.logical_size, to_window),
+        texture: &texture.texture,
+        y_inverted: texture.y_inverted,
+    }
 }
 
 /// One window as the scene placed it: where its surface goes, how it is
@@ -465,6 +483,9 @@ enum ClientRequest {
     },
     /// The chrome's display density changed; re-advertise the output scale so
     /// clients redraw at the resolution the screen actually has.
+    DeclareBands {
+        depths: Vec<i32>,
+    },
     SetOutputScale {
         scale: i32,
     },
@@ -1095,6 +1116,13 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                 }
                 Vec::new()
             }
+            // Compositor-level for the same reason as the density above: what
+            // depths the chrome draws at is what the compositor interleaves
+            // windows with, and the brain models neither.
+            Ok(ChromeMessage::DeclareBands { depths }) => {
+                hub.send_request(ClientRequest::DeclareBands { depths });
+                Vec::new()
+            }
             // A resize drives both the client's configure and the brain's model.
             Ok(ChromeMessage::ResizeApp { app_id, size }) => {
                 hub.send_request(ClientRequest::ConfigureApp {
@@ -1345,6 +1373,16 @@ struct DomicileCompositor {
     /// The chrome's latest surface as a texture. Transparent wherever an
     /// `<app>` element is, which is what lets the app below show through.
     chrome_texture: Option<SurfaceTexture>,
+    /// Which band the chrome is being asked for, and which have answered.
+    bands: Bands,
+    /// The texture each answered band committed, by its index in `bands`.
+    ///
+    /// A band is a full-size raster that is transparent wherever that depth
+    /// paints nothing, so these are drawn whole and in depth order rather than
+    /// clipped: nothing in them was flattened together, which is the entire
+    /// reason for asking separately. Kept between frames because asking is a
+    /// round trip — a desktop that has not repainted redraws from these.
+    band_textures: HashMap<usize, SurfaceTexture>,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1465,6 +1503,16 @@ impl DomicileCompositor {
     /// dropped is the whole picture going stale rather than one window's.
     fn publish_chrome_frame(&mut self, buffer: &wl_buffer::WlBuffer, buffer_scale: i32) {
         let Some(committed) = committed_buffer(buffer) else {
+            // A buffer this cannot read is still a *commit*, and the chrome
+            // believes it answered. Returning before the attribution below
+            // would leave the question standing with nothing left to answer
+            // it — and because a standing question is what routes a commit
+            // away from `chrome_texture`, the desktop's chrome would stop
+            // updating for the rest of the run.
+            if let Some(band) = self.bands.answered() {
+                self.bands.unanswered(band);
+                self.ask_for_the_next_band();
+            }
             return;
         };
         let texture = self.texture_from(committed, buffer_scale);
@@ -1494,8 +1542,55 @@ impl DomicileCompositor {
                 None => info!("the chrome's frame could not be made into a texture"),
             }
         }
-        self.chrome_texture = texture;
+        // A frame the compositor asked for is that band, and only that band:
+        // one question outstanding is what makes it unambiguous, since the
+        // page cannot label its own commits. Anything else is the chrome
+        // repainting of its own accord, which makes every band a picture of
+        // the page before it.
+        match self.bands.answered() {
+            Some(band) => match texture {
+                Some(texture) => {
+                    self.band_textures.insert(band, texture);
+                    self.ask_for_the_next_band();
+                }
+                // The frame arrived and could not be made into a texture — an
+                // shm upload that failed, or no renderer to upload to. Asking
+                // again rather than marking it answered: a band counted as
+                // answered with nothing cached for it leaves the set reporting
+                // itself complete while a layer of the desktop is missing, and
+                // the draw below would skip it without saying so.
+                None => {
+                    self.bands.unanswered(band);
+                    self.ask_for_the_next_band();
+                }
+            },
+            None => {
+                self.chrome_texture = texture;
+                if !self.bands.depths().is_empty() {
+                    self.bands.went_stale();
+                    self.band_textures.clear();
+                    self.ask_for_the_next_band();
+                }
+            }
+        }
         self.needs_present = true;
+    }
+
+    /// Ask the chrome for the next band that has not answered, if any.
+    ///
+    /// One at a time, which is the whole of how a commit is attributed: the
+    /// page has no handle on its own Wayland stream — that connection is
+    /// Chromium's — so it cannot label a frame, and a label sent back over the
+    /// chrome socket would not be ordered against the commit it describes.
+    /// With a single question outstanding there is only one band the next
+    /// commit can be.
+    fn ask_for_the_next_band(&mut self) {
+        let Next::Ask(band) = self.bands.next() else {
+            return;
+        };
+        self.bands.asked(band);
+        let asked = u32::try_from(band).expect("a band index fits a u32");
+        self.hub.broadcast(HostMessage::RenderBand { band: asked });
     }
 
     /// A committed buffer as a texture to draw, whichever kind it is.
@@ -2134,6 +2229,45 @@ impl DomicileCompositor {
                 }
             }
             layers = drawn;
+        }
+        // Bands, where the chrome declared any and has answered for them.
+        // Each is a full-size raster that is transparent wherever that depth
+        // paints nothing, so they are drawn whole and in depth order rather
+        // than clipped out of one another — nothing in them was flattened
+        // together, which is the entire reason for having asked separately.
+        //
+        // Only once every band has answered. A frame drawn from a partial set
+        // is the desktop with a layer missing, and asking is a round trip, so
+        // half-answered is a state this passes through on any repaint rather
+        // than an unusual one. Until then the single `chrome_texture` above is
+        // what is drawn, which is the same picture flattened.
+        if self.bands.next() == Next::Complete && !self.bands.depths().is_empty() {
+            let mut ordered: Vec<(i32, usize)> = self
+                .bands
+                .depths()
+                .iter()
+                .enumerate()
+                .map(|(band, depth)| (*depth, band))
+                .collect();
+            ordered.sort_unstable();
+            let mut banded = Vec::with_capacity(layers.len() + ordered.len());
+            let mut next = 0;
+            for (index, depth) in depths.iter().enumerate() {
+                let below = ordered[next..].partition_point(|(at, _)| at < depth);
+                for (_, band) in &ordered[next..next + below] {
+                    if let Some(texture) = self.band_textures.get(band) {
+                        banded.push(band_layer(texture, to_window));
+                    }
+                }
+                next += below;
+                banded.push(layers[index].clone());
+            }
+            for (_, band) in &ordered[next..] {
+                if let Some(texture) = self.band_textures.get(band) {
+                    banded.push(band_layer(texture, to_window));
+                }
+            }
+            layers = banded;
         }
 
         let Some(gpu) = self.gpu.as_mut() else {
@@ -3012,6 +3146,11 @@ impl DomicileCompositor {
                 // is what tells the two apart.
                 self.enter_the_displays_each_window_is_on();
                 self.needs_present = true;
+            }
+            ClientRequest::DeclareBands { depths } => {
+                self.bands.declared(depths);
+                self.band_textures.clear();
+                self.ask_for_the_next_band();
             }
             ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
@@ -4453,6 +4592,14 @@ impl XdgShellHandler for DomicileCompositor {
             info!("the chrome's toplevel went away");
             self.chrome_toplevel = None;
             self.chrome_texture = None;
+            // The bands with it. They are that page's rasters, and the
+            // question outstanding is that page's to answer — left standing,
+            // the next page's first commit would be taken for the dead one's
+            // answer, and because a question being outstanding is what routes
+            // a commit away from `chrome_texture`, nothing would ever refill
+            // it: a desktop with no chrome at all until something re-declared.
+            self.bands = Bands::default();
+            self.band_textures.clear();
             let keyboard = self.seat.get_keyboard().unwrap();
             let serial = SERIAL_COUNTER.next_serial();
             keyboard.set_focus(self, None, serial);
@@ -5077,6 +5224,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         last_frame: HashMap::new(),
         last_commit: None,
         pending_key: None,
+        bands: Bands::default(),
+        band_textures: HashMap::new(),
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,

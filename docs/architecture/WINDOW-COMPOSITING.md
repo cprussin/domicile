@@ -412,11 +412,22 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
   and one copy of the shell's state, which is the thing the architecture is
   for.
 
-  What it needs: a request on the chrome protocol (`render_band`), a reply the
-  compositor treats as "the next commit is this", a texture per band rather
-  than the single `chrome_texture`, and a policy for what to draw while a band
-  is still being asked for — the last frame's texture for that band, which is
-  why they are cached rather than requested per frame.
+  **Built**, in `compositor/src/bands.rs`: `declare_bands` from the chrome,
+  `render_band` back, a texture per band rather than the single
+  `chrome_texture`, and drawing that waits for the whole set — half-answered is
+  a state any repaint passes through, and a frame from a partial set is the
+  desktop with a layer missing. The textures are kept between frames so a
+  desktop that has not repainted redraws without asking again.
+
+  **The obligation this puts on a chrome, which is the price of the page not
+  being able to label its own frames:** while a band is outstanding, commit
+  nothing else. A repaint of the chrome's own — a clock, a caret, a hover — is
+  a commit the compositor cannot tell from the answer, and taking it as one
+  files every later band under the wrong depth. The compositor guarantees the
+  half it can, one question outstanding, so there is never a second band a
+  commit might have been for; the other half is the chrome's, stated on
+  `BridgeClient.declareBands`. A chrome that declares nothing takes on none of
+  this and is drawn as one layer over every window, as before.
 
 - **What the number actually is.** Everything through the draw is in place and
   tested, but the only measurement so far is of the copy path. Phase 1 is not

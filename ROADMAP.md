@@ -38,7 +38,7 @@ copies per frame was its cost before damage tracking; a steady-state frame now
 reads and sends only what changed, and full-frame is what a first frame, a
 resize or a hand-over still costs.
 
-The wire protocol is at `PROTOCOL_VERSION = 14`.
+The wire protocol is at `PROTOCOL_VERSION = 15`.
 
 Run the suites for their counts rather than reading one here. A number written
 down goes stale on the next commit that adds a test, and this one went stale
@@ -567,10 +567,14 @@ falloff the shadow uses, is the next candidate to move it.
   and chrome below it cover one pixel, the page flattened that texel before we
   saw it — a translucent panel over a window with a wallpaper behind it, which
   needs one window and no overlap. A raster per band is what closes that, and
-  its transport is now settled in `WINDOW-COMPOSITING.md`: the page cannot tag
-  its own commits, because the Wayland connection belongs to Chromium rather
-  than to the page, so the compositor asks for one band at a time and the next
-  commit is that band by construction. Not built.
+  its transport is settled in `WINDOW-COMPOSITING.md` and the compositor's half
+  is built (`bands.rs`): the page cannot tag its own commits, because the
+  Wayland connection belongs to Chromium rather than to the page, so the
+  compositor asks for one band at a time and takes the next commit as the
+  answer — which obliges a chrome that declares depths to commit nothing else
+  while one is outstanding. What is missing is a chrome that declares any: the
+  SDK can send `declare_bands` and nothing calls it, so every frame is still
+  the all-above case.
 - ~~follow a window that moves~~ — done. `<domicile-app>` re-measures on every
   animation frame rather than on a `ResizeObserver`, which sees a box change
   size and nothing else: moving a window, animating a transform, a `:hover`

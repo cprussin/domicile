@@ -45,6 +45,7 @@ export type ChromeMessage =
   | ReturnType<typeof removePortalMessage>
   | ReturnType<typeof resizeAppMessage>
   | ReturnType<typeof setDevicePixelRatioMessage>
+  | ReturnType<typeof declareBandsMessage>
   | ReturnType<typeof focusAppMessage>
   | ReturnType<typeof focusChromeMessage>
   | ReturnType<typeof closeAppMessage>
@@ -121,6 +122,18 @@ export const resizeAppMessage = (
  */
 export const setDevicePixelRatioMessage = (ratio: number) =>
   ({ ratio, type: "set_device_pixel_ratio" }) as const;
+
+/**
+ * Declare the depths this chrome draws at, so the compositor can put windows
+ * between them.
+ *
+ * The values are `z-index`, in the space `place_portal` reports a window's in.
+ * A chrome that never sends this is drawn as one layer over every window,
+ * which is what every chrome did before bands existed — so sending nothing is
+ * a working chrome rather than a broken one.
+ */
+export const declareBandsMessage = (depths: readonly number[]) =>
+  ({ depths: [...depths], type: "declare_bands" }) as const;
 
 export const focusAppMessage = (appId: string) =>
   ({ app_id: appId, type: "focus_app" }) as const;
