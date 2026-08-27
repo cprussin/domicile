@@ -353,6 +353,7 @@ dependencies = [
  "domicile-scene",
  "domicile-test-chrome",
  "libloading",
+ "serde_json",
  "smithay",
  "tempfile",
  "thiserror 1.0.69",

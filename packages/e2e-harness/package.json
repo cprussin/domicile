@@ -12,8 +12,7 @@
   "exports": {
     "./chrome-socket": "./src/chrome-socket.ts",
     "./input-injector": "./src/input-injector.ts",
-    "./mock-chrome": "./src/mock-chrome.ts",
-    "./spawn-probe": "./src/spawn-probe.ts"
+    "./mock-chrome": "./src/mock-chrome.ts"
   },
   "files": [
     "src/**/*"

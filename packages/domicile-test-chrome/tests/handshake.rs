@@ -179,6 +179,82 @@ fn a_read_that_runs_out_of_time_is_the_same_answer_as_the_deadline() {
     );
 }
 
+/// A frame's pixels are consumed with its header, so the next message is read
+/// as a message.
+///
+/// The whole point of reading the payload at all. Left on the socket, the next
+/// `read_line` stops at whatever byte of RGBA happens to be `0x0a` and hands
+/// back a fragment of image as a line of JSON — reported against the
+/// compositor, which sent exactly what it promised.
+///
+/// The pixels here contain a `\n` on purpose: without one this passes whether
+/// the payload is skipped or not.
+#[test]
+fn what_follows_a_frame_is_read_as_a_message() {
+    let pixels = b"\x01\x0a\x02\x0a\x03\x0a\x04\x0a";
+    let mut wire = frame_header(pixels.len() as u32).into_bytes();
+    wire.extend_from_slice(pixels);
+    wire.extend_from_slice(welcome(PROTOCOL_VERSION).as_bytes());
+    let mut heard = BufReader::new(Cursor::new(wire));
+
+    let frame = hear(&mut heard)
+        .expect("the header reads")
+        .expect("it came");
+    assert!(
+        matches!(frame, HostMessage::AppFrame { .. }),
+        "got {frame:?}"
+    );
+
+    let next = hear(&mut heard)
+        .expect("the message after it reads")
+        .expect("it came");
+    assert!(
+        matches!(next, HostMessage::Welcome { .. }),
+        "the message after a frame should be the welcome, got {next:?}"
+    );
+}
+
+/// A frame carrying no pixels consumes none.
+///
+/// The boundary `take(0)` makes easy to get wrong in the other direction — a
+/// skip that read *something* here would eat the next message's first line.
+#[test]
+fn a_frame_of_no_bytes_eats_nothing() {
+    let mut wire = frame_header(0).into_bytes();
+    wire.extend_from_slice(welcome(PROTOCOL_VERSION).as_bytes());
+    let mut heard = BufReader::new(Cursor::new(wire));
+
+    hear(&mut heard)
+        .expect("the header reads")
+        .expect("it came");
+    let next = hear(&mut heard)
+        .expect("the welcome reads")
+        .expect("it came");
+    assert!(matches!(next, HostMessage::Welcome { .. }), "got {next:?}");
+}
+
+/// A connection that ends mid-frame says so, with both counts.
+///
+/// Rather than `Closed`, whose message is "the host went away before it said
+/// anything" — untrue of a host that said plenty and then stopped halfway
+/// through an image, and the wrong place to send the reader looking.
+#[test]
+fn a_frame_cut_short_is_reported_with_what_was_promised() {
+    let mut wire = frame_header(64).into_bytes();
+    wire.extend_from_slice(b"only ten..");
+    let mut heard = BufReader::new(Cursor::new(wire));
+
+    let why = hear(&mut heard).expect_err("a frame that stops early is a failure");
+    assert_eq!(
+        why,
+        ChromeError::TruncatedFrame {
+            expected: 64,
+            got: 10
+        },
+        "got {why:?}"
+    );
+}
+
 /// A host with plenty to say and no welcome in it.
 struct Chatty;
 
@@ -198,4 +274,12 @@ impl Read for Mute {
     fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
         Err(std::io::Error::from(std::io::ErrorKind::WouldBlock))
     }
+}
+
+/// A frame's header, as a line on the wire.
+fn frame_header(bytes: u32) -> String {
+    format!(
+        "{{\"type\":\"app_frame\",\"app_id\":\"a\",\"width\":2,\"height\":1,\
+         \"scale\":1,\"format\":\"rgba\",\"bytes\":{bytes}}}\n"
+    )
 }

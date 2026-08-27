@@ -103,3 +103,27 @@ export const unreachableChecks = (
     .filter((name) => name.startsWith("e2e-") && !apps.has(name))
     .map((name) => `${name} has no flake app, so nix run cannot reach it`);
 };
+
+/**
+ * Every flake app naming a script that is not there.
+ *
+ * The other direction of the same staleness, and the one nothing catches:
+ * those values are strings, so a flake with an app for a deleted script
+ * evaluates perfectly and fails only when someone runs it. Three had
+ * accumulated that way — two from a change that deleted their scripts and one
+ * that had been dangling for a while — and each was found by reading rather
+ * than by anything failing.
+ *
+ * Every app, not just `e2e-*`: `test-every-launch-names-a-shell` was the one
+ * that sat longest, and it is not an e2e check. The set is what goes stale, so
+ * the set is what is checked.
+ */
+export const missingCheckScripts = (
+  flake: string,
+  scripts: string[],
+): string[] => {
+  const present = new Set(scripts);
+  return [...appScripts(flake)]
+    .filter((named) => !present.has(named))
+    .map((named) => `a flake app names ${named}, which is not in scripts/`);
+};

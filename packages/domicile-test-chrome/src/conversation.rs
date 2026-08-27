@@ -1,6 +1,6 @@
 //! What a chrome says and hears, over anything that can be read and written.
 
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Read, Write};
 use std::time::{Duration, Instant};
 
 use domicile_host::ipc::to_line;
@@ -23,6 +23,9 @@ pub enum ChromeError {
 
     #[error("the host never said it; it said: {heard}")]
     NeverCame { heard: String },
+
+    #[error("the host announced {expected} bytes of frame and sent {got}")]
+    TruncatedFrame { expected: u64, got: u64 },
 
     #[error("nothing was listening on {socket} after {patience:?} ({kind:?})")]
     NeverListened {
@@ -140,6 +143,20 @@ pub fn say(said: &mut impl Write, message: &ChromeMessage) -> Result<(), ChromeE
 /// A closed connection is the end rather than a failure: a compositor that
 /// stopped is something a test asserts on, and the caller has the context to
 /// say whether it was expected.
+///
+/// # Frames
+///
+/// [`HostMessage::AppFrame`] is a header line followed by that many bytes of
+/// pixels on the same socket, so reading it as a line and stopping would leave
+/// the reader pointing into the middle of an image — where the next `\n` is
+/// whatever byte of RGBA happens to be `0x0a`, and every message after it is
+/// garbage attributed to the compositor. The payload is therefore consumed
+/// here, as part of reading the header that measures it.
+///
+/// The pixels are dropped rather than returned. No test has yet asked what a
+/// frame *contained* — the questions are about which app drew, at what size
+/// and how often, and all of those are in the header. A test that needs the
+/// image should have them handed back rather than read the socket itself.
 pub fn hear(heard: &mut impl BufRead) -> Result<Option<HostMessage>, ChromeError> {
     let mut line = String::new();
     let read = heard
@@ -148,10 +165,46 @@ pub fn hear(heard: &mut impl BufRead) -> Result<Option<HostMessage>, ChromeError
     if read == 0 {
         return Ok(None);
     }
-    serde_json::from_str(line.trim_end())
-        .map(Some)
-        .map_err(|err| ChromeError::Unreadable {
+    let message: HostMessage =
+        serde_json::from_str(line.trim_end()).map_err(|err| ChromeError::Unreadable {
             line: line.trim_end().to_string(),
             message: err.to_string(),
+        })?;
+    if let HostMessage::AppFrame { bytes, .. } = &message {
+        skip(heard, *bytes as u64)?;
+    }
+    Ok(Some(message))
+}
+
+/// Discard exactly `bytes` from `heard`.
+///
+/// Exactly, and a short read is a failure rather than a shrug: the count comes
+/// from the header the compositor just wrote, so falling short means the
+/// connection ended mid-frame. Continuing from there would resume at an
+/// arbitrary offset into the pixels and read the rest of the run as nonsense.
+///
+/// Its own error rather than [`ChromeError::Closed`], which reads "the host
+/// went away before it said anything" — the wrong thing to tell someone whose
+/// host said plenty and then stopped halfway through an image. The two counts
+/// are what makes it diagnosable.
+///
+/// One caveat the caller inherits: [`std::io::copy`] retries `Interrupted` but
+/// not `WouldBlock` or `TimedOut`, so a read timeout landing *inside* a payload
+/// leaves the reader parked mid-frame. Neither caller reports it as such —
+/// `greet` and [`Chrome::wait_for`] both rewrite a timeout into `NeverCame`
+/// with a transcript — so what that looks like is the host having gone quiet,
+/// on a reader that will read the rest of the pixels as JSON. Nothing recovers
+/// one from there: treat a timeout as the end of the connection rather than as
+/// one slow read.
+fn skip(heard: &mut impl BufRead, bytes: u64) -> Result<(), ChromeError> {
+    let copied = std::io::copy(&mut heard.take(bytes), &mut std::io::sink())
+        .map_err(|err| ChromeError::Io(err.kind()))?;
+    if copied == bytes {
+        Ok(())
+    } else {
+        Err(ChromeError::TruncatedFrame {
+            expected: bytes,
+            got: copied,
         })
+    }
 }
