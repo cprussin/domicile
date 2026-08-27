@@ -162,6 +162,19 @@ const shortcutMessageSchema = z.looseObject({
   type: z.literal("shortcut"),
 });
 
+// Which modifiers are held now. The page cannot see this for itself once a
+// window has the keyboard — `wl_keyboard.modifiers` goes to the focused
+// surface — and a chrome whose windows answer to a held modifier, alt to drag
+// one, needs to know exactly then. Sent on a change, so a modifier held down
+// arrives once.
+const modifiersSchema = z.looseObject({
+  alt: z.boolean(),
+  ctrl: z.boolean(),
+  logo: z.boolean(),
+  shift: z.boolean(),
+  type: z.literal("modifiers"),
+});
+
 // The counterpart to `app_frame`: the compositor is drawing this window's own
 // buffer now, so whatever pixels the chrome holds for it are stale. It arrives
 // after the last frame on the same socket, which is what makes it safe to act
@@ -256,6 +269,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   focusChangedSchema,
   shortcutMessageSchema,
   renderBandSchema,
+  modifiersSchema,
 ]);
 
 /**
@@ -286,6 +300,7 @@ export type AppCursorMessage = z.infer<typeof appCursorSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
+export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 export type RenderBandMessage = z.infer<typeof renderBandSchema>;
 
 /** One display of the desktop, in the coordinates the shell lays out in. */

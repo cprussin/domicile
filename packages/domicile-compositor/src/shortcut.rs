@@ -11,6 +11,8 @@ use std::collections::{HashMap, HashSet};
 
 use domicile_protocol::Shortcut;
 
+use crate::modifiers::Modifiers;
+
 /// The combinations the chrome has claimed, and what became of the press
 /// each key that is down was given.
 #[derive(Debug, Default)]
@@ -84,23 +86,10 @@ impl Shortcuts {
     }
 }
 
-/// The modifiers held when a key was pressed.
-///
-/// Its own type rather than Smithay's, which carries the toggles as well —
-/// caps lock and num lock are states of the keyboard, not part of the chord a
-/// user pressed, and matching on them would make a shortcut stop working the
-/// moment Num Lock was on.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Modifiers {
-    pub alt: bool,
-    pub ctrl: bool,
-    pub shift: bool,
-    pub logo: bool,
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{Modifiers, Shortcuts};
+    use super::Shortcuts;
+    use crate::modifiers::Modifiers;
     use domicile_protocol::Shortcut;
 
     /// Alt+Enter, as a chrome would claim it: evdev 28 is Enter.

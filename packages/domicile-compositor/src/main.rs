@@ -96,6 +96,7 @@ mod compose;
 mod damage;
 mod dmabuf_descriptor;
 mod dmabuf_import;
+mod modifiers;
 mod outbound;
 mod scale;
 mod screens;
@@ -113,10 +114,11 @@ use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer, S
 use crate::damage::{covered, Look, Painted};
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
+use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
-use crate::shortcut::{Modifiers, Shortcuts};
+use crate::shortcut::Shortcuts;
 use crate::timing_window::TimingWindow;
 use domicile_bridge::BridgeRegistry;
 use domicile_config::{Config, ConfigError, ConfigStore};
@@ -1471,6 +1473,8 @@ struct DomicileCompositor {
     max_scale: u32,
     /// The key combinations the chrome has claimed for the desktop.
     shortcuts: Shortcuts,
+    /// Which modifiers the chrome was last told are held.
+    modifiers: Held,
     /// Whether anything has changed since the last frame was drawn.
     ///
     /// Compositing does not happen where the change is noticed. Submitting a
@@ -2924,6 +2928,7 @@ impl DomicileCompositor {
                     info!(key = shortcut.key, "a claimed shortcut -> the chrome");
                     self.hub.broadcast(HostMessage::Shortcut { shortcut });
                 }
+                self.tell_the_chromes_the_modifiers();
             }
             _ => {}
         }
@@ -2948,6 +2953,31 @@ impl DomicileCompositor {
                 None => (chrome.clone(), logical),
             },
             PointerTarget::Chrome { screen } => (chrome.clone(), screen),
+        }
+    }
+
+    /// Tell every chrome which modifiers are held, when that has changed.
+    ///
+    /// The seat is asked rather than the filter answering, because a key
+    /// reaches the seat from three places and only one of them runs a filter
+    /// worth reading: the desktop's own keyboard, the keys a chrome injects
+    /// into a window, and the releases a dead chrome's held keys are let go
+    /// with. All three move the modifiers, so all three end here.
+    fn tell_the_chromes_the_modifiers(&mut self) {
+        let state = self.seat.get_keyboard().unwrap().modifier_state();
+        let now = Modifiers {
+            alt: state.alt,
+            ctrl: state.ctrl,
+            shift: state.shift,
+            logo: state.logo,
+        };
+        if let Some(held) = self.modifiers.moved_to(now) {
+            self.hub.broadcast(HostMessage::Modifiers {
+                alt: held.alt,
+                ctrl: held.ctrl,
+                shift: held.shift,
+                logo: held.logo,
+            });
         }
     }
 
@@ -3128,6 +3158,7 @@ impl DomicileCompositor {
                 keyboard.input::<(), _>(self, key, state, serial, time, |_, _, _| {
                     FilterResult::Forward
                 });
+                self.tell_the_chromes_the_modifiers();
             }
             ClientRequest::KeyboardFocus { app_id } => {
                 let requested = match &app_id {
@@ -3310,6 +3341,7 @@ impl DomicileCompositor {
                 },
             );
         }
+        self.tell_the_chromes_the_modifiers();
     }
 }
 
@@ -5280,6 +5312,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_scale: config.output.max_scale,
         screens,
         shortcuts: Shortcuts::default(),
+        modifiers: Held::default(),
         needs_present: false,
         window_input_seen: HashSet::new(),
         stop: Arc::new(AtomicBool::new(false)),
