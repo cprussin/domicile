@@ -13,10 +13,25 @@ import { useEffect, useState } from "react";
 import { css, cx } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
 import type { Floating } from "./shell-state";
-import { floatPlacement, windowStyles } from "./window-styles";
+import {
+  clickThroughStyles,
+  draggingStyles,
+  floatPlacement,
+  windowStyles,
+} from "./window-styles";
 import { withScheme } from "./with-scheme";
 
 type Props = {
+  /**
+   * Whether the pointer goes through this window to the page behind it.
+   *
+   * What lets the shell drag a window at all: the pointer over a client's
+   * surface belongs to the client, so the shell has to be given it back
+   * before it can be told where the window is being dragged to.
+   */
+  clickThrough: boolean;
+  /** Whether the user has hold of this window, which makes it see-through. */
+  dragging: boolean;
   /** How this window floats over the stage, or `undefined` while it is on it. */
   floating: Floating | undefined;
   /** Whether the user is working in this window, so it takes the keyboard. */
@@ -44,6 +59,8 @@ type Props = {
  * itself; this is the chrome the user drives it with.
  */
 export const BrowserWindow = ({
+  clickThrough,
+  dragging,
   floating,
   focused,
   onNavigate,
@@ -106,7 +123,12 @@ export const BrowserWindow = ({
   return (
     <section
       aria-label="Browser"
-      className={cx(windowStyles, browserStyles)}
+      className={cx(
+        windowStyles,
+        browserStyles,
+        clickThrough && clickThroughStyles,
+        dragging && draggingStyles,
+      )}
       hidden={!onScreen}
       // Inline because the box is a runtime number and Panda reads literals;
       // `window-styles` owns everything static. `undefined` leaves the window

@@ -22,8 +22,10 @@ import type { AppElements } from "./app-elements";
 import { BrowserWindow } from "./BrowserWindow";
 import { Clock } from "./Clock";
 import type { Chord } from "./chord";
+import { FloatGrab } from "./FloatGrab";
 import { floatingOf } from "./shell-state";
 import { WindowKind } from "./shell-window";
+import { useModifiers } from "./useModifiers";
 import { useShellWindows } from "./useShellWindows";
 import { useWindowSizedToDesktop } from "./useWindowSizedToDesktop";
 
@@ -109,16 +111,27 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
   const {
     activeId,
     close,
+    draggingId,
+    drop,
     floats,
+    grab,
+    move,
     openBrowser,
     openTerminal,
     renameToSite,
     reorder,
+    resize,
     select,
     shownId,
     toggleFloat,
     windows,
   } = useShellWindows(bridge, appElements);
+
+  // Alt is what hands the pointer back to the page, and Shift is what makes
+  // the drag a resize. Neither can be read off a DOM event here: while a
+  // window holds the keyboard the page is told nothing, which is exactly when
+  // the user is holding Alt over one. See `useModifiers`.
+  const { alt, shift } = useModifiers(bridge);
 
   // Alt+Enter -> a terminal; add Shift for a browser.
   const launch = useCallback(
@@ -279,12 +292,21 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
               // On screen while it is floating whatever the stage is showing,
               // and while it is the one the stage shows.
               const onScreen = floating !== undefined || window.id === shownId;
+              const dragging = window.id === draggingId;
+              // While Alt is held the pointer belongs to the shell rather than
+              // to the client, so the drag can be caught in the page — and it
+              // goes on belonging to it for the rest of a drag that outlives
+              // the key. Only a floating window: nothing drags one on the
+              // stage, and taking the pointer off it would cost a click.
+              const clickThrough = floating !== undefined && (alt || dragging);
               switch (window.kind) {
                 case WindowKind.App: {
                   return (
                     <AppWindow
                       appElements={appElements}
                       appId={window.appId}
+                      clickThrough={clickThrough}
+                      dragging={dragging}
                       floating={floating}
                       focused={window.id === activeId}
                       key={window.id}
@@ -295,6 +317,8 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
                 case WindowKind.Browser: {
                   return (
                     <BrowserWindow
+                      clickThrough={clickThrough}
+                      dragging={dragging}
                       floating={floating}
                       focused={window.id === activeId}
                       key={window.id}
@@ -308,6 +332,31 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
                 }
               }
             })}
+            {/*
+              After every window, so that a sheet and the window it grabs tie
+              on `z-index` and the sheet wins on document order — while a
+              window one place further up the stack still covers both.
+            */}
+            {floats.map((float, depth) =>
+              alt || float.id === draggingId ? (
+                <FloatGrab
+                  depth={depth}
+                  float={float}
+                  key={float.id}
+                  onDrop={drop}
+                  onGrab={() => {
+                    grab(float.id);
+                  }}
+                  onMove={(x, y) => {
+                    move(float.id, x, y);
+                  }}
+                  onResize={(width, height) => {
+                    resize(float.id, width, height);
+                  }}
+                  resizes={shift}
+                />
+              ) : undefined,
+            )}
             {windows.length === 0 && <EmptyStage />}
           </main>
         </div>

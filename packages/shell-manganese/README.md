@@ -84,7 +84,8 @@ that swaps nodes out from under the reconciler is not something React tolerates.
   the stage. Its address bar navigates on Enter (an address typed without a
   scheme is loaded over https) and follows the page wherever it goes; the
   window's tab is labelled with the site it is showing.
-- **Alt+Tab** — float the window you are working in, or put it back. See
+- **Alt+Tab** — float the window you are working in, or put it back.
+  **Alt+drag** moves a floating window; **Alt+Shift+drag** resizes it. See
   below.
 
 ## Floating a window
@@ -100,6 +101,36 @@ the placement and what the compositor stacks the client's surface by, so the
 page and the desktop agree about which window is in front. A floating window
 is drawn over the stage rather than on it, so the stage falls back to the last
 window still in the rail rather than going blank.
+
+**Alt+drag** moves a floating window and **Alt+Shift+drag** resizes it from the
+bottom-right corner. Which of the two a drag is, is read when it starts and
+then kept, so letting go of Shift half way through does not turn a resize into
+a move with the window jumping to wherever the pointer got to. A window is
+never dragged smaller than the grab it is dragged by, and its top-left corner
+stays on the stage — the two edges a window dragged past could not be dragged
+back from.
+
+Two things have to be true for that drag to be seen at all, and both are worth
+knowing about:
+
+- **The pointer over a window belongs to the client behind it.** That is the
+  point of Domicile, and it means the shell cannot handle a drag on the window
+  itself. While Alt is held a floating window is given
+  `pointer-events: none` — the compositor reports it as taking no pointer and
+  routes to the chrome instead — and a transparent sheet over the window
+  catches what falls through. The same mechanism that stops a window
+  swallowing the clicks meant for a menu drawn over it.
+- **The page cannot see Alt while a window has the keyboard.**
+  `wl_keyboard.modifiers` goes to the focused surface, so the compositor
+  broadcasts the held set instead and the shell listens (`modifiers`). The
+  page's own keyboard events are the fallback for a shell opened in a plain
+  browser with no host to ask.
+
+The window is **half transparent while it is being dragged**, and that
+translucency is the compositor's rather than the page's: the SDK reports the
+element's `opacity` with the placement and the shader applies it to the
+client's own buffer, so what shows through a dragged window is the desktop
+behind it.
 
 A floated window keeps its tab. The tab is how it is reached when it is behind
 something, and a window with no tab and nothing selected is a window you have

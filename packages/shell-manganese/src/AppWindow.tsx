@@ -4,9 +4,24 @@ import { useEffect, useState } from "react";
 import { css, cx } from "../styled-system/css";
 import type { AppElements } from "./app-elements";
 import type { Floating } from "./shell-state";
-import { floatPlacement, windowStyles } from "./window-styles";
+import {
+  clickThroughStyles,
+  draggingStyles,
+  floatPlacement,
+  windowStyles,
+} from "./window-styles";
 
 type Props = {
+  /**
+   * Whether the pointer goes through this window to the page behind it.
+   *
+   * What lets the shell drag a window at all: the pointer over a client's
+   * surface belongs to the client, so the shell has to be given it back
+   * before it can be told where the window is being dragged to.
+   */
+  clickThrough: boolean;
+  /** Whether the user has hold of this window, which makes it see-through. */
+  dragging: boolean;
   appElements: AppElements;
   /** The host's name for the client this portal shows. */
   appId: string;
@@ -33,6 +48,8 @@ type Props = {
 export const AppWindow = ({
   appElements,
   appId,
+  clickThrough,
+  dragging,
   floating,
   focused,
   onScreen,
@@ -67,7 +84,12 @@ export const AppWindow = ({
   return (
     <domicile-app
       app-id={appId}
-      className={cx(windowStyles, appStyles)}
+      className={cx(
+        windowStyles,
+        appStyles,
+        clickThrough && clickThroughStyles,
+        dragging && draggingStyles,
+      )}
       hidden={!onScreen}
       ref={setPortal}
       // Inline because the box is a runtime number and Panda reads literals;

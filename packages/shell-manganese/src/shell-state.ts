@@ -8,7 +8,7 @@
 import type { DropPosition } from "@domicile/component-library/TabRail";
 
 import type { Float } from "./float";
-import { floatFor } from "./float";
+import { floatFor, movedTo, sizedTo } from "./float";
 import type { ShellWindow } from "./shell-window";
 import { appWindowId, ShellWindow as Window } from "./shell-window";
 
@@ -25,6 +25,15 @@ export type ShellState = {
   activeId: string | undefined;
   /** How many browser windows have been opened, ever — the id counter. */
   browsersOpened: number;
+  /**
+   * The floating window the user has hold of, or `undefined` when none is.
+   *
+   * Here rather than in the component that reads the pointer because it is
+   * what makes the window see-through while it moves, and because a drag
+   * outlives the modifier that started it: letting go of Alt half way through
+   * one must not drop the window.
+   */
+  draggingId: string | undefined;
   /**
    * The windows that have left the rail, back to front.
    *
@@ -57,6 +66,7 @@ export type ShellState = {
 export const EMPTY_SHELL: ShellState = {
   activeId: undefined,
   browsersOpened: 0,
+  draggingId: undefined,
   floats: [],
   focusedId: undefined,
   shownId: undefined,
@@ -102,9 +112,13 @@ export enum ShellActionKind {
   BrowserOpened,
   FocusChanged,
   WindowClosed,
+  WindowDropped,
   WindowFloated,
+  WindowGrabbed,
+  WindowMoved,
   WindowRaised,
   WindowRenamed,
+  WindowResized,
   WindowSelected,
   WindowTabbed,
   WindowsReordered,
@@ -162,10 +176,35 @@ export const ShellAction = {
     kind: ShellActionKind.WindowClosed as const,
   }),
 
+  /** The user let go of the window they had hold of. */
+  WindowDropped: () => ({
+    kind: ShellActionKind.WindowDropped as const,
+  }),
+
   /** The user took a window out of the rail to float over the stage. */
   WindowFloated: (id: string) => ({
     id,
     kind: ShellActionKind.WindowFloated as const,
+  }),
+
+  /**
+   * The user took hold of a floating window to move or resize it.
+   *
+   * Which of the two it will be is not recorded: the shell is told where the
+   * window ends up, not what the pointer is doing, so a move and a resize are
+   * the same drag as far as this is concerned.
+   */
+  WindowGrabbed: (id: string) => ({
+    id,
+    kind: ShellActionKind.WindowGrabbed as const,
+  }),
+
+  /** The user dragged a floating window to a new corner of the stage. */
+  WindowMoved: (id: string, x: number, y: number) => ({
+    id,
+    kind: ShellActionKind.WindowMoved as const,
+    x,
+    y,
   }),
 
   /** The user touched a floating window, which brings it to the front. */
@@ -179,6 +218,14 @@ export const ShellAction = {
     id,
     kind: ShellActionKind.WindowRenamed as const,
     title,
+  }),
+
+  /** The user dragged a floating window's corner to a new size. */
+  WindowResized: (id: string, width: number, height: number) => ({
+    height,
+    id,
+    kind: ShellActionKind.WindowResized as const,
+    width,
   }),
 
   /** The user picked a window's tab. */
@@ -244,14 +291,32 @@ export const reduceShell = (
     case ShellActionKind.WindowClosed: {
       return closeWindow(state, action.id);
     }
+    case ShellActionKind.WindowDropped: {
+      return { ...state, draggingId: undefined };
+    }
     case ShellActionKind.WindowFloated: {
       return floatWindow(state, action.id);
+    }
+    case ShellActionKind.WindowGrabbed: {
+      // Taking hold of a window brings it to the front, the same way clicking
+      // one does — which is what a grab is.
+      return { ...raiseWindow(state, action.id), draggingId: action.id };
+    }
+    case ShellActionKind.WindowMoved: {
+      return reshape(state, action.id, (float) =>
+        movedTo(float, action.x, action.y),
+      );
     }
     case ShellActionKind.WindowRaised: {
       return raiseWindow(state, action.id);
     }
     case ShellActionKind.WindowRenamed: {
       return renameWindow(state, action.id, action.title);
+    }
+    case ShellActionKind.WindowResized: {
+      return reshape(state, action.id, (float) =>
+        sizedTo(float, action.width, action.height),
+      );
     }
     case ShellActionKind.WindowSelected: {
       return showWindow(state, action.id);
@@ -375,8 +440,31 @@ const tabWindow = (state: ShellState, id: string): ShellState => {
     return {
       ...state,
       activeId: id,
+      // Whatever the pointer was doing, it was doing it to a window that is
+      // now on the stage and has no box to drag.
+      draggingId: state.draggingId === id ? undefined : state.draggingId,
       floats: state.floats.filter((float) => float.id !== id),
       shownId: id,
+    };
+  }
+};
+
+// A floating window's box, replaced. Only a floating window has one, so
+// asking to reshape a tabbed one is a wiring fault rather than a no-op: the
+// caller is dragging something the shell is not laying out.
+const reshape = (
+  state: ShellState,
+  id: string,
+  into: (float: Float) => Float,
+): ShellState => {
+  if (floatOf(state, id) === undefined) {
+    throw new Error(`shell: window ${id} is not floating`);
+  } else {
+    return {
+      ...state,
+      floats: state.floats.map((float) =>
+        float.id === id ? into(float) : float,
+      ),
     };
   }
 };
@@ -410,6 +498,7 @@ const closeWindow = (state: ShellState, id: string): ShellState => {
     // on the one it was covering; the stage is what is left when none is out.
     activeId:
       state.activeId === id ? (floats.at(-1)?.id ?? shownId) : state.activeId,
+    draggingId: state.draggingId === id ? undefined : state.draggingId,
     floats,
     shownId,
     windows,

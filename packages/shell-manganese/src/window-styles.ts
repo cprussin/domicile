@@ -66,3 +66,26 @@ export const floatPlacement = (float: Float, depth: number): CSSProperties => ({
   insetInlineStart: `${float.x.toString()}px`,
   zIndex: FLOOR + depth,
 });
+
+/**
+ * What a window looks like while it is being dragged: most of the way there.
+ *
+ * A real translucency rather than a hint of one, because it is the compositor
+ * that draws it: the SDK reports the element's `opacity` with the placement and
+ * the shader applies it to the client's own buffer, so what shows through a
+ * half-transparent window is the desktop behind it rather than anything the
+ * page could have painted over it.
+ */
+export const draggingStyles = css({ opacity: 0.6 });
+
+/**
+ * A window the pointer goes straight through.
+ *
+ * How the shell takes the mouse back while Alt is held. The compositor
+ * hit-tests a rectangle and gives the pointer to the window under it; a window
+ * that says `pointer-events: none` is reported as taking no pointer, so the
+ * events arrive in the page instead — which is where a drag is handled. The
+ * same mechanism that stops a window swallowing the clicks meant for a menu
+ * drawn over it.
+ */
+export const clickThroughStyles = css({ pointerEvents: "none" });
