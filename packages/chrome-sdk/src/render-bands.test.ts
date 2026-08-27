@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { bandLabelColour } from "./band-label";
 import type { BandBridge } from "./render-bands";
 import { renderBands } from "./render-bands";
 
@@ -31,9 +32,11 @@ const bridge = () => {
   };
 };
 
-/** The opacity of the element that guarantees a frame, if it is in the page. */
-const nudged = () =>
-  document.getElementById("domicile-band-nudge")?.style.opacity;
+/** The label element the compositor reads the band off, if it is in the page. */
+const marker = () => document.getElementById("domicile-band-label");
+
+/** The part of it that changes every time, so a frame always happens. */
+const nudged = () => marker()?.style.blockSize;
 
 describe("renderBands", () => {
   it("declares the depths the shell draws at", () => {
@@ -73,7 +76,7 @@ describe("renderBands", () => {
     expect(nudged()).not.toBe(first);
   });
 
-  it("keeps one nudge however many bands are asked for", () => {
+  it("keeps one label however many bands are asked for", () => {
     const host = bridge();
     renderBands(host, [0, 5], showsNothing);
 
@@ -81,7 +84,32 @@ describe("renderBands", () => {
     host.ask(1);
     host.ask(0);
 
-    expect(document.querySelectorAll("#domicile-band-nudge")).toHaveLength(1);
+    expect(document.querySelectorAll("#domicile-band-label")).toHaveLength(1);
+  });
+
+  it("paints the band it was asked for, which is what the frame is read as", () => {
+    // The whole of how a commit is attributed: the compositor reads this pixel
+    // off the frame rather than assuming the next commit is the answer.
+    const host = bridge();
+    renderBands(host, [0, 5], showsNothing);
+
+    host.ask(1);
+    expect(marker()?.style.backgroundColor).toBe(bandLabelColour(1));
+    host.ask(0);
+    expect(marker()?.style.backgroundColor).toBe(bandLabelColour(0));
+  });
+
+  it("puts the label over whatever the shell drew in that corner", () => {
+    // The pixel has to be the label rather than the label blended with a
+    // background, or the two sentinel channels stop meaning anything.
+    const host = bridge();
+    renderBands(host, [0], showsNothing);
+    host.ask(0);
+
+    expect(marker()?.style.position).toBe("fixed");
+    expect(marker()?.style.insetBlockStart).toBe("0");
+    expect(marker()?.style.insetInlineStart).toBe("0");
+    expect(Number(marker()?.style.zIndex)).toBeGreaterThan(0);
   });
 
   it("takes no pointer, so the shell's own hit-testing is untouched", () => {
@@ -89,9 +117,7 @@ describe("renderBands", () => {
     renderBands(host, [0], showsNothing);
     host.ask(0);
 
-    expect(
-      document.getElementById("domicile-band-nudge")?.style.pointerEvents,
-    ).toBe("none");
+    expect(marker()?.style.pointerEvents).toBe("none");
   });
 
   it("stops answering when the shell lets it go", () => {
@@ -106,5 +132,19 @@ describe("renderBands", () => {
     host.ask(0);
 
     expect(shown).toStrictEqual([]);
+  });
+
+  it("takes its label away with it", () => {
+    // Nothing reads it once nothing is asking, but it is a coloured pixel in
+    // the corner of the desktop and leaving one behind is not this module's
+    // to do.
+    const host = bridge();
+    const stop = renderBands(host, [0], showsNothing);
+    host.ask(0);
+    expect(marker()).not.toBeNull();
+
+    stop();
+
+    expect(marker()).toBeNull();
   });
 });

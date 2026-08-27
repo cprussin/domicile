@@ -126,12 +126,15 @@ use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::session::{publish, Session};
+use domicile_protocol::band_label::band_in;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Shortcut};
 use domicile_scene::{
     Point as ScenePoint, PointerTarget, Scene, Style as SceneStyle, Transform as SceneTransform,
 };
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
-use smithay::backend::renderer::{Color32F, Frame as _, ImportMem as _, Renderer as _};
+use smithay::backend::renderer::{
+    Color32F, ExportMem as _, Frame as _, ImportMem as _, Renderer as _, Texture as _,
+};
 use smithay::backend::winit::WinitGraphicsBackend;
 
 /// The log messages *this change's* scripts and tests grep for, pinned to them.
@@ -1619,15 +1622,25 @@ impl DomicileCompositor {
         // What this frame *is* — see `chrome_frame`, which is where that is
         // decided and where it can be tested. Everything below is applying the
         // answer to state this method owns.
-        let arrived = what_arrived(self.bands.answered(), came, !self.bands.depths().is_empty());
+        let asked = self.bands.outstanding();
+        // Read only while a question is outstanding, which is both halves of
+        // the bargain: the chrome may leave its last label up between cycles,
+        // and the compositor pays for a pixel of read-back only while it is
+        // waiting for a band.
+        let said = match (asked, &texture) {
+            (Some(_), Some(surface)) => self.band_labelled_on(surface),
+            _ => None,
+        };
+        let arrived = what_arrived(asked, said, came, !self.bands.depths().is_empty());
         match arrived {
             Arrival::Banded(band) => {
+                self.bands.answered();
                 self.band_textures
                     .insert(band, texture.expect("a banded frame made a texture"));
                 self.ask_for_the_next_band();
             }
-            Arrival::AskAgain(band) => {
-                self.bands.unanswered(band);
+            Arrival::AskAgain(_) => {
+                self.bands.unusable();
                 self.ask_for_the_next_band();
             }
             Arrival::StaleBands => {
@@ -1644,14 +1657,61 @@ impl DomicileCompositor {
         self.needs_present = true;
     }
 
+    /// Which band this frame's own pixels say it is.
+    ///
+    /// The label is one pixel at the top-left of the picture — see
+    /// `domicile_protocol::band_label` for why it is in the picture at all —
+    /// and this is the read-back that gets it. A texture rather than the
+    /// buffer, because the buffer is a dmabuf in every case that matters: the
+    /// chrome is a GPU-accelerated browser and its frame never touches the CPU
+    /// on the way in.
+    ///
+    /// `None` for anything that could not be read. A label nobody could read
+    /// is a frame the compositor cannot attribute, which is the same answer as
+    /// a frame with no label: it is not the band that was asked for.
+    fn band_labelled_on(&mut self, surface: &SurfaceTexture) -> Option<usize> {
+        // The top-left of the *picture*. `copy_texture` reads in GL's own
+        // coordinates, whose origin is the first row of the texture — and a
+        // client that rendered with GL hands its buffer over bottom row first,
+        // which is what `y_inverted` says. So the picture's top row is the
+        // texture's last one exactly when the buffer is inverted.
+        let top = if surface.y_inverted {
+            surface.texture.height().saturating_sub(1)
+        } else {
+            0
+        };
+        let corner = Rectangle::new((0, i32::try_from(top).unwrap_or(0)).into(), (1, 1).into());
+        let gpu = self.gpu.as_mut()?;
+        let mapping = match gpu
+            .renderer()
+            .copy_texture(&surface.texture, corner, Fourcc::Abgr8888)
+        {
+            Ok(mapping) => mapping,
+            Err(err) => {
+                tracing::warn!(%err, "a chrome frame's label would not copy");
+                return None;
+            }
+        };
+        let read = match gpu.renderer().map_texture(&mapping) {
+            Ok(read) => read,
+            Err(err) => {
+                tracing::warn!(%err, "a chrome frame's label would not map");
+                return None;
+            }
+        };
+        // The same byte order the shm path uploads in: `Abgr8888` is R, G, B, A
+        // in memory.
+        let pixel = <[u8; 4]>::try_from(read.get(..4)?).ok()?;
+        band_in(pixel)
+    }
+
     /// Ask the chrome for the next band that has not answered, if any.
     ///
-    /// One at a time, which is the whole of how a commit is attributed: the
-    /// page has no handle on its own Wayland stream — that connection is
-    /// Chromium's — so it cannot label a frame, and a label sent back over the
-    /// chrome socket would not be ordered against the commit it describes.
-    /// With a single question outstanding there is only one band the next
-    /// commit can be.
+    /// One at a time. The frame that answers says which band it is in its own
+    /// pixels — see `domicile_protocol::band_label` — so this is no longer
+    /// what attributes a commit; it is what keeps the answer unambiguous,
+    /// because a label then only has to be told from the band actually asked
+    /// for rather than from every band declared.
     fn ask_for_the_next_band(&mut self) {
         let Next::Ask(band) = self.bands.next() else {
             return;

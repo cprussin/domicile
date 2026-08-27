@@ -101,13 +101,18 @@ const stop = renderBands(bridge, [0, 10], (band) => {
 });
 ```
 
-**What declaring bands obliges a shell to do:** commit nothing else while a
-band is outstanding. The compositor takes the page's next commit as the band it
-asked for — the page cannot label its own frames, because the Wayland
-connection belongs to Chromium rather than to the page — so a repaint of the
-chrome's own is a commit it cannot tell from the answer, and taking it as one
-files every later band under the wrong depth. `renderBands` causes no repaint
-of its own; a CSS animation or a video in the shell still would.
+**How the compositor knows which band a frame is:** `renderBands` paints it
+into the frame's top-left pixel. The page cannot label the stream its commit
+rides on — that connection belongs to Chromium rather than to the page — but it
+can decide what the frame *looks like*, so the label rides in the picture where
+nothing can reorder it. A repaint the shell makes for its own reasons — a
+clock, a caret, a video — carries the label of whatever band was painted last
+and is not mistaken for an answer; it costs the compositor a round trip, which
+it takes by dropping the bands it holds and asking again from the first.
+
+**What that leaves a shell to do:** answer in the frame the request is handled
+in. Anything deferred — a `requestAnimationFrame`, a timeout, an await — paints
+the label for a band the page is no longer being asked for.
 
 A shell that never calls this declares nothing and is drawn as one layer over
 every window, which is what every chrome did before bands existed.

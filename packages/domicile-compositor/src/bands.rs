@@ -7,27 +7,23 @@
 //! raster carries whatever the page had already blended into those pixels, and
 //! `stacking`'s regions can only move that texel, not unmake it.
 //!
-//! **The page cannot label its own frames.** The chrome is a page in Electron
-//! and the Wayland connection is Chromium's, so the page has no handle on the
-//! stream its commit rides on. A label sent over the chrome socket instead
-//! crosses a different transport, and nothing orders a socket write against a
-//! Wayland commit — the compositor would match frames to labels by arrival and
-//! would eventually get it wrong, silently, looking exactly like a stacking
-//! bug. See `docs/architecture/WINDOW-COMPOSITING.md`.
+//! **The page has no handle on its own Wayland stream.** The chrome is a page
+//! in Electron and the connection is Chromium's, so the page cannot label a
+//! commit — and a label sent over the chrome socket instead crosses a
+//! different transport, which nothing orders against the commit it describes.
 //!
-//! So the compositor asks, one band at a time, and takes the chrome's next
-//! commit as the answer. That is only unambiguous if the chrome commits
-//! *nothing else* while a band is outstanding, which is an obligation on the
-//! chrome rather than something this can enforce: a repaint of its own — a
-//! clock, a caret, a hover — is a commit indistinguishable from the answer,
-//! and taking it as one files every later band under the wrong depth. The
-//! obligation is stated where a chrome meets it, on `BridgeClient.declareBands`,
-//! and is the price of the page having no way to label its own frames.
+//! What the page *can* label is what the frame looks like, and that is what it
+//! does: while it answers, it paints the band into one pixel of the picture.
+//! See `domicile_protocol::band_label`. So a repaint the page made for its own
+//! reasons — a clock, a caret, a hover — carries the wrong band or none, and
+//! is not mistaken for an answer. It only makes the bands already held stale,
+//! because they are pictures of a page that has moved on.
 //!
-//! What this module *does* guarantee is the half it can: at most one question
-//! outstanding, so there is never a second band a commit might have been for.
-//! It holds no textures and speaks no protocol, so what it decides can be
-//! tested without either.
+//! This module keeps the other half: at most one question outstanding, so
+//! there is never a second band a labelled commit might have been for, and the
+//! question survives a repaint — the chrome was asked for a band and is still
+//! going to render it. It holds no textures and speaks no protocol, so what it
+//! decides can be tested without either.
 
 use std::collections::HashSet;
 
@@ -84,8 +80,14 @@ impl Bands {
     ///
     /// Separate from [`declared`](Self::declared) because the depths have not
     /// changed and re-declaring them would be the chrome's message to send.
+    ///
+    /// The question outstanding is *kept*. A repaint is not an answer and does
+    /// not stop one coming: the chrome was asked for a band and is going to
+    /// render it, so taking the question back would leave an answer in flight
+    /// that nothing expects — and asking again would put two of them there.
+    /// What that answer lands beside is a set with nothing in it, so the round
+    /// trip starts over from the band after it.
     pub fn went_stale(&mut self) {
-        self.asked = None;
         self.answered.clear();
     }
 
@@ -116,29 +118,35 @@ impl Bands {
         self.asked = Some(band);
     }
 
-    /// A chrome frame arrived. Says which band it is, if it answers anything.
+    /// The band a request is outstanding for, without taking it.
     ///
-    /// `None` when nothing was asked for, which covers both the chrome
-    /// repainting of its own accord — a clock, a caret, a hover — and a frame
-    /// for a question that stopped standing while it was in flight. Anything
-    /// that makes the set stale clears the request first, so a late frame
-    /// finds nothing outstanding and answers nothing: the one take is the
-    /// whole guarantee, and a generation counter beside it was a second
-    /// spelling of the same thing that no test could tell from a no-op.
+    /// Asked before a frame is sorted rather than after, because a frame is
+    /// only the answer if it says so: a repaint that arrives mid-cycle must
+    /// leave the question standing, and a `take` here would have consumed it
+    /// before anything had looked at the label.
+    pub fn outstanding(&self) -> Option<usize> {
+        self.asked
+    }
+
+    /// The frame that answered the outstanding question has been taken.
+    ///
+    /// `None` when nothing was asked for, which is a caller sorting a frame
+    /// as an answer when there was no question — a bug rather than a state,
+    /// and one the caller's own match makes unreachable.
     pub fn answered(&mut self) -> Option<usize> {
         let band = self.asked.take()?;
         self.answered.insert(band);
         Some(band)
     }
 
-    /// Take back an answer: the frame arrived and was not usable.
+    /// The frame that answered cannot be used, so the band is still unanswered.
     ///
-    /// The band goes back to unanswered and can be asked for again. Marking it
-    /// answered with nothing to draw would leave the set reporting itself
-    /// complete while a layer is missing, which is the state waiting for the
-    /// whole set exists to avoid.
-    pub fn unanswered(&mut self, band: usize) {
-        self.answered.remove(&band);
+    /// The question is taken — it has been answered, just not usefully — and
+    /// the band can be asked for again. Marking it answered with nothing to
+    /// draw would leave the set reporting itself complete while a layer is
+    /// missing, which is the state waiting for the whole set exists to avoid.
+    pub fn unusable(&mut self) {
+        self.asked = None;
     }
 
     /// The order to draw one frame's windows and bands in.
@@ -267,6 +275,28 @@ mod tests {
     }
 
     #[test]
+    fn a_repaint_while_a_band_is_outstanding_keeps_the_question() {
+        // A repaint is not an answer and does not stop one coming: the chrome
+        // was asked for a band and is going to render it. Taking the question
+        // back would leave that answer in flight with nothing expecting it,
+        // and asking again would put two of them there — which is the
+        // ambiguity this module exists to make impossible.
+        let mut bands = Bands::default();
+        bands.declared(vec![0, 5]);
+        bands.asked(0);
+        bands.answered();
+        bands.asked(1);
+
+        bands.went_stale();
+        assert_eq!(bands.next(), Next::Waiting);
+
+        // And when it does answer, the round trip starts again from the band
+        // the repaint took away.
+        assert_eq!(bands.answered(), Some(1));
+        assert_eq!(bands.next(), Next::Ask(0));
+    }
+
+    #[test]
     fn redeclaring_the_same_depths_still_starts_over() {
         // What is *at* a depth can move without the depth doing so, so the
         // depths matching is not the set being unchanged.
@@ -289,9 +319,8 @@ mod tests {
         let mut bands = Bands::default();
         bands.declared(vec![0, 5]);
         bands.asked(0);
-        assert_eq!(bands.answered(), Some(0));
 
-        bands.unanswered(0);
+        bands.unusable();
         assert_eq!(bands.next(), Next::Ask(0));
     }
 

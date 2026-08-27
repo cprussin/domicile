@@ -6,28 +6,34 @@
 // whatever the page had already blended into those pixels, and no ordering can
 // unmake that.
 //
-// **The commit is the answer.** There is no message back — the compositor asks
-// for a band and takes the page's next Wayland commit as that band, because the
-// page cannot label its own frames (the connection belongs to Chromium, not to
-// the page). Everything awkward here follows from that one fact:
+// **The commit is the answer, and it says so in its own pixels.** There is no
+// message back — the compositor asks for a band and reads which band the next
+// commit is off the frame itself, because the page has no handle on the stream
+// its commit rides on (the connection belongs to Chromium, not to the page)
+// and a label sent back over the chrome socket would not be ordered against
+// the commit it describes. So this paints the band into one pixel of the
+// picture; see `band-label`. Two things still follow from the commit being the
+// answer:
 //
-// - **One commit per request, in the frame the request is handled.** A second
-//   commit for the same band is a commit the compositor attributes to the
-//   *next* band, so anything deferred to a later frame — a `requestAnimationFrame`,
-//   a timeout, an await — turns into the very off-by-one this exists to avoid.
-//   Worse after the last band: an unasked commit makes the compositor discard
-//   every band it holds and start the round trip again, for ever.
+// - **One commit per request, in the frame the request is handled.** Anything
+//   deferred to a later frame — a `requestAnimationFrame`, a timeout, an await
+//   — paints the label for a band the page is no longer being asked for.
 // - **A commit has to actually happen.** If handling the request changes no
 //   style, Chromium has nothing to invalidate, does not paint, and does not
 //   commit; the compositor's question then stands for ever and the desktop's
-//   chrome freezes. See `nudge`.
-// - **Nothing else may commit while a band is outstanding.** This module causes
-//   no repaint of its own, but a CSS animation or a video in the shell still
-//   would, and that is the shell's to know. See `BridgeClient.declareBands`.
+//   chrome freezes. That is why the label element also changes shape — see
+//   `label`.
+//
+// What no longer follows is the third thing. A repaint the shell makes for its
+// own reasons — a clock, a caret, a video — carries the label of whatever band
+// was painted last, which is not the band being asked for; the compositor takes
+// it for what it is, drops the bands it holds as pictures of a page that has
+// moved on, and asks again. Before the label it was filed as the answer.
 //
 // A shell that never calls this is drawn as one layer over every window, which
 // is what every chrome did before bands existed.
 
+import { bandLabelColour } from "./band-label";
 import type { BridgeClient } from "./bridge";
 
 /** Show only this band, hiding every other. The shell's own business. */
@@ -63,57 +69,69 @@ export const renderBands = (
   const answer = ({ band }: { band: number }): void => {
     show(band);
     // In the same frame, deliberately. The page paints once for both and
-    // commits once, and that commit is the answer.
-    nudge();
+    // commits once, and that commit is the answer — carrying, in its top-left
+    // pixel, the band it is the answer to.
+    label(band);
   };
   bridge.on("render_band", answer);
   bridge.declareBands(depths);
   return () => {
     bridge.off("render_band", answer);
+    // The label goes with it. Nothing reads it once nothing is asking, but it
+    // is a coloured pixel in the corner of the desktop, and leaving one behind
+    // is not this module's to do.
+    document.getElementById(LABEL)?.remove();
   };
 };
 
-/** The element whose only job is to make sure a frame happens. */
-const NUDGE = "domicile-band-nudge";
+/** The element that carries the label, and makes sure a frame happens at all. */
+const LABEL = "domicile-band-label";
 
 /**
- * How many times a band has been shown, so the style below always changes.
+ * How many times a band has been shown, so the shape below always changes.
  *
- * A value derived from the *band* would repeat — a one-band chrome asked twice
- * gets band 0 both times, and setting a style to the value it already holds is
- * not a change: Chromium invalidates nothing, paints nothing, and commits
- * nothing. That is the frozen chrome this exists to prevent, reached by the
- * very code meant to prevent it.
+ * The *colour* is not enough on its own: a band asked for twice running — a
+ * one-band chrome, or a frame the compositor could not use — is painted the
+ * same colour both times, and setting a style to the value it already holds is
+ * not a change. Chromium invalidates nothing, paints nothing, and commits
+ * nothing, and the compositor's question stands for ever. That is the frozen
+ * chrome this exists to prevent, reached by the very code meant to prevent it.
  */
 let shown = 0;
 
 /**
- * Guarantee the page commits something for this band.
+ * Say this frame is `band`, and guarantee there is a frame to say it in.
  *
- * What is needed is a paint *invalidation*, not a visible difference: Chromium
- * submits a frame because something was invalidated, whether or not the result
- * differs from the last one. So this changes a style property to a value it did
- * not hold, on one fixed pixel in the corner — `opacity`, so it costs no
- * layout, and small enough to be invisible against anything.
+ * The colour is the label the compositor reads. The height is the guarantee:
+ * what is needed is a paint *invalidation* rather than a visible difference,
+ * and alternating the height is one the compositor cannot see — the pixel it
+ * reads is the top-left one, which is inside the element at either height, and
+ * the colour there is the label exactly rather than the label blended with
+ * anything.
  */
-const nudge = (): void => {
+const label = (band: number): void => {
   shown += 1;
-  const held = document.getElementById(NUDGE) ?? mount();
-  held.style.opacity = shown % 2 === 0 ? "0.004" : "0.008";
+  const marker = document.getElementById(LABEL) ?? mount();
+  marker.style.backgroundColor = bandLabelColour(band);
+  marker.style.blockSize = shown % 2 === 0 ? "1px" : "2px";
 };
 
-/** The nudge element, created once and left in the page. */
+/** The label element, created the first time a band is asked for. */
 const mount = (): HTMLElement => {
-  const held = document.createElement("div");
-  held.id = NUDGE;
-  held.style.position = "fixed";
-  held.style.inlineSize = "1px";
-  held.style.blockSize = "1px";
-  held.style.insetBlockStart = "0";
-  held.style.insetInlineStart = "0";
+  const marker = document.createElement("div");
+  marker.id = LABEL;
+  // Fixed at the origin, because the origin is where the compositor reads it:
+  // the top-left pixel of the picture the page commits.
+  marker.style.position = "fixed";
+  marker.style.inlineSize = "1px";
+  marker.style.insetBlockStart = "0";
+  marker.style.insetInlineStart = "0";
+  // Over whatever the shell drew there, so the pixel is the label rather than
+  // the label blended with a background.
+  marker.style.zIndex = "2147483647";
   // Out of the way of everything a shell does with the page: it takes no
   // pointer, and `elementFromPoint` sees through it.
-  held.style.pointerEvents = "none";
-  document.body.append(held);
-  return held;
+  marker.style.pointerEvents = "none";
+  document.body.append(marker);
+  return marker;
 };

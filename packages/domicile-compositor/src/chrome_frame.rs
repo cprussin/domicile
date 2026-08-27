@@ -1,8 +1,8 @@
 //! What a chrome commit *is*, decided apart from the state it lands in.
 //!
-//! The compositor asks the chrome for one band at a time and takes its next
-//! Wayland commit as that band, because the page cannot label its own frames.
-//! So every commit has to be sorted into one of a few kinds, and getting that
+//! The compositor asks the chrome for one band at a time, and the frame that
+//! answers says so in its own pixels — see `domicile_protocol::band_label`. So
+//! every commit has to be sorted into one of a few kinds, and getting that
 //! wrong is not a small error: a frame filed as the wrong band puts a layer of
 //! the desktop at the wrong depth, and a question left standing stops the
 //! chrome updating for the rest of the run.
@@ -43,10 +43,14 @@ pub enum Arrival {
     /// a band answered with nothing to draw leaves the set reporting itself
     /// complete while a layer of the desktop is missing.
     AskAgain(usize),
-    /// Nobody asked for it, and this chrome has bands. It is the page
-    /// repainting of its own accord, which makes every band a picture of the
-    /// page before it: keep it as the flattened chrome, drop the bands, and
-    /// start the round trip again.
+    /// The page repainted of its own accord, and this chrome has bands. Every
+    /// band held is now a picture of the page before it: keep this as the
+    /// flattened chrome and drop them.
+    ///
+    /// It does not clear the question. A frame that is not the answer does not
+    /// stop the answer coming — the chrome was asked for a band and is going
+    /// to render it — and taking the question back would leave the compositor
+    /// with an answer in flight it no longer expects.
     StaleBands,
     /// Nobody asked for it and there are no bands. The ordinary frame every
     /// chrome has always sent, and the whole of the desktop.
@@ -63,20 +67,39 @@ pub enum Arrival {
 
 /// Sort the frame that just arrived.
 ///
-/// `asked` is the band a request is outstanding for, `buffer` what came off
-/// the commit, and `declared` whether this chrome has bands at all.
-pub fn what_arrived(asked: Option<usize>, buffer: Buffer, declared: bool) -> Arrival {
-    match (asked, buffer, declared) {
-        (Some(band), Buffer::Textured, _) => Arrival::Banded(band),
-        // Unreadable or untextured, it is still the answer to a question that
-        // now has nothing to answer it. Asked again rather than counted, and
-        // rather than returned on: a question left standing routes every later
-        // commit away from the chrome's own texture, and the chrome stops
-        // updating for the rest of the run.
-        (Some(band), _, _) => Arrival::AskAgain(band),
-        (None, Buffer::Unreadable, _) => Arrival::Nothing,
-        (None, _, true) => Arrival::StaleBands,
-        (None, _, false) => Arrival::Chrome,
+/// `asked` is the band a request is outstanding for, `said` the band the
+/// frame's own label claims to be, `buffer` what came off the commit, and
+/// `declared` whether this chrome has bands at all.
+///
+/// `said` is only read while a question is outstanding, which is what lets the
+/// chrome leave its label up between cycles: the pixel goes on saying which
+/// band was rendered last, and nobody is asking.
+pub fn what_arrived(
+    asked: Option<usize>,
+    said: Option<usize>,
+    buffer: Buffer,
+    declared: bool,
+) -> Arrival {
+    match (asked, said, buffer, declared) {
+        (Some(band), Some(label), Buffer::Textured, _) if label == band => Arrival::Banded(band),
+        // A frame with no label to read, while a question stands. The label is
+        // a pixel of the picture, so a frame that made no texture has none —
+        // and it might have been the answer. Asked again, which is right
+        // either way: if it was the answer, a question left standing is one
+        // the chrome has already answered and will never answer again, and the
+        // chrome stops updating for the rest of the run; if it was not, the
+        // band is asked for a second time and the answer already in flight
+        // says which band it is when it lands.
+        (Some(band), _, Buffer::Readable | Buffer::Unreadable, _) => Arrival::AskAgain(band),
+        // Textured, and it does not say it is the band asked for: the page
+        // repainting of its own accord. It answers nothing and the question
+        // stands — the chrome is still going to render the band it was asked
+        // for — but every band already held is a picture of a page that has
+        // moved on.
+        (Some(_), _, Buffer::Textured, _) => Arrival::StaleBands,
+        (None, _, Buffer::Unreadable, _) => Arrival::Nothing,
+        (None, _, _, true) => Arrival::StaleBands,
+        (None, _, _, false) => Arrival::Chrome,
     }
 }
 
@@ -85,24 +108,26 @@ mod tests {
     use super::{what_arrived, Arrival, Buffer};
 
     #[test]
-    fn a_frame_that_answers_is_that_band() {
+    fn a_frame_that_says_it_is_the_band_asked_for_is_that_band() {
         assert_eq!(
-            what_arrived(Some(1), Buffer::Textured, true),
+            what_arrived(Some(1), Some(1), Buffer::Textured, true),
             Arrival::Banded(1),
         );
     }
 
     #[test]
-    fn a_band_whose_frame_could_not_be_used_is_asked_for_again() {
-        // Both ways it can fail, because both leave the question with nothing
-        // to answer it. Counted answered, the set reports itself complete with
-        // nothing cached for that depth and the desktop is drawn a layer
-        // short; returned on, the question stands for ever and — because a
-        // standing question routes every later commit away from the chrome's
-        // own texture — the chrome never updates again.
+    fn a_frame_with_no_label_to_read_is_asked_for_again() {
+        // The label is a pixel of the picture, so a frame that made no texture
+        // has none — and it might have been the answer. Counted answered, the
+        // set reports itself complete with nothing cached for that depth and
+        // the desktop is drawn a layer short. Left standing, the question is
+        // one the chrome has already answered and will never answer again:
+        // nothing asks, nothing repaints, and the chrome freezes for the rest
+        // of the run. Asking again is the only arm that is right whichever it
+        // was.
         for buffer in [Buffer::Readable, Buffer::Unreadable] {
             assert_eq!(
-                what_arrived(Some(0), buffer, true),
+                what_arrived(Some(0), None, buffer, true),
                 Arrival::AskAgain(0),
                 "{buffer:?}",
             );
@@ -110,14 +135,41 @@ mod tests {
     }
 
     #[test]
-    fn a_frame_nobody_asked_for_makes_the_bands_stale() {
-        // The chrome repaints of its own accord all the time — a clock, a
-        // caret, a hover — and every band held is then a picture of the page
-        // before it.
+    fn a_frame_that_says_nothing_does_not_answer_the_question() {
+        // The whole of what the label buys. The chrome repaints of its own
+        // accord all the time — a clock, a caret, a hover — and before there
+        // was a label every one of those was filed as whatever band happened
+        // to be outstanding, which is a layer of the desktop at the wrong
+        // depth.
         assert_eq!(
-            what_arrived(None, Buffer::Textured, true),
+            what_arrived(Some(1), None, Buffer::Textured, true),
             Arrival::StaleBands,
         );
+    }
+
+    #[test]
+    fn a_frame_that_says_it_is_a_different_band_does_not_answer_either() {
+        // What a repaint looks like mid-cycle: the label is still the one the
+        // chrome painted last, because it has no way to know its own commit
+        // happened and nothing clears it. Saying the wrong band is exactly as
+        // good as saying nothing.
+        assert_eq!(
+            what_arrived(Some(2), Some(1), Buffer::Textured, true),
+            Arrival::StaleBands,
+        );
+    }
+
+    #[test]
+    fn a_frame_nobody_asked_for_makes_the_bands_stale() {
+        // Its label is not looked at: the chrome leaves the last one up, so
+        // between cycles every frame carries a band nobody asked for.
+        for said in [None, Some(0), Some(3)] {
+            assert_eq!(
+                what_arrived(None, said, Buffer::Textured, true),
+                Arrival::StaleBands,
+                "{said:?}",
+            );
+        }
     }
 
     #[test]
@@ -126,9 +178,12 @@ mod tests {
         // picture of a page that has moved on, so it goes — which is what the
         // compositor has always done with a frame it could read and could not
         // upload.
-        assert_eq!(what_arrived(None, Buffer::Readable, false), Arrival::Chrome);
         assert_eq!(
-            what_arrived(None, Buffer::Readable, true),
+            what_arrived(None, None, Buffer::Readable, false),
+            Arrival::Chrome,
+        );
+        assert_eq!(
+            what_arrived(None, None, Buffer::Readable, true),
             Arrival::StaleBands,
         );
     }
@@ -139,18 +194,20 @@ mod tests {
         // now — and `present` draws no chrome at all when it has no texture,
         // so replacing the last good frame with nothing blanks the whole
         // desktop until the next readable commit.
-        for declared in [true, false] {
+        for declared in [false, true] {
             assert_eq!(
-                what_arrived(None, Buffer::Unreadable, declared),
+                what_arrived(None, None, Buffer::Unreadable, declared),
                 Arrival::Nothing,
-                "declared: {declared}",
+                "{declared}",
             );
         }
     }
 
     #[test]
-    fn a_chrome_with_no_bands_just_has_frames() {
-        // Every chrome today, and every chrome before bands existed.
-        assert_eq!(what_arrived(None, Buffer::Textured, false), Arrival::Chrome);
+    fn a_chrome_with_no_bands_is_drawn_whole() {
+        assert_eq!(
+            what_arrived(None, None, Buffer::Textured, false),
+            Arrival::Chrome,
+        );
     }
 }
