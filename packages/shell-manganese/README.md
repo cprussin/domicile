@@ -102,6 +102,26 @@ page and the desktop agree about which window is in front. A floating window
 is drawn over the stage rather than on it, so the stage falls back to the last
 window still in the rail rather than going blank.
 
+A floating window has a **title bar**: what it is called, and an X that closes
+it. Dragging the bar moves the window, with no modifier held — the bar is
+chrome, so the pointer over it belongs to the page, which is exactly what is
+not true of the rest of the window. The bar comes *out* of the window's box
+rather than being added to it, so a window dragged to a size is that size, bar
+included, and a resize does not have to reason about a frame that grows with
+it.
+
+The bar is also the reason this shell can show what `declare_bands` is for. It
+is page pixels at the depth of the window it names, so a window in front of
+that one has to be drawn *over* it — and a compositor that composites the whole
+page above every window cannot do that. Until the shell declares its depths,
+the bar of a window behind another is drawn on top of the one in front. That is
+visible now rather than theoretical.
+
+A floating window's corners are the frame's rather than its own, and square:
+the compositor's shader takes one radius for all four (it is the element's
+`border-top-left-radius` the SDK reports), so a window cannot be square under
+its bar and round at the bottom. The bar carries the rounding.
+
 **Alt+drag** moves a floating window and **Alt+Shift+drag** resizes it from the
 bottom-right corner. Which of the two a drag is, is read when it starts and
 then kept, so letting go of Shift half way through does not turn a resize into

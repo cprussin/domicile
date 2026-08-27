@@ -94,6 +94,12 @@ class FakeBridge {
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
   }
+  // The portal forwards the keys a focused window is given, and a window that
+  // has just been floated is focused — so the shell's own keystrokes reach
+  // this once one is on screen.
+  key(appId: string, keycode: number, pressed: boolean): void {
+    this.calls.push(["key", appId, keycode, pressed]);
+  }
   focusChrome(): void {
     this.calls.push(["focusChrome"]);
   }
@@ -753,6 +759,73 @@ describe("Shell", () => {
     });
   });
 
+  describe("a floating window's title bar", () => {
+    const barIn = (container: HTMLElement) =>
+      container.querySelector<HTMLElement>("main > div:not([aria-hidden])");
+
+    const floated = async () => {
+      const rendered = renderShell();
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      return rendered;
+    };
+
+    it("gives a window in the rail no bar at all", () => {
+      const { container } = renderShell();
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+
+      expect(barIn(container)).toBeNull();
+    });
+
+    it("names the window it belongs to", async () => {
+      const { container } = await floated();
+
+      expect(barIn(container)?.textContent).toContain("Terminal");
+    });
+
+    it("sits above the window, which starts below it", async () => {
+      // The bar comes out of the window's box rather than being added to it,
+      // and it is chrome at the window's own depth — which is the case
+      // `declare_bands` exists for, and the reason this is a bar and not a
+      // border.
+      const { container } = await floated();
+      const bar = barIn(container);
+      const portal = container.querySelector<HTMLElement>(APP_TAG_NAME);
+
+      expect(bar?.style.insetBlockStart).toBe("48px");
+      expect(bar?.style.zIndex).toBe("1");
+      expect(portal?.style.insetBlockStart).toBe("78px");
+      expect(portal?.style.zIndex).toBe("1");
+    });
+
+    it("closes the window from its X", async () => {
+      await floated();
+      await userEvent.click(screen.getByRole("button", { name: "Close" }));
+
+      expect(bridge.calls).toContainEqual(["closeApp", "term"]);
+    });
+
+    it("moves the window when the bar is dragged, with no modifier held", async () => {
+      // The pointer over a client's surface belongs to the client, and the
+      // pointer over the bar belongs to the page — which is what Alt is for
+      // everywhere else on the window and is not needed here.
+      const { container } = await floated();
+      const bar = barIn(container);
+      if (bar === null) {
+        throw new Error("no title bar to drag");
+      }
+      bar.setPointerCapture = () => undefined;
+      fireEvent.pointerDown(bar, { clientX: 0, clientY: 0, pointerId: 1 });
+      fireEvent.pointerMove(bar, { clientX: 70, clientY: 30, pointerId: 1 });
+
+      expect(barIn(container)?.style.insetInlineStart).toBe("118px");
+      expect(
+        container.querySelector<HTMLElement>(APP_TAG_NAME)?.style
+          .insetInlineStart,
+      ).toBe("118px");
+    });
+  });
+
   describe("moving and resizing a floating window", () => {
     const portalFor = (container: HTMLElement, appId: string) =>
       container.querySelector<HTMLElement>(
@@ -839,7 +912,10 @@ describe("Shell", () => {
       // The corner moved, not the window.
       expect(portal?.style.insetInlineStart).toBe(before);
       expect(portal?.style.inlineSize).toBe("760px");
-      expect(portal?.style.blockSize).toBe("480px");
+      // 450 of the frame's 480: the title bar comes out of the window's box
+      // rather than being added to it, so a window dragged to a height is
+      // that height, bar included.
+      expect(portal?.style.blockSize).toBe("450px");
     });
 
     it("goes on resizing after Shift is let go mid-drag", async () => {

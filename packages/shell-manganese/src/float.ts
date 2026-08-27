@@ -50,7 +50,10 @@ export const floatFor = (id: string, floating: number): Float => ({
  *
  * Not a taste: the corner a resize is driven from is inside the window, so a
  * window that can be made smaller than the grab is one that can be made
- * impossible to grab again.
+ * impossible to grab again. Taller than {@link TITLE_BAR} for the same reason
+ * twice over — the bar comes out of this height, so a window that could be
+ * dragged shorter than its own bar would have a surface of nothing and a frame
+ * with nothing left to grab.
  */
 const SMALLEST = { height: 120, width: 240 };
 
@@ -77,4 +80,49 @@ export const sizedTo = (
   ...float,
   height: Math.max(SMALLEST.height, height),
   width: Math.max(SMALLEST.width, width),
+});
+
+/**
+ * How tall a floating window's title bar is.
+ *
+ * It comes out of the window rather than being added to it: a float's box is
+ * the whole frame, so a window dragged to a size is that size, bar included,
+ * and a resize does not have to reason about a frame that grows with it.
+ */
+export const TITLE_BAR = 30;
+
+/** What a floating window's box is made of: a bar over a client's surface. */
+export type Box = {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+};
+
+/** The whole frame — the bar and the surface under it. */
+export const frameBox = ({ height, width, x, y }: Float): Box => ({
+  height,
+  width,
+  x,
+  y,
+});
+
+/** Just the bar, along the top of it. */
+export const barBox = (float: Float): Box => ({
+  ...frameBox(float),
+  height: TITLE_BAR,
+});
+
+/**
+ * And the client's surface, under the bar.
+ *
+ * Never shorter than nothing: {@link sizedTo} keeps a window taller than its
+ * own bar, so this stays positive — but a negative height would be reported to
+ * the compositor as a window turned inside out, which is worth not relying on
+ * a number in another module for.
+ */
+export const surfaceBox = (float: Float): Box => ({
+  ...frameBox(float),
+  height: Math.max(0, float.height - TITLE_BAR),
+  y: float.y + TITLE_BAR,
 });

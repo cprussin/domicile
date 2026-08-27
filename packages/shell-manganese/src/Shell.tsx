@@ -13,7 +13,7 @@ import { TabRail } from "@domicile/component-library/TabRail";
 import { ThemeSwitch } from "@domicile/component-library/ThemeSwitch";
 import { TerminalWindowIcon } from "@phosphor-icons/react/dist/ssr/TerminalWindow";
 import type { PropsWithChildren } from "react";
-import { useCallback, useEffect } from "react";
+import { Fragment, useCallback, useEffect } from "react";
 
 import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
@@ -23,11 +23,29 @@ import { BrowserWindow } from "./BrowserWindow";
 import { Clock } from "./Clock";
 import type { Chord } from "./chord";
 import { FloatGrab } from "./FloatGrab";
+import { FloatTitleBar } from "./FloatTitleBar";
 import { floatingOf } from "./shell-state";
+import type { ShellWindow } from "./shell-window";
 import { WindowKind } from "./shell-window";
 import { useModifiers } from "./useModifiers";
 import { useShellWindows } from "./useShellWindows";
 import { useWindowSizedToDesktop } from "./useWindowSizedToDesktop";
+
+/**
+ * What the window `id` is called, for the bar that names it.
+ *
+ * The float list holds boxes rather than windows — a box is where a window is,
+ * not what it is — so the title comes from the window list beside it. A float
+ * for a window that is not there is impossible: closing one takes its box.
+ */
+const titleOf = (windows: readonly ShellWindow[], id: string): string => {
+  const named = windows.find((window) => window.id === id);
+  if (named === undefined) {
+    throw new Error(`shell: no window ${id} to name`);
+  } else {
+    return named.title;
+  }
+};
 
 /** A window with no tab selected — the rail's resting state on an empty shell. */
 const NO_WINDOW = "";
@@ -333,30 +351,49 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
               }
             })}
             {/*
-              After every window, so that a sheet and the window it grabs tie
-              on `z-index` and the sheet wins on document order — while a
-              window one place further up the stack still covers both.
+              After every window, so that the chrome of a float and the window
+              it belongs to tie on `z-index` and the chrome wins on document
+              order — while a window one place further up the stack still
+              covers both. Which is the case bands exist for: today the whole
+              page is composited over every window, so the bar of a window
+              behind another is drawn on top of the one in front.
             */}
-            {floats.map((float, depth) =>
-              alt || float.id === draggingId ? (
-                <FloatGrab
-                  depth={depth}
-                  float={float}
-                  key={float.id}
-                  onDrop={drop}
-                  onGrab={() => {
-                    grab(float.id);
-                  }}
-                  onMove={(x, y) => {
-                    move(float.id, x, y);
-                  }}
-                  onResize={(width, height) => {
-                    resize(float.id, width, height);
-                  }}
-                  resizes={shift}
-                />
-              ) : undefined,
-            )}
+            {floats.map((float, depth) => {
+              const floating = { depth, float };
+              const onMove = (x: number, y: number) => {
+                move(float.id, x, y);
+              };
+              const onGrab = () => {
+                grab(float.id);
+              };
+              return (
+                <Fragment key={float.id}>
+                  <FloatTitleBar
+                    floating={floating}
+                    focused={float.id === activeId}
+                    onClose={() => {
+                      close(float.id);
+                    }}
+                    onDrop={drop}
+                    onGrab={onGrab}
+                    onMove={onMove}
+                    title={titleOf(windows, float.id)}
+                  />
+                  {(alt || float.id === draggingId) && (
+                    <FloatGrab
+                      floating={floating}
+                      onDrop={drop}
+                      onGrab={onGrab}
+                      onMove={onMove}
+                      onResize={(width, height) => {
+                        resize(float.id, width, height);
+                      }}
+                      resizes={shift}
+                    />
+                  )}
+                </Fragment>
+              );
+            })}
             {windows.length === 0 && <EmptyStage />}
           </main>
         </div>
