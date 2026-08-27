@@ -365,3 +365,111 @@ describe("floating windows", () => {
     ).toThrow();
   });
 });
+
+describe("moving and resizing a floating window", () => {
+  const boxOf = (state: ShellState, id: string) =>
+    state.floats.find((float) => float.id === id);
+
+  const oneFloating = [
+    ShellAction.AppAppeared("one", "One"),
+    ShellAction.AppAppeared("two", "Two"),
+    ShellAction.WindowFloated("app:two"),
+  ] as const;
+
+  it("moves a floating window to where it was dragged", () => {
+    const state = after(
+      ...oneFloating,
+      ShellAction.WindowMoved("app:two", 300, 200),
+    );
+    expect(boxOf(state, "app:two")).toMatchObject({ x: 300, y: 200 });
+  });
+
+  it("keeps a window's top-left corner on the stage", () => {
+    // The two edges a window dragged past cannot be dragged back from: the
+    // corner you would reach for is off the screen. The right and the bottom
+    // are left alone, because a window most of the way off those still has
+    // its top-left in reach.
+    const state = after(
+      ...oneFloating,
+      ShellAction.WindowMoved("app:two", -400, -400),
+    );
+    expect(boxOf(state, "app:two")).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it("resizes a floating window to where its corner was dragged", () => {
+    const state = after(
+      ...oneFloating,
+      ShellAction.WindowResized("app:two", 800, 500),
+    );
+    expect(boxOf(state, "app:two")).toMatchObject({ height: 500, width: 800 });
+  });
+
+  it("will not resize a window smaller than what is left to grab", () => {
+    // The corner a resize is driven from is inside the window, so a window
+    // that can be made smaller than the grab is one that can be made
+    // impossible to grab again.
+    const state = after(
+      ...oneFloating,
+      ShellAction.WindowResized("app:two", 1, 1),
+    );
+    const box = boxOf(state, "app:two");
+    expect(box?.width).toBeGreaterThan(1);
+    expect(box?.height).toBeGreaterThan(1);
+  });
+
+  it("leaves every other window's box alone", () => {
+    const floated = after(...oneFloating, ShellAction.WindowFloated("app:one"));
+    const moved = reduceShell(
+      floated,
+      ShellAction.WindowMoved("app:two", 9, 9),
+    );
+    expect(boxOf(moved, "app:one")).toStrictEqual(boxOf(floated, "app:one"));
+  });
+
+  it("brings a window to the front when it is grabbed", () => {
+    // The same thing clicking one does, which is what a grab is.
+    const state = after(
+      ...oneFloating,
+      ShellAction.WindowFloated("app:one"),
+      ShellAction.WindowGrabbed("app:two"),
+    );
+    expect(state.floats.at(-1)?.id).toBe("app:two");
+    expect(state.draggingId).toBe("app:two");
+  });
+
+  it("lets go when the drag ends", () => {
+    const state = after(
+      ...oneFloating,
+      ShellAction.WindowGrabbed("app:two"),
+      ShellAction.WindowDropped(),
+    );
+    expect(state.draggingId).toBeUndefined();
+  });
+
+  it("lets go of a window that stops floating mid-drag", () => {
+    // Whatever the pointer was doing, it was doing it to a window that is now
+    // on the stage and has no box to drag.
+    const state = after(
+      ...oneFloating,
+      ShellAction.WindowGrabbed("app:two"),
+      ShellAction.WindowTabbed("app:two"),
+    );
+    expect(state.draggingId).toBeUndefined();
+  });
+
+  it("lets go of a window whose client goes away mid-drag", () => {
+    const state = after(
+      ...oneFloating,
+      ShellAction.WindowGrabbed("app:two"),
+      ShellAction.AppClosed("two"),
+    );
+    expect(state.draggingId).toBeUndefined();
+  });
+
+  it("refuses to move a window that is not floating", () => {
+    const state = after(...oneFloating);
+    expect(() =>
+      reduceShell(state, ShellAction.WindowMoved("app:one", 1, 1)),
+    ).toThrow();
+  });
+});

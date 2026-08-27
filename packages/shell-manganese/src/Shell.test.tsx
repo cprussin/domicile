@@ -6,7 +6,7 @@ import {
   registerElements,
 } from "@domicile/chrome-sdk/register-elements";
 import type { Display } from "@domicile/component-library/display-source";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
@@ -750,6 +750,141 @@ describe("Shell", () => {
 
       expect(portalFor(container, "two")?.style.zIndex).toBe("1");
       expect(portalFor(container, "one")?.style.zIndex).toBe("2");
+    });
+  });
+
+  describe("moving and resizing a floating window", () => {
+    const portalFor = (container: HTMLElement, appId: string) =>
+      container.querySelector<HTMLElement>(
+        `${APP_TAG_NAME}[app-id="${appId}"]`,
+      );
+
+    /** The sheet the pointer lands on: presentational, so it is `aria-hidden`. */
+    const sheetIn = (container: HTMLElement) =>
+      container.querySelector<HTMLElement>("main > div[aria-hidden]");
+
+    /** The same, for the tests that go on to drag it. */
+    const grabbing = (container: HTMLElement): HTMLElement => {
+      const sheet = sheetIn(container);
+      if (sheet === null) {
+        throw new Error("no grab sheet to drag");
+      } else {
+        return sheet;
+      }
+    };
+
+    /** A floating terminal, with the host saying which modifiers are held. */
+    const floated = async (held: { alt: boolean; shift: boolean }) => {
+      const rendered = renderShell();
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      bridge.emit("modifiers", { ...held, ctrl: false, logo: false });
+      return rendered;
+    };
+
+    // Two events, not one batch: taking hold is a state change, and a move
+    // dispatched in the same `act` would be handled by a sheet that has not
+    // seen it yet — which is a drag that never starts.
+    const drag = (sheet: HTMLElement, by: { x: number; y: number }): void => {
+      // `setPointerCapture` is not implemented by the test DOM, and a drag
+      // that threw there would never reach the assertions below.
+      sheet.setPointerCapture = () => undefined;
+      fireEvent.pointerDown(sheet, { clientX: 0, clientY: 0, pointerId: 1 });
+      fireEvent.pointerMove(sheet, {
+        clientX: by.x,
+        clientY: by.y,
+        pointerId: 1,
+      });
+    };
+
+    it("leaves a floating window alone while no modifier is held", () => {
+      // A window is an ordinary window the rest of the time: the pointer over
+      // it belongs to the client behind it, which is the whole point.
+      const { container } = renderShell();
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+
+      expect(sheetIn(container)).toBeNull();
+    });
+
+    it("hands the pointer to the page while Alt is held", async () => {
+      // The compositor hit-tests a rectangle and gives the pointer to the
+      // window under it, so the shell cannot see a drag over one until the
+      // window says it takes no pointer.
+      const { container } = await floated({ alt: true, shift: false });
+
+      expect(portalFor(container, "term")?.className).toContain(
+        css({ pointerEvents: "none" }),
+      );
+      expect(sheetIn(container)).not.toBeNull();
+    });
+
+    it("moves the window with an Alt+drag", async () => {
+      const { container } = await floated({ alt: true, shift: false });
+      const before = portalFor(container, "term")?.style.insetInlineStart;
+
+      drag(grabbing(container), { x: 120, y: 60 });
+
+      const after = portalFor(container, "term")?.style.insetInlineStart;
+      expect(after).not.toBe(before);
+      expect(portalFor(container, "term")?.style.inlineSize).toBe("640px");
+    });
+
+    it("resizes the window with an Alt+Shift+drag", async () => {
+      const { container } = await floated({ alt: true, shift: true });
+      const before = portalFor(container, "term")?.style.insetInlineStart;
+
+      drag(grabbing(container), { x: 120, y: 60 });
+
+      const portal = portalFor(container, "term");
+      // The corner moved, not the window.
+      expect(portal?.style.insetInlineStart).toBe(before);
+      expect(portal?.style.inlineSize).toBe("760px");
+      expect(portal?.style.blockSize).toBe("480px");
+    });
+
+    it("goes on resizing after Shift is let go mid-drag", async () => {
+      // Which it is, is read when the drag starts and then kept: letting go
+      // half way through must not turn a resize into a move, with the window
+      // jumping to wherever the pointer has got to.
+      const { container } = await floated({ alt: true, shift: true });
+      const sheet = grabbing(container);
+      sheet.setPointerCapture = () => undefined;
+      fireEvent.pointerDown(sheet, { clientX: 0, clientY: 0, pointerId: 1 });
+      bridge.emit("modifiers", {
+        alt: true,
+        ctrl: false,
+        logo: false,
+        shift: false,
+      });
+      fireEvent.pointerMove(sheet, { clientX: 100, clientY: 40, pointerId: 1 });
+
+      const portal = portalFor(container, "term");
+      expect(portal?.style.inlineSize).toBe("740px");
+      expect(portal?.style.insetInlineStart).toBe("48px");
+    });
+
+    it("makes the window see-through while it is being dragged", async () => {
+      // Drawn by the compositor rather than by the page: the SDK reports the
+      // element's `opacity` and the shader applies it to the client's own
+      // buffer, so what shows through is the desktop behind the window.
+      const { container } = await floated({ alt: true, shift: false });
+      drag(grabbing(container), { x: 10, y: 10 });
+
+      expect(portalFor(container, "term")?.className).toContain(
+        css({ opacity: 0.6 }),
+      );
+    });
+
+    it("puts the window back to normal when the drag ends", async () => {
+      const { container } = await floated({ alt: true, shift: false });
+      const sheet = grabbing(container);
+
+      drag(sheet, { x: 10, y: 10 });
+      fireEvent.pointerUp(sheet, { pointerId: 1 });
+
+      expect(portalFor(container, "term")?.className).not.toContain(
+        css({ opacity: 0.6 }),
+      );
     });
   });
 });

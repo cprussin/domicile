@@ -26,10 +26,18 @@ export type ShellWindows = ShellState & {
    * leaves the list when the host says it went.
    */
   close: (id: string) => void;
+  /** The user let go of the window they had hold of. */
+  drop: () => void;
+  /** Take hold of the floating window `id`, which also raises it. */
+  grab: (id: string) => void;
+  /** Put the floating window `id`'s top-left corner at `x`,`y`. */
+  move: (id: string, x: number, y: number) => void;
   /** Open a browser window on the stage and give it the stage. */
   openBrowser: () => void;
   /** Ask the compositor to launch a terminal onto the stage. */
   openTerminal: () => void;
+  /** Give the floating window `id` a new size. */
+  resize: (id: string, width: number, height: number) => void;
   /** Retitle the window `id` after its page navigated to `url`. */
   renameToSite: (id: string, url: string) => void;
   /** Move the window `fromId` to just before/after the window `toId`. */
@@ -133,6 +141,22 @@ export const useShellWindows = (
     dispatch(ShellAction.WindowSelected(id));
   }, []);
 
+  const grab = useCallback((id: string) => {
+    dispatch(ShellAction.WindowGrabbed(id));
+  }, []);
+
+  const drop = useCallback(() => {
+    dispatch(ShellAction.WindowDropped());
+  }, []);
+
+  const move = useCallback((id: string, x: number, y: number) => {
+    dispatch(ShellAction.WindowMoved(id, x, y));
+  }, []);
+
+  const resize = useCallback((id: string, width: number, height: number) => {
+    dispatch(ShellAction.WindowResized(id, width, height));
+  }, []);
+
   const toggleFloat = useCallback(
     (id: string) => {
       dispatch(
@@ -148,19 +172,27 @@ export const useShellWindows = (
     () => ({
       ...state,
       close,
+      drop,
+      grab,
+      move,
       openBrowser,
       openTerminal,
       renameToSite,
       reorder,
+      resize,
       select,
       toggleFloat,
     }),
     [
       close,
+      drop,
+      grab,
+      move,
       openBrowser,
       openTerminal,
       renameToSite,
       reorder,
+      resize,
       select,
       state,
       toggleFloat,

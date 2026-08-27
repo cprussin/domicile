@@ -44,3 +44,37 @@ export const floatFor = (id: string, floating: number): Float => ({
   x: ORIGIN + CASCADE * floating,
   y: ORIGIN + CASCADE * floating,
 });
+
+/**
+ * The smallest a window can be dragged down to.
+ *
+ * Not a taste: the corner a resize is driven from is inside the window, so a
+ * window that can be made smaller than the grab is one that can be made
+ * impossible to grab again.
+ */
+const SMALLEST = { height: 120, width: 240 };
+
+/**
+ * The same box, moved.
+ *
+ * Kept on the stage at the top and the left, which are the two edges a window
+ * dragged past cannot be dragged back from — the corner you would reach for is
+ * off the screen. The right and the bottom are left alone: a window dragged
+ * most of the way off those still has its top-left corner in reach.
+ */
+export const movedTo = (float: Float, x: number, y: number): Float => ({
+  ...float,
+  x: Math.max(0, x),
+  y: Math.max(0, y),
+});
+
+/** The same box, resized, never below what is left to grab. */
+export const sizedTo = (
+  float: Float,
+  width: number,
+  height: number,
+): Float => ({
+  ...float,
+  height: Math.max(SMALLEST.height, height),
+  width: Math.max(SMALLEST.width, width),
+});

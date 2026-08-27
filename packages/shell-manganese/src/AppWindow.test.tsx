@@ -61,6 +61,8 @@ describe("AppWindow", () => {
       <AppWindow
         appElements={new AppElements()}
         appId="term"
+        clickThrough={false}
+        dragging={false}
         floating={undefined}
         focused
         onScreen
@@ -74,6 +76,8 @@ describe("AppWindow", () => {
       <AppWindow
         appElements={new AppElements()}
         appId="term"
+        clickThrough={false}
+        dragging={false}
         floating={undefined}
         focused={false}
         onScreen={false}
@@ -89,6 +93,8 @@ describe("AppWindow", () => {
         <AppWindow
           appElements={appElements}
           appId="term"
+          clickThrough={false}
+          dragging={false}
           floating={undefined}
           focused
           onScreen
@@ -110,6 +116,8 @@ describe("AppWindow", () => {
         <AppWindow
           appElements={appElements}
           appId="term"
+          clickThrough={false}
+          dragging={false}
           floating={undefined}
           focused
           onScreen
