@@ -90,6 +90,7 @@ use smithay::{
 use tracing::{debug, info, warn};
 
 mod bands;
+mod chrome_frame;
 mod coalesce;
 mod compose;
 mod damage;
@@ -103,7 +104,8 @@ mod stacking;
 mod straight_alpha;
 mod timing_window;
 
-use crate::bands::{Bands, Next};
+use crate::bands::{Bands, Layered, Next};
+use crate::chrome_frame::{what_arrived, Arrival, Buffer};
 use crate::coalesce::last_of_burst;
 use crate::compose::chrome_onto_output;
 use crate::compose::shadow_quad;
@@ -1572,20 +1574,18 @@ impl DomicileCompositor {
     /// Unthrottled, unlike an app's: this is the desktop, and a frame of it
     /// dropped is the whole picture going stale rather than one window's.
     fn publish_chrome_frame(&mut self, buffer: &wl_buffer::WlBuffer, buffer_scale: i32) {
-        let Some(committed) = committed_buffer(buffer) else {
-            // A buffer this cannot read is still a *commit*, and the chrome
-            // believes it answered. Returning before the attribution below
-            // would leave the question standing with nothing left to answer
-            // it — and because a standing question is what routes a commit
-            // away from `chrome_texture`, the desktop's chrome would stop
-            // updating for the rest of the run.
-            if let Some(band) = self.bands.answered() {
-                self.bands.unanswered(band);
-                self.ask_for_the_next_band();
-            }
-            return;
+        // A buffer this cannot read is still a *commit*, and the chrome
+        // believes it answered — so it is sorted like any other frame rather
+        // than returned on. Returning early here left the question standing
+        // with nothing to answer it, and the chrome stopped updating for the
+        // rest of the run.
+        let (came, texture) = match committed_buffer(buffer) {
+            Some(committed) => match self.texture_from(committed, buffer_scale) {
+                Some(texture) => (Buffer::Textured, Some(texture)),
+                None => (Buffer::Readable, None),
+            },
+            None => (Buffer::Unreadable, None),
         };
-        let texture = self.texture_from(committed, buffer_scale);
         // Once, and again whenever what arrives changes shape. This is the one
         // line that says what the desktop is actually made of — which kind of
         // buffer, at what size, and which way up — and a picture that is the
@@ -1612,36 +1612,30 @@ impl DomicileCompositor {
                 None => info!("the chrome's frame could not be made into a texture"),
             }
         }
-        // A frame the compositor asked for is that band, and only that band:
-        // one question outstanding is what makes it unambiguous, since the
-        // page cannot label its own commits. Anything else is the chrome
-        // repainting of its own accord, which makes every band a picture of
-        // the page before it.
-        match self.bands.answered() {
-            Some(band) => match texture {
-                Some(texture) => {
-                    self.band_textures.insert(band, texture);
-                    self.ask_for_the_next_band();
-                }
-                // The frame arrived and could not be made into a texture — an
-                // shm upload that failed, or no renderer to upload to. Asking
-                // again rather than marking it answered: a band counted as
-                // answered with nothing cached for it leaves the set reporting
-                // itself complete while a layer of the desktop is missing, and
-                // the draw below would skip it without saying so.
-                None => {
-                    self.bands.unanswered(band);
-                    self.ask_for_the_next_band();
-                }
-            },
-            None => {
-                self.chrome_texture = texture;
-                if !self.bands.depths().is_empty() {
-                    self.bands.went_stale();
-                    self.band_textures.clear();
-                    self.ask_for_the_next_band();
-                }
+        // What this frame *is* — see `chrome_frame`, which is where that is
+        // decided and where it can be tested. Everything below is applying the
+        // answer to state this method owns.
+        let arrived = what_arrived(self.bands.answered(), came, !self.bands.depths().is_empty());
+        match arrived {
+            Arrival::Banded(band) => {
+                self.band_textures
+                    .insert(band, texture.expect("a banded frame made a texture"));
+                self.ask_for_the_next_band();
             }
+            Arrival::AskAgain(band) => {
+                self.bands.unanswered(band);
+                self.ask_for_the_next_band();
+            }
+            Arrival::StaleBands => {
+                self.chrome_texture = texture;
+                self.bands.went_stale();
+                self.band_textures.clear();
+                self.ask_for_the_next_band();
+            }
+            Arrival::Chrome => self.chrome_texture = texture,
+            // Nothing was read, so nothing is known and nothing changes — not
+            // even a present, which would only redraw the frame already up.
+            Arrival::Nothing => return,
         }
         self.needs_present = true;
     }
@@ -2189,7 +2183,11 @@ impl DomicileCompositor {
         // Out here rather than beside its use because the clip rectangles are
         // borrowed into the layers, so the plan has to outlive them.
         let plan = stacking::steps(&depths, &bands);
-        let mut layers: Vec<_> = placements
+        // The windows alone, in the order the scene drew them, and never
+        // reassigned. Both plans below name a window by its position in *this*
+        // list; `layers` is what each plan produces, and reading a window back
+        // out of that would be reading a position in a plan.
+        let windows: Vec<_> = placements
             .iter()
             .filter_map(|(app_id, surface_to_output, style, _)| {
                 let surface = self.textures.get(app_id)?;
@@ -2208,6 +2206,7 @@ impl DomicileCompositor {
                 })
             })
             .collect();
+        let mut layers = windows.clone();
         // What each layer covers, from the same transform it is drawn with, so
         // the reported box and the drawn pixels cannot describe different
         // rectangles. Built here rather than from the scene, which is in
@@ -2270,7 +2269,7 @@ impl DomicileCompositor {
                     // above: `depths` and `layers` are built from the same
                     // vector under the same filter, so an index `steps`
                     // produced by enumerating one addresses the other.
-                    stacking::Step::Window(at) => drawn.push(layers[*at].clone()),
+                    stacking::Step::Window(at) => drawn.push(windows[*at].clone()),
                     stacking::Step::Chrome(rects) => drawn.push(Layer {
                         alpha: 1.0,
                         // The whole quad as `&[]` rather than as one instance
@@ -2312,32 +2311,26 @@ impl DomicileCompositor {
         // than an unusual one. Until then the single `chrome_texture` above is
         // what is drawn, which is the same picture flattened.
         if self.bands.next() == Next::Complete && !self.bands.depths().is_empty() {
-            let mut ordered: Vec<(i32, usize)> = self
+            // The order is `bands`' to decide — see `Bands::drawn_with`, which
+            // is where it can be tested. What is left here is turning that
+            // order into layers, which needs the textures this owns.
+            //
+            // Indexing rather than `get`, on both arms. `drawn_with`
+            // enumerates the depths handed to it, and `depths` and `windows`
+            // are built from one vector under one filter, so a window it names
+            // is a window there. A band it names was declared, and a declared
+            // band that answered has a texture: every place that forgets one
+            // forgets the other in the same breath, and `Arrival::AskAgain` is
+            // what stops a band being counted answered without.
+            layers = self
                 .bands
-                .depths()
-                .iter()
-                .enumerate()
-                .map(|(band, depth)| (*depth, band))
+                .drawn_with(&depths)
+                .into_iter()
+                .map(|drawn| match drawn {
+                    Layered::Window(at) => windows[at].clone(),
+                    Layered::Band(band) => band_layer(&self.band_textures[&band], to_window),
+                })
                 .collect();
-            ordered.sort_unstable();
-            let mut banded = Vec::with_capacity(layers.len() + ordered.len());
-            let mut next = 0;
-            for (index, depth) in depths.iter().enumerate() {
-                let below = ordered[next..].partition_point(|(at, _)| at < depth);
-                for (_, band) in &ordered[next..next + below] {
-                    if let Some(texture) = self.band_textures.get(band) {
-                        banded.push(band_layer(texture, to_window));
-                    }
-                }
-                next += below;
-                banded.push(layers[index].clone());
-            }
-            for (_, band) in &ordered[next..] {
-                if let Some(texture) = self.band_textures.get(band) {
-                    banded.push(band_layer(texture, to_window));
-                }
-            }
-            layers = banded;
         }
 
         let Some(gpu) = self.gpu.as_mut() else {
