@@ -12,17 +12,18 @@
 //! about what a chrome may say and when is checkable against a pair of
 //! buffers, and only the process arrangement needs a compositor.
 //!
-//! # What it does not speak
+//! # Frames
 //!
-//! The frame transport. `app_frame` is a header line followed by the pixels
-//! themselves on the same socket, and this reads newline-delimited JSON with
-//! no notion of that — so a frame arrives as [`ChromeError::Unreadable`] on a
-//! line of RGBA, or worse, desynchronises the reader at whatever byte happened
-//! to be a newline and produces a `NeverCame` about the message *after* it.
+//! `app_frame` is a header line followed by that many bytes of pixels on the
+//! same socket. [`hear`] reads the header and then consumes the payload, so a
+//! reader resumes at the next message rather than at whatever byte of RGBA
+//! happened to be a newline — which is what a test that starts a real client
+//! hits immediately, and did.
 //!
-//! Nothing sends one today: a compositor only broadcasts frames for clients,
-//! and no test here starts one. The first that does needs this implemented
-//! rather than worked around.
+//! The pixels are dropped. Every question asked so far is about which app drew,
+//! at what size and how often, and all of those are in the header; a test that
+//! needs the image itself should have it handed back rather than read the
+//! socket on its own.
 
 mod connected;
 mod conversation;

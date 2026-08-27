@@ -620,8 +620,12 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
         _: &QueueHandle<Client>,
     ) {
         // A compositor that closed the window has ended this client's job, and
-        // exiting is how a check sees that it did: `e2e-close.sh` asserts on
-        // the process going away.
+        // exiting is how a check sees that it did:
+        // `a_close_from_the_chrome_reaches_the_client_and_comes_back`
+        // (`domicile-compositor/tests/apps.rs`) waits for this process to go.
+        // Zero is the only success this binary has, which is what lets that
+        // wait mean "the close arrived and was acted on" rather than "the
+        // client stopped for some reason".
         if let xdg_toplevel::Event::Close = event {
             std::process::exit(0);
         }

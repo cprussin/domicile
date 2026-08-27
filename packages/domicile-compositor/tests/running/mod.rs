@@ -35,6 +35,10 @@ const PATIENCE: Duration = Duration::from_secs(20);
 /// A compositor process and the directory it was given.
 pub struct Compositor {
     child: Child,
+    /// The directory the compositor was told to run in, which is also where
+    /// its Wayland socket lives — so a client this fixture starts is pointed
+    /// at the same one rather than at the runner's own session.
+    runtime_dir: PathBuf,
     complaint: Arc<Mutex<String>>,
     config_file: PathBuf,
     /// Held, not read: dropping it removes the run directory, and the config
@@ -46,6 +50,14 @@ pub struct Compositor {
 /// What the compositor published, as this fixture needs it.
 pub struct Session {
     pub chrome_socket: PathBuf,
+    /// The display applications connect to, as the compositor named it.
+    ///
+    /// Read from the session rather than assumed to be `wayland-1`, which is
+    /// what the scripts this replaced did — and why they each began by
+    /// deleting `$XDG_RUNTIME_DIR/wayland-*`. The compositor picks the first
+    /// free name, so the assumption held only for a directory nothing else had
+    /// ever bound in, and the deletion was there to force that.
+    pub wayland_display: String,
 }
 
 impl Compositor {
@@ -71,6 +83,17 @@ impl Compositor {
             // Its own, so a display this binds cannot collide with the
             // session the test runner itself is in.
             .env("XDG_RUNTIME_DIR", directory.path())
+            // A decoy, and load-bearing. The compositor aims what it spawns
+            // by setting `WAYLAND_DISPLAY`, and a child that inherited the
+            // compositor's instead would open on whatever session the runner
+            // is in rather than inside Domicile. Left unset, the compositor
+            // inherits the runner's — very often `wayland-1`, which is also
+            // the first name the compositor binds in a fresh runtime
+            // directory, so "inherited" and "aimed" produce the same string
+            // and the test cannot tell them apart. `e2e-spawn.sh` set this
+            // for the same reason and said so; dropping it made the port
+            // silently weaker than the script on any machine running Wayland.
+            .env("WAYLAND_DISPLAY", "not-domicile")
             // Debug, because some of what a compositor decides it never says
             // over the socket — a density it *refused* is a no-op on the wire,
             // and this log line is the only trace that path leaves. Drained on
@@ -95,12 +118,19 @@ impl Compositor {
             child,
             complaint,
             config_file: config_file.clone(),
+            runtime_dir: directory.path().to_path_buf(),
             _directory: directory,
             session: Session {
                 chrome_socket: chrome_socket.clone(),
+                // Filled in from the document itself, below. Empty until the
+                // compositor has said what it bound, because until then there
+                // is no true answer and a guess would be one a test carries
+                // into every client it starts.
+                wayland_display: String::new(),
             },
         };
-        compositor.await_session(&session_file);
+        let published = compositor.await_session(&session_file);
+        compositor.session.wayland_display = published.wayland_display;
         compositor
     }
 
@@ -116,6 +146,78 @@ impl Compositor {
             .expect("a chrome can connect to a compositor that published a session")
     }
 
+    /// Start a real Wayland client against this compositor, and watch what it
+    /// says.
+    ///
+    /// `domicile-test-client` under `--trace`, on the display the compositor
+    /// actually published rather than on `wayland-1`. Its trace is the only
+    /// window a test has into what the *client* was told — a `close`, an
+    /// `enter`, a buffer coming back — because those are events the compositor
+    /// sends outward and never mentions on the chrome socket.
+    ///
+    /// Killed on drop, like the compositor: a client that outlived its test
+    /// would hold a window open on a compositor the next test starts.
+    pub fn client(&self, title: &str) -> Client {
+        self.client_on(&self.session.wayland_display, title)
+    }
+
+    fn client_on(&self, display: &str, title: &str) -> Client {
+        let mut child = Command::new(test_client_binary())
+            .arg("--title")
+            .arg(title)
+            .arg("--trace")
+            .env("WAYLAND_DISPLAY", display)
+            .env("XDG_RUNTIME_DIR", &self.runtime_dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|why| panic!("the test client starts: {why}"));
+        let said = Arc::new(Mutex::new(String::new()));
+        drain(child.stdout.take().expect("stdout was piped"), &said);
+        drain(child.stderr.take().expect("stderr was piped"), &said);
+        Client {
+            child,
+            said,
+            title: title.to_string(),
+        }
+    }
+
+    /// The display the compositor published for applications.
+    pub fn wayland_display(&self) -> &str {
+        &self.session.wayland_display
+    }
+
+    /// A path inside this compositor's run directory, for a program it starts
+    /// to write to.
+    ///
+    /// In the run directory rather than a temporary of its own so it goes when
+    /// the compositor does — a spawned program that outlives its test would
+    /// otherwise leave a file nothing owns.
+    pub fn scratch_file(&self, name: &str) -> PathBuf {
+        self.runtime_dir.join(name)
+    }
+
+    /// Wait for `path` to exist and answer with its contents.
+    ///
+    /// For asking a spawned program what it saw. Fails with what the
+    /// compositor said, because the interesting failure is not "no file" but
+    /// whatever the compositor did instead of starting the program.
+    pub fn await_file(&self, path: &std::path::Path) -> String {
+        let until = Instant::now() + PATIENCE;
+        loop {
+            if let Ok(said) = std::fs::read_to_string(path) {
+                return said;
+            }
+            assert!(
+                Instant::now() < until,
+                "nothing wrote {} in {PATIENCE:?}; the compositor said:\n{}",
+                path.display(),
+                self.complaint()
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     /// Rewrite the config the compositor is watching.
     ///
     /// By rename, which is how an editor saves and what the compositor's
@@ -128,8 +230,15 @@ impl Compositor {
         std::fs::rename(&staging, &self.config_file).expect("it replaces the old one");
     }
 
-    /// Wait for the session document, or say why there will not be one.
-    fn await_session(&mut self, session_file: &std::path::Path) {
+    /// Wait for the session document, and answer with the display it names.
+    ///
+    /// The document is published by rename, so it is either absent or whole —
+    /// which is what makes reading it the moment it exists safe, and why this
+    /// waits on the file rather than on the socket it describes.
+    fn await_session(
+        &mut self,
+        session_file: &std::path::Path,
+    ) -> domicile_launch::session::Session {
         let until = Instant::now() + PATIENCE;
         while !session_file.exists() {
             if let Some(status) = self.child.try_wait().expect("the child is waitable") {
@@ -144,6 +253,20 @@ impl Compositor {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
+        let published = std::fs::read_to_string(session_file).expect("the session is readable");
+        // Through the launcher's own type rather than by reaching into the
+        // JSON, so a field this reads is one a shell would have got too. A
+        // session that will not parse is the compositor having published
+        // something no shell could start against, which is a failure of the
+        // subject rather than of the fixture.
+        serde_json::from_str::<domicile_launch::session::Session>(&published).unwrap_or_else(
+            |why| {
+                let said = self.complaint();
+                panic!(
+                "the compositor published a session no shell could read: {why}\n{published}\n{said}"
+            )
+            },
+        )
     }
 
     /// Wait until the compositor has said something containing `pattern`.
@@ -344,4 +467,78 @@ fn what_a_pipe_was_cut_off_mid_character_saying_is_still_reported() {
         assert!(Instant::now() < until, "the tail never arrived: {text:?}");
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+/// A `domicile-test-client` talking to the compositor.
+pub struct Client {
+    child: Child,
+    said: Arc<Mutex<String>>,
+    title: String,
+}
+
+impl Client {
+    /// Wait for the client to exit, and answer whether it did so cleanly.
+    ///
+    /// The end of `e2e-close`'s question: a client told to close is one that
+    /// *goes*, and a client still running is the failure that check exists
+    /// for. Bounded, because a client that ignores the request would otherwise
+    /// hang the run rather than fail it.
+    pub fn wait_for_exit(&mut self) -> bool {
+        let until = Instant::now() + PATIENCE;
+        loop {
+            match self.child.try_wait().expect("the client is waitable") {
+                Some(status) => return status.success(),
+                None if Instant::now() >= until => panic!(
+                    "the client {:?} was still running after {PATIENCE:?}:\n{}",
+                    self.title,
+                    self.trace()
+                ),
+                None => std::thread::sleep(Duration::from_millis(20)),
+            }
+        }
+    }
+
+    /// Whatever the client has traced so far.
+    pub fn trace(&self) -> String {
+        let said = self.said.lock().expect("nothing panics holding this");
+        if said.trim().is_empty() {
+            "(it said nothing)".to_string()
+        } else {
+            said.clone()
+        }
+    }
+}
+
+impl Drop for Client {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Where `domicile-test-client` was built.
+///
+/// `CARGO_BIN_EXE_` covers only the binaries of the crate under test, so the
+/// client — another crate's — has to be found rather than handed over. Its
+/// sibling of the compositor binary is where cargo puts it, and taking the
+/// path from the compositor's own means it follows a `--release` or a custom
+/// `--target-dir` without this knowing about either.
+///
+/// Checked rather than assumed: `cargo test -p domicile-compositor` does not
+/// build another crate's binary — cargo has no stable way to depend on one, so
+/// it has to be asked for separately — and a missing file would otherwise
+/// surface as a bare `NotFound` against a path nobody in the test wrote.
+fn test_client_binary() -> PathBuf {
+    let compositor = PathBuf::from(env!("CARGO_BIN_EXE_domicile-compositor"));
+    let client = compositor
+        .parent()
+        .expect("the compositor binary is in a directory")
+        .join("domicile-test-client");
+    assert!(
+        client.exists(),
+        "{} is not built; `cargo test --workspace` builds it, \
+         or `cargo build -p domicile-test-client` on its own",
+        client.display()
+    );
+    client
 }

@@ -67,7 +67,6 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/e2e-chrome.sh          # client -> host -> mock chrome, and the buffer release
 ./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow
 ./scripts/e2e-late-chrome.sh     # a chrome arriving to a client already running (reload)
-./scripts/e2e-spawn.sh           # a spawned client is aimed at *our* display
 ./scripts/e2e-input.sh           # keyboard + pointer reach a client (copy path)
 ./scripts/e2e-stuck-key.sh       # a key held when the page reloads is not left down in the seat
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
@@ -77,7 +76,6 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/e2e-hidpi.sh           # a 2x chrome makes a client draw at 2x, and the frame says so
 ./scripts/e2e-chrome-layer.sh    # the chrome is told from the apps, and keeps the keyboard
 ./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel
-./scripts/e2e-close.sh           # a close request reaches the client, and the window leaves when it goes
 ./scripts/e2e-chrome-without-a-host.sh   # a chrome whose host socket is dead says so once and stops
 ./scripts/e2e-two-displays.sh    # one wl_output per configured display, at its own size and scale
 ./scripts/e2e-reload-displays.sh # a display *added* to the config is taken up while it runs
@@ -184,7 +182,9 @@ below.
   beside the host compositor's. A client we spawn is therefore given
   `WAYLAND_DISPLAY` **explicitly** (`client_command`); inheriting ours opens the
   app on the host desktop, which reads as "the compositor isn't compositing".
-  `e2e-spawn.sh` guards this with a decoy display.
+  `a_spawned_program_is_pointed_at_this_compositor`
+  (`domicile-compositor/tests/apps.rs`) guards this, and the fixture gives the
+  compositor a decoy `WAYLAND_DISPLAY` so an inherited one cannot look right.
 - **The cursor the user sees belongs to the session Domicile's window is in.** A
   client asking for a shape is a request to pass on to winit; nothing about it is
   visible otherwise.

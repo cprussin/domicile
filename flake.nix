@@ -444,14 +444,12 @@
           e2e-shell-launch = "e2e-shell-launch.sh";
           e2e-late-chrome = "e2e-late-chrome.sh";
           e2e-chrome-without-a-host = "e2e-chrome-without-a-host.sh";
-          e2e-spawn = "e2e-spawn.sh";
           e2e-input = "e2e-input.sh";
           e2e-dmabuf = "e2e-dmabuf.sh";
           e2e-chrome-layer = "e2e-chrome-layer.sh";
           e2e-hidpi = "e2e-hidpi.sh";
           probe-transparency = "probe-transparency.sh";
           e2e-slow-chrome = "e2e-slow-chrome.sh";
-          e2e-close = "e2e-close.sh";
           e2e-compose = "e2e-compose.sh";
           e2e-stuck-key = "e2e-stuck-key.sh";
           e2e-two-displays = "e2e-two-displays.sh";
@@ -464,7 +462,6 @@
           e2e-window-alpha = "e2e-window-alpha.sh";
           smoke-compositor = "smoke-compositor.sh";
           test-out-of-tree-shell = "test-out-of-tree-shell.sh";
-          test-every-launch-names-a-shell = "test-every-launch-names-a-shell.sh";
         };
     in
     {

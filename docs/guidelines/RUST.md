@@ -24,8 +24,15 @@ pulls Smithay and the native Wayland libraries, so a plain `cargo test` in the
 core shell stays fast and Smithay-free. Build and test it explicitly:
 
 ```sh
+nix develop .#full -c cargo build -p domicile-test-client
 nix develop .#full -c cargo test -p domicile-compositor
 ```
+
+The build first because its integration tests start a real Wayland client, and
+`-p domicile-compositor` does not produce one: cargo has no stable way for a
+crate to depend on another crate's *binary*. `cargo test --workspace` builds
+every binary and so needs neither line. The fixture fails with this command in
+its message rather than a bare `NotFound`.
 
 Keep that split intact. A new crate that needs GPU, Wayland, or CEF belongs
 outside `default-members` with a comment saying why.

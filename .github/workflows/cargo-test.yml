@@ -94,4 +94,11 @@ jobs:
           echo "::error::apt did not succeed in three attempts" >&2
           exit 1
       - run: cargo clippy -p domicile-compositor --all-targets -- -D warnings
+      # The compositor's integration tests start a real Wayland client, and
+      # `-p domicile-compositor` does not build one: a dev-dependency on that
+      # crate gets its *library*, which is not the thing a test can execute.
+      # Cargo has no stable way to depend on another crate's binary, so it is
+      # asked for here. The fixture fails with this command in its message
+      # rather than a bare `NotFound` if it is ever missing again.
+      - run: cargo build -p domicile-test-client
       - run: cargo test -p domicile-compositor

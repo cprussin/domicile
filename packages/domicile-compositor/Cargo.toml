@@ -49,4 +49,7 @@ features = [
 
 [dev-dependencies]
 domicile-test-chrome = { path = "../domicile-test-chrome" }
+# The fixture reads the published session to learn which display the
+# compositor bound, through `domicile-launch`'s own type.
+serde_json.workspace = true
 tempfile.workspace = true
