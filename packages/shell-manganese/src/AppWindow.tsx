@@ -3,14 +3,25 @@ import { useEffect, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
 import type { AppElements } from "./app-elements";
-import { windowStyles } from "./window-styles";
+import type { Floating } from "./shell-state";
+import { floatPlacement, windowStyles } from "./window-styles";
 
 type Props = {
-  /** Whether this window has the stage. */
-  active: boolean;
   appElements: AppElements;
   /** The host's name for the client this portal shows. */
   appId: string;
+  /** How this window floats over the stage, or `undefined` while it is on it. */
+  floating: Floating | undefined;
+  /** Whether the user is working in this window, so it takes the keyboard. */
+  focused: boolean;
+  /**
+   * Whether this window is on screen at all.
+   *
+   * Not the same as being focused: a floating window is on screen whatever
+   * else the user is doing, and a tabbed one is on screen only while its tab
+   * is the selected one.
+   */
+  onScreen: boolean;
 };
 
 /**
@@ -19,7 +30,13 @@ type Props = {
  * ordinary CSS. Hiding is what takes it off the stage: a hidden element has no
  * box, so the SDK reports it to the host as no longer composited.
  */
-export const AppWindow = ({ active, appElements, appId }: Props) => {
+export const AppWindow = ({
+  appElements,
+  appId,
+  floating,
+  focused,
+  onScreen,
+}: Props) => {
   // `null` rather than `undefined` because that is what React's ref API hands
   // a callback ref on unmount.
   const [portal, setPortal] = useState<DomicileAppElement | null>(null);
@@ -38,20 +55,29 @@ export const AppWindow = ({ active, appElements, appId }: Props) => {
     }
   }, [appElements, appId, portal]);
 
-  // The window that lands on the stage takes the keyboard with it, so the user
-  // can type into what they just opened or switched to without clicking it.
+  // The window the user is working in takes the keyboard with it, so they can
+  // type into what they just opened, switched to, or brought to the front
+  // without clicking it.
   useEffect(() => {
-    if (active && portal !== null) {
+    if (focused && portal !== null) {
       portal.focusApp();
     }
-  }, [active, portal]);
+  }, [focused, portal]);
 
   return (
     <domicile-app
       app-id={appId}
       className={cx(windowStyles, appStyles)}
-      hidden={!active}
+      hidden={!onScreen}
       ref={setPortal}
+      // Inline because the box is a runtime number and Panda reads literals;
+      // `window-styles` owns everything static. `undefined` leaves the window
+      // filling the stage, which is where a window that is not floating is.
+      style={
+        floating === undefined
+          ? undefined
+          : floatPlacement(floating.float, floating.depth)
+      }
     />
   );
 };

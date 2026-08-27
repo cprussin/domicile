@@ -392,7 +392,12 @@ describe("Shell", () => {
       // `window-styles.ts` would fail a rule that had not changed.
       const portal = document.querySelector(APP_TAG_NAME);
       expect(portal?.className).toContain(css({ position: "absolute" }));
-      expect(portal?.className).toContain(css({ inset: 0 }));
+      // Four declarations rather than `inset: 0`, because a floating window
+      // overrides them one at a time — see `window-styles`.
+      expect(portal?.className).toContain(css({ insetBlockStart: 0 }));
+      expect(portal?.className).toContain(css({ insetInlineStart: 0 }));
+      expect(portal?.className).toContain(css({ blockSize: "100%" }));
+      expect(portal?.className).toContain(css({ inlineSize: "100%" }));
     });
 
     it("gives an idle screen's clock the whole of that screen", () => {
@@ -582,7 +587,7 @@ describe("Shell", () => {
       expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
     });
 
-    it("claims Alt+Enter from the Electron host, with and without Shift", () => {
+    it("claims every chord it answers from the Electron host", () => {
       // The compositor's claim covers a Wayland client holding the keyboard,
       // and not a page the chrome embeds: a `<webview>` is a browsing context
       // of its own, so its keys never reach this page. Where Domicile is not
@@ -592,6 +597,7 @@ describe("Shell", () => {
       expect(host.claims).toStrictEqual([
         { alt: true, ctrl: false, key: "Enter", meta: false, shift: false },
         { alt: true, ctrl: false, key: "Enter", meta: false, shift: true },
+        { alt: true, ctrl: false, key: "Tab", meta: false, shift: false },
       ]);
     });
 
@@ -664,6 +670,86 @@ describe("Shell", () => {
       renderShell();
       await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
       expect(tabNames()).toStrictEqual(["www.google.com"]);
+    });
+  });
+
+  describe("floating windows", () => {
+    const portalFor = (container: HTMLElement, appId: string) =>
+      container.querySelector<HTMLElement>(
+        `${APP_TAG_NAME}[app-id="${appId}"]`,
+      );
+
+    it("claims Alt+Tab from the compositor", () => {
+      // The same reason Alt+Enter is claimed: the window being floated is the
+      // one holding the keyboard, so the page hears nothing.
+      renderShell();
+
+      expect(bridge.calls).toContainEqual([
+        "grabShortcut",
+        { alt: true, ctrl: false, key: 15, logo: false, shift: false },
+      ]);
+    });
+
+    it("floats on an Alt+Tab the compositor hands back", () => {
+      // The path that matters most: once a window has the keyboard the page
+      // hears nothing, so this is the only one that fires in a real desktop.
+      const { container } = renderShell();
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      act(() => {
+        bridge.emit("shortcut", {
+          shortcut: {
+            alt: true,
+            ctrl: false,
+            key: 15,
+            logo: false,
+            shift: false,
+          },
+        });
+      });
+
+      expect(portalFor(container, "term")?.style.zIndex).toBe("1");
+    });
+
+    it("takes the window the user is working in out of the rail", async () => {
+      const { container } = renderShell();
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+
+      const portal = portalFor(container, "term");
+      // A box of its own rather than the stage's, and above the stage. The
+      // `z-index` is on the element itself because that is what the SDK
+      // reports and what the compositor stacks the client's surface by.
+      expect(portal?.style.insetInlineStart).not.toBe("");
+      expect(portal?.style.zIndex).toBe("1");
+      // And still on screen: a float is drawn over the stage whatever the
+      // stage is showing.
+      expect(portal).toBeVisible();
+    });
+
+    it("puts a floating window back on the stage", async () => {
+      const { container } = renderShell();
+      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+
+      const portal = portalFor(container, "term");
+      // No box of its own, so `window-styles` has it filling the stage again.
+      expect(portal?.style.insetInlineStart).toBe("");
+      expect(portal?.style.zIndex).toBe("");
+    });
+
+    it("stacks each float above the one before it", async () => {
+      const { container } = renderShell();
+      bridge.emit("app_appeared", { app_id: "one", title: "One" });
+      bridge.emit("app_appeared", { app_id: "two", title: "Two" });
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      // A click on the other window is what the compositor reports, and it is
+      // what says which window the next Alt+Tab is about.
+      bridge.emit("focus_changed", { app_id: "one" });
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+
+      expect(portalFor(container, "two")?.style.zIndex).toBe("1");
+      expect(portalFor(container, "one")?.style.zIndex).toBe("2");
     });
   });
 });

@@ -12,14 +12,25 @@ import { useEffect, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
-import { windowStyles } from "./window-styles";
+import type { Floating } from "./shell-state";
+import { floatPlacement, windowStyles } from "./window-styles";
 import { withScheme } from "./with-scheme";
 
 type Props = {
-  /** Whether this window has the stage. */
-  active: boolean;
+  /** How this window floats over the stage, or `undefined` while it is on it. */
+  floating: Floating | undefined;
+  /** Whether the user is working in this window, so it takes the keyboard. */
+  focused: boolean;
   /** Called with the address on show whenever the page navigates. */
   onNavigate: (url: string) => void;
+  /**
+   * Whether this window is on screen at all.
+   *
+   * Not the same as being focused: a floating window is on screen whatever
+   * else the user is doing, and a tabbed one is on screen only while its tab
+   * is the selected one.
+   */
+  onScreen: boolean;
   /** Where the window starts. The view owns navigation from there. */
   src: string;
 };
@@ -32,7 +43,13 @@ type Props = {
  * every other control in the shell. The view element owns the navigation
  * itself; this is the chrome the user drives it with.
  */
-export const BrowserWindow = ({ active, onNavigate, src }: Props) => {
+export const BrowserWindow = ({
+  floating,
+  focused,
+  onNavigate,
+  onScreen,
+  src,
+}: Props) => {
   // `null` rather than `undefined` because that is what React's ref API hands
   // a callback ref on unmount.
   const [view, setView] = useState<DomicileWebviewElement | null>(null);
@@ -56,13 +73,13 @@ export const BrowserWindow = ({ active, onNavigate, src }: Props) => {
     }
   }, [onNavigate, view]);
 
-  // Taking the stage means taking the keyboard, and a browser window's belongs
-  // to its page rather than to the chrome around it.
+  // The window the user is working in takes the keyboard, and a browser
+  // window's belongs to its page rather than to the chrome around it.
   useEffect(() => {
-    if (active && view !== null) {
+    if (focused && view !== null) {
       view.focus();
     }
-  }, [active, view]);
+  }, [focused, view]);
 
   // Every control here drives the view element, which is rendered by this
   // component and so is attached by the time anyone can press one. A press
@@ -90,7 +107,15 @@ export const BrowserWindow = ({ active, onNavigate, src }: Props) => {
     <section
       aria-label="Browser"
       className={cx(windowStyles, browserStyles)}
-      hidden={!active}
+      hidden={!onScreen}
+      // Inline because the box is a runtime number and Panda reads literals;
+      // `window-styles` owns everything static. `undefined` leaves the window
+      // filling the stage, which is where a window that is not floating is.
+      style={
+        floating === undefined
+          ? undefined
+          : floatPlacement(floating.float, floating.depth)
+      }
     >
       <form className={addressBarStyles} onSubmit={handleSubmit}>
         <Button

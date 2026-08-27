@@ -22,6 +22,7 @@ import type { AppElements } from "./app-elements";
 import { BrowserWindow } from "./BrowserWindow";
 import { Clock } from "./Clock";
 import type { Chord } from "./chord";
+import { floatingOf } from "./shell-state";
 import { WindowKind } from "./shell-window";
 import { useShellWindows } from "./useShellWindows";
 import { useWindowSizedToDesktop } from "./useWindowSizedToDesktop";
@@ -38,6 +39,9 @@ const ALT_ENTER = {
   shift: false,
 };
 
+/** Alt+Tab, the same way. 15 is Tab. */
+const ALT_TAB = { ...ALT_ENTER, key: 15 };
+
 /**
  * The same combination as the page names its keys, which is what the Electron
  * host matches an embedded page's keys against — see `chord`.
@@ -49,6 +53,9 @@ const ALT_ENTER_CHORD: Chord = {
   meta: false,
   shift: false,
 };
+
+/** And Alt+Tab as the page names it. */
+const ALT_TAB_CHORD: Chord = { ...ALT_ENTER_CHORD, key: "Tab" };
 
 type ChromeProps = {
   appElements: AppElements;
@@ -100,13 +107,16 @@ export const Shell = ({ appElements, bridge, displays }: Props) => (
  */
 const Desktop = ({ appElements, bridge }: ChromeProps) => {
   const {
+    activeId,
     close,
+    floats,
     openBrowser,
     openTerminal,
     renameToSite,
     reorder,
     select,
     shownId,
+    toggleFloat,
     windows,
   } = useShellWindows(bridge, appElements);
 
@@ -122,6 +132,16 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
     [openBrowser, openTerminal],
   );
 
+  // Alt+Tab -> the window the user is working in leaves the rail, or goes back
+  // into it. The window rather than the stage: once one is floating, the stage
+  // is showing something else, and a toggle that acted on the stage could
+  // never put a float back.
+  const float = useCallback(() => {
+    if (activeId !== undefined) {
+      toggleFloat(activeId);
+    }
+  }, [activeId, toggleFloat]);
+
   // Claimed from the compositor as well as listened for in the page. Where
   // Domicile draws this window, a key goes to whatever holds the keyboard —
   // so once a window is on screen the page hears nothing, which is exactly
@@ -132,13 +152,18 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
   useEffect(() => {
     bridge.grabShortcut(ALT_ENTER);
     bridge.grabShortcut({ ...ALT_ENTER, shift: true });
+    bridge.grabShortcut(ALT_TAB);
     // `on` returns the bridge for chaining, so it is deliberately not returned
     // as a cleanup — there is one handler per message type and re-registering
     // replaces it.
     bridge.on("shortcut", ({ shortcut }) => {
-      launch(shortcut.shift);
+      if (shortcut.key === ALT_TAB.key) {
+        float();
+      } else {
+        launch(shortcut.shift);
+      }
     });
-  }, [bridge, launch]);
+  }, [bridge, float, launch]);
 
   // And claimed from the Electron host, which covers the one keyboard neither
   // of those reaches: a `<webview>` is a browsing context of its own, so a key
@@ -152,31 +177,45 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
     if (host !== undefined) {
       host.grab(ALT_ENTER_CHORD);
       host.grab({ ...ALT_ENTER_CHORD, shift: true });
+      host.grab(ALT_TAB_CHORD);
       host.onPressed((chord) => {
-        launch(chord.shift);
+        if (chord.key === ALT_TAB_CHORD.key) {
+          float();
+        } else {
+          launch(chord.shift);
+        }
       });
     }
-  }, [launch]);
+  }, [float, launch]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       // Every modifier is part of the combination, the way the compositor's
       // claim and the host's are: Ctrl+Alt+Enter is a chord nobody claimed,
       // and the page is the only path that would otherwise answer it.
-      if (
-        event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        event.key === "Enter"
-      ) {
-        // Taken from the page whether or not it opens anything: the chord is
+      if (event.altKey && !event.ctrlKey && !event.metaKey) {
+        // Taken from the page whether or not it does anything: the chord is
         // the desktop's for as long as it is held. A held key repeats tens of
-        // times a second and only the first of them opens a window — the
-        // compositor never sees a repeat at all, and the host takes them out
-        // of a guest's stream, so one press opens one window on every path.
-        event.preventDefault();
-        if (!event.repeat) {
-          launch(event.shiftKey);
+        // times a second and only the first of them acts — the compositor
+        // never sees a repeat at all, and the host takes them out of a guest's
+        // stream, so one press does one thing on every path.
+        switch (event.key) {
+          case "Enter": {
+            event.preventDefault();
+            if (!event.repeat) {
+              launch(event.shiftKey);
+            }
+            break;
+          }
+          case "Tab": {
+            // And the browser's own focus ring, which Tab would otherwise
+            // move out from under the window the user is floating.
+            event.preventDefault();
+            if (!event.repeat) {
+              float();
+            }
+            break;
+          }
         }
       }
     };
@@ -184,7 +223,7 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
     return () => {
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [launch]);
+  }, [float, launch]);
 
   // The window this is drawn in is the main process's and the desktop is the
   // compositor's, so the size crosses back over the host IPC. Nothing happens
@@ -197,7 +236,10 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
       <OnTheFirstScreen>
         <div className={rootStyles}>
           <TabRail
-            activeId={shownId ?? NO_WINDOW}
+            // The window the user is working in, which is not always the
+            // one on the stage: a floating window is reached by its tab and
+            // has to look reached.
+            activeId={activeId ?? NO_WINDOW}
             brand={<span className={brandStyles}>Domicile</span>}
             footer={
               <div className={footerStyles}>
@@ -223,26 +265,43 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
             }))}
           />
           <main className={stageStyles}>
+            {/*
+              One list, floating and tabbed alike, in the order they were
+              opened. Two lists would read better and cost a window its
+              contents: React reconciles by position, so a window moving from
+              one to the other unmounts and remounts — a portal re-created
+              blank, and an embedded page reloaded to the URL it opened at.
+              Floating is a matter of where a window is laid out, so that is
+              all that changes here.
+            */}
             {windows.map((window) => {
+              const floating = floatingOf(floats, window.id);
+              // On screen while it is floating whatever the stage is showing,
+              // and while it is the one the stage shows.
+              const onScreen = floating !== undefined || window.id === shownId;
               switch (window.kind) {
                 case WindowKind.App: {
                   return (
                     <AppWindow
-                      active={window.id === shownId}
                       appElements={appElements}
                       appId={window.appId}
+                      floating={floating}
+                      focused={window.id === activeId}
                       key={window.id}
+                      onScreen={onScreen}
                     />
                   );
                 }
                 case WindowKind.Browser: {
                   return (
                     <BrowserWindow
-                      active={window.id === shownId}
+                      floating={floating}
+                      focused={window.id === activeId}
                       key={window.id}
                       onNavigate={(url) => {
                         renameToSite(window.id, url);
                       }}
+                      onScreen={onScreen}
                       src={window.src}
                     />
                   );
