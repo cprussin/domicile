@@ -66,8 +66,9 @@ for either.
 
 `packages/domicile-protocol` and `@domicile/chrome-sdk/protocol` describe the
 same wire format from opposite sides. A change to either is a change to both,
-in the same PR, with `PROTOCOL_VERSION` bumped when the change is breaking —
-see the versioning rules in
+in the same PR. Do **not** bump `PROTOCOL_VERSION` for it: the constant is
+pinned at 1 while nothing ships the two halves apart, and its own docs say what
+would change that — see also the versioning rules in
 [/docs/guidelines/DATA.md](/docs/guidelines/DATA.md). Keep the crate
 dependency-light (serde only) so it stays a clean, portable description of the
 protocol.

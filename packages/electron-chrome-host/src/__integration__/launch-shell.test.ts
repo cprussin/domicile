@@ -29,7 +29,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 cat >"$SESSION.new" <<JSON
-{ "protocol": 17, "chrome_socket": "$CHROME_SOCKET",
+{ "protocol": 1, "chrome_socket": "$CHROME_SOCKET",
   "wayland_display": "wayland-stand-in",
   "chrome_wayland_display": "wayland-stand-in-chrome",
   "composited": true }

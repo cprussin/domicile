@@ -1,4 +1,4 @@
-{"type":"welcome","protocol_version":17}
+{"type":"welcome","protocol_version":1}
 {"type":"render_band","band":2}
 {"type":"shortcut","shortcut":{"key":24,"alt":false,"ctrl":true,"shift":false,"logo":true}}
 {"type":"app_appeared","app_id":"app-1","title":null,"size":null}

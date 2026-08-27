@@ -38,7 +38,7 @@ copies per frame was its cost before damage tracking; a steady-state frame now
 reads and sends only what changed, and full-frame is what a first frame, a
 resize or a hand-over still costs.
 
-The wire protocol is at `PROTOCOL_VERSION = 17`.
+The wire protocol is at `PROTOCOL_VERSION = 1`.
 
 Run the suites for their counts rather than reading one here. A number written
 down goes stale on the next commit that adds a test, and this one went stale

@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
-export const PROTOCOL_VERSION = 17;
+export const PROTOCOL_VERSION = 1;
 
 const sizeSchema = z.tuple([z.number(), z.number()]);
 

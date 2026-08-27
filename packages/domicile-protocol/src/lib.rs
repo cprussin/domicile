@@ -9,142 +9,27 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version this build speaks.
 ///
-/// v17 added `app_titled`: a client names its window with `set_title` after it
-/// has one, so the name was never in the announcement and nothing carried it
-/// afterwards. Every window was nameless to a chrome that shows names.
+/// Pinned at 1, and there is no version history above it any more. The host
+/// and every shipped chrome are built from this repo at the same commit, so
+/// there are no two builds that can disagree and nothing for a number to
+/// protect. Bumping it per wire change was bookkeeping about a skew that
+/// cannot happen, and the history was an argument for refusing handshakes
+/// nobody makes.
 ///
-/// A bump although the message is new rather than changed, for the reason v13
-/// and v14 give: what a host that does not send it looks like from a chrome is
-/// silence. A v17 chrome would sit with every tab reading `app-1` and nothing
-/// anywhere saying why. `negotiate` matching exactly is what turns that into a
-/// chrome that refuses to start and names the two versions that disagreed.
+/// It starts mattering when a chrome ships separately from the host — an
+/// outside shell, or a released binary someone upgrades one half of. That is
+/// when to start bumping this and writing down why. The rule to loosen then is
+/// written out three times, once per peer that has to apply it: [`negotiate`]
+/// here, `BridgeClient`'s welcome check in `@domicile/chrome-sdk`, and `greet`
+/// in `domicile-test-chrome`.
 ///
-/// v16 made `app_appeared`'s `size` optional, because a client that has just
-/// mapped has not said one. It was `[0.0, 0.0]`, which is a size rather than
-/// the absence of one — and a chrome that read it as the client's answer
-/// opened a window with no box: never composited, because a zero-sized element
-/// reports itself invisible, and never configured to a size to redraw at. A
-/// v15 chrome would read `null` where it expects two numbers, so the versions
-/// are not interchangeable.
-///
-/// v14 is the same shape as v13 and a different promise: the host answers
-/// every `hello` with `displays`, and re-sends it whenever the desktop
-/// changes. v12 added the message and nothing sent it; a v13 host is still one
-/// that may never describe a desktop at all.
-///
-/// A bump although no message changed. What separates a host that keeps this
-/// promise from one that does not is host behaviour with no message of its
-/// own, so it reaches the chrome only as silence: it waits for a `displays`
-/// that is not coming, and nothing anywhere says why. `negotiate` matching
-/// exactly is what lets the version carry that difference — turning the
-/// silence into a chrome that refuses to start and says so, which is the
-/// difference between a shell laying out `<Screen>`s against a host that has
-/// not described the desktop *yet* and one that never will.
-///
-/// This entry argues only its own bump. Earlier attempts to justify it from
-/// what some set of other bumps had in common were each false about an entry
-/// below, and no property other bumps share is what justifies this one.
-///
-/// v13 added `close_app`: the chrome can ask a client to close its window, so
-/// a native window's tab gets the same X button a chrome's own window has.
-///
-/// A bump although a v12 host would merely ignore the message, because that is
-/// precisely what it does — silently. The button would be on screen and do
-/// nothing, with no way for the page to tell that the host it is talking to
-/// has no answer for it; `negotiate` matching exactly is what turns that into
-/// a chrome that says why it did not start.
-///
-/// v12 added `displays`: the desktop is a list of displays the shell lays out
-/// against, rather than one screen it can only assume. The chrome is one page
-/// spanning all of them and puts things on one by position, so without this it
-/// has nothing to position against.
-///
-/// A bump although nothing a v11 chrome sends changes, for the reason v11 had:
-/// `negotiate` matches exactly, so a new host message is observable to an older
-/// chrome as silence — and a chrome that never hears `displays` cannot tell a
-/// single-display desktop from a host too old to describe one.
-///
-/// The bump made room for the message; it did not make the promise. No v12 or
-/// v13 host ever answered `hello` with `displays` — that is v14.
-///
-/// v11 added `focus_changed`: the chrome is told who holds the keyboard, which
-/// it could not work out for itself once a click or a closing window moved
-/// focus without it asking.
-///
-/// A bump although nothing a v10 chrome sends changes, because `negotiate`
-/// matches exactly and a new *host* message is observable to an older chrome
-/// as silence. Left unbumped, a v10 chrome would start, mark whichever window
-/// it last asked for as active, and be wrong from the first click onwards —
-/// with nothing anywhere to say why.
-///
-/// v10 added `region` to `app_frame`: a frame carries only the part of the
-/// buffer the client damaged, so the copy path stops paying megabytes for a
-/// blinking cursor. A v9 chrome would draw those pixels as if they were the
-/// whole buffer, which is a window drawn from its own top-left corner
-/// outwards — visibly wrong rather than merely stale.
-///
-/// v9 added `takes_pointer` to `place_portal`: the chrome reports an element's
-/// `pointer-events`, so a window the engine painted something over stops
-/// swallowing the clicks meant for what covers it.
-///
-/// A bump rather than a silent addition, though the field defaults. The
-/// default is for reading a message that predates the field, not for admitting
-/// a chrome that would send one: `negotiate` matches exactly, so a v8 chrome
-/// is turned away at `hello` and says so. Left unbumped it would instead have
-/// started, placed every window as taking the pointer, and had its menus
-/// swallowed by the windows under them with nothing anywhere to say why —
-/// which is worse than not starting.
-///
-/// v8 added `native` to `place_portal` and `app_composited` alongside
-/// `app_frame`: the chrome can see a computed style the compositor's shaders
-/// have no answer for, and says so, and that window alone goes back down the
-/// copy path — and the compositor answers when it has taken a window back, so
-/// the chrome knows when the pixels it holds are stale.
-///
-/// A bump rather than a silent addition, though `native` defaults and
-/// `app_composited` can be ignored. A v7 chrome would never send `native:
-/// false`, so a window it styled with a `filter` would be drawn natively and
-/// wrongly, and it would never drop a canvas it had been told to — leaving a
-/// still of a window over the live one. Both are pictures that are quietly
-/// wrong, which is worse than a chrome that is turned away at `hello` and says
-/// so.
-///
-/// v7 added `shadow` to `place_portal`, for the same reason v6 added the other
-/// two: the compositor draws the window, so a `box-shadow` on the element is
-/// its to cast.
-///
-/// `negotiate` matches exactly, so an older chrome is turned away at the
-/// handshake rather than running with the fields it knows — the version is what
-/// the two halves agree on, not a floor. The `serde` defaults on the newer
-/// fields are for reading a message that predates them, not for admitting a
-/// chrome that would send one.
-///
-/// v6 added `corner_radius` and `opacity` to `place_portal`: the compositor
-/// draws app windows itself, so a `border-radius` or an `opacity` on the
-/// element is no longer something the engine applies to a picture of the
-/// window — it has to be told.
-///
-/// v5 added `grab_shortcut` and `shortcut`: the chrome claims key combinations
-/// and the compositor takes matching presses out of the stream before anyone is
-/// given them. A v4 chrome never claims any, so its own shortcuts stop working
-/// the moment a window takes the keyboard — which is what this fixes rather
-/// than a difference in how a message is read.
-///
-/// v4 made the frame path scale-aware: the chrome reports its
-/// `device_pixel_ratio`, and `app_frame` says at what `scale` its pixels were
-/// drawn so the chrome can size a canvas backing store in device pixels while
-/// laying the element out in logical ones. A v3 chrome would take a scaled
-/// frame's pixel dimensions for logical ones and mis-map every pointer event,
-/// so the versions are not interchangeable.
-///
-/// v3 moved an app's pixels out of the JSON: `app_frame` now carries a byte
-/// count and the pixels follow the header line as raw bytes. A v2 chrome would
-/// read those bytes as messages, so the versions are not interchangeable.
-///
-/// v2 added `resize_app`, `app_cursor`, and the high-resolution scroll fields
-/// on `pointer_axis` — the last of which a v1 chrome does not send, so the
-/// versions are not interchangeable.
-pub const PROTOCOL_VERSION: u32 = 17;
+/// Meanwhile the `#[serde(default)]` on the newer fields below stays, and is
+/// not a compatibility floor. Nothing can complete a handshake and then send a
+/// message missing them, because the match is exact. They are there so a
+/// message that predates a field can still be *read* — by a test fixture, a
+/// captured session, a hand-written line in `wire/host-messages.jsonl` — which
+/// is a thing this crate does independently of who it is talking to.
+pub const PROTOCOL_VERSION: u32 = 1;
 
 /// A key combination the desktop claims for itself.
 ///
@@ -181,8 +66,8 @@ pub struct Shadow {
 /// What an element with no `opacity` set has: all of it.
 ///
 /// Spelled out because serde needs a function, and because a missing field
-/// meaning *invisible* would be the worst possible default — a v5 chrome would
-/// place windows nobody could see.
+/// meaning *invisible* would be the worst possible default — a chrome that
+/// omits the field would place windows nobody could see.
 fn opaque() -> f64 {
     1.0
 }

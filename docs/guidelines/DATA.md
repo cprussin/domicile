@@ -69,8 +69,11 @@ migrated; don't delete the old one the same day.
 - **Adapters over already-versioned external APIs** — a wrapper around a
   third-party SDK inherits that SDK's own versioning as the contract.
 
-The host↔chrome protocol is the canonical versioned contract in this repo:
-the compositor and a chrome package ship independently, so
-`PROTOCOL_VERSION` is negotiated in the `hello`/`welcome` handshake.
-`packages/domicile-protocol` and `@domicile/chrome-sdk/protocol` are the two
-halves of that contract and must move together.
+The host↔chrome protocol looks like the exception and is not one yet.
+`PROTOCOL_VERSION` is negotiated in the `hello`/`welcome` handshake, but it is
+**pinned at 1 and does not get bumped**: nothing ships the compositor and a
+chrome apart, so the two halves are one deploy unit and there is no skew for a
+number to catch. See the constant's own docs in `packages/domicile-protocol`
+for what would change that. `packages/domicile-protocol` and
+`@domicile/chrome-sdk/protocol` are still the two halves of one contract and
+must move together — in the same PR, which is what makes the pin safe.
