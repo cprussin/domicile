@@ -325,7 +325,12 @@ describe("every script that can tell a dead compositor apart", () => {
   const scripts = shellScripts();
 
   it("scans the scripts", () => {
-    expect(scripts.map(([name]) => name)).toContain("e2e-two-displays.sh");
+    // Named because an empty scan must fail rather than report no offenders.
+    // `e2e-electron.sh` rather than one of the mock-chrome checks: those are
+    // being ported to Rust a batch at a time, and this canary named one of
+    // them until the batch that deleted it. A check needing a real Electron
+    // outlives that migration.
+    expect(scripts.map(([name]) => name)).toContain("e2e-electron.sh");
     expect(scripts.map(([name]) => name)).toContain("test-xvfb-verdict.sh");
   });
 

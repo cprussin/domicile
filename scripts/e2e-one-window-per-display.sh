@@ -3,7 +3,7 @@
 #
 #   nix develop .#full -c ./scripts/e2e-one-window-per-display.sh
 #
-# `e2e-two-displays.sh` asserts a client is told both displays exist and that
+# `tests/outputs.rs` asserts a client is told both displays exist and that
 # an unplaced surface enters both — which is the fallback, and was all there
 # was to assert while every surface entered every output. This is the rule:
 # once the chrome has placed a window, the client is told the one screen it is

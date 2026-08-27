@@ -248,11 +248,13 @@ fn a_desktop_edited_on_disk_reaches_the_connected_and_the_latecomer() {
 /// `devicePixelRatio` is reporting back a density it was handed — taking it
 /// would let a page overwrite the desktop it was told to lay out against.
 ///
-/// Not the only cover for this branch: `scripts/e2e-two-displays.sh` phase 3
-/// drives the same refusal and then re-reads `wl_output`, which is stricter
-/// than anything reachable from here. What this adds is that it runs at all —
-/// that script needs `wayland-info` *and* `weston-terminal`, so on a machine
-/// without them the branch is covered by a skip, and a skip is not evidence.
+/// The only cover for this branch now. `scripts/e2e-two-displays.sh` phase 3
+/// drove the same refusal and then re-read `wl_output`, which was stricter
+/// than anything reachable from here — but it needed `wayland-info`, so it
+/// covered the branch only on machines that had it. When that script was
+/// ported to `tests/outputs.rs`, the client-side half of this refusal was
+/// written and then dropped: every mutation that killed it killed this check
+/// too, so it was a second spelling rather than a second cover.
 ///
 /// Two assertions, because the refusal is one arm of an `if` and the log is
 /// the other: a compositor that wrote the line and re-described the desktop

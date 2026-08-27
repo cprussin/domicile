@@ -77,7 +77,6 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/e2e-chrome-layer.sh    # the chrome is told from the apps, and keeps the keyboard
 ./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel
 ./scripts/e2e-chrome-without-a-host.sh   # a chrome whose host socket is dead says so once and stops
-./scripts/e2e-two-displays.sh    # one wl_output per configured display, at its own size and scale
 ./scripts/e2e-reload-displays.sh # a display *added* to the config is taken up while it runs
 ./scripts/e2e-one-window-per-display.sh # a client is told the one output its window is on
 ./scripts/e2e-chrome-fills-the-desktop.sh # a real chrome commits at the described desktop's size, and follows it

@@ -498,6 +498,63 @@ impl Client {
         }
     }
 
+    /// Wait until the client has traced at least `wanted` lines matching
+    /// `pattern`, and answer whether it did.
+    ///
+    /// Counted rather than merely present, because the questions here are
+    /// about *how many* screens a client was told about, and one is the answer
+    /// a broken compositor gives. Bounded, so a compositor that never says it
+    /// fails the assertion that follows rather than hanging the run.
+    pub fn wait_for_trace(&mut self, pattern: &str, wanted: usize) -> bool {
+        let until = Instant::now() + PATIENCE;
+        loop {
+            if self.trace().matches(pattern).count() >= wanted {
+                return true;
+            }
+            if Instant::now() >= until {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// What the client was told each screen is, one entry per `wl_output`.
+    ///
+    /// The same fields `wayland-info` printed for the shell check this
+    /// replaces — name, position, scale, and the mode with its flags — read
+    /// out of the client's own trace instead. That is what lets this run
+    /// anywhere: the script skipped when `wayland-info` was missing, and while
+    /// CI installs it, every machine without it got a pass for a check that
+    /// had not run.
+    ///
+    /// Every field is one a client acts on, which is why none is dropped: the
+    /// position places the screen, the scale is what a toolkit draws at, the
+    /// mode is the logical size in physical pixels, and the flags are two
+    /// separate promises — `current` and `preferred` — each of which a
+    /// one-line mutation can drop on its own.
+    pub fn screens(&self) -> Vec<String> {
+        let trace = self.trace();
+        let mut found: Vec<(String, Screen)> = Vec::new();
+        for line in trace.lines() {
+            let Some((object, event)) = line.split_once('.') else {
+                continue;
+            };
+            let object = object.trim();
+            if !object.contains("wl_output") {
+                continue;
+            }
+            let slot = match found.iter().position(|(id, _)| id == object) {
+                Some(at) => at,
+                None => {
+                    found.push((object.to_string(), Screen::default()));
+                    found.len() - 1
+                }
+            };
+            found[slot].1.take(event.trim());
+        }
+        found.into_iter().map(|(_, screen)| screen.said()).collect()
+    }
+
     /// Whatever the client has traced so far.
     pub fn trace(&self) -> String {
         let said = self.said.lock().expect("nothing panics holding this");
@@ -513,6 +570,95 @@ impl Drop for Client {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+/// One screen, as the client was told about it.
+///
+/// Built up across the four events that describe an output rather than read
+/// from one, because that is how Wayland says it: `name`, `geometry`, `mode`
+/// and `scale` arrive separately and a client knows the screen only once it
+/// has them all.
+#[derive(Default)]
+struct Screen {
+    name: Option<String>,
+    position: Option<String>,
+    scale: Option<String>,
+    mode: Option<String>,
+}
+
+impl Screen {
+    /// Take whatever one traced event says about this screen.
+    ///
+    /// Unknown events are ignored rather than refused: the client traces more
+    /// than this reads, and a compositor that starts sending something new
+    /// should not fail a check about geometry.
+    fn take(&mut self, event: &str) {
+        let Some((name, rest)) = event.split_once('(') else {
+            return;
+        };
+        let args: Vec<&str> = rest.trim_end_matches(')').split(", ").collect();
+        match (name, args.as_slice()) {
+            ("name", [called]) => self.name = Some(called.trim_matches('"').to_string()),
+            ("geometry", [x, y, ..]) => self.position = Some(format!("{x},{y}")),
+            ("scale", [factor]) => self.scale = Some((*factor).to_string()),
+            ("mode", [flags, width, height, ..]) => {
+                self.mode = Some(format!("{width}x{height}({})", Self::flags(flags)));
+            }
+            _ => {}
+        }
+    }
+
+    /// `wl_output.mode`'s flags, spelled the way the protocol names them.
+    ///
+    /// Named rather than left as a number so a mode advertised as neither
+    /// current nor preferred reads as `(none)` instead of `(0)` — a client
+    /// bound to a screen with nothing to draw at, which is a real failure and
+    /// an unreadable one as an integer.
+    ///
+    /// The two bits are separately droppable, which is why both are spelled.
+    /// `change_current_state` writes only `current_mode`; `preferred_mode` is
+    /// written solely by `set_preferred`, so deleting `restate_output`'s call
+    /// to it leaves `(current)` and fails the check below. `preferred` alone
+    /// would leave a client bound to a screen with no mode to draw at, and
+    /// `current` alone a toolkit choosing a mode with nothing marked
+    /// preferred; a number would make those two failures look like one.
+    fn flags(said: &str) -> String {
+        // Not a fallback: `take` matches the arity first, so a torn line never
+        // reaches here and the only way in is the client changing its trace
+        // format. Defaulting to 0 would render that harness break as `(none)`
+        // — this function's own word for a real compositor fault.
+        let bits: u32 = said
+            .parse()
+            .expect("the client traces a mode's flags as a number");
+        let mut named = Vec::new();
+        if bits & 1 != 0 {
+            named.push("current");
+        }
+        if bits & 2 != 0 {
+            named.push("preferred");
+        }
+        if named.is_empty() {
+            named.push("none");
+        }
+        named.join(" ")
+    }
+
+    /// The one line this screen was described in, or what is still missing.
+    ///
+    /// A screen the client was told only half about is its own failure, and
+    /// naming the absent field beats comparing against a string with a hole
+    /// in it.
+    fn said(&self) -> String {
+        match (&self.name, &self.position, &self.scale, &self.mode) {
+            (Some(name), Some(position), Some(scale), Some(mode)) => {
+                format!("{name}@{position}@{scale}={mode}")
+            }
+            _ => format!(
+                "an output described only as name={:?} position={:?} scale={:?} mode={:?}",
+                self.name, self.position, self.scale, self.mode
+            ),
+        }
     }
 }
 
