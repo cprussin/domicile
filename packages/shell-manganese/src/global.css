@@ -1,1 +1,14 @@
 @layer reset, base, tokens, recipes, utilities;
+
+/*
+ * A band that is not the one being rendered.
+ *
+ * `opacity` rather than `visibility` or `display`, and the reasons are in
+ * `bands.ts`: the page stays in the last band it was asked for, so anything
+ * that stopped an element taking the pointer would leave the chrome dead to
+ * the mouse, and anything that took away its box would move every window.
+ * Unlayered, so it outranks whatever a component set.
+ */
+[data-band-hidden] {
+  opacity: 0;
+}

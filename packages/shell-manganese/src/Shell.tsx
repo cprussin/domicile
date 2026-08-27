@@ -1,4 +1,5 @@
 import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { renderBands } from "@domicile/chrome-sdk/render-bands";
 import { Button } from "@domicile/component-library/Button";
 import { Card } from "@domicile/component-library/Card";
 import {
@@ -13,17 +14,18 @@ import { TabRail } from "@domicile/component-library/TabRail";
 import { ThemeSwitch } from "@domicile/component-library/ThemeSwitch";
 import { TerminalWindowIcon } from "@phosphor-icons/react/dist/ssr/TerminalWindow";
 import type { PropsWithChildren } from "react";
-import { Fragment, useCallback, useEffect } from "react";
-
+import { Fragment, useCallback, useEffect, useMemo } from "react";
 import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
 import { AppWindow } from "./AppWindow";
 import type { AppElements } from "./app-elements";
 import { BrowserWindow } from "./BrowserWindow";
+import { bandDepths, showBand, showEveryBand } from "./bands";
 import { Clock } from "./Clock";
 import type { Chord } from "./chord";
 import { FloatGrab } from "./FloatGrab";
 import { FloatTitleBar } from "./FloatTitleBar";
+
 import { floatingOf } from "./shell-state";
 import type { ShellWindow } from "./shell-window";
 import { WindowKind } from "./shell-window";
@@ -46,6 +48,14 @@ const titleOf = (windows: readonly ShellWindow[], id: string): string => {
     return named.title;
   }
 };
+
+/**
+ * The band everything that is not a float's own chrome belongs to.
+ *
+ * Under every floating window, because a float's window is at `z-index: 1 +
+ * its place in the stack` and this is at 0 — see `window-styles` and `bands`.
+ */
+const BAND_UNDER_EVERY_FLOAT = 0;
 
 /** A window with no tab selected — the rail's resting state on an empty shell. */
 const NO_WINDOW = "";
@@ -144,6 +154,28 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
     toggleFloat,
     windows,
   } = useShellWindows(bridge, appElements);
+
+  // The depths this chrome draws at, so the compositor can put a window
+  // between two of them. One band under every floating window and one per
+  // float above it; see `bands`.
+  //
+  // Re-declared only when the count changes. Declaring the same depths again
+  // is still a change as far as the compositor is concerned — what is *at* a
+  // depth can move without the depth doing so — and it would start the round
+  // trip over on every render.
+  const depths = useMemo(() => bandDepths(floats.length), [floats.length]);
+
+  useEffect(() => {
+    const stop = renderBands(bridge, depths, showBand);
+    return () => {
+      stop();
+      // The page is left showing whichever band was asked for last, because
+      // nothing puts it back — so a chrome that stops declaring depths has to
+      // put itself back, or the desktop keeps whatever band it was on and
+      // loses the rest.
+      showEveryBand();
+    };
+  }, [bridge, depths]);
 
   // Alt is what hands the pointer back to the page, and Shift is what makes
   // the drag a resize. Neither can be read off a DOM event here: while a
@@ -266,35 +298,44 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
     <>
       <OnTheFirstScreen>
         <div className={rootStyles}>
-          <TabRail
-            // The window the user is working in, which is not always the
-            // one on the stage: a floating window is reached by its tab and
-            // has to look reached.
-            activeId={activeId ?? NO_WINDOW}
-            brand={<span className={brandStyles}>Domicile</span>}
-            footer={
-              <div className={footerStyles}>
-                <Button
-                  label="Terminal"
-                  onClick={openTerminal}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <TerminalWindowIcon size={18} />
-                </Button>
-                <ThemeSwitch />
-                <Clock />
-              </div>
-            }
-            onClose={close}
-            onNew={openBrowser}
-            onReorder={reorder}
-            onSelect={select}
-            tabs={windows.map((window) => ({
-              id: window.id,
-              label: window.title,
-            }))}
-          />
+          {/*
+            The rail is a band of its own element rather than of the row around
+            it, because that row is also what the float chrome hangs inside and
+            `opacity` multiplies: a bar inside a faded ancestor cannot fade
+            back in. A flex child that hugs the rail, so the rail's own fixed
+            width is still what decides the layout.
+          */}
+          <div className={railBandStyles} data-band={BAND_UNDER_EVERY_FLOAT}>
+            <TabRail
+              // The window the user is working in, which is not always the
+              // one on the stage: a floating window is reached by its tab and
+              // has to look reached.
+              activeId={activeId ?? NO_WINDOW}
+              brand={<span className={brandStyles}>Domicile</span>}
+              footer={
+                <div className={footerStyles}>
+                  <Button
+                    label="Terminal"
+                    onClick={openTerminal}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <TerminalWindowIcon size={18} />
+                  </Button>
+                  <ThemeSwitch />
+                  <Clock />
+                </div>
+              }
+              onClose={close}
+              onNew={openBrowser}
+              onReorder={reorder}
+              onSelect={select}
+              tabs={windows.map((window) => ({
+                id: window.id,
+                label: window.title,
+              }))}
+            />
+          </div>
           <main className={stageStyles}>
             {/*
               One list, floating and tabbed alike, in the order they were
@@ -335,6 +376,11 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
                 case WindowKind.Browser: {
                   return (
                     <BrowserWindow
+                      band={
+                        floating === undefined
+                          ? BAND_UNDER_EVERY_FLOAT
+                          : floating.depth + 1
+                      }
                       clickThrough={clickThrough}
                       dragging={dragging}
                       floating={floating}
@@ -369,6 +415,7 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
               return (
                 <Fragment key={float.id}>
                   <FloatTitleBar
+                    band={depth + 1}
                     floating={floating}
                     focused={float.id === activeId}
                     onClose={() => {
@@ -399,7 +446,7 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
         </div>
       </OnTheFirstScreen>
       <OnEveryOtherScreen>
-        <div className={idleScreenStyles}>
+        <div className={idleScreenStyles} data-band={BAND_UNDER_EVERY_FLOAT}>
           <Clock />
         </div>
       </OnEveryOtherScreen>
@@ -496,7 +543,7 @@ const OnEveryOtherScreen = ({ children }: PropsWithChildren) => {
 const NoScreens = () => {
   const displays = useDisplays();
   return displays?.length === 0 ? (
-    <div className={noScreensStyles}>
+    <div className={noScreensStyles} data-band={BAND_UNDER_EVERY_FLOAT}>
       <Card title="No screens">
         <p className={hintStyles}>
           The host described a desktop with no displays on it, so there is
@@ -510,7 +557,7 @@ const NoScreens = () => {
 
 /** What the stage says before anything has been opened onto it. */
 const EmptyStage = () => (
-  <div className={emptyStageStyles}>
+  <div className={emptyStageStyles} data-band={BAND_UNDER_EVERY_FLOAT}>
     <Card title="No windows yet">
       <p className={hintStyles}>
         <Kbd>Alt</Kbd> + <Kbd>Enter</Kbd> opens a terminal on Domicile.
@@ -527,6 +574,10 @@ const rootStyles = flex({
   blockSize: "100%",
   direction: "row",
 });
+
+// A flex child that hugs the rail, so the rail's own fixed width is still what
+// decides the layout; this is only here to be a band of its own.
+const railBandStyles = flex({ shrink: 0 });
 
 const brandStyles = css({
   color: "foreground",
