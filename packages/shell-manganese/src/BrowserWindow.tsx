@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
+import { BAND } from "./bands";
 import { surfaceBox } from "./float";
 import type { Floating } from "./shell-state";
 import {
@@ -23,6 +24,14 @@ import {
 import { withScheme } from "./with-scheme";
 
 type Props = {
+  /**
+   * Which band this window paints in.
+   *
+   * A browser window is page pixels rather than a client's surface, so unlike
+   * an `<domicile-app>` portal it is chrome as far as the compositor is
+   * concerned and has to be in exactly one band.
+   */
+  band: number;
   /**
    * Whether the pointer goes through this window to the page behind it.
    *
@@ -60,6 +69,7 @@ type Props = {
  * itself; this is the chrome the user drives it with.
  */
 export const BrowserWindow = ({
+  band,
   clickThrough,
   dragging,
   floating,
@@ -124,6 +134,7 @@ export const BrowserWindow = ({
   return (
     <section
       aria-label="Browser"
+      {...{ [BAND]: band }}
       className={cx(
         windowStyles,
         browserStyles,

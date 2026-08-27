@@ -3,12 +3,21 @@ import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 
 import { css, cx } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
+import { BAND } from "./bands";
 import { barBox } from "./float";
 import type { Floating } from "./shell-state";
 import { useFloatDrag } from "./useFloatDrag";
 import { floatPlacement } from "./window-styles";
 
 type Props = {
+  /**
+   * Which band this bar paints in.
+   *
+   * Its own, at the depth of the window it names, which is the whole reason a
+   * bar is worth having beyond looking like a window: a window in front of
+   * that one has to be drawn over it. See `bands`.
+   */
+  band: number;
   floating: Floating;
   /** Whether the user is working in this window, so its bar looks like it. */
   focused: boolean;
@@ -38,6 +47,7 @@ type Props = {
  * is the opposite one.
  */
 export const FloatTitleBar = ({
+  band,
   floating,
   focused,
   onClose,
@@ -53,6 +63,7 @@ export const FloatTitleBar = ({
   return (
     <div
       className={cx(barStyles, focused && focusedStyles)}
+      {...{ [BAND]: band }}
       style={floatPlacement(barBox(floating.float), floating.depth)}
       {...handlers}
     >

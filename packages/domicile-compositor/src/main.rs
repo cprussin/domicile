@@ -164,6 +164,10 @@ mod grepped {
     pub const DENSITY_REFUSED: &str = "a described desktop keeps its own scale";
     /// `e2e-hidpi.sh`: the logical size it derives the expected mode from.
     pub const ADVERTISING: &str = "advertising output scale";
+    /// `e2e-bands.sh`: a chrome frame recognised as the band it says it is.
+    /// The only trace the label's read-back leaves, and the whole of what says
+    /// the round trip closed rather than stalled.
+    pub const BAND_ANSWERED: &str = "a band answered";
 }
 
 /// The renderer client buffers are imported on, and the policy that chose it.
@@ -1634,6 +1638,7 @@ impl DomicileCompositor {
         let arrived = what_arrived(asked, said, came, !self.bands.depths().is_empty());
         match arrived {
             Arrival::Banded(band) => {
+                info!(band, "{}", grepped::BAND_ANSWERED);
                 self.bands.answered();
                 self.band_textures
                     .insert(band, texture.expect("a banded frame made a texture"));
@@ -5670,6 +5675,13 @@ mod tests {
                 ),
                 include_str!("../../../scripts/e2e-hidpi.sh"),
                 "e2e-hidpi.sh",
+            ),
+            (
+                // Read with its field too: the script tells the bands apart by
+                // the number, so the field's name is part of the agreement.
+                format!("{} band=[0-9]*", crate::grepped::BAND_ANSWERED),
+                include_str!("../../../scripts/e2e-bands.sh"),
+                "e2e-bands.sh",
             ),
         ] {
             assert!(

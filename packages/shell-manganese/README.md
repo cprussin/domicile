@@ -110,12 +110,40 @@ rather than being added to it, so a window dragged to a size is that size, bar
 included, and a resize does not have to reason about a frame that grows with
 it.
 
-The bar is also the reason this shell can show what `declare_bands` is for. It
-is page pixels at the depth of the window it names, so a window in front of
-that one has to be drawn *over* it — and a compositor that composites the whole
-page above every window cannot do that. Until the shell declares its depths,
-the bar of a window behind another is drawn on top of the one in front. That is
-visible now rather than theoretical.
+The bar is also why this shell declares depths at all. It is page pixels at the
+depth of the window it names, so a window in front of that one has to be drawn
+*over* it — and a compositor that composites the whole page above every window
+cannot do that. So the shell tells it where its own layers are: one band under
+every floating window (the backdrop, the rail, whatever is on the stage), and
+one per float above it. Nothing floating declares nothing, because a desktop
+with nothing to interleave would pay a round trip per repaint for a picture the
+compositor already has.
+
+Rendering a band means leaving only that band painting, and three things follow
+from that being a whole-page property rather than a component's:
+
+- **It happens outside React.** What the page commits next *is* the raster, and
+  `setState` schedules — the commit would carry whatever was on screen before
+  React got to it. So the elements carry a `data-band` attribute and `bands.ts`
+  drives them directly.
+- **`opacity`, not `visibility` or `display`.** The page stays in the last band
+  it was asked for; nothing puts it back, because putting it back is a repaint
+  and a repaint is another round trip. A hidden element takes no pointer, so
+  the chrome would be dead to the mouse between cycles, and one with no box
+  would move every window. At `opacity: 0` an element lays out as it did, takes
+  the pointer as it did, and paints nothing. What you look at is the bands
+  composited, not the page.
+- **Everything that paints is in exactly one band.** Anything unmarked paints
+  in *every* band, which is only ever right for something that paints nothing:
+  a `<domicile-app>` portal is a hole in the page, and fading one would report
+  it to the compositor at `opacity: 0` and take the window off the screen.
+
+  Which is also why **this shell paints no desktop background of its own**. On
+  the composited path a background element goes behind every window and fills
+  in the holes the clients show through — a desktop of windows hidden behind
+  their own wallpaper. The background is the host's, injected per path:
+  `html, body { background: transparent }` where Domicile composites this
+  window, and the page's own where it does not.
 
 A floating window's corners are the frame's rather than its own, and square:
 the compositor's shader takes one radius for all four (it is the element's

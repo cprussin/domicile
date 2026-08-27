@@ -580,17 +580,32 @@ falloff the shadow uses, is the next candidate to move it.
   like. So a repaint the shell makes for its own reasons costs a round trip
   rather than a layer at the wrong depth.
 
-  What is missing is a chrome that declares any depths: the SDK can send
-  `declare_bands` and nothing calls it, so every frame is still the all-above
-  case — and so the label's read-back is code no desktop runs yet. Declaring
-  them is more than a call. A shell renders a band by leaving only that band
-  painting, which it cannot do with `visibility` (a hidden element stops
-  hit-testing, so the chrome would go dead between cycles) and cannot do by
-  hiding a container (`opacity` multiplies, so a band inside a hidden root
-  cannot opt back in). What it needs is every painting element in exactly one
-  band, the page's own background included, and the page left showing the last
-  band it was asked for — which is fine to look at, because what the user sees
-  is the bands composited rather than the page.
+  `shell-manganese` declares them: one band under every floating window and one
+  per float above it, so a window in front of another is drawn over that one's
+  title bar. Rendering a band is leaving only that band painting, which it
+  cannot do with `visibility` (a hidden element stops hit-testing, and the page
+  stays in the last band it was asked for, so the chrome would go dead between
+  cycles) and cannot do by hiding a container (`opacity` multiplies, so a band
+  inside a hidden root cannot opt back in). So every painting element is in
+  exactly one band, the page's own background included — `html` gives its
+  background up to an element for that reason — and a portal is in none,
+  because fading one would report the window at `opacity: 0`.
+
+  `e2e-bands.sh` is what says the round trip closes: the shell runs as a
+  Wayland client of ours and the compositor reads each band off the frames it
+  commits. Reading the wrong row of the texture, or painting a different
+  sentinel, turns it red — which is the only check there is on any of that.
+- a **pixel probe for a chrome that paints where a window is**. Nothing checks
+  that a client's pixels actually reach the screen: the chrome is composited
+  over every window, so a background anywhere behind a `<domicile-app>` fills
+  in the hole the client shows through, and a whole desktop of windows
+  disappears with nothing on screen to say why. It nearly shipped while the
+  bands were being written — `html` is an ancestor of every band, so a
+  background there lands in every raster, and moving it onto an element of
+  band 0 puts it behind every window instead. Every check in the tree passed.
+  What would catch it is drawing a window, reading a pixel of it back, and
+  requiring it to be the client's colour; `straight-alpha-probe.ts` is the
+  shape of the machinery, and no check uses it for this.
 - ~~follow a window that moves~~ — done. `<domicile-app>` re-measures on every
   animation frame rather than on a `ResizeObserver`, which sees a box change
   size and nothing else: moving a window, animating a transform, a `:hover`

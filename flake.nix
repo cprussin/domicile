@@ -453,6 +453,7 @@
           e2e-compose = "e2e-compose.sh";
           e2e-stuck-key = "e2e-stuck-key.sh";
           e2e-modifiers = "e2e-modifiers.sh";
+          e2e-bands = "e2e-bands.sh";
           e2e-two-displays = "e2e-two-displays.sh";
           e2e-reload-displays = "e2e-reload-displays.sh";
           e2e-one-window-per-display = "e2e-one-window-per-display.sh";
