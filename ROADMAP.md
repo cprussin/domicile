@@ -573,13 +573,24 @@ falloff the shadow uses, is the next candidate to move it.
   saw it — a translucent panel over a window with a wallpaper behind it, which
   needs one window and no overlap. A raster per band is what closes that, and
   its transport is settled in `WINDOW-COMPOSITING.md` and the compositor's half
-  is built (`bands.rs`): the page cannot tag its own commits, because the
-  Wayland connection belongs to Chromium rather than to the page, so the
-  compositor asks for one band at a time and takes the next commit as the
-  answer — which obliges a chrome that declares depths to commit nothing else
-  while one is outstanding. What is missing is a chrome that declares any: the
-  SDK can send `declare_bands` and nothing calls it, so every frame is still
-  the all-above case.
+  is built (`bands.rs`): the compositor asks for one band at a time, and the
+  frame that answers says which band it is in its own pixels — the page cannot
+  tag the stream its commit rides on, because that connection belongs to
+  Chromium rather than to the page, but it can decide what the frame looks
+  like. So a repaint the shell makes for its own reasons costs a round trip
+  rather than a layer at the wrong depth.
+
+  What is missing is a chrome that declares any depths: the SDK can send
+  `declare_bands` and nothing calls it, so every frame is still the all-above
+  case — and so the label's read-back is code no desktop runs yet. Declaring
+  them is more than a call. A shell renders a band by leaving only that band
+  painting, which it cannot do with `visibility` (a hidden element stops
+  hit-testing, so the chrome would go dead between cycles) and cannot do by
+  hiding a container (`opacity` multiplies, so a band inside a hidden root
+  cannot opt back in). What it needs is every painting element in exactly one
+  band, the page's own background included, and the page left showing the last
+  band it was asked for — which is fine to look at, because what the user sees
+  is the bands composited rather than the page.
 - ~~follow a window that moves~~ — done. `<domicile-app>` re-measures on every
   animation frame rather than on a `ResizeObserver`, which sees a box change
   size and nothing else: moving a window, animating a transform, a `:hover`

@@ -7,6 +7,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod band_label;
+
 /// The protocol version this build speaks.
 ///
 /// Pinned at 1, and there is no version history above it any more. The host

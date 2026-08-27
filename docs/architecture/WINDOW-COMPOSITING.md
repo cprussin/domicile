@@ -387,30 +387,36 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
   over a window with anything behind it, because nothing is pre-flattened. Its
   open part is transport, not rendering.
 
-  **Settled: the page cannot tag its own commits, so the compositor drives.**
-  The obvious design is for the chrome to render each band and label it —
-  "this frame is band 2" — and that cannot be built here. The chrome is a page
-  in Electron; the Wayland connection is *Chromium's*, not the page's, so the
-  page cannot add a request to the stream its own commit rides on. A label sent
-  over the chrome protocol socket instead crosses a different transport, and
-  nothing orders a Unix-socket write against a Wayland commit: the compositor
-  would be matching frames to labels by arrival and would eventually get it
-  wrong, silently, in a way that looks like a stacking bug.
+  **Settled: the compositor asks, and the frame that answers says so in its
+  own pixels.** The obvious design is for the chrome to label a commit — "this
+  frame is band 2" — over the connection the commit rides on, and that cannot
+  be built here. The chrome is a page in Electron; the Wayland connection is
+  *Chromium's*, not the page's, so the page cannot add a request to that
+  stream. A label sent over the chrome protocol socket instead crosses a
+  different transport, and nothing orders a Unix-socket write against a Wayland
+  commit: the compositor would be matching frames to labels by arrival and
+  would eventually get it wrong, silently, in a way that looks like a stacking
+  bug.
 
-  Three ways out, and only the third is both correct and affordable:
+  Four ways out:
 
   | | ordering | cost |
   |---|---|---|
   | **N surfaces** — one Electron window per band | solved by construction: each band is its own `wl_surface` | N renderer processes, each holding the shell's state, and the shell's own state sync between them |
   | **Tag over the socket** | unordered against the commit; matched by arrival | cheap and wrong |
-  | **The compositor asks, one band at a time** | one outstanding request, so the next chrome commit *is* that band | a socket round trip per band, per chrome repaint |
+  | **The compositor asks, one band at a time** | one outstanding request, so the next chrome commit is *presumed* to be that band | a socket round trip per band, per chrome repaint — and every unrelated repaint filed as an answer |
+  | **A label in the picture** — the page paints the band into one pixel | in the frame, so nothing can reorder it against the frame | one pixel read back per commit, while a band is outstanding |
 
-  The third makes the ambiguity impossible rather than unlikely: with one
-  request outstanding there is only one band the next commit can be. It costs
-  latency on a chrome repaint — N round trips where there is one now — and
-  nothing on an idle desktop, which is most of them. It also keeps one renderer
-  and one copy of the shell's state, which is the thing the architecture is
-  for.
+  The last two are what is built, and they answer different halves. The asking
+  is what keeps *one* question outstanding, so a label only has to be told from
+  the band actually asked for. The label is what makes a commit attributable at
+  all: the page cannot tag the stream, but it can decide what the frame looks
+  like, so it paints the band into the top-left pixel and the compositor reads
+  it back. See `domicile-protocol/src/band_label.rs`.
+
+  Together they cost a socket round trip per band per chrome repaint, and
+  nothing on an idle desktop, which is most of them. They keep one renderer and
+  one copy of the shell's state, which is the thing the architecture is for.
 
   **Built**, in `compositor/src/bands.rs`: `declare_bands` from the chrome,
   `render_band` back, a texture per band rather than the single
@@ -419,15 +425,23 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
   desktop with a layer missing. The textures are kept between frames so a
   desktop that has not repainted redraws without asking again.
 
-  **The obligation this puts on a chrome, which is the price of the page not
-  being able to label its own frames:** while a band is outstanding, commit
-  nothing else. A repaint of the chrome's own — a clock, a caret, a hover — is
-  a commit the compositor cannot tell from the answer, and taking it as one
-  files every later band under the wrong depth. The compositor guarantees the
-  half it can, one question outstanding, so there is never a second band a
-  commit might have been for; the other half is the chrome's, stated on
-  `BridgeClient.declareBands`. A chrome that declares nothing takes on none of
-  this and is drawn as one layer over every window, as before.
+  **What the label bought.** Before it, a chrome had to commit *nothing else*
+  while a band was outstanding: a repaint of its own — a clock, a caret, a
+  hover — was a commit the compositor could not tell from the answer, and
+  taking it as one filed every later band under the wrong depth, silently. That
+  was an obligation on the chrome that a live shell cannot honour, because the
+  things that repaint a page are not all the shell's to stop.
+
+  Now such a repaint carries the label of whatever band was painted last, which
+  is not the band being asked for, and the compositor takes it for what it is:
+  the bands it holds are pictures of a page that has moved on, so it drops them
+  and starts the round trip again. The question is *not* taken back — the
+  chrome was asked for a band and is still going to render it — so there is
+  never a second answer in flight. What a repaint costs is a round trip, not a
+  layer at the wrong depth.
+
+  A chrome that declares nothing takes on none of this and is drawn as one
+  layer over every window, as before.
 
 - **What the number actually is.** Everything through the draw is in place and
   tested, but the only measurement so far is of the copy path. Phase 1 is not
