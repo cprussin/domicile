@@ -9,7 +9,7 @@ can be verified in CI and on a headless box.
 
 | Entry | Used by | What it does |
 |---|---|---|
-| `src/mock-chrome.ts` | `e2e-chrome.sh`, `e2e-dmabuf.sh`, `e2e-hidpi.sh`, `e2e-two-displays.sh` | Connects, handshakes, and prints every frame the host pushes so the calling script can grep for one. |
+| `src/mock-chrome.ts` | `e2e-chrome.sh`, `e2e-dmabuf.sh`, `e2e-hidpi.sh` | Connects, handshakes, and prints every frame the host pushes so the calling script can grep for one. |
 | `src/input-injector.ts` | `e2e-input.sh` | Waits for `app_appeared`, then forwards a focus + pointer + keyboard sequence to prove input injection reaches a real client. |
 | `src/reload-typist.ts` | `e2e-stuck-key.sh` | Holds a key down, reloads, and then tries to toggle it — the page dying mid-press, which used to leave that key down in the seat for good. |
 | `src/focus-probe.ts` | `e2e-chrome-layer.sh` | Focuses the first app announced and stays connected, so the check can watch the keyboard come back to the chrome on its own when that client goes away. |
@@ -29,7 +29,7 @@ whether the compositor is still there at the instant it fires:
 `harness_fault` for this suite's own fault, `compositor_verdict` for the
 code's. Both exit, which is the point below.
 
-What actually keeps the blame straight is structural: in the three scripts
+What actually keeps the blame straight is structural: in the twelve scripts
 that use the helpers, a diagnosis is one `if`/`elif`/`else` or one `case`,
 every arm of which ends in a helper that exits or in a pass — so no arm is
 reachable by falling *through* another. A bail that turned into a no-op — the
@@ -49,10 +49,19 @@ independent of the file it lives in: it reads `PASSED`, which only `passed`
 sets, and a script that fails to source the file at all is caught by the third
 rule below rather than by the count.
 
-Three scripts, not sixteen: `e2e-two-displays.sh`, `e2e-two-chromes.sh` and
-`e2e-hidpi.sh` source the helpers and the rest do not, so rules 2 and 3 below
-are vacuous for the other thirteen and rule 1 is all that reaches them. Worth
-knowing before writing the fourth.
+Twelve scripts of the thirty-two in `scripts/`, not all of them, source the
+helpers; rules 2 and 3 below are vacuous for the other twenty, and rule 1 is
+all that reaches them. Worth knowing before writing the next one.
+
+Thirty-two because that is what the sweep reads — every `.sh` in the
+directory, as the paragraph below says, not the twenty-four `check.sh` runs.
+
+That count is measured rather than remembered. It read "three scripts, not
+sixteen … the other thirteen" until someone counted, and every number in it
+was wrong — the helpers had spread past ten while the sentence went
+on describing the three that first used them. It then said ten for a while,
+which was true of the tree it was written against and stale by the next
+rebase; a count in prose is only ever true of one commit.
 
 `verdicts.ts` is the backstop rather than the guarantee, and says so: it drives
 the real helpers and holds every `.sh` in `scripts/` to three rules — no
@@ -71,9 +80,10 @@ Every `.sh` rather than every `e2e-*.sh`, because `check.sh` runs the
 `test-*.sh` checks in the same loop and the `measure*.sh` scripts drive these
 same harnesses. `scripts/lib/harness.sh` is out of that sweep because reading
 `scripts/` without recursing leaves it out — it is what the rules are about
-rather than something they apply to. It is the only helper down there;
-`xvfb-verdict.sh` and `xvfb-display.sh` are sourced-only too and sit in
-`scripts/` proper, where they are scanned like everything else.
+rather than something they apply to. `test-client.sh` is down there with it,
+sourced-only for the same reason; `xvfb-verdict.sh` and `xvfb-display.sh` are
+sourced-only too but sit in `scripts/` proper, where they are scanned like
+everything else.
 
 Note that `exit 99` is not a verdict class the rest of the repo knows about:
 `check.sh` counts every non-zero, non-77 status as failed, so 99 and 1 reach it

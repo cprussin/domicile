@@ -156,11 +156,18 @@ use smithay::backend::winit::WinitGraphicsBackend;
 /// more, none of them named or pinned. Those predate this change; these three
 /// are the ones it introduced or newly depended on.
 mod grepped {
-    /// `e2e-two-displays.sh` phase 3: told a density it could not read.
+    /// `e2e-hidpi.sh`: told a density it could not read.
     pub const UNPARSEABLE: &str = "unparseable chrome message";
-    /// `e2e-two-displays.sh` phase 3 and
     /// `tests/desktop.rs::a_described_desktop_refuses_a_chromes_density`: the
     /// guarded return in `set_output_scale`.
+    ///
+    /// No script greps this any more — `e2e-two-displays.sh` was the last, and
+    /// it is gone. What pins it now is a Rust test that spells the string,
+    /// which is a weaker arrangement in one specific way: a rename here and in
+    /// that test together are one edit a reviewer sees whole, where a script
+    /// was a second file that had to be remembered. Kept a constant because
+    /// the wait is still a wait on a string, and a string with a name is
+    /// easier to find than one written twice.
     pub const DENSITY_REFUSED: &str = "a described desktop keeps its own scale";
     /// `e2e-hidpi.sh`: the logical size it derives the expected mode from.
     pub const ADVERTISING: &str = "advertising output scale";
@@ -5637,9 +5644,11 @@ mod tests {
     /// file as the constants and rename along with them, which is the whole
     /// failure it exists to catch.
     ///
-    /// A row per *pair*, not per constant: `UNPARSEABLE` is grepped by two
+    /// A row per *pair*, not per constant: `UNPARSEABLE` was grepped by two
     /// scripts, and a table keyed on the constant alone left the second pair
-    /// unpinned — renaming it in `e2e-hidpi.sh` stayed green.
+    /// unpinned — renaming it in `e2e-hidpi.sh` stayed green. One of that pair
+    /// has since been ported to `tests/outputs.rs` and deleted, which is why
+    /// the shape now looks like more machinery than the rows need.
     ///
     /// The pattern is *built from* the constant rather than searched for in
     /// the file, because both weaker forms let a rename through. Spelling the
@@ -5653,18 +5662,8 @@ mod tests {
         for (pattern, script, name) in [
             (
                 crate::grepped::UNPARSEABLE.to_string(),
-                include_str!("../../../scripts/e2e-two-displays.sh"),
-                "e2e-two-displays.sh",
-            ),
-            (
-                crate::grepped::UNPARSEABLE.to_string(),
                 include_str!("../../../scripts/e2e-hidpi.sh"),
                 "e2e-hidpi.sh",
-            ),
-            (
-                crate::grepped::DENSITY_REFUSED.to_string(),
-                include_str!("../../../scripts/e2e-two-displays.sh"),
-                "e2e-two-displays.sh",
             ),
             (
                 // The one whose script reads fields off the line as well, so

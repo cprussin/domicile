@@ -544,9 +544,20 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Client {
                 // Safe to do from the event, unlike `wl_seat`, because an
                 // output's version comes with its announcement rather than
                 // having to be weighed against the rest of the list.
+                // Version 4 rather than 2 for `wl_output.name`, which is the
+                // only place a client learns what a screen is *called*. Every
+                // other field — where it sits, its scale, its mode — arrives
+                // at 2, so a check that only wants geometry never needed this.
+                // `both_configured_displays_are_advertised_to_a_client` does:
+                // it asserts a client is told `left` and `right`, and the
+                // fixture will not describe a screen it has no name for.
+                //
+                // Capped, not demanded: a compositor advertising less still
+                // binds at what it offers, and the extra events are additive,
+                // so a client reading the older ones is unaffected.
                 if interface == "wl_output" {
                     let output: wl_output::WlOutput =
-                        registry.bind(name, version.min(2), handle, ());
+                        registry.bind(name, version.min(4), handle, ());
                     client.outputs.push((name, output.id()));
                 }
                 client.globals.named.push((name, interface, version));
@@ -835,6 +846,9 @@ impl Dispatch<wl_output::WlOutput, ()> for Client {
                     height,
                     refresh
                 );
+            }
+            wl_output::Event::Name { name } => {
+                domicile_test_client::say!(output.id(), "name(\"{}\")", name);
             }
             wl_output::Event::Scale { factor } => {
                 domicile_test_client::say!(output.id(), "scale({})", factor);
