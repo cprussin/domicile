@@ -69,7 +69,9 @@ jobs:
       # `expect` — which does name the library, but out of a panic, so it reads
       # as a compositor crash rather than as a missing dependency. There is no
       # window manager on an Xvfb, so `xdotool` is what resizes the window in
-      # `e2e-chrome-fills-a-window.sh`.
+      # `e2e-chrome-fills-a-window.sh` — and what presses keys and drags the
+      # mouse in `e2e-electron.sh`, which has no other way to drive the real
+      # shell: its keyboard is this display's rather than Domicile's.
       #
       # Retried with a deadline per attempt, for the reason `cargo-test.yml`
       # spells out: a stalled apt mirror fails by hanging, so a plain
