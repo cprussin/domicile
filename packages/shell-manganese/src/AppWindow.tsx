@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
 import type { AppElements } from "./app-elements";
+import { surfaceBox } from "./float";
 import type { Floating } from "./shell-state";
 import {
   clickThroughStyles,
@@ -89,6 +90,7 @@ export const AppWindow = ({
         appStyles,
         clickThrough && clickThroughStyles,
         dragging && draggingStyles,
+        floating !== undefined && framedStyles,
       )}
       hidden={!onScreen}
       ref={setPortal}
@@ -98,7 +100,7 @@ export const AppWindow = ({
       style={
         floating === undefined
           ? undefined
-          : floatPlacement(floating.float, floating.depth)
+          : floatPlacement(surfaceBox(floating.float), floating.depth)
       }
     />
   );
@@ -125,3 +127,10 @@ const appStyles = css({
   // cannot draw, and it would send every window down the copy path.
   borderRadius: "lg",
 });
+
+// A floating window's corners are the frame's, not its own. Square, because
+// the compositor's shader takes one radius for all four — it is the element's
+// `border-top-left-radius` the SDK reports — so a window cannot be square
+// under its bar and round at the bottom. The bar carries the rounding, and the
+// surface under it meets it flush.
+const framedStyles = css({ borderRadius: 0 });

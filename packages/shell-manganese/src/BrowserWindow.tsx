@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
+import { surfaceBox } from "./float";
 import type { Floating } from "./shell-state";
 import {
   clickThroughStyles,
@@ -136,7 +137,7 @@ export const BrowserWindow = ({
       style={
         floating === undefined
           ? undefined
-          : floatPlacement(floating.float, floating.depth)
+          : floatPlacement(surfaceBox(floating.float), floating.depth)
       }
     >
       <form className={addressBarStyles} onSubmit={handleSubmit}>

@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 
 import { css } from "../styled-system/css";
-import type { Float } from "./float";
+import type { Box } from "./float";
 
 /**
  * What every window shares: it fills the stage, and the one that is not on it
@@ -45,7 +45,8 @@ export const windowStyles = css({
 const FLOOR = 1;
 
 /**
- * Where a floating window sits, as the inline style that puts it there.
+ * Where a part of a floating window sits, as the inline style that puts it
+ * there.
  *
  * Inline rather than a Panda class because these are runtime numbers, and
  * Panda extracts styles by reading literals at build time: a class built from
@@ -59,11 +60,11 @@ const FLOOR = 1;
  * rather than on a wrapper for exactly that reason: a wrapper's `z-index` is
  * one the page can see and the desktop cannot.
  */
-export const floatPlacement = (float: Float, depth: number): CSSProperties => ({
-  blockSize: `${float.height.toString()}px`,
-  inlineSize: `${float.width.toString()}px`,
-  insetBlockStart: `${float.y.toString()}px`,
-  insetInlineStart: `${float.x.toString()}px`,
+export const floatPlacement = (box: Box, depth: number): CSSProperties => ({
+  blockSize: `${box.height.toString()}px`,
+  inlineSize: `${box.width.toString()}px`,
+  insetBlockStart: `${box.y.toString()}px`,
+  insetInlineStart: `${box.x.toString()}px`,
   zIndex: FLOOR + depth,
 });
 
