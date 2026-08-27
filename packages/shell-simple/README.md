@@ -1,6 +1,6 @@
 # @domicile/shell-simple
 
-The smallest Domicile chrome that is still a desktop. Every Wayland client the
+A desktop with nothing in it but windows. Every Wayland client the
 host announces gets a `<domicile-app>` element on the page; hold **Alt** and
 drag one to move it, hold Alt and drag with the **right button** to resize it,
 and either way it comes to the front. **Alt+Enter** opens a terminal. That is
@@ -10,10 +10,18 @@ has nowhere else to say what it answers to. It is there whenever the desktop
 is empty: gone while a window is open, back when the last one leaves.
 
 It is [TinyWM](http://incise.org/tinywm.html) for Domicile, and for TinyWM's
-reason: a window manager with no widgets in it is the shortest honest answer to
-"what does a shell actually have to do?". The answer here is about ninety lines
-of it — [`@domicile/shell-manganese`](../shell-manganese/README.md) is the
-reference chrome that shows what the model is *for*.
+reason: a window manager with no widgets in it shows what a shell is *made of*
+without a design on top of it. It is not, though, the least a shell can be —
+there is drag, resize, a terminal shortcut and a config schema in here, about
+twelve hundred lines of it. Two neighbours mark the ends it sits between:
+
+- [`examples/minimal-shell`](/examples/minimal-shell) is the floor — every
+  window full-screen, newest on top, and no more. It is also the only shell
+  here built against the *published* SDK from outside the workspace, which is
+  what makes it the worked example in
+  [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
+- [`@domicile/shell-manganese`](../shell-manganese/README.md) is the reference
+  chrome, and shows what the model is *for*.
 
 ## Layout
 

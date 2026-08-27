@@ -68,8 +68,13 @@ Which is the whole interface. A shell owns its own configuration and starts
 of Domicile's and never configures it directly.
 
 [docs/WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md) is the guide;
-[examples/minimal-shell](examples/minimal-shell) is a complete one in about a
-hundred lines.
+[examples/minimal-shell](examples/minimal-shell) is a complete one in about two
+hundred and fifty lines, built against the published SDK from outside this
+workspace exactly as yours would be. The two shells in `packages/` are built on
+that floor rather than instead of it:
+[`shell-simple`](packages/shell-simple/README.md) is windows, gestures and a
+terminal shortcut, [`shell-manganese`](packages/shell-manganese/README.md) the
+bundled reference chrome.
 
 ## Check
 
