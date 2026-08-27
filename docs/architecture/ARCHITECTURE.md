@@ -125,7 +125,9 @@ libraries — build it in `nix develop .#full`:
 Web side:
 - `packages/chrome-sdk` — TypeScript: the `<app>`/`<webview>` custom elements + bridge client.
 - `packages/shell-manganese` — the bundled reference chrome.
-- `packages/shell-simple` — the smallest chrome that works, for reading rather than using.
+- `packages/shell-simple` — a desktop with nothing in it but windows, for reading
+  rather than using. Not the floor: that is `examples/minimal-shell`, which is a
+  quarter its size and the worked example in `/docs/WRITING-A-SHELL.md`.
 
 ## Testing strategy (TDD)
 

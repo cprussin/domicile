@@ -7,6 +7,13 @@ Every window full-screen, newest on top. That is the least a shell can do and
 still be one — a real shell differs from it only in where it puts the elements
 and what it draws around them.
 
+It is the floor, and the two shells shipped in `packages/` are what gets built
+on it: [`@domicile/shell-simple`](/packages/shell-simple/README.md) adds drag,
+resize and a terminal shortcut without adding any widgets, and
+[`@domicile/shell-manganese`](/packages/shell-manganese/README.md) is the
+bundled reference chrome. Neither can stand in for this one, for the reason
+below.
+
 ## Why it is here and not in `packages/`
 
 `packages/` is the bun workspace. Inside it `@domicile/chrome-sdk` resolves to a
