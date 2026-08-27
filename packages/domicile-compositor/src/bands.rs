@@ -46,6 +46,16 @@ pub struct Bands {
     answered: HashSet<usize>,
 }
 
+/// One thing to draw, in the order it is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Layered {
+    /// The window at this index of the depths handed to
+    /// [`drawn_with`](Bands::drawn_with).
+    Window(usize),
+    /// The band at this index of the declared depths, drawn whole.
+    Band(usize),
+}
+
 /// What the compositor should do next about the chrome's bands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Next {
@@ -131,6 +141,47 @@ impl Bands {
         self.answered.remove(&band);
     }
 
+    /// The order to draw one frame's windows and bands in.
+    ///
+    /// `windows` is each drawn window's depth, in the order the scene draws
+    /// them. The result is every window once and every band once, interleaved
+    /// — the whole of what putting a window between two layers of chrome
+    /// means, and the reason it is here rather than inline in `present`: the
+    /// method that draws cannot be tested, and this can.
+    ///
+    /// A band moves only for a window strictly above it, matching `stacking`:
+    /// at equal depth the page has already decided, in its own raster, whether
+    /// that chrome covers the `<app>` element's hole.
+    ///
+    /// Bands are drawn *whole*, unlike `stacking`'s: each raster holds only
+    /// its own depth, so there is nothing of another depth in it to confine
+    /// away. That is what closes the case ordering cannot — a translucent
+    /// panel over a window with a wallpaper behind it.
+    pub fn drawn_with(&self, windows: &[i32]) -> Vec<Layered> {
+        let mut ordered: Vec<(i32, usize)> = self
+            .depths
+            .iter()
+            .enumerate()
+            .map(|(band, depth)| (*depth, band))
+            .collect();
+        ordered.sort_unstable();
+
+        let mut order = Vec::with_capacity(windows.len() + ordered.len());
+        let mut next = 0;
+        for (index, depth) in windows.iter().enumerate() {
+            let below = ordered[next..].partition_point(|(at, _)| at < depth);
+            order.extend(
+                ordered[next..next + below]
+                    .iter()
+                    .map(|(_, b)| Layered::Band(*b)),
+            );
+            next += below;
+            order.push(Layered::Window(index));
+        }
+        order.extend(ordered[next..].iter().map(|(_, b)| Layered::Band(*b)));
+        order
+    }
+
     /// The depth of each band, in the order they were declared.
     pub fn depths(&self) -> &[i32] {
         &self.depths
@@ -139,7 +190,7 @@ impl Bands {
 
 #[cfg(test)]
 mod tests {
-    use super::{Bands, Next};
+    use super::{Bands, Layered, Next};
 
     #[test]
     fn a_chrome_that_declared_nothing_is_already_complete() {
@@ -242,6 +293,122 @@ mod tests {
 
         bands.unanswered(0);
         assert_eq!(bands.next(), Next::Ask(0));
+    }
+
+    #[test]
+    fn a_chrome_with_no_bands_is_just_its_windows() {
+        // Every desktop today. The chrome's own single texture is drawn over
+        // the lot by `present`, as it always was.
+        let bands = Bands::default();
+        assert_eq!(
+            bands.drawn_with(&[1, 2]),
+            vec![Layered::Window(0), Layered::Window(1)],
+        );
+    }
+
+    #[test]
+    fn a_band_below_a_window_is_drawn_before_it() {
+        // The whole point: a window between two layers of chrome.
+        let mut bands = Bands::default();
+        bands.declared(vec![0, 9]);
+        assert_eq!(
+            bands.drawn_with(&[5]),
+            vec![Layered::Band(0), Layered::Window(0), Layered::Band(1)],
+        );
+    }
+
+    #[test]
+    fn a_band_at_a_windows_own_depth_stays_above_it() {
+        // Strictly below, matching `stacking`: at equal depth the page has
+        // already decided, in its own raster, whether that chrome covers the
+        // `<app>` element's hole.
+        let mut bands = Bands::default();
+        bands.declared(vec![5]);
+        assert_eq!(
+            bands.drawn_with(&[5]),
+            vec![Layered::Window(0), Layered::Band(0)],
+        );
+    }
+
+    #[test]
+    fn bands_are_drawn_by_depth_rather_than_by_the_order_declared() {
+        // A shell names its layers in whatever order suits it; what orders the
+        // drawing is the `z-index` each one carries.
+        let mut bands = Bands::default();
+        bands.declared(vec![9, 0]);
+        assert_eq!(
+            bands.drawn_with(&[5]),
+            vec![Layered::Band(1), Layered::Window(0), Layered::Band(0)],
+        );
+    }
+
+    #[test]
+    fn bands_under_one_window_keep_their_own_order() {
+        // Two bands falling either side of nothing — both below the same
+        // window, so both land in one group. A group emitted in the wrong
+        // order is a wallpaper over the panel that belongs above it, and the
+        // membership test below cannot see it: it sorts before comparing.
+        let mut bands = Bands::default();
+        bands.declared(vec![0, -1]);
+
+        assert_eq!(
+            bands.drawn_with(&[5]),
+            vec![Layered::Band(1), Layered::Band(0), Layered::Window(0)],
+        );
+    }
+
+    #[test]
+    fn every_window_and_every_band_is_drawn_exactly_once() {
+        // The loop this replaced walked two sorted lists with an index into
+        // each, and indexed `layers` by the window's position — correct only
+        // while nothing else had rewritten that list. Losing or repeating one
+        // is a window that vanished or a layer drawn twice.
+        let mut bands = Bands::default();
+        bands.declared(vec![3, 3, 8, -1]);
+        let order = bands.drawn_with(&[0, 3, 7, 7]);
+
+        let mut windows: Vec<usize> = order
+            .iter()
+            .filter_map(|drawn| match drawn {
+                Layered::Window(at) => Some(*at),
+                Layered::Band(_) => None,
+            })
+            .collect();
+        let mut drawn: Vec<usize> = order
+            .iter()
+            .filter_map(|item| match item {
+                Layered::Band(band) => Some(*band),
+                Layered::Window(_) => None,
+            })
+            .collect();
+        windows.sort_unstable();
+        drawn.sort_unstable();
+
+        assert_eq!(windows, vec![0, 1, 2, 3], "every window, once");
+        assert_eq!(drawn, vec![0, 1, 2, 3], "every band, once");
+    }
+
+    #[test]
+    fn windows_keep_the_order_the_scene_drew_them_in() {
+        // `draw_order` has already sorted them by `(z_index, index)`, so their
+        // relative order is the scene's answer and not this function's to
+        // revisit.
+        let mut bands = Bands::default();
+        bands.declared(vec![4]);
+        let order = bands.drawn_with(&[1, 2, 9]);
+        let windows: Vec<_> = order
+            .iter()
+            .filter(|drawn| matches!(drawn, Layered::Window(_)))
+            .collect();
+
+        assert_eq!(
+            windows,
+            vec![
+                &Layered::Window(0),
+                &Layered::Window(1),
+                &Layered::Window(2)
+            ],
+        );
     }
 
     #[test]
