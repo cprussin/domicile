@@ -4,7 +4,12 @@ import { useCallback, useEffect, useMemo, useReducer } from "react";
 
 import type { AppElements } from "./app-elements";
 import type { ShellState } from "./shell-state";
-import { EMPTY_SHELL, reduceShell, ShellAction } from "./shell-state";
+import {
+  EMPTY_SHELL,
+  floatingOf,
+  reduceShell,
+  ShellAction,
+} from "./shell-state";
 import { appIdOf, siteOf } from "./shell-window";
 
 /** Where a browser window starts. */
@@ -31,6 +36,15 @@ export type ShellWindows = ShellState & {
   reorder: (fromId: string, toId: string, position: DropPosition) => void;
   /** Put the window `id` on the stage. */
   select: (id: string) => void;
+  /**
+   * Take the window `id` out of the rail to float over the stage, or put it
+   * back if it is already out.
+   *
+   * One call rather than two because it answers one keystroke: Alt+Tab is a
+   * toggle, and which way it goes is a fact about the window the shell already
+   * holds rather than something the caller should have to look up.
+   */
+  toggleFloat: (id: string) => void;
 };
 
 /**
@@ -119,6 +133,17 @@ export const useShellWindows = (
     dispatch(ShellAction.WindowSelected(id));
   }, []);
 
+  const toggleFloat = useCallback(
+    (id: string) => {
+      dispatch(
+        floatingOf(state.floats, id) === undefined
+          ? ShellAction.WindowFloated(id)
+          : ShellAction.WindowTabbed(id),
+      );
+    },
+    [state.floats],
+  );
+
   return useMemo(
     () => ({
       ...state,
@@ -128,7 +153,17 @@ export const useShellWindows = (
       renameToSite,
       reorder,
       select,
+      toggleFloat,
     }),
-    [close, openBrowser, openTerminal, renameToSite, reorder, select, state],
+    [
+      close,
+      openBrowser,
+      openTerminal,
+      renameToSite,
+      reorder,
+      select,
+      state,
+      toggleFloat,
+    ],
   );
 };

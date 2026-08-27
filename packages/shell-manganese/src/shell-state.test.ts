@@ -226,3 +226,142 @@ describe("reduceShell", () => {
     });
   });
 });
+
+describe("floating windows", () => {
+  const floating = (state: ShellState): string[] =>
+    state.floats.map((float) => float.id);
+
+  const twoTerminals = [
+    ShellAction.AppAppeared("one", "One"),
+    ShellAction.AppAppeared("two", "Two"),
+  ] as const;
+
+  it("takes a floated window off the stage and leaves it in the rail", () => {
+    const state = after(...twoTerminals, ShellAction.WindowFloated("app:two"));
+    expect(floating(state)).toStrictEqual(["app:two"]);
+    // Still a window, so still a tab: the rail is how it is reached, and a
+    // window with no tab and no stage is one the user has lost.
+    expect(titles(state)).toStrictEqual(["One", "Two"]);
+    // And the stage falls back rather than going blank, which would hide the
+    // other windows because one of them was floated.
+    expect(state.shownId).toBe("app:one");
+    // The user is working in the window they just floated, wherever the
+    // stage went.
+    expect(state.activeId).toBe("app:two");
+  });
+
+  it("leaves the stage empty when the only window floats", () => {
+    const state = after(
+      ShellAction.AppAppeared("one", "One"),
+      ShellAction.WindowFloated("app:one"),
+    );
+    expect(state.shownId).toBeUndefined();
+    expect(state.activeId).toBe("app:one");
+  });
+
+  it("leaves the stage alone when a window that was not on it floats", () => {
+    const state = after(...twoTerminals, ShellAction.WindowFloated("app:one"));
+    expect(state.shownId).toBe("app:two");
+  });
+
+  it("cascades each float past the ones already out", () => {
+    // Not a stack: a window that opened exactly on top of the last one looks
+    // like the last one moved, and there is nothing to grab to find out.
+    const state = after(
+      ...twoTerminals,
+      ShellAction.WindowFloated("app:one"),
+      ShellAction.WindowFloated("app:two"),
+    );
+    const [first, second] = state.floats;
+    expect(second?.x).toBeGreaterThan(first?.x ?? 0);
+    expect(second?.y).toBeGreaterThan(first?.y ?? 0);
+  });
+
+  it("does not move a window that is floated twice", () => {
+    // The user asking again for what they already have is the same window,
+    // and re-cascading it would move one they had put somewhere on purpose.
+    const once = after(...twoTerminals, ShellAction.WindowFloated("app:two"));
+    expect(reduceShell(once, ShellAction.WindowFloated("app:two"))).toBe(once);
+  });
+
+  it("puts a window that stops floating back on the stage", () => {
+    const state = after(
+      ...twoTerminals,
+      ShellAction.WindowFloated("app:two"),
+      ShellAction.WindowTabbed("app:two"),
+    );
+    expect(floating(state)).toStrictEqual([]);
+    expect(state.shownId).toBe("app:two");
+  });
+
+  it("raises a floating window to the front", () => {
+    // The order is the stacking order, so the front is the end of the list.
+    const state = after(
+      ...twoTerminals,
+      ShellAction.WindowFloated("app:one"),
+      ShellAction.WindowFloated("app:two"),
+      ShellAction.WindowRaised("app:one"),
+    );
+    expect(floating(state)).toStrictEqual(["app:two", "app:one"]);
+    expect(state.activeId).toBe("app:one");
+  });
+
+  it("keeps a raised window's own box rather than re-cascading it", () => {
+    const floated = after(
+      ...twoTerminals,
+      ShellAction.WindowFloated("app:two"),
+    );
+    const raised = reduceShell(floated, ShellAction.WindowRaised("app:two"));
+    expect(raised.floats).toStrictEqual(floated.floats);
+  });
+
+  it("raises a floating window whose tab is picked, rather than staging it", () => {
+    // Its tab is how it is reached; reaching a window that is on screen
+    // already means bringing it to the front. Putting it back on the stage
+    // would undo the float the user asked for.
+    const state = after(
+      ...twoTerminals,
+      ShellAction.WindowFloated("app:two"),
+      ShellAction.WindowSelected("app:two"),
+    );
+    expect(floating(state)).toStrictEqual(["app:two"]);
+    expect(state.shownId).toBe("app:one");
+    expect(state.activeId).toBe("app:two");
+  });
+
+  it("takes a floating window's box with it when it closes", () => {
+    const state = after(
+      ...twoTerminals,
+      ShellAction.WindowFloated("app:two"),
+      ShellAction.AppClosed("two"),
+    );
+    expect(floating(state)).toStrictEqual([]);
+    expect(state.activeId).toBe("app:one");
+  });
+
+  it("moves to the float underneath when the front one closes", () => {
+    const state = after(
+      ...twoTerminals,
+      ShellAction.WindowFloated("app:one"),
+      ShellAction.WindowFloated("app:two"),
+      ShellAction.AppClosed("two"),
+    );
+    expect(state.activeId).toBe("app:one");
+  });
+
+  it("refuses to float a window that is not open", () => {
+    expect(() =>
+      reduceShell(EMPTY_SHELL, ShellAction.WindowFloated("app:x")),
+    ).toThrow();
+  });
+
+  it("refuses to tab or raise a window that is not floating", () => {
+    const state = after(...twoTerminals);
+    expect(() =>
+      reduceShell(state, ShellAction.WindowTabbed("app:one")),
+    ).toThrow();
+    expect(() =>
+      reduceShell(state, ShellAction.WindowRaised("app:one")),
+    ).toThrow();
+  });
+});

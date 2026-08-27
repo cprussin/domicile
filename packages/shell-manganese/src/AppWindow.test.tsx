@@ -58,14 +58,26 @@ beforeEach(() => {
 describe("AppWindow", () => {
   it("mounts a portal carrying the host's app id", () => {
     const { container } = render(
-      <AppWindow active appElements={new AppElements()} appId="term" />,
+      <AppWindow
+        appElements={new AppElements()}
+        appId="term"
+        floating={undefined}
+        focused
+        onScreen
+      />,
     );
     expect(portal(container).getAttribute("app-id")).toBe("term");
   });
 
   it("hides the portal when the window is not on the stage", () => {
     const { container } = render(
-      <AppWindow active={false} appElements={new AppElements()} appId="term" />,
+      <AppWindow
+        appElements={new AppElements()}
+        appId="term"
+        floating={undefined}
+        focused={false}
+        onScreen={false}
+      />,
     );
     expect(portal(container)).not.toBeVisible();
   });
@@ -74,7 +86,13 @@ describe("AppWindow", () => {
     it("registers the mounted portal so the host's frames reach it", () => {
       const appElements = new AppElements();
       const { container } = render(
-        <AppWindow active appElements={appElements} appId="term" />,
+        <AppWindow
+          appElements={appElements}
+          appId="term"
+          floating={undefined}
+          focused
+          onScreen
+        />,
       );
       appElements.drawFrame({
         app_id: "term",
@@ -89,7 +107,13 @@ describe("AppWindow", () => {
     it("unregisters the portal when the window unmounts", () => {
       const appElements = new AppElements();
       const { unmount } = render(
-        <AppWindow active appElements={appElements} appId="term" />,
+        <AppWindow
+          appElements={appElements}
+          appId="term"
+          floating={undefined}
+          focused
+          onScreen
+        />,
       );
       unmount();
       appElements.drawFrame({

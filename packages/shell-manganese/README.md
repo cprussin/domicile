@@ -84,6 +84,27 @@ that swaps nodes out from under the reconciler is not something React tolerates.
   the stage. Its address bar navigates on Enter (an address typed without a
   scheme is loaded over https) and follows the page wherever it goes; the
   window's tab is labelled with the site it is showing.
+- **Alt+Tab** — float the window you are working in, or put it back. See
+  below.
+
+## Floating a window
+
+**Alt+Tab** takes the window you are working in out of the rail, where it
+floats over the stage in a box of its own; pressing it again puts the window
+back. Each float opens cascaded past the ones already out, and comes to the
+front when you click it or pick its tab.
+
+The float order is the stacking order, and the shell writes it as the
+`z-index` of the window's *own* element — which is what the SDK reports with
+the placement and what the compositor stacks the client's surface by, so the
+page and the desktop agree about which window is in front. A floating window
+is drawn over the stage rather than on it, so the stage falls back to the last
+window still in the rail rather than going blank.
+
+A floated window keeps its tab. The tab is how it is reached when it is behind
+something, and a window with no tab and nothing selected is a window you have
+lost — so picking the tab of a floating window brings it to the front rather
+than putting it back on the stage. Alt+Tab is what changes the mode.
 
 Both combinations are claimed three times over, because three different things
 can be holding the keyboard when the user presses one. The page listens for its
