@@ -1,6 +1,7 @@
 {"type":"welcome","protocol_version":1}
 {"type":"render_band","band":2}
 {"type":"shortcut","shortcut":{"key":24,"alt":false,"ctrl":true,"shift":false,"logo":true}}
+{"type":"modifiers","alt":true,"ctrl":false,"shift":true,"logo":false}
 {"type":"app_appeared","app_id":"app-1","title":null,"size":null}
 {"type":"app_appeared","app_id":"app-2","title":"kitty","size":[800.0,600.0]}
 {"type":"app_titled","app_id":"app-2","title":"~/src"}

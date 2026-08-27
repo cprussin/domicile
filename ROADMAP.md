@@ -167,6 +167,12 @@ below.
   is given them, which is the only place they can be taken from a window that
   has the keyboard. Modifier *toggles* are deliberately not part of a chord:
   matching on caps lock or num lock makes a shortcut stop working when one is on.
+- **A modifier is told, not claimed.** `wl_keyboard.modifiers` goes to the
+  surface that holds the keyboard, so a chrome whose windows answer to a held
+  Alt — dragging one, say — stops hearing about it the moment a window is
+  focused, which is exactly when it needs to know. So the compositor broadcasts
+  `modifiers` on every change. Not through `grab_shortcut`: a modifier the
+  chrome had to take out of the stream would be one no window could ever use.
 - **Never leave the keyboard focused on nothing.** Focusing a window that has
   already closed — the race the chrome loses whenever one goes away while its
   focus message is in flight — used to hand the keyboard to `None`, and nothing
@@ -559,8 +565,8 @@ falloff the shadow uses, is the next candidate to move it.
   reported in. **Half done.** `compositor/src/stacking.rs` decides where the
   chrome goes among the windows, and `Layer::clip` confines each of its depths
   to the region that depth occupies. What is missing is the depths themselves:
-  the chrome knows them and the protocol carries no message for them, so every
-  frame is still the all-above case.
+  `declare_bands` carries them and no chrome sends one, so every frame is
+  still the all-above case.
 
   Ordering is not the whole answer and cannot be. Where chrome above a window
   and chrome below it cover one pixel, the page flattened that texel before we

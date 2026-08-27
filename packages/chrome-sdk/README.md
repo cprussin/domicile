@@ -112,6 +112,29 @@ of its own; a CSS animation or a video in the shell still would.
 A shell that never calls this declares nothing and is drawn as one layer over
 every window, which is what every chrome did before bands existed.
 
+### Knowing which modifiers are held
+
+`wl_keyboard.modifiers` goes to whatever holds the keyboard, so the moment a
+window is focused the page stops hearing about the Alt the user is holding —
+which is exactly when a shell wants to know, because that is when it would
+begin an alt-drag. The host says instead:
+
+```ts
+bridge.on("modifiers", ({ alt }) => {
+  // While Alt is held, let the pointer reach the page rather than the window
+  // it is over: `pointer-events: none` is what tells the compositor the
+  // window is not taking clicks, and it hit-tests accordingly.
+  portal.style.pointerEvents = alt ? "none" : "";
+});
+```
+
+Sent when the set changes, so a modifier held down arrives once and letting go
+arrives once; an ordinary key never appears here at all.
+
+Unlike `grabShortcut` this claims nothing — the focused window is given the
+key as well, because a modifier the chrome had to take would be one no window
+could ever use.
+
 ## Dependencies
 
 `zod`, used only at the host boundary: incoming frames are parsed against the

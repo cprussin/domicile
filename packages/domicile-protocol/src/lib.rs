@@ -258,6 +258,30 @@ pub enum HostMessage {
     /// nothing and would arrive as a second event for one keystroke.
     Shortcut { shortcut: Shortcut },
 
+    /// Which modifier keys are held now, whenever that changes.
+    ///
+    /// The chrome cannot see this for itself: `wl_keyboard.modifiers` goes to
+    /// the surface that holds the keyboard, so the moment a window is focused
+    /// the page stops being told — and a chrome whose windows answer to a held
+    /// modifier needs to know exactly then. Alt to drag a window is why this
+    /// exists.
+    ///
+    /// Which modifiers are down, never which key put them there: no ordinary
+    /// key appears here, and one held down sends nothing at all. A chrome that
+    /// connects mid-keystroke is not caught up on this, because the state it
+    /// would be caught up on is one a user is holding — the next thing that
+    /// happens is them letting go, which is a message.
+    ///
+    /// Not a claim, unlike [`ChromeMessage::GrabShortcut`]: the focused client
+    /// is given the key as well. A modifier the chrome had to take would be
+    /// one no window could ever use.
+    Modifiers {
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        logo: bool,
+    },
+
     /// A new Wayland client wants a portal. The chrome decides where to mount
     /// its `<app id="…">` element.
     ///
