@@ -10,6 +10,22 @@ rust-version.workspace = true
 name = "domicile-compositor"
 path = "src/main.rs"
 
+# The stand-in Wayland client this crate's integration tests open a window
+# with, owned here rather than by `domicile-test-client` — which is where all
+# of its code still lives.
+#
+# Cargo builds every binary of the package under test before it runs that
+# package's tests, and has no stable way to depend on another package's binary
+# (`artifact = "bin"` is still `-Z bindeps`). So a client that lived only in
+# its own crate was built by whatever command happened to run first:
+# `cargo test --workspace` produced one and `cargo test -p domicile-compositor`
+# did not, which made the documented command fail on a clean tree. Declaring
+# the target here is what ties the two together — the tests get
+# `CARGO_BIN_EXE_domicile-test-client` and cargo keeps its promise about it.
+[[bin]]
+name = "domicile-test-client"
+path = "src/bin/domicile-test-client.rs"
+
 [dependencies]
 # The renderer's matrix type, at the version Smithay's own API speaks.
 cgmath = "0.18"
@@ -19,6 +35,10 @@ domicile-host = { path = "../domicile-host" }
 domicile-protocol = { path = "../domicile-protocol" }
 domicile-scene = { path = "../domicile-scene" }
 domicile-launch = { path = "../domicile-launch" }
+# The client above, and a dependency rather than a dev-dependency because a
+# `[[bin]]` links against the former. It adds no crate to this tree: Smithay
+# already pulls `wayland-client` and `wayland-protocols` for the server side.
+domicile-test-client = { path = "../domicile-test-client" }
 # Same dlopen crate Smithay uses for EGL, so libEGL can be probed for before
 # Smithay loads it (it treats a missing library as fatal).
 libloading = "0.8"

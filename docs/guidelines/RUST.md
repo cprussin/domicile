@@ -24,18 +24,35 @@ pulls Smithay and the native Wayland libraries, so a plain `cargo test` in the
 core shell stays fast and Smithay-free. Build and test it explicitly:
 
 ```sh
-nix develop .#full -c cargo build -p domicile-test-client
+nix develop .#full -c cargo build -p domicile-compositor
 nix develop .#full -c cargo test -p domicile-compositor
 ```
 
-The build first because its integration tests start a real Wayland client, and
-`-p domicile-compositor` does not produce one: cargo has no stable way for a
-crate to depend on another crate's *binary*. `cargo test --workspace` builds
-every binary and so needs neither line. The fixture fails with this command in
-its message rather than a bare `NotFound`.
-
 Keep that split intact. A new crate that needs GPU, Wayland, or CEF belongs
 outside `default-members` with a comment saying why.
+
+### A test that needs another crate's binary owns the target
+
+`domicile-compositor`'s integration tests start a real Wayland client, and the
+client is `domicile-test-client` — a separate crate, so that its command line
+can be tested in the core shell without Smithay. Cargo builds every **binary**
+of the package under test before running that package's tests, and has no
+stable way to depend on another package's binary (`artifact = "bin"` is still
+`-Z bindeps`). So the `domicile-test-client` executable is declared as a
+`[[bin]]` of `domicile-compositor`, whose source is one line calling
+`domicile_test_client::run`; the client's own crate is a library.
+
+That is what makes `cargo test -p domicile-compositor` work on a clean tree.
+Before it, whether those tests passed depended on which cargo command had run
+before them — `cargo test --workspace` left a client behind and
+`cargo test -p domicile-compositor` did not — and the fixture had to assert the
+binary existed and name the command to produce it.
+
+Do the same for the next test that needs a binary from elsewhere: put the
+`[[bin]]` on the package whose tests spawn it and keep the code in the crate it
+belongs to. Do not reach for a `build.rs` that shells out to cargo — cargo
+holds a lock on the target directory while tests run, and a test that invokes
+it deadlocks.
 
 ## Required checks
 

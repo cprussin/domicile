@@ -161,7 +161,13 @@
 
         # `default-members` leaves this crate out — it is the one thing in the
         # workspace that needs a graphics stack — so it has to be named.
-        cargoBuildFlags = [ "-p" "domicile-compositor" ];
+        #
+        # And the binary too, not just the package: the crate owns a second
+        # `[[bin]]`, `domicile-test-client`, which exists so that cargo builds
+        # a Wayland client whenever it builds the tests that spawn one. It is
+        # test scaffolding, and naming the binary here is what keeps it out of
+        # what this package installs.
+        cargoBuildFlags = [ "-p" "domicile-compositor" "--bin" "domicile-compositor" ];
 
         # Not because they would fail — the ones needing a GPU are `#[ignore]`d
         # and CI runs the rest with no GL stack at all — but because a package

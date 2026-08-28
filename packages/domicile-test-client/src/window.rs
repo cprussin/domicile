@@ -270,7 +270,7 @@ impl Client {
         let xdg = wm_base.get_xdg_surface(&surface, handle, ());
         let toplevel = xdg.get_toplevel(handle, ());
         toplevel.set_title(self.title.clone());
-        domicile_test_client::say!(toplevel.id(), "set_title(\"{}\")", self.title);
+        crate::say!(toplevel.id(), "set_title(\"{}\")", self.title);
         // An app id is what a chrome keys a window by, so a window with none
         // is one a shell cannot address. The title is the human name; this is
         // the one programs match on.
@@ -336,7 +336,7 @@ impl Client {
             .expect("open() proved there is a wl_shm before there was a window");
 
         window.surface.set_buffer_scale(wanted);
-        domicile_test_client::say!(window.surface.id(), "set_buffer_scale({})", wanted);
+        crate::say!(window.surface.id(), "set_buffer_scale({})", wanted);
         // Destroyed, not dropped. Dropping a `wayland-client` proxy sends no
         // destructor, so the old buffers would stay alive on both sides: they
         // would go on delivering `release` into a handler keyed on an index
@@ -527,7 +527,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Client {
                 interface,
                 version,
             } => {
-                domicile_test_client::say!(
+                crate::say!(
                     registry.id(),
                     "global({}, \"{}\", {})",
                     name,
@@ -671,7 +671,7 @@ impl Dispatch<wl_buffer::WlBuffer, usize> for Client {
         // into it. Without this the client runs out of buffers after two
         // frames and never draws again.
         if let wl_buffer::Event::Release = event {
-            domicile_test_client::say!(buffer.id(), "release()");
+            crate::say!(buffer.id(), "release()");
             let window = client
                 .window
                 .as_mut()
@@ -771,14 +771,14 @@ impl Dispatch<wl_surface::WlSurface, ()> for Client {
     ) {
         match event {
             wl_surface::Event::Enter { output } => {
-                domicile_test_client::say!(surface.id(), "enter({})", output.id());
+                crate::say!(surface.id(), "enter({})", output.id());
                 let on = output.id();
                 if !client.entered.contains(&on) {
                     client.entered.push(on);
                 }
             }
             wl_surface::Event::Leave { output } => {
-                domicile_test_client::say!(surface.id(), "leave({})", output.id());
+                crate::say!(surface.id(), "leave({})", output.id());
                 let off = output.id();
                 client.entered.retain(|on| on != &off);
             }
@@ -819,7 +819,7 @@ impl Dispatch<wl_output::WlOutput, ()> for Client {
                 model,
                 transform,
             } => {
-                domicile_test_client::say!(
+                crate::say!(
                     output.id(),
                     "geometry({}, {}, {}, {}, {}, \"{}\", \"{}\", {})",
                     x,
@@ -838,7 +838,7 @@ impl Dispatch<wl_output::WlOutput, ()> for Client {
                 height,
                 refresh,
             } => {
-                domicile_test_client::say!(
+                crate::say!(
                     output.id(),
                     "mode({}, {}, {}, {})",
                     number(flags),
@@ -848,10 +848,10 @@ impl Dispatch<wl_output::WlOutput, ()> for Client {
                 );
             }
             wl_output::Event::Name { name } => {
-                domicile_test_client::say!(output.id(), "name(\"{}\")", name);
+                crate::say!(output.id(), "name(\"{}\")", name);
             }
             wl_output::Event::Scale { factor } => {
-                domicile_test_client::say!(output.id(), "scale({})", factor);
+                crate::say!(output.id(), "scale({})", factor);
                 let of = output.id();
                 match client.scales.iter_mut().find(|(id, _)| id == &of) {
                     Some((_, scale)) => *scale = factor,
@@ -859,7 +859,7 @@ impl Dispatch<wl_output::WlOutput, ()> for Client {
                 }
             }
             wl_output::Event::Done => {
-                domicile_test_client::say!(output.id(), "done()");
+                crate::say!(output.id(), "done()");
                 // The event that says the batch above is complete, which is
                 // when a client is meant to act on it. Acting on `scale`
                 // directly would redraw against a half-applied description.
@@ -891,7 +891,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
                 key,
                 state,
             } => {
-                domicile_test_client::say!(
+                crate::say!(
                     keyboard.id(),
                     "key({}, {}, {}, {})",
                     serial,
@@ -907,7 +907,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
                 mods_locked,
                 group,
             } => {
-                domicile_test_client::say!(
+                crate::say!(
                     keyboard.id(),
                     "modifiers({}, {}, {}, {}, {})",
                     serial,
@@ -939,7 +939,7 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                 surface_x,
                 surface_y,
             } => {
-                domicile_test_client::say!(
+                crate::say!(
                     pointer.id(),
                     "enter({}, {}, {}, {})",
                     serial,
@@ -961,7 +961,7 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                 surface_x,
                 surface_y,
             } => {
-                domicile_test_client::say!(
+                crate::say!(
                     pointer.id(),
                     "motion({}, {}, {})",
                     time,
@@ -975,7 +975,7 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                 button,
                 state,
             } => {
-                domicile_test_client::say!(
+                crate::say!(
                     pointer.id(),
                     "button({}, {}, {}, {})",
                     serial,
