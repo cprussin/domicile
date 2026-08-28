@@ -1098,8 +1098,10 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                 // closes that into `host` -> `chromes` -> `writer` -> `host`.
                 // Three threads, so it takes two chromes: this one's reader,
                 // `serve_outbound`, and a second connection's reader sitting
-                // in `write_responses` — an arrangement with an e2e check of
-                // its own, not a corner.
+                // in `write_responses`. Nothing drives that interleaving
+                // deterministically. The scoping is what prevents it, not a
+                // check — which is why widening it has to stay a deliberate
+                // decision rather than a tidy-up.
                 // The same holds for the `chromes` lock in the `else` arm.
                 let responses = {
                     let mut host = hub.host.lock().unwrap();
@@ -6092,6 +6094,44 @@ mod tests {
         // second chrome is not left marking the wrong window active. Returning
         // it from the message's own handling is what put it on one socket, and
         // only a real connection reaches that line.
+        //
+        // One chrome is enough *here* because the queue is the seam: a focus
+        // written back to the asker never reaches it, whatever is connected.
+        // What one chrome cannot show is the other end — `serve_outbound`
+        // writing each queued message to every entry in `chromes` rather than
+        // to the first. `tests/desktop.rs` pins that in
+        // `a_density_one_chrome_reports_is_described_to_the_others`, with two
+        // chromes on the fan-out; its third is a latecomer, and a latecomer is
+        // answered by `write_responses` rather than by the fan-out at all.
+        //
+        // `e2e-two-chromes.sh` existed to cover the pair at once and was
+        // deleted for covering neither alone. A port of it was written and
+        // both halves were mutated — `serve_outbound`'s `chromes.retain`
+        // writing to the first chrome only, and `read_chrome_messages`'
+        // `hub.broadcast(message)` after a chrome message written back to the
+        // asking connection instead — and each was already killed there or
+        // here. Named by statement rather than by line: both sites moved
+        // within the change that wrote this comment.
+        //
+        // What went with the script is the *composition*, and it is worth
+        // being plain about rather than implying it followed: the two halves
+        // are pinned separately, and nothing now drives a `focus_changed`
+        // over the fan-out to *two connected chromes*. The qualifier is the
+        // claim: `e2e-input.sh` does assert a compositor's `focus_changed`
+        // reaching a real socket, with one chrome, and `e2e-bands.sh` does
+        // run two at once — the shell and `band-declarer.ts` — where a
+        // `render_band` the declarer never asked for reaches the shell over
+        // this same fan-out. That one survives both mutations regardless: the
+        // shell connects first, so it is the chrome a first-chrome-only
+        // fan-out still writes to. Measured: every check that turns on a
+        // message reaching a chrome *other than the first* is a `Displays`
+        // check.
+        //
+        // And a fan-out made type-aware — every message to everyone,
+        // `FocusChanged` to the first chrome only — passes the Rust suite
+        // (`cargo test --workspace`; the shell scripts were not run under it).
+        // That is not a regression anyone writes by accident, which is why the
+        // script still went; it is the shape of what nothing would now catch.
         let (hub, outbound, app_id) = hub_with_an_app();
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(

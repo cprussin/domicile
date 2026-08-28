@@ -13,7 +13,6 @@ can be verified in CI and on a headless box.
 | `src/input-injector.ts` | `e2e-input.sh` | Waits for `app_appeared`, then forwards a focus + pointer + keyboard sequence to prove input injection reaches a real client. |
 | `src/reload-typist.ts` | `e2e-stuck-key.sh` | Holds a key down, reloads, and then tries to toggle it — the page dying mid-press, which used to leave that key down in the seat for good. |
 | `src/focus-probe.ts` | `e2e-chrome-layer.sh` | Focuses the first app announced and stays connected, so the check can watch the keyboard come back to the chrome on its own when that client goes away. |
-| `src/two-chrome-probe.ts` | `e2e-two-chromes.sh` | Reports what *two* connected chromes are told about focus, since a change is announced once and a page that missed it has missed it for good. |
 | `src/alpha-probe.ts` | `probe-transparency.sh` | Reports whether the frames an app commits carry real transparency, which is the assumption hole-punching rests on. |
 | `src/straight-alpha-probe.ts` | `e2e-window-alpha.sh` | Reports whether frames reaching a chrome carry *straight* alpha, i.e. that the compositor divided out what the client premultiplied. |
 | `src/keystroke-driver.ts` | `measure.sh` | Types over the host socket at a steady rate, so the latency numbers are measured against a known count of keystrokes. |
