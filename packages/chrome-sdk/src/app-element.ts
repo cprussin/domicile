@@ -220,9 +220,12 @@ export const createAppElement = (
      * copied frame on the same socket, where a guess would race the frames still
      * in flight and one of them would put the canvas straight back.
      *
-     * `has-surface` stays: it says this element has a window behind it, which is
-     * as true when the compositor draws it as when a canvas does. Putting the
-     * placeholder back would draw "app surface: …" over a live window.
+     * `has-surface` is *set* here, not merely left alone: it says this element
+     * has a window behind it, which is as true when the compositor draws it as
+     * when a canvas does. A window drawn natively from its first frame never
+     * sent a copied one, so nothing else would ever put it on — and a shell
+     * that hangs a placeholder off its absence draws "app surface: …" over a
+     * live window for as long as that window is open.
      *
      * So does the recorded surface size, which is what pointer coordinates are
      * scaled through and is still the client's resolution when the compositor
@@ -232,6 +235,11 @@ export const createAppElement = (
     dropSurface(): void {
       this.#canvas?.remove();
       this.#canvas = undefined;
+      // Added rather than assumed. A window the compositor drew from the start
+      // never sent a copied frame, so nothing has put this on — and the
+      // placeholder a shell hangs off its absence would be painted over a live
+      // window, for as long as that window is open.
+      this.classList.add(HAS_SURFACE_CLASS);
     }
 
     /** Show the cursor a client asked for while the pointer is over this app. */

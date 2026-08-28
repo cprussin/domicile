@@ -1246,6 +1246,60 @@ describe("Shell", () => {
       expect(claimed()).toHaveLength(1);
     });
 
+    it("hands the pointer over a window on the stage to the page mid-drag", async () => {
+      // The window being dragged is not the only one the pointer crosses. A
+      // window still on the stage takes the pointer the moment the drag passes
+      // over it, and the compositor hands it to that client — so the page
+      // stops seeing the drag and never sees the release that ends it. The
+      // window is then left grabbed with the mouse already let go, which is
+      // what dragging quickly across the desktop produces.
+      const { container } = renderShell();
+      bridge.emit("app_appeared", { app_id: "stage", title: "Stage" });
+      bridge.emit("app_appeared", { app_id: "float", title: "Float" });
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      act(() => {
+        bridge.emit("modifiers", {
+          alt: true,
+          ctrl: false,
+          logo: false,
+          shift: false,
+        });
+      });
+
+      press(sheetOver(container, "float"), 0, 0);
+
+      expect(portalFor(container, "stage")?.className).toContain(
+        css({ pointerEvents: "none" }),
+      );
+    });
+
+    it("gives the stage window its pointer back once the drag ends", async () => {
+      // Only for the length of the drag: a window on the stage is there to be
+      // used, and a click that fell through it would cost the user that click.
+      const { container } = renderShell();
+      bridge.emit("app_appeared", { app_id: "stage", title: "Stage" });
+      bridge.emit("app_appeared", { app_id: "float", title: "Float" });
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      // Alt stays held, so the float keeps its sheet and only the drag can be
+      // what makes the *stage* window let the pointer through.
+      act(() => {
+        bridge.emit("modifiers", {
+          alt: true,
+          ctrl: false,
+          logo: false,
+          shift: false,
+        });
+      });
+      const sheet = sheetOver(container, "float");
+      press(sheet, 0, 0);
+
+      fireEvent.pointerUp(sheet, { pointerId: 1 });
+
+      expect(portalFor(container, "stage")?.className).not.toContain(
+        css({ pointerEvents: "none" }),
+      );
+    });
+
     it("stops banding while a window is being dragged", async () => {
       // A band is a round trip, and the page answers one at a time by leaving
       // only that band painting. A chrome that repaints every frame — which is
