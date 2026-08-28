@@ -21,6 +21,13 @@
 # deleted rather than shipped. So this runs the shell as a *Wayland client of
 # ours*, the same way `e2e-bands.sh` does, with a real client's window on the
 # stage under it.
+#
+# **To falsify it, put a background on an element** — `main { background: ... }`
+# in the shell's `global.css` is the shape the real one had. Not on `html`:
+# `electron-chrome-host` injects `html, body { background: transparent
+# !important }` into a composited chrome, so an `html` rule never applies and
+# is not a defect. A run against one looks like this check failing to fire when
+# it should, and it is the check being right.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib/test-client.sh
