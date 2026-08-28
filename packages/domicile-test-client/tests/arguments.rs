@@ -23,6 +23,10 @@ fn a_client_told_nothing_still_opens_a_window() {
 
     assert_eq!(asked.title, "domicile-test-client");
     assert!(!asked.trace, "a client nobody asked to report stays quiet");
+    assert!(
+        !asked.translucent,
+        "a window is opaque unless a check needs to see past it",
+    );
 }
 
 #[test]
@@ -86,6 +90,28 @@ fn asking_to_report_twice_is_refused_like_any_other_repeat() {
         given(&["--trace", "--trace"]),
         Err(ArgumentError::Repeated {
             flag: "--trace".to_string()
+        })
+    );
+}
+
+#[test]
+fn a_client_can_be_asked_for_a_window_that_is_not_opaque() {
+    // What `e2e-window-shows-through.sh` needs. A headless compositor copies
+    // every window into the page rather than drawing it itself, so the chrome
+    // legitimately paints the client's own pixels where the window is — and
+    // with an opaque client that is indistinguishable from a background
+    // painted over it. A half-opaque window tells the two apart.
+    let asked = given(&["--translucent"]).expect("a request for a see-through window");
+
+    assert!(asked.translucent);
+}
+
+#[test]
+fn asking_for_a_see_through_window_twice_is_refused_like_any_other_repeat() {
+    assert_eq!(
+        given(&["--translucent", "--translucent"]),
+        Err(ArgumentError::Repeated {
+            flag: "--translucent".to_string()
         })
     );
 }

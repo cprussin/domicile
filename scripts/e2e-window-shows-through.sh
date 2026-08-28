@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
-# Do a client's own pixels actually reach the screen?
+# Does anything behind a `<domicile-app>` paint over the window?
 #
 #   nix develop .#full -c ./scripts/e2e-window-shows-through.sh
 #
-# A `<domicile-app>` element is a *hole* in the page. The compositor draws the
-# client's buffer there and composites the chrome over the top, so a window is
-# visible only because the page painted nothing where it is. Put a background
-# on anything behind that hole and the window is gone — every window, if the
-# element spans the desktop, and nothing on screen says why.
-#
-# Nothing in this repo checked that. A full-page backdrop written while the
-# bands were going in would have hidden every window on the desktop, and every
-# check in the tree passed on it; it was caught by reading, which is not a
-# check. This is the check: the compositor looks through each window's hole at
-# the frame the chrome actually committed and says what it found there.
+# A background on any element *behind* a `<domicile-app>` composites under the
+# window and hides it — every window, if that element spans the desktop, and
+# nothing on screen says why. A full-page backdrop written while the bands were
+# going in would have done exactly that, and every check in the tree passed on
+# it; it was caught by reading, which is not a check. This is the check: the
+# compositor reads the texel of the chrome's own committed frame that lies over
+# each window and says what it found.
 #
 # It has to be a real engine. The rule is about a computed background on an
 # ancestor, and the test DOM has no cascade — a unit test for it passes
@@ -22,12 +18,78 @@
 # ours*, the same way `e2e-bands.sh` does, with a real client's window on the
 # stage under it.
 #
+# ## Why the client is `--translucent`
+#
+# The element is only a *hole* where the compositor draws the client's buffer
+# itself, and `disposition` does that for a **dmabuf** on a presenting desktop.
+# `domicile-test-client` commits `wl_shm`, so this window would be on the **copy
+# path** even if this check were given `--present`; the compositor being
+# headless here is the smaller half of the reason. On that path the compositor
+# reads the client's frame back, sends it, and the shell draws it into a
+# `<canvas>` inside the element. What is over the window *is* the window, and it
+# is drawn at the alpha the client committed.
+#
+# `--title` alone gets an `Xrgb8888` window, which is fully opaque, and reading
+# that back is indistinguishable from a background painted over it. That is not
+# a hypothetical: this check read `alpha=255 opaque=true` and called it a
+# hidden window, and passed or failed on whether the chrome frame it happened
+# to read predated the shell drawing the canvas. A half-opaque window makes the
+# reading say one thing — fully opaque over a window is a background behind the
+# element and nothing else.
+#
+# The compositor reads a texel only for a window it has sent the shell the
+# pixels of, and waits out an opaque one, because the shell goes on committing
+# frames it rendered before it had the window — the empty stage, whose card
+# sits in the middle of exactly where the window is going. The line it prints
+# carries the colour as well as the alpha, so a red run says which of those it
+# caught: a run against a `#123456` behind the stage read `rgb="#193253"`,
+# which is this window composited over it to the byte.
+#
+# And the alpha asserted below is the client's own, not merely "not opaque". A
+# *translucent* background behind the element would composite this window to
+# something in between and pass a check that only refused 255 — so the number
+# is the one `TRANSLUCENT_ALPHA` draws, and
+# `the_grepped_log_messages_are_what_the_scripts_expect` pins the two together.
+#
 # **To falsify it, put a background on an element** — `main { background: ... }`
 # in the shell's `global.css` is the shape the real one had. Not on `html`:
 # `electron-chrome-host` injects `html, body { background: transparent
 # !important }` into a composited chrome, so an `html` rule never applies and
 # is not a defect. A run against one looks like this check failing to fire when
 # it should, and it is the check being right.
+#
+# ## What it catches, and what it still does not — measured, not reasoned
+#
+# The reading can settle on a frame that has a background painted and the
+# window not yet: the compositor cannot tell those apart, because a page it has
+# sent a window's pixels to and which has not drawn them looks like a page with
+# something in front of it. So the assertion is on the alpha *and the colour*,
+# and both come off a real run.
+#
+# Falsified four ways, one file changed each time and nothing else:
+#
+#   (none)                                         green: alpha=128 rgb="#101828"
+#   main { background-color: #123456 }             red:   alpha=255 rgb="#193253"
+#   main { background-color: rgb(18 52 86 / 25%) } red:   alpha=64  rgb="#050d16"
+#   main { background-color: rgb(18 52 86 / 50%) } red:   alpha=128 rgb="#091a2b"
+#
+# Unpremultiply each by the client's alpha and they say what they are.
+# `#101828` doubles to `#203050`, which is `COLOURS[0]` — the window itself.
+# `#091a2b` doubles to `#123456`, which is the background on its own, from a
+# frame before the window was drawn. `#050d16` is the same background at a
+# quarter. `#193253` is the window composited over an opaque `#123456`.
+#
+# The 50% row is why the colour is asserted rather than only the alpha: a
+# background at exactly the client's alpha reads `alpha=128 opaque=false` and
+# is indistinguishable from the window by the number alone. It passed this
+# check until the colour went in.
+#
+# What is left is narrow and worth naming: a background behind the element that
+# is at the client's alpha *and* one of the two colours it draws would still
+# read as the window. That is a background painted the same colour as the
+# window it is hiding, which is a thing to be told about rather than a thing to
+# guard against.
+#
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib/test-client.sh
@@ -135,15 +197,17 @@ if wait_for "$LOG" "the chrome committed a frame" 400; then
 else
   compositor_verdict "$COMP" \
     "FAIL: the chrome never committed a frame we could read, so there is no" \
-    "  page to look through a window's hole at. Its own output:" \
+    "  page to read a texel of over a window. Its own output:" \
     "$(tail -12 "$ELOG")"
 fi
 
 # A real client on the app socket, which is what the shell mounts a portal for.
 # `--trace` so its own view is in the log beside the compositor's when this
-# fails for a reason on the client's side.
+# fails for a reason on the client's side. `--translucent` for the reason at
+# the top of this file: on the copy path the page paints this window itself,
+# and a half-opaque one is what makes *fully* opaque mean a background.
 WAYLAND_DISPLAY=wayland-1 timeout 60 "$TEST_CLIENT" --title shows --trace \
-  >"$CLOG" 2>&1 &
+  --translucent >"$CLOG" 2>&1 &
 APP=$!
 
 if ! after 1; then
@@ -161,8 +225,9 @@ else
   passed "a real client's window is on the stage, placed by the shell"
 fi
 
-# What the compositor found looking through the hole. `opaque=false` is the
-# window showing through; `opaque=true` is a page painting over it.
+# What the compositor found over the window. `alpha=128` is the client's own
+# half-opaque pixels, drawn in the page and painted over by nothing; anything
+# else is something between the window and the screen.
 looked() { grep -o "the chrome over a window.*" "$LOG" | tail -1; }
 for _ in $(seq 1 200); do [ -n "$(looked)" ] && break; sleep 0.2; done
 
@@ -171,20 +236,38 @@ if ! after 2; then
     "ERROR: this check's premise is the one above it having held."
 elif [ -z "$(looked)" ]; then
   compositor_verdict "$COMP" \
-    "FAIL: the compositor never looked through the window's hole, so nothing" \
-    "  here says a client's pixels reach the screen. It looks once per window," \
-    "  on a whole-page chrome frame — a chrome being asked for bands commits" \
-    "  one depth at a time and none of those is the page." \
+    "FAIL: the compositor never reached a reading over the window, so nothing" \
+    "  here says a client's pixels reach the screen. It reads on a whole-page" \
+    "  chrome frame — a chrome being asked for bands commits one depth at a" \
+    "  time and none of those is the page — and only once the chrome has been" \
+    "  sent that window's pixels to draw." \
     "  what the chrome said:" \
     "$(tail -8 "$ELOG")"
-elif ! printf '%s' "$(looked)" | grep -q "opaque=false"; then
+elif ! printf '%s' "$(looked)" | grep -q "alpha=128 opaque=false"; then
   compositor_verdict "$COMP" \
-    "FAIL: the chrome is opaque where the window is, so that window is not on" \
-    "  screen at all: something behind its <domicile-app> element is painting" \
-    "  a background, and it fills in the hole the client shows through." \
-    "  the reading: $(looked)"
+    "FAIL: what the chrome paints where the window is, is not the window. It" \
+    "  draws at half alpha, so anything else over it — fully opaque, or the" \
+    "  window blended with something behind it — is a background on an element" \
+    "  behind its <domicile-app>, composited under it. That window is not on" \
+    "  screen as itself." \
+    "  the reading: $(looked)" \
+    "  the colour says which: the window's own is #101828 or #182840."
+elif ! printf '%s' "$(looked)" | grep -Eq 'rgb="#101828"|rgb="#182840"'; then
+  compositor_verdict "$COMP" \
+    "FAIL: the chrome is half-opaque where the window is, but it is not the" \
+    "  window: the colour is not one of the two this client draws. A" \
+    "  background on an element behind its <domicile-app> reads exactly like" \
+    "  this when its own alpha happens to match the window's — the alpha" \
+    "  cannot tell them apart and the colour can." \
+    "  the reading: $(looked)" \
+    "  the window's own is rgb=\"#101828\" or rgb=\"#182840\"."
 else
-  passed "the chrome is transparent where the window is, so the client shows through"
+  # With the reading, not just the verdict. A green run is a measurement too,
+  # and this is the only place it is visible: the compositor's log is a
+  # temporary this script deletes, so a pass that printed nothing left the
+  # exact colour and alpha it passed on unrecorded — which is what a later
+  # tightening of this assertion has to be written against.
+  passed "what the chrome paints where the window is, is the window ($(looked))"
 fi
 
 every_check_ran 3
