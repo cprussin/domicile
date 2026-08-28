@@ -70,7 +70,6 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/e2e-input.sh           # keyboard + pointer reach a client (copy path)
 ./scripts/e2e-stuck-key.sh       # a key held when the page reloads is not left down in the seat
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
-./scripts/e2e-slow-chrome.sh     # a chrome that stops reading does not freeze the compositor
 ./scripts/e2e-two-chromes.sh     # a focus change reaches every chrome, not just the one that moved it
 ./scripts/e2e-window-alpha.sh    # a translucent client's premultiplied alpha is undone once
 ./scripts/e2e-hidpi.sh           # a 2x chrome makes a client draw at 2x, and the frame says so
@@ -478,7 +477,7 @@ Two rules the copy path is built around, both from freezes:
   stalls the same thread, which also injects input — past the 200ms repeat delay,
   so a key the user tapped starts repeating. Frames and lifecycle messages need
   opposite policies (`outbound.rs`): drop frames past a shallow cap, never drop or
-  wait on messages. `e2e-slow-chrome.sh` holds the line.
+  wait on messages. `tests/backpressure.rs` holds both halves.
 
 ---
 

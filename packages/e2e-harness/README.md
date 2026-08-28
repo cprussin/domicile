@@ -14,7 +14,6 @@ can be verified in CI and on a headless box.
 | `src/reload-typist.ts` | `e2e-stuck-key.sh` | Holds a key down, reloads, and then tries to toggle it — the page dying mid-press, which used to leave that key down in the seat for good. |
 | `src/focus-probe.ts` | `e2e-chrome-layer.sh` | Focuses the first app announced and stays connected, so the check can watch the keyboard come back to the chrome on its own when that client goes away. |
 | `src/two-chrome-probe.ts` | `e2e-two-chromes.sh` | Reports what *two* connected chromes are told about focus, since a change is announced once and a page that missed it has missed it for good. |
-| `src/stuck-chrome.ts` | `e2e-slow-chrome.sh` | Connects, handshakes, and then never reads again — a wedged chrome, which the compositor has to survive without stalling its other clients. |
 | `src/alpha-probe.ts` | `probe-transparency.sh` | Reports whether the frames an app commits carry real transparency, which is the assumption hole-punching rests on. |
 | `src/straight-alpha-probe.ts` | `e2e-window-alpha.sh` | Reports whether frames reaching a chrome carry *straight* alpha, i.e. that the compositor divided out what the client premultiplied. |
 | `src/keystroke-driver.ts` | `measure.sh` | Types over the host socket at a steady rate, so the latency numbers are measured against a known count of keystrokes. |
@@ -49,12 +48,12 @@ independent of the file it lives in: it reads `PASSED`, which only `passed`
 sets, and a script that fails to source the file at all is caught by the third
 rule below rather than by the count.
 
-Twelve scripts of the thirty-two in `scripts/`, not all of them, source the
-helpers; rules 2 and 3 below are vacuous for the other twenty, and rule 1 is
+Twelve scripts of the thirty-one in `scripts/`, not all of them, source the
+helpers; rules 2 and 3 below are vacuous for the other nineteen, and rule 1 is
 all that reaches them. Worth knowing before writing the next one.
 
-Thirty-two because that is what the sweep reads — every `.sh` in the
-directory, as the paragraph below says, not the twenty-four `check.sh` runs.
+Thirty-one because that is what the sweep reads — every `.sh` in the
+directory, as the paragraph below says, not the twenty-three `check.sh` runs.
 
 That count is measured rather than remembered. It read "three scripts, not
 sixteen … the other thirteen" until someone counted, and every number in it
