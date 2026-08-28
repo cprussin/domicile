@@ -23,7 +23,7 @@ whether the compositor is still there at the instant it fires:
 `harness_fault` for this suite's own fault, `compositor_verdict` for the
 code's. Both exit, which is the point below.
 
-What actually keeps the blame straight is structural: in the seven scripts
+What actually keeps the blame straight is structural: in the six scripts
 that use the helpers, a diagnosis is one `if`/`elif`/`else` or one `case`,
 every arm of which ends in a helper that exits or in a pass — so no arm is
 reachable by falling *through* another. A bail that turned into a no-op — the
@@ -43,12 +43,12 @@ independent of the file it lives in: it reads `PASSED`, which only `passed`
 sets, and a script that fails to source the file at all is caught by the third
 rule below rather than by the count.
 
-Seven scripts of the twenty-five in `scripts/`, not all of them, source the
+Six scripts of the twenty-four in `scripts/`, not all of them, source the
 helpers; rules 2 and 3 below are vacuous for the other eighteen, and rule 1 is
 all that reaches them. Worth knowing before writing the next one.
 
-Twenty-five because that is what the sweep reads — every `.sh` in the
-directory, as the paragraph below says, not the seventeen `check.sh` runs.
+Twenty-four because that is what the sweep reads — every `.sh` in the
+directory, as the paragraph below says, not the sixteen `check.sh` runs.
 
 That count is measured rather than remembered. It read "three scripts, not
 sixteen … the other thirteen" until someone counted, and every number in it
@@ -88,13 +88,13 @@ All of this exists because the same misattribution kept being shipped, and
 each fix produced the next instance of it somewhere the last one had not been
 looked at.
 
-`src/desktop-line.ts` is the format a display probe prints. It was shared so
-the `EXPECTED` strings in two scripts could not drift apart; since the desktop
-assertions moved into `packages/domicile-compositor/tests/desktop.rs` there is
-one caller left, `reload-displays-probe.ts`, and nothing left for it to drift
-apart *from*. Kept for now on the expectation that the client-driven probes
-grow back, and worth inlining if they do not. `src/waiting.ts` is `rest`, the
-sleep a probe with nothing to poll takes.
+`src/desktop-line.ts` was the format a display probe printed, shared so the
+`EXPECTED` strings in two scripts could not drift apart. It was kept after the
+desktop assertions moved into `packages/domicile-compositor/tests/desktop.rs`,
+on the expectation that the client-driven probes would grow back; they did not,
+and its last caller went with `reload-displays-probe.ts`. Deleted rather than
+kept for a caller that never arrived. `src/waiting.ts` is `rest`, the sleep a
+probe with nothing to poll takes; it has two callers left.
 
 `src/chrome-socket.ts` is the shared connection: newline-delimited JSON framing
 from [`@domicile/chrome-sdk/newline-frames`](../chrome-sdk/README.md), the
