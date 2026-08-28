@@ -14,7 +14,6 @@ can be verified in CI and on a headless box.
 | `src/straight-alpha-probe.ts` | `e2e-window-alpha.sh` | Reports whether frames reaching a chrome carry *straight* alpha, i.e. that the compositor divided out what the client premultiplied. |
 | `src/keystroke-driver.ts` | `measure.sh` | Types over the host socket at a steady rate, so the latency numbers are measured against a known count of keystrokes. |
 | `src/chrome-typist.ts` | `measure-round-trip.sh` | Types with real input events into the chrome's own window instead, which is what puts the chrome's own clock back in the measured loop. |
-| `src/one-window-per-display-probe.ts` | `e2e-one-window-per-display.sh` | Places one window on each display, so each client can be asked which screen it was told it is on — the placement is what narrows the set, and only a chrome can send one. |
 
 `src/verdicts.ts` is the odd one out: not a harness but a check *on* the
 scripts, run from `verdicts.test.ts` in the `typescript` group. `exit 99` in a
@@ -24,7 +23,7 @@ whether the compositor is still there at the instant it fires:
 `harness_fault` for this suite's own fault, `compositor_verdict` for the
 code's. Both exit, which is the point below.
 
-What actually keeps the blame straight is structural: in the eight scripts
+What actually keeps the blame straight is structural: in the seven scripts
 that use the helpers, a diagnosis is one `if`/`elif`/`else` or one `case`,
 every arm of which ends in a helper that exits or in a pass — so no arm is
 reachable by falling *through* another. A bail that turned into a no-op — the
@@ -44,12 +43,12 @@ independent of the file it lives in: it reads `PASSED`, which only `passed`
 sets, and a script that fails to source the file at all is caught by the third
 rule below rather than by the count.
 
-Eight scripts of the twenty-six in `scripts/`, not all of them, source the
+Seven scripts of the twenty-five in `scripts/`, not all of them, source the
 helpers; rules 2 and 3 below are vacuous for the other eighteen, and rule 1 is
 all that reaches them. Worth knowing before writing the next one.
 
-Twenty-six because that is what the sweep reads — every `.sh` in the
-directory, as the paragraph below says, not the eighteen `check.sh` runs.
+Twenty-five because that is what the sweep reads — every `.sh` in the
+directory, as the paragraph below says, not the seventeen `check.sh` runs.
 
 That count is measured rather than remembered. It read "three scripts, not
 sixteen … the other thirteen" until someone counted, and every number in it
