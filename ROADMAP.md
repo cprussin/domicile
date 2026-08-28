@@ -70,7 +70,6 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/e2e-input.sh           # keyboard + pointer reach a client (copy path)
 ./scripts/e2e-stuck-key.sh       # a key held when the page reloads is not left down in the seat
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
-./scripts/e2e-two-chromes.sh     # a focus change reaches every chrome, not just the one that moved it
 ./scripts/e2e-window-alpha.sh    # a translucent client's premultiplied alpha is undone once
 ./scripts/e2e-hidpi.sh           # a 2x chrome makes a client draw at 2x, and the frame says so
 ./scripts/e2e-chrome-layer.sh    # the chrome is told from the apps, and keeps the keyboard
