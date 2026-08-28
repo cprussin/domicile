@@ -575,6 +575,20 @@ describe("<domicile-app>", () => {
     expect(element.querySelector("canvas")).toBeNull();
   });
 
+  it("says it has a window behind it once the compositor has taken one", () => {
+    // A window the compositor drew from the start never sends a copied frame,
+    // so nothing ever put `has-surface` on: the shell's placeholder — "app
+    // surface: <id>" — is still painted, over a live window. The class says
+    // this element has a window behind it, which is as true when the
+    // compositor draws it as when a canvas does.
+    const element = mountApp("term");
+    expect(element.classList.contains("has-surface")).toBe(false);
+
+    element.dropSurface();
+
+    expect(element.classList.contains("has-surface")).toBe(true);
+  });
+
   it("keeps the copied pixels until the host says so, however it is styled", () => {
     // The element knows what it *asked* for, which is not the same as what the
     // compositor managed: a `wl_shm` client is never drawn natively however

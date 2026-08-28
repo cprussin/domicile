@@ -106,7 +106,7 @@ mod stacking;
 mod straight_alpha;
 mod timing_window;
 
-use crate::bands::{Bands, Layered, Next};
+use crate::bands::{hold_the_frame, Bands, Layered, Next};
 use crate::chrome_frame::{what_arrived, Arrival, Buffer};
 use crate::coalesce::last_of_burst;
 use crate::compose::chrome_onto_output;
@@ -1502,6 +1502,12 @@ struct DomicileCompositor {
     /// reason for asking separately. Kept between frames because asking is a
     /// round trip — a desktop that has not repainted redraws from these.
     band_textures: HashMap<usize, SurfaceTexture>,
+    /// Whether `chrome_texture` arrived under the depths declared now. False
+    /// from the moment they change until the chrome commits a whole page
+    /// again — which, while it is being asked for bands, it never does.
+    chrome_is_current: bool,
+    /// Frames held since the depths last changed. See `bands::hold_the_frame`.
+    frames_held: u32,
     /// How many readings have been taken over each window *since the chrome
     /// was given its pixels*, while the answer is still opaque. A window
     /// leaves here the moment it settles. See
@@ -1711,6 +1717,7 @@ impl DomicileCompositor {
             }
             Arrival::Chrome => {
                 self.chrome_texture = texture;
+                self.chrome_is_current = true;
                 // A whole page just arrived, so it is the one to read over
                 // each window. Only a whole page: a band is one depth of the
                 // chrome and says nothing about what the others painted, and
@@ -2611,10 +2618,20 @@ impl DomicileCompositor {
         // set is collected, because the alternative is the flattened chrome —
         // the whole page over every window — on every frame the chrome
         // repaints for its own reasons.
-        if self
+        let bands_drawable = self
             .bands
-            .all_pictured(|band| self.band_textures.contains_key(&band))
-        {
+            .all_pictured(|band| self.band_textures.contains_key(&band));
+        // Neither picture of the chrome can be trusted yet, so the one already
+        // on screen is left alone rather than replaced by one that is wrong.
+        // See `bands::hold_the_frame`: this is the flash at every transition
+        // that changes the declared depths — a window floating, a window going
+        // back to the rail, a drag beginning.
+        if hold_the_frame(bands_drawable, self.chrome_is_current, self.frames_held) {
+            self.frames_held += 1;
+            return;
+        }
+        self.frames_held = 0;
+        if bands_drawable {
             // The order is `bands`' to decide — see `Bands::drawn_with`, which
             // is where it can be tested. What is left here is turning that
             // order into layers, which needs the textures this owns.
@@ -3547,6 +3564,13 @@ impl DomicileCompositor {
             ClientRequest::DeclareBands { depths } => {
                 self.bands.declared(depths);
                 self.band_textures.clear();
+                // The flattened page on hand was committed under the depths
+                // that have just gone. Once a chrome has begun answering
+                // bands, every frame it commits is one band with the rest at
+                // `opacity: 0`, so what is held is from before any of that
+                // began — a picture of a desktop that no longer exists.
+                self.chrome_is_current = false;
+                self.frames_held = 0;
                 self.ask_for_the_next_band();
             }
             ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
@@ -5038,6 +5062,13 @@ impl XdgShellHandler for DomicileCompositor {
             info!("the chrome's toplevel went away");
             self.chrome_toplevel = None;
             self.chrome_texture = None;
+            // There is no picture of the chrome now and none is coming, so
+            // holding the frame already on screen would hold a dead page's
+            // chrome over live windows for as long as the desktop ran. The
+            // count is what runs the hold out; see `bands::hold_the_frame`.
+            self.chrome_is_current = false;
+            self.frames_held = u32::MAX;
+            self.needs_present = true;
             // The bands with it. They are that page's rasters, and the
             // question outstanding is that page's to answer — left standing,
             // the next page's first commit would be taken for the dead one's
@@ -5617,6 +5648,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pending_key: None,
         bands: Bands::default(),
         band_textures: HashMap::new(),
+        chrome_is_current: false,
+        frames_held: 0,
         looks: HashMap::new(),
         settled: HashSet::new(),
         chrome_toplevel: None,

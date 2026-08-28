@@ -388,21 +388,24 @@ const Desktop = ({ appElements, bridge, measure }: DesktopProps) => {
               const onScreen = floating !== undefined || window.id === shownId;
               const dragging = window.id === draggingId;
               // While Alt is held the pointer belongs to the shell rather than
-              // to the client, so the drag can be caught in the page — and it
-              // goes on belonging to it for the rest of a drag that outlives
-              // the key. Only a floating window: nothing drags one on the
-              // stage, and taking the pointer off it would cost a click.
+              // to the client, so the drag can be caught in the page. Only a
+              // floating window for that: nothing drags one on the stage, and
+              // taking the pointer off it would cost a click.
               //
-              // **Every float while any drag runs, not just the one being
-              // dragged.** The compositor hit-tests a rectangle and hands the
-              // pointer to the window under it, and it is the *other* windows
-              // a drag crosses: one that still takes the pointer swallows the
-              // moves as the drag passes over it and the release that should
-              // have ended it, which leaves the dragged window following a
-              // pointer the page can no longer see. Alt covers this for as
-              // long as it is held, and a drag routinely outlives it.
+              // **While a drag runs, every window — the stage's included.**
+              // The compositor hit-tests a rectangle and hands the pointer to
+              // the window under it, and the windows a drag crosses are not
+              // the one being dragged. Any of them that still takes the
+              // pointer swallows the moves as the drag passes over it and the
+              // release that should have ended it, and the window is left
+              // grabbed with the mouse already let go. Dragging quickly is
+              // what finds this: the pointer leaves the window it started on
+              // and lands on whatever is beneath, which on this desktop is as
+              // often the window on the stage as another float. Alt covers
+              // the floats for as long as it is held; it covers the stage
+              // never, and a drag routinely outlives the key besides.
               const clickThrough =
-                floating !== undefined && (alt || draggingId !== undefined);
+                draggingId !== undefined || (floating !== undefined && alt);
               switch (window.kind) {
                 case WindowKind.App: {
                   return (

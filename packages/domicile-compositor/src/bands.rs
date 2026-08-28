@@ -215,9 +215,39 @@ impl Bands {
     }
 }
 
+/// How many frames the desktop will hold rather than draw a chrome picture it
+/// cannot trust.
+///
+/// Bounded, because holding is only ever better than drawing the wrong thing
+/// while something right is on its way. A chrome that stops answering
+/// altogether must not freeze the desktop with it.
+const PATIENCE: u32 = 8;
+
+/// Whether to leave the frame already on screen alone this time.
+///
+/// The desktop has two pictures of the chrome: the set of bands, and the
+/// flattened whole page. Every time the declared depths change — a window
+/// floats, a window goes back to the rail, a drag begins and the chrome stops
+/// declaring anything — the band set is dropped and has to be collected again,
+/// and the flattened page is whatever arrived *last*. Once a chrome has begun
+/// answering bands, every frame it commits is one band with the rest at
+/// `opacity: 0`, so the flattened page it holds is from before any of that
+/// began: on this desktop, from before the window was floated at all.
+///
+/// Drawing it is the flash the user sees at every one of those transitions.
+/// The frame already on screen is the last picture that was *right*, so
+/// keeping it costs a few frames of a desktop that is not moving — a
+/// transition is not a drag — and costs nothing at all once the chrome has
+/// answered, which is the very next frame when nothing is declared.
+///
+/// `held` counts the frames already held since the depths last changed.
+pub fn hold_the_frame(bands_drawable: bool, chrome_is_current: bool, held: u32) -> bool {
+    !bands_drawable && !chrome_is_current && held < PATIENCE
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Bands, Layered, Next};
+    use super::{hold_the_frame, Bands, Layered, Next, PATIENCE};
 
     #[test]
     fn a_chrome_that_declared_nothing_is_already_complete() {
@@ -511,5 +541,29 @@ mod tests {
         let mut bands = Bands::default();
         bands.declared(vec![0, 1]);
         assert!(!bands.all_pictured(|band| band == 0));
+    }
+
+    #[test]
+    fn a_desktop_with_a_picture_it_trusts_draws_it() {
+        assert!(!hold_the_frame(true, false, 0));
+        assert!(!hold_the_frame(false, true, 0));
+        assert!(!hold_the_frame(true, true, 0));
+    }
+
+    #[test]
+    fn a_desktop_with_neither_keeps_what_is_already_on_screen() {
+        // The flash: the depths just changed, the band set is being collected
+        // again, and the flattened page on hand is from before the chrome ever
+        // started answering bands — so it shows a desktop that no longer
+        // exists. What is already on screen is the last picture that was right.
+        assert!(hold_the_frame(false, false, 0));
+    }
+
+    #[test]
+    fn a_chrome_that_stops_answering_does_not_freeze_the_desktop() {
+        // Holding is only better than drawing the wrong thing while something
+        // right is coming. Past that, the wrong thing at least moves.
+        assert!(hold_the_frame(false, false, PATIENCE - 1));
+        assert!(!hold_the_frame(false, false, PATIENCE));
     }
 }
