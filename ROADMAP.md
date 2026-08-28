@@ -66,7 +66,6 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/smoke-compositor.sh    # a real client binds our globals
 ./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow
 ./scripts/e2e-late-chrome.sh     # a chrome arriving to a client already running (reload)
-./scripts/e2e-input.sh           # keyboard + pointer reach a client (copy path)
 ./scripts/e2e-stuck-key.sh       # a key held when the page reloads is not left down in the seat
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
 ./scripts/e2e-window-alpha.sh    # a translucent client's premultiplied alpha is undone once
@@ -735,8 +734,9 @@ age, and it needs a screen before anyone should believe it.
 - **`e2e-chrome-layer.sh` focuses a window that was never placed.** Its
   `focus-probe.ts` sends `focus_app` without a `place_portal`, and
   `Scene::focus_app` refuses an app with no portal — the same silent no-op
-  `input-injector.ts` had. The script *does* assert on focus, in three places,
-  and passes anyway: those assertions read the **seat**, which
+  `input-injector.ts` had before it went with `e2e-input.sh`. The script
+  *does* assert on focus, in three places, and passes anyway: those
+  assertions read the **seat**, which
   `ClientRequest::KeyboardFocus` moves before the brain is consulted at all. So
   the brain's `Scene::focus` never leaves the chrome and nothing notices.
   Fixing it widens what that check covers, which is its own change.

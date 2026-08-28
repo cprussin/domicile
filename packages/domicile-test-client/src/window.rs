@@ -255,11 +255,11 @@ impl Client {
             .ok_or(ClientError::Missing { global: "wl_shm" })?;
         // On the same footing as the three above, because it is now just as
         // load-bearing: asking for a cursor is the only thing that tells the
-        // compositor there is one to pass to the chrome, and `e2e-input`
+        // compositor there is one to pass to the chrome, and
+        // `tests/input.rs::a_pointer_over_a_window_asks_the_chrome_for_that_window_s_cursor`
         // asserts the chrome was told. Left as a silent `None`, a compositor
-        // that advertised no manager would fail that check through
-        // `compositor_verdict` — convicting the compositor of a gap that is
-        // this client's.
+        // that advertised no manager would fail that check — convicting the
+        // compositor of a gap that is this client's.
         if self.globals.cursor.is_none() {
             return Err(ClientError::Missing {
                 global: "wp_cursor_shape_manager_v1",

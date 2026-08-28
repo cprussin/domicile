@@ -64,8 +64,8 @@ CLI=""
 . "$ROOT/scripts/lib/harness.sh"
 for _ in $(seq 1 200); do { [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && [ -S "$SOCK" ]; } && break; sleep 0.05; done
 
-# `--trace` for the same reason as e2e-input.sh: the client reports the
-# messages it is handed, in the shape these greps read.
+# `--trace` because the client reports the messages it is handed, in the shape
+# these greps read — there is nowhere else those events are visible.
 WAYLAND_DISPLAY=wayland-1 timeout 20 "$TEST_CLIENT" --title app --trace >"$APP" 2>&1 &
 CLI=$!
 # On an event the client actually reports. This waited on `xdg_surface`, which
