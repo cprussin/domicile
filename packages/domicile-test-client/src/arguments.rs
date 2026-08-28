@@ -22,6 +22,16 @@ pub struct Arguments {
     /// default: a buffer release arrives every frame, and the checks that only
     /// need a window open should not pay a write for each one.
     pub trace: bool,
+    /// Whether the window is see-through rather than opaque.
+    ///
+    /// Off by default, and only `e2e-window-shows-through.sh` asks for it.
+    /// That check reads what the chrome painted where the window is, and a
+    /// headless compositor copies every window into the page rather than
+    /// drawing it itself — so what is legitimately there is the client's own
+    /// pixels. With an opaque client those are indistinguishable from a
+    /// background painted over the window; a half-opaque one makes *fully*
+    /// opaque mean one thing only.
+    pub translucent: bool,
 }
 
 /// A command line the client will not run.
@@ -44,6 +54,7 @@ pub enum ArgumentError {
 pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, ArgumentError> {
     let mut title = None;
     let mut trace = None;
+    let mut translucent = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -55,6 +66,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--trace" => {
                 take(&mut trace, &flag, true)?;
             }
+            "--translucent" => {
+                take(&mut translucent, &flag, true)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -62,6 +76,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     Ok(Arguments {
         title: title.unwrap_or_else(|| "domicile-test-client".to_string()),
         trace: trace.unwrap_or(false),
+        translucent: translucent.unwrap_or(false),
     })
 }
 

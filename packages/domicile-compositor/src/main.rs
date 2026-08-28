@@ -178,9 +178,9 @@ mod grepped {
     /// the round trip closed rather than stalled.
     pub const BAND_ANSWERED: &str = "a band answered";
     /// `e2e-window-shows-through.sh`: what the chrome painted where a window
-    /// is. A window is a hole in the page, and this is the compositor looking
-    /// through it — the only thing in the tree that says a client's pixels
-    /// reach the screen at all.
+    /// is — the only thing in the tree that says a *copied* client's pixels
+    /// reach the screen at all. Nothing says it for a window the compositor
+    /// draws itself; see `over_window`.
     pub const CHROME_OVER_WINDOW: &str = "the chrome over a window";
 }
 
@@ -1484,13 +1484,13 @@ struct DomicileCompositor {
     /// reason for asking separately. Kept between frames because asking is a
     /// round trip — a desktop that has not repainted redraws from these.
     band_textures: HashMap<usize, SurfaceTexture>,
-    /// How many times each window has been looked at through the chrome while
-    /// the answer is still opaque. A window leaves here the moment it settles.
-    /// See `over_window::what_the_chrome_shows`.
+    /// How many readings have been taken over each window *since the chrome
+    /// was given its pixels*, while the answer is still opaque. A window
+    /// leaves here the moment it settles. See
+    /// `over_window::what_the_chrome_shows`.
     looks: HashMap<String, u32>,
-    /// The windows whose reading is final, so they are looked at no more: a
-    /// hole on the first look, or a chrome still opaque after every frame
-    /// `PATIENCE` allows.
+    /// The windows whose reading is final, so they are looked at no more.
+    /// See `over_window::what_the_chrome_shows`.
     settled: HashSet<String>,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
@@ -1693,11 +1693,11 @@ impl DomicileCompositor {
             }
             Arrival::Chrome => {
                 self.chrome_texture = texture;
-                // A whole page just arrived, so it is the one to look through
-                // each window's hole in. Only a whole page: a band is one
-                // depth of the chrome and says nothing about what the others
-                // painted, and the flattened frame is what would hide a
-                // window if anything does.
+                // A whole page just arrived, so it is the one to read over
+                // each window. Only a whole page: a band is one depth of the
+                // chrome and says nothing about what the others painted, and
+                // the flattened frame is what would hide a window if anything
+                // does.
                 self.look_over_the_windows();
             }
             // Unreachable by construction — the arms above cover every
@@ -1711,19 +1711,21 @@ impl DomicileCompositor {
         self.needs_present = true;
     }
 
-    /// Look through each window's hole and report what the chrome painted
-    /// there.
+    /// Report what the chrome painted where each window is.
     ///
-    /// A `<domicile-app>` element is a hole: the client's buffer is drawn in
-    /// it and the chrome is composited over the top, so the window is visible
-    /// only because the page painted nothing where it is. Anything opaque
-    /// behind that hole fills it in and the window is gone — every window, if
-    /// the element spans the desktop, and nothing on screen says why.
+    /// A background on any element *behind* a `<domicile-app>` composites
+    /// under the window and hides it — every window, if the element spans the
+    /// desktop, and nothing on screen says why. This is the only thing in the
+    /// tree that would notice; see `over_window` for what a texel over a
+    /// window means, which is not the obvious thing.
     ///
-    /// Once per window. A page that paints over a window paints over it
-    /// always, and reading a texel back stalls the GPU, so this is not a thing
-    /// to do per frame. The reading is the whole of what says a client's
-    /// pixels reach the screen; nothing else in the tree checks it.
+    /// Only a window the chrome is holding the pixels of is read at all, and
+    /// only until it has an answer. Both halves are about the stall a texel
+    /// read-back costs: a window the compositor draws itself puts nothing in
+    /// the page and is never read, and a window that has answered is not read
+    /// again. In between the reading is taken on each whole-page frame,
+    /// because a page given a window is not showing it until it has repainted
+    /// since — and that is bounded too, by `PATIENCE`.
     fn look_over_the_windows(&mut self) {
         let Some(chrome) = self.chrome_texture.as_ref() else {
             return;
@@ -1751,21 +1753,35 @@ impl DomicileCompositor {
         let unsettled: Vec<(String, (f64, f64))> = placed
             .into_iter()
             .filter(|(app_id, _)| !self.settled.contains(app_id))
+            // Only a window whose pixels the chrome is holding. Anything else
+            // has nothing of itself in the page for a texel to be about — and
+            // a window the compositor draws itself is never in `held`, so
+            // without this it would cost a `copy_texture` and a `map_texture`
+            // on every whole-page frame for the life of the session, which is
+            // the pipeline stall the native path exists to avoid. See
+            // `what_the_chrome_shows`, which is only ever asked about a window
+            // that got past here.
+            .filter(|(app_id, _)| self.held.contains_key(app_id))
             .map(|(app_id, surface_to_output)| {
-                // The middle of the window, which is the part a background
-                // behind it would cover if it covers any. `surface_to_output`
-                // maps the *unit square* onto the window's box — it is the
-                // portal's size scaled and then placed — so the middle is
-                // (0.5, 0.5) and not half of anything.
-                let centre = surface_to_output.apply(ScenePoint::new(0.5, 0.5));
-                (app_id, (centre.x, centre.y))
+                // Inside the window, which is all a background behind it
+                // needs to be covered by — and a quarter of the way down
+                // rather than the middle, because the element's own
+                // placeholder is a single line of text that `place-items:
+                // center` puts exactly at the middle. That placeholder is
+                // opaque ink, and a texel of it is a reading of the element
+                // rather than of what is behind it. `surface_to_output` maps
+                // the *unit square* onto the window's box — it is the portal's
+                // size scaled and then placed — so this is (0.5, 0.25) and not
+                // a quarter of anything.
+                let inside = surface_to_output.apply(ScenePoint::new(0.5, 0.25));
+                (app_id, (inside.x, inside.y))
             })
             .collect();
         for (app_id, centre) in unsettled {
             let Some(texel) = texel_over(centre, page, frame, y_inverted) else {
                 // Off the page, so there is no pixel of the chrome over it and
                 // nothing to say. Left unsettled: a window dragged back on is
-                // one to look through.
+                // one to read again.
                 continue;
             };
             let Some(pixel) = self.chrome_pixel_at(texel) else {
@@ -1773,24 +1789,37 @@ impl DomicileCompositor {
                 // and left unsettled so the next frame tries again.
                 continue;
             };
-            let looks = self.looks.entry(app_id.clone()).or_insert(0);
-            let seen = *looks;
-            *looks += 1;
-            match what_the_chrome_shows(pixel[3], seen) {
-                // Not an answer yet: a window's placement arrives when the
-                // page has laid it out, which is before the page has painted
-                // its hole and committed a frame with it in.
+            let taken = self.looks.entry(app_id.clone()).or_insert(0);
+            let looks = *taken;
+            *taken += 1;
+            match what_the_chrome_shows(pixel[3], looks) {
+                // Not an answer. Left unsettled, so the next whole-page frame
+                // asks again.
                 Verdict::LookAgain => {}
-                Verdict::ShowsThrough => {
-                    self.settle(&app_id, pixel[3]);
+                Verdict::OnScreen => {
+                    self.settle(&app_id, pixel);
                 }
                 Verdict::Hidden => {
-                    self.settle(&app_id, pixel[3]);
+                    self.settle(&app_id, pixel);
                     warn!(
                         app_id,
-                        "the chrome is opaque where this window is, so the window \
-                         cannot be seen: something behind its <domicile-app> \
-                         element is painting a background"
+                        "the chrome is fully opaque where this window is, so the \
+                         window cannot be seen: something behind its \
+                         <domicile-app> element is painting a background"
+                    );
+                }
+                // The absence of a verdict rather than one, so it is said in a
+                // line of its own rather than in the one the check reads.
+                // Stopping is the point: a page that has this window's pixels
+                // and has painted nothing where it is has answered nothing,
+                // and a texel read back every frame for ever is a stall.
+                Verdict::NothingToRead => {
+                    self.looks.remove(&app_id);
+                    self.settled.insert(app_id.clone());
+                    info!(
+                        app_id,
+                        "the page holds this window's pixels and has painted \
+                         nothing where it is; not looking again"
                     );
                 }
             }
@@ -1799,13 +1828,23 @@ impl DomicileCompositor {
 
     /// Record what the chrome turned out to show over `app_id`, and stop
     /// looking.
-    fn settle(&mut self, app_id: &str, alpha: u8) {
+    ///
+    /// The colour is reported beside the alpha, and not only because it is
+    /// free: the two failures this can report look identical without it. A
+    /// background behind the element and a frame of the page from before it
+    /// had the window in it are both `opaque=true`, and which one a red run is
+    /// deciding is the whole question. It earned that immediately — a run
+    /// against a deliberate `#123456` behind the stage read `rgb="#193253"`,
+    /// which is the half-opaque window composited over it to the byte.
+    fn settle(&mut self, app_id: &str, pixel: [u8; 4]) {
         self.looks.remove(app_id);
         self.settled.insert(app_id.to_string());
+        let alpha = pixel[3];
         info!(
             app_id,
             alpha,
             opaque = alpha == u8::MAX,
+            rgb = format!("#{:02x}{:02x}{:02x}", pixel[0], pixel[1], pixel[2]),
             "{}",
             grepped::CHROME_OVER_WINDOW
         );
@@ -4987,7 +5026,7 @@ impl XdgShellHandler for DomicileCompositor {
             self.bands = Bands::default();
             self.band_textures.clear();
             // A new page is a new answer to what it paints over a window, so
-            // every window is one to look through again.
+            // every window is one to read again.
             self.looks.clear();
             self.settled.clear();
             let keyboard = self.seat.get_keyboard().unwrap();
@@ -5862,6 +5901,51 @@ mod tests {
                 format!("{} band=[0-9]*", crate::grepped::BAND_ANSWERED),
                 include_str!("../../../scripts/e2e-bands.sh"),
                 "e2e-bands.sh",
+            ),
+            (
+                // With the tail the script keeps: it prints the whole line as
+                // the reading, so the trailing `.*` is part of what has to
+                // agree.
+                format!("{}.*", crate::grepped::CHROME_OVER_WINDOW),
+                include_str!("../../../scripts/e2e-window-shows-through.sh"),
+                "e2e-window-shows-through.sh",
+            ),
+            (
+                // The *value*, not just the message. That check passes on the
+                // texel over the window being the window's own half-opaque
+                // pixels rather than merely on it not being fully opaque, so
+                // the number the client draws at is part of the agreement and
+                // this is what stops the two drifting.
+                format!(
+                    "alpha={} opaque=false",
+                    domicile_test_client::TRANSLUCENT_ALPHA
+                ),
+                include_str!("../../../scripts/e2e-window-shows-through.sh"),
+                "e2e-window-shows-through.sh",
+            ),
+            // And the colour, which is what the alpha cannot do on its own: a
+            // background behind the element whose own alpha happens to be the
+            // client's reads as `alpha=128 opaque=false` and is the background
+            // rather than the window. Measured — a `rgb(18 52 86 / 50%)`
+            // behind the stage reads `rgb="#091a2b"` where the window reads
+            // `rgb="#101828"`. Premultiplied, which is what the chrome
+            // commits, so these are the low three bytes of the colours the
+            // client draws.
+            (
+                format!(
+                    "#{:06x}",
+                    domicile_test_client::TRANSLUCENT_COLOURS[0] & 0xff_ffff
+                ),
+                include_str!("../../../scripts/e2e-window-shows-through.sh"),
+                "e2e-window-shows-through.sh",
+            ),
+            (
+                format!(
+                    "#{:06x}",
+                    domicile_test_client::TRANSLUCENT_COLOURS[1] & 0xff_ffff
+                ),
+                include_str!("../../../scripts/e2e-window-shows-through.sh"),
+                "e2e-window-shows-through.sh",
             ),
         ] {
             assert!(

@@ -27,6 +27,8 @@ pub mod arguments;
 pub mod trace;
 mod window;
 
+pub use window::{TRANSLUCENT_ALPHA, TRANSLUCENT_COLOURS};
+
 /// Be the client: open a window on the compositor `WAYLAND_DISPLAY` names and
 /// keep drawing until something kills it.
 ///
@@ -37,7 +39,7 @@ pub fn run(command_line: impl IntoIterator<Item = OsString>) -> ExitCode {
         Ok(asked) => asked,
         Err(err) => {
             eprintln!("domicile-test-client: {err}");
-            eprintln!("usage: domicile-test-client [--title NAME] [--trace]");
+            eprintln!("usage: domicile-test-client [--title NAME] [--trace] [--translucent]");
             return ExitCode::from(2);
         }
     };
@@ -48,7 +50,7 @@ pub fn run(command_line: impl IntoIterator<Item = OsString>) -> ExitCode {
 
     // `window::run` only returns a failure — a window's job here lasts as long
     // as the check that opened it, and every caller ends it with a signal.
-    let Err(err) = window::run(&asked.title);
+    let Err(err) = window::run(&asked.title, asked.translucent);
     eprintln!("domicile-test-client: {err}");
     ExitCode::FAILURE
 }
