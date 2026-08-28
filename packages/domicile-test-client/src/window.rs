@@ -385,7 +385,7 @@ impl Client {
     /// This is the half of being scale-aware that a check can see: a client
     /// that only reads `wl_output.scale` and never acts on it is a client that
     /// draws a 1x picture on a 2x screen, which is exactly the blurry window
-    /// `e2e-hidpi` exists to catch. The buffer grows; the surface does not.
+    /// `tests/density.rs` exists to catch. The buffer grows; the surface does not.
     fn follow(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
         // On no screen: keep what we have. See [`Client::wanted_scale`].
         let Some(wanted) = self.wanted_scale() else {

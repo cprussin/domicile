@@ -163,7 +163,16 @@ use smithay::backend::winit::WinitGraphicsBackend;
 /// named or pinned, and so do several `tests/` files. Those predate this
 /// change; these three are the ones it introduced or newly depended on.
 mod grepped {
-    /// `e2e-hidpi.sh`: told a density it could not read.
+    /// Told a message it could not read.
+    ///
+    /// No script greps this any more — `e2e-hidpi.sh` was the last, and it is
+    /// gone. **Nothing pins it at all**, which is a third shape: neither a row
+    /// in `the_grepped_log_messages_are_what_the_scripts_expect`, nor
+    /// [`DENSITY_REFUSED`]'s weaker arrangement of a Rust test that spells the
+    /// string. There is nothing for either to hold, because the check that
+    /// replaced that script speaks the protocol as types and a harness and a
+    /// host cannot disagree about a wire they both derive. Kept because the
+    /// compositor still logs it and an operator still reads it.
     pub const UNPARSEABLE: &str = "unparseable chrome message";
     /// `tests/desktop.rs::a_described_desktop_refuses_a_chromes_density`: the
     /// guarded return in `set_output_scale`.
@@ -176,7 +185,18 @@ mod grepped {
     /// the wait is still a wait on a string, and a string with a name is
     /// easier to find than one written twice.
     pub const DENSITY_REFUSED: &str = "a described desktop keeps its own scale";
-    /// `e2e-hidpi.sh`: the logical size it derives the expected mode from.
+    /// `e2e-chrome-fills-a-window.sh`: the logical size and density an output
+    /// was advertised at, read field by field.
+    ///
+    /// Two scripts grepped this and `e2e-hidpi.sh` was the one that went. Its
+    /// row moved to the survivor rather than going with it: a first version of
+    /// that change deleted the row and said the constant had no reader left,
+    /// which was false — renaming it then passed the whole workspace.
+    ///
+    /// The move also closes the hole that was open while both scripts grepped
+    /// it, one row between them. Measured before the port: breaking the
+    /// unrowed script's pattern was green. That is the failure the test below
+    /// is written against, and this constant was living in it.
     pub const ADVERTISING: &str = "advertising output scale";
     /// `e2e-bands.sh`: a chrome frame recognised as the band it says it is.
     /// The only trace the label's read-back leaves, and the whole of what says
@@ -6028,9 +6048,21 @@ mod tests {
     ///
     /// A row per *pair*, not per constant: `UNPARSEABLE` was grepped by two
     /// scripts, and a table keyed on the constant alone left the second pair
-    /// unpinned — renaming it in `e2e-hidpi.sh` stayed green. One of that pair
-    /// has since been ported to `tests/outputs.rs` and deleted, which is why
-    /// the shape now looks like more machinery than the rows need.
+    /// unpinned — renaming it in one of them stayed green. Both of that pair
+    /// have since been ported and deleted, which is why the shape now looks
+    /// like more machinery than the rows need.
+    ///
+    /// It stays because the same hole was open again, for `ADVERTISING`, and
+    /// stayed open until the port that deleted the second of *its* two
+    /// scripts. Measured on the commit before that port: two scripts grepped
+    /// it, one row between them, and breaking the unrowed script's pattern was
+    /// green. That is this paragraph's failure, live in the tree, and the row
+    /// moving to the survivor is what closed it.
+    ///
+    /// The near-miss on the way out was a different shape and worth keeping
+    /// apart: that port first deleted the row outright, which left a rename of
+    /// the constant green. A table keyed per constant would have caught that
+    /// one; only a row per pair catches the one above.
     ///
     /// The pattern is *built from* the constant rather than searched for in
     /// the file, because both weaker forms let a rename through. Spelling the
@@ -6043,19 +6075,14 @@ mod tests {
     fn the_grepped_log_messages_are_what_the_scripts_expect() {
         for (pattern, script, name) in [
             (
-                crate::grepped::UNPARSEABLE.to_string(),
-                include_str!("../../../scripts/e2e-hidpi.sh"),
-                "e2e-hidpi.sh",
-            ),
-            (
                 // The one whose script reads fields off the line as well, so
                 // the tail is part of what has to agree.
                 format!(
                     "{} width=[0-9]+ height=[0-9]+ scale=[0-9]+",
                     crate::grepped::ADVERTISING
                 ),
-                include_str!("../../../scripts/e2e-hidpi.sh"),
-                "e2e-hidpi.sh",
+                include_str!("../../../scripts/e2e-chrome-fills-a-window.sh"),
+                "e2e-chrome-fills-a-window.sh",
             ),
             (
                 // Read with its field too: the script tells the bands apart by

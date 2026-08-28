@@ -270,9 +270,11 @@ describe("bailFaults", () => {
   });
 
   it("reads a call wherever a command can start", () => {
-    // Not just at the start of a line. The wrapper form is `e2e-hidpi.sh`'s
-    // own, and a fourth script whose only reach into the helpers is one of
-    // these and which forgot the source line would otherwise be invisible.
+    // Not just at the start of a line. The wrapper form was `e2e-hidpi.sh`'s
+    // own, until the batch that ported it, and no script uses it now. Kept
+    // forward-looking: a script whose only reach into the helpers is a call
+    // like these, and which forgot the source line, would otherwise be
+    // invisible to the rule below.
     for (const script of [
       'if [ -z "$X" ]; then harness_fault "$COMP" "x"; fi',
       'for i in 1; do harness_fault "$COMP" "x"; done',
