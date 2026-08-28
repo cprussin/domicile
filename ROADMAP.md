@@ -80,7 +80,7 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/e2e-chrome-fills-a-window.sh # the same where the desktop *is* Domicile's window (--present)
 ./scripts/e2e-window-follows-the-desktop.sh # a described desktop that grows takes its window with it (--present)
 ./scripts/e2e-shell-launch.sh    # running the *shell* brings up a compositor and the chrome inside it
-./scripts/e2e-window-shows-through.sh # the chrome paints nothing where a window is, so the client is on screen
+./scripts/e2e-window-shows-through.sh # nothing behind a <domicile-app> paints over the window, so the client is on screen
 ./scripts/probe-transparency.sh  # the engine, as our client, commits real alpha
 
 # Needs a real display — run on the user's machine.
@@ -611,12 +611,31 @@ falloff the shadow uses, is the next candidate to move it.
   raster, and moving it onto an element of band 0 puts it behind every window
   instead. Every check in the tree passed on it, and it was caught by reading.
 
-  The compositor now looks through each window's hole, once per window, at the
-  frame the chrome actually committed, and says what it found. Restoring that
-  background turns the check red with `alpha=255 opaque=true`. It has to be a
-  real engine: the rule is about a computed background on an ancestor, and the
-  test DOM has no cascade — which is why the unit guard written at the time
-  could not be falsified and was deleted rather than shipped.
+  The compositor now reads the texel of the chrome's committed frame that lies
+  over each window and says what it found. It has to be a real engine: the rule
+  is about a computed background on an ancestor, and the test DOM has no
+  cascade — which is why the unit guard written at the time could not be
+  falsified and was deleted rather than shipped.
+
+  What it reads is *not* a hole, so it says this for *copied* windows only.
+  The element is a hole where the compositor draws the client's buffer itself,
+  which `disposition` does for a **dmabuf** on a presenting desktop —
+  `domicile-test-client` commits `wl_shm`, so this window is on the copy path
+  even with `--present`, and the check's compositor being headless is the
+  smaller half of the reason. There the shell draws the client's own pixels
+  into a `<canvas>` inside the element. So the client is run `--translucent`:
+  what the page may paint over the window is then half-opaque, and the check
+  asserts the client's own alpha rather than merely "not opaque" — a
+  translucent background would otherwise composite to something in between and
+  pass. Reading an opaque `Xrgb8888` client is what made this check pass or
+  fail on which chrome frame it happened to catch, twice red on `main` before
+  it was understood; a deliberate `#123456` behind the stage now reads
+  `rgb="#193253"`, which is the window composited over it to the byte.
+
+  Nothing says any of this for a window the compositor draws itself. The
+  compositor reads a texel only for a window whose pixels the chrome is
+  holding, because for one it draws there is nothing in the page to read and a
+  read-back is the pipeline stall that path exists to avoid.
 - ~~follow a window that moves~~ — done. `<domicile-app>` re-measures on every
   animation frame rather than on a `ResizeObserver`, which sees a box change
   size and nothing else: moving a window, animating a transform, a `:hover`

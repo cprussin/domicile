@@ -1,19 +1,42 @@
-//! Which pixel of the chrome's frame lies over a window.
+//! What the chrome painted where a window is.
 //!
-//! A `<domicile-app>` element is a *hole* in the page: the compositor draws the
-//! client's own buffer there and composites the chrome over the top, so the
-//! window is only ever visible because the page painted nothing where it is. A
-//! background on any element behind that hole fills it in, and the window is
-//! gone — every window, if the element spans the desktop, with nothing on
-//! screen to say why. It has happened: a full-page backdrop added while the
-//! bands were being written would have hidden every window on the desktop, and
-//! every check in the tree passed on it.
+//! A background on any element *behind* a `<domicile-app>` composites under
+//! the window and hides it — every window, if that element spans the desktop,
+//! with nothing on screen to say why. It has happened: a full-page backdrop
+//! added while the bands were being written would have hidden every window on
+//! the desktop, and every check in the tree passed on it.
 //!
-//! So the compositor looks. This is the arithmetic that says where — a page
-//! coordinate to a texel of the frame the page committed — kept apart from the
-//! looking because it is the part that can be wrong quietly. The same
-//! conversion read the wrong row of a texture once already; see
-//! `band_label`.
+//! So the compositor looks. Two parts, and both can be wrong quietly.
+//!
+//! [`texel_over`] is the arithmetic: a page coordinate to a texel of the frame
+//! the page committed, which is a scale it is never told and a row counted
+//! from the other end when the buffer is inverted. The same conversion read
+//! the wrong row of a texture once already; see `band_label`.
+//!
+//! [`what_the_chrome_shows`] is what the texel means, and it is *not* "clear
+//! or nothing". The element is a hole only where the compositor draws the
+//! client's buffer itself, which `disposition` does for a **dmabuf** on a
+//! presenting desktop. A `wl_shm` client is never a dmabuf, whatever else is
+//! true, so `e2e-window-shows-through.sh`'s window is on the **copy path**
+//! even if that check were given `--present`; the headless compositor it does
+//! use is the smaller half of the reason. On that path the compositor reads
+//! the client's frame back, sends it, and the shell draws it into a `<canvas>`
+//! inside the element — so what is over the window *is* the window, and what
+//! this is looking for is what would be behind it.
+//!
+//! Which is why that check runs its client `--translucent`. Half-opaque is
+//! then the only thing the page is entitled to paint over the window and a
+//! hole is clear, so fully opaque means one thing: a background behind the
+//! element, composited under it. Read against an opaque `Xrgb8888` client
+//! instead, this said `alpha=255 opaque=true` for a window that was on screen,
+//! and the check passed or failed on whether the chrome frame it caught
+//! predated the shell drawing the canvas.
+//!
+//! And *when* the texel is read is the other half. A reading is taken only
+//! once the chrome has that window's pixels, and an opaque one waits
+//! [`PATIENCE`] frames before it is believed, because the page goes on
+//! committing frames it rendered before it had the window — the empty stage,
+//! whose card sits in the middle of exactly where the window is going.
 
 /// The texel of a chrome frame that covers `at`.
 ///
@@ -59,40 +82,70 @@ pub fn texel_over(
     Some((i32::try_from(x).ok()?, i32::try_from(y).ok()?))
 }
 
-/// How many whole-page frames a window is looked through before an opaque
-/// answer is believed.
+/// How many whole-page frames an answer waits before it is taken as final.
 ///
-/// A window's placement reaches the compositor when the page has *laid it
-/// out*, which is before the page has painted the hole and committed a frame
-/// with it in. So the first frames after a window appears can legitimately
-/// have the chrome still opaque where it is going, and a verdict taken from
-/// one of those is a verdict about a page that had not drawn the window yet.
+/// The chrome having a window's pixels does not mean the page has painted
+/// them: the compositor sends the frame and goes on reading what the page
+/// commits, and the next few commits can still be the page as it was before
+/// the window existed — an empty stage, which draws a card in the middle of
+/// exactly where the window is going. Those frames are opaque over the window
+/// and say nothing about it.
 ///
-/// Transparent needs no patience — a hole is a hole, and nothing that appears
-/// later fills it in. Opaque is the answer that has to wait.
-const PATIENCE: u32 = 60;
+/// A window that is on screen reads as its own half-opaque pixels the moment
+/// the page catches up and settles there, so the wait is only ever paid where
+/// the answer is not that. It is a bound as much as a wait: reading a texel
+/// back is a pipeline stall, and a page that never paints the window would
+/// otherwise be read on every frame for the life of the session.
+const PATIENCE: u32 = 120;
 
 /// What a reading of the chrome over a window means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
-    /// There is a hole here; the client's own pixels reach the screen.
-    ShowsThrough,
-    /// The chrome is painting over this window and has had every chance to
-    /// stop. The window is not on screen.
+    /// What the chrome shows over this window is the window. It is on screen.
+    OnScreen,
+    /// The chrome is fully opaque over this window, which nothing it is
+    /// entitled to paint there is, and has had every chance to stop. The
+    /// window is not on screen.
     Hidden,
-    /// Opaque, but the page may not have painted the window's hole yet.
+    /// Not an answer yet. Look again on the next whole-page frame.
     LookAgain,
+    /// The page has this window's pixels and has painted nothing where it is,
+    /// for [`PATIENCE`] frames. Stop reading it — this is the absence of a
+    /// verdict rather than one.
+    NothingToRead,
 }
 
-/// What `alpha` says, given how many times this window has been looked at.
+/// What `alpha` says about the window under it.
+///
+/// **Only for a window the chrome is holding the pixels of** — `held`, the
+/// compositor's own record of what it has sent. That is what makes a texel
+/// mean anything, and a window it does not hold is one the caller must not
+/// read at all: there is nothing of that window in the page, so clear cannot
+/// be told from a frame arriving too early, and the read-back would be a
+/// pipeline stall bought for nothing. Taking that decision before the read
+/// rather than inside this is what keeps a window the compositor draws itself
+/// — never in `held` — from costing one every frame for ever.
+///
+/// - Clear: the page has those pixels and has not painted them yet.
+/// - Partly opaque: that is the window, drawn at the alpha it committed.
+/// - Fully opaque: neither the window nor a hole, so it is a background behind
+///   the element — once [`PATIENCE`] frames have said so rather than one.
 ///
 /// `looks` counts the readings already taken of *this* window, so the first
 /// call passes 0.
 pub fn what_the_chrome_shows(alpha: u8, looks: u32) -> Verdict {
-    match (alpha, looks) {
-        (u8::MAX, looks) if looks + 1 < PATIENCE => Verdict::LookAgain,
-        (u8::MAX, _) => Verdict::Hidden,
-        _ => Verdict::ShowsThrough,
+    // What an answer that has to wait says once the waiting is over.
+    let waited = |answer| {
+        if looks + 1 < PATIENCE {
+            Verdict::LookAgain
+        } else {
+            answer
+        }
+    };
+    match alpha {
+        0 => waited(Verdict::NothingToRead),
+        u8::MAX => waited(Verdict::Hidden),
+        _ => Verdict::OnScreen,
     }
 }
 
@@ -175,37 +228,67 @@ mod tests {
     }
 
     #[test]
-    fn a_hole_is_a_hole_the_first_time_it_is_seen() {
-        // Transparent needs no patience: nothing that paints later fills in a
-        // hole that is already there.
-        assert_eq!(what_the_chrome_shows(0, 0), Verdict::ShowsThrough);
-        assert_eq!(what_the_chrome_shows(254, 0), Verdict::ShowsThrough);
+    fn a_clear_texel_is_not_a_reading() {
+        // The chrome has this window's pixels and has not painted them yet.
+        // Clear is what the page shows in between, not a verdict about it.
+        assert_eq!(what_the_chrome_shows(0, 0), Verdict::LookAgain);
     }
 
     #[test]
-    fn an_opaque_first_look_is_not_a_verdict() {
-        // A window's placement reaches the compositor when the page has laid
-        // it out, which is before the page has painted its hole and committed
-        // a frame with it in. Believing the first opaque reading is a verdict
-        // about a page that had not drawn the window yet — and it is flaky
-        // rather than wrong, which is worse: the window is hidden or not
-        // depending on which frame the compositor happened to be holding.
+    fn a_page_that_never_paints_the_window_is_given_up_on() {
+        // The bound, not just the wait. Every look is a `copy_texture` and a
+        // `map_texture` — a pipeline stall — so an answer that never comes has
+        // to stop being asked for.
+        assert_eq!(
+            what_the_chrome_shows(0, PATIENCE - 1),
+            Verdict::NothingToRead
+        );
+    }
+
+    #[test]
+    fn a_window_the_page_paints_at_its_own_alpha_is_on_screen() {
+        // Settled, and settled at once: the client is run `--translucent`, so
+        // partly opaque is the window and nothing else, and nothing that
+        // paints later takes a window that is on screen off it. Every value
+        // between the ends rather than a sample, because an arm that answered
+        // anything else for any of them leaves a window that is on screen
+        // unreported — or reported as hidden.
+        for alpha in 1..u8::MAX {
+            assert_eq!(
+                what_the_chrome_shows(alpha, 0),
+                Verdict::OnScreen,
+                "alpha={alpha}",
+            );
+            assert_eq!(
+                what_the_chrome_shows(alpha, PATIENCE),
+                Verdict::OnScreen,
+                "alpha={alpha}, out of patience",
+            );
+        }
+    }
+
+    #[test]
+    fn an_opaque_look_is_not_a_verdict_until_the_patience_is_spent() {
+        // The chrome having this window's pixels does not mean the page has
+        // painted them: the frames it commits next can still be the page as it
+        // was before the window existed — an empty stage, which draws a card
+        // in the middle of exactly where the window is going. Believing the
+        // first opaque reading convicts the shell of that card.
         assert_eq!(what_the_chrome_shows(u8::MAX, 0), Verdict::LookAgain);
+        assert_eq!(
+            what_the_chrome_shows(u8::MAX, PATIENCE - 2),
+            Verdict::LookAgain
+        );
     }
 
     #[test]
-    fn an_opaque_chrome_is_believed_in_the_end() {
+    fn a_chrome_still_opaque_when_the_patience_runs_out_is_believed() {
+        // A background behind the element never stops being opaque, which is
+        // what separates it from a page that had not caught up.
         assert_eq!(
             what_the_chrome_shows(u8::MAX, PATIENCE - 1),
             Verdict::Hidden
         );
         assert_eq!(what_the_chrome_shows(u8::MAX, PATIENCE), Verdict::Hidden);
-    }
-
-    #[test]
-    fn a_window_that_shows_through_late_still_shows_through() {
-        // The page painted its hole on the last frame anyone was going to
-        // look at. That is a window on screen, not a window hidden.
-        assert_eq!(what_the_chrome_shows(0, PATIENCE), Verdict::ShowsThrough);
     }
 }

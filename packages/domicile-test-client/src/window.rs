@@ -53,12 +53,64 @@ const SIZE: (u32, u32) = (320, 240);
 /// the window rather than by trusting a counter this process prints.
 const COLOURS: [u32; 2] = [0x00_20_30_50, 0x00_30_50_80];
 
+/// How opaque a `--translucent` window is.
+///
+/// Half. Neither end of the range would do: clear is a window with nothing to
+/// see, and opaque is the answer `e2e-window-shows-through.sh` has to be able
+/// to tell a background painted over the window apart from.
+///
+/// Public because that check asserts on this exact number in the compositor's
+/// log — `alpha=128 opaque=false` is what says the texel over the window is
+/// the window — and `the_grepped_log_messages_are_what_the_scripts_expect`
+/// pins the two together. A change here that the script did not follow would
+/// otherwise be a check waiting for a value nothing produces.
+pub const TRANSLUCENT_ALPHA: u8 = 0x80;
+
+const _: () = assert!(
+    TRANSLUCENT_ALPHA > 0 && TRANSLUCENT_ALPHA < u8::MAX,
+    "a clear window has nothing to see and an opaque one is what the check \
+     has to tell a background apart from",
+);
+
+/// [`COLOURS`] at [`TRANSLUCENT_ALPHA`], which is what a `--translucent`
+/// window draws.
+const TRANSLUCENT_COLOURS: [u32; 2] = [translucent(COLOURS[0]), translucent(COLOURS[1])];
+
+/// One colour at [`TRANSLUCENT_ALPHA`], **premultiplied**.
+///
+/// Premultiplied because that is what `Argb8888` means: a channel above the
+/// alpha is a colour brighter than it is opaque, and no compositor owes an
+/// answer for one. Computed rather than written out, so the two colours cannot
+/// drift from the opaque ones they are supposed to be — a hand-scaled table is
+/// four multiplications nobody checks.
+const fn translucent(colour: u32) -> u32 {
+    let alpha = TRANSLUCENT_ALPHA as u32;
+    let red = ((colour >> 16) & 0xff) * alpha / 0xff;
+    let green = ((colour >> 8) & 0xff) * alpha / 0xff;
+    let blue = (colour & 0xff) * alpha / 0xff;
+    (alpha << 24) | (red << 16) | (green << 8) | blue
+}
+
+/// The `wl_shm` format a window of each kind is drawn in.
+///
+/// `Xrgb8888` has no alpha channel at all, which is what makes an ordinary
+/// test window fully opaque however it is composited — see the compositor's
+/// `xrgb_forces_opaque_alpha`. A window a check has to see past has to say so
+/// in its format, not only in its pixels.
+const fn shm_format(translucent: bool) -> wl_shm::Format {
+    if translucent {
+        wl_shm::Format::Argb8888
+    } else {
+        wl_shm::Format::Xrgb8888
+    }
+}
+
 /// Open a window on `$WAYLAND_DISPLAY` and draw until killed.
 ///
 /// Returns only on a failure: a client whose job is to be a window for the
 /// length of a check has nothing to return early *for*, and every caller in
 /// `scripts/` ends it with a signal.
-pub fn run(title: &str) -> Result<std::convert::Infallible, ClientError> {
+pub fn run(title: &str, translucent: bool) -> Result<std::convert::Infallible, ClientError> {
     let connection =
         Connection::connect_to_env().map_err(|err| ClientError::NoDisplay(err.to_string()))?;
     let mut queue = connection.new_event_queue();
@@ -72,7 +124,7 @@ pub fn run(title: &str) -> Result<std::convert::Infallible, ClientError> {
     // Two roundtrips: the first brings the globals, the second brings what
     // binding them produced — the `wl_shm.format` list, and the seat's
     // capabilities, which is what says whether there is a keyboard to bind.
-    let mut client = Client::new(title.to_string());
+    let mut client = Client::new(title.to_string(), translucent);
     queue
         .roundtrip(&mut client)
         .map_err(|err| ClientError::Lost(err.to_string()))?;
@@ -92,6 +144,11 @@ pub fn run(title: &str) -> Result<std::convert::Infallible, ClientError> {
 /// The globals a window needs, and the window once it has them.
 struct Client {
     title: String,
+    /// Whether this client's window is see-through — see
+    /// [`crate::arguments::Arguments::translucent`]. Held here rather than
+    /// passed down because the buffers are remade whenever the window changes
+    /// density, and the second set has to be the same kind as the first.
+    translucent: bool,
     globals: Globals,
     /// Made by [`Client::open`], which `run` calls before dispatching anything
     /// that could draw. An event arriving with this still unset would be the
@@ -183,9 +240,10 @@ struct Globals {
 }
 
 impl Client {
-    fn new(title: String) -> Client {
+    fn new(title: String, translucent: bool) -> Client {
         Client {
             title,
+            translucent,
             globals: Globals::default(),
             window: None,
             configured: false,
@@ -279,7 +337,7 @@ impl Client {
         // not entered one yet — that only happens once it is mapped — so there
         // is no screen whose density this window is on. `follow` raises it
         // when `wl_surface.enter` says which.
-        let pixels = Pixels::new(shm, handle, SIZE.0, SIZE.1)?;
+        let pixels = Pixels::new(shm, handle, SIZE.0, SIZE.1, self.translucent)?;
         // The commit that starts the handshake, and it must carry no buffer:
         // the compositor answers it with the size the surface may use, and
         // attaching before that is asking for a size nobody agreed to.
@@ -350,7 +408,13 @@ impl Client {
         for buffer in &window.pixels.buffers {
             buffer.destroy();
         }
-        window.pixels = Pixels::new(shm, handle, SIZE.0 * wanted as u32, SIZE.1 * wanted as u32)?;
+        window.pixels = Pixels::new(
+            shm,
+            handle,
+            SIZE.0 * wanted as u32,
+            SIZE.1 * wanted as u32,
+            self.translucent,
+        )?;
         window.scale = wanted;
         Ok(())
     }
@@ -410,6 +474,7 @@ impl Pixels {
         handle: &QueueHandle<Client>,
         width: u32,
         height: u32,
+        translucent: bool,
     ) -> Result<Pixels, ClientError> {
         let each = (width as usize) * (height as usize) * 4;
         let file = anonymous(each * 2)
@@ -421,7 +486,7 @@ impl Pixels {
                 width as i32,
                 height as i32,
                 (width * 4) as i32,
-                wl_shm::Format::Xrgb8888,
+                shm_format(translucent),
                 handle,
                 index,
             )
@@ -430,7 +495,12 @@ impl Pixels {
         // keep it alive on the compositor's side, so nothing here needs it
         // again.
         pool.destroy();
-        let colours = COLOURS.map(|colour| {
+        let painted = if translucent {
+            TRANSLUCENT_COLOURS
+        } else {
+            COLOURS
+        };
+        let colours = painted.map(|colour| {
             colour
                 .to_ne_bytes()
                 .iter()
@@ -999,5 +1069,51 @@ fn number<T: Into<u32>>(stated: WEnum<T>) -> u32 {
     match stated {
         WEnum::Value(known) => known.into(),
         WEnum::Unknown(raw) => raw,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use wayland_client::protocol::wl_shm;
+
+    use super::{shm_format, COLOURS, TRANSLUCENT_ALPHA, TRANSLUCENT_COLOURS};
+
+    #[test]
+    fn a_see_through_window_is_premultiplied_and_actually_see_through() {
+        // `Argb8888` is premultiplied alpha. A channel above the alpha is a
+        // colour brighter than it is opaque, which no compositor owes an
+        // answer for — and the answer this one gives is what
+        // `e2e-window-shows-through.sh` reads.
+        for (translucent, opaque) in TRANSLUCENT_COLOURS.iter().zip(COLOURS) {
+            let [alpha, red, green, blue] = translucent.to_be_bytes();
+            assert_eq!(alpha, TRANSLUCENT_ALPHA, "{translucent:#010x}");
+            for (channel, of) in [red, green, blue]
+                .iter()
+                .zip(opaque.to_be_bytes().iter().skip(1))
+            {
+                assert!(
+                    *channel <= alpha,
+                    "{translucent:#010x}: {channel} over {alpha}",
+                );
+                // And it is *that* colour at that alpha rather than some other
+                // one: premultiplying is what the compositor undoes, so a
+                // window drawn from an unrelated table would come back a
+                // colour nothing expected.
+                assert_eq!(
+                    u32::from(*channel),
+                    u32::from(*of) * u32::from(alpha) / 0xff,
+                    "{translucent:#010x} against {opaque:#010x}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn only_a_see_through_window_asks_for_a_format_with_alpha() {
+        // The branch the flag actually turns: `Xrgb8888` has no alpha channel,
+        // so a window drawn in it is fully opaque whatever its pixels say —
+        // which is the reading that made `e2e-window-shows-through.sh` flaky.
+        assert_eq!(shm_format(true), wl_shm::Format::Argb8888);
+        assert_eq!(shm_format(false), wl_shm::Format::Xrgb8888);
     }
 }
