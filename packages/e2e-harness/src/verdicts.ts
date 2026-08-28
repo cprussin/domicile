@@ -29,21 +29,22 @@
 // decision undecided rather than convicting anyone, and the count is what
 // turns the resulting silence into a failure instead of a green run.
 //
-// Every script that sources this file carries that whole property, with two
-// exceptions. Naming the ones that *do* is what keeps going stale here — a
+// Every script that sources this file carries that whole property, with one
+// exception. Naming the ones that *do* is what keeps going stale here — a
 // count went first, then the roster that replaced it, each wrong the moment
-// another script adopted the lib — so this names only the exceptions, and each
-// of the two says the same thing in its own text above its source line.
+// another script adopted the lib — so this names only the exception, which
+// says the same thing in its own text above its source line.
 //
-// `e2e-chrome.sh` and `e2e-input.sh` source the helpers for the *bails* alone:
-// they diagnose through `harness_fault` and convict through
-// `compositor_verdict`, but their checks are sequential `if`s rather than arms
-// of one decision, and they have no `passed` and no `every_check_ran`. So a
-// bail that no-ops there falls through into the next check rather than being
-// caught by a count, which is the thing the count exists for. Nothing does
-// today — every arm in both ends in a helper that exits — but it is the
-// difference between them and the rest, and worth naming rather than leaving
-// to be discovered.
+// `e2e-input.sh` sources the helpers for the *bails* alone: it diagnoses
+// through `harness_fault` and convicts through `compositor_verdict`, but its
+// checks are sequential `if`s rather than arms of one decision, and it has no
+// `passed` and no `every_check_ran`. So a bail that no-ops there falls through
+// into the next check rather than being caught by a count, which is the thing
+// the count exists for. Nothing does today — every arm ends in a helper that
+// exits — but it is the difference between it and the rest, and worth naming
+// rather than leaving to be discovered.
+//
+// It was two until `e2e-chrome.sh` was deleted.
 //
 // Scripts that never source the file at all are reached by rule 1 and nothing
 // else: rules 2 and 3 are vacuous for a script that names neither helper.

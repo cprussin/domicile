@@ -64,7 +64,6 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 # `e2e-chrome-without-a-host` builds no Rust at all. Every one has a flake app, so
 # `nix run .#<name>` runs any of them against a fresh checkout.
 ./scripts/smoke-compositor.sh    # a real client binds our globals
-./scripts/e2e-chrome.sh          # client -> host -> mock chrome, and the buffer release
 ./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow
 ./scripts/e2e-late-chrome.sh     # a chrome arriving to a client already running (reload)
 ./scripts/e2e-input.sh           # keyboard + pointer reach a client (copy path)
@@ -268,7 +267,9 @@ below.
 - **Buffers must be released.** Smithay only releases the *previous* buffer when
   the next is committed — which is the buffer the client cannot draw. The
   compositor takes the buffer out of the surface state and releases it once the
-  pixels are out of it. `e2e-chrome.sh` asserts it.
+  pixels are out of it. `tests/backpressure.rs` asserts it — both its checks
+  fail without the release, because a client that cannot reuse its buffer
+  stops drawing and there is nothing left to fall behind on.
 - **`winit::init` hands back an event loop, and dropping it is silent.** The
   window still opens and draws; it just never hears a pointer or a key, which
   reads as a compositor that has hung rather than a wire-up that is missing.
