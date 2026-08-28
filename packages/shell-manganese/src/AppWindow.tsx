@@ -8,6 +8,7 @@ import type { Floating } from "./shell-state";
 import {
   clickThroughStyles,
   draggingStyles,
+  floatEdgeStyles,
   floatPlacement,
   windowStyles,
 } from "./window-styles";
@@ -91,6 +92,7 @@ export const AppWindow = ({
         clickThrough && clickThroughStyles,
         dragging && draggingStyles,
         floating !== undefined && framedStyles,
+        floating !== undefined && floatEdgeStyles,
       )}
       hidden={!onScreen}
       ref={setPortal}
@@ -133,4 +135,4 @@ const appStyles = css({
 // `border-top-left-radius` the SDK reports — so a window cannot be square
 // under its bar and round at the bottom. The bar carries the rounding, and the
 // surface under it meets it flush.
-const framedStyles = css({ borderRadius: 0 });
+const framedStyles = css({ borderBlockStartWidth: 0, borderRadius: 0 });

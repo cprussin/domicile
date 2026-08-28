@@ -429,11 +429,12 @@ describe("Shell", () => {
   });
 
   describe("with nothing open", () => {
-    it("says how to open something", () => {
-      renderShell();
-      expect(
-        screen.getByRole("heading", { name: "No windows yet" }),
-      ).toBeInTheDocument();
+    it("says nothing at all", () => {
+      // The stage is bare until something is opened onto it. It used to carry
+      // a card of keybinding hints, which is a thing to read once and then
+      // look past for ever.
+      const { container } = renderShell();
+      expect(container.querySelector("main")?.children).toHaveLength(0);
     });
   });
 
@@ -1244,6 +1245,26 @@ describe("Shell", () => {
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
 
       expect(claimed()).toHaveLength(1);
+    });
+
+    it("hands the pointer to the page while Ctrl is held", async () => {
+      // Ctrl does what Alt does — gives the shell the pointer — and it is what
+      // makes a resize reachable without a second modifier, because the
+      // secondary button is the resize.
+      const { container } = await twoFloats({ alt: false, shift: false });
+      act(() => {
+        bridge.emit("modifiers", {
+          alt: false,
+          ctrl: true,
+          logo: false,
+          shift: false,
+        });
+      });
+
+      expect(sheetsIn(container)).toHaveLength(2);
+      expect(portalFor(container, "one")?.className).toContain(
+        css({ pointerEvents: "none" }),
+      );
     });
 
     it("hands the pointer over a window on the stage to the page mid-drag", async () => {

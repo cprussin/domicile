@@ -1,14 +1,21 @@
 import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import { useCallback, useEffect, useState } from "react";
 
-/** The modifiers the shell reacts to: Alt drags a window, Shift resizes it. */
+/**
+ * The modifiers the shell reacts to.
+ *
+ * Alt and Ctrl both hand the pointer to the shell, which is what makes a drag
+ * catchable in the page at all; Shift makes that drag a resize, as does taking
+ * hold with the secondary button.
+ */
 export type Modifiers = {
   alt: boolean;
+  ctrl: boolean;
   shift: boolean;
 };
 
 /** Nothing held, which is what the shell assumes until it is told otherwise. */
-const NONE: Modifiers = { alt: false, shift: false };
+const NONE: Modifiers = { alt: false, ctrl: false, shift: false };
 
 /**
  * Which modifiers are held, from both of the places that can know.
@@ -32,7 +39,11 @@ export const useModifiers = (bridge: BridgeClient): Modifiers => {
   // sentence of typing re-renders once rather than per keystroke.
   const settle = useCallback((next: Modifiers) => {
     setHeld((last) =>
-      last.alt === next.alt && last.shift === next.shift ? last : next,
+      last.alt === next.alt &&
+      last.ctrl === next.ctrl &&
+      last.shift === next.shift
+        ? last
+        : next,
     );
   }, []);
 
@@ -40,14 +51,18 @@ export const useModifiers = (bridge: BridgeClient): Modifiers => {
     // `on` returns the bridge for chaining, so it is deliberately not returned
     // as a cleanup — there is one handler per message type and re-registering
     // replaces it.
-    bridge.on("modifiers", ({ alt, shift }) => {
-      settle({ alt, shift });
+    bridge.on("modifiers", ({ alt, ctrl, shift }) => {
+      settle({ alt, ctrl, shift });
     });
   }, [bridge, settle]);
 
   useEffect(() => {
     const follow = (event: KeyboardEvent) => {
-      settle({ alt: event.altKey, shift: event.shiftKey });
+      settle({
+        alt: event.altKey,
+        ctrl: event.ctrlKey,
+        shift: event.shiftKey,
+      });
     };
     document.addEventListener("keydown", follow);
     document.addEventListener("keyup", follow);

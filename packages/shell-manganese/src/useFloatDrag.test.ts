@@ -7,14 +7,18 @@ import { useFloatDrag } from "./useFloatDrag";
 const FLOAT: Float = { height: 200, id: "w1", width: 300, x: 10, y: 20 };
 
 /** A press, carrying what the hook actually reads off a pointer event. */
-const press = (x = 0, y = 0) =>
+const press = (x = 0, y = 0, button = 0) =>
   ({
+    button,
     clientX: x,
     clientY: y,
     currentTarget: { setPointerCapture: () => undefined },
     pointerId: 1,
     // biome-ignore lint/suspicious/noExplicitAny: a stand-in for the fields read
   }) as any;
+
+/** The secondary button, which resizes whatever it takes hold of. */
+const SECONDARY = 2;
 
 /**
  * The rest of a drag, which the hook listens for on `window` rather than on
@@ -119,6 +123,24 @@ describe("useFloatDrag", () => {
         moveTo(70, 30);
       });
       expect(calls.onResize).toHaveBeenCalledTimes(1);
+      expect(calls.onMove).not.toHaveBeenCalled();
+    });
+
+    it("resizes when the drag is taken hold of with the secondary button", () => {
+      // The other way to reach a resize, and the one that needs no second
+      // modifier: whatever handed the pointer to the shell, the right button
+      // means the corner rather than the whole window.
+      const { calls, result } = dragging();
+      act(() => {
+        result.current.onPointerDown(press(0, 0, SECONDARY));
+      });
+      act(() => {
+        moveTo(70, 30);
+      });
+      expect(calls.onResize).toHaveBeenCalledWith(
+        FLOAT.width + 70,
+        FLOAT.height + 30,
+      );
       expect(calls.onMove).not.toHaveBeenCalled();
     });
 
