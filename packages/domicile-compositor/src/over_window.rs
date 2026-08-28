@@ -59,9 +59,46 @@ pub fn texel_over(
     Some((i32::try_from(x).ok()?, i32::try_from(y).ok()?))
 }
 
+/// How many whole-page frames a window is looked through before an opaque
+/// answer is believed.
+///
+/// A window's placement reaches the compositor when the page has *laid it
+/// out*, which is before the page has painted the hole and committed a frame
+/// with it in. So the first frames after a window appears can legitimately
+/// have the chrome still opaque where it is going, and a verdict taken from
+/// one of those is a verdict about a page that had not drawn the window yet.
+///
+/// Transparent needs no patience — a hole is a hole, and nothing that appears
+/// later fills it in. Opaque is the answer that has to wait.
+const PATIENCE: u32 = 60;
+
+/// What a reading of the chrome over a window means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    /// There is a hole here; the client's own pixels reach the screen.
+    ShowsThrough,
+    /// The chrome is painting over this window and has had every chance to
+    /// stop. The window is not on screen.
+    Hidden,
+    /// Opaque, but the page may not have painted the window's hole yet.
+    LookAgain,
+}
+
+/// What `alpha` says, given how many times this window has been looked at.
+///
+/// `looks` counts the readings already taken of *this* window, so the first
+/// call passes 0.
+pub fn what_the_chrome_shows(alpha: u8, looks: u32) -> Verdict {
+    match (alpha, looks) {
+        (u8::MAX, looks) if looks + 1 < PATIENCE => Verdict::LookAgain,
+        (u8::MAX, _) => Verdict::Hidden,
+        _ => Verdict::ShowsThrough,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::texel_over;
+    use super::{texel_over, what_the_chrome_shows, Verdict, PATIENCE};
 
     const PAGE: (f64, f64) = (800.0, 600.0);
 
@@ -135,5 +172,40 @@ mod tests {
         );
         assert_eq!(texel_over((0.0, 0.0), PAGE, (0, 600), false), None);
         assert_eq!(texel_over((0.0, 0.0), PAGE, (800, 0), false), None);
+    }
+
+    #[test]
+    fn a_hole_is_a_hole_the_first_time_it_is_seen() {
+        // Transparent needs no patience: nothing that paints later fills in a
+        // hole that is already there.
+        assert_eq!(what_the_chrome_shows(0, 0), Verdict::ShowsThrough);
+        assert_eq!(what_the_chrome_shows(254, 0), Verdict::ShowsThrough);
+    }
+
+    #[test]
+    fn an_opaque_first_look_is_not_a_verdict() {
+        // A window's placement reaches the compositor when the page has laid
+        // it out, which is before the page has painted its hole and committed
+        // a frame with it in. Believing the first opaque reading is a verdict
+        // about a page that had not drawn the window yet — and it is flaky
+        // rather than wrong, which is worse: the window is hidden or not
+        // depending on which frame the compositor happened to be holding.
+        assert_eq!(what_the_chrome_shows(u8::MAX, 0), Verdict::LookAgain);
+    }
+
+    #[test]
+    fn an_opaque_chrome_is_believed_in_the_end() {
+        assert_eq!(
+            what_the_chrome_shows(u8::MAX, PATIENCE - 1),
+            Verdict::Hidden
+        );
+        assert_eq!(what_the_chrome_shows(u8::MAX, PATIENCE), Verdict::Hidden);
+    }
+
+    #[test]
+    fn a_window_that_shows_through_late_still_shows_through() {
+        // The page painted its hole on the last frame anyone was going to
+        // look at. That is a window on screen, not a window hidden.
+        assert_eq!(what_the_chrome_shows(0, PATIENCE), Verdict::ShowsThrough);
     }
 }

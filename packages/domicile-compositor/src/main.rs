@@ -117,7 +117,7 @@ use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
-use crate::over_window::texel_over;
+use crate::over_window::{texel_over, what_the_chrome_shows, Verdict};
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::shortcut::Shortcuts;
@@ -1482,10 +1482,14 @@ struct DomicileCompositor {
     /// reason for asking separately. Kept between frames because asking is a
     /// round trip — a desktop that has not repainted redraws from these.
     band_textures: HashMap<usize, SurfaceTexture>,
-    /// The windows already looked at through the chrome. One reading each: a
-    /// page that paints over a window paints over it always, and a read-back
-    /// is a stall on the GPU rather than something to do every frame.
-    looked_over: HashSet<String>,
+    /// How many times each window has been looked at through the chrome while
+    /// the answer is still opaque. A window leaves here the moment it settles.
+    /// See `over_window::what_the_chrome_shows`.
+    looks: HashMap<String, u32>,
+    /// The windows whose reading is final, so they are looked at no more: a
+    /// hole on the first look, or a chrome still opaque after every frame
+    /// `PATIENCE` allows.
+    settled: HashSet<String>,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1742,9 +1746,9 @@ impl DomicileCompositor {
         // client. It may hold none: a window on the copy path is drawn by the
         // engine, and a desktop with no window of its own composites nothing.
         // What is being looked at here is the page.
-        let unseen: Vec<(String, (f64, f64))> = placed
+        let unsettled: Vec<(String, (f64, f64))> = placed
             .into_iter()
-            .filter(|(app_id, _)| !self.looked_over.contains(app_id))
+            .filter(|(app_id, _)| !self.settled.contains(app_id))
             .map(|(app_id, surface_to_output)| {
                 // The middle of the window, which is the part a background
                 // behind it would cover if it covers any. `surface_to_output`
@@ -1755,36 +1759,54 @@ impl DomicileCompositor {
                 (app_id, (centre.x, centre.y))
             })
             .collect();
-        for (app_id, centre) in unseen {
+        for (app_id, centre) in unsettled {
             let Some(texel) = texel_over(centre, page, frame, y_inverted) else {
                 // Off the page, so there is no pixel of the chrome over it and
-                // nothing to say. Deliberately not marked as looked at: a
-                // window dragged back on is one to look through.
+                // nothing to say. Left unsettled: a window dragged back on is
+                // one to look through.
                 continue;
             };
             let Some(pixel) = self.chrome_pixel_at(texel) else {
                 // No renderer, or a read that failed — said where it failed,
-                // and left unmarked so the next frame tries again.
+                // and left unsettled so the next frame tries again.
                 continue;
             };
-            self.looked_over.insert(app_id.clone());
-            let alpha = pixel[3];
-            info!(
-                app_id,
-                alpha,
-                opaque = alpha == u8::MAX,
-                "{}",
-                grepped::CHROME_OVER_WINDOW
-            );
-            if alpha == u8::MAX {
-                warn!(
-                    app_id,
-                    "the chrome is opaque where this window is, so the window \
-                     cannot be seen: something behind its <domicile-app> \
-                     element is painting a background"
-                );
+            let looks = self.looks.entry(app_id.clone()).or_insert(0);
+            let seen = *looks;
+            *looks += 1;
+            match what_the_chrome_shows(pixel[3], seen) {
+                // Not an answer yet: a window's placement arrives when the
+                // page has laid it out, which is before the page has painted
+                // its hole and committed a frame with it in.
+                Verdict::LookAgain => {}
+                Verdict::ShowsThrough => {
+                    self.settle(&app_id, pixel[3]);
+                }
+                Verdict::Hidden => {
+                    self.settle(&app_id, pixel[3]);
+                    warn!(
+                        app_id,
+                        "the chrome is opaque where this window is, so the window \
+                         cannot be seen: something behind its <domicile-app> \
+                         element is painting a background"
+                    );
+                }
             }
         }
+    }
+
+    /// Record what the chrome turned out to show over `app_id`, and stop
+    /// looking.
+    fn settle(&mut self, app_id: &str, alpha: u8) {
+        self.looks.remove(app_id);
+        self.settled.insert(app_id.to_string());
+        info!(
+            app_id,
+            alpha,
+            opaque = alpha == u8::MAX,
+            "{}",
+            grepped::CHROME_OVER_WINDOW
+        );
     }
 
     /// One texel of the chrome's last frame, as R, G, B, A.
@@ -4964,7 +4986,8 @@ impl XdgShellHandler for DomicileCompositor {
             self.band_textures.clear();
             // A new page is a new answer to what it paints over a window, so
             // every window is one to look through again.
-            self.looked_over.clear();
+            self.looks.clear();
+            self.settled.clear();
             let keyboard = self.seat.get_keyboard().unwrap();
             let serial = SERIAL_COUNTER.next_serial();
             keyboard.set_focus(self, None, serial);
@@ -4990,7 +5013,8 @@ impl XdgShellHandler for DomicileCompositor {
             self.textures.remove(&app_id);
             // An app id can come back — a client that reconnects, a portal
             // re-created — and the window it names then is a different one.
-            self.looked_over.remove(&app_id);
+            self.looks.remove(&app_id);
+            self.settled.remove(&app_id);
             if self.pointer_app.as_deref() == Some(app_id.as_str()) {
                 self.pointer_app = None;
             }
@@ -5531,7 +5555,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pending_key: None,
         bands: Bands::default(),
         band_textures: HashMap::new(),
-        looked_over: HashSet::new(),
+        looks: HashMap::new(),
+        settled: HashSet::new(),
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
