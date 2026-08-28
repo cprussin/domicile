@@ -37,8 +37,9 @@
 //! the compositor to say `keyboard focus -> client` before any test looks at
 //! anything. It logs a different line for the window with no surface, so the
 //! fixture's own fault and the compositor's are distinguishable rather than
-//! both arriving as "no input was delivered". `e2e-chrome-layer.sh` is on
-//! record in the ROADMAP as getting this wrong and passing anyway.
+//! both arriving as "no input was delivered". The ROADMAP records that
+//! `e2e-chrome-layer.sh` got this wrong and passed anyway for as long as it
+//! existed; `tests/layers.rs` took its claims over and places first.
 
 mod running;
 
@@ -137,11 +138,14 @@ fn drive(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
 /// `wl_pointer`. The client's own start-up rules that out — `run()` is `bind()`,
 /// then a roundtrip in which the seat's capabilities are answered with
 /// `get_keyboard`/`get_pointer`, and only then `open()`, which creates the
-/// toplevel that `app_appeared` announces. The retry was also never delivered:
-/// a test that stops draining its chrome fills the socket, `serve_outbound`
-/// blocks holding the writer, and the reader blocks behind it — measured, the
-/// compositor read one message of the second wave and nothing more for twenty
-/// seconds. One wave and a signal is both shorter and honest.
+/// toplevel that `app_appeared` announces. The retry was also never delivered,
+/// against the compositor of the time: a test that stopped draining its chrome
+/// filled the socket, `serve_outbound` blocked holding the writer, and the
+/// reader blocked behind it at the end of an iteration that had nothing to
+/// write — measured, the compositor read one message of the second wave and
+/// nothing more for twenty seconds. `write_responses` no longer takes the lock
+/// for an empty answer, so that no longer happens; the wave is still one,
+/// because one and a signal is both shorter and honest.
 fn a_client_being_typed_at(
     compositor: &Compositor,
 ) -> (domicile_test_chrome::Chrome, crate::running::Client, String) {

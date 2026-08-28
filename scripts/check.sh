@@ -296,7 +296,13 @@ if wanted rust; then
   echo "== rust =="
   run "cargo fmt" cargo fmt --all --check
   run "cargo clippy" cargo clippy --workspace --all-targets -- -D warnings
-  run "cargo test" cargo test --workspace
+  # `--no-fail-fast`, because without it cargo stops at the first failing
+  # target and says nothing about the rest. A tree that breaks two test
+  # binaries then reports whichever sorts first, and the second failure is
+  # invisible until the first is fixed — which is how a mutation measurement
+  # taken with this gate came out reading "killed by one file" when two killed
+  # it.
+  run "cargo test" cargo test --workspace --no-fail-fast
 fi
 
 if wanted typescript; then

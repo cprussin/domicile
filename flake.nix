@@ -450,11 +450,9 @@
           e2e-late-chrome = "e2e-late-chrome.sh";
           e2e-chrome-without-a-host = "e2e-chrome-without-a-host.sh";
           e2e-dmabuf = "e2e-dmabuf.sh";
-          e2e-chrome-layer = "e2e-chrome-layer.sh";
           e2e-hidpi = "e2e-hidpi.sh";
           probe-transparency = "probe-transparency.sh";
           e2e-compose = "e2e-compose.sh";
-          e2e-stuck-key = "e2e-stuck-key.sh";
           e2e-bands = "e2e-bands.sh";
           e2e-window-shows-through = "e2e-window-shows-through.sh";
           e2e-reload-displays = "e2e-reload-displays.sh";

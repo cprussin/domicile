@@ -191,7 +191,7 @@ describe("Desktop", () => {
       // `ClientRequest::KeyboardFocus` moves the seat regardless — so a focus
       // that arrives first leaves the brain and the seat disagreeing, with
       // nothing to notice. The portal is sent as the element connects, which
-      // is the append. See the `e2e-chrome-layer.sh` entry in the roadmap for
+      // is the append. See the placed-before-focused entry in the roadmap for
       // the same no-op found the hard way.
       const { acted, desktop } = recordingDesktop();
       desktop.caughtUp();

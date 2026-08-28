@@ -50,6 +50,10 @@ pub struct Compositor {
 /// What the compositor published, as this fixture needs it.
 pub struct Session {
     pub chrome_socket: PathBuf,
+    /// The display the *chrome's own window* goes on, which is a different
+    /// socket. Which one a client arrived on is the whole of how the
+    /// compositor tells the desktop from the things running on it.
+    pub chrome_wayland_display: String,
     /// The display applications connect to, as the compositor named it.
     ///
     /// Read from the session rather than assumed to be `wayland-1`, which is
@@ -122,6 +126,7 @@ impl Compositor {
             _directory: directory,
             session: Session {
                 chrome_socket: chrome_socket.clone(),
+                chrome_wayland_display: String::new(),
                 // Filled in from the document itself, below. Empty until the
                 // compositor has said what it bound, because until then there
                 // is no true answer and a guess would be one a test carries
@@ -131,6 +136,7 @@ impl Compositor {
         };
         let published = compositor.await_session(&session_file);
         compositor.session.wayland_display = published.wayland_display;
+        compositor.session.chrome_wayland_display = published.chrome_wayland_display;
         compositor
     }
 
@@ -141,6 +147,40 @@ impl Compositor {
     }
 
     /// A stand-in chrome, connected and past the handshake.
+    ///
+    /// **It only reads when asked to.** `Chrome::wait_for` is what pulls from
+    /// the socket, so a test that connects one and then waits on something
+    /// else — a client's trace, a log line — is not draining it, and a drawing
+    /// client fills that socket in a few frames. `serve_outbound` then blocks
+    /// in `write_all` holding the writer lock.
+    ///
+    /// That used to stop the compositor reading this connection at all:
+    /// `read_chrome_messages` took the same writer lock at the end of *every*
+    /// iteration, including for the whole input path, which answers with
+    /// nothing. So a chrome that only ever spoke — the ordinary case — parked
+    /// the reader behind a socket it was not draining, and everything it said
+    /// afterwards was silently never processed. That was a real flake:
+    /// `tests/input.rs` failed one run in twenty-four of the whole workspace,
+    /// with the compositor's last `chrome -> host` line being the
+    /// `place_portal` and `chrome is behind; dropped a frame` repeating to the
+    /// end.
+    ///
+    /// `write_responses` now returns before taking the lock when there is
+    /// nothing to write, so that case is gone: measured, a test that stalls
+    /// fifteen seconds without reading a byte still has its next message acted
+    /// on, where before the fix it did not.
+    ///
+    /// What remains is one message. `apply_chrome_message` answers non-empty
+    /// for `ChromeMessage::Hello` and for nothing else, so a `hello` — which is
+    /// also how a test spells a page reloading — still takes the writer lock
+    /// and can still park the reader behind `serve_outbound`. Measured on the
+    /// fixed compositor, against a chrome nobody reads: fifty of them cost
+    /// three hundred microseconds and the whole check finishes in
+    /// four-hundredths of a second; two thousand wedge between the five
+    /// hundredth and the five hundred and fiftieth, and are still wedged two
+    /// minutes later. And it *hangs* rather than failing — `say` blocks,
+    /// nothing reaches a `wait_for`, so `PATIENCE` never fires and the run has
+    /// to be killed. Read the socket if you send hundreds.
     pub fn chrome(&self) -> Chrome {
         Chrome::connect(&self.session.chrome_socket, PATIENCE)
             .expect("a chrome can connect to a compositor that published a session")
@@ -159,6 +199,16 @@ impl Compositor {
     /// would hold a window open on a compositor the next test starts.
     pub fn client(&self, title: &str) -> Client {
         self.client_on(&self.session.wayland_display, title)
+    }
+
+    /// The same, on the display the chrome's own window goes on.
+    ///
+    /// A real chrome is an Electron; what matters to the compositor is which
+    /// socket the client arrived on, so an ordinary test client on that
+    /// display is the chrome as far as the classification is concerned — which
+    /// is what makes the claim testable without a browser.
+    pub fn chrome_side_client(&self, title: &str) -> Client {
+        self.client_on(&self.session.chrome_wayland_display, title)
     }
 
     fn client_on(&self, display: &str, title: &str) -> Client {
@@ -290,6 +340,28 @@ impl Compositor {
             assert!(
                 Instant::now() < until,
                 "the compositor never said {pattern:?} in {PATIENCE:?}:\n{said}"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// Wait until the compositor has said `pattern` at least `wanted` times.
+    ///
+    /// For a line the compositor says more than once, where the interesting
+    /// one is not the first. `wait_for_log` is answered by an earlier
+    /// occurrence and so cannot ask "and again" — the same distinction
+    /// `Chrome::wait_for` draws by consuming its matches.
+    pub fn wait_for_log_times(&self, pattern: &str, wanted: usize) {
+        let until = Instant::now() + PATIENCE;
+        loop {
+            let said = self.complaint();
+            if said.matches(pattern).count() >= wanted {
+                return;
+            }
+            assert!(
+                Instant::now() < until,
+                "the compositor said {pattern:?} fewer than {wanted} times in \
+                 {PATIENCE:?}:\n{said}"
             );
             std::thread::sleep(Duration::from_millis(20));
         }

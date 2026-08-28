@@ -10,8 +10,6 @@ can be verified in CI and on a headless box.
 | Entry | Used by | What it does |
 |---|---|---|
 | `src/mock-chrome.ts` | `e2e-dmabuf.sh`, `e2e-hidpi.sh` | Connects, handshakes, and prints every frame the host pushes so the calling script can grep for one. |
-| `src/reload-typist.ts` | `e2e-stuck-key.sh` | Holds a key down, reloads, and then tries to toggle it — the page dying mid-press, which used to leave that key down in the seat for good. |
-| `src/focus-probe.ts` | `e2e-chrome-layer.sh` | Focuses the first app announced and stays connected, so the check can watch the keyboard come back to the chrome on its own when that client goes away. |
 | `src/alpha-probe.ts` | `probe-transparency.sh` | Reports whether the frames an app commits carry real transparency, which is the assumption hole-punching rests on. |
 | `src/straight-alpha-probe.ts` | `e2e-window-alpha.sh` | Reports whether frames reaching a chrome carry *straight* alpha, i.e. that the compositor divided out what the client premultiplied. |
 | `src/keystroke-driver.ts` | `measure.sh` | Types over the host socket at a steady rate, so the latency numbers are measured against a known count of keystrokes. |
@@ -26,7 +24,7 @@ whether the compositor is still there at the instant it fires:
 `harness_fault` for this suite's own fault, `compositor_verdict` for the
 code's. Both exit, which is the point below.
 
-What actually keeps the blame straight is structural: in the nine scripts
+What actually keeps the blame straight is structural: in the eight scripts
 that use the helpers, a diagnosis is one `if`/`elif`/`else` or one `case`,
 every arm of which ends in a helper that exits or in a pass — so no arm is
 reachable by falling *through* another. A bail that turned into a no-op — the
@@ -46,12 +44,12 @@ independent of the file it lives in: it reads `PASSED`, which only `passed`
 sets, and a script that fails to source the file at all is caught by the third
 rule below rather than by the count.
 
-Nine scripts of the twenty-eight in `scripts/`, not all of them, source the
-helpers; rules 2 and 3 below are vacuous for the other nineteen, and rule 1 is
+Eight scripts of the twenty-six in `scripts/`, not all of them, source the
+helpers; rules 2 and 3 below are vacuous for the other eighteen, and rule 1 is
 all that reaches them. Worth knowing before writing the next one.
 
-Twenty-eight because that is what the sweep reads — every `.sh` in the
-directory, as the paragraph below says, not the twenty `check.sh` runs.
+Twenty-six because that is what the sweep reads — every `.sh` in the
+directory, as the paragraph below says, not the eighteen `check.sh` runs.
 
 That count is measured rather than remembered. It read "three scripts, not
 sixteen … the other thirteen" until someone counted, and every number in it

@@ -238,8 +238,8 @@ round trip per motion for.
 
 The chrome's toplevel is therefore kept out of `toplevels` entirely — never
 announced, never placed by a portal, drawn last over everything rather than in
-`draw_order`. `scripts/e2e-chrome-layer.sh` runs one client on each socket and
-checks that exactly one of them becomes a window.
+`draw_order`. `packages/domicile-compositor/tests/layers.rs` runs one client on
+each socket and checks that the one on the apps' display is the one announced.
 
 Phase 2 — the effects that make an app a CSS element:
 

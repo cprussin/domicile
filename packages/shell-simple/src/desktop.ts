@@ -130,7 +130,8 @@ export class Desktop {
       // refuses an app it has no portal for — silently, while the seat is
       // moved anyway — so a focus that arrived first would leave the brain and
       // the compositor disagreeing with nothing to notice. The roadmap records
-      // that exact no-op being found the hard way, in `e2e-chrome-layer.sh`.
+      // that exact no-op being found the hard way, in the check that became
+      // `tests/layers.rs`.
       if (this.#caughtUp) {
         element.focusApp();
       }

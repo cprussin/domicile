@@ -66,11 +66,9 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/smoke-compositor.sh    # a real client binds our globals
 ./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow
 ./scripts/e2e-late-chrome.sh     # a chrome arriving to a client already running (reload)
-./scripts/e2e-stuck-key.sh       # a key held when the page reloads is not left down in the seat
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
 ./scripts/e2e-window-alpha.sh    # a translucent client's premultiplied alpha is undone once
 ./scripts/e2e-hidpi.sh           # a 2x chrome makes a client draw at 2x, and the frame says so
-./scripts/e2e-chrome-layer.sh    # the chrome is told from the apps, and keeps the keyboard
 ./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel
 ./scripts/e2e-chrome-without-a-host.sh   # a chrome whose host socket is dead says so once and stops
 ./scripts/e2e-reload-displays.sh # a display *added* to the config is taken up while it runs
@@ -754,15 +752,38 @@ age, and it needs a screen before anyone should believe it.
 
 - **A client that draws its own cursor into a surface gets a plain arrow.**
   Compositing that surface is the same work as compositing any other.
-- **`e2e-chrome-layer.sh` focuses a window that was never placed.** Its
-  `focus-probe.ts` sends `focus_app` without a `place_portal`, and
-  `Scene::focus_app` refuses an app with no portal — the same silent no-op
-  `input-injector.ts` had before it went with `e2e-input.sh`. The script
-  *does* assert on focus, in three places, and passes anyway: those
-  assertions read the **seat**, which
-  `ClientRequest::KeyboardFocus` moves before the brain is consulted at all. So
-  the brain's `Scene::focus` never leaves the chrome and nothing notices.
-  Fixing it widens what that check covers, which is its own change.
+- **Focusing a window that was never placed moves the seat and not the brain.**
+  `ClientRequest::KeyboardFocus` gives the keyboard to the surface before the
+  brain is consulted, and `Scene::focus_app` then refuses an app with no
+  portal — so the seat says one window has it and `Scene::focus` says the
+  chrome does. Still true of the compositor; nothing here has changed it.
+
+  What has changed is that no check quietly depends on it any more.
+  `e2e-chrome-layer.sh`'s `focus-probe.ts` and `input-injector.ts` both sent
+  `focus_app` with no `place_portal`, asserted on focus, and passed — because
+  they read the seat. Both scripts are gone; `tests/layers.rs` and
+  `tests/input.rs` place before they focus and say why where they do it. The
+  divergence is still a gap, and it is this entry rather than those checks that
+  now records it.
+
+  One half of it was uncovered outright, and it is covered now.
+  `focus_chrome` moves the seat and then the brain, and deleting the second —
+  `broadcast_focus_decision(&self.hub, ChromeMessage::FocusChrome)`, the line
+  whose own comment names this divergence — used to pass the whole workspace.
+  The obvious guard does not catch it, which was measured rather than assumed:
+  `the_keyboard_comes_back_to_the_chrome_when_a_window_goes_away` holds a
+  chrome, and waiting there for a `focus_changed` passes the mutation, because
+  `toplevel_destroyed` runs `broadcast_closed` first and that has already moved
+  the brain. What kills it is driving a different route into `focus_chrome`,
+  which `the_desktop_mapping_late_takes_the_keyboard_back_in_the_brain_too`
+  does: the desktop's own window turning up while an app holds the keyboard.
+
+  `focus_chrome` has three call sites and that check covers one of them.
+  `toplevel_destroyed`'s is covered by the check above it. The one left is
+  `WinitEvent::Focus(true)` — alt-tabbing into Domicile — which needs a real
+  winit window and so is not reachable headless. A click on the desktop is
+  *not* one of the three: `focus_pointed_at` broadcasts the same decision from
+  its own arm, which the mutation above leaves untouched.
 - **A mixed-density desktop is drawn at one density.** The chrome is one page
   spanning every display (see ARCHITECTURE's decision on that), so it
   rasterises at a single `devicePixelRatio` — the largest of the outputs its
