@@ -101,11 +101,16 @@ jobs:
           exit 1
 
       # `wayland-utils` is in that list for a reason worth recording: it
-      # provides `wayland-info`, which `e2e-dmabuf.sh` and `e2e-slow-chrome.sh`
-      # use to ask the compositor what it advertises. Without it the probe
-      # cannot run, and both scripts report that as "the compositor is alive
-      # but NOT answering: its event loop is blocked" — a missing tool wearing
-      # the signature of a hung compositor.
+      # provides `wayland-info`, which `e2e-dmabuf.sh` uses to ask the
+      # compositor what it advertises. Without it the probe cannot run, and the
+      # script reports that as "the compositor is alive but NOT answering: its
+      # event loop is blocked" — a missing tool wearing the signature of a hung
+      # compositor.
+      #
+      # Two of the checks this loop runs used it until `e2e-slow-chrome.sh` was
+      # ported to `tests/backpressure.rs`, which asks the same question of a
+      # client it starts itself and so needs nothing installed.
+      # `smoke-compositor.sh` uses it too and is not in this loop.
       - run: bun install --frozen-lockfile
 
       # Bun does not run an untrusted dependency's postinstall, and Electron's

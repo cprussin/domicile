@@ -449,7 +449,6 @@
           e2e-chrome-layer = "e2e-chrome-layer.sh";
           e2e-hidpi = "e2e-hidpi.sh";
           probe-transparency = "probe-transparency.sh";
-          e2e-slow-chrome = "e2e-slow-chrome.sh";
           e2e-compose = "e2e-compose.sh";
           e2e-stuck-key = "e2e-stuck-key.sh";
           e2e-modifiers = "e2e-modifiers.sh";
