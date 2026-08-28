@@ -12,3 +12,18 @@
 [data-band-hidden] {
   opacity: 0;
 }
+
+/* DELIBERATE DEFECT — do not merge. The *translucent* falsification arm for
+ * e2e-window-shows-through.sh: `main` is the stage, an ancestor of every
+ * <domicile-app>, and a background here composites under every window without
+ * ever reading as fully opaque. A check that only refused `opaque=true` passes
+ * on this.
+ *
+ * A quarter rather than a half, and the number matters: at 50% this reads back
+ * alpha=128, which is exactly the alpha the test client draws at — so a frame
+ * showing the backdrop and no window yet is indistinguishable from the window,
+ * and the arm measures nothing. 64 is neither that nor 255, and the settled
+ * composite (0.5 over 0.25) is 159, which is neither either. */
+main {
+  background-color: rgb(18 52 86 / 25%);
+}
