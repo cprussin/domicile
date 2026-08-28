@@ -222,6 +222,28 @@ else
   exit 1
 fi
 
+# 5b) And the bar that floating gave the window has to claim the pointer where
+# it lies. The compositor hit-tests rectangles, so a bar drawn across another
+# window is invisible to it: without a claim the press on that bar goes to the
+# window underneath, which focuses it and raises it — clicking the front
+# window's title bar raises the one behind. This says the claim crosses the
+# wire; `domicile-scene`'s own tests say what the compositor does with it.
+# A region, not just the message: the shell sends the whole set every time, so
+# an empty one is exactly what a bar that never got measured looks like — and
+# it claims nothing, which is the bug this checks for.
+if wait_for "$LOG" '"regions":\[{' 100; then
+  echo "OK: the floating window's title bar claimed the pointer it covers"
+  grep -o '{"regions":\[{[^]]*}\]' "$LOG" | tail -1 | sed 's/^/    /'
+else
+  echo "FAIL: the shell floated a window and claimed the pointer nowhere, so a"
+  echo "  press on its title bar reaches whatever window the bar happens to lie"
+  echo "  over rather than the page."
+  echo "  what the chrome sent:"
+  grep -o '"type":"[a-z_]*"' "$LOG" | sort | uniq -c | tail -12 | sed 's/^/    /'
+  echo "  what the chrome said:"; tail -12 "$ELOG" | sed 's/^/    /'
+  exit 1
+fi
+
 # 6) Holding Alt should hand the pointer to the page. The compositor hit-tests
 # a rectangle and gives the pointer to the window under it, so a shell cannot
 # see a drag over one of its own windows until that window says it takes no

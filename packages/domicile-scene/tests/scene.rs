@@ -8,7 +8,7 @@
 //! space, plus a stacking order. Hit-testing inverts that transform to recover
 //! the local coordinate to forward to the Wayland client.
 
-use domicile_scene::{KeyboardTarget, Point, PointerTarget, Portal, Scene, Transform};
+use domicile_scene::{Claim, KeyboardTarget, Point, PointerTarget, Portal, Scene, Transform};
 
 const EPS: f64 = 1e-9;
 
@@ -597,4 +597,135 @@ fn two_windows_over_each_other_overlap() {
 
     assert!(under.bounds().overlaps(&over.bounds()));
     assert!(over.bounds().overlaps(&under.bounds()));
+}
+
+// ---- The chrome claiming the pointer where it paints -----------------------
+
+#[test]
+fn a_claim_over_a_window_gives_the_pointer_to_the_chrome() {
+    // The shell's own arrangement: a floating window's title bar is page
+    // pixels at that window's depth, and the window it cascades over is
+    // another window's surface. Hit-testing that point against the portals
+    // alone finds the window underneath and hands it the press — so the bar
+    // never sees the click, the compositor focuses the wrong window, and the
+    // chrome raises it. Which is the bug: clicking the title bar of the window
+    // in front raises the one behind.
+    let mut scene = Scene::new();
+    scene.upsert(portal(
+        "under",
+        640.0,
+        390.0,
+        Transform::translate(48.0, 78.0),
+        1,
+    ));
+    scene.upsert(portal(
+        "over",
+        640.0,
+        390.0,
+        Transform::translate(84.0, 114.0),
+        2,
+    ));
+    // `over`'s bar: the 30px above its surface, at its own depth.
+    scene.claim_pointer(vec![Claim::new(
+        (640.0, 30.0),
+        Transform::translate(84.0, 84.0),
+        2,
+    )]);
+
+    assert_eq!(
+        scene.route_pointer(Point::new(300.0, 100.0)),
+        PointerTarget::Chrome {
+            screen: Point::new(300.0, 100.0)
+        },
+    );
+}
+
+#[test]
+fn a_window_in_front_of_a_claim_still_takes_the_pointer() {
+    // A claim only wins where it is actually on top. The bar of a window
+    // behind must not steal the pointer from the window in front of it —
+    // which is the whole reason a claim carries a depth rather than being a
+    // flag that says "the chrome is here somewhere".
+    let mut scene = Scene::new();
+    scene.upsert(portal("front", 100.0, 100.0, Transform::identity(), 9));
+    scene.claim_pointer(vec![Claim::new((100.0, 100.0), Transform::identity(), 1)]);
+
+    assert_eq!(
+        scene.route_pointer(Point::new(50.0, 50.0)),
+        PointerTarget::App {
+            app_id: "front".to_string(),
+            local: Point::new(50.0, 50.0),
+        },
+    );
+}
+
+#[test]
+fn a_claim_at_a_windows_own_depth_is_over_it() {
+    // The same rule the bands draw by: chrome at a window's depth is the
+    // chrome *of* that window, and it is drawn over it. A bar ties with the
+    // window it names and has to win, or it is unclickable along every edge
+    // that overlaps its own surface.
+    let mut scene = Scene::new();
+    scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 3));
+    scene.claim_pointer(vec![Claim::new((100.0, 100.0), Transform::identity(), 3)]);
+
+    assert_eq!(
+        scene.route_pointer(Point::new(50.0, 50.0)),
+        PointerTarget::Chrome {
+            screen: Point::new(50.0, 50.0)
+        },
+    );
+}
+
+#[test]
+fn a_claim_nowhere_near_the_pointer_changes_nothing() {
+    let mut scene = Scene::new();
+    scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 1));
+    scene.claim_pointer(vec![Claim::new(
+        (50.0, 50.0),
+        Transform::translate(500.0, 500.0),
+        9,
+    )]);
+
+    assert_eq!(
+        scene.route_pointer(Point::new(50.0, 50.0)),
+        PointerTarget::App {
+            app_id: "term".to_string(),
+            local: Point::new(50.0, 50.0),
+        },
+    );
+}
+
+#[test]
+fn claiming_again_replaces_what_was_claimed_before() {
+    // The whole set every time, like the bands: the chrome re-sends it as its
+    // own layout changes, and a bar that moved must not go on taking the
+    // pointer where it used to be.
+    let mut scene = Scene::new();
+    scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 1));
+    scene.claim_pointer(vec![Claim::new((100.0, 100.0), Transform::identity(), 5)]);
+    scene.claim_pointer(vec![]);
+
+    assert_eq!(
+        scene.route_pointer(Point::new(50.0, 50.0)),
+        PointerTarget::App {
+            app_id: "term".to_string(),
+            local: Point::new(50.0, 50.0),
+        },
+    );
+}
+
+#[test]
+fn a_claim_over_nothing_at_all_is_still_the_chrome() {
+    // The chrome is what answers where no window does, with or without a
+    // claim; this is only here to say a claim never turns that into a miss.
+    let mut scene = Scene::new();
+    scene.claim_pointer(vec![Claim::new((100.0, 100.0), Transform::identity(), 0)]);
+
+    assert_eq!(
+        scene.route_pointer(Point::new(50.0, 50.0)),
+        PointerTarget::Chrome {
+            screen: Point::new(50.0, 50.0)
+        },
+    );
 }

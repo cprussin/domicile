@@ -46,6 +46,7 @@ export type ChromeMessage =
   | ReturnType<typeof resizeAppMessage>
   | ReturnType<typeof setDevicePixelRatioMessage>
   | ReturnType<typeof declareBandsMessage>
+  | ReturnType<typeof claimPointerMessage>
   | ReturnType<typeof focusAppMessage>
   | ReturnType<typeof focusChromeMessage>
   | ReturnType<typeof closeAppMessage>
@@ -134,6 +135,51 @@ export const setDevicePixelRatioMessage = (ratio: number) =>
  */
 export const declareBandsMessage = (depths: readonly number[]) =>
   ({ depths: [...depths], type: "declare_bands" }) as const;
+
+/**
+ * A rectangle of the page that takes the pointer, at a depth.
+ *
+ * `transform` is a CSS `matrix(a,b,c,d,e,f)` mapping the region's own pixels
+ * to screen space, and `zIndex` is in the space `place_portal` reports a
+ * window's in — the same two things a portal reports, because a claim is
+ * hit-tested against the windows and has to be in their space to be.
+ */
+export type PointerRegion = {
+  size: readonly [width: number, height: number];
+  transform: readonly [
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+    f: number,
+  ];
+  zIndex: number;
+};
+
+/**
+ * Claim the pointer wherever this chrome paints over a window.
+ *
+ * The compositor hit-tests rectangles, so it cannot see that the page painted
+ * a title bar across the window behind it: the press goes to that window, and
+ * the bar never hears about it. `takesPointer` on a portal answers this only
+ * where a *whole* window is underneath — a menu, a dialog — because a window
+ * has one flag and the pointer has a position.
+ *
+ * The whole set each time, and re-sent as the page's own layout moves: a bar
+ * that has moved must not go on taking the pointer where it used to be. A
+ * chrome that never sends this claims nothing, which is what every chrome did
+ * before this existed.
+ */
+export const claimPointerMessage = (regions: readonly PointerRegion[]) =>
+  ({
+    regions: regions.map(({ size, transform, zIndex }) => ({
+      size,
+      transform,
+      z_index: zIndex,
+    })),
+    type: "claim_pointer",
+  }) as const;
 
 export const focusAppMessage = (appId: string) =>
   ({ app_id: appId, type: "focus_app" }) as const;

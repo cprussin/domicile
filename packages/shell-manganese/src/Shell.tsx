@@ -1,4 +1,6 @@
 import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { Measure } from "@domicile/chrome-sdk/measure";
+import { defaultMeasure } from "@domicile/chrome-sdk/measure";
 import { renderBands } from "@domicile/chrome-sdk/render-bands";
 import { Button } from "@domicile/component-library/Button";
 import { Card } from "@domicile/component-library/Card";
@@ -23,6 +25,7 @@ import { BrowserWindow } from "./BrowserWindow";
 import { bandDepths, showBand, showEveryBand } from "./bands";
 import { Clock } from "./Clock";
 import type { Chord } from "./chord";
+import { claimedRegions } from "./claim-pointer";
 import { FloatGrab } from "./FloatGrab";
 import { FloatTitleBar } from "./FloatTitleBar";
 
@@ -75,7 +78,27 @@ type ChromeProps = {
   bridge: BridgeClient;
 };
 
+type DesktopProps = ChromeProps & {
+  /**
+   * How an element's placement is read, for the regions this chrome claims the
+   * pointer in — see `claim-pointer`.
+   *
+   * Required here and defaulted where the tree is entered, so there is one
+   * answer to what measuring means rather than one per component.
+   */
+  measure: Measure;
+};
+
 type Props = ChromeProps & {
+  /**
+   * How an element's placement is read — see {@link DesktopProps.measure}.
+   *
+   * Injected so a test can describe a layout: the test DOM has no cascade and
+   * lays nothing out, so every real measurement there is a zero-sized box at
+   * the origin. Defaults to the SDK's own, which is what puts a claim in the
+   * same space as the windows it is tested against.
+   */
+  measure?: Measure;
   /**
    * Where the desktop comes from — the host over the bridge, or the window
    * itself where there is no host. Passed in rather than built here because the
@@ -95,10 +118,15 @@ type Props = ChromeProps & {
  * its screens from. `on` is a single slot, so there is exactly one listener for
  * the host's descriptions and every `<Screen>` below fans out from it.
  */
-export const Shell = ({ appElements, bridge, displays }: Props) => (
+export const Shell = ({
+  appElements,
+  bridge,
+  displays,
+  measure = defaultMeasure,
+}: Props) => (
   <Provider>
     <DisplayProvider source={displays}>
-      <Desktop appElements={appElements} bridge={bridge} />
+      <Desktop appElements={appElements} bridge={bridge} measure={measure} />
     </DisplayProvider>
   </Provider>
 );
@@ -118,7 +146,7 @@ export const Shell = ({ appElements, bridge, displays }: Props) => (
  * between screens is moving where its `<domicile-app>` is laid out, not handing
  * it to another shell.
  */
-const Desktop = ({ appElements, bridge }: ChromeProps) => {
+const Desktop = ({ appElements, bridge, measure }: DesktopProps) => {
   const {
     activeId,
     close,
@@ -172,6 +200,17 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
       showEveryBand();
     };
   }, [bridge, depths]);
+
+  // Where the chrome takes the pointer over the windows, re-sent after every
+  // commit rather than when some list changes: a bar moves for anything that
+  // moves the window it names — a drag, a resize, a raise, a screen being
+  // described — and every one of those is a render. No dependency array for
+  // exactly that reason; the work is a measurement per floating window and the
+  // set is sent whole, so a re-send that changed nothing costs nothing to
+  // apply. See `claim-pointer`.
+  useEffect(() => {
+    bridge.claimPointer(claimedRegions(measure));
+  });
 
   // Alt is what hands the pointer back to the page, and Shift is what makes
   // the drag a resize. Neither can be read off a DOM event here: while a

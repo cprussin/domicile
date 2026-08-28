@@ -114,10 +114,33 @@ The bar is also why this shell declares depths at all. It is page pixels at the
 depth of the window it names, so a window in front of that one has to be drawn
 *over* it — and a compositor that composites the whole page above every window
 cannot do that. So the shell tells it where its own layers are: one band under
-every floating window (the backdrop, the rail, whatever is on the stage), and
-one per float above it. Nothing floating declares nothing, because a desktop
-with nothing to interleave would pay a round trip per repaint for a picture the
-compositor already has.
+every floating window (the rail, whatever is on the stage), and one per float
+above it. Nothing floating declares nothing, because a desktop with nothing to
+interleave would pay a round trip per repaint for a picture the compositor
+already has.
+
+**And the bar claims the pointer where it lies.** Being drawn in the right
+place is only half of it: the compositor hit-tests rectangles, it knows where
+every window is because the page reports each `<domicile-app>` element's box,
+and it knows nothing about what the page painted over one. A bar lies across
+whatever the window it names cascades over, so without a claim the press on it
+goes to *that* window — which focuses it, which raises it. Clicking the front
+window's title bar raised the one behind it, and the bar never heard the click.
+`pointer-events: none` on the window is the other half of the same mechanism
+and cannot answer this: it makes a whole window inert, which is right for a
+menu drawn across all of it and wrong for a bar covering the top thirty pixels
+of one window and none of the window beside it. So the shell says where it
+takes the pointer, at what depth, and the compositor gives the press to
+whichever is on top there. See `claim-pointer`.
+
+Bands are dropped for the length of a drag. A band costs a round trip and the
+page answers one at a time by leaving only that band painting, so a chrome
+repainting every frame never holds still long enough for the set to describe a
+single moment — band 0 ends up a frame older than band 1, and the desktop
+composited from them is several moments at once. While a window is being
+dragged the whole page goes back and is drawn flattened, which is what every
+chrome did before bands existed; the cost is the one bands exist to remove, and
+it is worth paying for the length of a drag.
 
 Rendering a band means leaving only that band painting, and three things follow
 from that being a whole-page property rather than a component's:

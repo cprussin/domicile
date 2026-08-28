@@ -74,6 +74,25 @@ fn opaque() -> f64 {
     1.0
 }
 
+/// A rectangle of the page that takes the pointer, at a depth.
+///
+/// The chrome's answer to what [`ChromeMessage::PlacePortal::takes_pointer`]
+/// cannot say. That flag makes a *whole* window inert, which covers a menu or
+/// a dialog drawn over it; it has nothing to say about chrome lying across
+/// part of one window and none of the one beside it. A floating window's title
+/// bar is exactly that, and without this the press on it goes to whichever
+/// window the bar happens to overlap.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PointerRegion {
+    /// A CSS `matrix(a,b,c,d,e,f)` mapping the region's local pixels to
+    /// screen space — the same mapping, and the same space, as a portal's.
+    pub transform: [f64; 6],
+    /// Local size `(width, height)`, in the units `transform` maps from.
+    pub size: [f64; 2],
+    /// Stacking order, in the space `place_portal` reports a window's in.
+    pub z_index: i32,
+}
+
 /// What a window whose chrome expressed no opinion gets: the fast path.
 fn natively() -> bool {
     true
@@ -162,6 +181,16 @@ pub enum ChromeMessage {
     /// means "start over": what is *at* a depth can move without the depth
     /// doing so.
     DeclareBands { depths: Vec<i32> },
+
+    /// Where the chrome takes the pointer over the windows.
+    ///
+    /// The whole set each time, like [`DeclareBands`](Self::DeclareBands), and
+    /// re-sent whenever the page's own layout moves: a bar that has moved must
+    /// not go on taking the pointer where it used to be. A chrome that sends
+    /// nothing here claims nothing, which is what every chrome did before this
+    /// existed — and what leaves a press on a floating window's title bar
+    /// landing on whichever window that bar overlaps.
+    ClaimPointer { regions: Vec<PointerRegion> },
 
     /// How many physical pixels the chrome paints per CSS pixel — its
     /// `devicePixelRatio`. The compositor advertises this as the `wl_output`

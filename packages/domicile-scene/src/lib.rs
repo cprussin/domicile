@@ -356,11 +356,58 @@ pub enum KeyboardTarget {
     Chrome,
 }
 
+/// A region where the chrome takes the pointer, at a depth.
+///
+/// The other half of [`Portal::takes_pointer`], and the answer to what that
+/// field's own documentation describes as unanswerable: hit-testing is a test
+/// against a rectangle, and a rectangle cannot see that the engine painted
+/// something over it. `takes_pointer` covers the case where the whole window
+/// is underneath — a menu, a dialog — by making that window inert. It cannot
+/// cover chrome that lies over only *part* of a window, or over one window and
+/// not the one beside it, because a window has one flag and the pointer has a
+/// position. A floating window's title bar is exactly that: page pixels lying
+/// across whatever the window it names happens to cascade over.
+///
+/// So the chrome says where it takes the pointer, and at what depth, in the
+/// same `z-index` space [`Portal::z_index`] is in. Then a press lands on
+/// whichever is on top there, chrome or window, which is what the user sees.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Claim {
+    /// Local content size `(width, height)`, as for a portal.
+    pub size: (f64, f64),
+    /// Local-to-screen transform, as for a portal.
+    pub transform: Transform,
+    /// Stacking order; higher is closer to the viewer.
+    pub z_index: i32,
+}
+
+impl Claim {
+    pub fn new(size: (f64, f64), transform: Transform, z_index: i32) -> Self {
+        Claim {
+            size,
+            transform,
+            z_index,
+        }
+    }
+
+    /// Whether `screen` is inside this claim.
+    fn covers(&self, screen: Point) -> bool {
+        let Some(inverse) = self.transform.inverse() else {
+            return false;
+        };
+        let local = inverse.apply(screen);
+        let (w, h) = self.size;
+        local.x >= 0.0 && local.x <= w && local.y >= 0.0 && local.y <= h
+    }
+}
+
 /// The set of placed app portals plus current keyboard focus.
 #[derive(Debug, Default)]
 pub struct Scene {
     /// Insertion-ordered; later entries win z-index ties.
     portals: Vec<Portal>,
+    /// Where the chrome takes the pointer over the windows. See [`Claim`].
+    claims: Vec<Claim>,
     /// `None` means the chrome holds keyboard focus.
     focus: Option<String>,
 }
@@ -380,6 +427,15 @@ impl Scene {
             Some(existing) => *existing = portal,
             None => self.portals.push(portal),
         }
+    }
+
+    /// Replace every region where the chrome takes the pointer.
+    ///
+    /// The whole set each time, like the bands: the chrome re-sends it as its
+    /// own layout moves, and a bar that has moved must not go on taking the
+    /// pointer where it used to be.
+    pub fn claim_pointer(&mut self, claims: Vec<Claim>) {
+        self.claims = claims;
     }
 
     /// Move a portal to the top of its z-index tier, returning whether one was
@@ -484,12 +540,34 @@ impl Scene {
     }
 
     /// Route a pointer at `screen` to an app (with local coords) or the chrome.
+    ///
+    /// A window wins only where nothing the chrome claimed is over it. At equal
+    /// depth the chrome wins, matching how the bands are drawn: chrome at a
+    /// window's depth is the chrome *of* that window and is drawn over it, so
+    /// a title bar that ties with the window it names is on top of it — and a
+    /// bar that lost the tie would be unclickable everywhere it overlapped its
+    /// own window.
     pub fn route_pointer(&self, screen: Point) -> PointerTarget {
         match self.hit_test(screen) {
-            Some(hit) => PointerTarget::App {
-                app_id: hit.app_id,
-                local: hit.local,
-            },
+            Some(hit) => {
+                let over = self
+                    .portals
+                    .iter()
+                    .find(|portal| portal.app_id == hit.app_id)
+                    .is_some_and(|portal| {
+                        self.claims
+                            .iter()
+                            .any(|claim| claim.z_index >= portal.z_index && claim.covers(screen))
+                    });
+                if over {
+                    PointerTarget::Chrome { screen }
+                } else {
+                    PointerTarget::App {
+                        app_id: hit.app_id,
+                        local: hit.local,
+                    }
+                }
+            }
             None => PointerTarget::Chrome { screen },
         }
     }
