@@ -210,4 +210,28 @@ mod tests {
             Arrival::Chrome,
         );
     }
+
+    #[test]
+    fn nothing_committed_while_bands_are_declared_is_the_flattened_chrome() {
+        // `Arrival::Chrome` is the only arrival the compositor keeps as the
+        // flattened chrome — the picture it falls back to whenever the band
+        // set is incomplete. This is what makes that safe: while the chrome
+        // has depths, *no* frame it commits is one, because answering a band
+        // is leaving only that band painting. Such a frame kept as the
+        // flattened chrome is a desktop with its rail and every other
+        // window's chrome sitting at `opacity: 0`, drawn the moment the set
+        // is next incomplete — the flash a window dragged over the page
+        // produces, once per repaint.
+        for asked in [None, Some(0)] {
+            for said in [None, Some(0), Some(1)] {
+                for buffer in [Buffer::Unreadable, Buffer::Readable, Buffer::Textured] {
+                    assert_ne!(
+                        what_arrived(asked, said, buffer, true),
+                        Arrival::Chrome,
+                        "asked={asked:?} said={said:?} buffer={buffer:?}",
+                    );
+                }
+            }
+        }
+    }
 }

@@ -27,27 +27,10 @@ import { FloatGrab } from "./FloatGrab";
 import { FloatTitleBar } from "./FloatTitleBar";
 
 import { floatingOf } from "./shell-state";
-import type { ShellWindow } from "./shell-window";
 import { WindowKind } from "./shell-window";
 import { useModifiers } from "./useModifiers";
 import { useShellWindows } from "./useShellWindows";
 import { useWindowSizedToDesktop } from "./useWindowSizedToDesktop";
-
-/**
- * What the window `id` is called, for the bar that names it.
- *
- * The float list holds boxes rather than windows — a box is where a window is,
- * not what it is — so the title comes from the window list beside it. A float
- * for a window that is not there is impossible: closing one takes its box.
- */
-const titleOf = (windows: readonly ShellWindow[], id: string): string => {
-  const named = windows.find((window) => window.id === id);
-  if (named === undefined) {
-    throw new Error(`shell: no window ${id} to name`);
-  } else {
-    return named.title;
-  }
-};
 
 /**
  * The band everything that is not a float's own chrome belongs to.
@@ -163,7 +146,20 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
   // is still a change as far as the compositor is concerned — what is *at* a
   // depth can move without the depth doing so — and it would start the round
   // trip over on every render.
-  const depths = useMemo(() => bandDepths(floats.length), [floats.length]);
+  //
+  // **Nothing at all while a window is being dragged.** A band costs a round
+  // trip and the page answers one at a time, by leaving only that band
+  // painting; a chrome that repaints every frame never holds still long enough
+  // for the set to describe a single moment, so band 0 is a frame older than
+  // band 1, which is a frame older than band 2, and the desktop composited out
+  // of them is three moments at once. Declaring nothing puts the whole page
+  // back and has it drawn flattened — what every chrome did before bands
+  // existed. The cost is the one bands exist to remove, a bar landing over the
+  // window in front, and it is worth paying for the length of a drag.
+  const depths = useMemo(
+    () => (draggingId === undefined ? bandDepths(floats.length) : []),
+    [draggingId, floats.length],
+  );
 
   useEffect(() => {
     const stop = renderBands(bridge, depths, showBand);
@@ -357,7 +353,17 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
               // goes on belonging to it for the rest of a drag that outlives
               // the key. Only a floating window: nothing drags one on the
               // stage, and taking the pointer off it would cost a click.
-              const clickThrough = floating !== undefined && (alt || dragging);
+              //
+              // **Every float while any drag runs, not just the one being
+              // dragged.** The compositor hit-tests a rectangle and hands the
+              // pointer to the window under it, and it is the *other* windows
+              // a drag crosses: one that still takes the pointer swallows the
+              // moves as the drag passes over it and the release that should
+              // have ended it, which leaves the dragged window following a
+              // pointer the page can no longer see. Alt covers this for as
+              // long as it is held, and a drag routinely outlives it.
+              const clickThrough =
+                floating !== undefined && (alt || draggingId !== undefined);
               switch (window.kind) {
                 case WindowKind.App: {
                   return (
@@ -403,37 +409,48 @@ const Desktop = ({ appElements, bridge }: ChromeProps) => {
               covers both. Which is the case bands exist for: today the whole
               page is composited over every window, so the bar of a window
               behind another is drawn on top of the one in front.
+
+              **In the windows' order rather than the floats'**, which is the
+              stacking order and moves every time a window is raised. Stacking
+              is expressed as `z-index` here — see `floatPlacement` — so
+              nothing about what covers what needs these in stacking order,
+              and putting them in it costs a drag: a browser releases pointer
+              capture when the capturing element is moved in the document, and
+              taking hold of a window raises it. The rest of that drag — every
+              move, and the release that ends it — is then delivered to
+              whatever the pointer is over instead, which is how a window
+              could be left grabbed for ever with the pointer over another one.
             */}
-            {floats.map((float, depth) => {
-              const floating = { depth, float };
+            {windows.map((window) => {
+              const floating = floatingOf(floats, window.id);
               const onMove = (x: number, y: number) => {
-                move(float.id, x, y);
+                move(window.id, x, y);
               };
               const onGrab = () => {
-                grab(float.id);
+                grab(window.id);
               };
-              return (
-                <Fragment key={float.id}>
+              return floating === undefined ? undefined : (
+                <Fragment key={window.id}>
                   <FloatTitleBar
-                    band={depth + 1}
+                    band={floating.depth + 1}
                     floating={floating}
-                    focused={float.id === activeId}
+                    focused={window.id === activeId}
                     onClose={() => {
-                      close(float.id);
+                      close(window.id);
                     }}
                     onDrop={drop}
                     onGrab={onGrab}
                     onMove={onMove}
-                    title={titleOf(windows, float.id)}
+                    title={window.title}
                   />
-                  {(alt || float.id === draggingId) && (
+                  {(alt || window.id === draggingId) && (
                     <FloatGrab
                       floating={floating}
                       onDrop={drop}
                       onGrab={onGrab}
                       onMove={onMove}
                       onResize={(width, height) => {
-                        resize(float.id, width, height);
+                        resize(window.id, width, height);
                       }}
                       resizes={shift}
                     />
