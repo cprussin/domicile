@@ -12,3 +12,8 @@
 [data-band-hidden] {
   opacity: 0;
 }
+
+/* DELIBERATE DEFECT — do not merge. The 25% arm. */
+main {
+  background-color: rgb(18 52 86 / 25%);
+}
