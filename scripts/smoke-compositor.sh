@@ -56,3 +56,17 @@ for global in wl_compositor wl_shm xdg_wm_base wl_seat wl_data_device_manager; d
   fi
 done
 echo "PASS: every global a desktop's clients expect is advertised"
+
+# And the ones on the way to delegated compositing. Chromium asks for these
+# before it will send its layer tree as a subsurface per quad, and says so in
+# its own log — `Server doesn't support <name>` — rather than failing. Losing
+# one here is losing that, silently and much later. See
+# `docs/architecture/WINDOW-COMPOSITING.md`.
+for global in wp_viewporter wp_single_pixel_buffer_manager_v1 wp_content_type_manager_v1; do
+  if ! echo "$ADVERTISED" | grep -q "interface: '$global'"; then
+    echo "FAIL: $global is not advertised, so a chrome that wanted it has"
+    echo "  quietly gone without — which is what delegated compositing does."
+    exit 1
+  fi
+done
+echo "PASS: the standard protocols delegated compositing asks for are advertised"

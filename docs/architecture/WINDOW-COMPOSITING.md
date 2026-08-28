@@ -341,9 +341,52 @@ What a compositor has to implement for it:
 | explicit sync | an acquire fence per quad's buffer | `zwp_linux_explicit_synchronization_v1`; upstream has work to go without it on kernel >= 6.0 |
 | `surface-augmenter` | rounded corners, clipping, solid colour at pixel precision | **Chromium's own**, defined by `exo`. The only one here that is not a standard protocol |
 
-`surface-augmenter` is the piece to size first: whether delegation degrades
-gracefully without it or refuses outright. Everything else is core Wayland or a
-staging protocol.
+**Measured, not guessed.** With `--enable-features=WaylandOverlayDelegation,
+DelegatedCompositing` and `--vmodule=*wayland*=3`, Chromium says exactly what
+it wants and does not get, one line per protocol, and then falls back without
+erroring:
+
+```
+WARNING ui/ozone/platform/wayland/host/wayland_surface.cc:170] Server doesn't support zcr_alpha_compositing_v1.
+WARNING ui/ozone/platform/wayland/host/wayland_surface.cc:185] Server doesn't support overlay_prioritizer.
+WARNING ui/ozone/platform/wayland/host/wayland_surface.cc:200] Server doesn't support wp_content_type_v1
+WARNING ui/ozone/platform/wayland/host/wayland_surface.cc:214] Server doesn't support wp_color_management_surface_v1.
+```
+
+That list is the work, and it is not the list the write-ups gave: it names
+`overlay_prioritizer` and `zcr_alpha_compositing_v1`, which none of them
+mention, and it does *not* name `surface-augmenter`. Advertising
+`wp_content_type_v1` — Smithay has it — removed that line and left the rest,
+so the loop is closed: Chromium reports, we implement, it asks for less.
+
+Advertised now, and asserted by `smoke-compositor.sh`: `wp_viewporter`,
+`wp_single_pixel_buffer_manager_v1`, `wp_content_type_manager_v1`.
+`wl_subcompositor` comes with `CompositorState` and was always there.
+
+Then the two `exo` protocols were vendored and implemented — see
+`packages/domicile-compositor/protocols/` and `src/exo.rs` — and their lines
+went too. Both are pure hints: neither sends an event back, so answering is
+accepting the object and letting the request stand. One is left:
+
+| | what it is |
+|---|---|
+| `wp_color_management_surface_v1` | standard, but not in Smithay 0.7 |
+
+**No subsurface has arrived, and this container cannot say whether that is the
+protocol.** Delegated compositing is a Viz path, and the GPU process does not
+start here at all:
+
+```
+WARNING ui/ozone/platform/wayland/gpu/wayland_buffer_manager_gpu.cc:456] Failed to initialize drm render node handle.
+VERBOSE1 gpu/ipc/service/gpu_init.cc:516] gl::init::InitializeGLNoExtensionsOneOff failed
+ERROR   components/viz/service/main/viz_main_impl.cc:189] Exiting GPU process due to errors during initialization
+```
+
+There is no DRM render node in this environment, so there is no Viz compositor
+to delegate from and no amount of protocol will produce a quad. Whether
+`wp_color_management_surface_v1` is the last blocker or merely the last
+*warning* is a question for a machine with a GPU. Everything above it is
+answered.
 
 **What this does not settle.** With the page arriving as N subsurfaces, the
 compositor still has to know *which* depth each window belongs at: the
@@ -357,7 +400,9 @@ be the first compositor driving this path and would find its bugs. Those are
 narrow upstream bugs against a supported flag rather than a fork — but "the
 flag exists" is not "the flag works", and none of this is settled until a
 Domicile advertising these protocols has actually been handed a subsurface per
-quad.
+quad. What the measurement above establishes is that Chromium is willing to
+tell us what it needs, in order, without failing: the remaining risk is the
+size of two `exo` protocols, not whether the road exists.
 
 ## Open questions
 
