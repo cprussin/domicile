@@ -12,3 +12,9 @@
 [data-band-hidden] {
   opacity: 0;
 }
+
+/* DELIBERATE DEFECT — do not merge. The 50% arm: a background at exactly the
+ * client's alpha, which the check missed until it asserted the colour too. */
+main {
+  background-color: rgb(18 52 86 / 50%);
+}
