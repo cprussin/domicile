@@ -5840,8 +5840,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // enclosing scope — which closes the channel, so the first
                     // `recv` returns `Err`, this thread ends before anything is
                     // ever edited, and the config appears simply not to be
-                    // watched. It cost an afternoon; `e2e-reload-displays.sh` is
-                    // what catches it coming back.
+                    // watched. It cost an afternoon; seven checks catch it coming
+                    // back now, `tests/desktop.rs`'s reload and `tests/outputs.rs`'s
+                    // among them — measured, by reproducing the capture.
                     let watcher = watcher;
                     // Ends when the watcher is dropped with this thread, or when
                     // the event loop has gone and nothing is listening.

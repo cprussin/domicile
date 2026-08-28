@@ -71,7 +71,6 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/e2e-hidpi.sh           # a 2x chrome makes a client draw at 2x, and the frame says so
 ./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel
 ./scripts/e2e-chrome-without-a-host.sh   # a chrome whose host socket is dead says so once and stops
-./scripts/e2e-reload-displays.sh # a display *added* to the config is taken up while it runs
 ./scripts/e2e-chrome-fills-the-desktop.sh # a real chrome commits at the described desktop's size, and follows it
 ./scripts/e2e-chrome-fills-a-window.sh # the same where the desktop *is* Domicile's window (--present)
 ./scripts/e2e-window-follows-the-desktop.sh # a described desktop that grows takes its window with it (--present)
@@ -821,8 +820,10 @@ age, and it needs a screen before anyone should believe it.
   a display added, removed, renamed or reshaped is taken up while it runs —
   `Screens::rearranged_into` decides which `wl_output`s survive, and a display
   that only changed shape keeps the one it had rather than being unplugged and
-  plugged back in. `e2e-reload-displays.sh` drives the *added* display end to
-  end; reshape, rename and remove are `rearranged_into`'s unit tests only.
+  plugged back in. `tests/desktop.rs` and `tests/outputs.rs` drive the
+  *added* display end to end — what a chrome is told, and what a window
+  already open is told; reshape, rename and remove are `rearranged_into`'s
+  unit tests only.
 
   A reload now also asks the host for a window the size of the desktop it
   describes — `Screens::window_showing_it`, the same question asked at startup,

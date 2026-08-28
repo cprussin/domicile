@@ -190,8 +190,14 @@ struct Client {
     ///
     /// `wl_registry.global_remove` names a screen by that rather than by the
     /// object, so without this a display that went away would leave its scale
-    /// and its entry behind — and `e2e-reload-displays` swaps the display list
-    /// while the client runs, so they would accumulate for the life of it.
+    /// and its entry behind, and they would accumulate for the life of the
+    /// client.
+    ///
+    /// Reasoned rather than covered: nothing in the tree removes a display
+    /// yet. `tests/outputs.rs`'s reload *adds* one, and `screens_entered`'s
+    /// own doc says so in terms — measured, no-opping this whole arm passes
+    /// the workspace. An earlier version of this sentence claimed that reload
+    /// swapped the list, which it does not.
     outputs: Vec<(u32, ObjectId)>,
 }
 

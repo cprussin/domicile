@@ -185,16 +185,21 @@ fn a_density_one_chrome_reports_is_described_to_the_others() {
 /// A desktop edited on disk reaches both a chrome already connected and one
 /// that arrives afterwards.
 ///
-/// The chrome-socket half of `scripts/e2e-reload-displays.sh`, which still
-/// runs: that script also opens a real window across the reload, which needs a
-/// Wayland client and so cannot live here yet. What is here is the half that
-/// needs neither, and it runs everywhere rather than skipping for want of
-/// weston.
+/// The chrome-socket half of `scripts/e2e-reload-displays.sh`, deleted in the
+/// change that finished porting it. The other half — a real window open across
+/// the reload, which needs a Wayland client and so cannot live here — is
+/// `tests/outputs.rs`'s
+/// `a_window_open_across_a_reload_is_told_about_the_display_that_arrived`.
+/// Neither substitutes for the other: deleting `adopt_the_desktop`'s re-narrow
+/// leaves this check passing, because the chrome is told the new desktop by a
+/// different line further down the same function.
 ///
 /// One test rather than two, because the reload path describes and broadcasts
-/// from one expression (`main.rs:2638-2645`): no mutation separates "the
-/// connected chrome was told" from "the retained answer was updated", so a
-/// second compositor process would buy nothing.
+/// from one expression — `adopt_the_desktop`'s, at the end of it. No mutation
+/// separates "the connected chrome was told" from "the retained answer was
+/// updated", so a second compositor process would buy nothing. Named rather
+/// than numbered: the line range this used to quote had drifted onto an
+/// unrelated branch, which is the rule `outputs.rs` states for itself.
 #[test]
 fn a_desktop_edited_on_disk_reaches_the_connected_and_the_latecomer() {
     let compositor = Compositor::started_with(SIDE_BY_SIDE);
