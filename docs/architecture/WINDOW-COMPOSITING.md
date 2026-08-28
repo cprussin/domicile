@@ -310,6 +310,55 @@ Phase 3 — own the display:
 The chrome-as-a-texture step this phase used to carry is gone: the engine
 commits dmabufs as our client, so its surface needs no capture path of its own.
 
+## Delegated compositing: the layer tree without a fork
+
+**Chromium already emits its layer tree as Wayland surfaces, and the only
+reason it does not do so here is that no Linux compositor has implemented what
+it asks for.** Domicile is a compositor. That makes this ours rather than
+Chromium's, and it moves the work out of an engine fork and into Rust we own.
+
+`WaylandOverlayDelegation` is a **runtime feature flag, not absent code**. It
+defaults on for LaCrOS — which runs against `exo`, the ChromeOS compositor that
+implements the protocols — and off everywhere else, because no other compositor
+does. A client whose compositor lacks them falls back to the flat path
+automatically, which is today's behaviour and is also the failure mode if this
+does not work out.
+
+With it on, each quad of the page becomes its own `wl_subsurface`, z-ordered by
+`wl_subsurface.place_above` / `place_below`. That is the layer tree, arriving
+as separate rasters over a protocol we already speak — and separate rasters are
+the whole of what "one raster is already flattened" costs us. A window goes
+*between* two of them because the compositor draws both and orders them: no
+bands, no round trip, no depth protocol, no `render_band`.
+
+What a compositor has to implement for it:
+
+| | what for | where it comes from |
+|---|---|---|
+| `wl_subsurface` | one per quad; `place_above`/`place_below` carry the z-order | core Wayland; Smithay has it |
+| `wp_viewporter` | scaling a quad's buffer to its destination | core protocol; Smithay has it |
+| `single-pixel-buffer` | solid-colour quads without allocating for them | wayland-protocols staging |
+| explicit sync | an acquire fence per quad's buffer | `zwp_linux_explicit_synchronization_v1`; upstream has work to go without it on kernel >= 6.0 |
+| `surface-augmenter` | rounded corners, clipping, solid colour at pixel precision | **Chromium's own**, defined by `exo`. The only one here that is not a standard protocol |
+
+`surface-augmenter` is the piece to size first: whether delegation degrades
+gracefully without it or refuses outright. Everything else is core Wayland or a
+staging protocol.
+
+**What this does not settle.** With the page arriving as N subsurfaces, the
+compositor still has to know *which* depth each window belongs at: the
+`<domicile-app>` hole is a quad like any other, and nothing in the subsurface
+tree says which portal it is. `place_portal`'s `z_index` is the obvious way to
+reconcile the two, and that reconciliation is a real design question rather
+than a detail. It is a question about our own code, which is the point.
+
+**The risk.** Off by default on Linux means under-exercised on Linux: we would
+be the first compositor driving this path and would find its bugs. Those are
+narrow upstream bugs against a supported flag rather than a fork — but "the
+flag exists" is not "the flag works", and none of this is settled until a
+Domicile advertising these protocols has actually been handed a subsurface per
+quad.
+
 ## Open questions
 
 - ~~**How does the chrome declare "this window is native"?**~~ Settled: it does
@@ -349,7 +398,7 @@ commits dmabufs as our client, so its surface needs no capture path of its own.
   | **region-clipped** | a clip-rects field on `Layer`, passed to `render_texture`'s `instances` (which `draw_layers` currently passes `None`); push the chrome `Layer` into `layers` once per band | N quads for N bands. Correct only where the upper band is **opaque** over the lower — see below |
   | **raster per band** | the chrome rasterises N views of the same DOM, each with the other bands hidden, and the SDK generates the views | N rasters, plus transport: `chrome_toplevel` and `chrome_texture` are single `Option`s, so N textures means N surfaces or N frames the compositor caches |
   | **many surfaces** | one transparent toplevel per band | the transport cost above, and the shell must partition its DOM — Wayland back in the page |
-  | **layer tree** | the compositor merges the engine's compositing layers with the portals in one z-ordered list | **a Chromium fork.** CEF's only route out is `OnAcceleratedPaint` — *one* composited texture, the same flat texture. Per-layer depths mean `cc::LayerTreeHost`, the engine-internals project with a per-release rebase cost that this doc already declined |
+  | **layer tree** | the compositor merges the engine's compositing layers with the portals in one z-ordered list | **a Chromium fork** *by that route*. CEF's only route out is `OnAcceleratedPaint` — *one* composited texture, the same flat texture. Per-layer depths mean `cc::LayerTreeHost`, the engine-internals project with a per-release rebase cost that this doc already declined. There is a second route to the same place that is not a fork — see **Delegated compositing** below |
 
   **Region-clipped first, and its restriction is not a corner case.** Take
   wallpaper, window, panel. Where the panel overlaps the window, the single
