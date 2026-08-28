@@ -53,6 +53,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # only Rust build-time codegen and a runtime `dlopen` of libEGL/libGLESv2, so the
 # crate still links against nothing but libxkbcommon and still builds where there
 # is no GPU (the dmabuf global is simply not advertised there).
+# Generates server bindings for the vendored protocols in `protocols/` —
+# Chromium's own, which nothing packages. See that directory's README.
+wayland-scanner = "0.31"
+# The generated bindings name it directly; the version is the one Smithay
+# already links, so this adds nothing to the tree.
+wayland-backend = "0.3"
+
 [dependencies.smithay]
 version = "0.7"
 default-features = false

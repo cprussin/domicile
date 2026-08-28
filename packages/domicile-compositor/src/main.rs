@@ -65,6 +65,7 @@ use smithay::wayland::{
         with_states, BufferAssignment, CompositorClientState, CompositorHandler, CompositorState,
         Damage, SurfaceAttributes,
     },
+    content_type::ContentTypeState,
     cursor_shape::CursorShapeManagerState,
     dmabuf::{
         get_dmabuf, DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier,
@@ -80,12 +81,15 @@ use smithay::wayland::{
     },
     shm::with_buffer_contents,
     shm::{ShmHandler, ShmState},
+    single_pixel_buffer::SinglePixelBufferState,
     socket::ListeningSocketSource,
     tablet_manager::TabletSeatHandler,
+    viewporter::ViewporterState,
 };
 use smithay::{
-    delegate_compositor, delegate_cursor_shape, delegate_data_device, delegate_dmabuf,
-    delegate_output, delegate_seat, delegate_shm, delegate_xdg_shell,
+    delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_device,
+    delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_single_pixel_buffer,
+    delegate_viewporter, delegate_xdg_shell,
 };
 use tracing::{debug, info, warn};
 
@@ -96,6 +100,7 @@ mod compose;
 mod damage;
 mod dmabuf_descriptor;
 mod dmabuf_import;
+mod exo;
 mod modifiers;
 mod outbound;
 mod over_window;
@@ -4826,7 +4831,99 @@ impl DmabufHandler for DomicileCompositor {
     }
 }
 
+// The protocols Chromium asks for before it will delegate its layer tree. Both
+// are hints and neither sends an event back, so answering is accepting the
+// object and letting the request stand — see `exo`. What they buy is not their
+// own behaviour but Chromium's willingness to delegate at all.
+mod exo_dispatch {
+    use smithay::reexports::wayland_server::{
+        Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
+    };
+
+    use crate::exo::alpha_compositing::{zcr_alpha_compositing_v1, zcr_blending_v1};
+    use crate::exo::overlay_prioritizer::{overlay_prioritized_surface, overlay_prioritizer};
+    use crate::DomicileCompositor;
+
+    macro_rules! accepts {
+        ($global:path, $child:path) => {
+            impl GlobalDispatch<$global, ()> for DomicileCompositor {
+                fn bind(
+                    _: &mut Self,
+                    _: &DisplayHandle,
+                    _: &Client,
+                    resource: New<$global>,
+                    _: &(),
+                    data_init: &mut DataInit<'_, Self>,
+                ) {
+                    data_init.init(resource, ());
+                }
+            }
+
+            impl Dispatch<$child, ()> for DomicileCompositor {
+                fn request(
+                    _: &mut Self,
+                    _: &Client,
+                    _: &$child,
+                    _: <$child as Resource>::Request,
+                    _: &(),
+                    _: &DisplayHandle,
+                    _: &mut DataInit<'_, Self>,
+                ) {
+                    // A hint taken and not acted on. The compositor already
+                    // draws premultiplied alpha and has no overlay planes to
+                    // prioritise into, so there is nothing here to honour that
+                    // it is not doing.
+                }
+            }
+        };
+    }
+
+    accepts!(
+        overlay_prioritizer::OverlayPrioritizer,
+        overlay_prioritized_surface::OverlayPrioritizedSurface
+    );
+    accepts!(
+        zcr_alpha_compositing_v1::ZcrAlphaCompositingV1,
+        zcr_blending_v1::ZcrBlendingV1
+    );
+
+    impl Dispatch<overlay_prioritizer::OverlayPrioritizer, ()> for DomicileCompositor {
+        fn request(
+            _: &mut Self,
+            _: &Client,
+            _: &overlay_prioritizer::OverlayPrioritizer,
+            request: overlay_prioritizer::Request,
+            _: &(),
+            _: &DisplayHandle,
+            data_init: &mut DataInit<'_, Self>,
+        ) {
+            if let overlay_prioritizer::Request::GetOverlayPrioritizedSurface { id, .. } = request {
+                data_init.init(id, ());
+            }
+        }
+    }
+
+    impl Dispatch<zcr_alpha_compositing_v1::ZcrAlphaCompositingV1, ()> for DomicileCompositor {
+        fn request(
+            _: &mut Self,
+            _: &Client,
+            _: &zcr_alpha_compositing_v1::ZcrAlphaCompositingV1,
+            request: zcr_alpha_compositing_v1::Request,
+            _: &(),
+            _: &DisplayHandle,
+            data_init: &mut DataInit<'_, Self>,
+        ) {
+            if let zcr_alpha_compositing_v1::Request::GetBlending { id, .. } = request {
+                data_init.init(id, ());
+            }
+        }
+    }
+}
+
 delegate_compositor!(DomicileCompositor);
+delegate_viewporter!(DomicileCompositor);
+delegate_single_pixel_buffer!(DomicileCompositor);
+delegate_content_type!(DomicileCompositor);
 delegate_shm!(DomicileCompositor);
 delegate_dmabuf!(DomicileCompositor);
 
@@ -5448,6 +5545,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
     let display: Display<DomicileCompositor> = Display::new()?;
     let dh = display.handle();
+    // Delegated compositing: Chromium sends its layer tree as one subsurface
+    // per quad, but only to a compositor that advertises what it asks for.
+    // `wl_subcompositor` comes with `CompositorState`; these are the rest that
+    // are standard. See `docs/architecture/WINDOW-COMPOSITING.md`.
+    ViewporterState::new::<DomicileCompositor>(&dh);
+    SinglePixelBufferState::new::<DomicileCompositor>(&dh);
+    ContentTypeState::new::<DomicileCompositor>(&dh);
+    // And Chromium's own two, which nothing packages — see `exo`.
+    dh.create_global::<DomicileCompositor, exo::overlay_prioritizer::overlay_prioritizer::OverlayPrioritizer, _>(1, ());
+    dh.create_global::<DomicileCompositor, exo::alpha_compositing::zcr_alpha_compositing_v1::ZcrAlphaCompositingV1, _>(1, ());
 
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);
