@@ -449,7 +449,6 @@
           e2e-shell-launch = "e2e-shell-launch.sh";
           e2e-late-chrome = "e2e-late-chrome.sh";
           e2e-chrome-without-a-host = "e2e-chrome-without-a-host.sh";
-          e2e-input = "e2e-input.sh";
           e2e-dmabuf = "e2e-dmabuf.sh";
           e2e-chrome-layer = "e2e-chrome-layer.sh";
           e2e-hidpi = "e2e-hidpi.sh";

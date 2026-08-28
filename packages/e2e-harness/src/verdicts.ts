@@ -29,22 +29,24 @@
 // decision undecided rather than convicting anyone, and the count is what
 // turns the resulting silence into a failure instead of a green run.
 //
-// Every script that sources this file carries that whole property, with one
-// exception. Naming the ones that *do* is what keeps going stale here — a
-// count went first, then the roster that replaced it, each wrong the moment
-// another script adopted the lib — so this names only the exception, which
-// says the same thing in its own text above its source line.
+// Every script that sources this file carries that whole property, and there
+// are no exceptions left. Naming the ones that *do* is what keeps going stale
+// here — a count went first, then the roster that replaced it, each wrong the
+// moment another script adopted the lib — so what is recorded is the shape of
+// an exception rather than a list, and how to check for one.
 //
-// `e2e-input.sh` sources the helpers for the *bails* alone: it diagnoses
-// through `harness_fault` and convicts through `compositor_verdict`, but its
-// checks are sequential `if`s rather than arms of one decision, and it has no
-// `passed` and no `every_check_ran`. So a bail that no-ops there falls through
-// into the next check rather than being caught by a count, which is the thing
-// the count exists for. Nothing does today — every arm ends in a helper that
-// exits — but it is the difference between it and the rest, and worth naming
-// rather than leaving to be discovered.
+// An exception is a script that sources the helpers for the *bails* alone: it
+// diagnoses through `harness_fault` and convicts through `compositor_verdict`,
+// but its checks are sequential `if`s rather than arms of one decision, so it
+// has no `passed` and no `every_check_ran`. A bail that no-ops in such a
+// script falls through into the next check instead of being caught by a count,
+// which is the thing the count exists for. `grep -L every_check_ran` over the
+// scripts that source the lib finds them, and today it finds none.
 //
-// It was two until `e2e-chrome.sh` was deleted.
+// There were two: `e2e-chrome.sh` and `e2e-input.sh`, both of which have since
+// been deleted for having their claims covered by `cargo test` instead. That
+// is why this reads as a rule rather than a roster — the roster was empty
+// twice over within a week of being written down.
 //
 // Scripts that never source the file at all are reached by rule 1 and nothing
 // else: rules 2 and 3 are vacuous for a script that names neither helper.

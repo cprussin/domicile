@@ -25,9 +25,9 @@ path = "src/lib.rs"
 thiserror.workspace = true
 wayland-client = "0.31"
 # `staging` and `unstable` for `wp_cursor_shape_v1`, which is how a client asks
-# for a named cursor and so how `e2e-input` sees one reach the chrome. Neither
-# feature reaches the compositor's build as a change: Smithay already turns both
-# on for its own server side, so this adds no crate and no code to it.
+# for a named cursor and so how `tests/input.rs` sees one reach the chrome.
+# Neither feature reaches the compositor's build as a change: Smithay already
+# turns both on for its own server side, so this adds no crate and no code to it.
 wayland-protocols = { version = "0.32", features = [
   "client",
   "staging",

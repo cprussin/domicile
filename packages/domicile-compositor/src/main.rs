@@ -6142,8 +6142,11 @@ mod tests {
         // being plain about rather than implying it followed: the two halves
         // are pinned separately, and nothing now drives a `focus_changed`
         // over the fan-out to *two connected chromes*. The qualifier is the
-        // claim: `e2e-input.sh` does assert a compositor's `focus_changed`
-        // reaching a real socket, with one chrome, and `e2e-bands.sh` does
+        // claim: `tests/input.rs`'s
+        // `a_focus_the_chrome_asked_for_comes_back_over_the_socket` does
+        // assert a compositor's `focus_changed` reaching a real socket, with
+        // one chrome — it took that over from `e2e-input.sh`, which is gone —
+        // and `e2e-bands.sh` does
         // run two at once — the shell and `band-declarer.ts` — where a
         // `render_band` the declarer never asked for reaches the shell over
         // this same fan-out. That one survives both mutations regardless: the
