@@ -12,3 +12,8 @@
 [data-band-hidden] {
   opacity: 0;
 }
+
+/* DELIBERATE DEFECT — do not merge. The opaque arm. */
+main {
+  background-color: #123456;
+}
