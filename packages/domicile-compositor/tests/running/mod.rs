@@ -478,6 +478,201 @@ fn decoded(pending: &mut Vec<u8>) -> String {
     }
 }
 
+/// The screens a client's window is on *now*, by name, read out of its trace.
+///
+/// Every output it entered and has not since left. Reading the leaves is what
+/// the `enter_only` rows in `outputs.rs`'s table turn on: a compositor that
+/// stops sending them leaves each window on every screen it entered at map.
+///
+/// A `leave` for a screen the window is *not* on changes nothing here — the
+/// retain removes nothing and the push is skipped — so this is blind to a
+/// compositor that leaves screens it never entered. Nothing asks about that;
+/// said because an earlier version of this sentence claimed the opposite.
+///
+/// Named rather than numbered: an object id is per-connection and means
+/// nothing across two clients, which is exactly what a check comparing one
+/// window's screens against another's needs.
+///
+/// # Half-written lines are skipped, not guessed at
+///
+/// The client's stderr is unbuffered and `say!` nests `format_args!`, so one
+/// trace line is several `write` calls — `wl_surface@13`, `.enter(`,
+/// `wl_output`, `@`, `3`, `)`, `\n` — and [`Client::trace`] clones a buffer a
+/// drain thread is appending to. So every line has intermediate states in
+/// which it is readable and incomplete.
+///
+/// Each parse therefore requires its closing bracket and skips the line
+/// without it. On the `enter` side that is load-bearing and was not
+/// hypothetical: `trim_end_matches(')')` turned `enter(wl_output@` into a
+/// screen named `an unnamed wl_output@` and failed a check once for a window
+/// the compositor had narrowed correctly. Reverting that one guard alone fails
+/// the torn-line test below.
+///
+/// On the `name` side **nothing can kill the guard, measured** — revert it
+/// alone and both tests below and the whole workspace stay green. The reason
+/// is the ordering argument on that test: a torn `name` is always the trace's
+/// last line and always for an output nothing has entered yet, so the entry it
+/// would produce is never looked at. It is kept for symmetry, and because the
+/// ordering it rests on belongs to smithay rather than to this file.
+///
+/// # A display that goes away does not leave this answer
+///
+/// The compositor sends no `wl_surface.leave` when a display is retired — the
+/// retire path removes the global and `enter_only` then walks the *new* output
+/// list, which no longer holds it — so an `enter` for a screen that is gone
+/// has nothing to cancel it and the screen stays here for the rest of the run.
+///
+/// No choice of key fixes that: the record this reads is an `enter` with no
+/// matching `leave`, so a check that crosses a removal has to notice
+/// `wl_registry.global_remove` itself — or the compositor has to send the
+/// leaves before it removes the global, which is a change to the compositor
+/// rather than to this. Releasing the output client-side is *not* the third
+/// option it looks like: a release sends no `leave` and traces nothing, so the
+/// reading is unchanged, and it would free the id the paragraph below rests on
+/// never being freed. Every check using this adds displays and removes none.
+///
+/// Ids are *not* a hazard here, which an earlier version of this section
+/// claimed. Wayland client ids are recycled in principle — `wayland-backend`
+/// takes the first free slot — but `domicile-test-client` never destroys a
+/// `wl_output`: its `global_remove` arm drops its own bookkeeping and sends
+/// nothing, and `wayland-client` has no `Drop` to send it for them. So an
+/// output's id is never freed, nothing can take it, and resolving an id to the
+/// first name it carried is exact — including for a display removed and added
+/// again, which binds a fresh id.
+fn screens_entered(trace: &str) -> Vec<String> {
+    let mut named: Vec<(String, String)> = Vec::new();
+    let mut window: Option<String> = None;
+    let mut on: Vec<String> = Vec::new();
+    for line in trace.lines() {
+        let Some((object, event)) = line.trim().split_once('.') else {
+            continue;
+        };
+        if let Some(called) = event.strip_prefix("name(") {
+            if object.starts_with("wl_output") {
+                let Some(whole) = called.strip_suffix(')') else {
+                    continue;
+                };
+                named.push((object.to_string(), whole.trim_matches('"').to_string()));
+            }
+            continue;
+        }
+        if !object.starts_with("wl_surface") {
+            continue;
+        }
+        let (entering, rest) = match (event.strip_prefix("enter("), event.strip_prefix("leave(")) {
+            (Some(rest), _) => (true, rest),
+            (_, Some(rest)) => (false, rest),
+            _ => continue,
+        };
+        let Some(output) = rest.strip_suffix(')') else {
+            continue;
+        };
+        let window = window.get_or_insert_with(|| object.to_string());
+        // One surface, and a second is a fault rather than something to filter
+        // past. `domicile-test-client` creates exactly one `wl_surface`, so a
+        // second entering an output means the client grew a popup — and a
+        // popup is entered and left too, which keyed on the output alone would
+        // have a menu closing over the right-hand screen erase the *window's*
+        // membership of it. That is a wrong answer this would then report as a
+        // compositor fault, so it says so here instead.
+        assert_eq!(
+            window.as_str(),
+            object,
+            "the client has more than one surface ({window} and {object}), so \
+             which of them this is answering about is no longer obvious; give \
+             it a rule rather than letting it pick the first"
+        );
+        on.retain(|already| already != output);
+        if entering {
+            on.push(output.to_string());
+        }
+    }
+    let mut screens: Vec<String> = on
+        .into_iter()
+        .map(|output| {
+            named
+                .iter()
+                .find(|(id, _)| id == &output)
+                // A screen the client entered and was never told the name of
+                // is a real failure — a toolkit cannot pick a density for it.
+                // Loud rather than reported as a screen called "an unnamed
+                // wl_output@3": a half-written line cannot reach here now, so
+                // the only way in is a compositor that entered a surface onto
+                // an output it never described.
+                .unwrap_or_else(|| {
+                    panic!("the client entered {output}, which it was never told the name of")
+                })
+                .1
+                .clone()
+        })
+        .collect();
+    // Sorted, because the order two enters arrive in is the compositor's and
+    // is not what is being asked about.
+    screens.sort_unstable();
+    screens
+}
+
+/// A trace is read for the screens the window is on, and for the leaves.
+///
+/// A table rather than one case, because the two events are separate rules:
+/// dropping either one is a compositor bug with a distinct symptom, and the
+/// reading has to tell them apart before a check can.
+#[test]
+fn the_screens_a_window_is_on_are_the_ones_it_entered_and_did_not_leave() {
+    let whole = "\
+wl_output@3.name(\"left\")
+wl_output@4.name(\"right\")
+wl_surface@13.enter(wl_output@3)
+wl_surface@13.enter(wl_output@4)";
+    assert_eq!(screens_entered(whole), ["left", "right"]);
+
+    let left_again = format!("{whole}\nwl_surface@13.leave(wl_output@4)");
+    assert_eq!(screens_entered(&left_again), ["left"]);
+
+    let back = format!("{left_again}\nwl_surface@13.enter(wl_output@4)");
+    assert_eq!(screens_entered(&back), ["left", "right"]);
+}
+
+/// A line the drain thread has not finished writing is not an answer.
+///
+/// A real intermediate state: the client writes a trace line in several
+/// `write` calls, so the buffer holds each of them in turn. Read loosely,
+/// `enter(wl_output@` is a screen called `an unnamed wl_output@` — which a
+/// check would report as the compositor having done something it did not, and
+/// once did.
+///
+/// # Why there is no torn-`name` case here
+///
+/// One was written and deleted for killing nothing, under the rule the rest of
+/// this migration applies: revert the `name` site to `trim_end_matches` and
+/// both this test and the whole workspace stay green. Measured.
+///
+/// The reason is structural. A torn `name` is always the trace's last line, so
+/// it is always for an output nothing has entered yet, so the entry it leaves
+/// behind is never looked at — `named` is read only from inside the walk over
+/// what was entered. What orders it is not the client, which writes what
+/// arrives on one stream from one thread, but smithay's `wl_output` bind
+/// handler: it sends `name` before the loop that enters the surfaces already
+/// on that output, and `wl_surface.enter` names a `wl_output` object that
+/// cannot exist before the client has bound it. `restate_output` never
+/// re-sends `name`, so a reload does not reorder it either.
+///
+/// So if that ordering ever broke, the symptom would not be a wrong name — it
+/// would be the panic in [`screens_entered`], for an output entered and never
+/// named. The guard on the `name` side is kept for symmetry with that
+/// reasoning rather than because a test can hold it up.
+#[test]
+fn a_trace_line_still_being_written_is_skipped() {
+    let described = "wl_output@3.name(\"left\")\nwl_surface@13.enter(wl_output@3)";
+    let torn = format!("{described}\nwl_surface@13.enter(wl_output@");
+
+    assert_eq!(
+        screens_entered(&torn),
+        ["left"],
+        "a half-written enter is not a screen"
+    );
+}
+
 /// A character split across two reads is one character, not two mistakes.
 ///
 /// The `read` boundary falls wherever the kernel put it. Decoding each read on
@@ -630,6 +825,14 @@ impl Client {
             found[slot].1.take(event.trim());
         }
         found.into_iter().map(|(_, screen)| screen.said()).collect()
+    }
+
+    /// The screens this client's window is on *now*, by name.
+    ///
+    /// See [`screens_entered`], which is where the reading is and what the
+    /// checks below it are about.
+    pub fn on_screens(&self) -> Vec<String> {
+        screens_entered(&self.trace())
     }
 
     /// Whatever the client has traced so far.

@@ -456,7 +456,6 @@
           e2e-bands = "e2e-bands.sh";
           e2e-window-shows-through = "e2e-window-shows-through.sh";
           e2e-reload-displays = "e2e-reload-displays.sh";
-          e2e-one-window-per-display = "e2e-one-window-per-display.sh";
           e2e-chrome-fills-the-desktop = "e2e-chrome-fills-the-desktop.sh";
           e2e-chrome-fills-a-window = "e2e-chrome-fills-a-window.sh";
           e2e-window-follows-the-desktop = "e2e-window-follows-the-desktop.sh";

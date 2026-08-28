@@ -869,13 +869,13 @@ impl Dispatch<wl_surface::WlSurface, ()> for Client {
 
 /// What each screen is, where it is, and how dense.
 ///
-/// `geometry`'s x and y say which screen a window is on once
-/// `wl_surface.enter` has named the output, which is what `screens_of` in
-/// `e2e-one-window-per-display` reads. `mode` is the physical size a check
-/// about density reads back. `scale` is the one this client acts on, and
-/// `done` is when it acts: the events above it are one description delivered
-/// in pieces, and redrawing on `scale` alone would redraw against half of
-/// one.
+/// `name` says which screen a window is on once `wl_surface.enter` has named
+/// the output, which is what `Client::on_screens` in the compositor's tests
+/// reads. `geometry`'s x and y are where that screen sits on the desktop, and
+/// `mode` is the physical size a check about density reads back. `scale` is
+/// the one this client acts on, and `done` is when it acts: the events above
+/// it are one description delivered in pieces, and redrawing on `scale` alone
+/// would redraw against half of one.
 impl Dispatch<wl_output::WlOutput, ()> for Client {
     fn event(
         client: &mut Client,
