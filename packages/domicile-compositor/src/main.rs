@@ -1656,12 +1656,25 @@ impl DomicileCompositor {
                 self.ask_for_the_next_band();
             }
             Arrival::StaleBands => {
-                self.chrome_texture = texture;
+                // The frame is *not* kept as the flattened chrome, though it
+                // is the page's latest: a page being asked for bands answers
+                // by leaving only one of them painting, so this is a picture
+                // of one band and everything else at `opacity: 0`. See
+                // `is_the_whole_page`.
                 self.bands.went_stale();
-                self.band_textures.clear();
+                // The pictures are *kept*. They are a frame of the page before
+                // this repaint, which is one frame behind rather than wrong,
+                // and each is replaced as its band answers again. Cleared, a
+                // chrome that repaints every frame would have no complete set
+                // ever again, and the desktop would fall back to the flattened
+                // chrome between one frame and the next.
                 self.ask_for_the_next_band();
             }
             Arrival::Chrome => self.chrome_texture = texture,
+            // Unreachable by construction — the arms above cover every
+            // arrival that carries a usable frame — but stated so that the
+            // one rule about `chrome_texture` is written where it is applied:
+            // only a whole page becomes the flattened chrome.
             // Nothing was read, so nothing is known and nothing changes — not
             // even a present, which would only redraw the frame already up.
             Arrival::Nothing => return,
@@ -2381,12 +2394,19 @@ impl DomicileCompositor {
         // than clipped out of one another — nothing in them was flattened
         // together, which is the entire reason for having asked separately.
         //
-        // Only once every band has answered. A frame drawn from a partial set
-        // is the desktop with a layer missing, and asking is a round trip, so
-        // half-answered is a state this passes through on any repaint rather
-        // than an unusual one. Until then the single `chrome_texture` above is
-        // what is drawn, which is the same picture flattened.
-        if self.bands.next() == Next::Complete && !self.bands.depths().is_empty() {
+        // Once every band has a picture, rather than once the cycle collecting
+        // them has finished — see `Bands::all_pictured`, which is where the
+        // difference is written down. A frame drawn from a partial set is the
+        // desktop with a layer missing, so the flattened `chrome_texture`
+        // above is what a desktop that has never completed a cycle gets; one
+        // that has keeps drawing from the pictures it holds while the next
+        // set is collected, because the alternative is the flattened chrome —
+        // the whole page over every window — on every frame the chrome
+        // repaints for its own reasons.
+        if self
+            .bands
+            .all_pictured(|band| self.band_textures.contains_key(&band))
+        {
             // The order is `bands`' to decide — see `Bands::drawn_with`, which
             // is where it can be tested. What is left here is turning that
             // order into layers, which needs the textures this owns.

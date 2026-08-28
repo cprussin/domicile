@@ -1050,4 +1050,251 @@ describe("Shell", () => {
       );
     });
   });
+
+  describe("two floating windows that overlap", () => {
+    /** Every grab sheet on the stage, in the order the page lays them out. */
+    const sheetsIn = (container: HTMLElement) => [
+      ...container.querySelectorAll<HTMLElement>("main > div[aria-hidden]"),
+    ];
+
+    const portalFor = (container: HTMLElement, appId: string) =>
+      container.querySelector<HTMLElement>(
+        `${APP_TAG_NAME}[app-id="${appId}"]`,
+      );
+
+    /** Where the window `appId` has its left edge, as a number of pixels. */
+    const leftOf = (container: HTMLElement, appId: string): string => {
+      const portal = portalFor(container, appId);
+      if (portal === null) {
+        throw new Error(`no window ${appId} on the stage`);
+      } else {
+        return portal.style.insetInlineStart;
+      }
+    };
+
+    /**
+     * Two floating terminals, with Alt held so both are grabbable.
+     *
+     * `one` is floated first, so it cascades above and to the left of `two`
+     * and the two boxes overlap — which is the whole point: the bugs this
+     * covers only appear when a grab has another window to be confused with.
+     */
+    const twoFloats = async (held = { alt: true, shift: false }) => {
+      const rendered = renderShell();
+      bridge.emit("app_appeared", { app_id: "one", title: "One" });
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      bridge.emit("app_appeared", { app_id: "two", title: "Two" });
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      bridge.emit("modifiers", { ...held, ctrl: false, logo: false });
+      return rendered;
+    };
+
+    /** The sheet over the window `appId`, found by the box it is placed in. */
+    const sheetOver = (container: HTMLElement, appId: string): HTMLElement => {
+      const at = leftOf(container, appId);
+      const found = sheetsIn(container).find(
+        (sheet) => sheet.style.insetInlineStart === at,
+      );
+      if (found === undefined) {
+        throw new Error(`no grab sheet over ${appId}`);
+      } else {
+        return found;
+      }
+    };
+
+    /** The last depths this chrome told the host it draws at. */
+    const declared = () =>
+      bridge.calls.filter(([kind]) => kind === "declareBands").at(-1);
+
+    const press = (sheet: HTMLElement, x: number, y: number): void => {
+      // The test DOM does not implement pointer capture, and a drag that threw
+      // there would never reach the assertions below.
+      sheet.setPointerCapture = () => undefined;
+      fireEvent.pointerDown(sheet, { clientX: x, clientY: y, pointerId: 1 });
+    };
+
+    it("floats both windows, each in a box of its own", async () => {
+      const { container } = await twoFloats();
+
+      expect(sheetsIn(container)).toHaveLength(2);
+      expect(leftOf(container, "one")).not.toBe(leftOf(container, "two"));
+    });
+
+    it("moves the window that was grabbed, not the one on top of it", async () => {
+      const { container } = await twoFloats();
+      const before = leftOf(container, "two");
+
+      const sheet = sheetOver(container, "one");
+      press(sheet, 0, 0);
+      fireEvent.pointerMove(sheet, { clientX: 90, clientY: 0, pointerId: 1 });
+
+      // The grabbed window moved by exactly the drag, and the other one did
+      // not move at all — a raise reorders the stack, and a drag that read its
+      // box back out of that order would move whichever window landed in the
+      // grabbed one's old place.
+      expect(leftOf(container, "one")).toBe("138px");
+      expect(leftOf(container, "two")).toBe(before);
+    });
+
+    it("keeps the float chrome in a stable order when a window is raised", async () => {
+      // A raise restacks the windows, and restacking must not reorder the
+      // elements: a browser releases pointer capture when the capturing
+      // element is moved in the document, and the rest of the drag — every
+      // move and the release that ends it — is delivered to whatever the
+      // pointer happens to be over instead.
+      const { container } = await twoFloats();
+      const before = sheetsIn(container);
+
+      press(sheetOver(container, "one"), 0, 0);
+
+      // Where each sheet was before, by identity. A DOM node deep-compares
+      // through its own parent, so matching the arrays themselves never
+      // returns — and the indices say which way an order changed.
+      const after = sheetsIn(container).map((sheet) => before.indexOf(sheet));
+      expect(after).toStrictEqual([0, 1]);
+    });
+
+    it("raises the grabbed window over the one it was under", async () => {
+      // Restacking still has to happen — it is just expressed as `z-index`
+      // rather than as document order.
+      const { container } = await twoFloats();
+      const under = Number(portalFor(container, "one")?.style.zIndex);
+      const over = Number(portalFor(container, "two")?.style.zIndex);
+      expect(under).toBeLessThan(over);
+
+      press(sheetOver(container, "one"), 0, 0);
+
+      expect(Number(portalFor(container, "one")?.style.zIndex)).toBeGreaterThan(
+        Number(portalFor(container, "two")?.style.zIndex),
+      );
+    });
+
+    it("ends the drag when the release lands on the other window", async () => {
+      // Which is where it lands whenever the pointer has left the window being
+      // dragged — the case pointer capture exists to cover, and the one that
+      // leaves a window grabbed for ever when it does not.
+      const { container } = await twoFloats();
+      const dragged = sheetOver(container, "one");
+      press(dragged, 0, 0);
+      fireEvent.pointerMove(dragged, { clientX: 90, clientY: 0, pointerId: 1 });
+
+      fireEvent.pointerUp(sheetOver(container, "two"), { pointerId: 1 });
+
+      expect(portalFor(container, "one")?.className).not.toContain(
+        css({ opacity: 0.6 }),
+      );
+    });
+
+    it("ends the drag when the release lands on the chrome around it", async () => {
+      const { container } = await twoFloats();
+      const dragged = sheetOver(container, "one");
+      press(dragged, 0, 0);
+      fireEvent.pointerMove(dragged, { clientX: 90, clientY: 0, pointerId: 1 });
+
+      const rail = container.querySelector("main");
+      if (rail === null) {
+        throw new Error("no stage to release over");
+      }
+      fireEvent.pointerUp(rail, { pointerId: 1 });
+
+      expect(portalFor(container, "one")?.className).not.toContain(
+        css({ opacity: 0.6 }),
+      );
+    });
+
+    it("stops banding while a window is being dragged", async () => {
+      // A band is a round trip, and the page answers one at a time by leaving
+      // only that band painting. A chrome that repaints every frame — which is
+      // what a window being dragged over it is — can never hold still long
+      // enough for the set to describe one moment: band 0 is captured a frame
+      // before band 1, which is captured a frame before band 2, and the
+      // desktop composited from them is three moments at once. Declaring
+      // nothing puts the whole page back and draws it flattened, which is what
+      // every chrome did before bands existed: a bar can land over the window
+      // in front, and nothing flashes.
+      const { container } = await twoFloats();
+      expect(declared()).toStrictEqual(["declareBands", [0, 1, 2]]);
+
+      press(sheetOver(container, "one"), 0, 0);
+
+      expect(declared()).toStrictEqual(["declareBands", []]);
+    });
+
+    it("bands again once the window is let go of", async () => {
+      const { container } = await twoFloats();
+      const sheet = sheetOver(container, "one");
+      press(sheet, 0, 0);
+
+      fireEvent.pointerUp(sheet, { pointerId: 1 });
+
+      expect(declared()).toStrictEqual(["declareBands", [0, 1, 2]]);
+    });
+
+    it("keeps every float click-through after Alt is let go of mid-drag", async () => {
+      // The pointer belongs to the shell only where a window says it takes
+      // none. Alt is what says so, and a drag routinely outlives it: the user
+      // presses Alt, takes hold, and lets the key go while still dragging. A
+      // window that took its pointer back then would swallow the moves the
+      // drag crosses it with, and the release that should have ended it.
+      const { container } = await twoFloats();
+      press(sheetOver(container, "one"), 0, 0);
+
+      act(() => {
+        bridge.emit("modifiers", {
+          alt: false,
+          ctrl: false,
+          logo: false,
+          shift: false,
+        });
+      });
+
+      expect(portalFor(container, "two")?.className).toContain(
+        css({ pointerEvents: "none" }),
+      );
+    });
+
+    it("ends a drag that outlived the Alt that started it", async () => {
+      const { container } = await twoFloats();
+      const dragged = sheetOver(container, "one");
+      press(dragged, 0, 0);
+      act(() => {
+        bridge.emit("modifiers", {
+          alt: false,
+          ctrl: false,
+          logo: false,
+          shift: false,
+        });
+      });
+
+      fireEvent.pointerMove(dragged, { clientX: 90, clientY: 0, pointerId: 1 });
+      fireEvent.pointerUp(dragged, { pointerId: 1 });
+
+      expect(leftOf(container, "one")).toBe("138px");
+      expect(portalFor(container, "one")?.className).not.toContain(
+        css({ opacity: 0.6 }),
+      );
+    });
+
+    it("leaves a window alone after a click that never moved it", async () => {
+      // A press and a release with nothing in between: the window is grabbed
+      // and must be let go of again, or it stays see-through, stays
+      // click-through, and follows the very next move the pointer makes.
+      const { container } = await twoFloats();
+      const before = leftOf(container, "one");
+      const sheet = sheetOver(container, "one");
+
+      press(sheet, 0, 0);
+      fireEvent.pointerUp(sheet, { pointerId: 1 });
+      fireEvent.pointerMove(sheet, {
+        clientX: 300,
+        clientY: 300,
+        pointerId: 1,
+      });
+
+      expect(leftOf(container, "one")).toBe(before);
+      expect(portalFor(container, "one")?.className).not.toContain(
+        css({ opacity: 0.6 }),
+      );
+    });
+  });
 });

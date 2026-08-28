@@ -194,6 +194,25 @@ impl Bands {
     pub fn depths(&self) -> &[i32] {
         &self.depths
     }
+
+    /// Whether a banded frame can be drawn at all: every declared band has a
+    /// picture, whether or not the cycle collecting them has finished.
+    ///
+    /// The draw condition, and deliberately not [`Next::Complete`]. A chrome
+    /// that repaints for its own reasons — a window being dragged, a caret, a
+    /// clock — makes every commit a stale one, and a cycle restarted on each
+    /// of them never reaches the end. Drawn on completeness such a desktop
+    /// falls back to the flattened chrome between one frame and the next, and
+    /// the flattened chrome is the whole page over every window: the windows
+    /// go missing and come back at the page's own repaint rate, which is the
+    /// desktop flashing. A band whose picture is a cycle old is that band's
+    /// previous frame, which is what a compositor draws in any case.
+    ///
+    /// `pictured` says whether a band has a texture, which is the caller's to
+    /// know: the pictures are the renderer's and the bookkeeping is this.
+    pub fn all_pictured(&self, pictured: impl Fn(usize) -> bool) -> bool {
+        !self.depths.is_empty() && (0..self.depths.len()).all(pictured)
+    }
 }
 
 #[cfg(test)]
@@ -447,5 +466,50 @@ mod tests {
         bands.declared(vec![0, 5]);
         bands.asked(0);
         bands.asked(1);
+    }
+
+    #[test]
+    fn a_chrome_that_declared_nothing_draws_no_bands() {
+        assert!(!Bands::default().all_pictured(|_| true));
+    }
+
+    #[test]
+    fn every_declared_band_has_to_have_a_picture() {
+        let mut bands = Bands::default();
+        bands.declared(vec![0, 1, 2]);
+        assert!(bands.all_pictured(|_| true));
+        assert!(!bands.all_pictured(|band| band != 1));
+    }
+
+    #[test]
+    fn a_repaint_mid_cycle_leaves_the_bands_drawable() {
+        // The flash this exists to stop. The chrome answered for every band,
+        // then repainted for a reason of its own — a window being dragged over
+        // it — which makes what is held a picture of the page before. Those
+        // pictures are still every band, and drawing them is the desktop one
+        // frame behind; not drawing them is the whole chrome over every
+        // window, which is every window gone until the round trip finishes.
+        let mut bands = Bands::default();
+        bands.declared(vec![0, 1]);
+        bands.asked(0);
+        bands.answered();
+        bands.asked(1);
+        bands.answered();
+        assert_eq!(bands.next(), Next::Complete);
+
+        bands.went_stale();
+
+        assert_ne!(bands.next(), Next::Complete);
+        assert!(bands.all_pictured(|_| true));
+    }
+
+    #[test]
+    fn newly_declared_depths_are_drawable_only_once_they_have_pictures() {
+        // Unlike a repaint, a re-declaration drops the pictures with the
+        // depths: they describe a page that has just laid out, so a texture
+        // from the previous set is a picture of a different desktop.
+        let mut bands = Bands::default();
+        bands.declared(vec![0, 1]);
+        assert!(!bands.all_pictured(|band| band == 0));
     }
 }
