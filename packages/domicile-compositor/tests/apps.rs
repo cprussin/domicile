@@ -63,6 +63,61 @@ fn a_close_from_the_chrome_reaches_the_client_and_comes_back() {
         .expect("the chrome is told the window it closed is gone");
 }
 
+/// A client that names its window has the chrome told the name.
+///
+/// Ported from `e2e-chrome.sh`, and the only part of it that was not already
+/// covered — see that change's description for the other three, each of which
+/// was mutated to check.
+///
+/// `title_changed` is the compositor's whole answer to a window being named,
+/// and nothing below the e2e level reaches it: it needs a real client making a
+/// real `set_title`, on a real toplevel the host has already announced. Cutting
+/// the function to a bare `return` passed the entire Rust suite before this
+/// test existed.
+///
+/// The name arrives *after* the announcement rather than with it — a client
+/// creates its toplevel and names it in the next request — which is why this
+/// is a message of its own rather than a field of `app_appeared`, and why a
+/// chrome that ignored it would show every window unnamed.
+///
+/// *Renames* are out of scope here and it is worth saying so rather than
+/// leaving it to be discovered: a terminal renames itself on every command it
+/// runs, but a compositor that forwards only the first `set_title` of the
+/// process and goes deaf afterwards passes this test and the whole suite —
+/// measured. `e2e-chrome.sh` did not cover that either (it grepped once for
+/// `app_titled`), so nothing was lost in the move; covering it needs
+/// `domicile-test-client` to be able to rename, which it cannot today.
+#[test]
+fn a_client_that_names_its_window_has_the_chrome_told() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+
+    // Before the client, because the name has to be heard live. The catch-up
+    // a late chrome gets on `hello` is `Host::open_apps`, which replays
+    // `app_appeared` — carrying whatever the title is by then — and then
+    // `focus_changed`, and never sends `app_titled` at all. So a chrome that
+    // connected after the `set_title` would wait here for a message that is
+    // not coming: the ordering is load-bearing, but it earns a *failure*
+    // against a correct compositor rather than a pass against a broken one.
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client("a named window");
+
+    let titled = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppTitled { .. }))
+        .expect("a client that named its window has the chrome told");
+    let HostMessage::AppTitled { title, .. } = titled else {
+        unreachable!("the wait matched on this variant")
+    };
+
+    // The name itself, not merely that something was sent: a compositor that
+    // forwards the event with an empty title leaves the chrome showing a
+    // window with no name, which is the failure this is about.
+    assert_eq!(
+        title.as_deref(),
+        Some("a named window"),
+        "the chrome was told the window is called {title:?}"
+    );
+}
+
 /// A chrome's `spawn` starts a process, aimed at Domicile rather than at
 /// whatever session the compositor is itself presenting into.
 ///

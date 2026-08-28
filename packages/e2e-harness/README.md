@@ -9,7 +9,7 @@ can be verified in CI and on a headless box.
 
 | Entry | Used by | What it does |
 |---|---|---|
-| `src/mock-chrome.ts` | `e2e-chrome.sh`, `e2e-dmabuf.sh`, `e2e-hidpi.sh` | Connects, handshakes, and prints every frame the host pushes so the calling script can grep for one. |
+| `src/mock-chrome.ts` | `e2e-dmabuf.sh`, `e2e-hidpi.sh` | Connects, handshakes, and prints every frame the host pushes so the calling script can grep for one. |
 | `src/input-injector.ts` | `e2e-input.sh` | Waits for `app_appeared`, then forwards a focus + pointer + keyboard sequence to prove input injection reaches a real client. |
 | `src/reload-typist.ts` | `e2e-stuck-key.sh` | Holds a key down, reloads, and then tries to toggle it — the page dying mid-press, which used to leave that key down in the seat for good. |
 | `src/focus-probe.ts` | `e2e-chrome-layer.sh` | Focuses the first app announced and stays connected, so the check can watch the keyboard come back to the chrome on its own when that client goes away. |
@@ -27,7 +27,7 @@ whether the compositor is still there at the instant it fires:
 `harness_fault` for this suite's own fault, `compositor_verdict` for the
 code's. Both exit, which is the point below.
 
-What actually keeps the blame straight is structural: in the twelve scripts
+What actually keeps the blame straight is structural: in the eleven scripts
 that use the helpers, a diagnosis is one `if`/`elif`/`else` or one `case`,
 every arm of which ends in a helper that exits or in a pass — so no arm is
 reachable by falling *through* another. A bail that turned into a no-op — the
@@ -47,12 +47,12 @@ independent of the file it lives in: it reads `PASSED`, which only `passed`
 sets, and a script that fails to source the file at all is caught by the third
 rule below rather than by the count.
 
-Twelve scripts of the thirty-one in `scripts/`, not all of them, source the
+Eleven scripts of the thirty in `scripts/`, not all of them, source the
 helpers; rules 2 and 3 below are vacuous for the other nineteen, and rule 1 is
 all that reaches them. Worth knowing before writing the next one.
 
-Thirty-one because that is what the sweep reads — every `.sh` in the
-directory, as the paragraph below says, not the twenty-three `check.sh` runs.
+Thirty because that is what the sweep reads — every `.sh` in the directory, as
+the paragraph below says, not the twenty-two `check.sh` runs.
 
 That count is measured rather than remembered. It read "three scripts, not
 sixteen … the other thirteen" until someone counted, and every number in it

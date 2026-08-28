@@ -445,7 +445,6 @@
           native = "run-native.sh";
           measure = "measure.sh";
           measure-round-trip = "measure-round-trip.sh";
-          e2e-chrome = "e2e-chrome.sh";
           e2e-electron = "e2e-electron.sh";
           e2e-shell-launch = "e2e-shell-launch.sh";
           e2e-late-chrome = "e2e-late-chrome.sh";
