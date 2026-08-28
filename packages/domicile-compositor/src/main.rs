@@ -1248,7 +1248,11 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
             // A placement changes what is drawn and where, so the desktop is
             // dirty — and the chrome's thread is not the one that can draw.
             Ok(
-                message @ (ChromeMessage::PlacePortal { .. } | ChromeMessage::RemovePortal { .. }),
+                message @ (ChromeMessage::PlacePortal { .. }
+                | ChromeMessage::RemovePortal { .. }
+                // Not what is drawn, but what a press lands on — and the scene
+                // is what answers that, so it travels with the placements.
+                | ChromeMessage::ClaimPointer { .. }),
             ) => {
                 // Read before the message is consumed, and from the message
                 // rather than from the scene: a backgrounded window leaves the

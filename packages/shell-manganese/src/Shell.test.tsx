@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { AppElements } from "./app-elements";
 import type { Chord } from "./chord";
+import { CLAIMS_POINTER } from "./claim-pointer";
 import { displaysFrom } from "./display-source";
 import { Shell } from "./Shell";
 
@@ -96,6 +97,10 @@ class FakeBridge {
   declareBands(depths: readonly number[]): void {
     this.calls.push(["declareBands", [...depths]]);
   }
+
+  claimPointer(regions: readonly unknown[]): void {
+    this.calls.push(["claimPointer", [...regions]]);
+  }
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
   }
@@ -114,7 +119,7 @@ class FakeBridge {
 }
 
 // The test DOM performs no layout, so measurement is injected.
-const stubMeasure: Measure = () => ({
+const stubMeasure: Measure = (element) => ({
   cornerRadius: 0,
   native: true,
   opacity: 1,
@@ -123,7 +128,10 @@ const stubMeasure: Measure = () => ({
   takesPointer: true,
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,
-  zIndex: 0,
+  // The element's own, so a test can tell two windows' chrome apart. A real
+  // measurement reads the computed value; happy-dom has no cascade, and the
+  // shell writes this one inline.
+  zIndex: Number(element.style.zIndex),
 });
 
 const tabNames = (): string[] =>
@@ -190,6 +198,7 @@ const renderingShell = (desktop: readonly Display[] | undefined) => {
       appElements={new AppElements()}
       bridge={client}
       displays={displaysFrom(client)}
+      measure={stubMeasure}
     />,
   );
 };
@@ -1102,6 +1111,12 @@ describe("Shell", () => {
       }
     };
 
+    /** The last set of regions this chrome said it takes the pointer in. */
+    const claimed = () =>
+      bridge.calls.filter(([kind]) => kind === "claimPointer").at(-1)?.[1] as
+        | { zIndex: number }[]
+        | undefined;
+
     /** The last depths this chrome told the host it draws at. */
     const declared = () =>
       bridge.calls.filter(([kind]) => kind === "declareBands").at(-1);
@@ -1200,6 +1215,35 @@ describe("Shell", () => {
       expect(portalFor(container, "one")?.className).not.toContain(
         css({ opacity: 0.6 }),
       );
+    });
+
+    it("claims the pointer where each title bar covers a window", async () => {
+      // A bar is page pixels lying across whatever the window it names
+      // cascades over, and the compositor hit-tests rectangles: without a
+      // claim the press goes to the window underneath, which focuses that
+      // window and raises it. Clicking the front window's bar raised the one
+      // behind it.
+      const { container } = await twoFloats();
+
+      const regions = claimed();
+      expect(regions).toHaveLength(2);
+      // At each bar's own depth, so a bar only wins where it is on top.
+      expect(regions?.map((region) => region.zIndex).sort()).toStrictEqual([
+        1, 2,
+      ]);
+      expect(container.querySelectorAll(`[${CLAIMS_POINTER}]`)).toHaveLength(2);
+    });
+
+    it("stops claiming for a window put back in the rail", async () => {
+      // The whole set every time: a bar that has gone must not go on taking
+      // the pointer where it used to be.
+      await twoFloats();
+      expect(claimed()).toHaveLength(2);
+
+      // The window the user is working in is the one Alt+Tab puts back.
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+
+      expect(claimed()).toHaveLength(1);
     });
 
     it("stops banding while a window is being dragged", async () => {

@@ -8,8 +8,14 @@
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 
-import type { ChromeMessage, Placement, Shortcut } from "./chrome-message";
+import type {
+  ChromeMessage,
+  Placement,
+  PointerRegion,
+  Shortcut,
+} from "./chrome-message";
 import {
+  claimPointerMessage,
   closeAppMessage,
   declareBandsMessage,
   focusAppMessage,
@@ -318,6 +324,15 @@ export class BridgeClient {
    */
   declareBands(depths: readonly number[]): void {
     this.send(declareBandsMessage(depths));
+  }
+
+  /**
+   * Say where this chrome takes the pointer over the windows.
+   *
+   * The whole set each time — see {@link claimPointerMessage}.
+   */
+  claimPointer(regions: readonly PointerRegion[]): void {
+    this.send(claimPointerMessage(regions));
   }
 
   focusApp(appId: string): void {

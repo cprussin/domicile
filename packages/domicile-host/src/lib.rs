@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage};
 
 pub mod ipc;
-use domicile_scene::{KeyboardTarget, PointerTarget, Portal, Scene, Style, Transform};
+use domicile_scene::{Claim, KeyboardTarget, PointerTarget, Portal, Scene, Style, Transform};
 
 /// Identifier for a connected app (Wayland toplevel), assigned by the host.
 pub type AppId = String;
@@ -256,6 +256,23 @@ impl Host {
                 // when the display's pixel density does. This is the
                 // compositor's business — it becomes the `wl_output` scale —
                 // and it is intercepted there before reaching the brain.
+            }
+            ChromeMessage::ClaimPointer { regions } => {
+                // Where the chrome takes the pointer over the windows, which
+                // is routing and so the scene's — unlike the depths above,
+                // which are only ever about how the desktop is drawn.
+                self.scene.claim_pointer(
+                    regions
+                        .into_iter()
+                        .map(|region| {
+                            Claim::new(
+                                (region.size[0], region.size[1]),
+                                transform_from_wire(region.transform),
+                                region.z_index,
+                            )
+                        })
+                        .collect(),
+                );
             }
             ChromeMessage::PlacePortal {
                 app_id,
