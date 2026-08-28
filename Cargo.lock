@@ -352,6 +352,7 @@ dependencies = [
  "domicile-protocol",
  "domicile-scene",
  "domicile-test-chrome",
+ "domicile-test-client",
  "libloading",
  "serde_json",
  "smithay",

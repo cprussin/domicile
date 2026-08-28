@@ -222,6 +222,13 @@ below.
   against a stale binary — which is exactly what happened once. Keep the build.
 - **`domicile-compositor` is excluded from `default-members`** (it pulls Smithay +
   native libs). Plain `cargo test`/`cargo build` skip it; build it explicitly.
+- **The `domicile-test-client` binary is a `[[bin]]` of `domicile-compositor`**,
+  though every line of its code is `domicile-test-client`'s. Cargo builds a
+  package's binaries with that package's tests and has no stable way to depend
+  on another package's binary, so this is what makes `cargo test -p
+  domicile-compositor` build the client its tests spawn. Leave the target where
+  it is — moving it back makes those tests pass or fail on whatever cargo
+  command someone ran last.
 - **Verifying without nix**: `libxkbcommon-dev`, `weston` and `wayland-utils`
   get most of the headless scripts running outside the nix shell. On top of
   that, and checked against the scripts rather than remembered:

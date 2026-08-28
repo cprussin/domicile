@@ -6,13 +6,13 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+# Library only. The `domicile-test-client` executable is a `[[bin]]` of
+# `domicile-compositor`, because cargo builds a package's binaries whenever it
+# builds that package's tests and cannot be told to build another package's —
+# see this crate's `lib.rs` and that manifest for the whole of it.
 [lib]
 name = "domicile_test_client"
 path = "src/lib.rs"
-
-[[bin]]
-name = "domicile-test-client"
-path = "src/main.rs"
 
 # The pure-Rust backend, deliberately: no `system`, no `dlopen`, no
 # libwayland. A client that links nothing builds in the core dev shell and on

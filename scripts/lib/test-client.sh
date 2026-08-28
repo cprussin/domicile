@@ -16,10 +16,15 @@
 # the machine, which is what `exit 77` is for; a client that will not build is
 # a broken tree, and a check that shrugged at that would be hiding the thing it
 # is here to find.
+#
+# `-p domicile-compositor` because that is the package the binary belongs to —
+# its integration tests spawn one, and cargo builds a package's binaries with
+# its tests, which is the only stable way to have them arrive together. The
+# code is `domicile-test-client`'s all the same; only the target lives there.
 build_test_client() {
   TEST_CLIENT="$ROOT/target/debug/domicile-test-client"
-  cargo build -p domicile-test-client >/dev/null 2>&1 || {
-    echo "the test client did not build; run: cargo build -p domicile-test-client"
+  cargo build -p domicile-compositor --bin domicile-test-client >/dev/null 2>&1 || {
+    echo "the test client did not build; run: cargo build -p domicile-compositor --bin domicile-test-client"
     return 1
   }
   [ -x "$TEST_CLIENT" ] || {

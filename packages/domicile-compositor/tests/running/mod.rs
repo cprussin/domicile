@@ -162,7 +162,12 @@ impl Compositor {
     }
 
     fn client_on(&self, display: &str, title: &str) -> Client {
-        let mut child = Command::new(test_client_binary())
+        // Handed over by cargo rather than looked for, which is the whole
+        // reason the client's binary is a target of this crate: cargo builds
+        // it before it runs these tests, and `CARGO_BIN_EXE_` is how it says
+        // where it put it — so this follows a `--release` or a
+        // `--target-dir` without knowing about either, and cannot be missing.
+        let mut child = Command::new(env!("CARGO_BIN_EXE_domicile-test-client"))
             .arg("--title")
             .arg(title)
             .arg("--trace")
@@ -660,31 +665,4 @@ impl Screen {
             ),
         }
     }
-}
-
-/// Where `domicile-test-client` was built.
-///
-/// `CARGO_BIN_EXE_` covers only the binaries of the crate under test, so the
-/// client — another crate's — has to be found rather than handed over. Its
-/// sibling of the compositor binary is where cargo puts it, and taking the
-/// path from the compositor's own means it follows a `--release` or a custom
-/// `--target-dir` without this knowing about either.
-///
-/// Checked rather than assumed: `cargo test -p domicile-compositor` does not
-/// build another crate's binary — cargo has no stable way to depend on one, so
-/// it has to be asked for separately — and a missing file would otherwise
-/// surface as a bare `NotFound` against a path nobody in the test wrote.
-fn test_client_binary() -> PathBuf {
-    let compositor = PathBuf::from(env!("CARGO_BIN_EXE_domicile-compositor"));
-    let client = compositor
-        .parent()
-        .expect("the compositor binary is in a directory")
-        .join("domicile-test-client");
-    assert!(
-        client.exists(),
-        "{} is not built; `cargo test --workspace` builds it, \
-         or `cargo build -p domicile-test-client` on its own",
-        client.display()
-    );
-    client
 }
