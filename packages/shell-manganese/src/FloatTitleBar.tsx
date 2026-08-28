@@ -8,7 +8,7 @@ import { CLAIMS_POINTER } from "./claim-pointer";
 import { barBox } from "./float";
 import type { Floating } from "./shell-state";
 import { useFloatDrag } from "./useFloatDrag";
-import { floatPlacement } from "./window-styles";
+import { floatEdgeStyles, floatPlacement } from "./window-styles";
 
 type Props = {
   /**
@@ -63,7 +63,7 @@ export const FloatTitleBar = ({
   });
   return (
     <div
-      className={cx(barStyles, focused && focusedStyles)}
+      className={cx(barStyles, floatEdgeStyles, focused && focusedStyles)}
       // The bar lies across whatever the window it names cascades over, and a
       // press on it must reach the page rather than that window. See
       // `claim-pointer`.
@@ -97,6 +97,9 @@ const doesNotResize = () => {
 
 const barStyles = hstack({
   background: "card",
+  // The frame's line is one line: the bar carries the top and the sides down
+  // to where the surface picks them up, and the seam between them is not one.
+  borderBlockEndWidth: 0,
   // Rounded at the top only: the client's surface under this has the other two
   // corners, and a bar rounded all the way round would show the desktop
   // through the seam between them.

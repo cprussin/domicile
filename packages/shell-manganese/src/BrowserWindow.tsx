@@ -18,6 +18,7 @@ import type { Floating } from "./shell-state";
 import {
   clickThroughStyles,
   draggingStyles,
+  floatEdgeStyles,
   floatPlacement,
   windowStyles,
 } from "./window-styles";
@@ -140,6 +141,9 @@ export const BrowserWindow = ({
         browserStyles,
         clickThrough && clickThroughStyles,
         dragging && draggingStyles,
+        // The bar above carries the top edge; this picks up the other three.
+        floating !== undefined && floatEdgeStyles,
+        floating !== undefined && noTopEdgeStyles,
       )}
       hidden={!onScreen}
       // Inline because the box is a runtime number and Panda reads literals;
@@ -252,3 +256,7 @@ const viewStyles = flex({
   flex: 1,
   minBlockSize: 0,
 });
+
+// A floating browser window meets its title bar at the top, and the seam
+// between the two is not a line to draw twice.
+const noTopEdgeStyles = css({ borderBlockStartWidth: 0 });

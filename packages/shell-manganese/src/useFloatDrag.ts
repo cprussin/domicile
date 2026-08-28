@@ -22,9 +22,25 @@ type Drag = {
   resizes: boolean;
 };
 
+/**
+ * The secondary button, which resizes whatever it takes hold of.
+ *
+ * The other way to a resize, and the one that needs no second modifier held:
+ * whatever handed the pointer to the shell — Alt, Ctrl — the right button
+ * means the corner rather than the whole window.
+ */
+const SECONDARY_BUTTON = 2;
+
 export type FloatDrag = {
   /** Whether a drag is running, and whether it is resizing rather than moving. */
   drag: { resizes: boolean } | undefined;
+  /**
+   * Swallow the menu the secondary button would otherwise open.
+   *
+   * The right button is a resize here, and a context menu over the window
+   * being resized is the browser answering a press the desktop has taken.
+   */
+  onContextMenu: (event: { preventDefault: () => void }) => void;
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
 };
 
@@ -118,20 +134,24 @@ export const useFloatDrag = ({
 
   return {
     drag,
+    onContextMenu: (event) => {
+      event.preventDefault();
+    },
     onPointerDown: (event) => {
       // Still captured, which costs nothing beside the listeners above and
       // covers the one thing they cannot see: a pointer that has moved over a
       // browsing context of its own, where the events are that document's.
       event.currentTarget.setPointerCapture(event.pointerId);
+      const resizing = resizes || event.button === SECONDARY_BUTTON;
       running.current = {
         box: float,
         from: { x: event.clientX, y: event.clientY },
         onDrop,
         onMove,
         onResize,
-        resizes,
+        resizes: resizing,
       };
-      setDrag({ resizes });
+      setDrag({ resizes: resizing });
       onGrab();
     },
   };

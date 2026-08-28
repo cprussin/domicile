@@ -9,7 +9,6 @@ import {
   useDisplays,
 } from "@domicile/component-library/DisplayProvider";
 import type { DisplaySource } from "@domicile/component-library/display-source";
-import { Kbd } from "@domicile/component-library/Kbd";
 import { Provider } from "@domicile/component-library/Provider";
 import { Screen } from "@domicile/component-library/Screen";
 import { TabRail } from "@domicile/component-library/TabRail";
@@ -216,7 +215,7 @@ const Desktop = ({ appElements, bridge, measure }: DesktopProps) => {
   // the drag a resize. Neither can be read off a DOM event here: while a
   // window holds the keyboard the page is told nothing, which is exactly when
   // the user is holding Alt over one. See `useModifiers`.
-  const { alt, shift } = useModifiers(bridge);
+  const { alt, ctrl, shift } = useModifiers(bridge);
 
   // Alt+Enter -> a terminal; add Shift for a browser.
   const launch = useCallback(
@@ -404,8 +403,12 @@ const Desktop = ({ appElements, bridge, measure }: DesktopProps) => {
               // often the window on the stage as another float. Alt covers
               // the floats for as long as it is held; it covers the stage
               // never, and a drag routinely outlives the key besides.
+              // Alt or Ctrl: either hands the pointer over, and Ctrl is what
+              // makes a resize reachable without also holding Shift — the
+              // secondary button does that part.
               const clickThrough =
-                draggingId !== undefined || (floating !== undefined && alt);
+                draggingId !== undefined ||
+                (floating !== undefined && (alt || ctrl));
               switch (window.kind) {
                 case WindowKind.App: {
                   return (
@@ -485,7 +488,7 @@ const Desktop = ({ appElements, bridge, measure }: DesktopProps) => {
                     onMove={onMove}
                     title={window.title}
                   />
-                  {(alt || window.id === draggingId) && (
+                  {(alt || ctrl || window.id === draggingId) && (
                     <FloatGrab
                       floating={floating}
                       onDrop={drop}
@@ -500,7 +503,6 @@ const Desktop = ({ appElements, bridge, measure }: DesktopProps) => {
                 </Fragment>
               );
             })}
-            {windows.length === 0 && <EmptyStage />}
           </main>
         </div>
       </OnTheFirstScreen>
@@ -614,21 +616,6 @@ const NoScreens = () => {
   ) : undefined;
 };
 
-/** What the stage says before anything has been opened onto it. */
-const EmptyStage = () => (
-  <div className={emptyStageStyles} data-band={BAND_UNDER_EVERY_FLOAT}>
-    <Card title="No windows yet">
-      <p className={hintStyles}>
-        <Kbd>Alt</Kbd> + <Kbd>Enter</Kbd> opens a terminal on Domicile.
-      </p>
-      <p className={hintStyles}>
-        <Kbd>Alt</Kbd> + <Kbd>Shift</Kbd> + <Kbd>Enter</Kbd> opens a browser
-        window — so does <Kbd>+</Kbd> in the rail.
-      </p>
-    </Card>
-  </div>
-);
-
 const rootStyles = flex({
   blockSize: "100%",
   direction: "row",
@@ -672,13 +659,6 @@ const idleScreenStyles = flex({
   align: "center",
   blockSize: "100%",
   justify: "center",
-});
-
-const emptyStageStyles = flex({
-  align: "center",
-  inset: 0,
-  justify: "center",
-  position: "absolute",
 });
 
 const hintStyles = css({

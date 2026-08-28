@@ -65,6 +65,16 @@ export const floatPlacement = (box: Box, depth: number): CSSProperties => ({
   inlineSize: `${box.width.toString()}px`,
   insetBlockStart: `${box.y.toString()}px`,
   insetInlineStart: `${box.x.toString()}px`,
+  // In the desktop's coordinates rather than the stage's, which is what lets a
+  // window be dragged over the rail. A float laid out against the stage cannot
+  // leave it, and the stage begins where the rail ends — so most of the
+  // left-hand edge of the screen was somewhere a window could not go.
+  //
+  // The page spans the whole desktop, so the viewport *is* the desktop and a
+  // float at 0 is at its corner. That is the same space `<Screen>` places its
+  // regions in, which is why this is a change of nothing but reach: the
+  // numbers a float is given mean what they always meant, over a wider area.
+  position: "fixed",
   zIndex: FLOOR + depth,
 });
 
@@ -78,6 +88,22 @@ export const floatPlacement = (box: Box, depth: number): CSSProperties => ({
  * page could have painted over it.
  */
 export const draggingStyles = css({ opacity: 0.6 });
+
+/**
+ * The line around a floating window, so its edge is visible against whatever
+ * it is over.
+ *
+ * On the page rather than on the client: the element is a hole and the border
+ * is drawn around the hole, which is the one part of a window's frame the
+ * compositor does not have to be told about. A window on the stage needs none
+ * — it meets the rail and the screen edge, and there is nothing to tell it
+ * apart from.
+ */
+export const floatEdgeStyles = css({
+  borderColor: "borderStrong",
+  borderStyle: "solid",
+  borderWidth: "1px",
+});
 
 /**
  * A window the pointer goes straight through.
