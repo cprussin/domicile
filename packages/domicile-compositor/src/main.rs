@@ -98,6 +98,7 @@ mod dmabuf_descriptor;
 mod dmabuf_import;
 mod modifiers;
 mod outbound;
+mod over_window;
 mod scale;
 mod screens;
 mod shortcut;
@@ -116,6 +117,7 @@ use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
+use crate::over_window::texel_over;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::shortcut::Shortcuts;
@@ -175,6 +177,11 @@ mod grepped {
     /// The only trace the label's read-back leaves, and the whole of what says
     /// the round trip closed rather than stalled.
     pub const BAND_ANSWERED: &str = "a band answered";
+    /// `e2e-window-shows-through.sh`: what the chrome painted where a window
+    /// is. A window is a hole in the page, and this is the compositor looking
+    /// through it — the only thing in the tree that says a client's pixels
+    /// reach the screen at all.
+    pub const CHROME_OVER_WINDOW: &str = "the chrome over a window";
 }
 
 /// The renderer client buffers are imported on, and the policy that chose it.
@@ -1475,6 +1482,10 @@ struct DomicileCompositor {
     /// reason for asking separately. Kept between frames because asking is a
     /// round trip — a desktop that has not repainted redraws from these.
     band_textures: HashMap<usize, SurfaceTexture>,
+    /// The windows already looked at through the chrome. One reading each: a
+    /// page that paints over a window paints over it always, and a read-back
+    /// is a stall on the GPU rather than something to do every frame.
+    looked_over: HashSet<String>,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1674,7 +1685,15 @@ impl DomicileCompositor {
                 // chrome between one frame and the next.
                 self.ask_for_the_next_band();
             }
-            Arrival::Chrome => self.chrome_texture = texture,
+            Arrival::Chrome => {
+                self.chrome_texture = texture;
+                // A whole page just arrived, so it is the one to look through
+                // each window's hole in. Only a whole page: a band is one
+                // depth of the chrome and says nothing about what the others
+                // painted, and the flattened frame is what would hide a
+                // window if anything does.
+                self.look_over_the_windows();
+            }
             // Unreachable by construction — the arms above cover every
             // arrival that carries a usable frame — but stated so that the
             // one rule about `chrome_texture` is written where it is applied:
@@ -1684,6 +1703,110 @@ impl DomicileCompositor {
             Arrival::Nothing => return,
         }
         self.needs_present = true;
+    }
+
+    /// Look through each window's hole and report what the chrome painted
+    /// there.
+    ///
+    /// A `<domicile-app>` element is a hole: the client's buffer is drawn in
+    /// it and the chrome is composited over the top, so the window is visible
+    /// only because the page painted nothing where it is. Anything opaque
+    /// behind that hole fills it in and the window is gone — every window, if
+    /// the element spans the desktop, and nothing on screen says why.
+    ///
+    /// Once per window. A page that paints over a window paints over it
+    /// always, and reading a texel back stalls the GPU, so this is not a thing
+    /// to do per frame. The reading is the whole of what says a client's
+    /// pixels reach the screen; nothing else in the tree checks it.
+    fn look_over_the_windows(&mut self) {
+        let Some(chrome) = self.chrome_texture.as_ref() else {
+            return;
+        };
+        let page = chrome.logical_size;
+        let frame = (chrome.texture.width(), chrome.texture.height());
+        let y_inverted = chrome.y_inverted;
+        // Where each window is, from the same scene `present` draws from —
+        // read here rather than passed in, because this runs whenever a chrome
+        // frame arrives and `present` returns early on a desktop with no
+        // window of its own to draw into.
+        let placed: Vec<(String, SceneTransform)> = {
+            let host = self.hub.host.lock().unwrap();
+            host.scene()
+                .draw_order()
+                .into_iter()
+                .map(|portal| (portal.app_id.clone(), portal.surface_to_output()))
+                .collect()
+        };
+        // The window's own box, from the page's placement of its
+        // `<domicile-app>` — not from any texture the compositor holds for the
+        // client. It may hold none: a window on the copy path is drawn by the
+        // engine, and a desktop with no window of its own composites nothing.
+        // What is being looked at here is the page.
+        let unseen: Vec<(String, (f64, f64))> = placed
+            .into_iter()
+            .filter(|(app_id, _)| !self.looked_over.contains(app_id))
+            .map(|(app_id, surface_to_output)| {
+                // The middle of the window, which is the part a background
+                // behind it would cover if it covers any. `surface_to_output`
+                // maps the *unit square* onto the window's box — it is the
+                // portal's size scaled and then placed — so the middle is
+                // (0.5, 0.5) and not half of anything.
+                let centre = surface_to_output.apply(ScenePoint::new(0.5, 0.5));
+                (app_id, (centre.x, centre.y))
+            })
+            .collect();
+        for (app_id, centre) in unseen {
+            let Some(texel) = texel_over(centre, page, frame, y_inverted) else {
+                // Off the page, so there is no pixel of the chrome over it and
+                // nothing to say. Deliberately not marked as looked at: a
+                // window dragged back on is one to look through.
+                continue;
+            };
+            let Some(pixel) = self.chrome_pixel_at(texel) else {
+                // No renderer, or a read that failed — said where it failed,
+                // and left unmarked so the next frame tries again.
+                continue;
+            };
+            self.looked_over.insert(app_id.clone());
+            let alpha = pixel[3];
+            info!(
+                app_id,
+                alpha,
+                opaque = alpha == u8::MAX,
+                "{}",
+                grepped::CHROME_OVER_WINDOW
+            );
+            if alpha == u8::MAX {
+                warn!(
+                    app_id,
+                    "the chrome is opaque where this window is, so the window \
+                     cannot be seen: something behind its <domicile-app> \
+                     element is painting a background"
+                );
+            }
+        }
+    }
+
+    /// One texel of the chrome's last frame, as R, G, B, A.
+    fn chrome_pixel_at(&mut self, (x, y): (i32, i32)) -> Option<[u8; 4]> {
+        let texture = self.chrome_texture.as_ref()?.texture.clone();
+        let at = Rectangle::new((x, y).into(), (1, 1).into());
+        let gpu = self.gpu.as_mut()?;
+        let mapping = match gpu.renderer().copy_texture(&texture, at, Fourcc::Abgr8888) {
+            Ok(mapping) => mapping,
+            Err(err) => {
+                warn!(%err, "the chrome over a window would not copy");
+                return None;
+            }
+        };
+        let read = match gpu.renderer().map_texture(&mapping) {
+            Ok(read) => read,
+            Err(err) => {
+                warn!(%err, "the chrome over a window would not map");
+                return None;
+            }
+        };
+        <[u8; 4]>::try_from(read.get(..4)?).ok()
     }
 
     /// Which band this frame's own pixels say it is.
@@ -4839,6 +4962,9 @@ impl XdgShellHandler for DomicileCompositor {
             // it: a desktop with no chrome at all until something re-declared.
             self.bands = Bands::default();
             self.band_textures.clear();
+            // A new page is a new answer to what it paints over a window, so
+            // every window is one to look through again.
+            self.looked_over.clear();
             let keyboard = self.seat.get_keyboard().unwrap();
             let serial = SERIAL_COUNTER.next_serial();
             keyboard.set_focus(self, None, serial);
@@ -4862,6 +4988,9 @@ impl XdgShellHandler for DomicileCompositor {
             // And nothing is owed to a canvas that no longer exists.
             self.pending_damage.remove(&app_id);
             self.textures.remove(&app_id);
+            // An app id can come back — a client that reconnects, a portal
+            // re-created — and the window it names then is a different one.
+            self.looked_over.remove(&app_id);
             if self.pointer_app.as_deref() == Some(app_id.as_str()) {
                 self.pointer_app = None;
             }
@@ -5402,6 +5531,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pending_key: None,
         bands: Bands::default(),
         band_textures: HashMap::new(),
+        looked_over: HashSet::new(),
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
