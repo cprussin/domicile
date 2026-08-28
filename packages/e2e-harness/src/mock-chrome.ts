@@ -1,13 +1,13 @@
 // biome-ignore-all lint/suspicious/noConsole: this harness's whole output is the frames it prints
 
-// Headless stand-in for the chrome, driven by scripts/e2e-dmabuf.sh and
-// scripts/e2e-hidpi.sh: connect to the compositor's chrome socket, complete
-// the handshake, and print every frame the host pushes so the calling script
-// can assert on them.
+// Headless stand-in for the chrome, driven by scripts/e2e-dmabuf.sh: connect
+// to the compositor's chrome socket, complete the handshake, and print every
+// frame the host pushes so the calling script can assert on them.
 //
-// `e2e-chrome.sh` drove it too, until that script's four claims each got a
-// killer in `cargo test` and it went. What is left here is what needs a frame
-// out of a real GPU or at a real density — neither of which the Rust suite has.
+// `e2e-chrome.sh` and `e2e-hidpi.sh` drove it too, until each script's claims
+// got a killer in `cargo test` and they went. The density half is
+// `tests/density.rs` now, which reaches a 2x frame with no bun in the picture.
+// One caller and one reason left: a frame out of a real GPU.
 
 import { setDevicePixelRatioMessage } from "@domicile/chrome-sdk/chrome-message";
 
