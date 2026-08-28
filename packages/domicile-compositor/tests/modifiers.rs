@@ -25,10 +25,11 @@
 //! of those and is unit-tested on its own; what was not tested is the call
 //! site — that the compositor asks it at all, and broadcasts what it answers.
 //!
-//! Uncovered *here*, that is. `e2e-stuck-key.sh` already covers the release on
-//! reload from the other side, reading it off a real client's own
-//! `wl_keyboard.modifiers`. What is new below is the chrome *message* on
-//! reload, not the release itself.
+//! Uncovered *here*, that is. `tests/stuck_keys.rs` covers the release on
+//! reload from the other side, off a real client's own trace. The two come
+//! apart: a compositor that clears the seat but never forwards the release
+//! passes this file and fails that one, because
+//! `tell_the_chromes_the_modifiers` reads the seat and the seat is clear.
 //!
 //! # Nothing here needs a client
 //!

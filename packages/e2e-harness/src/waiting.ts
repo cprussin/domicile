@@ -5,9 +5,8 @@
 // Two of the modules importing this one had a byte-identical copy of `rest`
 // before it existed.
 //
-// `keystroke-driver.ts` and `reload-typist.ts` still spell their own as
-// `sleep`. Left alone — this diff has no business in them — so this is
-// not yet the whole package.
+// `keystroke-driver.ts` still spells its own as `sleep`. Left alone — this
+// diff has no business in it — so this is not yet the whole package.
 
 /** Resolves after `ms` milliseconds. */
 export const rest = (ms: number): Promise<void> =>

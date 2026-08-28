@@ -153,10 +153,10 @@ use smithay::backend::winit::WinitGraphicsBackend;
 /// read by that test — but it lives in another file, so no rename catches both
 /// at once and the disagreement still surfaces as a failure.
 ///
-/// Three of at least nine: `e2e-chrome-layer.sh` and `e2e-dmabuf.sh` grep for
-/// `toplevel mapped`, `broadcast app frame`, `chrome client connected` and
-/// more, none of them named or pinned. Those predate this change; these three
-/// are the ones it introduced or newly depended on.
+/// Three of at least nine: `e2e-dmabuf.sh` greps for `toplevel mapped`,
+/// `broadcast app frame`, `chrome client connected` and more, none of them
+/// named or pinned, and so do several `tests/` files. Those predate this
+/// change; these three are the ones it introduced or newly depended on.
 mod grepped {
     /// `e2e-hidpi.sh`: told a density it could not read.
     pub const UNPARSEABLE: &str = "unparseable chrome message";
@@ -709,6 +709,24 @@ fn write_responses(
     writer: &Arc<Mutex<UnixStream>>,
     responses: Vec<HostMessage>,
 ) -> bool {
+    // Before the lock, and not a fast path for its own sake. This runs at the
+    // end of *every* iteration of the read loop, and the whole high-volume
+    // input path — `Key`, `PointerMotion`, `PointerButton`, `PointerAxis`,
+    // `CloseApp`, `GrabShortcut` — answers with nothing. Taking the writer
+    // lock to write zero bytes parks the reader behind `serve_outbound`, which
+    // is blocked in `write_all` to a chrome that is not reading; the
+    // compositor then stops reading *that chrome* and everything it says
+    // afterwards is dropped on the floor. A chrome that only says things is
+    // the ordinary case, so this was the ordinary case too.
+    //
+    // Guarded by `an_answer_with_nothing_in_it_does_not_wait_for_the_writer`
+    // below, which says the invariant directly. `tests/stuck_keys.rs` also
+    // fails without this, twelve runs of twelve — that is the evidence the bug
+    // was real rather than the guard, since it needs a socket to fill up under
+    // parallel load to say so.
+    if responses.is_empty() {
+        return true;
+    }
     let mut writer = writer.lock().unwrap();
     for message in responses {
         let message = freshened(hub, message);
@@ -3050,12 +3068,15 @@ impl DomicileCompositor {
         info!("the chrome has the window's keyboard");
         let serial = SERIAL_COUNTER.next_serial();
         keyboard.set_focus(self, Some(surface), serial);
-        // The brain as well as the seat. Every route that hands the keyboard
-        // back to the page comes through here — a click on the desktop,
-        // alt-tabbing into Domicile, the chrome's own window mapping — and
-        // moving the seat without telling the brain leaves `keyboard_target`
-        // naming a window the compositor is no longer typing into, with the
-        // chrome still marking it active.
+        // The brain as well as the seat. Every route through *this* function —
+        // the chrome's own window mapping, a window going away, alt-tabbing
+        // into Domicile — and moving the seat without telling the brain leaves
+        // `keyboard_target` naming a window the compositor is no longer typing
+        // into, with the chrome still marking it active.
+        //
+        // Not a click on the desktop, which this said for a while: that is
+        // `focus_pointed_at`, which broadcasts the same decision from its own
+        // arm and never comes through here.
         broadcast_focus_decision(&self.hub, ChromeMessage::FocusChrome);
     }
 
@@ -6024,6 +6045,57 @@ mod tests {
                 }],
             ),
             "a write to a peer that is gone ends the connection rather than looping"
+        );
+    }
+
+    #[test]
+    fn an_answer_with_nothing_in_it_does_not_wait_for_the_writer() {
+        // The read loop calls this at the end of every iteration, and every
+        // chrome message but `hello` answers with nothing — so waiting here
+        // for a writer `serve_outbound` is holding stops the compositor
+        // reading that chrome at all, and everything it says afterwards is
+        // dropped. That was a real flake before the early return: one run in
+        // twenty-four of the whole workspace.
+        //
+        // A unit test rather than the integration one that found it: the
+        // behaviour is one sentence about this function, and the integration
+        // failure needs a socket to fill up under parallel load to say it.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (_page, compositor) = UnixStream::pair().expect("a socket pair");
+        let writer = Arc::new(Mutex::new(
+            compositor.try_clone().expect("the stream clones"),
+        ));
+
+        // `serve_outbound`, mid-`write_all` to a chrome that is not reading.
+        //
+        // Handshaked rather than slept past. A settle of "long enough, surely"
+        // fails in the direction that hides the bug: if the main thread wins
+        // the lock, the call it is timing never waits and a *mutated* build
+        // passes. Waiting for the holder to say it has the lock removes the
+        // race rather than making it unlikely — and lets the hold be a second
+        // rather than two, since none of it is spent settling.
+        let (took_it, holds) = channel();
+        let held = writer.clone();
+        let holder = thread::spawn(move || {
+            let _guard = held.lock().unwrap();
+            took_it.send(()).expect("the test is still listening");
+            sleep(Duration::from_secs(1));
+        });
+        holds.recv().expect("the holder takes the lock and says so");
+
+        let started = Instant::now();
+        let answered = write_responses(&hub, &writer, Vec::new());
+        let took = started.elapsed();
+        holder.join().expect("the holder ends");
+
+        assert!(
+            answered,
+            "an answer with nothing in it is not a failed write"
+        );
+        assert!(
+            took < Duration::from_millis(500),
+            "an empty answer waited {took:?} for a writer another thread was holding"
         );
     }
 
