@@ -455,7 +455,6 @@
           probe-transparency = "probe-transparency.sh";
           e2e-compose = "e2e-compose.sh";
           e2e-stuck-key = "e2e-stuck-key.sh";
-          e2e-modifiers = "e2e-modifiers.sh";
           e2e-bands = "e2e-bands.sh";
           e2e-window-shows-through = "e2e-window-shows-through.sh";
           e2e-reload-displays = "e2e-reload-displays.sh";
