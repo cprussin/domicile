@@ -46,9 +46,40 @@ pub fn logical_size(buffer: (u32, u32), buffer_scale: i32) -> (u32, u32) {
     ((buffer.0 / scale).max(1), (buffer.1 / scale).max(1))
 }
 
+/// The logical size of a desktop that covers a window `physical` device pixels
+/// across on a display of `scale_factor` device pixels per CSS pixel.
+///
+/// The companion to [`output_scale`], and the reason the two are separate:
+/// they answer the same display with different numbers on purpose.
+/// `wl_output.scale` has to be a whole number and rounds 1.5 *up* to 2, so
+/// that clients draw more pixels than the display has and are downscaled
+/// rather than stretched. The desktop's size is not free to round with it —
+/// it is how much room there is, which the display settles and no protocol
+/// constrains. Dividing the window by the rounded scale instead makes a
+/// 1.5x display a desktop two thirds the size of the screen it covers, with
+/// every CSS pixel in it drawn a third too large; at 1.25 it is 1.6 times too
+/// large. The mode that goes out is this size times the integer scale, which
+/// is larger than the window and is exactly the overdraw that keeps it sharp.
+///
+/// `scale_factor` comes from a window system rather than from a client, and is
+/// still not trusted: a NaN would make the desktop's size NaN, and the cast
+/// that follows turns that into a number nobody chose. Anything not usable as
+/// a divisor leaves the desktop the size of its window, which is what a
+/// display of 1 would give and what [`output_scale`] independently decides for
+/// the same input.
+pub fn desktop_size(physical: (i32, i32), scale_factor: f64) -> (i32, i32) {
+    let ratio = if scale_factor.is_finite() && scale_factor > 1.0 {
+        scale_factor
+    } else {
+        1.0
+    };
+    let along = |pixels: i32| ((f64::from(pixels) / ratio).round() as i32).max(1);
+    (along(physical.0), along(physical.1))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{logical_size, output_scale};
+    use super::{desktop_size, logical_size, output_scale};
 
     #[test]
     fn an_ordinary_display_asks_for_no_scaling() {
@@ -118,5 +149,55 @@ mod tests {
         // A buffer smaller than its own scale violates the protocol, but a zero
         // here would divide by zero in the chrome's pointer mapping.
         assert_eq!(logical_size((1, 1), 4), (1, 1));
+    }
+
+    #[test]
+    fn a_desktop_is_as_wide_as_its_display_not_as_its_rounded_scale() {
+        // The failure this exists for. `output_scale` rounds 1.5 up to 2 so
+        // that buffers stay sharp, and dividing the window by *that* makes the
+        // desktop a third smaller than the display it covers — every CSS pixel
+        // in it drawn 1.33 times too large. At 1.25 the same slip is 1.6.
+        assert_eq!(desktop_size((1920, 1200), 1.5), (1280, 800));
+        assert_eq!(desktop_size((1920, 1200), 1.25), (1536, 960));
+    }
+
+    #[test]
+    fn a_whole_ratio_divides_exactly() {
+        assert_eq!(desktop_size((2560, 1600), 2.0), (1280, 800));
+        assert_eq!(desktop_size((1280, 800), 1.0), (1280, 800));
+    }
+
+    #[test]
+    fn a_desktop_below_one_device_pixel_per_css_pixel_is_its_own_size() {
+        // Wayland cannot advertise a scale under 1 and `output_scale` reports
+        // 1 for one, so the desktop is the window: enlarging it here would
+        // disagree with the scale the same display was advertised at.
+        assert_eq!(desktop_size((1280, 800), 0.5), (1280, 800));
+    }
+
+    #[test]
+    fn a_nonsense_ratio_leaves_the_desktop_the_size_of_its_window() {
+        // `scale_factor` is a float from a window system and reaches this
+        // unchecked; a NaN divisor would make the desktop's size NaN and the
+        // cast that follows is UB-adjacent nonsense rather than a number.
+        assert_eq!(desktop_size((1280, 800), f64::NAN), (1280, 800));
+        assert_eq!(desktop_size((1280, 800), f64::INFINITY), (1280, 800));
+        assert_eq!(desktop_size((1280, 800), -2.0), (1280, 800));
+        assert_eq!(desktop_size((1280, 800), 0.0), (1280, 800));
+    }
+
+    #[test]
+    fn a_desktop_never_goes_empty() {
+        // A window can be dragged to nothing, and a zero here divides by zero
+        // in every mapping that takes the desktop's size as its denominator.
+        assert_eq!(desktop_size((0, 0), 2.0), (1, 1));
+        assert_eq!(desktop_size((1, 1), 4.0), (1, 1));
+    }
+
+    #[test]
+    fn a_fraction_of_a_pixel_rounds_to_the_nearest_one() {
+        // 1365.33 rather than 1365 or 1366 exactly; either neighbour is half a
+        // pixel out and the nearest is the one that stays centred.
+        assert_eq!(desktop_size((4096, 2160), 3.0), (1365, 720));
     }
 }
