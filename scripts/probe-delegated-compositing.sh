@@ -40,6 +40,11 @@ WANTED_FEATURES="WaylandOverlayDelegation"
 # read exactly like a run that disabled something and saw no change.
 COLOUR_FEATURE="WaylandWpColorManagerV1"
 
+# Spelled the same way the compositor logs them, since these are read back out
+# of its own output.
+AUGMENTER_BOUND="the engine bound surface_augmenter"
+AUGMENTER_ASKED="the engine asked the augmenter for something"
+
 # The page's size, named here because the buffer sizes on the wire are read
 # against it: a buffer the size of the page is the page delegated as one thing,
 # and a buffer smaller than it is a quad.
@@ -56,7 +61,8 @@ APPDIR="$(mktemp -d)"
 APP=""
 
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
-  "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+  "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" \
+  --experiment-augmenter >"$COMPLOG" 2>&1 &
 COMP=$!
 cleanup() { kill -9 "$COMP" $APP 2>/dev/null; rm -rf "$COMPLOG" "$OFFLOG" "$FEWLOG" "$ONLOG" "$NOCOLOURLOG" "$APPDIR"; }
 trap cleanup EXIT
@@ -135,6 +141,43 @@ run_engine() {
   APP=""
 }
 subsurfaces() { grep -ac "get_subsurface" "$1" 2>/dev/null || true; }
+
+# What the engine asked of the augmenter, which is this experiment's whole
+# reason for existing.
+#
+# `exo`, the ChromeOS compositor, is the one server known to make the engine
+# send a quad per composited layer, and `surface_augmenter` is its own protocol
+# and the last difference between that server and this one. The compositor
+# advertises it under `--experiment-augmenter` and implements *none* of it: it
+# logs what is asked and honours nothing. That is only defensible because the
+# flag defaults off and cannot reach a desktop, and because what the engine
+# asks for is exactly the evidence wanted.
+#
+# A `kind="subsurface"` is the engine naming a quad it means to place. That
+# line appearing at all is the answer.
+augmenter() {
+  if ! grep -aq "$AUGMENTER_BOUND" "$COMPLOG"; then
+    echo "NO: it never bound the augmenter, though one was advertised."
+    echo "  A client binds the globals it wants when it enumerates the"
+    echo "  registry, before it renders anything, so this is not a decision"
+    echo "  the engine deferred. It is not looking for an augmenter at all,"
+    echo "  and it does not gate delegation on finding a compositor shaped"
+    echo "  like exo. That closes the last lever, and the negative result in"
+    echo "  docs/architecture/WINDOW-COMPOSITING.md is final."
+    return
+  fi
+  echo "YES: it bound the augmenter. What it then asked for:"
+  local asked
+  asked=$(sed 's/\x1b\[[0-9;]*m//g' "$COMPLOG" | grep -a "$AUGMENTER_ASKED" \
+    | grep -oE 'kind="[a-z ]*"' | sort | uniq -c | sed 's/^ *//')
+  if [ -z "$asked" ]; then
+    echo "  ...and then asked it for nothing."
+  else
+    printf '%s\n' "$asked" | sed 's/^/  /'
+    echo "  A kind=\"subsurface\" is the engine naming a quad it means to"
+    echo "  place. One per composited layer is the layer tree."
+  fi
+}
 
 # What Chromium said about promoting quads, for an answer that is not yes.
 #
@@ -367,6 +410,10 @@ if [ -z "$MISSING" ]; then
 else
   echo "$MISSING" | sed 's/^/  /'
 fi
+
+echo
+echo "== did the engine want an augmenter? =="
+augmenter
 
 echo
 echo "== the answer =="
