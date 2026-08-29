@@ -310,12 +310,59 @@ Phase 3 — own the display:
 The chrome-as-a-texture step this phase used to carry is gone: the engine
 commits dmabufs as our client, so its surface needs no capture path of its own.
 
-## Delegated compositing: the layer tree without a fork
+## Delegated compositing: measured, and the layer tree does not arrive
 
-**Chromium already emits its layer tree as Wayland surfaces, and the only
-reason it does not do so here is that no Linux compositor has implemented what
-it asks for.** Domicile is a compositor. That makes this ours rather than
-Chromium's, and it moves the work out of an engine fork and into Rust we own.
+**This section used to open by asserting that Chromium already emits its layer
+tree as Wayland surfaces, and that the only reason it did not do so here was
+that no Linux compositor had implemented what it asks for. That was the
+premise this whole route rested on, it has now been measured, and it is
+false for the engine as it ships.**
+
+Everything the engine asked for was implemented — `wp_viewporter` honoured
+rather than merely advertised, `wp_single_pixel_buffer_manager_v1`,
+`wp_content_type_manager_v1`, and its own `overlay_prioritizer` and
+`zcr_alpha_compositing_v1`. One protocol was left, `wp_color_management_surface_v1`,
+and it was ruled out rather than assumed: with the engine's own
+`WaylandWpColorManagerV1` feature switched off, so that the protocol is out of
+the question entirely, nothing changes.
+
+What `scripts/probe-delegated-compositing.sh` measures on a machine with a
+render node, with `WaylandOverlayDelegation` on:
+
+| | |
+|---|---|
+| subsurfaces, delegation off, 8 composited layers | 0 |
+| subsurfaces, delegation on, 1 composited layer | 1 |
+| subsurfaces, delegation on, 8 composited layers | **1** |
+| subsurfaces with colour management disabled | 1 |
+| `place_above` / `place_below` | **0** |
+| buffers allocated, by size, for a 600x400 page | **632x442, and only that** |
+
+The count does not follow the page, nothing is ever stacked, and the single
+buffer is the size of the whole page. That is the flat raster with one
+`wl_subsurface` in front of it: a delegated *root*, not a delegated tree. The
+engine is still flattening every layer into one quad and handing it over as one
+quad.
+
+**So the fork question is reopened, and this is the evidence that reopens it.**
+The argument for not forking was that the layer tree was already on offer and
+only needed a compositor to accept it. It is not on offer. What remains is
+either an engine that does emit one — a different build, a different
+configuration, or a fork — or living with a flattened page and the band
+machinery that fakes stacking on top of it.
+
+**One lever is untested**, and it is the last row of the table below that was
+never implemented: `surface-augmenter`, Chromium's own `exo` protocol. The
+engine never asks for it, so nothing in its logs suggests it matters, and on
+ChromeOS — where delegated compositing does produce a quad per layer — `exo`
+provides it. Whether the engine gates per-quad delegation on finding an
+exo-shaped compositor is not answerable from the outside; the only way to know
+is to implement it and re-run the probe. That is the one experiment left before
+the negative result above is final.
+
+Everything below this line was written while the premise still stood. It is
+kept because the protocol work it describes is real, was done, and is what
+makes the measurement above trustworthy — the engine got what it asked for.
 
 `WaylandOverlayDelegation` is a **runtime feature flag, not absent code**. It
 defaults on for LaCrOS — which runs against `exo`, the ChromeOS compositor that
@@ -471,7 +518,7 @@ size of two `exo` protocols, not whether the road exists.
   | **region-clipped** | a clip-rects field on `Layer`, passed to `render_texture`'s `instances` (which `draw_layers` currently passes `None`); push the chrome `Layer` into `layers` once per band | N quads for N bands. Correct only where the upper band is **opaque** over the lower — see below |
   | **raster per band** | the chrome rasterises N views of the same DOM, each with the other bands hidden, and the SDK generates the views | N rasters, plus transport: `chrome_toplevel` and `chrome_texture` are single `Option`s, so N textures means N surfaces or N frames the compositor caches |
   | **many surfaces** | one transparent toplevel per band | the transport cost above, and the shell must partition its DOM — Wayland back in the page |
-  | **layer tree** | the compositor merges the engine's compositing layers with the portals in one z-ordered list | **a Chromium fork** *by that route*. CEF's only route out is `OnAcceleratedPaint` — *one* composited texture, the same flat texture. Per-layer depths mean `cc::LayerTreeHost`, the engine-internals project with a per-release rebase cost that this doc already declined. There is a second route to the same place that is not a fork — see **Delegated compositing** below |
+  | **layer tree** | the compositor merges the engine's compositing layers with the portals in one z-ordered list | **a Chromium fork** *by that route*. CEF's only route out is `OnAcceleratedPaint` — *one* composited texture, the same flat texture. Per-layer depths mean `cc::LayerTreeHost`, the engine-internals project with a per-release rebase cost that this doc already declined. A second route was thought to reach the same place without a fork — delegated compositing — and it has since been measured and does not: the engine delegates the page as one quad however many layers it has. See **Delegated compositing** above |
 
   **Region-clipped first, and its restriction is not a corner case.** Take
   wallpaper, window, panel. Where the panel overlaps the window, the single
