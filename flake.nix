@@ -446,6 +446,7 @@
           measure = "measure.sh";
           measure-round-trip = "measure-round-trip.sh";
           e2e-electron = "e2e-electron.sh";
+          e2e-a-dense-display = "e2e-a-dense-display.sh";
           e2e-shell-launch = "e2e-shell-launch.sh";
           e2e-late-chrome = "e2e-late-chrome.sh";
           e2e-chrome-without-a-host = "e2e-chrome-without-a-host.sh";

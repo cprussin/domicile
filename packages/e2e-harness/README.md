@@ -43,12 +43,12 @@ independent of the file it lives in: it reads `PASSED`, which only `passed`
 sets, and a script that fails to source the file at all is caught by the third
 rule below rather than by the count.
 
-Five scripts of the twenty-three in `scripts/`, not all of them, source the
-helpers; rules 2 and 3 below are vacuous for the other eighteen, and rule 1 is
+Five scripts of the twenty-five in `scripts/`, not all of them, source the
+helpers; rules 2 and 3 below are vacuous for the other twenty, and rule 1 is
 all that reaches them. Worth knowing before writing the next one.
 
-Twenty-three because that is what the sweep reads — every `.sh` in the
-directory, as the paragraph below says, not the fifteen `check.sh` runs.
+Twenty-five because that is what the sweep reads — every `.sh` in the
+directory, as the paragraph below says, not the sixteen `check.sh` runs.
 
 That count is measured rather than remembered. It read "three scripts, not
 sixteen … the other thirteen" until someone counted, and every number in it
