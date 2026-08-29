@@ -34,14 +34,14 @@ export XDG_RUNTIME_DIR="/tmp/domicile-rt-delegate"   # short: Unix socket path l
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 SOCK="$XDG_RUNTIME_DIR/c.sock"
-COMPLOG="$(mktemp)"; OFFLOG="$(mktemp)"; ONLOG="$(mktemp)"
+COMPLOG="$(mktemp)"; OFFLOG="$(mktemp)"; FEWLOG="$(mktemp)"; ONLOG="$(mktemp)"
 APPDIR="$(mktemp -d)"
 APP=""
 
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
   "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
-cleanup() { kill -9 "$COMP" $APP 2>/dev/null; rm -rf "$COMPLOG" "$OFFLOG" "$ONLOG" "$APPDIR"; }
+cleanup() { kill -9 "$COMP" $APP 2>/dev/null; rm -rf "$COMPLOG" "$OFFLOG" "$FEWLOG" "$ONLOG" "$APPDIR"; }
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break; sleep 0.05; done
 if [ ! -S "$XDG_RUNTIME_DIR/wayland-1" ]; then
@@ -56,10 +56,11 @@ if [ ! -S "$XDG_RUNTIME_DIR/wayland-1" ]; then
   exit 1
 fi
 
-# A page whose layer tree is not a single quad. `will-change: transform` is the
+# A page whose layer count this script chooses. `will-change: transform` is the
 # ordinary web-developer way to ask for a compositing layer, which is the point:
 # if delegation works, the thing that arrives as separate subsurfaces is the
-# thing a page author already knows how to ask for.
+# thing a page author already knows how to ask for — and it arrives once per
+# layer, which is what makes the count mean something.
 cat >"$APPDIR/package.json" <<'JSON'
 { "name": "domicile-delegation-probe", "version": "0.0.0", "main": "main.js" }
 JSON
@@ -75,7 +76,7 @@ app.whenReady().then(() => {
     "data:text/html," +
       encodeURIComponent(
         "<html><body style='margin:0;background:#222'>" +
-          [0, 1, 2, 3, 4].map(layer).join("") +
+          Array.from({ length: Number(process.env.LAYERS) }, (_, i) => layer(i)).join("") +
           "</body></html>",
       ),
   );
@@ -89,7 +90,8 @@ JS
 # either exists on the wire or it does not; reading it off the protocol means
 # the answer does not depend on Chromium keeping a log line we happened to grep
 # for. NO_COLOR because libwayland otherwise writes SGR escapes into the trace.
-run_engine() { # $1 = extra features, $2 = logfile
+run_engine() { # $1 = extra features, $2 = logfile, $3 = how many layers the page draws
+  LAYERS="$3" \
   NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
     electron --no-sandbox --ozone-platform=wayland \
     --enable-features="UseOzonePlatform$1" \
@@ -113,28 +115,47 @@ fi
 echo "PASS: $(ls /dev/dri/renderD* | tr '\n' ' ')"
 
 echo
+# Three runs, not two, and the third is what makes the answer mean something.
+#
+# "More subsurfaces than the flat path" is too weak a bar, and this script set
+# it and passed on `1`: a single subsurface is equally what a compositor gets
+# when Chromium wraps the whole page in one delegated root and goes on
+# flattening everything into it. What tells a layer *tree* from a layer is
+# whether the count follows the page. So the page is drawn once with one
+# composited layer and once with eight, and the difference between those two
+# is the only number that answers the question.
+LAYERS_FEW=1
+LAYERS_MANY=8
+DELEGATED=",WaylandOverlayDelegation,DelegatedCompositing"
+
 echo "== baseline: the engine with delegation off =="
-run_engine "" "$OFFLOG"
+run_engine "" "$OFFLOG" "$LAYERS_MANY"
 if ! grep -aq "wl_compositor" "$OFFLOG"; then
   echo "FAIL: the engine never spoke to Domicile — nothing below this means anything."
   cut -c1-200 "$OFFLOG" | tail -12 | sed 's/^/  /'
   exit 1
 fi
 OFF=$(subsurfaces "$OFFLOG")
-echo "$OFF subsurfaces on the flat path"
+echo "$OFF with $LAYERS_MANY layers and no delegation"
 
 echo
-echo "== the engine with WaylandOverlayDelegation,DelegatedCompositing =="
-run_engine ",WaylandOverlayDelegation,DelegatedCompositing" "$ONLOG"
+echo "== delegation on, and the page kept small =="
+run_engine "$DELEGATED" "$FEWLOG" "$LAYERS_FEW"
+FEW=$(subsurfaces "$FEWLOG")
+echo "$FEW with $LAYERS_FEW layer"
+
+echo
+echo "== delegation on, and the page eight layers deep =="
+run_engine "$DELEGATED" "$ONLOG" "$LAYERS_MANY"
 ON=$(subsurfaces "$ONLOG")
-echo "$ON subsurfaces with delegation on"
+echo "$ON with $LAYERS_MANY layers"
 
 echo
 echo "== did the GPU process survive? =="
 if grep -aq "Exiting GPU process due to errors" "$ONLOG"; then
   echo "UNKNOWN: the GPU process exited during initialisation even with a render node."
   echo "  Everything below the GPU is unanswerable until this is fixed; the"
-  echo "  subsurface count above is measuring the software path twice."
+  echo "  counts above are measuring the software path."
   grep -aiE "drm render node|InitializeGL|gpu process" "$ONLOG" | cut -c1-160 | tail -6 | sed 's/^/  /'
   exit 1
 fi
@@ -153,18 +174,24 @@ fi
 
 echo
 echo "== the answer =="
-if [ "$ON" -gt "$OFF" ]; then
-  echo "YES: delegation produced $((ON - OFF)) subsurfaces the flat path did not."
-  echo "  The layer tree arrives over a protocol we already speak. Bands can go:"
-  echo "  a window goes between two quads because we draw both and order them."
-elif [ "$ON" -eq 0 ]; then
+GREW=$((ON - FEW))
+WANTED=$((LAYERS_MANY - LAYERS_FEW))
+if [ "$GREW" -ge "$WANTED" ]; then
+  echo "YES: seven more layers on the page brought $GREW more subsurfaces."
+  echo "  The count follows the page, so what arrives is the layer tree rather"
+  echo "  than one delegated root with everything flattened into it. Bands can"
+  echo "  go: a window goes between two quads because we draw both and order"
+  echo "  them, and z-index means what it means anywhere else."
+elif [ "$ON" -gt "$OFF" ]; then
+  echo "PARTLY: delegation makes subsurfaces the flat path does not — $ON against"
+  echo "  $OFF — but the count does not follow the page: $FEW for $LAYERS_FEW layer"
+  echo "  and $ON for $LAYERS_MANY. That is a delegated *root* rather than a"
+  echo "  delegated tree, and the page is still being flattened into it. Bands"
+  echo "  cannot go on this. The list above is what to implement next; where it"
+  echo "  is empty, the next question is Chromium's own vmodule output for why"
+  echo "  it is declining to promote each layer."
+else
   echo "NO: not one subsurface, either way."
   echo "  The engine is still flattening the page into a single raster. If the"
-  echo "  list above is non-empty, implement those and run this again — Chromium"
-  echo "  asks for less each time. If it is empty, the flag is not enough on this"
-  echo "  build and bands stay."
-else
-  echo "NO: $ON subsurfaces with delegation on, $OFF without — the flag changed nothing."
-  echo "  Those subsurfaces are Chromium's ordinary overlay use, not the layer"
-  echo "  tree. Same next step as above: the list of protocols it still wants."
+  echo "  list above is non-empty, implement those and run this again."
 fi
