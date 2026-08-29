@@ -1537,6 +1537,12 @@ struct DomicileCompositor {
     /// leaves here the moment it settles. See
     /// `over_window::what_the_chrome_shows`.
     looks: HashMap<String, u32>,
+    /// The last reading taken of each window still being looked at, and how
+    /// many times the reading has moved. See
+    /// `over_window::what_the_chrome_shows`: the question is whether the
+    /// chrome over a window keeps moving with the client, which no single
+    /// reading can answer. A window leaves here with its `looks` count.
+    last_seen: HashMap<String, ([u8; 4], u32)>,
     /// The windows whose reading is final, so they are looked at no more.
     /// See `over_window::what_the_chrome_shows`.
     settled: HashSet<String>,
@@ -1841,20 +1847,31 @@ impl DomicileCompositor {
             let taken = self.looks.entry(app_id.clone()).or_insert(0);
             let looks = *taken;
             *taken += 1;
-            match what_the_chrome_shows(pixel[3], looks) {
+            // Counted here rather than inside the verdict, which stays a
+            // function of three numbers and testable as one. The first reading
+            // of a window has moved zero times, which is what a window that
+            // has only ever been looked at once has to say.
+            let seen = self.last_seen.entry(app_id.clone()).or_insert((pixel, 0));
+            if seen.0 != pixel {
+                *seen = (pixel, seen.1 + 1);
+            }
+            let changes = seen.1;
+            match what_the_chrome_shows(changes, pixel[3], looks) {
                 // Not an answer. Left unsettled, so the next whole-page frame
                 // asks again.
                 Verdict::LookAgain => {}
                 Verdict::OnScreen => {
-                    self.settle(&app_id, pixel);
+                    self.settle(&app_id, pixel, changes);
                 }
                 Verdict::Hidden => {
-                    self.settle(&app_id, pixel);
+                    self.settle(&app_id, pixel, changes);
                     warn!(
                         app_id,
-                        "the chrome is fully opaque where this window is, so the \
-                         window cannot be seen: something behind its \
-                         <domicile-app> element is painting a background"
+                        "what the chrome shows over this window never changes, so \
+                         the window cannot be seen: the client redraws in a \
+                         different colour every frame and a page following it \
+                         cannot hold still, so what is there is the page's own \
+                         painting over the <domicile-app> element"
                     );
                 }
                 // The absence of a verdict rather than one, so it is said in a
@@ -1864,6 +1881,7 @@ impl DomicileCompositor {
                 // and a texel read back every frame for ever is a stall.
                 Verdict::NothingToRead => {
                     self.looks.remove(&app_id);
+                    self.last_seen.remove(&app_id);
                     self.settled.insert(app_id.clone());
                     info!(
                         app_id,
@@ -1885,15 +1903,21 @@ impl DomicileCompositor {
     /// deciding is the whole question. It earned that immediately — a run
     /// against a deliberate `#123456` behind the stage read `rgb="#193253"`,
     /// which is the half-opaque window composited over it to the byte.
-    fn settle(&mut self, app_id: &str, pixel: [u8; 4]) {
+    fn settle(&mut self, app_id: &str, pixel: [u8; 4], changes: u32) {
         self.looks.remove(app_id);
+        self.last_seen.remove(app_id);
         self.settled.insert(app_id.to_string());
         let alpha = pixel[3];
+        let hex = |texel: [u8; 4]| format!("#{:02x}{:02x}{:02x}", texel[0], texel[1], texel[2]);
         info!(
             app_id,
             alpha,
             opaque = alpha == u8::MAX,
-            rgb = format!("#{:02x}{:02x}{:02x}", pixel[0], pixel[1], pixel[2]),
+            rgb = hex(pixel),
+            // How many times the reading moved to get here, because that and
+            // not the colour is what the verdict turned on — a line carrying
+            // only the last reading cannot be read back into the reason.
+            changes,
             "{}",
             grepped::CHROME_OVER_WINDOW
         );
@@ -5799,6 +5823,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         band_textures: HashMap::new(),
         chrome_is_current: false,
         frames_held: 0,
+        last_seen: HashMap::new(),
         looks: HashMap::new(),
         settled: HashSet::new(),
         chrome_toplevel: None,
@@ -6121,43 +6146,20 @@ mod tests {
                 include_str!("../../../scripts/e2e-window-shows-through.sh"),
                 "e2e-window-shows-through.sh",
             ),
-            (
-                // The *value*, not just the message. That check passes on the
-                // texel over the window being the window's own half-opaque
-                // pixels rather than merely on it not being fully opaque, so
-                // the number the client draws at is part of the agreement and
-                // this is what stops the two drifting.
-                format!(
-                    "alpha={} opaque=false",
-                    domicile_test_client::TRANSLUCENT_ALPHA
-                ),
-                include_str!("../../../scripts/e2e-window-shows-through.sh"),
-                "e2e-window-shows-through.sh",
-            ),
-            // And the colour, which is what the alpha cannot do on its own: a
-            // background behind the element whose own alpha happens to be the
-            // client's reads as `alpha=128 opaque=false` and is the background
-            // rather than the window. Measured — a `rgb(18 52 86 / 50%)`
-            // behind the stage reads `rgb="#091a2b"` where the window reads
-            // `rgb="#101828"`. Premultiplied, which is what the chrome
-            // commits, so these are the low three bytes of the colours the
-            // client draws.
-            (
-                format!(
-                    "#{:06x}",
-                    domicile_test_client::TRANSLUCENT_COLOURS[0] & 0xff_ffff
-                ),
-                include_str!("../../../scripts/e2e-window-shows-through.sh"),
-                "e2e-window-shows-through.sh",
-            ),
-            (
-                format!(
-                    "#{:06x}",
-                    domicile_test_client::TRANSLUCENT_COLOURS[1] & 0xff_ffff
-                ),
-                include_str!("../../../scripts/e2e-window-shows-through.sh"),
-                "e2e-window-shows-through.sh",
-            ),
+            // The client's alpha and its two colours used to be pinned here
+            // too, because that check asserted on all three. It no longer
+            // mentions any of them: it asks whether the reading *keeps moving*
+            // instead, which is a claim about the sequence rather than about
+            // any value in it. So there is nothing left for a row to hold —
+            // renaming `TRANSLUCENT_ALPHA` or either colour cannot leave that
+            // script asserting on an old spelling it does not spell.
+            //
+            // What replaced them is stronger than a pin: the script reads
+            // `changes=` off the line above and the compositor decides the
+            // verdict from the same count, so the two cannot disagree about a
+            // number they both derive. That is the shape `grepped::UNPARSEABLE`
+            // records for the checks that went to Rust, reached here by a
+            // script that stayed.
         ] {
             assert!(
                 script.contains(&format!("\"{pattern}\"")),

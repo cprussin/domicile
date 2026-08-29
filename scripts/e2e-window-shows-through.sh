@@ -18,7 +18,7 @@
 # ours*, the same way `e2e-bands.sh` does, with a real client's window on the
 # stage under it.
 #
-# ## Why the client is `--translucent`
+# ## Why the reading has to move
 #
 # The element is only a *hole* where the compositor draws the client's buffer
 # itself, and `disposition` does that for a **dmabuf** on a presenting desktop.
@@ -26,16 +26,28 @@
 # path** even if this check were given `--present`; the compositor being
 # headless here is the smaller half of the reason. On that path the compositor
 # reads the client's frame back, sends it, and the shell draws it into a
-# `<canvas>` inside the element. What is over the window *is* the window, and it
-# is drawn at the alpha the client committed.
+# `<canvas>` inside the element. What is over the window *is* the window, drawn
+# by the page.
 #
-# `--title` alone gets an `Xrgb8888` window, which is fully opaque, and reading
-# that back is indistinguishable from a background painted over it. That is not
-# a hypothetical: this check read `alpha=255 opaque=true` and called it a
-# hidden window, and passed or failed on whether the chrome frame it happened
-# to read predated the shell drawing the canvas. A half-opaque window makes the
-# reading say one thing — fully opaque over a window is a background behind the
-# element and nothing else.
+# So the question is whether the page is *following* the client, and the client
+# is built to answer it: it alternates between two colours every frame, and
+# `window.rs` says why — "so that 'is it still drawing' can be answered by
+# looking at the window rather than by trusting a counter this process prints".
+# Two readings that differ are the window. A page painting something of its own
+# over the element gives one colour for ever.
+#
+# This used to read a single `alpha` instead: `--translucent` made the window
+# half-opaque, and *fully* opaque over it meant a background. That could not
+# survive the desktop getting a colour — a half-opaque window composited over
+# an opaque desktop is opaque, and the alpha cannot tell that from a window
+# that is hidden. `settle`'s own note already recorded the case: a run against
+# a deliberate `#123456` behind the stage read `rgb="#193253"`, "the half-opaque
+# window composited over it to the byte". Movement does not care what is
+# behind, what the theme is, or which two colours the client picked.
+#
+# `--translucent` stays. It is no longer what makes the reading mean something,
+# but a window that is half-opaque over a desktop with a colour is the case
+# this check most needs to keep working, and running it is how that stays true.
 #
 # The compositor reads a texel only for a window it has sent the shell the
 # pixels of, and waits out an opaque one, because the shell goes on committing
@@ -225,10 +237,18 @@ else
   passed "a real client's window is on the stage, placed by the shell"
 fi
 
-# What the compositor found over the window. `alpha=128` is the client's own
-# half-opaque pixels, drawn in the page and painted over by nothing; anything
-# else is something between the window and the screen.
+# What the compositor found over the window. The client redraws in a different
+# colour every frame, so a page following it cannot hold still: two readings
+# that differ are the window, and a page painting something of its own over the
+# element gives the same reading for ever. `readings` is every one of them and
+# `looked` the last, because the claim is about the sequence.
 looked() { grep -o "the chrome over a window.*" "$LOG" | tail -1; }
+# How many times the chrome's reading over the window moved before it settled.
+# Two is the compositor's own bar and `what_the_chrome_shows` says why: one
+# change is any page catching up, and only a page drawing the client's frames
+# changes again after that.
+changes() { printf '%s' "$(looked)" | sed -n 's/.*changes=\([0-9]*\).*/\1/p'; }
+kept_moving() { [ "$(changes)" -ge 2 ] 2>/dev/null; }
 for _ in $(seq 1 200); do [ -n "$(looked)" ] && break; sleep 0.2; done
 
 if ! after 2; then
@@ -241,26 +261,21 @@ elif [ -z "$(looked)" ]; then
     "  chrome frame — a chrome being asked for bands commits one depth at a" \
     "  time and none of those is the page — and only once the chrome has been" \
     "  sent that window's pixels to draw." \
+    "  A page that has the window's pixels and never paints them lands here" \
+    "  too, rather than on the verdict below: with nothing of the window in" \
+    "  the page the reading never moves, and a verdict that never moves waits" \
+    "  out the compositor's whole patience — which is longer than this does." \
     "  what the chrome said:" \
     "$(tail -8 "$ELOG")"
-elif ! printf '%s' "$(looked)" | grep -q "alpha=128 opaque=false"; then
+elif ! kept_moving; then
   compositor_verdict "$COMP" \
-    "FAIL: what the chrome paints where the window is, is not the window. It" \
-    "  draws at half alpha, so anything else over it — fully opaque, or the" \
-    "  window blended with something behind it — is a background on an element" \
-    "  behind its <domicile-app>, composited under it. That window is not on" \
-    "  screen as itself." \
-    "  the reading: $(looked)" \
-    "  the colour says which: the window's own is #101828 or #182840."
-elif ! printf '%s' "$(looked)" | grep -Eq 'rgb="#101828"|rgb="#182840"'; then
-  compositor_verdict "$COMP" \
-    "FAIL: the chrome is half-opaque where the window is, but it is not the" \
-    "  window: the colour is not one of the two this client draws. A" \
-    "  background on an element behind its <domicile-app> reads exactly like" \
-    "  this when its own alpha happens to match the window's — the alpha" \
-    "  cannot tell them apart and the colour can." \
-    "  the reading: $(looked)" \
-    "  the window's own is rgb=\"#101828\" or rgb=\"#182840\"."
+    "FAIL: what the chrome paints where the window is never changes, so it is" \
+    "  not the window. This client redraws in a different colour every frame" \
+    "  and the page draws those frames itself on the copy path, so a page" \
+    "  showing the window cannot hold still. One colour for every reading is" \
+    "  the page painting something of its own over the <domicile-app>." \
+    "  it moved $(changes) times before it settled; two is the bar." \
+    "  the reading: $(looked)"
 else
   # With the reading, not just the verdict. A green run is a measurement too,
   # and this is the only place it is visible: the compositor's log is a
