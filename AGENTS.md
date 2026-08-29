@@ -114,6 +114,7 @@ working in its area; it is context, not compliance.
 | [/docs/architecture/ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md) | Why Domicile is a compositor whose renderer is a web engine: the portal model, the host brain, the chrome protocol, and how a Wayland client becomes a styleable `<app>` element. |
 | [/docs/architecture/WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) | How native windows reach parity with an ordinary Wayland compositor: composite client dmabufs in the compositor and punch a transparent hole in the page, rather than pushing pixels through the engine. |
 | [/docs/architecture/STACKING-PARITY.md](/docs/architecture/STACKING-PARITY.md) | What it takes for an `<app>` element to stack like any other element: what is built, what does not work, and every route that has been closed with the evidence that closed it. Context for the fork question, not a design. |
+| [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The proposal that comes out of it: fork Chromium and back `<app>` with a `cc::SurfaceLayer` embedding a viz surface the compositor submits, so CSS applies structurally rather than being reimplemented. |
 
 [`/ROADMAP.md`](/ROADMAP.md) carries the current state and the ordered plan;
 read it before starting anything substantial.

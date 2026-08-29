@@ -158,23 +158,37 @@ Hard-won, and every one of these produced a wrong conclusion first.
 ## Reading Chromium source from this container
 
 `chromium.googlesource.com` and `source.chromium.org` are **blocked by the
-egress proxy** (403 on CONNECT). `raw.githubusercontent.com` answers, but the
-GitHub mirror is outside this session's repository scope, so reading it needs
-`add_repo` for the mirror first — or a local checkout.
+egress proxy** (403 on CONNECT). The GitHub mirror is served, and a blobless
+sparse clone is cheap — 154 MB for the directories that matter, against a
+14 GB session allowance:
+
+```sh
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --filter=blob:none --sparse \
+  https://github.com/chromium/chromium /home/user/chromium/chromium
+git -C /home/user/chromium/chromium sparse-checkout set \
+  components/exo cc/layers cc/trees components/viz services/viz \
+  content/browser/renderer_host ui/ozone/platform/wayland \
+  third_party/blink/renderer/core/frame \
+  third_party/blink/renderer/platform/graphics
+```
+
+A full `--depth 1` clone would not fit comfortably; the `--filter=blob:none
+--sparse` pair is what makes this affordable.
 
 ## What is left
 
-The fork. The question is the cheapest shape of it that meets requirements 1
-and 2, and it is open.
+Nothing, on this doc's own terms: the route out is
+`docs/architecture/ENGINE-FORK.md`, which proposes backing `<app>` with a
+`cc::SurfaceLayer` embedding a viz surface — the mechanism an out-of-process
+`<iframe>` and a hardware-decoded `<video>` already use.
 
-The working hypothesis, **not yet verified against source**: the mechanism to
-reuse is not `cc::LayerTreeHost` but the one an out-of-process `<iframe>` and a
-hardware-decoded `<video>` already use — a `SurfaceLayer` referencing a viz
-`SurfaceId` produced elsewhere. That path gives full CSS by construction, since
-the layer participates in the page's own compositing, and composites on the GPU
-without a copy. `components/exo` is the existing proof that a Wayland client's
-buffer can become a viz surface inside Chromium; what it is not is liftable.
-
-What would confirm or kill it: how OOPIF and `<video>` bind a foreign viz
-surface into a page's layer tree, what `assert(is_chromeos)` actually gates in
-`components/exo`, and what a fork of that shape costs per Chromium release.
+The hypothesis this doc was written holding — that the mechanism to reuse is
+`SurfaceLayer`, not `cc::LayerTreeHost` — has since been checked against
+source and holds. `components/exo` is confirmed unliftable, and for a sharper
+reason than `assert(is_chromeos)`: that assert is a GN parse-time guard in
+front of the real gate, which is exo's dependency on `//ash`, `//ui/aura`,
+`//ui/views` and `//ui/wm`, reaching into `surface.cc` and
+`surface_tree_host.cc` themselves. There is one `static_library("exo")` target
+and no core to split out. What is worth taking from it is `buffer.cc`, whose
+only ChromeOS dependency is two calls to
+`aura::Env::GetInstance()->context_factory()`.
