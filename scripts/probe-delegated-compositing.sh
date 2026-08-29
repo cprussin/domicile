@@ -34,18 +34,25 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 # and what is passed cannot drift apart.
 WANTED_FEATURES="WaylandOverlayDelegation"
 
+# And the one switched off for the last run, checked the same way: a
+# `--disable-features` name the engine does not know is ignored just as
+# silently as an `--enable-features` one, and a run that disabled nothing would
+# read exactly like a run that disabled something and saw no change.
+COLOUR_FEATURE="WaylandWpColorManagerV1"
+
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-delegate"   # short: Unix socket path limit
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 SOCK="$XDG_RUNTIME_DIR/c.sock"
-COMPLOG="$(mktemp)"; OFFLOG="$(mktemp)"; FEWLOG="$(mktemp)"; ONLOG="$(mktemp)"
+COMPLOG="$(mktemp)"; OFFLOG="$(mktemp)"; FEWLOG="$(mktemp)"
+ONLOG="$(mktemp)"; NOCOLOURLOG="$(mktemp)"
 APPDIR="$(mktemp -d)"
 APP=""
 
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
   "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
-cleanup() { kill -9 "$COMP" $APP 2>/dev/null; rm -rf "$COMPLOG" "$OFFLOG" "$FEWLOG" "$ONLOG" "$APPDIR"; }
+cleanup() { kill -9 "$COMP" $APP 2>/dev/null; rm -rf "$COMPLOG" "$OFFLOG" "$FEWLOG" "$ONLOG" "$NOCOLOURLOG" "$APPDIR"; }
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break; sleep 0.05; done
 if [ ! -S "$XDG_RUNTIME_DIR/wayland-1" ]; then
@@ -101,9 +108,12 @@ JS
 # difference between "no features asked for" and "a feature named the empty
 # string". `--ozone-platform=wayland` stays either way: it is a switch, not a
 # feature, and it is how the engine is told which platform to be.
+# $4, when given, is a feature to switch *off* — which is a different question
+# from the ones above and answerable without implementing anything.
 run_engine() {
   local features=()
   [ -n "$1" ] && features=(--enable-features="$1")
+  [ -n "${4:-}" ] && features+=(--disable-features="$4")
   LAYERS="$3" \
   NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
     electron --no-sandbox --ozone-platform=wayland "${features[@]}" \
@@ -186,7 +196,7 @@ if [ -z "$ENGINE" ]; then
 elif ! command -v strings >/dev/null 2>&1; then
   echo "UNKNOWN: no \`strings\`, so the feature names go unchecked. As above."
 else
-  for feature in $WANTED_FEATURES; do
+  for feature in $WANTED_FEATURES $COLOUR_FEATURE; do
     if strings -a "$ENGINE" | grep -qx "$feature"; then
       echo "  $feature: a real feature in this engine"
     else
@@ -255,6 +265,25 @@ ON=$(subsurfaces "$ONLOG")
 echo "$ON with $LAYERS_MANY layers"
 
 echo
+echo "== and again with colour management switched off in the engine =="
+# The one protocol the engine asks for and does not get is
+# `wp_color_management_surface_v1`, and the obvious next move is to implement
+# it. This run is what makes that a decision rather than a bet: turning the
+# engine's own colour-management feature *off* takes the protocol out of the
+# question entirely, for the price of one run and no compositor work at all.
+#
+# If the count climbs with it off, colour management was what held promotion
+# back and implementing it is the work. If the count does not move, it was
+# never the blocker, and a protocol that has to actually convert colour rather
+# than merely accept objects would have been built for nothing.
+#
+# Disabling rather than implementing is the cheap half of the experiment and it
+# runs first on purpose.
+run_engine "$DELEGATED" "$NOCOLOURLOG" "$LAYERS_MANY" "$COLOUR_FEATURE"
+NOCOLOUR=$(subsurfaces "$NOCOLOURLOG")
+echo "$NOCOLOUR with $LAYERS_MANY layers and no $COLOUR_FEATURE"
+
+echo
 echo "== did the GPU process survive? =="
 if grep -aq "Exiting GPU process due to errors" "$ONLOG"; then
   echo "UNKNOWN: the GPU process exited during initialisation even with a render node."
@@ -292,6 +321,20 @@ elif [ "$ON" -gt "$OFF" ]; then
   echo "  and $ON for $LAYERS_MANY. That is a delegated *root* rather than a"
   echo "  delegated tree, and the page is still being flattened into it. Bands"
   echo "  cannot go on this."
+  if [ "$NOCOLOUR" -gt "$ON" ]; then
+    echo
+    echo "  And colour management is why: with $COLOUR_FEATURE off the count"
+    echo "  went to $NOCOLOUR. The engine declines to promote a quad it cannot"
+    echo "  state a colour space for, so implementing"
+    echo "  wp_color_management_surface_v1 is the work — and it has to convert"
+    echo "  colour rather than merely accept the objects, or this comes back."
+  else
+    echo
+    echo "  And colour management is *not* why: with $COLOUR_FEATURE off the"
+    echo "  count is $NOCOLOUR against $ON, so the protocol the engine keeps"
+    echo "  asking for is not what holds promotion back. Implementing it would"
+    echo "  have been a protocol built for nothing."
+  fi
   why "$ONLOG"
 else
   echo "NO: not one subsurface, either way."
