@@ -84,12 +84,11 @@ use smithay::wayland::{
     single_pixel_buffer::SinglePixelBufferState,
     socket::ListeningSocketSource,
     tablet_manager::TabletSeatHandler,
-    viewporter::ViewporterState,
 };
 use smithay::{
     delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_device,
     delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_single_pixel_buffer,
-    delegate_viewporter, delegate_xdg_shell,
+    delegate_xdg_shell,
 };
 use tracing::{debug, info, warn};
 
@@ -123,7 +122,7 @@ use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::over_window::{texel_over, what_the_chrome_shows, Verdict};
-use crate::scale::{logical_size, output_scale};
+use crate::scale::{desktop_size, logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::shortcut::Shortcuts;
 use crate::timing_window::TimingWindow;
@@ -2776,7 +2775,12 @@ impl DomicileCompositor {
         // started at. Without this the scene is mapped through a fixed
         // 1280x800 whatever the window's shape, so a window that is not that
         // shape shows the desktop stretched to fit it.
-        let logical = ((physical.0 / scale).max(1), (physical.1 / scale).max(1));
+        //
+        // Sized by the display's own ratio rather than by `scale` — the two
+        // differ on every fractional display and `desktop_size` says why.
+        // Dividing by `scale` here is what made a 1.5x screen a desktop two
+        // thirds its size with the whole chrome drawn a third too large.
+        let logical = desktop_size(physical, scale_factor);
         self.set_output(logical, scale);
     }
 
@@ -4941,7 +4945,6 @@ mod exo_dispatch {
 }
 
 delegate_compositor!(DomicileCompositor);
-delegate_viewporter!(DomicileCompositor);
 delegate_single_pixel_buffer!(DomicileCompositor);
 delegate_content_type!(DomicileCompositor);
 delegate_shm!(DomicileCompositor);
@@ -5569,7 +5572,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // per quad, but only to a compositor that advertises what it asks for.
     // `wl_subcompositor` comes with `CompositorState`; these are the rest that
     // are standard. See `docs/architecture/WINDOW-COMPOSITING.md`.
-    ViewporterState::new::<DomicileCompositor>(&dh);
+    // `wp_viewporter` is *deliberately not here*, and that is the whole of
+    // this comment. Advertising it broke every display denser than 1x.
+    //
+    // Chromium picks one of two ways to say how big its surface is, and it
+    // picks by what the compositor offers. With no viewporter it commits a
+    // 1280x800 buffer and calls `wl_surface.set_buffer_scale(2)`; with one it
+    // commits 2560x1600 at scale 1 and puts the logical size in
+    // `wp_viewport.set_destination` instead. This compositor reads the buffer
+    // and the scale and nothing else, so the second form made every chrome
+    // surface twice its true logical size — the desktop drawn at double, the
+    // stage black beyond the right edge of a rail suddenly 780 pixels wide,
+    // and every `place_portal` and pointer coordinate out by the same factor,
+    // which is a window that misses its hole and a button that cannot be
+    // clicked. Measured both ways at `WINIT_X11_SCALE_FACTOR=1.5`; at 1x the
+    // two forms coincide, which is why nothing headless saw it.
+    //
+    // So it goes back when `set_destination` is *honoured* — the surface's
+    // logical size taken from the viewport's destination, and its source crop
+    // applied — and not before. It is the first thing delegated compositing
+    // needs and it is a change to the commit path rather than a global.
     SinglePixelBufferState::new::<DomicileCompositor>(&dh);
     ContentTypeState::new::<DomicileCompositor>(&dh);
     // And Chromium's own two, which nothing packages — see `exo`.

@@ -359,9 +359,29 @@ mention, and it does *not* name `surface-augmenter`. Advertising
 `wp_content_type_v1` — Smithay has it — removed that line and left the rest,
 so the loop is closed: Chromium reports, we implement, it asks for less.
 
-Advertised now, and asserted by `smoke-compositor.sh`: `wp_viewporter`,
+Advertised now, and asserted by `smoke-compositor.sh`:
 `wp_single_pixel_buffer_manager_v1`, `wp_content_type_manager_v1`.
 `wl_subcompositor` comes with `CompositorState` and was always there.
+
+**`wp_viewporter` is asserted *absent*, and that correction is the lesson of
+this section.** It was advertised here first and it broke every display denser
+than 1x. A global is a promise to honour what a client says through it, and
+Chromium reads this one as permission to stop calling
+`wl_surface.set_buffer_scale`: with no viewporter it commits a 1280x800 buffer
+at scale 2, and with one it commits 2560x1600 at scale 1 and puts the logical
+size in `wp_viewport.set_destination`. The commit path reads the buffer and its
+scale and nothing else, so every surface became twice its true logical size —
+the desktop drawn at double, and every `place_portal` and pointer coordinate
+out by the same factor, which is a window that misses its hole and a button
+that cannot be clicked. At 1x the two forms coincide, which is why nothing
+headless saw it and why the assertion is on the global rather than on a
+drawing.
+
+So honouring `set_destination` — a surface's logical size taken from its
+viewport destination, and its source crop applied — is the *first* work
+delegated compositing needs, ahead of the protocol below, and it is a change to
+the commit path rather than another global. Advertising ahead of honouring is
+what the order got wrong.
 
 Then the two `exo` protocols were vendored and implemented — see
 `packages/domicile-compositor/protocols/` and `src/exo.rs` — and their lines
