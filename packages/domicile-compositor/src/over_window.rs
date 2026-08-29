@@ -100,11 +100,11 @@ pub fn texel_over(
 /// exactly where the window is going. Those frames are opaque over the window
 /// and say nothing about it.
 ///
-/// A window that is on screen reads as its own half-opaque pixels the moment
-/// the page catches up and settles there, so the wait is only ever paid where
-/// the answer is not that. It is a bound as much as a wait: reading a texel
-/// back is a pipeline stall, and a page that never paints the window would
-/// otherwise be read on every frame for the life of the session.
+/// A window that is on screen shows a *changed* reading as soon as the page
+/// has caught up and drawn two of the client's frames, so the wait is only
+/// ever paid where the answer is not that. It is a bound as much as a wait:
+/// reading a texel back is a pipeline stall, and a page that never paints the
+/// window would otherwise be read on every frame for the life of the session.
 const PATIENCE: u32 = 120;
 
 /// What a reading of the chrome over a window means.
@@ -112,9 +112,10 @@ const PATIENCE: u32 = 120;
 pub enum Verdict {
     /// What the chrome shows over this window is the window. It is on screen.
     OnScreen,
-    /// The chrome is fully opaque over this window, which nothing it is
-    /// entitled to paint there is, and has had every chance to stop. The
-    /// window is not on screen.
+    /// What the chrome shows over this window never changed, and has had
+    /// every chance to. The client redraws in a different colour every frame,
+    /// so a page following it cannot hold still — this one is painting
+    /// something of its own over the window instead. It is not on screen.
     Hidden,
     /// Not an answer yet. Look again on the next whole-page frame.
     LookAgain,
@@ -124,7 +125,7 @@ pub enum Verdict {
     NothingToRead,
 }
 
-/// What `alpha` says about the window under it.
+/// What the readings of the chrome over a window say about it.
 ///
 /// **Only for a window the chrome is holding the pixels of** — `held`, the
 /// compositor's own record of what it has sent. That is what makes a texel
@@ -135,14 +136,45 @@ pub enum Verdict {
 /// rather than inside this is what keeps a window the compositor draws itself
 /// — never in `held` — from costing one every frame for ever.
 ///
-/// - Clear: the page has those pixels and has not painted them yet.
-/// - Partly opaque: that is the window, drawn at the alpha it committed.
-/// - Fully opaque: neither the window nor a hole, so it is a background behind
-///   the element — once [`PATIENCE`] frames have said so rather than one.
+/// The question is whether the chrome over the window *keeps* moving, and
+/// `domicile-test-client` is built to make that answerable: it alternates
+/// between two colours every frame, and says why — "so that 'is it still
+/// drawing' can be answered by looking at the window rather than by trusting a
+/// counter this process prints".
 ///
-/// `looks` counts the readings already taken of *this* window, so the first
-/// call passes 0.
-pub fn what_the_chrome_shows(alpha: u8, looks: u32) -> Verdict {
+/// - Clear: the page has those pixels and has not painted them yet.
+/// - Moved *twice*: the page is following the client's frames, which is the
+///   whole claim.
+/// - Fewer than twice, for [`PATIENCE`] frames: whatever is there is the
+///   page's own and not the window's.
+///
+/// Twice rather than once, and that is the load-bearing number. One change is
+/// what *any* page does — it is the page catching up, the reading going from
+/// whatever was there before the window existed to whatever is there now. The
+/// empty stage this doc's [`PATIENCE`] note describes drew a card in the
+/// middle of exactly where the window was going, and a card appearing is one
+/// change. Only a page drawing the client's frames changes again after that,
+/// because only the client keeps changing.
+///
+/// This used to ask what a single `alpha` meant — partly opaque was the
+/// window, fully opaque was a background over it. That reading cannot survive
+/// a desktop with a colour: a translucent window composited over an opaque
+/// desktop *is* opaque, and `settle`'s own note records a run that read
+/// `rgb="#193253"` for a window over a deliberate `#123456` — "the half-opaque
+/// window composited over it to the byte". The alpha could not tell that from
+/// a window that was hidden. Movement can, and it does not care what is
+/// behind, what the theme is, or which two colours the client picked.
+///
+/// The cost, since it is a change in kind: this is a verdict about a sequence
+/// rather than about a sample, so a chrome committing in perfect step with the
+/// client's alternation would read as still. Over [`PATIENCE`] frames that is
+/// remote, and what it produces is the plain "never changed" failure rather
+/// than a confusing one.
+///
+/// `changes` counts how many times the reading of *this* window has differed
+/// from the one before it, and `looks` how many readings have been taken, so
+/// the first call passes 0 for both.
+pub fn what_the_chrome_shows(changes: u32, alpha: u8, looks: u32) -> Verdict {
     // What an answer that has to wait says once the waiting is over.
     let waited = |answer| {
         if looks + 1 < PATIENCE {
@@ -151,16 +183,28 @@ pub fn what_the_chrome_shows(alpha: u8, looks: u32) -> Verdict {
             answer
         }
     };
-    match alpha {
-        0 => waited(Verdict::NothingToRead),
-        u8::MAX => waited(Verdict::Hidden),
-        _ => Verdict::OnScreen,
+    // Before the count, and not folded into it: a page that has painted
+    // nothing has answered nothing, and reporting that as a page holding still
+    // over the window would name the wrong fault.
+    if alpha == 0 {
+        return waited(Verdict::NothingToRead);
     }
+    if changes >= KEEPS_MOVING {
+        return Verdict::OnScreen;
+    }
+    waited(Verdict::Hidden)
 }
+
+/// How many times the reading has to move before it is the window.
+///
+/// See [`what_the_chrome_shows`]: one change is the page catching up, which
+/// every page does; the second is the page following a client that does not
+/// stop changing, which only a page drawing its frames can do.
+const KEEPS_MOVING: u32 = 2;
 
 #[cfg(test)]
 mod tests {
-    use super::{texel_over, what_the_chrome_shows, Verdict, PATIENCE};
+    use super::{texel_over, what_the_chrome_shows, Verdict, KEEPS_MOVING, PATIENCE};
 
     const PAGE: (f64, f64) = (800.0, 600.0);
 
@@ -237,10 +281,13 @@ mod tests {
     }
 
     #[test]
-    fn a_clear_texel_is_not_a_reading() {
-        // The chrome has this window's pixels and has not painted them yet.
-        // Clear is what the page shows in between, not a verdict about it.
-        assert_eq!(what_the_chrome_shows(0, 0), Verdict::LookAgain);
+    fn a_page_that_has_not_painted_the_window_yet_is_waited_for() {
+        // Clear is the page holding this window's pixels and not having drawn
+        // them: an answer that has not arrived rather than a bad one.
+        assert_eq!(what_the_chrome_shows(0, 0, 0), Verdict::LookAgain);
+        // And clear stays that answer however much the reading has moved —
+        // a window fading out is not a window painted over.
+        assert_eq!(what_the_chrome_shows(9, 0, 0), Verdict::LookAgain);
     }
 
     #[test]
@@ -249,27 +296,24 @@ mod tests {
         // `map_texture` — a pipeline stall — so an answer that never comes has
         // to stop being asked for.
         assert_eq!(
-            what_the_chrome_shows(0, PATIENCE - 1),
+            what_the_chrome_shows(0, 0, PATIENCE - 1),
             Verdict::NothingToRead
         );
     }
 
     #[test]
-    fn a_window_the_page_paints_at_its_own_alpha_is_on_screen() {
-        // Settled, and settled at once: the client is run `--translucent`, so
-        // partly opaque is the window and nothing else, and nothing that
-        // paints later takes a window that is on screen off it. Every value
-        // between the ends rather than a sample, because an arm that answered
-        // anything else for any of them leaves a window that is on screen
-        // unreported — or reported as hidden.
-        for alpha in 1..u8::MAX {
+    fn a_reading_that_keeps_moving_is_the_window() {
+        // The client redraws in a different colour every frame, so a page
+        // following it cannot hold still. Answered on the reading it moved on,
+        // whenever that is: the patience is for the answers that have to wait.
+        for alpha in [1, 128, u8::MAX] {
             assert_eq!(
-                what_the_chrome_shows(alpha, 0),
+                what_the_chrome_shows(KEEPS_MOVING, alpha, 0),
                 Verdict::OnScreen,
                 "alpha={alpha}",
             );
             assert_eq!(
-                what_the_chrome_shows(alpha, PATIENCE),
+                what_the_chrome_shows(KEEPS_MOVING, alpha, PATIENCE),
                 Verdict::OnScreen,
                 "alpha={alpha}, out of patience",
             );
@@ -277,27 +321,48 @@ mod tests {
     }
 
     #[test]
-    fn an_opaque_look_is_not_a_verdict_until_the_patience_is_spent() {
-        // The chrome having this window's pixels does not mean the page has
-        // painted them: the frames it commits next can still be the page as it
-        // was before the window existed — an empty stage, which draws a card
-        // in the middle of exactly where the window is going. Believing the
-        // first opaque reading convicts the shell of that card.
-        assert_eq!(what_the_chrome_shows(u8::MAX, 0), Verdict::LookAgain);
+    fn a_window_over_a_desktop_with_a_colour_is_still_the_window() {
+        // The case the old alpha reading could not survive, and the reason
+        // this asks about movement instead: a half-opaque window composited
+        // over an opaque desktop is opaque, and used to read as hidden.
         assert_eq!(
-            what_the_chrome_shows(u8::MAX, PATIENCE - 2),
+            what_the_chrome_shows(KEEPS_MOVING, u8::MAX, 0),
+            Verdict::OnScreen,
+        );
+    }
+
+    #[test]
+    fn one_change_is_the_page_catching_up_rather_than_the_window() {
+        // The number this hinges on. A page going from what it showed before
+        // the window existed to anything at all has changed once — the empty
+        // stage drew a card in the middle of exactly where the window was
+        // going, and a card appearing is one change and then stillness.
+        assert_eq!(what_the_chrome_shows(1, u8::MAX, 0), Verdict::LookAgain);
+        assert_eq!(
+            what_the_chrome_shows(1, u8::MAX, PATIENCE - 1),
+            Verdict::Hidden
+        );
+    }
+
+    #[test]
+    fn a_reading_that_has_not_moved_yet_is_waited_for() {
+        // One reading says nothing about a sequence, and the page can still be
+        // showing what it was before the window existed.
+        assert_eq!(what_the_chrome_shows(0, u8::MAX, 0), Verdict::LookAgain);
+        assert_eq!(
+            what_the_chrome_shows(0, 128, PATIENCE - 2),
             Verdict::LookAgain
         );
     }
 
     #[test]
-    fn a_chrome_still_opaque_when_the_patience_runs_out_is_believed() {
-        // A background behind the element never stops being opaque, which is
-        // what separates it from a page that had not caught up.
+    fn a_chrome_that_never_kept_moving_when_the_patience_runs_out_is_believed() {
+        // The page held still over a window that does not. What is there is
+        // the page's own painting, not the window.
         assert_eq!(
-            what_the_chrome_shows(u8::MAX, PATIENCE - 1),
+            what_the_chrome_shows(0, u8::MAX, PATIENCE - 1),
             Verdict::Hidden
         );
-        assert_eq!(what_the_chrome_shows(u8::MAX, PATIENCE), Verdict::Hidden);
+        assert_eq!(what_the_chrome_shows(0, 128, PATIENCE), Verdict::Hidden);
     }
 }

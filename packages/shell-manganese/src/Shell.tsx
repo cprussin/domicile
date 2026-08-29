@@ -640,6 +640,18 @@ const footerStyles = hstack({
 // The stage takes whatever the rail leaves, and every window in it fills the
 // stage — the rail is what switches between them.
 const stageStyles = css({
+  // The desktop itself: what is behind the windows, and what the stage shows
+  // when there are none. Deeper than the rail in both themes, so the two read
+  // as a desktop and the chrome on it rather than as one flat surface.
+  //
+  // Safe here and *not* on a window — see {@link windowStyles}, which forbids
+  // one. The compositor draws each client's surface over the chrome inside its
+  // portal's rectangle, so a colour behind that rectangle is covered by the
+  // window and never fills its hole. A window element is bigger than its
+  // portal whenever the client asks for less than the box it was given, and a
+  // colour *there* paints the difference — a frame the shell did not draw and
+  // cannot see.
+  backgroundColor: { _light: "neutral.200", base: "neutral.950" },
   flexGrow: 1,
   minInlineSize: 0,
   position: "relative",
