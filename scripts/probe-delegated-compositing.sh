@@ -95,13 +95,45 @@ run_engine() { # $1 = extra features, $2 = logfile, $3 = how many layers the pag
   NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
     electron --no-sandbox --ozone-platform=wayland \
     --enable-features="UseOzonePlatform$1" \
-    --enable-logging=stderr --v=1 --vmodule="*wayland*=3" \
+    --enable-logging=stderr --v=1 \
+    --vmodule="*wayland*=3,*overlay*=3,*delegat*=3,*skia_renderer*=2" \
     "$APPDIR" >"$2" 2>&1 &
   APP=$!
   wait "$APP" 2>/dev/null
   APP=""
 }
 subsurfaces() { grep -ac "get_subsurface" "$1" 2>/dev/null || true; }
+
+# What Chromium said about promoting quads, for an answer that is not yes.
+#
+# The protocol list this prints says what the engine *asked* for; this says
+# what it decided. They are different questions and only the second names a
+# cause: a missing global is a thing to implement, and whether implementing it
+# would change anything is exactly what these lines answer. Guessing instead —
+# implement whatever is missing, run this again — is a round trip per guess.
+#
+# Matched on the *file* rather than on the words, and that is not fussiness.
+# Matching "delegat" anywhere in a line brings in `NetworkDelegate`, the
+# zygote's "0 fork delegates", and — measured, on the first draft of this —
+# every path under the probe's own `domicile-delegation-probe` config
+# directory. Promotion is decided in a handful of files and naming them is what
+# makes this readable rather than something to scroll past.
+DECIDERS='(overlay_processor[a-z_]*|overlay_candidate[a-z_]*|skia_renderer|wayland_overlay[a-z_]*|delegated_frame[a-z_]*)[.]cc'
+why() {
+  local said
+  said=$(grep -aoE "[A-Za-z0-9_/]*$DECIDERS:[0-9]+\].*" "$1" | sort -u | head -25)
+  echo
+  echo "  --- what the engine said about promoting quads:"
+  if [ -n "$said" ]; then
+    printf '%s\n' "$said" | cut -c1-160 | sed 's/^/  /'
+  else
+    echo "  nothing, at this verbosity and from these files:"
+    echo "    $DECIDERS"
+    echo "  Either the decision is not being reached, or it is made somewhere"
+    echo "  this does not name. The --vmodule list on the electron line above"
+    echo "  is the next thing to widen."
+  fi
+}
 
 echo "== can this machine answer at all? =="
 if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
@@ -187,11 +219,10 @@ elif [ "$ON" -gt "$OFF" ]; then
   echo "  $OFF — but the count does not follow the page: $FEW for $LAYERS_FEW layer"
   echo "  and $ON for $LAYERS_MANY. That is a delegated *root* rather than a"
   echo "  delegated tree, and the page is still being flattened into it. Bands"
-  echo "  cannot go on this. The list above is what to implement next; where it"
-  echo "  is empty, the next question is Chromium's own vmodule output for why"
-  echo "  it is declining to promote each layer."
+  echo "  cannot go on this."
+  why "$ONLOG"
 else
   echo "NO: not one subsurface, either way."
-  echo "  The engine is still flattening the page into a single raster. If the"
-  echo "  list above is non-empty, implement those and run this again."
+  echo "  The engine is still flattening the page into a single raster."
+  why "$ONLOG"
 fi
