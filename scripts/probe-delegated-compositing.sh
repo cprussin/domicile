@@ -30,6 +30,10 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
 
+# The features this asks the engine for, named once so that what is checked
+# and what is passed cannot drift apart.
+WANTED_FEATURES="WaylandOverlayDelegation"
+
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-delegate"   # short: Unix socket path limit
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
@@ -90,11 +94,19 @@ JS
 # either exists on the wire or it does not; reading it off the protocol means
 # the answer does not depend on Chromium keeping a log line we happened to grep
 # for. NO_COLOR because libwayland otherwise writes SGR escapes into the trace.
-run_engine() { # $1 = extra features, $2 = logfile, $3 = how many layers the page draws
+# $1 = the whole --enable-features value, empty for none; $2 = logfile;
+# $3 = how many composited layers the page draws.
+#
+# Empty means the flag is left off rather than passed empty, which is the
+# difference between "no features asked for" and "a feature named the empty
+# string". `--ozone-platform=wayland` stays either way: it is a switch, not a
+# feature, and it is how the engine is told which platform to be.
+run_engine() {
+  local features=()
+  [ -n "$1" ] && features=(--enable-features="$1")
   LAYERS="$3" \
   NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
-    electron --no-sandbox --ozone-platform=wayland \
-    --enable-features="UseOzonePlatform$1" \
+    electron --no-sandbox --ozone-platform=wayland "${features[@]}" \
     --enable-logging=stderr --v=1 \
     --vmodule="*wayland*=3,*overlay*=3,*delegat*=3,*skia_renderer*=2" \
     "$APPDIR" >"$2" 2>&1 &
@@ -135,6 +147,59 @@ why() {
   fi
 }
 
+# Where the engine's own binary is, which is not what `command -v` gives on a
+# packaged build: that is a small script whose job is to exec the real thing
+# with an environment set up. Followed here so the feature names can be read
+# out of it, and left empty rather than guessed at when it cannot be found.
+engine_binary() {
+  local exe named
+  exe=$(command -v electron) || return 0
+  exe=$(readlink -f "$exe")
+  # Big enough to be the engine itself rather than a script that starts it.
+  # Chromium is a quarter of a gigabyte; a wrapper is a couple of kilobytes,
+  # and the paths it mentions include directories called `electron` as well as
+  # the binary, so the size is what tells them apart rather than the name.
+  if [ "$(stat -c %s "$exe" 2>/dev/null || echo 0)" -lt 10000000 ]; then
+    while read -r named; do
+      if [ -f "$named" ] && [ "$(stat -c %s "$named" 2>/dev/null || echo 0)" -gt 10000000 ]; then
+        exe="$named"
+        break
+      fi
+    done <<<"$(grep -aoE "/nix/store/[^\"' ]*electron[^\"' ]*" "$exe" 2>/dev/null | sort -u)"
+  fi
+  [ -f "$exe" ] && [ "$(stat -c %s "$exe" 2>/dev/null || echo 0)" -gt 10000000 ] && printf '%s' "$exe"
+}
+
+echo "== are the features we ask for real? =="
+# `--enable-features` ignores a name it does not recognise, without a word.
+# That is not a hypothetical failure: this probe passed `DelegatedCompositing`
+# and `UseOzonePlatform` on every run for its whole life, neither of which is a
+# feature name in this engine, and reported the result as though both were on.
+# Two round trips through a person with a GPU went to measuring a flag that was
+# never set. So the names are checked against the binary before anything is run
+# — an unchecked name is a run that may be measuring nothing.
+ENGINE=$(engine_binary)
+if [ -z "$ENGINE" ]; then
+  echo "UNKNOWN: the engine's own binary could not be found, so the feature"
+  echo "  names below go unchecked. Everything after this reports on whichever"
+  echo "  of them the engine happened to recognise."
+elif ! command -v strings >/dev/null 2>&1; then
+  echo "UNKNOWN: no \`strings\`, so the feature names go unchecked. As above."
+else
+  for feature in $WANTED_FEATURES; do
+    if strings -a "$ENGINE" | grep -qx "$feature"; then
+      echo "  $feature: a real feature in this engine"
+    else
+      echo "FAIL: $feature is not a feature name in this engine."
+      echo "  The engine would ignore it silently and this probe would report"
+      echo "  the run as though it were on. Either the name changed or it never"
+      echo "  existed; \`strings\` on the binary is how to find what replaced it."
+      echo "  Read from: $ENGINE"
+      exit 1
+    fi
+  done
+fi
+
 echo "== can this machine answer at all? =="
 if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
   echo "UNKNOWN: no DRM render node here."
@@ -158,7 +223,14 @@ echo
 # is the only number that answers the question.
 LAYERS_FEW=1
 LAYERS_MANY=8
-DELEGATED=",WaylandOverlayDelegation,DelegatedCompositing"
+# One feature, not two. `DelegatedCompositing` was in this list for the whole
+# life of this probe and is not a feature name in this engine at all, so every
+# run that named it was measuring `WaylandOverlayDelegation` alone and
+# reporting it as both. `UseOzonePlatform` went the same way: it was removed
+# from Chromium once Ozone became the only platform, and it was being passed on
+# every run including the baseline. See the check above, which is there so this
+# cannot happen quietly again.
+DELEGATED="$WANTED_FEATURES"
 
 echo "== baseline: the engine with delegation off =="
 run_engine "" "$OFFLOG" "$LAYERS_MANY"
