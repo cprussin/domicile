@@ -40,6 +40,12 @@ WANTED_FEATURES="WaylandOverlayDelegation"
 # read exactly like a run that disabled something and saw no change.
 COLOUR_FEATURE="WaylandWpColorManagerV1"
 
+# The page's size, named here because the buffer sizes on the wire are read
+# against it: a buffer the size of the page is the page delegated as one thing,
+# and a buffer smaller than it is a quad.
+PAGE_WIDE=600
+PAGE_TALL=400
+
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-delegate"   # short: Unix socket path limit
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
@@ -78,7 +84,11 @@ JSON
 cat >"$APPDIR/main.js" <<'JS'
 const { app, BrowserWindow } = require("electron");
 app.whenReady().then(() => {
-  const win = new BrowserWindow({ width: 600, height: 400, frame: false });
+  const win = new BrowserWindow({
+    width: Number(process.env.PAGE_WIDE),
+    height: Number(process.env.PAGE_TALL),
+    frame: false,
+  });
   const layer = (i) =>
     `<div style="position:absolute;left:${i * 40}px;top:${i * 30}px;width:200px;` +
     `height:150px;background:hsl(${i * 60},80%,50%);will-change:transform;` +
@@ -114,7 +124,7 @@ run_engine() {
   local features=()
   [ -n "$1" ] && features=(--enable-features="$1")
   [ -n "${4:-}" ] && features+=(--disable-features="$4")
-  LAYERS="$3" \
+  LAYERS="$3" PAGE_WIDE="$PAGE_WIDE" PAGE_TALL="$PAGE_TALL" \
   NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
     electron --no-sandbox --ozone-platform=wayland "${features[@]}" \
     --enable-logging=stderr --v=1 \
@@ -149,11 +159,64 @@ why() {
   if [ -n "$said" ]; then
     printf '%s\n' "$said" | cut -c1-160 | sed 's/^/  /'
   else
-    echo "  nothing, at this verbosity and from these files:"
-    echo "    $DECIDERS"
-    echo "  Either the decision is not being reached, or it is made somewhere"
-    echo "  this does not name. The --vmodule list on the electron line above"
-    echo "  is the next thing to widen."
+    echo "  nothing, and widening --vmodule will not change that. A release"
+    echo "  build compiles its DVLOGs out, and the engine's own binary bears"
+    echo "  that out: of the files that decide promotion only overlay_strategy"
+    echo "  embeds a path at all. The engine cannot be made to explain itself"
+    echo "  here; what it *did* is on the wire below."
+  fi
+}
+
+# What the engine actually sent, which is the evidence that does not depend on
+# a release build having kept a log line.
+#
+# The counts above answer "how many subsurfaces" and stop there. Everything
+# else needed to tell a delegated root from a delegated tree is already in the
+# trace and was being thrown away: how many surfaces were made at all, whether
+# any were stacked against each other, whether a viewport scaled them, and —
+# the one that settles it — how big the buffers were. A quad is smaller than
+# the page. A root is the page.
+wire() {
+  local trace="$1"
+  echo
+  echo "  --- what the engine put on the wire:"
+  printf '  %-28s %s\n' \
+    "wl_surface created"      "$(grep -ac 'create_surface' "$trace" || true)" \
+    "wl_subsurface created"   "$(grep -ac 'get_subsurface' "$trace" || true)" \
+    "wp_viewport created"     "$(grep -ac 'get_viewport' "$trace" || true)" \
+    "place_above/place_below" "$(grep -acE 'place_(above|below)' "$trace" || true)" \
+    "set_buffer_scale"        "$(grep -ac 'set_buffer_scale' "$trace" || true)"
+  # Buffer sizes, which is where a quad and a page tell themselves apart. A
+  # dmabuf states its dimensions when it is created, so the distinct sizes the
+  # engine allocated are the sizes of the things it drew.
+  # `[@#]` because libwayland spells an object id both ways depending on its
+  # version, and a pattern that assumed one of them read every trace as having
+  # no buffers at all — silently, since "no buffers" is a plausible answer for
+  # a client that never painted.
+  #
+  # Two spellings again below, because the two buffer kinds state their size in
+  # different argument positions: a dmabuf gives width and height straight after the new
+  # id, and an shm buffer gives an offset first. Reading the dmabuf pattern
+  # against an shm trace silently yields the offset and the width, which is a
+  # plausible-looking pair of numbers and the wrong one.
+  local sizes
+  sizes=$(
+    {
+      grep -aoE 'create_immed\(new id wl_buffer[@#][0-9]+, [0-9]+, [0-9]+' "$trace" \
+        | grep -oE '[0-9]+, [0-9]+$'
+      grep -aoE 'create_buffer\(new id wl_buffer[@#][0-9]+, [0-9]+, [0-9]+, [0-9]+' "$trace" \
+        | grep -oE '[0-9]+, [0-9]+$'
+    } | sort -u | head -12
+  )
+  if [ -n "$sizes" ]; then
+    echo "  buffers allocated, by size:"
+    printf '%s\n' "$sizes" | sed 's/^/    /'
+    echo "  The page is $PAGE_WIDE x $PAGE_TALL, give or take the frame the"
+    echo "  engine draws around it. A buffer about that size is the page"
+    echo "  delegated as one thing; buffers markedly smaller than it are quads."
+  else
+    echo "  no dmabuf allocations named a size in the trace, so what was drawn"
+    echo "  cannot be told apart from here."
   fi
 }
 
@@ -336,8 +399,10 @@ elif [ "$ON" -gt "$OFF" ]; then
     echo "  have been a protocol built for nothing."
   fi
   why "$ONLOG"
+  wire "$ONLOG"
 else
   echo "NO: not one subsurface, either way."
   echo "  The engine is still flattening the page into a single raster."
   why "$ONLOG"
+  wire "$ONLOG"
 fi
