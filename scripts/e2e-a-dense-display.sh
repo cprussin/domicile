@@ -21,8 +21,11 @@
 #   - `wp_viewporter` was advertised and not honoured. Chromium reads that
 #     global as permission to stop calling `wl_surface.set_buffer_scale` and to
 #     put its logical size in `wp_viewport.set_destination` instead, which
-#     nothing here reads — so the chrome's surface became twice its true size,
-#     and with it every portal and pointer coordinate.
+#     nothing read — so the chrome's surface became twice its true size, and
+#     with it every portal and pointer coordinate. It is honoured now, and the
+#     reading below is written to hold either way round: *which* of the two
+#     forms Chromium picks is its business, and it picks by what is advertised.
+#     What has to agree is the size.
 #
 # Both are one comparison: what the compositor says the desktop is, against
 # what the chrome's surface actually measures. They have to be the same number.
@@ -154,18 +157,23 @@ fi
 FRAME="$(said | grep "the chrome committed a frame" | tail -1)"
 # The logical size, which is the buffer divided by the scale the client set —
 # so this one line carries both halves of what the second fault broke.
-if ! echo "$FRAME" | grep -qE "width=1280(\.0)? height=800(\.0)? .*scale=2"; then
+# The size, and deliberately not the buffer scale beside it. Chromium has two
+# ways to state a surface's size and picks by what the compositor advertises:
+# `set_buffer_scale(2)` on a 1280x800 buffer, or `set_destination(1280, 800)`
+# on a 2560x1600 one. Both are the same surface and both are correct; a check
+# that pinned one of them would go red on a protocol being *added*, which is
+# what happened to the first version of this line.
+if ! echo "$FRAME" | grep -qE "width=1280(\.0)? height=800(\.0)?"; then
   echo "FAIL: the chrome's surface is not the desktop it was given."
-  echo "  It was told 1280x800 and its surface has to measure that, at buffer"
-  echo "  scale 2. A surface of 2560x1600 at scale 1 is the same pixels said"
-  echo "  the other way round — Chromium's wp_viewport.set_destination form,"
-  echo "  which it uses whenever wp_viewporter is advertised and which nothing"
-  echo "  here reads. Every portal and pointer coordinate doubles with it."
+  echo "  It was told 1280x800 and its surface has to measure that, however it"
+  echo "  says so. 2560x1600 is the buffer read as though nothing else spoke"
+  echo "  for it — the viewport's destination ignored — and every portal and"
+  echo "  pointer coordinate doubles with it."
   echo "  --- what it said:"
   echo "  $FRAME"
   exit 1
 fi
-echo "PASS: the chrome's surface is 1280x800 at buffer scale 2"
+echo "PASS: the chrome's surface measures 1280x800"
 echo
 echo "So a CSS pixel in the chrome is 1.5 display pixels, which is what the"
 echo "display is, and the desktop is drawn the size of the screen it covers."

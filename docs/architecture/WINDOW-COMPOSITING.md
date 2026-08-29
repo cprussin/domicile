@@ -363,25 +363,33 @@ Advertised now, and asserted by `smoke-compositor.sh`:
 `wp_single_pixel_buffer_manager_v1`, `wp_content_type_manager_v1`.
 `wl_subcompositor` comes with `CompositorState` and was always there.
 
-**`wp_viewporter` is asserted *absent*, and that correction is the lesson of
-this section.** It was advertised here first and it broke every display denser
-than 1x. A global is a promise to honour what a client says through it, and
-Chromium reads this one as permission to stop calling
+**`wp_viewporter` was advertised, then taken away, and is back — and that
+sequence is the lesson.** A global is a promise to honour what a client says
+through it. Chromium reads this one as permission to stop calling
 `wl_surface.set_buffer_scale`: with no viewporter it commits a 1280x800 buffer
 at scale 2, and with one it commits 2560x1600 at scale 1 and puts the logical
-size in `wp_viewport.set_destination`. The commit path reads the buffer and its
-scale and nothing else, so every surface became twice its true logical size —
-the desktop drawn at double, and every `place_portal` and pointer coordinate
-out by the same factor, which is a window that misses its hole and a button
-that cannot be clicked. At 1x the two forms coincide, which is why nothing
-headless saw it and why the assertion is on the global rather than on a
-drawing.
+size in `wp_viewport.set_destination`. Advertised while the commit path read
+the buffer and its scale and nothing else, every surface became twice its true
+logical size — the desktop drawn at double, and every `place_portal` and
+pointer coordinate out by the same factor, which is a window that misses its
+hole and a button that cannot be clicked. At 1x the two forms coincide, which
+is why nothing headless saw it until `e2e-a-dense-display.sh` was written to
+run at a fractional scale.
 
-So honouring `set_destination` — a surface's logical size taken from its
-viewport destination, and its source crop applied — is the *first* work
-delegated compositing needs, ahead of the protocol below, and it is a change to
-the commit path rather than another global. Advertising ahead of honouring is
-what the order got wrong.
+It is honoured now, in `src/viewport.rs`: the destination sizes the surface
+wherever a size is taken, and the source crops it where the compositor draws.
+`e2e-a-dense-display.sh` is what holds it — with the destination ignored the
+chrome's surface reads 2560x1600 against a desktop of 1280x800 and that check
+goes red, measured.
+
+One half is honoured on one path only, and it is said out loud rather than
+left to be discovered: a *source* rectangle is applied where the compositor
+draws the client's buffer, and not on the copy path, where the buffer is read
+back and handed to the page and the region that readback takes is the damage
+rather than a crop. A client that sets a source and lands on the copy path
+gets its whole buffer, and the compositor warns once per window when that
+happens. Nothing does it today — Chromium sets a source only on the delegated
+path, which is drawn.
 
 Then the two `exo` protocols were vendored and implemented — see
 `packages/domicile-compositor/protocols/` and `src/exo.rs` — and their lines

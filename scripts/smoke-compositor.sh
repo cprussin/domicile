@@ -62,7 +62,7 @@ echo "PASS: every global a desktop's clients expect is advertised"
 # its own log — `Server doesn't support <name>` — rather than failing. Losing
 # one here is losing that, silently and much later. See
 # `docs/architecture/WINDOW-COMPOSITING.md`.
-for global in wp_single_pixel_buffer_manager_v1 wp_content_type_manager_v1; do
+for global in wp_viewporter wp_single_pixel_buffer_manager_v1 wp_content_type_manager_v1; do
   if ! echo "$ADVERTISED" | grep -q "interface: '$global'"; then
     echo "FAIL: $global is not advertised, so a chrome that wanted it has"
     echo "  quietly gone without — which is what delegated compositing does."
@@ -70,24 +70,3 @@ for global in wp_single_pixel_buffer_manager_v1 wp_content_type_manager_v1; do
   fi
 done
 echo "PASS: the standard protocols delegated compositing asks for are advertised"
-
-# And the one that must *not* be, which is the same list read the other way.
-# A global is a promise to honour what a client then says through it, and
-# Chromium takes `wp_viewporter` as permission to stop calling
-# `wl_surface.set_buffer_scale` and put its logical size in
-# `wp_viewport.set_destination` instead. The commit path reads the buffer and
-# its scale and nothing else, so advertising this made every surface on a 2x
-# display twice its true size: the desktop drawn at double, and every portal
-# and pointer coordinate out by the same factor. At 1x the two forms agree,
-# which is why this is asserted here rather than left to a check that draws.
-#
-# The row moves back up to the loop above when the commit path honours a
-# destination — not when the global goes back, which is the order that broke
-# it.
-if echo "$ADVERTISED" | grep -q "interface: 'wp_viewporter'"; then
-  echo "FAIL: wp_viewporter is advertised. Unless the commit path now takes a"
-  echo "  surface's logical size from its viewport destination, this doubles"
-  echo "  the whole desktop on every display denser than 1x."
-  exit 1
-fi
-echo "PASS: no wp_viewporter, which is a promise this compositor cannot keep"
