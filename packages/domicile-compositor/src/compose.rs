@@ -110,14 +110,16 @@ pub struct Layer<'a> {
     /// its own and would need its own rectangles in that quad's space. The
     /// only layer that is banded is the chrome, and the chrome casts nothing.
     pub clip: &'a [[f32; 4]],
-    /// Whether the texture's rows run bottom-to-top.
+    /// How the quad reads the texture: the y-flip and the viewport's source
+    /// rectangle in one matrix.
     ///
-    /// A client that renders with GL hands over a buffer the way GL made it,
-    /// which is upside down relative to how a buffer is described. Smithay
-    /// records this per texture but does not expose it, so it is carried
-    /// alongside — see `DomicileCompositor::texture_from`, which is where it is
-    /// known.
-    pub y_inverted: bool,
+    /// Both are properties of the buffer rather than of the quad, and both are
+    /// known where the texture is made — a client that renders with GL hands
+    /// over a buffer the way GL made it, and one with a `wp_viewport` may be
+    /// showing only part of it. Composed there rather than here, because
+    /// `viewport::sampling` needs the buffer's own size to turn a source
+    /// rectangle into texture coordinates and this does not have it.
+    pub sampling: Matrix3<f32>,
 }
 
 /// Draw `layers` bottom-to-top into the frame.
@@ -140,7 +142,7 @@ pub fn draw_layers(
         }
         frame.render_texture(
             layer.texture,
-            texture_matrix(layer.y_inverted),
+            layer.sampling,
             matrix3(layer.surface_to_output),
             // `None` is the whole quad; `Some` is one instance per rectangle.
             // An empty list would draw nothing at all, which is why the empty
@@ -305,22 +307,6 @@ fn on_screen_size(transform: Transform) -> (f32, f32) {
         (transform.a * transform.a + transform.b * transform.b).sqrt() as f32,
         (transform.c * transform.c + transform.d * transform.d).sqrt() as f32,
     )
-}
-
-/// How the quad samples the texture.
-///
-/// Identity for a buffer whose rows run top-to-bottom: the whole texture fills
-/// the quad, and the surface's own size is already in `surface_to_output`. A
-/// y-inverted one is sampled bottom-to-top instead, which is the difference
-/// between a window drawn the right way up and one drawn upside down.
-fn texture_matrix(y_inverted: bool) -> Matrix3<f32> {
-    if y_inverted {
-        // v -> 1 - v. Written out rather than as a negation, so it does not
-        // depend on the texture's wrap mode to bring -v back into range.
-        Matrix3::new(1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 1.0)
-    } else {
-        Matrix3::from_scale(1.0)
-    }
 }
 
 /// Maps the chrome's logical units onto the window's device pixels.
@@ -832,7 +818,7 @@ mod pixels {
                     .then(Transform::translate(32.0, 0.0))
                     .then(to_target),
                 texture: &red,
-                y_inverted: false,
+                sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
             }],
             TARGET,
         );
@@ -877,7 +863,7 @@ mod pixels {
                     shadow: None,
                     surface_to_output: top_left.surface_to_output(),
                     texture: &red,
-                    y_inverted: false,
+                    sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
                 },
                 Layer {
                     alpha: 1.0,
@@ -886,7 +872,7 @@ mod pixels {
                     shadow: None,
                     surface_to_output: bottom_right.surface_to_output(),
                     texture: &blue,
-                    y_inverted: false,
+                    sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
                 },
             ],
         );
@@ -926,7 +912,7 @@ mod pixels {
                 surface_to_output: Transform::scale(24.0, 12.0)
                     .then(Transform::translate(8.0, 6.0)),
                 texture,
-                y_inverted,
+                sampling: crate::viewport::sampling(y_inverted, (1.0, 1.0), None),
             }],
         );
         let theirs = drawn_by_smithay(renderer, texture, dest);
@@ -964,7 +950,7 @@ mod pixels {
                 shadow: None,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
                 texture: &texture,
-                y_inverted: true,
+                sampling: crate::viewport::sampling(true, (1.0, 1.0), None),
             }],
         );
 
@@ -991,7 +977,7 @@ mod pixels {
                 shadow: None,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
                 texture: &texture,
-                y_inverted: false,
+                sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
             }],
         );
 
@@ -1038,7 +1024,7 @@ mod pixels {
                 shadow: None,
                 surface_to_output: Transform::scale(f64::from(OUTPUT.0), f64::from(OUTPUT.1)),
                 texture,
-                y_inverted: false,
+                sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
             }],
         )
     }
@@ -1065,7 +1051,7 @@ mod pixels {
                 )
                 .then(Transform::translate(INSET.0, INSET.1)),
                 texture,
-                y_inverted: false,
+                sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
             }],
         )
     }
@@ -1128,7 +1114,7 @@ mod pixels {
                 shadow: None,
                 surface_to_output: full.surface_to_output(),
                 texture: &red,
-                y_inverted: false,
+                sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
             }],
         );
 
@@ -1330,7 +1316,7 @@ mod pixels {
                 )
                 .then(Transform::translate(INSET.0, INSET.1)),
                 texture,
-                y_inverted: false,
+                sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
             }],
         )
     }
@@ -1418,7 +1404,7 @@ mod pixels {
                 )
                 .then(Transform::translate(INSET.0, INSET.1)),
                 texture,
-                y_inverted: false,
+                sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
             }],
         )
     }
@@ -1496,7 +1482,7 @@ mod pixels {
                         f64::from(MIDDLE.1),
                     )),
                 texture,
-                y_inverted: false,
+                sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
             }],
         )
     }
@@ -1713,7 +1699,7 @@ mod pixels {
                 )
                 .then(Transform::translate(INSET.0, INSET.1)),
                 texture,
-                y_inverted,
+                sampling: crate::viewport::sampling(y_inverted, (1.0, 1.0), None),
             }],
         )
     }
@@ -1790,7 +1776,7 @@ mod pixels {
                     shadow: None,
                     surface_to_output: whole,
                     texture: &blue,
-                    y_inverted: false,
+                    sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
                 },
                 Layer {
                     alpha: 0.5,
@@ -1799,7 +1785,7 @@ mod pixels {
                     shadow: None,
                     surface_to_output: whole,
                     texture: &red,
-                    y_inverted: false,
+                    sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
                 },
             ],
         );
@@ -1838,7 +1824,7 @@ mod pixels {
                 shadow: None,
                 surface_to_output: portal.surface_to_output(),
                 texture: textures(&portal.app_id),
-                y_inverted: false,
+                sampling: crate::viewport::sampling(false, (1.0, 1.0), None),
             })
             .collect();
 

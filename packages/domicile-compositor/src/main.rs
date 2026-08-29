@@ -59,6 +59,7 @@ use smithay::reexports::{
     },
 };
 use smithay::utils::{Rectangle, Serial, Transform, SERIAL_COUNTER};
+use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
 use smithay::wayland::{
     buffer::BufferHandler,
     compositor::{
@@ -88,7 +89,7 @@ use smithay::wayland::{
 use smithay::{
     delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_device,
     delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_single_pixel_buffer,
-    delegate_xdg_shell,
+    delegate_viewporter, delegate_xdg_shell,
 };
 use tracing::{debug, info, warn};
 
@@ -109,6 +110,7 @@ mod shortcut;
 mod stacking;
 mod straight_alpha;
 mod timing_window;
+mod viewport;
 
 use crate::bands::{hold_the_frame, Bands, Layered, Next};
 use crate::chrome_frame::{what_arrived, Arrival, Buffer};
@@ -126,6 +128,8 @@ use crate::scale::{desktop_size, logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::shortcut::Shortcuts;
 use crate::timing_window::TimingWindow;
+use crate::viewport::{sampling, surface_size, Viewport};
+use cgmath::Matrix3;
 use domicile_bridge::BridgeRegistry;
 use domicile_config::{Config, ConfigError, ConfigStore};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
@@ -286,7 +290,7 @@ fn band_layer<'a>(texture: &'a SurfaceTexture, to_window: SceneTransform) -> Lay
         shadow: None,
         surface_to_output: chrome_onto_output(texture.logical_size, to_window),
         texture: &texture.texture,
-        y_inverted: texture.y_inverted,
+        sampling: texture.sampling,
     }
 }
 
@@ -1540,6 +1544,9 @@ struct DomicileCompositor {
     /// The windows whose reading is final, so they are looked at no more.
     /// See `over_window::what_the_chrome_shows`.
     settled: HashSet<String>,
+    /// The windows already reported for setting a viewport source this cannot
+    /// honour, so it is said once rather than on every frame.
+    source_ignored: HashSet<String>,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1660,14 +1667,19 @@ impl DomicileCompositor {
     ///
     /// Unthrottled, unlike an app's: this is the desktop, and a frame of it
     /// dropped is the whole picture going stale rather than one window's.
-    fn publish_chrome_frame(&mut self, buffer: &wl_buffer::WlBuffer, buffer_scale: i32) {
+    fn publish_chrome_frame(
+        &mut self,
+        buffer: &wl_buffer::WlBuffer,
+        buffer_scale: i32,
+        viewport: Viewport,
+    ) {
         // A buffer this cannot read is still a *commit*, and the chrome
         // believes it answered — so it is sorted like any other frame rather
         // than returned on. Returning early here left the question standing
         // with nothing to answer it, and the chrome stopped updating for the
         // rest of the run.
         let (came, texture) = match committed_buffer(buffer) {
-            Some(committed) => match self.texture_from(committed, buffer_scale) {
+            Some(committed) => match self.texture_from(committed, buffer_scale, viewport) {
                 Some(texture) => (Buffer::Textured, Some(texture)),
                 None => (Buffer::Readable, None),
             },
@@ -1994,9 +2006,17 @@ impl DomicileCompositor {
         &mut self,
         committed: CommittedBuffer,
         buffer_scale: i32,
+        viewport: Viewport,
     ) -> Option<SurfaceTexture> {
         let (width, height) = committed.size();
-        let (logical_width, logical_height) = logical_size((width, height), buffer_scale);
+        // The buffer's own logical size, which is what a source rectangle is
+        // stated against — *not* the surface's, which a destination replaces.
+        // Cropping against the destination would read the wrong part of the
+        // buffer by exactly the ratio between them.
+        let (buffer_width, buffer_height) = logical_size((width, height), buffer_scale);
+        let buffer_logical = (f64::from(buffer_width), f64::from(buffer_height));
+        let (logical_width, logical_height) =
+            surface_size((width, height), buffer_scale, viewport.destination);
         let logical_size = (f64::from(logical_width), f64::from(logical_height));
         let gpu = self.gpu.as_mut()?;
         match committed {
@@ -2008,6 +2028,7 @@ impl DomicileCompositor {
                 // GL made it, and says so on the buffer.
                 y_inverted: dmabuf.y_inverted(),
                 logical_size,
+                sampling: sampling(dmabuf.y_inverted(), buffer_logical, viewport.source),
             }),
             CommittedBuffer::Pixels { rgba, .. } => {
                 let size = (
@@ -2024,6 +2045,7 @@ impl DomicileCompositor {
                         // Shared memory is described the way it is laid out.
                         y_inverted: false,
                         logical_size,
+                        sampling: sampling(false, buffer_logical, viewport.source),
                     }),
                     Err(err) => {
                         tracing::warn!(%err, "a shm buffer would not upload");
@@ -2158,6 +2180,7 @@ impl DomicileCompositor {
         buffer: &wl_buffer::WlBuffer,
         buffer_scale: i32,
         damaged: Option<Region>,
+        viewport: Viewport,
     ) {
         let Some(committed) = committed_buffer(buffer) else {
             return;
@@ -2185,6 +2208,35 @@ impl DomicileCompositor {
                 .get(app_id)
                 .map(|last| now.duration_since(*last)),
         );
+        // A source rectangle this frame will not be cropped by, said out loud.
+        //
+        // `viewport::sampling` applies a source where the compositor *draws*
+        // the client's buffer, which is the path Chromium's delegated
+        // compositing takes and the reason the global is advertised at all. It
+        // does not apply on the copy path: there the buffer is read back and
+        // handed to the page, and the region argument that readback takes is
+        // the *damage* — which patch of the window changed — rather than a
+        // crop. Conflating the two would send the page a patch it would
+        // composite at the wrong offset.
+        //
+        // So this is a promise kept on one path and not the other, and the
+        // difference is loud rather than silent: a client that asked to show
+        // one tile of an atlas and got the whole atlas has a picture that is
+        // wrong in a way no error would otherwise mention. Nothing does this
+        // today — Chromium sets a source only on the delegated path, which is
+        // drawn — and the day something does, this line is what says why the
+        // window looks like that.
+        if viewport.source.is_some()
+            && taking != Disposition::Draw
+            && self.source_ignored.insert(app_id.to_string())
+        {
+            warn!(
+                app_id,
+                "this window set a wp_viewport source and is on the copy path, \
+                 where the crop is not applied: it will show its whole buffer \
+                 rather than the rectangle it asked for"
+            );
+        }
         // Recorded before anything can drop this frame, and left recorded until
         // one actually goes. `frame_fate` decides the rest in one place: split
         // across the early returns below, the ordering was prose, and moving
@@ -2233,6 +2285,7 @@ impl DomicileCompositor {
                 buffer_scale,
                 taking == Disposition::Draw,
                 sending,
+                viewport,
             ),
         };
         if rgba.is_empty() {
@@ -2311,6 +2364,7 @@ impl DomicileCompositor {
         buffer_scale: i32,
         composited: bool,
         area: Option<Region>,
+        viewport: Viewport,
     ) -> Vec<u8> {
         let gpu = self.gpu.as_mut().expect(
             "a dmabuf can only be committed where the global — and so the renderer — exists",
@@ -2324,7 +2378,7 @@ impl DomicileCompositor {
             // nothing is copied out. The chrome gets no pixels for this app —
             // there is a hole in the page where the compositor puts it.
             if let Some(surface) =
-                self.texture_from(CommittedBuffer::Gpu(dmabuf.clone()), buffer_scale)
+                self.texture_from(CommittedBuffer::Gpu(dmabuf.clone()), buffer_scale, viewport)
             {
                 self.textures.insert(app_id.to_string(), surface);
             }
@@ -2530,7 +2584,7 @@ impl DomicileCompositor {
                     corner_radius: (style.corner_radius * scale) as f32,
                     surface_to_output: surface_to_output.then(to_window),
                     texture: &surface.texture,
-                    y_inverted: surface.y_inverted,
+                    sampling: surface.sampling,
                 })
             })
             .collect();
@@ -2621,7 +2675,7 @@ impl DomicileCompositor {
                         // wrong rectangle.
                         surface_to_output: chrome_onto_output,
                         texture: &chrome.texture,
-                        y_inverted: chrome.y_inverted,
+                        sampling: chrome.sampling,
                     }),
                 }
             }
@@ -3719,7 +3773,14 @@ struct SurfaceTexture {
     /// into. Not the output's: a client that has not answered a configure yet
     /// is still its old size, and stretching it to the output would hide that
     /// rather than show it.
+    ///
+    /// A `wp_viewport`'s destination is this, when it set one: a destination
+    /// *is* the logical size, which is the whole point of sending it.
     logical_size: (f64, f64),
+    /// See [`Layer::sampling`]. Composed here because this is where the
+    /// buffer's own size is known, which is what turns a viewport's source
+    /// rectangle into texture coordinates.
+    sampling: Matrix3<f32>,
 }
 
 /// What a surface is called in [`DomicileCompositor::content`] and in the
@@ -4739,31 +4800,45 @@ impl CompositorHandler for DomicileCompositor {
         // it (rather than borrowing) hands us the release: Smithay would
         // otherwise hold it until the *next* buffer arrives, which is a buffer
         // the client cannot draw without the release it is waiting for.
-        let (attached, callbacks, buffer_scale, damaged) = with_states(surface, |states| {
-            let mut guard = states.cached_state.get::<SurfaceAttributes>();
-            let attrs = guard.current();
-            let attached = match attrs.buffer.take() {
-                Some(BufferAssignment::NewBuffer(buffer)) => Some(buffer),
-                Some(BufferAssignment::Removed) | None => None,
-            };
-            let callbacks = std::mem::take(&mut attrs.frame_callbacks);
-            // Taken, not read. Smithay aggregates damage from commit to commit
-            // until the compositor clears it — `Cacheable for
-            // SurfaceAttributes` does `into.damage.extend(self.damage)` — so
-            // borrowing it gives every rectangle the surface has ever
-            // reported. That is a vector growing for the life of the window,
-            // walked on every commit by the Wayland thread, and a bounding box
-            // that only ever widens until it is the whole window and this
-            // stops saving anything. What is owed across dropped frames is
-            // `pending_damage`'s job, where it is bounded and testable.
-            let damaged = take_damage(&mut attrs.damage, attrs.buffer_scale);
-            // How many buffer pixels the client drew per logical unit. Taken
-            // here with the buffer rather than looked up later: it is the
-            // scale *this* buffer was drawn at, and a client that is mid-way
-            // through answering a scale change will commit the next one at a
-            // different number.
-            (attached, callbacks, attrs.buffer_scale, damaged)
-        });
+        let (attached, callbacks, buffer_scale, damaged, viewport) =
+            with_states(surface, |states| {
+                // Beside the buffer and in the same borrow, because a viewport is
+                // double-buffered too: what it says applies to the buffer it was
+                // committed with, and reading it later reads the next frame's.
+                let viewport = {
+                    let mut cached = states.cached_state.get::<ViewportCachedState>();
+                    let state = cached.current();
+                    Viewport {
+                        destination: state.dst.map(|size| (size.w, size.h)),
+                        source: state
+                            .src
+                            .map(|rect| (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h)),
+                    }
+                };
+                let mut guard = states.cached_state.get::<SurfaceAttributes>();
+                let attrs = guard.current();
+                let attached = match attrs.buffer.take() {
+                    Some(BufferAssignment::NewBuffer(buffer)) => Some(buffer),
+                    Some(BufferAssignment::Removed) | None => None,
+                };
+                let callbacks = std::mem::take(&mut attrs.frame_callbacks);
+                // Taken, not read. Smithay aggregates damage from commit to commit
+                // until the compositor clears it — `Cacheable for
+                // SurfaceAttributes` does `into.damage.extend(self.damage)` — so
+                // borrowing it gives every rectangle the surface has ever
+                // reported. That is a vector growing for the life of the window,
+                // walked on every commit by the Wayland thread, and a bounding box
+                // that only ever widens until it is the whole window and this
+                // stops saving anything. What is owed across dropped frames is
+                // `pending_damage`'s job, where it is bounded and testable.
+                let damaged = take_damage(&mut attrs.damage, attrs.buffer_scale);
+                // How many buffer pixels the client drew per logical unit. Taken
+                // here with the buffer rather than looked up later: it is the
+                // scale *this* buffer was drawn at, and a client that is mid-way
+                // through answering a scale change will commit the next one at a
+                // different number.
+                (attached, callbacks, attrs.buffer_scale, damaged, viewport)
+            });
 
         // Ask the client to draw its next frame (keeps it animating).
         let time = self.start.elapsed().as_millis() as u32;
@@ -4793,9 +4868,9 @@ impl CompositorHandler for DomicileCompositor {
             }
             match &committer {
                 Committer::App(app_id) => {
-                    self.publish_frame(app_id, &buffer, buffer_scale, damaged)
+                    self.publish_frame(app_id, &buffer, buffer_scale, damaged, viewport)
                 }
-                Committer::Chrome => self.publish_chrome_frame(&buffer, buffer_scale),
+                Committer::Chrome => self.publish_chrome_frame(&buffer, buffer_scale, viewport),
             }
             // The client may redraw into this buffer the instant it is
             // released, so the release comes after the pixels are out of it —
@@ -4945,6 +5020,7 @@ mod exo_dispatch {
 }
 
 delegate_compositor!(DomicileCompositor);
+delegate_viewporter!(DomicileCompositor);
 delegate_single_pixel_buffer!(DomicileCompositor);
 delegate_content_type!(DomicileCompositor);
 delegate_shm!(DomicileCompositor);
@@ -5572,26 +5648,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // per quad, but only to a compositor that advertises what it asks for.
     // `wl_subcompositor` comes with `CompositorState`; these are the rest that
     // are standard. See `docs/architecture/WINDOW-COMPOSITING.md`.
-    // `wp_viewporter` is *deliberately not here*, and that is the whole of
-    // this comment. Advertising it broke every display denser than 1x.
-    //
-    // Chromium picks one of two ways to say how big its surface is, and it
-    // picks by what the compositor offers. With no viewporter it commits a
-    // 1280x800 buffer and calls `wl_surface.set_buffer_scale(2)`; with one it
-    // commits 2560x1600 at scale 1 and puts the logical size in
-    // `wp_viewport.set_destination` instead. This compositor reads the buffer
-    // and the scale and nothing else, so the second form made every chrome
-    // surface twice its true logical size — the desktop drawn at double, the
-    // stage black beyond the right edge of a rail suddenly 780 pixels wide,
-    // and every `place_portal` and pointer coordinate out by the same factor,
-    // which is a window that misses its hole and a button that cannot be
-    // clicked. Measured both ways at `WINIT_X11_SCALE_FACTOR=1.5`; at 1x the
-    // two forms coincide, which is why nothing headless saw it.
-    //
-    // So it goes back when `set_destination` is *honoured* — the surface's
-    // logical size taken from the viewport's destination, and its source crop
-    // applied — and not before. It is the first thing delegated compositing
-    // needs and it is a change to the commit path rather than a global.
+    // Back, and only because it is honoured now. A global is a promise to
+    // act on what a client then says through it, and Chromium reads this one
+    // as permission to stop calling `wl_surface.set_buffer_scale` and to put
+    // its logical size in `wp_viewport.set_destination` instead. Advertising
+    // it while the commit path read the buffer and its scale and nothing else
+    // made every surface on a dense display twice its true size, and every
+    // portal and pointer coordinate with it. See `viewport`, which answers
+    // the destination that sizes a surface and the source that crops it where
+    // the compositor draws, and `e2e-a-dense-display.sh`, which is what says
+    // so: with the destination ignored the chrome's surface reads 2560x1600
+    // against a desktop of 1280x800, and that check goes red. Measured.
+    ViewporterState::new::<DomicileCompositor>(&dh);
     SinglePixelBufferState::new::<DomicileCompositor>(&dh);
     ContentTypeState::new::<DomicileCompositor>(&dh);
     // And Chromium's own two, which nothing packages — see `exo`.
@@ -5800,6 +5868,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_is_current: false,
         frames_held: 0,
         looks: HashMap::new(),
+        source_ignored: HashSet::new(),
         settled: HashSet::new(),
         chrome_toplevel: None,
         chrome_texture: None,
