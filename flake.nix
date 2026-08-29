@@ -452,6 +452,7 @@
           e2e-chrome-without-a-host = "e2e-chrome-without-a-host.sh";
           e2e-dmabuf = "e2e-dmabuf.sh";
           probe-transparency = "probe-transparency.sh";
+          probe-delegated-compositing = "probe-delegated-compositing.sh";
           e2e-compose = "e2e-compose.sh";
           e2e-bands = "e2e-bands.sh";
           e2e-window-shows-through = "e2e-window-shows-through.sh";

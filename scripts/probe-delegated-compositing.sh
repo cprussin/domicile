@@ -38,12 +38,23 @@ COMPLOG="$(mktemp)"; OFFLOG="$(mktemp)"; ONLOG="$(mktemp)"
 APPDIR="$(mktemp -d)"
 APP=""
 
-RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" "$BIN" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
+RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
+  "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 cleanup() { kill -9 "$COMP" $APP 2>/dev/null; rm -rf "$COMPLOG" "$OFFLOG" "$ONLOG" "$APPDIR"; }
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break; sleep 0.05; done
-[ -S "$XDG_RUNTIME_DIR/wayland-1" ] || { echo "FAIL: the compositor never opened wayland-1."; exit 1; }
+if [ ! -S "$XDG_RUNTIME_DIR/wayland-1" ]; then
+  # With what it said, which is the whole difference between a failure that
+  # names itself and one that restates the symptom. This line read
+  # "the compositor never opened wayland-1" and nothing else, and the reason —
+  # a required argument this script did not pass — was in a log it deleted on
+  # the way out. Twice as long to write and it answers itself.
+  echo "FAIL: the compositor never opened wayland-1, so there is nothing for"
+  echo "  the engine to be a client of. What it said:"
+  sed 's/\x1b\[[0-9;]*m//g' "$COMPLOG" | grep -avE "GL_|Supported (GL|EGL)" | tail -8 | sed 's/^/  /'
+  exit 1
+fi
 
 # A page whose layer tree is not a single quad. `will-change: transform` is the
 # ordinary web-developer way to ask for a compositing layer, which is the point:
