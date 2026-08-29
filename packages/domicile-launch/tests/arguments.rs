@@ -51,6 +51,46 @@ fn a_config_and_a_window_are_read_when_given() {
 
     assert_eq!(parsed.config, Some(PathBuf::from("/run/config.json")));
     assert!(parsed.present);
+    // Off unless asked for, which is the whole of what makes advertising a
+    // protocol this compositor does not implement defensible: an experiment
+    // that cannot be reached by a desktop.
+    assert!(!parsed.experiment_augmenter);
+}
+
+/// The augmenter experiment, which is off by default and takes no value.
+///
+/// It advertises `surface_augmenter` and honours none of it, so it is only
+/// ever a measurement — see `Arguments::experiment_augmenter`. The default is
+/// the load-bearing half and the test above pins it; this one pins that asking
+/// works and that asking *with a value* does not, the same way `--present`
+/// does, since a wrapper writing `--experiment-augmenter=false` and getting an
+/// experiment is the trap that flag shape exists to avoid.
+#[test]
+fn the_augmenter_experiment_is_asked_for_and_never_valued() {
+    let parsed = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--experiment-augmenter",
+    ])
+    .expect("the experiment is asked for");
+    assert!(parsed.experiment_augmenter);
+
+    let refused = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--experiment-augmenter=false",
+    ])
+    .expect_err("--experiment-augmenter takes no value");
+    assert_eq!(
+        refused,
+        ArgumentError::UnwantedValue {
+            flag: "--experiment-augmenter".into()
+        }
+    );
 }
 
 /// `--flag=value` as well as `--flag value`: a wrapper writing the command line

@@ -54,3 +54,18 @@ pub mod alpha_compositing {
     use self::__interfaces::*;
     wayland_scanner::generate_server_code!("protocols/alpha-compositing-unstable-v1.xml");
 }
+
+pub mod surface_augmenter {
+    pub use smithay::reexports::wayland_server;
+    // This one extends `wl_subsurface` as well as `wl_surface`, and names
+    // `wl_buffer` for the solid-colour buffers it can make.
+    pub use smithay::reexports::wayland_server::protocol::{wl_buffer, wl_subsurface, wl_surface};
+
+    pub mod __interfaces {
+        use super::wayland_server::protocol::__interfaces::*;
+
+        wayland_scanner::generate_interfaces!("protocols/surface-augmenter.xml");
+    }
+    use self::__interfaces::*;
+    wayland_scanner::generate_server_code!("protocols/surface-augmenter.xml");
+}
