@@ -33,9 +33,27 @@
 // transparent }` where Domicile composites this window, and the page's own
 // where it does not. See `electron-chrome-host/src/chrome-window.ts`.
 //
-// Nothing here catches a background added back. What would is a pixel probe —
-// draw a window, read a pixel of it back, and require it to be the client's
-// colour — and no check in this repo does that yet. It is on the roadmap.
+// `e2e-window-shows-through.sh` is what catches a background added back: it
+// draws a window, reads a pixel of the chrome over it, and requires that pixel
+// not to be fully opaque, because nothing the chrome is entitled to paint over
+// a window is. This paragraph used to say no such check existed; it does, and
+// it works.
+//
+// It has been proven, the hard way. A background was added to the stage, that
+// check went red on exactly this, and the verdict it fired was argued down as
+// a false positive instead of believed — the reasoning being that on the copy
+// path the page draws the window into a `<canvas>` *above* the background, so
+// the window is plainly still visible and a screenshot says so. That much is
+// true and it is beside the point: on the composited path there is no canvas,
+// the background is a raster of its own, and the topmost band covers the
+// window. Which path a desktop is on depends on whether its clients can
+// allocate a dmabuf, so a machine with no render node cannot reproduce the
+// failure and every check on one passes.
+//
+// So: the reading is fully opaque over a window means the window is not on
+// screen, whatever a screenshot taken on the copy path shows. Retuning that
+// verdict to accommodate a background is retuning the one thing that catches
+// this.
 
 /** The attribute a band's own elements carry, valued with the band's index. */
 export const BAND = "data-band";
