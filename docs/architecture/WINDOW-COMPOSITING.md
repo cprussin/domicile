@@ -351,14 +351,18 @@ either an engine that does emit one — a different build, a different
 configuration, or a fork — or living with a flattened page and the band
 machinery that fakes stacking on top of it.
 
-**One lever is untested**, and it is the last row of the table below that was
-never implemented: `surface-augmenter`, Chromium's own `exo` protocol. The
-engine never asks for it, so nothing in its logs suggests it matters, and on
-ChromeOS — where delegated compositing does produce a quad per layer — `exo`
-provides it. Whether the engine gates per-quad delegation on finding an
-exo-shaped compositor is not answerable from the outside; the only way to know
-is to implement it and re-run the probe. That is the one experiment left before
-the negative result above is final.
+**The last lever was pulled and it moved nothing.** `surface-augmenter` —
+Chromium's own `exo` protocol, the last row of the table below, and the only
+difference left between this compositor and the one server known to make the
+engine send a quad per composited layer — was vendored and advertised under
+`--experiment-augmenter`. The engine does not bind it. A client binds the
+globals it wants when it enumerates the registry, before it renders anything,
+so this is not a decision deferred until a GPU exists: the engine is not
+looking for an augmenter and does not gate delegation on finding a compositor
+shaped like `exo`. The negative result is final.
+
+`docs/architecture/STACKING-PARITY.md` carries the whole picture — every route
+closed, the evidence that closed it, and how to re-run any of it.
 
 Everything below this line was written while the premise still stood. It is
 kept because the protocol work it describes is real, was done, and is what
