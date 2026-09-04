@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <cprussin@bci-incorporated.com>
+Date: Sat, 29 Aug 2026 22:02:57 -0700
+Subject: [PATCH] domicile: build the non-renderer frame sink broker
+
+Adds the new components/domicile and content/browser/domicile sources to
+their targets, and registers components/domicile:unit_tests with
+components_unittests.
+
+The sources themselves are new files carried in
+packages/domicile-engine/src/; this is the whole of what the series has to
+edit in files Chromium already owns.
+---
+ components/BUILD.gn      | 1 +
+ content/browser/BUILD.gn | 3 +++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/components/BUILD.gn b/components/BUILD.gn
+index f71b6c4e4d813..6605d8094d8b9 100644
+--- a/components/BUILD.gn
++++ b/components/BUILD.gn
+@@ -235,6 +235,7 @@ test("components_unittests") {
+     "//components/device_reauth:unit_tests",
+     "//components/device_signals/core:unit_tests",
+     "//components/dom_distiller/core:unit_tests",
++    "//components/domicile:unit_tests",
+     "//components/download:unit_tests",
+     "//components/encrypted_messages:unit_tests",
+     "//components/enterprise/device_trust/core/signals:unit_tests",
+diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
+index 4e9e52469939b..0bab55e691d6c 100644
+--- a/content/browser/BUILD.gn
++++ b/content/browser/BUILD.gn
+@@ -151,6 +151,7 @@ source_set("browser") {
+     "//components/discardable_memory/common",
+     "//components/discardable_memory/service",
++    "//components/domicile:browser",
+     "//components/download/database",
+     "//components/download/public/common:public",
+     "//components/embedder_support",
+     "//components/embedder_support:user_agent",
+@@ -933,6 +934,8 @@ source_set("browser") {
+     "dom_storage/dom_storage_context_wrapper.h",
+     "dom_storage/session_storage_namespace_impl.cc",
+     "dom_storage/session_storage_namespace_impl.h",
++    "domicile/domicile_frame_sink_broker.cc",
++    "domicile/domicile_frame_sink_broker.h",
+     "download/data_url_blob_reader.cc",
+     "download/data_url_blob_reader.h",
+     "download/download_item_utils.cc",

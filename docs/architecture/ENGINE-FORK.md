@@ -76,6 +76,44 @@ referencing the output of another compositor instance or client"
 (`cc/layers/surface_layer.h:36`). It goes into the property trees with every
 other layer, which is the whole of requirement 2.
 
+### Who may create a frame sink
+
+**Nobody, at the viz layer.** `FrameSinkManagerImpl::CreateCompositorFrameSink`
+(`components/viz/service/frame_sinks/frame_sink_manager_impl.cc:333`) rejects a
+duplicate `FrameSinkId` and a nonexistent bundle, and checks nothing else. Every
+authorization decision is the browser's.
+
+The check the renderer path makes is **namespace ownership, not privilege**:
+
+```cpp
+if (frame_sink_id.client_id() != renderer_client_id_) {
+  receivers_.ReportBadMessage("Invalid client ID");
+```
+
+`renderer_client_id_` is the renderer's own child process id
+(`render_process_host_impl.cc:2783`), so this says *you may name only ids in the
+namespace I gave you* — the browser refusing a renderer's claim on someone
+else's sinks. It is not a gate the browser must get past.
+
+The browser has a namespace of its own, and it is unreachable by any renderer:
+
+| | |
+|---|---|
+| browser | `kBrowserClientId = 0` (`viz_process_transport_factory.cc:68`) |
+| renderer | its `ChildProcessId`, which "starts generating id's at 1" and treats 0 as invalid (`content/public/common/child_process_id.h:15`) |
+
+And both halves of the privilege are `CONTENT_EXPORT` free functions —
+`content::AllocateFrameSinkId()` and `content::GetHostFrameSinkManager()`,
+`content/browser/compositor/surface_utils.h:19` — so a browser-process service
+needs no `RenderProcessHost` and no renderer to hold one. And
+`mojom::CompositorFrameSink` is an ordinary message pipe once created, so it
+goes wherever a pipe can go.
+
+So the broker inverts the renderer interface: instead of validating an id the
+caller supplies, it allocates one and returns it. The allocator is injected
+rather than private, because a second `FrameSinkIdAllocator(0)` would hand out
+ids the browser has already used.
+
 ### The pieces
 
 | Piece | Where | New or edited |
@@ -83,7 +121,7 @@ other layer, which is the whole of requirement 2.
 | Wayland server, input, seat, outputs, session | `domicile-compositor` as it stands | **kept** |
 | dmabuf → `gpu::SharedImageInterface::CreateSharedImage` → `viz::TransferableResource` | ported from `components/exo/buffer.cc` | new |
 | Submitting `CompositorFrame`s for a sink | new external viz client | new |
-| Brokering a `FrameSinkId` and sink to a non-renderer process | new browser-process service, modelled on `content/browser/renderer_host/embedded_frame_sink_provider_impl.cc` | new file + ~1 line in `render_process_host_impl_receiver_bindings.cc` |
+| Brokering a `FrameSinkId` and sink to a non-renderer process | `components/domicile/`, modelled on `content/browser/renderer_host/embedded_frame_sink_provider_impl.cc` | **done** — new files + 4 lines across two `BUILD.gn`. Not `render_process_host_impl_receiver_bindings.cc` as first guessed: nothing about it hangs off a `RenderProcessHost` |
 | Pushing the `SurfaceId` to the page | new mojo, modelled on the `RemoteFrame` path | new |
 | An element that embeds it | `HTMLCanvasElement`, which already owns a `SurfaceLayerBridge` and a `cc::SurfaceLayer` for `transferControlToOffscreen` | edited (2 files + IDL) |
 
@@ -206,10 +244,11 @@ about the build changes.
 
 **The spike**, each step naming what would kill it:
 
-- [ ] a browser-process service that allocates a `FrameSinkId` and creates a
+- [x] a browser-process service that allocates a `FrameSinkId` and creates a
       `CompositorFrameSink` through `viz::HostFrameSinkManager` for a client
-      that is not a renderer — killed if that privilege turns out to be
-      reachable only from inside the browser's own object graph
+      that is not a renderer — **not killed**, see *Who may create a frame sink*
+      below. `components/domicile/browser/` in the
+      series
 - [ ] a throwaway external submitter pushing solid-colour `CompositorFrame`s to
       it — killed if frames are accepted but never aggregated, meaning
       hierarchy registration is not enough
@@ -251,15 +290,37 @@ Phase 3 — be the display server:
   ours to avoid the engine swallowing events is not established.
 - **Where the Wayland server runs.** External keeps the fork to a bridge and
   keeps the Rust. In-tree would get a GPU channel and `HostFrameSinkManager`
-  for free. Recommendation: external, and revisit only if the brokering turns
-  out to need privileges an external process cannot be given.
-- **Build and CI cost.** Half answered: a from-scratch build is 4h 16m and
-  97 GB on one 16-core machine, which is an afternoon rather than a build farm,
-  and cheap enough that carrying a fork is not obviously unaffordable. The half
-  that decides it is the **incremental** rebuild after a rebase onto a new
-  Chromium release — a full rebuild every six weeks is a different proposition
-  from a partial one. Measure that at the first rebase. This repo's CI still
-  will not carry either.
+  for free. Recommendation: external — the brokering needs no privilege an
+  external process cannot be given, which was the condition for revisiting.
+- **Who may reach the broker.** Holding a `FrameSinkBroker` pipe is
+  unrestricted authority to allocate frame sinks in viz, so the transport is
+  the access-control decision and there is nothing behind it. Recommendation: a
+  Unix socket the browser opens at a path only the compositor can reach, one
+  connection, established at startup — not a capability the renderer can pass
+  on. Decide it with step 2, which is the first thing that needs a pipe.
+- **Build and CI cost.** A from-scratch build is 4h 16m and 97 GB on one
+  16-core machine — an afternoon rather than a build farm. What the series
+  itself costs, measured on `crux` against a tree already built at the pin:
+
+  | | |
+  |---|---|
+  | null build — ninja stats 56k targets, nothing to do | **6–7s** |
+  | apply the whole series to a built tree, `autoninja chrome` | **65s** |
+  | edit `frame_sink_broker.cc` → `chrome` | **14s** |
+  | edit `frame_sink_broker.h` → `chrome` | **13s** |
+
+  Net of the floor that is ~1m to lay the series down — `gn` regen, the mojom
+  generation, three objects, and relinking `libcontent.so` and `chrome` — and
+  ~6s per subsequent edit. The series is additive, so it widens nothing's
+  blast radius: the one dep it adds runs `//content/browser` →
+  `//components/domicile:browser`, and the header behind it is included by
+  exactly one file.
+
+  **The rebase number is still not measured** — that needs the pin rolled onto
+  a later revision, which has not happened. But it is now clear it will be
+  upstream's number rather than the fork's: whatever a six-week upstream diff
+  costs to rebuild, carrying this adds seconds to it. This repo's CI still will
+  not carry either.
 - **Not verified by measurement.** Every claim above about what CSS applies is
   read from the mechanism, not observed. The spike's last step is what turns
   it into a fact.
