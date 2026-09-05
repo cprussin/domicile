@@ -116,8 +116,7 @@ ids the browser has already used.
 
 ### How the producer reaches the broker
 
-Read ahead of step 2, because one of the two obvious answers is disqualified
-rather than merely worse.
+One of the two obvious answers is disqualified rather than merely worse.
 
 **`mojo::IsolatedConnection` cannot be used.** It is the natural fit on paper —
 "primarily useful when you already have two established Mojo process graphs
@@ -135,27 +134,115 @@ Forwarding is the broker's entire job. The producer sends a
 (`host_frame_sink_manager.cc:221`). That is exactly the hop the limitation
 forbids.
 
-**So it is a real invitation over a named socket.**
+**So it is a real invitation over a named socket, and it works.**
 `mojo::NamedPlatformChannel` gives a `PlatformChannelServerEndpoint`, and
 `OutgoingInvitation::Send(invitation, target, server_endpoint)`
 (`invitation.h:103`) accepts one. The producer joins the browser's mojo graph,
-so handles route anywhere in it. This also settles the access-control question
-in the same stroke: the socket path *is* the ACL, which is what the open
-question below already recommended for other reasons.
+so handles route anywhere in it — including the one hop that matters, the
+`CompositorFrameSink` receiver the broker forwards to the viz process. This
+also settles the access-control question in the same stroke: the socket path
+*is* the ACL.
 
-**Chromium ships first-party Rust mojo bindings**, which is not obvious and
-matters more than the transport choice. `mojo/public/rust` has three layers —
-safe wrappers over the C API, a system layer, and a bindings layer "directly
-analogous to the C++ Bindings API" — and a `mojom()` GN target emits a `_rust`
-crate beside its C++ one. An external Rust producer speaking mojo is therefore
-possible rather than a rewrite.
+The producer is `components/domicile/spike/solid_color_submitter.cc`, a process
+the browser did not launch, does not sandbox, and has no `RenderProcessHost`
+for. It connects with `NamedPlatformChannel::ConnectToServer` and
+`IncomingInvitation::Accept`, and gets back `FrameSinkId(0, 2)` — client id 0,
+the browser's own namespace, the one no renderer can name.
 
-**The unsolved half is the build, not the language.** Those crates are GN
-targets consumed with `chromium::import!` from inside the Chromium tree.
-`domicile-compositor` is a cargo crate built by Nix outside it. Nothing here
-says how a mojom-generated crate reaches that build, and that gap — not
-privilege, and not the language — is now the real cost of keeping the producer
-external. Step 2 is where it gets measured instead of assumed.
+Two constraints on the transport, neither of them documented upstream:
+
+- **`base::kNullProcessHandle` is fine on POSIX.** `Send` wants the target
+  process handle "if known", and warns that IPC is limited without it on Mac and
+  Windows. There is no handle for a process you did not launch, and on Linux
+  nothing was lost.
+- **Pipe names on an invitation must be small integers, not strings.** Under
+  ipcz an attachment is indexed by the first four bytes of its name read as a
+  little-endian integer, and a name that is not exactly 4 or 8 bytes long lands
+  on index 0 (`mojo/core/ipcz_driver/invitation.cc`, `GetAttachmentIndex`). Two
+  string-named pipes on one invitation therefore collide, and the second
+  `AttachMessagePipe` fails a `DCHECK` with `MOJO_RESULT_ALREADY_EXISTS`. The
+  cap is `Invitation::kMaxAttachments`, which is 7.
+
+### What it takes to get a surface on the screen
+
+Not killed. **Registering the frame sink and registering the hierarchy do
+different jobs, and neither of them is what draws the surface.** Each of the
+embedder's three jobs was switched off in turn
+(`--domicile-spike-skip-hierarchy`, `--domicile-spike-skip-surface-layer`):
+
+| | | |
+|---|---|---|
+| | BeginFrames | aggregated |
+| hierarchy + `SurfaceLayer` | yes | **yes** — drew `#FFFF00FF`, the colour submitted |
+| `SurfaceLayer` only | **no** | **yes** — the frame submitted with a manual `BeginFrameAck` was still drawn |
+| hierarchy only | yes | no — nothing named the `SurfaceId`, so there was nothing to draw |
+
+`RegisterFrameSinkHierarchy` is about **BeginFrames**: a producer that does not
+need viz to drive it can skip it and still get pixels on screen. Aggregation
+needs an **embedder naming the `SurfaceId` in a `SurfaceDrawQuad`** — the
+design's `cc::SurfaceLayer`, which step 3 moves from the browser's UI into the
+page.
+
+The proof is a pixel, not a log line. The embedder issues a `CopyOutputRequest`
+on the embedding layer, which viz answers out of the display compositor's draw
+*after* the aggregator has resolved the `SurfaceDrawQuad`, and hands the centre
+pixel back to the producer over mojo; the producer compares it to what it
+submitted and sets its exit code. `--color=FF00C853` returns `#FF00C853`, so
+the pixel is the producer's rather than the fallback — which is black, and set
+so for that reason.
+
+### Rust: the bindings exist, the crate is not the seam
+
+**Chromium ships first-party Rust mojo bindings.** `mojo/public/rust` has three
+layers — safe wrappers over the C API, a system layer, and a bindings layer
+"directly analogous to the C++ Bindings API" — and a `mojom()` GN target emits a
+`_rust` crate beside its C++ one. Turning it on for viz and generating the
+crate produces exactly what an external producer would want:
+
+```rust
+pub trait CompositorFrameSink : bindings::interface::internal::ImplementThisViaMacro {
+  fn SetNeedsBeginFrame(&mut self, needs_begin_frame: bool) where Self: Sized;
+  fn SubmitCompositorFrame(&mut self,
+      local_surface_id: services_viz_public_mojom_surfaces_rust::local_surface_id::LocalSurfaceId,
+      frame: crate::compositor_frame::CompositorFrame,
+      hit_test_region_list: Option<crate::hit_test_region_list::HitTestRegionList>,
+      submit_time: u64) where Self: Sized;
+  ...
+}
+```
+
+A real `Remote`, real structs, no FFI at the call site — and not reachable from
+a cargo build, for three reasons, measured in that order:
+
+1. **`generate_rust` is off by default and transitively viral.** It is opt-in
+   per `mojom()` target and documented "under development". Turning it on for
+   `//services/viz/public/mojom` means turning it on for every mojom it imports,
+   transitively: **24 mojom targets across 14 `BUILD.gn` files Chromium owns**,
+   plus one `visibility` list to widen. Against a design whose whole carrying
+   argument is "roughly four edited files", that is the number that matters.
+2. **The generator does not yet survive the viz graph.** With all 24 enabled,
+   GN resolves and 50 crates build, then `media/mojo/mojom:media_types` fails
+   to compile: the generator emits `media.mojom.StatusData`, which contains
+   itself, as a Rust struct with a direct `Option<StatusData>` field —
+   `error[E0072]: recursive type has infinite size`. Upstream's bug rather than
+   ours, but `CompositorFrame` is downstream of it. The `surfaces` subset
+   (`FrameSinkId`, `LocalSurfaceId`) builds fine.
+3. **The Rust runtime is bound to Chromium's C++.** `mojo/public/rust/system`
+   depends on `//base` and declares `cxx_bindings`, and `c_mojo_api` is
+   `rust_bindgen` over `mojo/public/c/system/thunks.h`. So a mojom crate is not
+   a leaf: consuming one from cargo means linking `//base` and mojo core, which
+   are GN artifacts. The `chromium::import!` mangling is the *easy* part — it is
+   `{target}_{first 8 hex of SHA256 of the GN dir}`, deterministic, and a cargo
+   build could pass matching `--extern` flags.
+
+**The conclusion is not "Rust is out", it is "the seam is not the crate".** An
+external Rust producer would have to consume a GN-built artifact one way or
+another. The honest options are: build the mojo-facing layer in-tree with GN and
+expose a C ABI to cargo; or keep the producer's mojo half in C++, as step 2's
+throwaway does, and give it the same C ABI. Either way the boundary is a linked
+library, not a crate — and neither is blocked, so the recommendation to keep
+`domicile-compositor` external stands. What changed is that the cost is now
+known and it is a build-system cost, not a language one.
 
 ### The pieces
 
@@ -163,8 +250,9 @@ external. Step 2 is where it gets measured instead of assumed.
 |---|---|---|
 | Wayland server, input, seat, outputs, session | `domicile-compositor` as it stands | **kept** |
 | dmabuf → `gpu::SharedImageInterface::CreateSharedImage` → `viz::TransferableResource` | ported from `components/exo/buffer.cc` | new |
-| Submitting `CompositorFrame`s for a sink | new external viz client | new |
+| Submitting `CompositorFrame`s for a sink | new external viz client | **proven** — step 2's throwaway submits from a process the browser never launched and viz aggregates it |
 | Brokering a `FrameSinkId` and sink to a non-renderer process | `components/domicile/`, modelled on `content/browser/renderer_host/embedded_frame_sink_provider_impl.cc` | **done** — new files + 4 lines across two `BUILD.gn`. Not `render_process_host_impl_receiver_bindings.cc` as first guessed: nothing about it hangs off a `RenderProcessHost` |
+| Getting the producer to the broker | `mojo::NamedPlatformChannel` + a real invitation | **done** — see *How the producer reaches the broker*. One more edited file, `browser_main_loop.cc`, and only for the throwaway |
 | Pushing the `SurfaceId` to the page | new mojo, modelled on the `RemoteFrame` path | new |
 | An element that embeds it | `HTMLCanvasElement`, which already owns a `SurfaceLayerBridge` and a `cc::SurfaceLayer` for `transferControlToOffscreen` | edited (2 files + IDL) |
 
@@ -267,7 +355,7 @@ NIX_SHELL_RUN='autoninja -C out/Domicile chrome' nix-shell tools/nix/shell.nix
 ```
 
 **The build**, configured small and fast rather than shippable — a component
-build with no symbols, and every Ozone platform off but Wayland:
+build with no symbols, and every Ozone platform off but Wayland and headless:
 
 ```sh
 gn gen out/Domicile --args='
@@ -277,6 +365,7 @@ gn gen out/Domicile --args='
   use_ozone = true
   ozone_auto_platforms = false
   ozone_platform_wayland = true
+  ozone_platform_headless = true
 '
 autoninja -C out/Domicile chrome
 ./out/Domicile/chrome --ozone-platform=wayland
@@ -285,6 +374,15 @@ autoninja -C out/Domicile chrome
 Phase 3 swaps `ozone_platform_wayland` for `ozone_platform_drm`; nothing else
 about the build changes.
 
+`ozone_platform_headless` is not part of the design — it is what the
+measurement machine needs. `crux` has no display server and no Wayland
+compositor, so with Wayland alone the engine cannot be started at all and step
+2 has nothing to talk to. Two other flags are load-bearing for the same reason
+and are documented in `scripts/spike.sh`: `--disable-gpu`, which is half of why
+step 2 submits solid colours rather than textures, and `--password-store=basic`,
+without which Chrome blocks on a keyring that is not there and never creates a
+window.
+
 **The spike**, each step naming what would kill it:
 
 - [x] a browser-process service that allocates a `FrameSinkId` and creates a
@@ -292,12 +390,13 @@ about the build changes.
       that is not a renderer — **not killed**, see *Who may create a frame sink*
       below. `components/domicile/browser/` in the
       series
-- [ ] a throwaway external submitter pushing solid-colour `CompositorFrame`s to
-      it, over a real invitation on a named socket — killed if frames are
-      accepted but never aggregated, meaning hierarchy registration is not
-      enough. See *How the producer reaches the broker*: `IsolatedConnection`
-      is already ruled out, and the open cost is reaching the mojom-generated
-      Rust crate from a cargo build
+- [x] a throwaway external submitter pushing solid-colour `CompositorFrame`s to
+      it, over a real invitation on a named socket — **not killed**. Viz drew
+      `#FFFF00FF` where the external process submitted `#FFFF00FF`. See *What
+      it takes to get a surface on the screen*, which also separates what
+      hierarchy registration does (BeginFrames) from what embedding does
+      (aggregation). `components/domicile/spike/` in the series, run with
+      `scripts/spike.sh`
 - [ ] `canvas.embedExternalSurface()` behind a runtime flag, calling
       `SurfaceLayer::SetSurfaceId` with the brokered id — killed if the canvas
       refuses a surface it did not itself allocate
@@ -336,13 +435,15 @@ Phase 3 — be the display server:
   ours to avoid the engine swallowing events is not established.
 - **Where the Wayland server runs.** External keeps the fork to a bridge and
   keeps the Rust. In-tree would get a GPU channel and `HostFrameSinkManager`
-  for free. Recommendation: still external — the brokering needs no privilege
-  an external process cannot be given, which was the condition for revisiting,
-  and Chromium's own Rust mojo bindings mean the producer need not be C++. But
-  the question is no longer settled on privilege alone: an external producer
-  has to consume a mojom-generated Rust crate from a cargo build that is not
-  GN, and nobody has done that. If step 2 finds no reasonable bridge, in-tree
-  is the fallback and the Rust is what it costs.
+  for free. Recommendation: **still external**, and step 2 is why rather than
+  the earlier hope. An external process was given a frame sink and had its
+  frames aggregated, with no privilege it could not be handed and no
+  `RenderProcessHost` anywhere. What step 2 also found is that the mojom-crate
+  route into cargo is not the bridge — see *The Rust bindings reach further
+  than expected*. The bridge is a GN-built library behind a C ABI, and which
+  side of it the mojo code sits on is now an ordinary engineering choice rather
+  than a blocker. Phase 1 is where it gets made, because that is where the
+  producer stops being throwaway.
 - ~~**Who may reach the broker.**~~ Settled, and by the transport rather than
   by a policy. Holding a `FrameSinkBroker` pipe is unrestricted authority to
   allocate frame sinks in viz, so the socket the invitation is sent over is the

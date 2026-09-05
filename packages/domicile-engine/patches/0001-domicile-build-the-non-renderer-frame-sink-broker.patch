@@ -34,8 +34,8 @@ index 4e9e52469939b..0bab55e691d6c 100644
 @@ -151,6 +151,7 @@ source_set("browser") {
      "//components/discardable_memory/common",
      "//components/discardable_memory/service",
-+    "//components/domicile:browser",
      "//components/download/database",
++    "//components/domicile:browser",
      "//components/download/public/common:public",
      "//components/embedder_support",
      "//components/embedder_support:user_agent",

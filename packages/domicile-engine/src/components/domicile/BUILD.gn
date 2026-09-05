@@ -42,3 +42,12 @@ source_set("unit_tests") {
     "//testing/gtest",
   ]
 }
+
+# THROWAWAY. Step 2 of the spike.
+#
+# The submitter is an executable nothing depends on, and GN only loads a
+# BUILD.gn that something references. This group is what makes it reachable, so
+# that carrying the tool costs no edit to a file Chromium owns.
+group("spike") {
+  deps = [ "//components/domicile/spike:solid_color_submitter" ]
+}

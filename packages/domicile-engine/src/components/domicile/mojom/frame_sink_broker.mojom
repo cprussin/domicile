@@ -19,9 +19,15 @@ interface FrameSinkBroker {
   // resulting CompositorFrameSink. The returned id is what an embedder needs to
   // name the surface this sink submits to.
   //
-  // The sink is not yet part of any frame sink hierarchy: it will accept
-  // CompositorFrames, but nothing aggregates them and no BeginFrames arrive
-  // until an embedder registers it as a child.
+  // The sink is not yet part of any frame sink hierarchy, and nothing embeds
+  // the surface it submits to. Those are two separate things, measured in step
+  // 2 of the spike rather than assumed:
+  //
+  //   - Aggregation needs an embedder to name the SurfaceId in a
+  //     SurfaceDrawQuad. Registering the frame sink is not what draws it.
+  //   - Hierarchy registration is what makes BeginFrames arrive. Without it a
+  //     producer can still submit — with a manual BeginFrameAck — and viz still
+  //     aggregates what it submitted.
   CreateFrameSink(
       pending_remote<viz.mojom.CompositorFrameSinkClient> client,
       pending_receiver<viz.mojom.CompositorFrameSink> receiver)
