@@ -17,7 +17,10 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
-if [ ! -d "$CHROMIUM/.git" ]; then
+# `git rev-parse` rather than testing for a `.git` directory: in a worktree
+# `.git` is a file, and a worktree at the pin is the cheapest way to check that
+# the series still applies without disturbing the built tree.
+if ! git -C "$CHROMIUM" rev-parse --git-dir >/dev/null 2>&1; then
   echo "$CHROMIUM is not a git checkout" >&2
   exit 1
 fi
