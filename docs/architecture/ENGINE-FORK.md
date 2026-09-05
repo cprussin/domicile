@@ -114,6 +114,49 @@ caller supplies, it allocates one and returns it. The allocator is injected
 rather than private, because a second `FrameSinkIdAllocator(0)` would hand out
 ids the browser has already used.
 
+### How the producer reaches the broker
+
+Read ahead of step 2, because one of the two obvious answers is disqualified
+rather than merely worse.
+
+**`mojo::IsolatedConnection` cannot be used.** It is the natural fit on paper —
+"primarily useful when you already have two established Mojo process graphs
+isolated from each other" — but its own header states the disqualifying
+limitation:
+
+> if one of the processes sends a Mojo handle (e.g. another message pipe
+> endpoint) to the other process, the receiving process cannot pass that handle
+> to yet another process in its own graph.
+
+Forwarding is the broker's entire job. The producer sends a
+`PendingReceiver<CompositorFrameSink>`, and
+`HostFrameSinkManager::CreateCompositorFrameSink` passes it straight to
+`frame_sink_manager_`, a remote to **the viz process**
+(`host_frame_sink_manager.cc:221`). That is exactly the hop the limitation
+forbids.
+
+**So it is a real invitation over a named socket.**
+`mojo::NamedPlatformChannel` gives a `PlatformChannelServerEndpoint`, and
+`OutgoingInvitation::Send(invitation, target, server_endpoint)`
+(`invitation.h:103`) accepts one. The producer joins the browser's mojo graph,
+so handles route anywhere in it. This also settles the access-control question
+in the same stroke: the socket path *is* the ACL, which is what the open
+question below already recommended for other reasons.
+
+**Chromium ships first-party Rust mojo bindings**, which is not obvious and
+matters more than the transport choice. `mojo/public/rust` has three layers —
+safe wrappers over the C API, a system layer, and a bindings layer "directly
+analogous to the C++ Bindings API" — and a `mojom()` GN target emits a `_rust`
+crate beside its C++ one. An external Rust producer speaking mojo is therefore
+possible rather than a rewrite.
+
+**The unsolved half is the build, not the language.** Those crates are GN
+targets consumed with `chromium::import!` from inside the Chromium tree.
+`domicile-compositor` is a cargo crate built by Nix outside it. Nothing here
+says how a mojom-generated crate reaches that build, and that gap — not
+privilege, and not the language — is now the real cost of keeping the producer
+external. Step 2 is where it gets measured instead of assumed.
+
 ### The pieces
 
 | Piece | Where | New or edited |
@@ -250,8 +293,11 @@ about the build changes.
       below. `components/domicile/browser/` in the
       series
 - [ ] a throwaway external submitter pushing solid-colour `CompositorFrame`s to
-      it — killed if frames are accepted but never aggregated, meaning
-      hierarchy registration is not enough
+      it, over a real invitation on a named socket — killed if frames are
+      accepted but never aggregated, meaning hierarchy registration is not
+      enough. See *How the producer reaches the broker*: `IsolatedConnection`
+      is already ruled out, and the open cost is reaching the mojom-generated
+      Rust crate from a cargo build
 - [ ] `canvas.embedExternalSurface()` behind a runtime flag, calling
       `SurfaceLayer::SetSurfaceId` with the brokered id — killed if the canvas
       refuses a surface it did not itself allocate
@@ -290,14 +336,20 @@ Phase 3 — be the display server:
   ours to avoid the engine swallowing events is not established.
 - **Where the Wayland server runs.** External keeps the fork to a bridge and
   keeps the Rust. In-tree would get a GPU channel and `HostFrameSinkManager`
-  for free. Recommendation: external — the brokering needs no privilege an
-  external process cannot be given, which was the condition for revisiting.
-- **Who may reach the broker.** Holding a `FrameSinkBroker` pipe is
-  unrestricted authority to allocate frame sinks in viz, so the transport is
-  the access-control decision and there is nothing behind it. Recommendation: a
-  Unix socket the browser opens at a path only the compositor can reach, one
-  connection, established at startup — not a capability the renderer can pass
-  on. Decide it with step 2, which is the first thing that needs a pipe.
+  for free. Recommendation: still external — the brokering needs no privilege
+  an external process cannot be given, which was the condition for revisiting,
+  and Chromium's own Rust mojo bindings mean the producer need not be C++. But
+  the question is no longer settled on privilege alone: an external producer
+  has to consume a mojom-generated Rust crate from a cargo build that is not
+  GN, and nobody has done that. If step 2 finds no reasonable bridge, in-tree
+  is the fallback and the Rust is what it costs.
+- ~~**Who may reach the broker.**~~ Settled, and by the transport rather than
+  by a policy. Holding a `FrameSinkBroker` pipe is unrestricted authority to
+  allocate frame sinks in viz, so the socket the invitation is sent over is the
+  whole of the access control: a `NamedPlatformChannel` at a path only the
+  compositor can open, one connection at startup, no capability a renderer can
+  pass on. What remains is filesystem permissions on that path, which is step
+  2's to get right and is not an open design question.
 - **Build and CI cost.** A from-scratch build is 4h 16m and 97 GB on one
   16-core machine — an afternoon rather than a build farm. What the series
   itself costs, measured on `crux` against a tree already built at the pin:
