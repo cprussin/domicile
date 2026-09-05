@@ -29,8 +29,11 @@ same reason.
 | `scripts/apply.sh` | series → checkout |
 | `scripts/extract.sh` | checkout → series. Run before every push |
 | `scripts/build.sh` | `gn gen` + `autoninja` with the args the spike is measured under |
-| `scripts/spike.sh` | run the spike end to end and check the pixel viz drew |
-| `scripts/spike-page.html` | the page it drives: a `<canvas>` that embeds instead of drawing |
+| `scripts/spike.sh` | run one step of the spike end to end; the producer's exit code is the verdict |
+| `scripts/spike-page.html` | steps 2 and 3's page: a `<canvas>` that embeds instead of drawing |
+| `scripts/spike-step4.sh` | the measurement: seven CSS properties and the latency |
+| `scripts/spike-css-page.html` | its page — each property on an `<app>` and on a `<div>` beside it |
+| `scripts/spike-resize-page.html` | the resize cell, which needs a page to itself |
 
 ## Working on it
 
@@ -47,12 +50,12 @@ here as spell-check, never as proof.
 ./scripts/extract.sh /build/chromium/src     # write it back here
 ```
 
-`build.sh` and `spike.sh` both have to run inside Chromium's own toolchain
-shell — a component build links against that shell's glibc and will not start
-without it:
+`build.sh`, `spike.sh` and `spike-step4.sh` all have to run inside Chromium's
+own toolchain shell — a component build links against that shell's glibc and
+will not start without it:
 
 ```sh
-NIX_SHELL_RUN="$PWD/scripts/spike.sh /build/chromium/src" \
+NIX_SHELL_RUN="$PWD/scripts/spike-step4.sh /build/chromium/src" \
   nix-shell /build/chromium/src/tools/nix/shell.nix
 ```
 
@@ -100,26 +103,46 @@ per subsequent edit. The rebase number is still missing: it needs
 
 ## State
 
-Steps 1, 2 and 3 of the spike in `ENGINE-FORK.md`. None was killed: a process
-the browser did not launch gets a frame sink from the browser's own namespace,
-and a `<canvas>` in an ordinary web page embeds the surface it submits to.
+The spike in `ENGINE-FORK.md` is finished. All four steps, none killed: a
+process the browser did not launch gets a frame sink from the browser's own
+namespace, a `<canvas>` in an ordinary web page embeds the surface it submits
+to, and CSS treats that canvas the way it treats any other element.
 
-The evidence is a pixel. `spike.sh` starts the engine on a page whose canvas
-calls `embedExternalSurface()`, runs the external producer, and the producer
-asks the browser what colour it actually drew where the canvas is:
+**Step 4 is the one that matters.** `spike-step4.sh` lays each property out
+twice — once on an `<app>` and once on an ordinary `<div>` beside it — and
+compares the two halves pixel for pixel out of the display compositor's own
+draw:
+
+```
+$ ... scripts/spike-step4.sh /build/chromium/src
+property             pixels   differ   interior    worst in effect  verdict
+baseline              53200        0          0        1        no  pass
+z-index               53200        0          0        0       yes  pass
+transform             53200      285          0       84       yes  pass (edges only)
+border-radius         53200        0          0        1       yes  pass
+opacity               53200        0          0        2       yes  pass
+filter: blur()        53200        0          0        1       yes  pass
+mix-blend-mode        53200        0          0        1       yes  pass
+negative control      53200    10800       9976      255        no  pass (differs, as it must)
+```
+
+`z-index` is the property bands failed at and the reason the fork exists; it is
+exact. `transform` differs on a one-pixel outline, which is a surface being
+resampled where a `<div>` is rasterised, and is what a composited `<video>`
+does too. `in effect` is the check that stops a property that never reached the
+page from passing as parity, and the last row is the check that stops a diff
+that cannot see a difference from passing at all.
+
+Steps 2 and 3 are still `spike.sh`, and still a single pixel:
 
 ```
 $ ... scripts/spike.sh /build/chromium/src -- --color=FF00C853
 brokered frame sink: FrameSinkId(0, 2)
 waiting for a page to embed it...
-a page embedded us: LocalSurfaceId(1, 1, 9A4E...) at 640x480
+a page embedded us: LocalSurfaceId(1, 1, E8F6...) at 1024x681
 BeginFrames are flowing
 aggregated: drew #FF00C853, submitted #FF00C853
 ```
-
-Shrink the canvas so the sample lands beside it and the same run reports
-`NOT aggregated: drew #FF3F51B5` — the page's own background. CSS moves the
-canvas and the producer's surface moves with it.
 
 Kept:
 
@@ -131,6 +154,7 @@ Kept:
 | `components/domicile/browser/brokered_frame_sink.{h,cc}` | one registered `FrameSinkId`, held for as long as the producer submits to it |
 | `components/domicile/browser/external_surface_provider.{h,cc}` | the renderer-facing shim over the broker |
 | `components/domicile/browser/frame_sink_broker_unittest.cc` | nine tests, against a real `HostFrameSinkManager` and an in-process `FrameSinkManagerImpl` |
+| `components/domicile/spike/window_diff_unittest.cc` | six, over the rule step 4's verdicts come out of: what counts as a difference, and what counts as an edge rather than a region |
 | `content/browser/domicile/domicile_frame_sink_broker.{h,cc}` | the browser process's one instance, wired to `content::GetHostFrameSinkManager()` and `content::AllocateFrameSinkId()`, and the named socket a producer reaches it over |
 | `third_party/blink/renderer/platform/graphics/external_surface_embedder.{h,cc}` | the page's half: allocates the `LocalSurfaceId`, asks the browser for the `FrameSinkId`, pairs them |
 
@@ -138,9 +162,13 @@ Kept:
 
 | | |
 |---|---|
-| `components/domicile/spike/solid_color_submitter.cc` | the external producer. C++, in-tree, and that is a measured choice — see `ENGINE-FORK.md`'s *Rust: the bindings exist, the crate is not the seam* |
+| `components/domicile/spike/surface_producer.{h,cc}` | the external producer. C++, in-tree, and that is a measured choice — see `ENGINE-FORK.md`'s *Rust: the bindings exist, the crate is not the seam* |
+| `components/domicile/spike/solid_color_submitter.cc` | steps 2 and 3's assertion over it: one pixel at the centre of the window |
+| `components/domicile/spike/css_parity.cc`, `css_parity_layout.h` | step 4's. The latency loop and the page's geometry, which has to stay in step with `scripts/spike-css-page.html` |
+| `components/domicile/spike/window_diff.{h,cc}` | the rule that turns a picture of the window into step 4's verdicts. Separate from the process that takes the picture because every "pass" in the measurement is this code's opinion, and it has six tests |
+| `components/domicile/spike/spike_color.{h,cc}` | comparing what viz drew with what was submitted, which every step ends in |
 | `components/domicile/spike/mojom/spike_probe.mojom`, `content/browser/domicile/domicile_spike_probe.{h,cc}` | the pixel probe. A `CopyOutputRequest` on the browser's window, because the embedding layer belongs to the page now and there is no other way to keep the proof a pixel |
-| `scripts/spike-page.html` | the page. A canvas that fills the viewport and embeds instead of drawing |
+| `scripts/spike-page.html`, `spike-css-page.html`, `spike-resize-page.html` | the pages |
 
 Nothing hooks browser startup. The broker, its socket and the probe are created
 when a page first calls `embedExternalSurface()`, and the browser holds that
@@ -155,11 +183,11 @@ Run the tests with:
 
 ```sh
 autoninja -C out/Domicile components_unittests
-./out/Domicile/components_unittests --gtest_filter='FrameSinkBroker*'
+./out/Domicile/components_unittests --gtest_filter='FrameSinkBroker*:WindowDiff*'
 ```
 
 Neither the Blink half nor the probe has a unit test. Chromium does not unit
 test `SurfaceLayerBridge` either — there is no `surface_layer_bridge_test.cc` —
 and for the same reason: the seam only means anything with a display
-compositor behind it. `spike.sh` is what covers them, and its exit code is the
-assertion.
+compositor behind it. `spike.sh` and `spike-step4.sh` are what cover them, and
+their exit codes are the assertion.

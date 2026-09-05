@@ -11,7 +11,6 @@
 #include "components/domicile/mojom/external_surface.mojom-blink.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
-#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
@@ -42,6 +41,23 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
   using EmbeddedCallback =
       base::OnceCallback<void(const std::optional<viz::SurfaceId>&)>;
 
+  // Which LocalSurfaceId to embed at.
+  enum class Allocation {
+    // Whichever one this renderer is already showing, allocating it if there
+    // is none yet. So several elements embed one surface and all of them show
+    // the same producer, which is what lets the CSS measurement put six <app>
+    // elements on one page against one producer. A real shell has one surface
+    // per app and keys them by which app an element names; that is the chrome
+    // protocol's job and not this layer's.
+    kAdopt,
+    // A new one, bumping parent_sequence_number. The embedder's box changed
+    // and the producer has to render at the new size: this is the embedder
+    // half of xdg_toplevel.configure, and it is the writer split
+    // LocalSurfaceId is built around — the parent sequence number is the
+    // embedder's to increment, the child's is the producer's.
+    kReconfigure,
+  };
+
   ExternalSurfaceEmbedder();
 
   ExternalSurfaceEmbedder(const ExternalSurfaceEmbedder&) = delete;
@@ -49,15 +65,18 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
 
   ~ExternalSurfaceEmbedder();
 
-  // Allocates a LocalSurfaceId and asks the browser which FrameSinkId to pair
-  // it with. `parent_frame_sink_id` is this page's own, so that the producer
-  // ends up under it in the frame sink hierarchy and BeginFrames reach it.
+  // Resolves a LocalSurfaceId per `allocation` and asks the browser which
+  // FrameSinkId to pair it with. `parent_frame_sink_id` is this page's own, so
+  // that the producer ends up under it in the frame sink hierarchy and
+  // BeginFrames reach it. `size` is how much of the surface the caller will
+  // show, and is what the producer is told to render at.
   //
   // The browser holds the reply until some producer has been brokered a sink,
   // because an <app> element exists before the window behind it does. So this
   // may take arbitrarily long, and if no producer ever connects it never runs.
   void Embed(const viz::FrameSinkId& parent_frame_sink_id,
              const gfx::Size& size,
+             Allocation allocation,
              EmbeddedCallback callback);
 
  private:
@@ -65,7 +84,6 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
                   const viz::LocalSurfaceId& local_surface_id,
                   const std::optional<viz::FrameSinkId>& frame_sink_id);
 
-  viz::ParentLocalSurfaceIdAllocator local_surface_id_allocator_;
   mojo::Remote<domicile::mojom::blink::ExternalSurfaceProvider> provider_;
 };
 

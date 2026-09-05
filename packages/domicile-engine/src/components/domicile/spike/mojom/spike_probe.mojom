@@ -4,24 +4,43 @@
 
 module domicile.mojom;
 
-// THROWAWAY. Step 3's proof, and nothing else.
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
+// THROWAWAY. The spike's proof, and nothing else.
 //
 // The producer knows what colour it submitted. What it cannot see is what the
 // display compositor drew, and that is the only thing worth knowing: whether
 // viz aggregated a frame from a process that is not a renderer into a page's
 // layer tree, because a <canvas> in that page named its SurfaceId.
 //
-// Step 2 asked the same question of a ui::LayerSurface in the browser's own
-// window, and answered it with a CopyOutputRequest on that layer. There is no
-// such layer any more — the embedding one belongs to the page — so the copy is
-// of the browser's window, and the page puts the canvas where the sample lands.
+// Every method here answers that out of a CopyOutputRequest on the browser
+// window's root layer, which viz serves from the display compositor's draw
+// after the aggregator has resolved every SurfaceDrawQuad in the tree. So a
+// colour that comes back is a colour viz aggregated, and if it is the
+// producer's then the aggregation happened through the page.
 //
-// Deleted when domicile-compositor submits real buffers and the measurement in
-// ENGINE-FORK.md's step 4 replaces this with something that reads CSS.
+// Deleted when domicile-compositor submits real buffers.
 interface SpikeProbe {
-  // Copies what the display compositor drew for the browser's window and
-  // returns the colour at its centre, as SkColor (ARGB).
+  // Steps 2 and 3: the colour at the centre of the browser's window.
   //
   // Fails if there is no window yet, or nothing has been drawn — retry.
   SampleWindowCenter() => (bool sampled, uint32 argb);
+
+  // Step 4's CSS parity measurement: the whole window, row-major, as SkColor
+  // (ARGB). `size` is what to index it by.
+  //
+  // The measurement is a diff of one half of the window against the other —
+  // an <app> against an ordinary element laid out identically beside it — so
+  // it needs every pixel rather than a list of points chosen in advance. One
+  // capture of a 1024x768 window is ~3 MB, which is why the polling methods
+  // above and below exist rather than this being the only one.
+  CaptureWindow() => (bool captured, gfx.mojom.Size size, array<uint32> argb);
+
+  // Step 4's latency measurement: one pixel, so that polling for a colour to
+  // appear costs a draw and a round trip rather than a draw, a round trip and
+  // 3 MB.
+  //
+  // `point` outside the window fails rather than clamping: a measurement that
+  // silently samples the wrong pixel is worse than one that stops.
+  SamplePixel(gfx.mojom.Point point) => (bool sampled, uint32 argb);
 };
