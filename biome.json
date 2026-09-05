@@ -243,6 +243,16 @@
         "packages/chrome-sdk/package.json",
         "packages/electron-chrome-host/package.json"
       ]
+    },
+    {
+      "includes": ["packages/domicile-engine/scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
     }
   ],
   "root": true,

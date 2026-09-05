@@ -6,6 +6,27 @@ module domicile.mojom;
 
 import "services/viz/public/mojom/compositing/compositor_frame_sink.mojom";
 import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
+import "services/viz/public/mojom/compositing/local_surface_id.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
+// Tells a producer which surface to submit to.
+//
+// The embedder allocates and the producer adopts. That is not our invention: it
+// is what RemoteFrame does for every OOPIF, where the embedding side owns the
+// LocalSurfaceId's parent_sequence_number and bumps it whenever its box
+// changes. Here the embedder is the page — a <canvas> pointed at a brokered
+// FrameSinkId — so this call is a compositor telling a client to resize, and
+// the <canvas> element's layout box is the xdg_toplevel.configure.
+//
+// The LocalSurfaceId carries an embed_token the embedder minted, and holding it
+// is the whole of the producer's permission to submit to that surface. Nothing
+// has to decide whether the page *may* embed a window.
+interface SurfaceObserver {
+  // The embedder is showing `size` of this producer's surface at
+  // `local_surface_id`. Submit to that id, at that size, until told another.
+  OnSurfaceEmbedded(viz.mojom.LocalSurfaceId local_surface_id,
+                    gfx.mojom.Size size);
+};
 
 // Brokers viz frame sinks to a compositing producer that is not a renderer.
 //
@@ -17,7 +38,8 @@ import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
 interface FrameSinkBroker {
   // Allocates a FrameSinkId, registers it with viz, and binds `receiver` to the
   // resulting CompositorFrameSink. The returned id is what an embedder needs to
-  // name the surface this sink submits to.
+  // name the surface this sink submits to, and `observer` is how the producer
+  // hears which surface that turned out to be.
   //
   // The sink is not yet part of any frame sink hierarchy, and nothing embeds
   // the surface it submits to. Those are two separate things, measured in step
@@ -28,9 +50,19 @@ interface FrameSinkBroker {
   //   - Hierarchy registration is what makes BeginFrames arrive. Without it a
   //     producer can still submit — with a manual BeginFrameAck — and viz still
   //     aggregates what it submitted.
+  //
+  // Both happen when an embedder turns up, which is what SurfaceObserver
+  // announces. The producer may connect before there is a page to embed it, or
+  // after; neither side waits on the other.
+  //
+  // `observer` is optional, and a producer that passes none can never submit:
+  // it has no way to learn the LocalSurfaceId, and it may not invent one. That
+  // is a sink with no surface, which is a useful thing to be able to ask for in
+  // a test and nowhere else.
   CreateFrameSink(
       pending_remote<viz.mojom.CompositorFrameSinkClient> client,
-      pending_receiver<viz.mojom.CompositorFrameSink> receiver)
+      pending_receiver<viz.mojom.CompositorFrameSink> receiver,
+      pending_remote<SurfaceObserver>? observer)
       => (viz.mojom.FrameSinkId frame_sink_id);
 
   // Destroys the sink for `frame_sink_id` and invalidates the id. Every sink

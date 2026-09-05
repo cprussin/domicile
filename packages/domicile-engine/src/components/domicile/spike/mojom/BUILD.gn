@@ -4,13 +4,8 @@
 
 import("//mojo/public/tools/bindings/mojom.gni")
 
-# THROWAWAY. Step 2 of the spike only; deleted when the page does the
-# embedding. See docs/architecture/ENGINE-FORK.md in the Domicile repository.
+# THROWAWAY. The spike's proof only; deleted when the measurement replaces it.
+# See docs/architecture/ENGINE-FORK.md in the Domicile repository.
 mojom("mojom") {
-  sources = [ "spike_embedder.mojom" ]
-
-  public_deps = [
-    "//services/viz/public/mojom:surfaces",
-    "//ui/gfx/geometry/mojom",
-  ]
+  sources = [ "spike_probe.mojom" ]
 }

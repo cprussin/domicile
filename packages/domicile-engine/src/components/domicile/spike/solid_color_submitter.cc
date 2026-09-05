@@ -2,22 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// THROWAWAY. Step 2 of the spike in docs/architecture/ENGINE-FORK.md.
+// THROWAWAY. The spike's producer, standing in for domicile-compositor until it
+// submits real buffers. See docs/architecture/ENGINE-FORK.md.
 //
 // A viz client in a process the browser did not launch, does not sandbox, and
 // has no RenderProcessHost for. It joins the browser's mojo graph over a named
-// socket, asks domicile::FrameSinkBroker for a frame sink, gets the browser to
-// embed the resulting surface, submits solid-colour CompositorFrames to it, and
-// then asks the browser what colour it actually drew.
+// socket, asks domicile::FrameSinkBroker for a frame sink, waits to be told
+// which surface a page embedded it at, submits solid-colour CompositorFrames to
+// that surface, and then asks the browser what colour it actually drew.
 //
-// It exits 0 only if that colour is the one it submitted, which is the whole
-// question step 2 asks: does viz aggregate frames from a producer that is not
-// a renderer?
+// It exits 0 only if that colour is the one it submitted. In step 2 that
+// answered "does viz aggregate frames from a producer that is not a renderer?".
+// Here the embedder is a <canvas> in an ordinary web page rather than a
+// ui::LayerSurface in the browser's own window, so the same exit code answers
+// step 3: does a page's cc::SurfaceLayer embed a surface the page did not
+// allocate?
+//
+// Note what this no longer does. It does not ask to be embedded, and it does
+// not allocate a LocalSurfaceId. The embedder does both, and this adopts what
+// it is given — which is the direction RemoteFrame uses, and the direction a
+// compositor telling a client to resize has to run in.
 //
 // packages/domicile-engine/scripts/spike.sh in the Domicile repository runs
 // both halves and has the engine flags this needs.
-//
-// Everything here is deleted once the real compositor submits real buffers.
 
 #include <cinttypes>
 #include <cstdint>
@@ -42,7 +49,7 @@
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
-#include "components/domicile/spike/mojom/spike_embedder.mojom.h"
+#include "components/domicile/spike/mojom/spike_probe.mojom.h"
 #include "components/viz/common/frame_timing_details_map.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/compositor_render_pass.h"
@@ -66,26 +73,31 @@
 
 namespace {
 
-// Must match content/browser/domicile/domicile_spike.cc.
+// Must match content/browser/domicile/domicile_frame_sink_broker.cc.
 constexpr char kSocketSwitch[] = "domicile-broker-socket";
-// Integer names, matching domicile_spike.cc — see the comment there: under
-// ipcz, string-named attachments all collide on index 0.
+// Integer names, matching that file — see the comment there: under ipcz,
+// string-named attachments all collide on index 0.
 constexpr uint64_t kBrokerPipeName = 0;
-constexpr uint64_t kEmbedderPipeName = 1;
+constexpr uint64_t kProbePipeName = 1;
 
 constexpr char kColorSwitch[] = "color";
-constexpr char kSizeSwitch[] = "size";
 
-// Frames to submit before asking what got drawn, and tries to give the
-// browser to draw one. A surface is embedded with a deadline, and the first
-// draw after activation is what the copy request rides on, so neither number
-// is load-bearing — they are just "long enough".
+// How long to wait for a page to embed us. The engine has to start, load a
+// page, and the page has to call canvas.embedExternalSurface(); the producer
+// may well win that race, and waiting here rather than failing keeps the
+// ordering out of the harness.
+constexpr base::TimeDelta kEmbedTimeout = base::Seconds(60);
+
+// Frames to submit before asking what got drawn. A surface is embedded with a
+// deadline and the first draw after activation is what the copy request rides
+// on, so this is just "long enough".
 constexpr int kFramesBeforeSampling = 5;
 
 // If no BeginFrame arrives, sample anyway: the first frame is submitted with a
 // manual ack, so there is something to aggregate whether or not viz ever asks
-// for more. Which of the two happened is the interesting part, so it is
-// reported either way.
+// for more. Which of the two happened is the interesting part — hierarchy
+// registration is what makes BeginFrames flow, and in step 3 the page is what
+// asks for it — so it is reported either way.
 constexpr base::TimeDelta kBeginFrameGrace = base::Seconds(3);
 constexpr int kSampleTries = 40;
 constexpr base::TimeDelta kSampleInterval = base::Milliseconds(100);
@@ -93,7 +105,7 @@ constexpr base::TimeDelta kSampleInterval = base::Milliseconds(100);
 // Colour comparison is per-channel with slack: the display's colour space is
 // not necessarily the one the quad was authored in, and SkiaRenderer may round
 // through it. An exact match is not the claim; "the colour we submitted, not
-// the fallback" is.
+// the page's background" is.
 constexpr int kChannelTolerance = 4;
 
 bool ColorsMatch(SkColor a, SkColor b) {
@@ -110,12 +122,11 @@ std::string ToHex(SkColor color) {
   return base::StringPrintf("#%08X", color);
 }
 
-class SolidColorSubmitter : public viz::mojom::CompositorFrameSinkClient {
+class SolidColorSubmitter : public viz::mojom::CompositorFrameSinkClient,
+                            public domicile::mojom::SurfaceObserver {
  public:
-  SolidColorSubmitter(SkColor color,
-                      const gfx::Size& size,
-                      base::OnceCallback<void(bool)> done)
-      : color_(color), size_(size), done_(std::move(done)) {}
+  SolidColorSubmitter(SkColor color, base::OnceCallback<void(bool)> done)
+      : color_(color), done_(std::move(done)) {}
 
   SolidColorSubmitter(const SolidColorSubmitter&) = delete;
   SolidColorSubmitter& operator=(const SolidColorSubmitter&) = delete;
@@ -147,8 +158,8 @@ class SolidColorSubmitter : public viz::mojom::CompositorFrameSinkClient {
 
     broker_.Bind(mojo::PendingRemote<domicile::mojom::FrameSinkBroker>(
         invitation.ExtractMessagePipe(kBrokerPipeName), 0));
-    embedder_.Bind(mojo::PendingRemote<domicile::mojom::SpikeEmbedder>(
-        invitation.ExtractMessagePipe(kEmbedderPipeName), 0));
+    probe_.Bind(mojo::PendingRemote<domicile::mojom::SpikeProbe>(
+        invitation.ExtractMessagePipe(kProbePipeName), 0));
     broker_.set_disconnect_handler(base::BindOnce(
         &SolidColorSubmitter::OnBrokerDisconnected, base::Unretained(this)));
     return true;
@@ -159,6 +170,7 @@ class SolidColorSubmitter : public viz::mojom::CompositorFrameSinkClient {
     client_receiver_.Bind(client.InitWithNewPipeAndPassReceiver());
     broker_->CreateFrameSink(
         std::move(client), sink_.BindNewPipeAndPassReceiver(),
+        observer_receiver_.BindNewPipeAndPassRemote(),
         base::BindOnce(&SolidColorSubmitter::OnFrameSinkCreated,
                        base::Unretained(this)));
   }
@@ -167,26 +179,36 @@ class SolidColorSubmitter : public viz::mojom::CompositorFrameSinkClient {
   void OnFrameSinkCreated(const viz::FrameSinkId& frame_sink_id) {
     printf("brokered frame sink: %s\n", frame_sink_id.ToString().c_str());
     frame_sink_id_ = frame_sink_id;
+    printf("waiting for a page to embed it...\n");
 
-    // Nothing has referenced the surface yet, so submitting now would only
-    // create one viz garbage-collects. The embedder goes first, and it is the
-    // embedder that mints the LocalSurfaceId.
-    embedder_->Embed(frame_sink_id, size_,
-                     base::BindOnce(&SolidColorSubmitter::OnEmbedded,
-                                    base::Unretained(this)));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&SolidColorSubmitter::OnEmbedTimeout,
+                       base::Unretained(this)),
+        kEmbedTimeout);
   }
 
-  void OnEmbedded(const std::optional<viz::LocalSurfaceId>& local_surface_id) {
-    if (!local_surface_id) {
-      LOG(ERROR) << "the browser would not embed the surface";
-      Finish(false);
+  // domicile::mojom::SurfaceObserver:
+  //
+  // The page allocated this LocalSurfaceId and picked this size. Nothing here
+  // chose either, and nothing here could have: the embed_token in the id is the
+  // embedder's to mint, and the size is its layout box.
+  void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
+                         const gfx::Size& size) override {
+    printf("a page embedded us: %s at %s\n",
+           local_surface_id.ToString().c_str(), size.ToString().c_str());
+    local_surface_id_ = local_surface_id;
+    size_ = size;
+
+    if (submitting_) {
+      // A resize, which is the same message. Nothing else to do: the next
+      // frame goes to the new id.
       return;
     }
-    printf("embedded as: %s\n", local_surface_id->ToString().c_str());
-    local_surface_id_ = *local_surface_id;
+    submitting_ = true;
 
     // One frame straight away so the surface activates without waiting on the
-    // BeginFrame the hierarchy registration in Embed() just unblocked.
+    // BeginFrame that embedding just unblocked.
     Submit(viz::BeginFrameAck::CreateManualAckWithDamage());
     sink_->SetNeedsBeginFrame(true);
 
@@ -195,6 +217,15 @@ class SolidColorSubmitter : public viz::mojom::CompositorFrameSinkClient {
         base::BindOnce(&SolidColorSubmitter::MaybeStartSampling,
                        base::Unretained(this)),
         kBeginFrameGrace);
+  }
+
+  void OnEmbedTimeout() {
+    if (submitting_) {
+      return;
+    }
+    printf("NOT embedded: no page asked for this surface in %" PRId64 "s\n",
+           kEmbedTimeout.InSeconds());
+    Finish(false);
   }
 
   void MaybeStartSampling() {
@@ -246,8 +277,8 @@ class SolidColorSubmitter : public viz::mojom::CompositorFrameSinkClient {
   }
 
   void Sample() {
-    embedder_->SampleEmbeddedPixel(base::BindOnce(
-        &SolidColorSubmitter::OnSampled, base::Unretained(this)));
+    probe_->SampleWindowCenter(base::BindOnce(&SolidColorSubmitter::OnSampled,
+                                              base::Unretained(this)));
   }
 
   void OnSampled(bool sampled, uint32_t argb) {
@@ -263,7 +294,7 @@ class SolidColorSubmitter : public viz::mojom::CompositorFrameSinkClient {
         printf("NOT aggregated: drew %s, submitted %s\n", ToHex(argb).c_str(),
                ToHex(color_).c_str());
       } else {
-        printf("NOT aggregated: the browser never drew the embedding layer\n");
+        printf("NOT aggregated: the browser never drew its window\n");
       }
       Finish(false);
       return;
@@ -295,6 +326,9 @@ class SolidColorSubmitter : public viz::mojom::CompositorFrameSinkClient {
     if (!begin_frames_seen_++) {
       printf("BeginFrames are flowing\n");
     }
+    if (!submitting_) {
+      return;
+    }
     Submit(viz::BeginFrameAck(args, true));
     if (frames_submitted_ >= kFramesBeforeSampling) {
       MaybeStartSampling();
@@ -308,17 +342,19 @@ class SolidColorSubmitter : public viz::mojom::CompositorFrameSinkClient {
   void OnSurfaceEvicted(const viz::LocalSurfaceId& local_surface_id) override {}
 
   const SkColor color_;
-  const gfx::Size size_;
   base::OnceCallback<void(bool)> done_;
 
   mojo::Remote<domicile::mojom::FrameSinkBroker> broker_;
-  mojo::Remote<domicile::mojom::SpikeEmbedder> embedder_;
+  mojo::Remote<domicile::mojom::SpikeProbe> probe_;
   mojo::Remote<viz::mojom::CompositorFrameSink> sink_;
   mojo::Receiver<viz::mojom::CompositorFrameSinkClient> client_receiver_{this};
+  mojo::Receiver<domicile::mojom::SurfaceObserver> observer_receiver_{this};
 
   viz::FrameSinkId frame_sink_id_;
   viz::LocalSurfaceId local_surface_id_;
+  gfx::Size size_;
   viz::FrameTokenGenerator next_frame_token_;
+  bool submitting_ = false;
   int frames_submitted_ = 0;
   int begin_frames_seen_ = 0;
   int sample_tries_ = 0;
@@ -339,25 +375,6 @@ SkColor ParseColor(const base::CommandLine& command_line) {
   return value;
 }
 
-gfx::Size ParseSize(const base::CommandLine& command_line) {
-  constexpr gfx::Size kDefault(320, 240);
-  if (!command_line.HasSwitch(kSizeSwitch)) {
-    return kDefault;
-  }
-  const std::string value = command_line.GetSwitchValueASCII(kSizeSwitch);
-  const size_t x = value.find('x');
-  int width = 0;
-  int height = 0;
-  if (x == std::string::npos ||
-      !base::StringToInt(value.substr(0, x), &width) ||
-      !base::StringToInt(value.substr(x + 1), &height) || width <= 0 ||
-      height <= 0) {
-    LOG(ERROR) << "--size wants WxH; using the default";
-    return kDefault;
-  }
-  return gfx::Size(width, height);
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -369,7 +386,7 @@ int main(int argc, char** argv) {
   const std::string socket = command_line.GetSwitchValueASCII(kSocketSwitch);
   if (socket.empty()) {
     LOG(ERROR) << "usage: domicile_solid_color_submitter --" << kSocketSwitch
-               << "=<path> [--color=AARRGGBB] [--size=WxH]";
+               << "=<path> [--color=AARRGGBB]";
     return 2;
   }
 
@@ -387,7 +404,7 @@ int main(int argc, char** argv) {
   base::RunLoop run_loop;
   bool ok = false;
   SolidColorSubmitter submitter(
-      ParseColor(command_line), ParseSize(command_line),
+      ParseColor(command_line),
       base::BindOnce(
           [](bool* ok, base::OnceClosure quit, bool result) {
             *ok = result;

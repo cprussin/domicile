@@ -1,0 +1,43 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module domicile.mojom;
+
+import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
+import "services/viz/public/mojom/compositing/local_surface_id.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
+// Renderer to browser: how a page learns which surface to embed.
+//
+// The id cannot come from the renderer's own allocation path. A brokered
+// FrameSinkId is in the browser's namespace — client id 0 — and every entry
+// point of blink.mojom.EmbeddedFrameSinkProvider begins by rejecting a
+// FrameSinkId whose client id is not the calling renderer's. So the id reaches
+// Blink the way RemoteFrame's does: from the browser, which allocated it.
+//
+// Which half each side owns is the same split RemoteFrame uses. The browser
+// owns the FrameSinkId, because it owns the namespace. The page owns the
+// LocalSurfaceId, because it is the embedder, and the embed_token in it is the
+// capability it hands to the producer.
+interface ExternalSurfaceProvider {
+  // The page has allocated `local_surface_id` and will show `size` of the
+  // surface at it, under the frame sink `parent_frame_sink_id` — its own, so
+  // BeginFrames reach the producer.
+  //
+  // Replies with the brokered FrameSinkId, which the page pairs with its
+  // LocalSurfaceId to get the SurfaceId to embed. The reply is deferred until a
+  // producer has actually been brokered a sink: an <app> element exists before
+  // the client window behind it does, and a page that embeds early should wait
+  // rather than fail. Null only if the connection drops first.
+  //
+  // A page naming a surface it was not offered gains nothing. It allocates the
+  // LocalSurfaceId, so the surface it would embed is one no producer is
+  // submitting to — an empty surface, not somebody else's window. That is the
+  // capability argument from the LocalSurfaceId header holding in the direction
+  // that matters here.
+  Embed(viz.mojom.FrameSinkId parent_frame_sink_id,
+        viz.mojom.LocalSurfaceId local_surface_id,
+        gfx.mojom.Size size)
+      => (viz.mojom.FrameSinkId? frame_sink_id);
+};

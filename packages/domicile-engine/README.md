@@ -29,7 +29,8 @@ same reason.
 | `scripts/apply.sh` | series → checkout |
 | `scripts/extract.sh` | checkout → series. Run before every push |
 | `scripts/build.sh` | `gn gen` + `autoninja` with the args the spike is measured under |
-| `scripts/spike.sh` | run step 2 end to end and check the pixel viz drew |
+| `scripts/spike.sh` | run the spike end to end and check the pixel viz drew |
+| `scripts/spike-page.html` | the page it drives: a `<canvas>` that embeds instead of drawing |
 
 ## Working on it
 
@@ -99,48 +100,56 @@ per subsequent edit. The rebase number is still missing: it needs
 
 ## State
 
-Steps 1 and 2 of the spike in `ENGINE-FORK.md`. Neither was killed: a process
+Steps 1, 2 and 3 of the spike in `ENGINE-FORK.md`. None was killed: a process
 the browser did not launch gets a frame sink from the browser's own namespace,
-submits `CompositorFrame`s to it, and viz draws them.
+and a `<canvas>` in an ordinary web page embeds the surface it submits to.
 
-The evidence is a pixel. `spike.sh` starts the engine, runs the external
-submitter, and the submitter asks the browser what colour it actually drew
-where the surface was embedded:
+The evidence is a pixel. `spike.sh` starts the engine on a page whose canvas
+calls `embedExternalSurface()`, runs the external producer, and the producer
+asks the browser what colour it actually drew where the canvas is:
 
 ```
-$ ... scripts/spike.sh /build/chromium/src
+$ ... scripts/spike.sh /build/chromium/src -- --color=FF00C853
 brokered frame sink: FrameSinkId(0, 2)
-embedded as: LocalSurfaceId(1, 1, FADD...)
+waiting for a page to embed it...
+a page embedded us: LocalSurfaceId(1, 1, 9A4E...) at 640x480
 BeginFrames are flowing
-aggregated: drew #FFFF00FF, submitted #FFFF00FF
+aggregated: drew #FF00C853, submitted #FF00C853
 ```
 
-Step 1 — kept:
+Shrink the canvas so the sample lands beside it and the same run reports
+`NOT aggregated: drew #FF3F51B5` — the page's own background. CSS moves the
+canvas and the producer's surface moves with it.
+
+Kept:
 
 | | |
 |---|---|
-| `components/domicile/mojom/frame_sink_broker.mojom` | the interface a non-renderer producer calls |
+| `components/domicile/mojom/frame_sink_broker.mojom` | the interface a non-renderer producer calls, plus `SurfaceObserver`, which is how it hears which surface an embedder chose for it |
+| `components/domicile/mojom/external_surface.mojom` | the interface a *page* calls, which is one method wide and can only grant. A renderer never gets a `FrameSinkBroker` pipe |
 | `components/domicile/browser/frame_sink_broker.{h,cc}` | the service. Takes its `HostFrameSinkManager` and its `FrameSinkId` allocator from the embedder, so it needs no `//content` and no browser to test |
+| `components/domicile/browser/brokered_frame_sink.{h,cc}` | one registered `FrameSinkId`, held for as long as the producer submits to it |
+| `components/domicile/browser/external_surface_provider.{h,cc}` | the renderer-facing shim over the broker |
+| `components/domicile/browser/frame_sink_broker_unittest.cc` | nine tests, against a real `HostFrameSinkManager` and an in-process `FrameSinkManagerImpl` |
+| `content/browser/domicile/domicile_frame_sink_broker.{h,cc}` | the browser process's one instance, wired to `content::GetHostFrameSinkManager()` and `content::AllocateFrameSinkId()`, and the named socket a producer reaches it over |
+| `third_party/blink/renderer/platform/graphics/external_surface_embedder.{h,cc}` | the page's half: allocates the `LocalSurfaceId`, asks the browser for the `FrameSinkId`, pairs them |
 
-Step 2 — **throwaway**, all of it, deleted when the page does the embedding in
-step 3:
+**Throwaway**, and deleted when `domicile-compositor` submits real buffers:
 
 | | |
 |---|---|
-| `content/browser/domicile/domicile_spike.{h,cc}` | opens the socket, sends the invitation, and stands in for the page: allocates the `LocalSurfaceId`, registers the hierarchy, and embeds the `SurfaceId` in a `ui::LayerSurface` over the browser's own window |
-| `components/domicile/spike/solid_color_submitter.cc` | the external producer. C++, in-tree, and that is a measured choice — see `ENGINE-FORK.md`'s *The Rust bindings reach further than expected* |
-| `components/domicile/spike/mojom/spike_embedder.mojom` | the stand-in embedder's interface |
+| `components/domicile/spike/solid_color_submitter.cc` | the external producer. C++, in-tree, and that is a measured choice — see `ENGINE-FORK.md`'s *Rust: the bindings exist, the crate is not the seam* |
+| `components/domicile/spike/mojom/spike_probe.mojom`, `content/browser/domicile/domicile_spike_probe.{h,cc}` | the pixel probe. A `CopyOutputRequest` on the browser's window, because the embedding layer belongs to the page now and there is no other way to keep the proof a pixel |
+| `scripts/spike-page.html` | the page. A canvas that fills the viewport and embeds instead of drawing |
 
-The one file this step adds to the "edited, not new" column is
-`content/browser/browser_main_loop.cc`, and it is one call that does nothing
-without `--domicile-broker-socket`. It goes away with the rest.
-| `components/domicile/browser/brokered_frame_sink.{h,cc}` | one registered `FrameSinkId`, held for as long as the producer submits to it |
-| `components/domicile/browser/frame_sink_broker_unittest.cc` | four tests, against a real `HostFrameSinkManager` and an in-process `FrameSinkManagerImpl` |
-| `content/browser/domicile/domicile_frame_sink_broker.{h,cc}` | the browser process's one instance, wired to `content::GetHostFrameSinkManager()` and `content::AllocateFrameSinkId()` |
+Nothing hooks browser startup. The broker, its socket and the probe are created
+when a page first calls `embedExternalSurface()`, and the browser holds that
+page's request until a producer connects — an `<app>` element exists before the
+client window behind it does. Step 2's one line in `browser_main_loop.cc` is
+gone.
 
-Nothing binds the interface across a process boundary yet. That is step 2's
-job — the transport is what the throwaway external submitter needs, and
-building it before there is anything to connect would ship code no test runs.
+The series edits eight files Chromium owns; `ENGINE-FORK.md`'s *Minimise edited
+files* has the list and what each is for.
 
 Run the tests with:
 
@@ -148,3 +157,9 @@ Run the tests with:
 autoninja -C out/Domicile components_unittests
 ./out/Domicile/components_unittests --gtest_filter='FrameSinkBroker*'
 ```
+
+Neither the Blink half nor the probe has a unit test. Chromium does not unit
+test `SurfaceLayerBridge` either — there is no `surface_layer_bridge_test.cc` —
+and for the same reason: the seam only means anything with a display
+compositor behind it. `spike.sh` is what covers them, and its exit code is the
+assertion.

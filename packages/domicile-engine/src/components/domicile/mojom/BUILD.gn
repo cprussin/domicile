@@ -5,10 +5,14 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
-  sources = [ "frame_sink_broker.mojom" ]
+  sources = [
+    "external_surface.mojom",
+    "frame_sink_broker.mojom",
+  ]
 
   public_deps = [
     "//services/viz/public/mojom",
     "//services/viz/public/mojom:surfaces",
+    "//ui/gfx/geometry/mojom",
   ]
 }
