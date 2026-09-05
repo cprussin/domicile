@@ -583,15 +583,75 @@ The last one was the whole point. The three before it were plumbing that either
 worked or named its own blocker. **Nothing was deleted from Domicile until the
 measurement passed, and it has.**
 
+## The seam: a C ABI, and what crosses it
+
+Step 2 established that a mojom-generated Rust crate cannot reach a cargo
+build, and that the bridge is a GN-built library behind a C ABI. This is that
+ABI. Phase 1 cannot start without it, because every item in phase 1 crosses it.
+
+**The library owns the mojo, `domicile-compositor` owns the Wayland.** All of
+`libdomicile_engine.so` is C++ built by GN: the invitation, the
+`FrameSinkBroker` pipe, the `SharedImage` import, the `CompositorFrame`
+assembly. None of that reaches cargo, and none of it needs to.
+
+**It must not own the thread.** `domicile-compositor` runs a `calloop` loop —
+Smithay's — and mojo wants a task runner of its own. So the library exposes a
+pollable fd and does its work when told, rather than blocking or calling back
+from a thread the compositor does not know about:
+
+```c
+int  domicile_engine_fd(DomicileEngine*);      // add to calloop
+void domicile_engine_dispatch(DomicileEngine*); // run pending work, fire callbacks
+```
+
+That is the same shape as `wl_display_get_fd` / `wl_display_dispatch`, which is
+the loop the compositor already runs.
+
+### What crosses it
+
+| C ABI | Wayland concept it already implements |
+|---|---|
+| `domicile_surface_create(engine, app_id)` → `FrameSinkId` | a window appearing — the browser holds the page's `embedExternalSurface()` until this is called |
+| `domicile_surface_import(surface, dmabuf)` → `BufferId` | `zwp_linux_dmabuf_v1` — the fds the client already sent |
+| `domicile_surface_submit(surface, buffer, damage)` | `wl_surface.commit` |
+| `released(buffer_id)` | **`wl_buffer.release`** — viz returning a `TransferableResource` is exactly the client's cue to reuse |
+| `frame(deadline_us)` | **`wl_surface.frame`** — a viz `BeginFrame` is the callback the client is waiting on |
+| `configure(width, height)` | **`xdg_toplevel.configure`** — the page bumped `parent_sequence_number` because its layout box changed |
+
+**The right column is why this is small.** The ABI is not a new protocol to
+design and then teach the compositor; it is a translation table between viz and
+five Wayland requests `domicile-compositor` already speaks. Every callback has
+somewhere obvious to go, and the release path in particular is not a detail:
+without it the compositor would reuse a dmabuf viz is still sampling, which is
+a tear rather than an error.
+
+### The open part
+
+Whether the compositor holds one `DomicileEngine` and N surfaces, or one per
+app, is not settled — it follows from the "one surface per document" question
+step 4 raised, which is the chrome protocol's to answer. One engine and N
+surfaces is the assumption here, because one socket to the browser is one
+authority to hold.
+
 ## Plan
 
-Phase 1 — real pixels:
+Phase 1 — real pixels. **Ordered: nothing in phase 2 can start until the
+compositor can submit a frame, because phase 2 deletes what draws today.**
 
+- [ ] `libdomicile_engine.so` behind the C ABI above — invitation, broker pipe,
+      pollable fd
 - [ ] port `exo::Buffer`'s dmabuf → `SharedImage` → `TransferableResource`
+      behind `domicile_surface_import`
 - [ ] `domicile-compositor` submits a client's buffer instead of reading it back
+- [ ] `released` → `wl_buffer.release`, so a buffer viz still samples is not
+      reused
+- [ ] `frame` → `wl_surface.frame`
 - [ ] the embedder's `LocalSurfaceId` drives `xdg_toplevel.configure`
+- [ ] **on a machine with a GPU** — every measurement so far is headless and
+      `--disable-gpu`, so the dmabuf path itself is still unexercised
 
-Phase 2 — collect the winnings:
+Phase 2 — collect the winnings. **After phase 1, not beside it:** deleting the
+copy path before the compositor can submit leaves nothing drawing at all.
 
 - [ ] delete bands, the copy path, `AppFrame`, the measure loop, the shaders
 - [ ] `<domicile-app>` becomes a `<canvas>` and one call
