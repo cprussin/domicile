@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <cprussin@bci-incorporated.com>
+Date: Fri, 4 Sep 2026 22:38:17 -0700
+Subject: [PATCH] domicile: reach the broker from outside, and prove viz
+ aggregates
+
+Step 2 of the spike in docs/architecture/ENGINE-FORK.md. Adds the throwaway
+half: content/browser/domicile/domicile_spike.{h,cc}, which opens a
+NamedPlatformChannel and sends a real mojo invitation carrying the step-1
+FrameSinkBroker plus a stand-in embedder, and
+components/domicile/spike/, the external producer that submits solid-colour
+CompositorFrames to it.
+
+The two edits to files Chromium owns are the source list and dep in
+content/browser/BUILD.gn, and one call in browser_main_loop.cc. The call is in
+PostCreateThreads rather than PreMainMessageLoopRun because
+PostCreateThreadsImpl() is what creates the ImageTransportFactory the broker
+takes its HostFrameSinkManager from, and because Chrome does not return from
+parts_->PreMainMessageLoopRun() in time to be useful.
+
+All of it is a no-op without --domicile-broker-socket.
+---
+ content/browser/BUILD.gn             | 5 ++++-
+ content/browser/browser_main_loop.cc | 6 ++++++
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
+index 0bab55e691d6c..857721a48ced4 100644
+--- a/content/browser/BUILD.gn
++++ b/content/browser/BUILD.gn
+@@ -150,8 +150,9 @@ source_set("browser") {
+     "//components/cbor",
+     "//components/discardable_memory/common",
+     "//components/discardable_memory/service",
+-    "//components/download/database",
+     "//components/domicile:browser",
++    "//components/domicile/spike/mojom",
++    "//components/download/database",
+     "//components/download/public/common:public",
+     "//components/embedder_support",
+     "//components/embedder_support:user_agent",
+@@ -936,6 +937,8 @@ source_set("browser") {
+     "dom_storage/session_storage_namespace_impl.h",
+     "domicile/domicile_frame_sink_broker.cc",
+     "domicile/domicile_frame_sink_broker.h",
++    "domicile/domicile_spike.cc",
++    "domicile/domicile_spike.h",
+     "download/data_url_blob_reader.cc",
+     "download/data_url_blob_reader.h",
+     "download/download_item_utils.cc",
+diff --git a/content/browser/browser_main_loop.cc b/content/browser/browser_main_loop.cc
+index 90d60c44cc235..4306ea8cfc150 100644
+--- a/content/browser/browser_main_loop.cc
++++ b/content/browser/browser_main_loop.cc
+@@ -74,6 +74,7 @@
+ #include "content/browser/browser_thread_impl.h"
+ #include "content/browser/compositor/viz_process_transport_factory.h"
+ #include "content/browser/cpu_performance/cpu_performance.h"
++#include "content/browser/domicile/domicile_spike.h"
+ #include "content/browser/download/save_file_manager.h"
+ #include "content/browser/field_trial_synchronizer.h"
+ #include "content/browser/first_party_sets/first_party_set_parser.h"
+@@ -1038,6 +1039,11 @@ int BrowserMainLoop::PostCreateThreads() {
+ 
+   PostCreateThreadsImpl();
+ 
++  // Throwaway; step 2 of the spike. A no-op without --domicile-broker-socket.
++  // Here rather than later because PostCreateThreadsImpl() is what creates the
++  // ImageTransportFactory the broker takes its HostFrameSinkManager from.
++  MaybeStartDomicileSpike();
++
+   return result_code_;
+ }
+ 

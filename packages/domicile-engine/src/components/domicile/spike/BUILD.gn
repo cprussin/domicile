@@ -1,0 +1,30 @@
+# Copyright 2026 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# THROWAWAY. Step 2 of the spike in docs/architecture/ENGINE-FORK.md: a viz
+# client in a process the browser did not launch, to find out whether viz
+# aggregates what it submits.
+#
+# Not in the dependency graph of `chrome`. Build it by name:
+#
+#   autoninja -C out/Domicile domicile_solid_color_submitter
+executable("solid_color_submitter") {
+  output_name = "domicile_solid_color_submitter"
+
+  sources = [ "solid_color_submitter.cc" ]
+
+  deps = [
+    "//base",
+    "//components/domicile/mojom",
+    "//components/domicile/spike/mojom",
+    "//components/viz/common",
+    "//mojo/core/embedder",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/platform",
+    "//mojo/public/cpp/system",
+    "//services/viz/public/mojom",
+    "//skia",
+    "//ui/gfx/geometry",
+  ]
+}

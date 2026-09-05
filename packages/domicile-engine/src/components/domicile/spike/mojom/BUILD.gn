@@ -1,0 +1,16 @@
+# Copyright 2026 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+
+# THROWAWAY. Step 2 of the spike only; deleted when the page does the
+# embedding. See docs/architecture/ENGINE-FORK.md in the Domicile repository.
+mojom("mojom") {
+  sources = [ "spike_embedder.mojom" ]
+
+  public_deps = [
+    "//services/viz/public/mojom:surfaces",
+    "//ui/gfx/geometry/mojom",
+  ]
+}

@@ -4,7 +4,12 @@
 #   ./scripts/build.sh /build/chromium/src
 #
 # Small and fast rather than shippable: a component build with no symbols and
-# every Ozone platform off but Wayland. Phase 3 swaps in ozone_platform_drm.
+# every Ozone platform off but Wayland and headless. Phase 3 swaps in
+# ozone_platform_drm.
+#
+# Headless is not part of the design; it is what the measurement machine needs.
+# crux has no display server and no Wayland compositor, so without it the engine
+# cannot be started at all and scripts/spike.sh has nothing to talk to.
 set -u
 
 CHROMIUM="${1:-}"
@@ -25,7 +30,8 @@ if [ ! -f "$OUT/build.ninja" ]; then
     use_ozone = true
     ozone_auto_platforms = false
     ozone_platform_wayland = true
+    ozone_platform_headless = true
   ' || exit 1
 fi
 
-exec autoninja -C "$OUT" chrome
+exec autoninja -C "$OUT" chrome domicile_solid_color_submitter

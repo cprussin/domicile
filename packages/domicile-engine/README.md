@@ -29,6 +29,7 @@ same reason.
 | `scripts/apply.sh` | series → checkout |
 | `scripts/extract.sh` | checkout → series. Run before every push |
 | `scripts/build.sh` | `gn gen` + `autoninja` with the args the spike is measured under |
+| `scripts/spike.sh` | run step 2 end to end and check the pixel viz drew |
 
 ## Working on it
 
@@ -43,6 +44,15 @@ here as spell-check, never as proof.
 ./scripts/build.sh   /build/chromium/src     # gn gen + autoninja
 # ... work in the checkout, commit there ...
 ./scripts/extract.sh /build/chromium/src     # write it back here
+```
+
+`build.sh` and `spike.sh` both have to run inside Chromium's own toolchain
+shell — a component build links against that shell's glibc and will not start
+without it:
+
+```sh
+NIX_SHELL_RUN="$PWD/scripts/spike.sh /build/chromium/src" \
+  nix-shell /build/chromium/src/tools/nix/shell.nix
 ```
 
 `apply.sh` ends in `git am`, so the checkout needs a committer identity or the
@@ -89,15 +99,41 @@ per subsequent edit. The rebase number is still missing: it needs
 
 ## State
 
-Step 1 of the spike in `ENGINE-FORK.md`: a browser-process service that
-allocates a `FrameSinkId` and creates a `CompositorFrameSink` for a client that
-is not a renderer. It was not killed — `ENGINE-FORK.md`'s *Who may create a
-frame sink* has the evidence.
+Steps 1 and 2 of the spike in `ENGINE-FORK.md`. Neither was killed: a process
+the browser did not launch gets a frame sink from the browser's own namespace,
+submits `CompositorFrame`s to it, and viz draws them.
+
+The evidence is a pixel. `spike.sh` starts the engine, runs the external
+submitter, and the submitter asks the browser what colour it actually drew
+where the surface was embedded:
+
+```
+$ ... scripts/spike.sh /build/chromium/src
+brokered frame sink: FrameSinkId(0, 2)
+embedded as: LocalSurfaceId(1, 1, FADD...)
+BeginFrames are flowing
+aggregated: drew #FFFF00FF, submitted #FFFF00FF
+```
+
+Step 1 — kept:
 
 | | |
 |---|---|
 | `components/domicile/mojom/frame_sink_broker.mojom` | the interface a non-renderer producer calls |
 | `components/domicile/browser/frame_sink_broker.{h,cc}` | the service. Takes its `HostFrameSinkManager` and its `FrameSinkId` allocator from the embedder, so it needs no `//content` and no browser to test |
+
+Step 2 — **throwaway**, all of it, deleted when the page does the embedding in
+step 3:
+
+| | |
+|---|---|
+| `content/browser/domicile/domicile_spike.{h,cc}` | opens the socket, sends the invitation, and stands in for the page: allocates the `LocalSurfaceId`, registers the hierarchy, and embeds the `SurfaceId` in a `ui::LayerSurface` over the browser's own window |
+| `components/domicile/spike/solid_color_submitter.cc` | the external producer. C++, in-tree, and that is a measured choice — see `ENGINE-FORK.md`'s *The Rust bindings reach further than expected* |
+| `components/domicile/spike/mojom/spike_embedder.mojom` | the stand-in embedder's interface |
+
+The one file this step adds to the "edited, not new" column is
+`content/browser/browser_main_loop.cc`, and it is one call that does nothing
+without `--domicile-broker-socket`. It goes away with the rest.
 | `components/domicile/browser/brokered_frame_sink.{h,cc}` | one registered `FrameSinkId`, held for as long as the producer submits to it |
 | `components/domicile/browser/frame_sink_broker_unittest.cc` | four tests, against a real `HostFrameSinkManager` and an in-process `FrameSinkManagerImpl` |
 | `content/browser/domicile/domicile_frame_sink_broker.{h,cc}` | the browser process's one instance, wired to `content::GetHostFrameSinkManager()` and `content::AllocateFrameSinkId()` |
