@@ -1,0 +1,44 @@
+# Copyright 2026 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# The browser-process half of Domicile's engine fork: brokering viz frame sinks
+# to a compositing producer that is not a renderer. See
+# docs/architecture/ENGINE-FORK.md in the Domicile repository.
+#
+# This deliberately does not depend on //content. It takes the
+# HostFrameSinkManager and the FrameSinkId allocator from whoever instantiates
+# it, which keeps the privilege where it belongs — with the embedder — and
+# keeps this testable without a browser.
+source_set("browser") {
+  sources = [
+    "browser/brokered_frame_sink.cc",
+    "browser/brokered_frame_sink.h",
+    "browser/frame_sink_broker.cc",
+    "browser/frame_sink_broker.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/domicile/mojom",
+    "//components/viz/common",
+    "//components/viz/host",
+    "//mojo/public/cpp/bindings",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [ "browser/frame_sink_broker_unittest.cc" ]
+
+  deps = [
+    ":browser",
+    "//base",
+    "//base/test:test_support",
+    "//components/viz/service",
+    "//components/viz/test:test_support",
+    "//mojo/public/cpp/bindings",
+    "//testing/gtest",
+  ]
+}

@@ -1,6 +1,4 @@
 # The exact Chromium revision this series applies to. One line, nothing else.
 #
-# REPLACE THIS with the full 40-character revision on the first run from a real
-# checkout — a shortened sha is not a pin, it is a prefix that will one day be
-# ambiguous. `git -C <chromium>/src rev-parse HEAD` prints the right value.
-bbbfd22
+# `git -C <chromium>/src rev-parse HEAD` prints the right value.
+bbbfd22b56d9df22e578e9faf55b286714b7303c
