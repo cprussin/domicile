@@ -75,6 +75,42 @@ inline constexpr Cell kCells[] = {
     {"negative control", false, false},
 };
 
+// The iframe-parity check, which is spike-iframe-page.html rather than
+// spike-css-page.html and reuses the same cell geometry.
+//
+// ENGINE-FORK.md argued that an <app> under `transform` differs from a <div>
+// only the way any surface-backed element does, an out-of-process <iframe>
+// included, and that argument was read off child_frame_compositing_helper.cc
+// rather than measured. Measuring it found something better and stranger than
+// the argument: on a GPU an <app> is pixel-identical to a <div>, and it is the
+// OOPIF that is not.
+struct IframeCell {
+  const char* name;
+  enum class Expect {
+    // The requirement, in the project's own words: no CSS may behave
+    // differently for an <app> than for any other element. Nothing short of
+    // every pixel is a pass.
+    kIdentical,
+    // The reference point. An OOPIF is Chromium's own surface embedder, and it
+    // does *not* match an ordinary element pixel for pixel. If this row ever
+    // comes back identical, either the iframe stopped being out of process —
+    // in which case the whole page is comparing an <app> against a <div> three
+    // times — or upstream changed, and either way the run should stop.
+    kDiffers,
+    // Reported, not asserted: how our embedding compares with Chromium's. It
+    // is not a requirement that the two agree, only that each agrees with an
+    // ordinary element, and only the first row is that.
+    kInformational,
+  } expect;
+};
+
+// In the order spike-iframe-page.html lays them out.
+inline constexpr IframeCell kIframeCells[] = {
+    {"<app> vs <div>", IframeCell::Expect::kIdentical},
+    {"<app> vs OOPIF", IframeCell::Expect::kInformational},
+    {"OOPIF vs <div>", IframeCell::Expect::kDiffers},
+};
+
 }  // namespace domicile::spike
 
 #endif  // COMPONENTS_DOMICILE_SPIKE_CSS_PARITY_LAYOUT_H_

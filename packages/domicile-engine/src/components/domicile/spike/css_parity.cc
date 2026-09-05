@@ -23,6 +23,10 @@
 //                   reconfigured to match, against spike-resize-page.html.
 //                   That one mutates the LocalSurfaceId every element in the
 //                   document shares, so it cannot share a page with the others
+//   --check=iframe  an <app> against an out-of-process <iframe> under the same
+//                   transform, against spike-iframe-page.html. The one part of
+//                   the CSS claim that was read off the mechanism rather than
+//                   measured
 //
 // packages/domicile-engine/scripts/spike-step4.sh in the Domicile repository
 // runs both and has the engine flags they need.
@@ -77,6 +81,13 @@ constexpr char kColorSwitch[] = "color";
 constexpr char kCheckSwitch[] = "check";
 constexpr char kResizeFromSwitch[] = "resize-from";
 constexpr char kResizeToSwitch[] = "resize-to";
+
+// Which page is on the other side, and so what to make of the pixels.
+enum class Check {
+  kCss,
+  kResize,
+  kIframe,
+};
 
 // The colour the producer submits, and the colour the page fills every control
 // element with. One value reaches both halves through the harness — there is no
@@ -178,11 +189,11 @@ std::string Spread(const std::vector<base::TimeDelta>& sorted) {
 class Measurement {
  public:
   Measurement(SkColor color,
-              bool resize_check,
+              Check check,
               const gfx::Size& resize_from,
               const gfx::Size& resize_to,
               base::OnceCallback<void(bool)> done)
-      : resize_check_(resize_check),
+      : check_(check),
         resize_from_(resize_from),
         resize_to_(resize_to),
         done_(std::move(done)),
@@ -221,7 +232,7 @@ class Measurement {
     // Every <app> on the CSS page embeds the same surface, so the first
     // notification is the one that matters and the rest repeat it. The resize
     // page has one <app> and re-embeds it, so there the second is the point.
-    if (resize_check_ && embeds_ < 2) {
+    if (check_ == Check::kResize && embeds_ < 2) {
       return;
     }
     if (settling_) {
@@ -282,11 +293,17 @@ class Measurement {
     printf("window %s, page starts at y=%d\n", size.ToString().c_str(),
            viewport_top_);
 
-    if (resize_check_) {
-      ReportResize();
-      return;
+    switch (check_) {
+      case Check::kCss:
+        ReportCss();
+        return;
+      case Check::kResize:
+        ReportResize();
+        return;
+      case Check::kIframe:
+        ReportIframe();
+        return;
     }
-    ReportCss();
   }
 
   void ReportCss() {
@@ -471,6 +488,77 @@ class Measurement {
     Finish(css_passed_);
   }
 
+  // The part of ENGINE-FORK.md's CSS claim that was argued rather than
+  // measured: whether an <app> differs from a <div> the way a surface-backed
+  // element must. Three pairs — the requirement, a reference point, and the
+  // control that keeps the comparison honest.
+  void ReportIframe() {
+    printf("\n%-16s %8s %8s %10s %8s  %s\n", "pair", "pixels", "differ",
+           "interior", "worst", "verdict");
+    bool all_passed = true;
+    size_t index = 0;
+    for (const domicile::spike::IframeCell& spec :
+         domicile::spike::kIframeCells) {
+      const gfx::Rect cell = CellRect(index, viewport_top_);
+      ++index;
+      const std::string name(spec.name);
+      if (!capture_.Contains(cell) ||
+          !capture_.Contains(gfx::Rect(
+              cell.x() + domicile::spike::kCellHalfWidth, cell.y(),
+              cell.width(), cell.height()))) {
+        printf("%-16s %s\n", name.c_str(),
+               "off the window: the page does not fit");
+        all_passed = false;
+        continue;
+      }
+
+      const RectDiff diff = DiffHalves(capture_, cell);
+      const bool identical = diff.mismatched == 0;
+      const std::string verdict = Verdict(spec, identical, diff);
+      all_passed = all_passed && Passed(spec, identical);
+      printf("%-16s %8d %8d %10d %8d  %s\n", name.c_str(), diff.compared,
+             diff.mismatched, diff.interior_mismatched, diff.worst_delta,
+             verdict.c_str());
+    }
+    printf("\n");
+    Finish(all_passed);
+  }
+
+  static bool Passed(const domicile::spike::IframeCell& spec, bool identical) {
+    switch (spec.expect) {
+      case domicile::spike::IframeCell::Expect::kIdentical:
+        return identical;
+      case domicile::spike::IframeCell::Expect::kDiffers:
+        return !identical;
+      case domicile::spike::IframeCell::Expect::kInformational:
+        return true;
+    }
+  }
+
+  // Descriptive rather than diagnostic where it has to be: a pair that differs
+  // could be a different edge treatment or a different raster scale, and the
+  // pixels cannot tell those apart. What the harness can tell — whether the
+  // iframe got a renderer of its own — it reports separately.
+  static std::string Verdict(const domicile::spike::IframeCell& spec,
+                             bool identical,
+                             const RectDiff& diff) {
+    const bool edges_only = !identical && diff.interior_mismatched == 0;
+    switch (spec.expect) {
+      case domicile::spike::IframeCell::Expect::kIdentical:
+        return identical ? "pass — every pixel, so CSS cannot tell them apart"
+                         : (edges_only ? "FAIL — differs on its edges"
+                                       : "FAIL — differs beyond its edges");
+      case domicile::spike::IframeCell::Expect::kDiffers:
+        return identical
+                   ? "FAIL — identical; check the renderer count below"
+                   : (edges_only ? "differs on edges, as Chromium's own "
+                                   "surface embedder does"
+                                 : "differs beyond its edges");
+      case domicile::spike::IframeCell::Expect::kInformational:
+        return identical ? "identical" : "differs on edges (not a requirement)";
+    }
+  }
+
   void ReportResize() {
     printf("\n");
     bool passed = true;
@@ -528,7 +616,7 @@ class Measurement {
     }
   }
 
-  const bool resize_check_;
+  const Check check_;
   const gfx::Size resize_from_;
   const gfx::Size resize_to_;
   base::OnceCallback<void(bool)> done_;
@@ -570,12 +658,16 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  const std::string check = command_line.GetSwitchValueASCII(kCheckSwitch);
-  const bool resize_check = check == "resize";
-  if (!check.empty() && check != "css" && !resize_check) {
-    LOG(ERROR) << "--" << kCheckSwitch << " is css or resize";
+  const std::string requested = command_line.GetSwitchValueASCII(kCheckSwitch);
+  const bool resize_check = requested == "resize";
+  if (!requested.empty() && requested != "css" && !resize_check &&
+      requested != "iframe") {
+    LOG(ERROR) << "--" << kCheckSwitch << " is css, resize or iframe";
     return 2;
   }
+  const Check check = resize_check          ? Check::kResize
+                      : requested == "iframe" ? Check::kIframe
+                                              : Check::kCss;
 
   gfx::Size resize_from;
   gfx::Size resize_to;
@@ -608,7 +700,7 @@ int main(int argc, char** argv) {
   bool ok = false;
   Measurement measurement(
       domicile::spike::ParseColor(command_line, kColorSwitch, kDefaultColor),
-      resize_check, resize_from, resize_to,
+      check, resize_from, resize_to,
       base::BindOnce(
           [](bool* ok, base::OnceClosure quit, bool result) {
             *ok = result;

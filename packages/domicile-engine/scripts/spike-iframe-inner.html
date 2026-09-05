@@ -1,0 +1,39 @@
+<!doctype html>
+<!--
+  THROWAWAY. The document inside the out-of-process <iframe> that
+  spike-iframe-page.html compares an <app> against.
+
+  It is served from a different site than the page that frames it — 127.0.0.1
+  against localhost — so that --site-per-process puts it in its own renderer,
+  which is the whole point: an OOPIF reaches the parent's layer tree as a
+  cc::SurfaceLayer, the same class an <app> uses. A same-process iframe would
+  paint into the parent's own layer tree like a <div> and the comparison would
+  prove nothing.
+
+  All it does is fill itself with the colour the producer submits.
+-->
+<meta charset="utf-8">
+<title>domicile: the OOPIF an &lt;app&gt; is measured against</title>
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+</style>
+<body></body>
+<script>
+  const DEFAULT_COLOR = '00C853';
+
+  /** See spike-css-page.html: the harness is what makes the two agree. */
+  const parseColor = (raw) => {
+    if (/^[0-9a-fA-F]{6}$/.test(raw)) {
+      return '#' + raw;
+    } else {
+      throw new Error('?color= wants RRGGBB hex, got "' + raw + '"');
+    }
+  };
+
+  document.documentElement.style.background = parseColor(
+    new URLSearchParams(location.search).get('color') ?? DEFAULT_COLOR);
+</script>

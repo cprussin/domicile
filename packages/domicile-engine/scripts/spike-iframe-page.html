@@ -1,0 +1,202 @@
+<!doctype html>
+<!--
+  THROWAWAY. The iframe-parity cell of step 4's measurement, and the one thing
+  in ENGINE-FORK.md's CSS claim that was read from the mechanism rather than
+  observed.
+
+  Step 4 found that an <app> under `transform` differs from a <div> by a
+  one-pixel outline, and argued that this is parity because a hardware
+  composited <video> or an out-of-process <iframe> differs identically — both
+  are a cc::SurfaceLayer, which resamples its texture where a <div> is
+  rasterised from a vector. That argument was never measured. This measures it.
+
+  Three pairs, all under the same `transform`, all in one capture:
+
+    <app> vs <div>   the requirement: no CSS may behave differently for an
+                     <app> than for any other element
+    <app> vs OOPIF   how our embedding compares with Chromium's own
+    OOPIF vs <div>   the control. An OOPIF is not pixel-identical to a <div>;
+                     if this row ever says it is, the iframe is not out of
+                     process and none of the three rows mean anything
+
+  Served over HTTP, not file://, because the iframe has to be CROSS-SITE for
+  --site-per-process to give it a renderer of its own. localhost and 127.0.0.1
+  are different sites; two ports of one host are not.
+
+  THE GEOMETRY HERE MUST MATCH components/domicile/spike/css_parity_layout.h.
+-->
+<meta charset="utf-8">
+<title>domicile: does an &lt;app&gt; differ from an OOPIF?</title>
+<style>
+  html, body {
+    background: #101418;         /* kPageBackground */
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .cell {
+    height: 190px;               /* kCellHeight */
+    position: absolute;
+    width: 560px;                /* kCellWidth */
+  }
+
+  .half {
+    height: 190px;
+    isolation: isolate;
+    position: absolute;
+    top: 0;
+    width: 280px;                /* kCellHalfWidth */
+  }
+  .left { left: 0; }
+  .right { left: 280px; }
+
+  .backdrop {
+    background: linear-gradient(135deg, #ff9800 0%, #3f51b5 50%, #4caf50 100%);
+    height: 130px;
+    left: 60px;
+    position: absolute;
+    top: 30px;
+    width: 160px;
+  }
+
+  /* Every candidate is the same box under the same transform: only what fills
+     it changes. iframes carry a border by default and <div>s do not, which
+     would be a difference this is not trying to measure. */
+  .box {
+    border: 0;
+    display: block;
+    height: 90px;                /* kBoxHeight */
+    left: 80px;                  /* kBoxLeft */
+    position: absolute;
+    top: 50px;                   /* kBoxTop */
+    transform: translate(12px, 8px) rotate(12deg) scale(1.15);
+    width: 120px;                /* kBoxWidth */
+  }
+</style>
+<body></body>
+<script>
+  // Must match css_parity_layout.h.
+  const GRID_LEFT = 16;
+  const GRID_TOP = 16;
+  const CELL_WIDTH = 560;
+  const CELL_HEIGHT = 190;
+  const COLUMN_GAP = 24;
+  const ROW_GAP = 10;
+  const COLUMNS = 2;
+  const BOX_WIDTH = 120;
+  const BOX_HEIGHT = 90;
+
+  const DEFAULT_COLOR = '00C853';
+
+  // In the order css_parity_layout.h's kIframeCells lists them.
+  const CELLS = [
+    { left: 'app', right: 'div' },
+    { left: 'app', right: 'iframe' },
+    { left: 'iframe', right: 'div' },
+  ];
+
+  /** See spike-css-page.html: the harness is what makes the two agree. */
+  const parseColor = (raw) => {
+    if (/^[0-9a-fA-F]{6}$/.test(raw)) {
+      return '#' + raw;
+    } else {
+      throw new Error('?color= wants RRGGBB hex, got "' + raw + '"');
+    }
+  };
+
+  const COLOR_HEX =
+    new URLSearchParams(location.search).get('color') ?? DEFAULT_COLOR;
+  const COLOR = parseColor(COLOR_HEX);
+
+  /**
+   * The same document this page is served from, on the other of localhost and
+   * 127.0.0.1 — a different site, so --site-per-process gives the iframe a
+   * renderer of its own and therefore a cc::SurfaceLayer in this page's tree.
+   *
+   * Being served from neither name would silently produce a same-process
+   * iframe, which paints like a <div> and would make the whole measurement a
+   * tautology, so it throws rather than framing something that proves nothing.
+   */
+  const crossSiteSource = () => {
+    const swapped = location.origin.includes('//localhost')
+      ? location.origin.replace('//localhost', '//127.0.0.1')
+      : location.origin.replace('//127.0.0.1', '//localhost');
+    if (swapped === location.origin) {
+      throw new Error(
+        'serve this from localhost or 127.0.0.1 so the iframe is cross-site; ' +
+        'got ' + location.origin);
+    } else {
+      return swapped + '/spike-iframe-inner.html?color=' + COLOR_HEX;
+    }
+  };
+
+  const CROSS_SITE = crossSiteSource();
+
+  /** One of the three things a cell can be comparing. */
+  const buildCandidate = (kind) => {
+    switch (kind) {
+      case 'app': {
+        const app = document.createElement('canvas');
+        app.className = 'box';
+        app.width = BOX_WIDTH;
+        app.height = BOX_HEIGHT;
+        return app;
+      }
+      case 'iframe': {
+        const frame = document.createElement('iframe');
+        frame.className = 'box';
+        frame.src = CROSS_SITE;
+        return frame;
+      }
+      case 'div': {
+        const control = document.createElement('div');
+        control.className = 'box';
+        control.style.background = COLOR;
+        return control;
+      }
+      default: {
+        throw new Error('no such candidate: ' + kind);
+      }
+    }
+  };
+
+  const buildHalf = (kind, side) => {
+    const half = document.createElement('div');
+    half.className = 'half ' + side;
+    const backdrop = document.createElement('div');
+    backdrop.className = 'backdrop';
+    half.append(backdrop);
+    half.append(buildCandidate(kind));
+    return half;
+  };
+
+  /** Builds one cell and returns it, positioned but not yet in the document. */
+  const buildCell = (spec, index) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.style.left =
+      GRID_LEFT + (index % COLUMNS) * (CELL_WIDTH + COLUMN_GAP) + 'px';
+    cell.style.top =
+      GRID_TOP + Math.floor(index / COLUMNS) * (CELL_HEIGHT + ROW_GAP) + 'px';
+    cell.append(buildHalf(spec.left, 'left'));
+    cell.append(buildHalf(spec.right, 'right'));
+    return cell;
+  };
+
+  document.body.append(...CELLS.map(buildCell));
+
+  // Read back out of the document rather than collected while building it: the
+  // <app> elements are whichever canvases the cells above put there, and one
+  // source of truth for that beats two.
+  const canvases = [...document.querySelectorAll('canvas.box')];
+
+  if (canvases[0].embedExternalSurface === undefined) {
+    console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
+                'flag is off');
+  } else {
+    Promise.all(canvases.map((canvas) => canvas.embedExternalSurface())).then(
+      () => { console.log('domicile: embedded ' + canvases.length); },
+      (error) => { console.log('domicile: refused: ' + error.message); });
+  }
+</script>

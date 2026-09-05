@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "base/containers/flat_map.h"
@@ -85,6 +86,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
       mojo::PendingReceiver<viz::mojom::CompositorFrameSink> receiver,
       mojo::PendingRemote<mojom::SurfaceObserver> observer,
+      const std::string& debug_label,
       CreateFrameSinkCallback callback) override;
   void DestroyFrameSink(const viz::FrameSinkId& frame_sink_id) override;
 
