@@ -216,10 +216,15 @@ browser's window:
 $ ... scripts/spike.sh /build/chromium/src -- --color=FF00C853
 brokered frame sink: FrameSinkId(0, 2)
 waiting for a page to embed it...
-a page embedded us: LocalSurfaceId(1, 1, 9A4E...) at 640x480
+a page embedded us: LocalSurfaceId(1, 1, E8F6...) at 1024x681
 BeginFrames are flowing
 aggregated: drew #FF00C853, submitted #FF00C853
 ```
+
+`1024x681` is the canvas's layout box — the viewport, since the page's canvas
+fills it — and not its `width` and `height` attributes. That is the claim the
+design rests a resize on, so the size the producer is configured at is read off
+the box rather than the attributes.
 
 And the control that makes it a fact rather than a coincidence — the same page
 and the same producer, with the canvas shrunk to 16px in the corner so that the
@@ -266,6 +271,77 @@ parent frame sink it names.** That is the check
 making it needs the calling renderer's child process id, which means binding
 `ExternalSurfaceProvider` through `RenderProcessHostImpl` rather than as a free
 function. The cost is one more edited file, and it is not a spike's to pay.
+
+### What CSS does to an `<app>`
+
+Nothing it does not do to a `<div>`. Each property is applied to an `<app>` and
+to an ordinary element laid out identically beside it, so the question is
+whether one half of a cell is a pixel-for-pixel copy of the other half —
+a comparison rather than a judgement. `scripts/spike-step4.sh`, 53,200 pixels
+per cell, and the same numbers to the pixel on every run:
+
+| | differing | interior | worst Δ | |
+|---|---|---|---|---|
+| `z-index` | 0 | 0 | 0 | **exact** |
+| `border-radius` | 0 | 0 | 1 | exact |
+| `opacity` | 0 | 0 | 2 | exact |
+| `filter: blur()` | 0 | 0 | 1 | exact |
+| `mix-blend-mode` | 0 | 0 | 1 | exact |
+| resize | 0 | 0 | 1 | exact |
+| `transform` | 285 | **0** | 84 | edges only |
+| *negative control* | 10,800 | 9,976 | 255 | *differs, as it must* |
+
+**`z-index` is the row the fork exists for**, and it is the one with no
+difference at all: an `<app>` with `z-index: 1` paints above an ordinary
+element at `0` and below one at `2`, with both of them *after* it in document
+order so that document order alone would not have put it there. Bands failed
+exactly here.
+
+`transform`'s 285 pixels are a one-pixel outline — `interior` counts
+mismatching pixels every one of whose neighbours within 2px also mismatch, and
+there are none. A `translate/rotate/scale` resamples a surface's texture where
+it rasterises a `<div>`'s edge from a vector, so the two round differently
+along the boundary and nowhere else. That is what a hardware-composited
+`<video>` does under the same transform, which makes it parity rather than a
+gap — but it is a real difference and it is the one cell that is not bit-exact.
+
+Two things stop this from passing for the wrong reason. Each property cell is
+also compared against the baseline cell, and a cell whose property never took
+effect — a class that did not match, a stylesheet that did not load — leaves
+both halves plain, and two plain halves match; the run fails unless every
+property visibly changed its cell. And the last cell's control is a colour the
+producer never submits, so a diff that cannot see a difference fails there.
+
+### What it costs
+
+One display frame — which is what it costs to ask the question at all.
+
+The producer changes the colour it is submitting and then polls the browser for
+the pixel where the page put the `<app>`, until that pixel is the new colour.
+Sixty rounds of it, against sixty rounds of the same poll with nothing changed:
+
+| | |
+|---|---|
+| display frame interval, from viz's own `BeginFrameArgs` | **16.67 ms** |
+| poll round trip, nothing changed | median 16.67 ms, **1.0 frames** |
+| submit to the new colour being in the display compositor's output | median 16.68 ms, **1.0 frames** |
+| draws the new colour took to appear | **1**, on 60 of 60 rounds |
+
+The two distributions are indistinguishable, and that is the result: a frame
+from a process outside the renderer is aggregated into the same display frame
+as the page around it, with no stage of its own. On a busy machine both numbers
+move together to 2.0 frames, which is the measurement's own noise rather than
+the producer's.
+
+**This is not latency parity with a plain Wayland compositor, and it cannot be
+measured on `crux`.** There is no display server, no GPU and no compositor to
+compare against — `--ozone-platform=headless` and `--disable-gpu` are why the
+spike runs at all. What the number does establish is the thing the design
+claims structurally: no readback, no socket, no extra composite, no frame held
+for a stage of its own. What it does not touch is presentation: everything here
+is measured out of a `CopyOutputRequest` that forces the draw it then reads,
+which is the only way to see what the display compositor drew and is itself the
+16.67 ms.
 
 ### Rust: the bindings exist, the crate is not the seam
 
@@ -336,8 +412,8 @@ known and it is a build-system cost, not a language one.
 
 | Requirement | How |
 |---|---|
-| **Latency parity** | The client's dmabuf becomes a `SharedImage` and rides in a texture quad. Viz aggregates it into the display frame — the same single composite any Wayland compositor does — and its `OverlayProcessor` can promote the quad to direct scanout. No readback, no socket, no `putImageData` |
-| **CSS parity** | The window is a `cc::Layer`. Whatever CSS works on a hardware-composited `<video>` works, because it is the same layer type through the same property trees. This is the requirement's own wording — "just like a `<webview>` or `<iframe>` or `<video>`" — met by using literally that mechanism |
+| **Latency parity** | The client's dmabuf becomes a `SharedImage` and rides in a texture quad. Viz aggregates it into the display frame — the same single composite any Wayland compositor does — and its `OverlayProcessor` can promote the quad to direct scanout. No readback, no socket, no `putImageData`. **Measured** as far as `crux` allows: one display frame, indistinguishable from the probe's own floor. See *What it costs* |
+| **CSS parity** | The window is a `cc::Layer`. Whatever CSS works on a hardware-composited `<video>` works, because it is the same layer type through the same property trees. This is the requirement's own wording — "just like a `<webview>` or `<iframe>` or `<video>`" — met by using literally that mechanism. **Measured**: seven properties, six of them bit-exact against an ordinary element. See *What CSS does to an `<app>`* |
 | **Shell simplicity** | `<app>` stays a custom element wrapping a `<canvas>`, which is what `<domicile-app>` already is. What changes is what fills the canvas, not what a shell author writes |
 
 The third row is the surprise: the shell-side API barely moves. The SDK keeps
@@ -401,7 +477,7 @@ model, the session, and the host brain. That is most of what is hard.
 
 ## Getting started
 
-The spike proves the seam before anything is scrapped. It cannot be run on the
+The spike proved the seam before anything was scrapped. It cannot be run on the
 machine this was written on — that took a different one, and `crux` is now it,
 provisioned and building.
 
@@ -494,14 +570,18 @@ window.
       did not allocate*, which also has the control: move the canvas with CSS
       and the producer's surface moves with it. `components/domicile/mojom/`
       and `third_party/blink/` in the series
-- [ ] **the measurement**: drive the colour from the page, then read `z-index`
-      against ordinary DOM, `transform`, `border-radius`, `opacity`,
-      `filter: blur()`, `mix-blend-mode`, and the added latency against a plain
-      Wayland compositor
+- [x] **the measurement**: `z-index` against ordinary DOM, `transform`,
+      `border-radius`, `opacity`, `filter: blur()`, `mix-blend-mode`, resize,
+      and the latency — **passed**. Six of the seven are bit-exact against an
+      ordinary element laid out beside them and `transform` differs on a
+      one-pixel outline; a submitted frame reaches the display compositor's
+      output in one display frame. See *What CSS does to an `<app>`* and *What
+      it costs*. `components/domicile/spike/css_parity.cc` in the series, run
+      with `scripts/spike-step4.sh`
 
-The last one is the whole point. The three before it are plumbing that either
-works or names its own blocker. **Nothing is deleted from Domicile until the
-measurement passes.**
+The last one was the whole point. The three before it were plumbing that either
+worked or named its own blocker. **Nothing was deleted from Domicile until the
+measurement passed, and it has.**
 
 ## Plan
 
@@ -568,9 +648,15 @@ Phase 3 — be the display server:
   upstream's number rather than the fork's: whatever a six-week upstream diff
   costs to rebuild, carrying this adds seconds to it. This repo's CI still will
   not carry either.
-- **Not verified by measurement.** Five of the seven properties are still read
-  from the mechanism rather than observed. Step 3's control moved the canvas
-  with CSS and the producer's surface moved with it, which settles position and
-  size; `z-index`, `transform`, `border-radius`, `opacity`, `filter: blur()`
-  and `mix-blend-mode` are step 4's, along with the latency number. Nothing is
-  deleted from Domicile until it passes.
+- ~~**Not verified by measurement.**~~ Closed. All seven properties are
+  observed rather than read off the mechanism — see *What CSS does to an
+  `<app>`*. What remains unmeasured is **presentation**: `crux` has no display
+  and no compositor to compare against, so the latency number is "one display
+  frame into the display compositor's output" and not "commit to scanout". That
+  needs the machine phase 3 needs, and it is not a spike's to get.
+- **One surface per document, in the spike only.** The measurement puts eight
+  `<app>` elements on one page against one producer, and it does that by
+  sharing the `LocalSurfaceId` the renderer allocated across the document. A
+  shell has one surface per app and which one an element shows is keyed by
+  which app it names — the chrome protocol's job, which is why the broker does
+  not do it. Phase 1 is where the key stops being "the only one".

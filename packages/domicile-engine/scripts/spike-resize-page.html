@@ -1,0 +1,142 @@
+<!doctype html>
+<!--
+  THROWAWAY. The seventh cell of step 4's measurement, on its own page.
+
+  Resize is not a CSS property; it is the lifecycle event underneath one. The
+  embedder's box changes, and the producer has to be told to render at the new
+  size — which is xdg_toplevel.configure, arriving as a bumped
+  parent_sequence_number on the LocalSurfaceId the embedder owns.
+
+  It gets a page to itself because bumping that id is exactly what the other
+  seven cells cannot survive: every <app> in a document shares one surface in
+  this spike, so reconfiguring one strands the rest.
+
+  The geometry matches the first cell of spike-css-page.html, so the same
+  half-against-half comparison in domicile_css_parity reads it.
+-->
+<meta charset="utf-8">
+<title>domicile: does an &lt;app&gt; reconfigure when its box does?</title>
+<style>
+  html, body {
+    background: #101418;         /* kPageBackground */
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .cell {
+    height: 190px;               /* kCellHeight */
+    left: 16px;                  /* kGridLeft */
+    position: absolute;
+    top: 16px;                   /* kGridTop */
+    width: 560px;                /* kCellWidth */
+  }
+
+  .half {
+    height: 190px;
+    isolation: isolate;
+    position: absolute;
+    top: 0;
+    width: 280px;                /* kCellHalfWidth */
+  }
+  .app-half { left: 0; }
+  .control-half { left: 280px; }
+
+  .backdrop {
+    background: linear-gradient(135deg, #ff9800 0%, #3f51b5 50%, #4caf50 100%);
+    height: 130px;
+    left: 60px;
+    position: absolute;
+    top: 30px;
+    width: 160px;
+  }
+
+  .box {
+    display: block;
+    left: 80px;                  /* kBoxLeft */
+    position: absolute;
+    top: 50px;                   /* kBoxTop */
+  }
+</style>
+<body>
+  <div class="cell">
+    <div class="half app-half">
+      <div class="backdrop"></div>
+      <canvas class="box" height="90" id="app" width="120"></canvas>
+    </div>
+    <div class="half control-half">
+      <div class="backdrop"></div>
+      <div class="box" id="control"></div>
+    </div>
+  </div>
+</body>
+<script>
+  // Must match what spike-step4.sh passes as --resize-from and --resize-to.
+  // The producer is told these sizes so that "the box changed and the producer
+  // was reconfigured to match" is checked against what the page actually did,
+  // rather than against whatever it happened to be told.
+  const FROM = { height: 90, width: 120 };
+  const TO = { height: 130, width: 180 };
+
+  // How long to hold the first size before growing. Long enough for the
+  // producer to have submitted at it; the producer waits for the second
+  // configure rather than for a clock, so this is a floor and not a deadline.
+  const HOLD_MS = 1500;
+
+  const DEFAULT_COLOR = '00C853';
+
+  /** See spike-css-page.html: the harness is what makes the two agree. */
+  const parseColor = (raw) => {
+    if (/^[0-9a-fA-F]{6}$/.test(raw)) {
+      return '#' + raw;
+    } else {
+      throw new Error('?color= wants RRGGBB hex, got "' + raw + '"');
+    }
+  };
+
+  const COLOR = parseColor(
+    new URLSearchParams(location.search).get('color') ?? DEFAULT_COLOR);
+
+  const app = document.getElementById('app');
+  const control = document.getElementById('control');
+  control.style.background = COLOR;
+
+  /** Sizes both boxes, so the two halves stay comparable across the resize. */
+  const setSize = (size) => {
+    for (const element of [app, control]) {
+      element.style.width = size.width + 'px';
+      element.style.height = size.height + 'px';
+    }
+  };
+
+  /**
+   * Grows the box and asks to be re-embedded at it. Only the CSS box changes:
+   * the canvas keeps its width and height attributes, so what the producer is
+   * reconfigured to is the layout box and nothing else — which is the claim,
+   * that an <app> element's layout box is its xdg_toplevel.configure.
+   */
+  const reconfigure = () => {
+    setSize(TO);
+    app.embedExternalSurface().then(
+      () => {
+        console.log('domicile: reconfigured to ' + TO.width + 'x' + TO.height);
+      },
+      (error) => {
+        console.log('domicile: reconfigure refused: ' + error.message);
+      });
+  };
+
+  setSize(FROM);
+
+  if (app.embedExternalSurface === undefined) {
+    console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
+                'flag is off');
+  } else {
+    app.embedExternalSurface().then(
+      () => {
+        console.log('domicile: embedded at ' + FROM.width + 'x' + FROM.height);
+        setTimeout(reconfigure, HOLD_MS);
+      },
+      (error) => { console.log('domicile: refused: ' + error.message); });
+  }
+</script>

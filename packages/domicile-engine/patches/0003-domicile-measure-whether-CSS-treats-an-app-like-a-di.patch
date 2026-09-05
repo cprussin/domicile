@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Sat, 5 Sep 2026 13:25:42 -0700
+Subject: [PATCH] domicile: measure whether CSS treats an <app> like a <div>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Step 4 of the spike in docs/architecture/ENGINE-FORK.md: the measurement the
+fork exists to justify. Steps 1 to 3 were plumbing that either worked or named
+a blocker; this is the one that decides whether any of it was worth carrying.
+
+Seven properties, each applied to an <app> — a <canvas> showing a viz surface a
+process outside the renderer submits to — and to an ordinary <div> laid out
+identically beside it, so "behaves like a <div>" is a pixel comparison rather
+than a judgement. All seven pass, bit-identically across runs. z-index, the
+property bands failed at and the whole reason for the fork, is exact.
+
+Two changes to the files Chromium owns make the measurement possible, both in
+HTMLCanvasElement:
+
+- embedExternalSurface() called again on a canvas it already embedded bumps
+  parent_sequence_number and re-embeds at the current layout box, instead of
+  refusing. That is the embedder half of xdg_toplevel.configure and is what the
+  resize check drives.
+
+- The size reported is the layout box rather than the width and height
+  attributes, which is what the design has always claimed it would be: an <app>
+  element's layout box is its configure. Step 3's page now configures its
+  producer at 1024x681, the viewport, rather than at the canvas's 640x480.
+
+The rest is additive and lives in src/: a shared LocalSurfaceId per document so
+that several <app> elements can show one producer, two more methods on the
+throwaway SpikeProbe, and the producer factored out so that step 3's assertion
+and step 4's are two mains over one viz client rather than a copy of it.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ .../core/html/canvas/html_canvas_element.cc   | 35 ++++++++++++++++---
+ .../core/html/canvas/html_canvas_element.h    |  9 +++++
+ 2 files changed, 39 insertions(+), 5 deletions(-)
+
+diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+index de27286498141..18835f07e516e 100644
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -2106,14 +2106,15 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
+   // transferControlToOffscreen() and a desynchronized context both build one.
+   // Embedding then would point that layer somewhere else and strand whatever
+   // was submitting to it, which is a mistake worth refusing rather than
+-  // resolving in some order.
+-  if (surface_layer_bridge_) {
++  // resolving in some order. A bridge this method built itself is a different
++  // matter: calling again is how a page says its box changed.
++  if (surface_layer_bridge_ && !external_surface_embedder_) {
+     exception_state.ThrowDOMException(
+         DOMExceptionCode::kInvalidStateError,
+         "This canvas already has a surface of its own.");
+     return EmptyPromise();
+   }
+-  if (!CreateLayer()) {
++  if (!surface_layer_bridge_ && !CreateLayer()) {
+     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                       "Could not create a layer.");
+     return EmptyPromise();
+@@ -2123,14 +2124,38 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
+       MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(script_state);
+   auto promise = resolver->Promise();
+ 
+-  external_surface_embedder_ = std::make_unique<ExternalSurfaceEmbedder>();
++  const bool reconfiguring = !!external_surface_embedder_;
++  if (!reconfiguring) {
++    external_surface_embedder_ = std::make_unique<ExternalSurfaceEmbedder>();
++  }
+   external_surface_embedder_->Embed(
+-      frame->GetPage()->GetChromeClient().GetFrameSinkId(frame), Size(),
++      frame->GetPage()->GetChromeClient().GetFrameSinkId(frame),
++      ExternalSurfaceSize(),
++      reconfiguring ? ExternalSurfaceEmbedder::Allocation::kReconfigure
++                    : ExternalSurfaceEmbedder::Allocation::kAdopt,
+       BindOnce(&HTMLCanvasElement::OnExternalSurfaceEmbedded,
+                     WrapPersistent(this), WrapPersistent(resolver)));
+   return promise;
+ }
+ 
++gfx::Size HTMLCanvasElement::ExternalSurfaceSize() {
++  // The layout box rather than the width/height attributes, because the box is
++  // what the producer has to render at: for an <app> element the layout box is
++  // the xdg_toplevel.configure. Layout has to be current or a page that resized
++  // and immediately re-embedded would configure the producer at the old size.
++  GetDocument().UpdateStyleAndLayoutForNode(this,
++                                            DocumentUpdateReason::kJavaScript);
++  if (const LayoutBox* layout_box = GetLayoutBox()) {
++    if (const auto* replaced = DynamicTo<LayoutReplaced>(layout_box)) {
++      return ToRoundedSize(replaced->ReplacedContentRect().size);
++    }
++    return ToRoundedSize(layout_box->PhysicalContentBoxRect().size);
++  }
++  // No box at all — display:none, say. The intrinsic size is the only thing
++  // left to say, and it is what the canvas would show if it were laid out.
++  return Size();
++}
++
+ void HTMLCanvasElement::OnExternalSurfaceEmbedded(
+     ScriptPromiseResolver<IDLUndefined>* resolver,
+     const std::optional<viz::SurfaceId>& surface_id) {
+diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.h b/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
+index d4d7f140b95bb..d54eb646a2378 100644
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
+@@ -329,6 +329,11 @@ class CORE_EXPORT HTMLCanvasElement final
+   // SurfaceId comes from: the browser's namespace by way of
+   // ExternalSurfaceEmbedder, instead of this renderer's own.
+   //
++  // Calling it again on a canvas it already embedded re-embeds at the current
++  // layout box, bumping the LocalSurfaceId's parent_sequence_number so the
++  // producer is told to render at the new size. That is the embedder half of
++  // xdg_toplevel.configure, and the only way a page has to say its box moved.
++  //
+   // Behind RuntimeEnabledFeatures::DomicileExternalSurfaceEnabled(). Resolves
+   // when the surface is embedded, which waits for a producer to connect.
+   ScriptPromise<IDLUndefined> embedExternalSurface(
+@@ -448,6 +453,10 @@ class CORE_EXPORT HTMLCanvasElement final
+       ScriptPromiseResolver<IDLUndefined>* resolver,
+       const std::optional<viz::SurfaceId>& surface_id);
+ 
++  // How much of an external surface this canvas will show: its layout box,
++  // flushing layout first. See embedExternalSurface().
++  gfx::Size ExternalSurfaceSize();
++
+   bool ShouldAccelerate() const;
+   void ParseAttribute(const AttributeModificationParams&) override;
+   void AttributeChanged(const AttributeModificationParams&) override;

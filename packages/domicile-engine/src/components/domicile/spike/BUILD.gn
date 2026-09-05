@@ -2,28 +2,104 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# THROWAWAY. The spike's producer: a viz client in a process the browser did not
-# launch, standing in for domicile-compositor until it submits real buffers. See
+# THROWAWAY. The spike's producer and its measurements: a viz client in a
+# process the browser did not launch, standing in for domicile-compositor until
+# it submits real buffers, and the two assertions made against it. See
 # docs/architecture/ENGINE-FORK.md in the Domicile repository.
 #
-# Not in the dependency graph of `chrome`. Build it by name:
+# The executables are not in the dependency graph of `chrome`. Build them by
+# name:
 #
-#   autoninja -C out/Domicile domicile_solid_color_submitter
+#   autoninja -C out/Domicile domicile_solid_color_submitter domicile_css_parity
+
+# Comparing what viz drew with what was submitted, which every step ends in.
+source_set("colors") {
+  sources = [
+    "spike_color.cc",
+    "spike_color.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//skia",
+  ]
+}
+
+# The rule that turns a picture of the browser's window into step 4's verdicts.
+# Separate from the process that takes the picture because every "pass" in the
+# measurement is this code's opinion, and an opinion gets a unit test.
+source_set("window_diff") {
+  sources = [
+    "window_diff.cc",
+    "window_diff.h",
+  ]
+
+  public_deps = [
+    ":colors",
+    "//base",
+    "//skia",
+    "//ui/gfx/geometry",
+  ]
+}
+
+# The viz client itself.
+source_set("producer") {
+  sources = [
+    "surface_producer.cc",
+    "surface_producer.h",
+  ]
+
+  public_deps = [
+    ":colors",
+    "//base",
+    "//components/domicile/mojom",
+    "//components/domicile/spike/mojom",
+    "//components/viz/common",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/platform",
+    "//mojo/public/cpp/system",
+    "//services/viz/public/mojom",
+    "//skia",
+    "//ui/gfx/geometry",
+  ]
+}
+
+# Steps 2 and 3: one pixel at the centre of the browser's window is the colour
+# a process the browser did not launch submitted.
 executable("solid_color_submitter") {
   output_name = "domicile_solid_color_submitter"
 
   sources = [ "solid_color_submitter.cc" ]
 
   deps = [
+    ":colors",
+    ":producer",
     "//base",
-    "//components/domicile/mojom",
-    "//components/domicile/spike/mojom",
-    "//components/viz/common",
     "//mojo/core/embedder",
-    "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/platform",
-    "//mojo/public/cpp/system",
-    "//services/viz/public/mojom",
+    "//skia",
+    "//ui/gfx/geometry",
+  ]
+}
+
+# Step 4: the measurement. Seven CSS properties, each read off an <app> against
+# an ordinary element laid out identically beside it, plus the latency from a
+# producer's submit to the display compositor's own output.
+executable("css_parity") {
+  output_name = "domicile_css_parity"
+
+  sources = [
+    "css_parity.cc",
+    "css_parity_layout.h",
+  ]
+
+  deps = [
+    ":colors",
+    ":producer",
+    ":window_diff",
+    "//base",
+    "//mojo/core/embedder",
+    "//mojo/public/cpp/platform",
     "//skia",
     "//ui/gfx/geometry",
   ]

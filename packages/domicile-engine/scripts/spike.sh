@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Run step 3 of the spike: start the engine on a page whose <canvas> embeds an
-# external surface, then run the producer against it and check what viz drew.
+# Run one step of the spike: start the engine on a page whose <canvas> embeds an
+# external surface, then run a producer against it and let the producer's exit
+# code be the verdict.
+#
+# Step 3 is the default. Step 4's measurement is spike-step4.sh, which is this
+# script twice with PRODUCER, PAGE and WINDOW_SIZE set.
 #
 #   NIX_SHELL_RUN=".../scripts/spike.sh /build/chromium/src" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
@@ -43,6 +47,12 @@ shift
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 PAGE="${PAGE:-$SCRIPTS/spike-page.html}"
+# Appended to the page's URL. Step 4 uses it to tell the page which colour its
+# control elements have to be, because there is no channel from the page to the
+# producer and the harness is what makes the two agree.
+PAGE_QUERY="${PAGE_QUERY:-}"
+PRODUCER="${PRODUCER:-domicile_solid_color_submitter}"
+WINDOW_SIZE="${WINDOW_SIZE:-1024,768}"
 
 OUT="${OUT:-out/Domicile}"
 SOCKET="${SOCKET:-/tmp/domicile-spike}"
@@ -62,7 +72,7 @@ done
 
 cd "$CHROMIUM" || exit 1
 
-if [ ! -x "$OUT/chrome" ] || [ ! -x "$OUT/domicile_solid_color_submitter" ]; then
+if [ ! -x "$OUT/chrome" ] || [ ! -x "$OUT/$PRODUCER" ]; then
   echo "build them first: ./scripts/build.sh $CHROMIUM" >&2
   exit 1
 fi
@@ -81,12 +91,12 @@ rm -rf "$PROFILE" && mkdir -p "$PROFILE"
   --password-store=basic \
   --no-first-run \
   --user-data-dir="$PROFILE" \
-  --window-size=1024,768 \
+  --window-size="$WINDOW_SIZE" \
   --enable-blink-features=DomicileExternalSurface \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$SOCKET" \
   "${ENGINE_FLAGS[@]}" \
-  "file://$PAGE" > /tmp/domicile-spike-engine.log 2>&1 &
+  "file://$PAGE$PAGE_QUERY" > /tmp/domicile-spike-engine.log 2>&1 &
 ENGINE=$!
 
 # The socket appearing is the page having asked to embed, which is the only
@@ -101,7 +111,7 @@ if [ ! -S "$SOCKET" ]; then
   exit 1
 fi
 
-timeout 180 "$OUT/domicile_solid_color_submitter" \
+timeout 300 "$OUT/$PRODUCER" \
   --domicile-broker-socket="$SOCKET" "${PRODUCER_FLAGS[@]}"
 RESULT=$?
 

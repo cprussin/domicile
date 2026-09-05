@@ -33,24 +33,33 @@ source_set("browser") {
 source_set("unit_tests") {
   testonly = true
 
-  sources = [ "browser/frame_sink_broker_unittest.cc" ]
+  sources = [
+    "browser/frame_sink_broker_unittest.cc",
+    "spike/window_diff_unittest.cc",
+  ]
 
   deps = [
     ":browser",
     "//base",
     "//base/test:test_support",
+    "//components/domicile/spike:window_diff",
     "//components/viz/service",
     "//components/viz/test:test_support",
     "//mojo/public/cpp/bindings",
+    "//skia",
     "//testing/gtest",
+    "//ui/gfx/geometry",
   ]
 }
 
-# THROWAWAY. The spike's producer.
+# THROWAWAY. The spike's producer and its two measurements.
 #
-# The submitter is an executable nothing depends on, and GN only loads a
-# BUILD.gn that something references. This group is what makes it reachable, so
-# that carrying the tool costs no edit to a file Chromium owns.
+# Both are executables nothing depends on, and GN only loads a BUILD.gn that
+# something references. This group is what makes them reachable, so that
+# carrying the tools costs no edit to a file Chromium owns.
 group("spike") {
-  deps = [ "//components/domicile/spike:solid_color_submitter" ]
+  deps = [
+    "//components/domicile/spike:css_parity",
+    "//components/domicile/spike:solid_color_submitter",
+  ]
 }

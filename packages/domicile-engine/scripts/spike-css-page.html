@@ -1,0 +1,223 @@
+<!doctype html>
+<!--
+  THROWAWAY. The page half of step 4 of the spike in
+  docs/architecture/ENGINE-FORK.md: the measurement.
+
+  Every cell is one CSS property, applied identically to the two halves of it.
+  The left half holds an <app> — a <canvas> showing a viz surface a process
+  outside the renderer submits to — and the right half holds an ordinary <div>
+  filled with the colour that producer submits. Both halves are otherwise the
+  same markup at the same offsets, so "does this property treat an <app> like a
+  <div>" becomes "is the left half of this cell a pixel-for-pixel copy of the
+  right half", which domicile_css_parity answers out of the display
+  compositor's own draw.
+
+  The last cell is there to be different. A measurement that cannot fail has
+  not measured anything, so its control is a colour the producer never submits
+  and the run fails if the diff does not notice.
+
+  THE GEOMETRY HERE MUST MATCH components/domicile/spike/css_parity_layout.h.
+  Nothing checks that they agree, and nothing has to: a disagreement misaligns
+  both halves of every cell, which reads as everything failing rather than as
+  something passing that should not have.
+-->
+<meta charset="utf-8">
+<title>domicile: does CSS treat an &lt;app&gt; like a &lt;div&gt;?</title>
+<style>
+  /* Must match kPageBackground. The producer finds the top of the viewport by
+     looking for the first row of the window that is this colour all the way
+     across, which is how the measurement locates the page without needing to
+     know how tall the browser's own furniture is. kGridTop of margin above the
+     first cell is what guarantees such a row exists. */
+  html, body {
+    background: #101418;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .cell {                        /* kCellWidth x kCellHeight */
+    height: 190px;
+    position: absolute;
+    width: 560px;
+  }
+
+  /* One half of a cell. Isolated so that mix-blend-mode composites against
+     this half's own backdrop and not across the two of them. */
+  .half {
+    height: 190px;
+    isolation: isolate;
+    position: absolute;
+    top: 0;
+    width: 280px;              /* kCellHalfWidth */
+  }
+  .app-half { left: 0; }
+  .control-half { left: 280px; }
+
+  /* Something with structure to composite against, so that opacity, blur and
+     blend have more to show than one flat colour over another. */
+  .backdrop {
+    background: linear-gradient(135deg, #ff9800 0%, #3f51b5 50%, #4caf50 100%);
+    height: 130px;
+    left: 60px;
+    position: absolute;
+    top: 30px;
+    width: 160px;
+  }
+
+  /* The <app> and its control. kBoxLeft, kBoxTop, kBoxWidth, kBoxHeight. */
+  .box {
+    display: block;
+    height: 90px;
+    left: 80px;
+    position: absolute;
+    top: 50px;
+    width: 120px;
+  }
+
+  /* Ordinary elements for the <app> to stack between. */
+  .under, .over {
+    height: 90px;
+    position: absolute;
+    width: 120px;
+  }
+  .under { background: #e91e63; left: 50px; top: 30px; z-index: 0; }
+  .over  { background: #03a9f4; left: 110px; top: 80px; z-index: 2; }
+
+  /* One class per property under test, applied to the <app> and to its
+     control alike. */
+  .p-zindex        { z-index: 1; }
+  .p-transform     { transform: translate(12px, 8px) rotate(12deg) scale(1.15); }
+  .p-borderradius  { border-radius: 28px; }
+  .p-opacity       { opacity: 0.45; }
+  .p-blur          { filter: blur(6px); }
+  .p-blend         { mix-blend-mode: multiply; }
+</style>
+<body></body>
+<script>
+  // Must match css_parity_layout.h.
+  const GRID_LEFT = 16;
+  const GRID_TOP = 16;
+  const CELL_WIDTH = 560;
+  const CELL_HEIGHT = 190;
+  const COLUMN_GAP = 24;
+  const ROW_GAP = 10;
+  const COLUMNS = 2;
+  const BOX_WIDTH = 120;
+  const BOX_HEIGHT = 90;
+
+  const DEFAULT_COLOR = '00C853';
+
+  // In the order css_parity_layout.h's kCells lists them.
+  const CELLS = [
+    { backdrop: true, controlColor: undefined, property: undefined,
+      stack: false },
+    { backdrop: false, controlColor: undefined, property: 'p-zindex',
+      stack: true },
+    { backdrop: true, controlColor: undefined, property: 'p-transform',
+      stack: false },
+    { backdrop: true, controlColor: undefined, property: 'p-borderradius',
+      stack: false },
+    { backdrop: true, controlColor: undefined, property: 'p-opacity',
+      stack: false },
+    { backdrop: true, controlColor: undefined, property: 'p-blur',
+      stack: false },
+    { backdrop: true, controlColor: undefined, property: 'p-blend',
+      stack: false },
+    // The control the diff has to notice. Everything else about it is a
+    // baseline cell.
+    { backdrop: true, controlColor: '#ff1744', property: undefined,
+      stack: false },
+  ];
+
+  /**
+   * The colour the producer submits, which every control element is filled
+   * with. There is no channel from this page to the producer, so the harness
+   * is what makes the two agree.
+   *
+   * A value this cannot read would compare an <app> against the wrong colour
+   * and report every cell as a failure, so it throws instead of carrying on
+   * with a default.
+   */
+  const parseColor = (raw) => {
+    if (/^[0-9a-fA-F]{6}$/.test(raw)) {
+      return '#' + raw;
+    } else {
+      throw new Error('?color= wants RRGGBB hex, got "' + raw + '"');
+    }
+  };
+
+  const COLOR = parseColor(
+    new URLSearchParams(location.search).get('color') ?? DEFAULT_COLOR);
+
+  /**
+   * Builds one half of a cell: the backdrop or the stack it composites
+   * against, and the element under test.
+   *
+   * The stacking cell puts the element under test FIRST in document order, so
+   * that the two ordinary elements it has to interleave with come after it.
+   * That is what makes the cell discriminating: with z-index honoured the
+   * element paints above `under` and below `over`, and with z-index ignored it
+   * would fall back to document order and `under` would cover it. Building it
+   * the other way round — the way that reads more naturally — passes whether
+   * z-index works or not, because document order already puts it where
+   * z-index would.
+   */
+  const buildHalf = (spec, side, box) => {
+    const half = document.createElement('div');
+    half.className = 'half ' + side;
+    if (spec.backdrop) {
+      const backdrop = document.createElement('div');
+      backdrop.className = 'backdrop';
+      half.append(backdrop);
+    }
+    box.className =
+      'box' + (spec.property === undefined ? '' : ' ' + spec.property);
+    half.append(box);
+    if (spec.stack) {
+      for (const name of ['under', 'over']) {
+        const neighbour = document.createElement('div');
+        neighbour.className = name;
+        half.append(neighbour);
+      }
+    }
+    return half;
+  };
+
+  /** Builds one cell and returns the <app> in it. */
+  const buildCell = (spec, index) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.style.left =
+      GRID_LEFT + (index % COLUMNS) * (CELL_WIDTH + COLUMN_GAP) + 'px';
+    cell.style.top =
+      GRID_TOP + Math.floor(index / COLUMNS) * (CELL_HEIGHT + ROW_GAP) + 'px';
+
+    const app = document.createElement('canvas');
+    app.width = BOX_WIDTH;
+    app.height = BOX_HEIGHT;
+
+    const control = document.createElement('div');
+    control.style.background = spec.controlColor ?? COLOR;
+
+    cell.append(buildHalf(spec, 'app-half', app));
+    cell.append(buildHalf(spec, 'control-half', control));
+    document.body.append(cell);
+    return app;
+  };
+
+  const canvases = CELLS.map(buildCell);
+
+  if (canvases[0].embedExternalSurface === undefined) {
+    console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
+                'flag is off');
+  } else {
+    // Every canvas embeds the same surface: there is one producer, so there is
+    // one surface, and the renderer shares the LocalSurfaceId it allocated for
+    // it across the document. Each promise resolves only once a producer has
+    // been brokered a frame sink, which may be well after load.
+    Promise.all(canvases.map((canvas) => canvas.embedExternalSurface())).then(
+      () => { console.log('domicile: embedded ' + canvases.length); },
+      (error) => { console.log('domicile: refused: ' + error.message); });
+  }
+</script>
