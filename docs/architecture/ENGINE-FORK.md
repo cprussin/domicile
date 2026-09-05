@@ -180,7 +180,7 @@ embedder's three jobs was switched off in turn
 `RegisterFrameSinkHierarchy` is about **BeginFrames**: a producer that does not
 need viz to drive it can skip it and still get pixels on screen. Aggregation
 needs an **embedder naming the `SurfaceId` in a `SurfaceDrawQuad`** — the
-design's `cc::SurfaceLayer`, which step 3 moves from the browser's UI into the
+design's `cc::SurfaceLayer`, which step 3 moved from the browser's UI into the
 page.
 
 The proof is a pixel, not a log line. The embedder issues a `CopyOutputRequest`
@@ -190,6 +190,82 @@ pixel back to the producer over mojo; the producer compares it to what it
 submitted and sets its exit code. `--color=FF00C853` returns `#FF00C853`, so
 the pixel is the producer's rather than the fallback — which is black, and set
 so for that reason.
+
+### Whether the page will embed a surface it did not allocate
+
+Not killed, and nothing had to be persuaded. Neither layer looks at whose
+surface it is:
+
+| | |
+|---|---|
+| `SurfaceLayerBridge::EmbedSurface` | takes a `SurfaceId` and never compares it to its own `frame_sink_id_` (`surface_layer_bridge.cc:58`). Only `SetLocalSurfaceId`, the mojo path an OffscreenCanvas uses, pins the id to the bridge's own sink |
+| `cc::SurfaceLayer::SetSurfaceId` | stores a `SurfaceRange` and checks nothing about the `FrameSinkId`'s namespace (`surface_layer.cc:52`) |
+
+So `canvas.embedExternalSurface()` is `HTMLCanvasElement::CreateLayer()` — what
+`transferControlToOffscreen` already calls — followed by `EmbedSurface()` with
+an id that came from the browser. `HTMLCanvasPainter::PaintReplaced` then
+records that layer with
+`RecordForeignLayer(..., DisplayItem::kForeignLayerCanvas, ...)`
+(`html_canvas_painter.cc:87`), which is the mechanism behind requirement 2: the
+page's own property trees apply to it, because it is in them.
+
+The proof is the same pixel as step 2, read through the page instead of the
+browser's window:
+
+```
+$ ... scripts/spike.sh /build/chromium/src -- --color=FF00C853
+brokered frame sink: FrameSinkId(0, 2)
+waiting for a page to embed it...
+a page embedded us: LocalSurfaceId(1, 1, 9A4E...) at 640x480
+BeginFrames are flowing
+aggregated: drew #FF00C853, submitted #FF00C853
+```
+
+And the control that makes it a fact rather than a coincidence — the same page
+and the same producer, with the canvas shrunk to 16px in the corner so that the
+sample lands beside it rather than on it:
+
+```
+NOT aggregated: drew #FF3F51B5, submitted #FF00C853
+```
+
+`#3F51B5` is the page's own background. CSS moved the canvas and the producer's
+surface moved with it. That is the first evidence for requirement 2 that is
+measured rather than read off the mechanism, and it is two properties out of
+the seven step 4 has to cover.
+
+**The ids meet in the middle, and neither side could supply the other's half.**
+
+| | | |
+|---|---|---|
+| `FrameSinkId` | the browser | a brokered id is `client_id 0`, and every `EmbeddedFrameSinkProvider` entry point rejects an id whose client id is not the calling renderer's. The renderer cannot name one |
+| `LocalSurfaceId` | the page | it is the embedder, and the `embed_token` in it is the capability the producer needs to submit. Bumping `parent_sequence_number` is how it will resize the producer |
+
+Two new interfaces carry that, both narrow on purpose:
+
+| | |
+|---|---|
+| `domicile.mojom.ExternalSurfaceProvider` | renderer → browser, one method. A page says which `LocalSurfaceId` it allocated and how much it will show, and is told the `FrameSinkId`. It grants rather than takes: a page naming a surface it was not offered gets an empty one, because it allocated the id and no producer is submitting to it |
+| `domicile.mojom.SurfaceObserver` | browser → producer, one method. The other direction of the same exchange, and the shape `xdg_toplevel.configure` needs: a `LocalSurfaceId` and a size, again whenever the embedder's box changes |
+
+`FrameSinkBroker` stays reachable only over the named socket. Holding that pipe
+is unrestricted authority to allocate frame sinks in viz, and no renderer holds
+it.
+
+**The reply waits for a producer, and that removed the startup hook.** An
+`<app>` element exists before the client window behind it does, so a page that
+embeds early is held rather than failed, and is answered when a producer
+connects. Which means nothing has to be started at browser startup: the broker
+and its socket are created when a page first asks. Step 2's one line in
+`browser_main_loop.cc` is gone and nothing replaced it.
+
+One thing binding it from a free function costs, and it is worth stating rather
+than discovering later: **the browser does not check that the renderer owns the
+parent frame sink it names.** That is the check
+`EmbeddedFrameSinkProviderImpl` makes against its `renderer_client_id_`, and
+making it needs the calling renderer's child process id, which means binding
+`ExternalSurfaceProvider` through `RenderProcessHostImpl` rather than as a free
+function. The cost is one more edited file, and it is not a spike's to pay.
 
 ### Rust: the bindings exist, the crate is not the seam
 
@@ -252,9 +328,9 @@ known and it is a build-system cost, not a language one.
 | dmabuf → `gpu::SharedImageInterface::CreateSharedImage` → `viz::TransferableResource` | ported from `components/exo/buffer.cc` | new |
 | Submitting `CompositorFrame`s for a sink | new external viz client | **proven** — step 2's throwaway submits from a process the browser never launched and viz aggregates it |
 | Brokering a `FrameSinkId` and sink to a non-renderer process | `components/domicile/`, modelled on `content/browser/renderer_host/embedded_frame_sink_provider_impl.cc` | **done** — new files + 4 lines across two `BUILD.gn`. Not `render_process_host_impl_receiver_bindings.cc` as first guessed: nothing about it hangs off a `RenderProcessHost` |
-| Getting the producer to the broker | `mojo::NamedPlatformChannel` + a real invitation | **done** — see *How the producer reaches the broker*. One more edited file, `browser_main_loop.cc`, and only for the throwaway |
-| Pushing the `SurfaceId` to the page | new mojo, modelled on the `RemoteFrame` path | new |
-| An element that embeds it | `HTMLCanvasElement`, which already owns a `SurfaceLayerBridge` and a `cc::SurfaceLayer` for `transferControlToOffscreen` | edited (2 files + IDL) |
+| Getting the producer to the broker | `mojo::NamedPlatformChannel` + a real invitation | **done** — see *How the producer reaches the broker*. No edited file: the socket opens when a page first asks to embed, so it hangs off the same lazily-created service |
+| Pushing the `SurfaceId` to the page | `components/domicile/mojom/external_surface.mojom`, modelled on the `RemoteFrame` path | **done** — new files, plus one binder line in `render_process_host_impl_receiver_bindings.cc` |
+| An element that embeds it | `HTMLCanvasElement`, which already owns a `SurfaceLayerBridge` and a `cc::SurfaceLayer` for `transferControlToOffscreen` | **done** — `canvas.embedExternalSurface()`, 2 files + IDL as guessed, plus the flag and one `BUILD.gn` |
 
 ## Why this meets the requirements
 
@@ -288,8 +364,22 @@ its custom element and loses the `AppFrame` plumbing behind it.
   it at a browser-brokered `SurfaceId` instead of an OffscreenCanvas
   placeholder.
 - **Minimise edited files, not added ones.** A fork's carrying cost is conflicts,
-  and new files do not conflict. The design above edits Chromium in roughly
-  **four places**; everything else is additive.
+  and new files do not conflict. "Roughly four places" was the estimate before
+  the page half existed; measured, with steps 1–3 landed, it is **eight**, five
+  of them Blink's:
+
+  | | |
+  |---|---|
+  | `components/BUILD.gn`, `content/browser/BUILD.gn` | source lists and deps |
+  | `content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc` | one `AddUIThreadInterface` beside the one for `EmbeddedFrameSinkProvider` |
+  | `third_party/blink/renderer/core/html/canvas/html_canvas_element.{h,cc,idl}` | the method |
+  | `third_party/blink/renderer/platform/runtime_enabled_features.json5` | the flag |
+  | `third_party/blink/renderer/platform/BUILD.gn` | the new file and its mojom dep |
+
+  Everything else is additive, and the two that rebase noisily are the
+  generated lists — `runtime_enabled_features.json5` and the two `BUILD.gn`
+  source lists. Avoiding a new HTML element bought exactly what it was supposed
+  to: one entry in one generated list instead of three.
 
 ## What gets scrapped
 
@@ -397,9 +487,13 @@ window.
       hierarchy registration does (BeginFrames) from what embedding does
       (aggregation). `components/domicile/spike/` in the series, run with
       `scripts/spike.sh`
-- [ ] `canvas.embedExternalSurface()` behind a runtime flag, calling
-      `SurfaceLayer::SetSurfaceId` with the brokered id — killed if the canvas
-      refuses a surface it did not itself allocate
+- [x] `canvas.embedExternalSurface()` behind a runtime flag, calling
+      `SurfaceLayer::SetSurfaceId` with the brokered id — **not killed**. The
+      canvas does not refuse a surface it did not allocate, and neither does
+      `cc::SurfaceLayer` under it. See *Whether the page will embed a surface it
+      did not allocate*, which also has the control: move the canvas with CSS
+      and the producer's surface moves with it. `components/domicile/mojom/`
+      and `third_party/blink/` in the series
 - [ ] **the measurement**: drive the colour from the page, then read `z-index`
       against ordinary DOM, `transform`, `border-radius`, `opacity`,
       `filter: blur()`, `mix-blend-mode`, and the added latency against a plain
@@ -439,8 +533,8 @@ Phase 3 — be the display server:
   the earlier hope. An external process was given a frame sink and had its
   frames aggregated, with no privilege it could not be handed and no
   `RenderProcessHost` anywhere. What step 2 also found is that the mojom-crate
-  route into cargo is not the bridge — see *The Rust bindings reach further
-  than expected*. The bridge is a GN-built library behind a C ABI, and which
+  route into cargo is not the bridge — see *Rust: the bindings exist, the crate
+  is not the seam*. The bridge is a GN-built library behind a C ABI, and which
   side of it the mojo code sits on is now an ordinary engineering choice rather
   than a blocker. Phase 1 is where it gets made, because that is where the
   producer stops being throwaway.
@@ -474,6 +568,9 @@ Phase 3 — be the display server:
   upstream's number rather than the fork's: whatever a six-week upstream diff
   costs to rebuild, carrying this adds seconds to it. This repo's CI still will
   not carry either.
-- **Not verified by measurement.** Every claim above about what CSS applies is
-  read from the mechanism, not observed. The spike's last step is what turns
-  it into a fact.
+- **Not verified by measurement.** Five of the seven properties are still read
+  from the mechanism rather than observed. Step 3's control moved the canvas
+  with CSS and the producer's surface moved with it, which settles position and
+  size; `z-index`, `transform`, `border-radius`, `opacity`, `filter: blur()`
+  and `mix-blend-mode` are step 4's, along with the latency number. Nothing is
+  deleted from Domicile until it passes.

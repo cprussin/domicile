@@ -15,9 +15,11 @@ namespace domicile {
 BrokeredFrameSink::BrokeredFrameSink(
     viz::HostFrameSinkManager* host_frame_sink_manager,
     const viz::FrameSinkId& frame_sink_id,
+    mojo::PendingRemote<mojom::SurfaceObserver> observer,
     mojo::ReceiverId owner)
     : host_frame_sink_manager_(host_frame_sink_manager),
       frame_sink_id_(frame_sink_id),
+      observer_(std::move(observer)),
       owner_(owner) {
   host_frame_sink_manager_->RegisterFrameSinkId(
       frame_sink_id_, this, viz::ReportFirstSurfaceActivation::kNo);
@@ -26,6 +28,10 @@ BrokeredFrameSink::BrokeredFrameSink(
 }
 
 BrokeredFrameSink::~BrokeredFrameSink() {
+  if (parent_frame_sink_id_.is_valid()) {
+    host_frame_sink_manager_->UnregisterFrameSinkHierarchy(
+        parent_frame_sink_id_, frame_sink_id_);
+  }
   host_frame_sink_manager_->InvalidateFrameSinkId(frame_sink_id_, this, {});
 }
 
@@ -34,6 +40,24 @@ void BrokeredFrameSink::CreateCompositorFrameSink(
     mojo::PendingReceiver<viz::mojom::CompositorFrameSink> receiver) {
   host_frame_sink_manager_->CreateCompositorFrameSink(
       frame_sink_id_, std::move(receiver), std::move(client));
+}
+
+void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
+                              const viz::LocalSurfaceId& local_surface_id,
+                              const gfx::Size& size) {
+  // A page that navigates or reloads embeds again under a different frame
+  // sink, so the old edge has to go before the new one is added.
+  if (parent_frame_sink_id_.is_valid()) {
+    host_frame_sink_manager_->UnregisterFrameSinkHierarchy(
+        parent_frame_sink_id_, frame_sink_id_);
+  }
+  parent_frame_sink_id_ = parent_frame_sink_id;
+  host_frame_sink_manager_->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
+                                                       frame_sink_id_);
+
+  if (observer_) {
+    observer_->OnSurfaceEmbedded(local_surface_id, size);
+  }
 }
 
 // The producer's LocalSurfaceIds come from the embedder, which allocates them,

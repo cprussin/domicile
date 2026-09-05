@@ -2,9 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# THROWAWAY. Step 2 of the spike in docs/architecture/ENGINE-FORK.md: a viz
-# client in a process the browser did not launch, to find out whether viz
-# aggregates what it submits.
+# THROWAWAY. The spike's producer: a viz client in a process the browser did not
+# launch, standing in for domicile-compositor until it submits real buffers. See
+# docs/architecture/ENGINE-FORK.md in the Domicile repository.
 #
 # Not in the dependency graph of `chrome`. Build it by name:
 #

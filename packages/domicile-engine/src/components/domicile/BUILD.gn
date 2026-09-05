@@ -14,6 +14,8 @@ source_set("browser") {
   sources = [
     "browser/brokered_frame_sink.cc",
     "browser/brokered_frame_sink.h",
+    "browser/external_surface_provider.cc",
+    "browser/external_surface_provider.h",
     "browser/frame_sink_broker.cc",
     "browser/frame_sink_broker.h",
   ]
@@ -24,6 +26,7 @@ source_set("browser") {
     "//components/viz/common",
     "//components/viz/host",
     "//mojo/public/cpp/bindings",
+    "//ui/gfx/geometry",
   ]
 }
 
@@ -43,7 +46,7 @@ source_set("unit_tests") {
   ]
 }
 
-# THROWAWAY. Step 2 of the spike.
+# THROWAWAY. The spike's producer.
 #
 # The submitter is an executable nothing depends on, and GN only loads a
 # BUILD.gn that something references. This group is what makes it reachable, so

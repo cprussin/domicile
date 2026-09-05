@@ -1,0 +1,35 @@
+<!doctype html>
+<!--
+  THROWAWAY. The page half of step 3 of the spike in
+  docs/architecture/ENGINE-FORK.md.
+
+  A <canvas> that fills the viewport and, instead of drawing anything, embeds a
+  viz surface a producer outside the renderer submits to. That is the whole of
+  what the shell SDK's <domicile-app> becomes.
+
+  The background colour is the negative control. A canvas that embedded nothing
+  is transparent, so what the pixel probe finds at the centre of the window is
+  this indigo rather than the producer's colour — which is how "the canvas
+  refused the surface" reads differently from "the producer never submitted".
+-->
+<meta charset="utf-8">
+<title>domicile: embedding an external surface</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #3f51b5; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+<canvas height="480" id="app" width="640" ></canvas>
+<script>
+  const canvas = document.getElementById('app');
+  if (canvas.embedExternalSurface) {
+    // Resolves only once a producer has been brokered a frame sink, which may
+    // be well after load: the browser holds the reply until then, because an
+    // <app> element exists before the window behind it does.
+    canvas.embedExternalSurface().then(
+      () => { console.log('domicile: embedded'); },
+      (error) => { console.log('domicile: refused: ' + error.message); });
+  } else {
+    console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
+                'flag is off');
+  }
+</script>

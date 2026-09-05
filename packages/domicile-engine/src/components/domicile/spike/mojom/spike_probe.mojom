@@ -1,0 +1,27 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module domicile.mojom;
+
+// THROWAWAY. Step 3's proof, and nothing else.
+//
+// The producer knows what colour it submitted. What it cannot see is what the
+// display compositor drew, and that is the only thing worth knowing: whether
+// viz aggregated a frame from a process that is not a renderer into a page's
+// layer tree, because a <canvas> in that page named its SurfaceId.
+//
+// Step 2 asked the same question of a ui::LayerSurface in the browser's own
+// window, and answered it with a CopyOutputRequest on that layer. There is no
+// such layer any more — the embedding one belongs to the page — so the copy is
+// of the browser's window, and the page puts the canvas where the sample lands.
+//
+// Deleted when domicile-compositor submits real buffers and the measurement in
+// ENGINE-FORK.md's step 4 replaces this with something that reads CSS.
+interface SpikeProbe {
+  // Copies what the display compositor drew for the browser's window and
+  // returns the colour at its centre, as SkColor (ARGB).
+  //
+  // Fails if there is no window yet, or nothing has been drawn — retry.
+  SampleWindowCenter() => (bool sampled, uint32 argb);
+};
