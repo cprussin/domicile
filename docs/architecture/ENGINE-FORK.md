@@ -738,16 +738,46 @@ What this adds to the ABI is one call and one reply, not a new capability:
 already held, and gets back an opaque `BufferId`. The library never sees a
 mailbox and never holds a GPU channel.
 
-**One consequence that was not obvious when this was settled: the browser has
-to own the `CompositorFrameSink` too.** If the producer never sees a mailbox
+### Whether the producer can submit its own frames
+
+**Yes. Measured, and the per-frame hop is gone.**
+
+The worry was that "the producer never sees a mailbox" forced the browser to
+assemble every frame. It does not. `gpu::ExportedSharedImage` is what a
+`SharedImage` looks like to another client — a mailbox, its metadata, and a
+sync token the browser has already verified — and it is a mojo struct
+(`gpu/ipc/common/exported_shared_image.mojom`). So `ImportBuffer` hands one
+back, the producer calls `gpu::ClientSharedImage::ImportUnowned`, builds its own
+`viz::TransferableResource`, and submits its own `CompositorFrame` to the sink
+it has held since step 2.
+
+**Viz accepts a resource whose `SharedImage` a different client created.** The
+texture is sampled and `released` comes back through the producer's *own*
+`CompositorFrameSinkClient` — not forwarded by the browser — which is what
+proves viz returned the resource to the submitting sink and not somewhere else.
+No error, no bad-message report.
+
+| | |
+|---|---|
+| per-buffer hop | stays — the browser imports, because only it has an `aura::Env` |
+| per-frame hop | **gone** — the producer submits straight to viz |
+| GPU authority | unmoved. Naming a mailbox is not authority to mint one, and no GPU channel crosses |
+| what the library gained | `gpu::ClientSharedImage` and `viz::TransferableResource` — types, not a channel |
+
+So `domicile-compositor` submits its own frames, and the browser-owned sink
+stays only as the shape a producer gets by passing no receiver to
+`CreateFrameSink`. What follows was true while that was the only path:
+
+**The browser can own the `CompositorFrameSink` too.** If the producer never sees a mailbox
 then it cannot assemble the `CompositorFrame` either, so `domicile_surface_submit`
 names a `BufferId` and the browser builds the frame around the matching
 `TransferableResource`. That makes the per-frame path go through the browser,
 where the table above says only the import would. A producer that submits its
 own frames — the spike's solid-colour ones — still talks to viz directly, and
 `CreateFrameSink` takes a null client and receiver to ask for the other shape.
-Whether the frame hop costs anything measurable is not established; the
-producer submits at most one frame per BeginFrame either way.
+That is no longer the path the design takes — see *Whether the producer can
+submit its own frames*, directly above — and it is kept because it is what a
+producer with no GPU types at all would use.
 
 **The premise of that consequence should be tested before it hardens.** "If the
 producer never sees a mailbox" is the load-bearing clause, and the decision this
@@ -900,7 +930,16 @@ compositor can submit a frame, because phase 2 deletes what draws today.**
       frame replaces it, which is why a client double-buffers
 - [ ] `domicile-compositor` submits a client's buffer instead of reading it
       back — the only item left in phase 1, and the first that touches the
-      compositor
+      compositor. The seam is ready: `domicile_engine_fd` is a `Generic`
+      calloop source, which is the pattern `main.rs:6037` already uses, and the
+      three callbacks map onto requests the compositor implements. **What is
+      not decided is how the Rust reaches the library.** `libdomicile_engine.so`
+      is a GN artifact that exists only where Chromium is built, so linking it
+      from `cargo` makes `cargo build` need a Chromium checkout — which this
+      repo's CI does not have and cannot get. `dlopen` at runtime, behind the
+      same `disposition` the compositor already branches on, keeps `cargo
+      build` working everywhere and keeps the fork out of the default build.
+      Recommendation: `dlopen`, and decide it before writing the binding
 - [x] ~~**on a machine with a GPU**~~ — `crux` is one. See *The GPU was there
       all along*
 

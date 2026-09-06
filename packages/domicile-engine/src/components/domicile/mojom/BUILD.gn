@@ -11,6 +11,7 @@ mojom("mojom") {
   ]
 
   public_deps = [
+    "//gpu/ipc/common:interfaces",
     "//services/viz/public/mojom",
     "//services/viz/public/mojom:surfaces",
     "//ui/gfx/geometry/mojom",

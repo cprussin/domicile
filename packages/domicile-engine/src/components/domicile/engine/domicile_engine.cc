@@ -26,6 +26,14 @@
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "components/domicile/spike/mojom/spike_probe.mojom.h"
 #include "base/posix/eintr_wrapper.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/frame_timing_details_map.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
+#include "components/viz/common/quads/texture_draw_quad.h"
+#include "components/viz/common/resources/returned_resource.h"
+#include "components/viz/common/resources/transferable_resource.h"
+#include "gpu/command_buffer/client/client_shared_image.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "mojo/core/embedder/embedder.h"
@@ -41,6 +49,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer_handle.h"
+#include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/native_pixmap_handle.h"
 
 namespace domicile {
@@ -76,13 +85,14 @@ void EnsureMojoInitialized() {
 // Everything here runs on the engine's mojo thread. The only thing that leaves
 // it is a push onto the EngineEventQueue, which is what the compositor polls.
 //
-// It is deliberately not viz's CompositorFrameSinkClient. The browser owns the
-// sink — that is what passing no receiver to CreateFrameSink asks for — because
-// this process cannot assemble a CompositorFrame containing a dmabuf: a
-// TransferableResource names a mailbox and minting one needs a GPU channel this
-// process does not have and should not have. So BeginFrames and buffer
-// releases arrive on SurfaceObserver instead, forwarded by the browser.
-class Surface : public mojom::SurfaceObserver {
+// It holds its own CompositorFrameSink and assembles its own frames, which is
+// the thing ENGINE-FORK.md's "Whether the producer can submit its own frames"
+// asks about. It still mints no mailbox and holds no GPU channel: the browser
+// imports the dmabuf and hands back a gpu::ExportedSharedImage — a mailbox and
+// a verified sync token, bytes once verified — and naming one is not authority
+// to make one.
+class Surface : public mojom::SurfaceObserver,
+                public viz::mojom::CompositorFrameSinkClient {
  public:
   Surface(DomicileSurfaceId id, EngineEventQueue* queue)
       : id_(id), queue_(queue) {}
@@ -95,14 +105,81 @@ class Surface : public mojom::SurfaceObserver {
   void Create(mojom::FrameSinkBroker* broker,
               const std::string& app_id,
               base::OnceCallback<void(bool)> done) {
+    mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client;
+    client_receiver_.Bind(client.InitWithNewPipeAndPassReceiver());
     broker->CreateFrameSink(
-        /*client=*/mojo::NullRemote(), /*receiver=*/mojo::NullReceiver(),
+        std::move(client), sink_.BindNewPipeAndPassReceiver(),
         observer_receiver_.BindNewPipeAndPassRemote(), app_id,
         base::BindOnce(&Surface::OnCreated, base::Unretained(this),
                        std::move(done)));
   }
 
   const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
+
+  // Takes the SharedImage the browser made and keeps it under `buffer_id`, so
+  // a later Submit can name it in a resource list.
+  void Adopt(uint64_t buffer_id, gpu::ExportedSharedImage exported) {
+    scoped_refptr<gpu::ClientSharedImage> shared_image =
+        gpu::ClientSharedImage::ImportUnowned(std::move(exported));
+    if (!shared_image) {
+      return;
+    }
+    viz::TransferableResource resource = viz::TransferableResource::Make(
+        shared_image, viz::TransferableResource::ResourceSource::kUI,
+        shared_image->creation_sync_token());
+    resource.id = next_resource_id_;
+    next_resource_id_ = viz::ResourceId(next_resource_id_.GetUnsafeValue() + 1);
+    resource_to_buffer_[resource.id] = buffer_id;
+    buffers_[buffer_id] = {std::move(shared_image), std::move(resource)};
+  }
+
+  void Forget(uint64_t buffer_id) {
+    auto iter = buffers_.find(buffer_id);
+    if (iter != buffers_.end()) {
+      resource_to_buffer_.erase(iter->second.resource.id);
+      buffers_.erase(iter);
+    }
+  }
+
+  bool Submit(uint64_t buffer_id, const gfx::Rect& damage) {
+    auto iter = buffers_.find(buffer_id);
+    if (iter == buffers_.end() || !local_surface_id_.is_valid()) {
+      return false;
+    }
+    const gfx::Rect rect(size_);
+
+    auto pass = viz::CompositorRenderPass::Create();
+    pass->SetNew(viz::CompositorRenderPassId{1}, rect,
+                 damage.IsEmpty() ? rect : damage, gfx::Transform());
+
+    viz::SharedQuadState* quad_state = pass->CreateAndAppendSharedQuadState();
+    quad_state->SetAll(gfx::Transform(), rect, rect, gfx::MaskFilterInfo(),
+                       /*clip=*/std::nullopt, /*contents_opaque=*/true,
+                       /*opacity_f=*/1.f, SkBlendMode::kSrcOver,
+                       /*sorting_context=*/0, /*layer_id=*/0u,
+                       /*fast_rounded_corner=*/false);
+
+    viz::TextureDrawQuad* quad =
+        pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
+    quad->SetNew(quad_state, rect, rect, /*needs_blending=*/false,
+                 iter->second.resource.id, gfx::PointF(0.f, 0.f),
+                 gfx::PointF(1.f, 1.f), SkColors::kTransparent,
+                 /*nearest_neighbor=*/false, /*secure_output_only=*/false,
+                 gfx::ProtectedVideoType::kClear,
+                 /*is_tex_coords_normalized=*/true);
+
+    viz::CompositorFrame frame;
+    frame.metadata.begin_frame_ack =
+        viz::BeginFrameAck::CreateManualAckWithDamage();
+    frame.metadata.device_scale_factor = 1.f;
+    frame.metadata.frame_token = ++next_frame_token_;
+    frame.resource_list.push_back(iter->second.resource);
+    frame.render_pass_list.push_back(std::move(pass));
+
+    sink_->SubmitCompositorFrame(local_surface_id_, std::move(frame),
+                                 std::nullopt, 0);
+    return true;
+  }
 
  private:
   void OnCreated(base::OnceCallback<void(bool)> done,
@@ -118,33 +195,78 @@ class Surface : public mojom::SurfaceObserver {
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
                          const gfx::Size& size) override {
     local_surface_id_ = local_surface_id;
+    size_ = size;
+    if (!wants_begin_frames_) {
+      wants_begin_frames_ = true;
+      sink_->SetNeedsBeginFrame(true);
+    }
     queue_->Push({.type = EngineEvent::Type::kConfigure,
                   .surface = id_,
                   .width = static_cast<uint32_t>(size.width()),
                   .height = static_cast<uint32_t>(size.height())});
   }
 
-  void OnFrame(int64_t deadline_us) override {
+  // Only sent when the browser owns the sink, which this does not ask for.
+  void OnFrame(int64_t deadline_us) override {}
+  void OnBufferReleased(uint64_t buffer_id) override {}
+
+  // viz::mojom::CompositorFrameSinkClient:
+  void OnBeginFrame(const viz::BeginFrameArgs& args,
+                    const viz::FrameTimingDetailsMap& timing_details,
+                    std::vector<viz::ReturnedResource> resources) override {
+    Release(resources);
     queue_->Push({.type = EngineEvent::Type::kFrame,
                   .surface = id_,
-                  .deadline_us = static_cast<uint64_t>(deadline_us)});
+                  .deadline_us = static_cast<uint64_t>(
+                      args.deadline.since_origin().InMicroseconds())});
   }
+  void DidReceiveCompositorFrameAck(
+      std::vector<viz::ReturnedResource> resources) override {
+    Release(resources);
+  }
+  void ReclaimResources(
+      std::vector<viz::ReturnedResource> resources) override {
+    Release(resources);
+  }
+  void OnBeginFramePausedChanged(bool paused) override {}
+  void OnCompositorFrameTransitionDirectiveProcessed(
+      uint32_t sequence_id) override {}
+  void OnSurfaceEvicted(const viz::LocalSurfaceId& local_surface_id) override {}
 
   // wl_buffer.release: viz has stopped sampling that dmabuf and the client may
   // draw into it again.
-  void OnBufferReleased(uint64_t buffer_id) override {
-    queue_->Push({.type = EngineEvent::Type::kReleased,
-                  .surface = id_,
-                  .buffer = buffer_id});
+  void Release(const std::vector<viz::ReturnedResource>& resources) {
+    for (const viz::ReturnedResource& resource : resources) {
+      auto iter = resource_to_buffer_.find(resource.id);
+      if (iter == resource_to_buffer_.end()) {
+        continue;
+      }
+      queue_->Push({.type = EngineEvent::Type::kReleased,
+                    .surface = id_,
+                    .buffer = iter->second});
+    }
   }
+
+  struct Adopted {
+    scoped_refptr<gpu::ClientSharedImage> shared_image;
+    viz::TransferableResource resource;
+  };
 
   const DomicileSurfaceId id_;
   const raw_ptr<EngineEventQueue> queue_;
 
   mojo::Receiver<mojom::SurfaceObserver> observer_receiver_{this};
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink_;
+  mojo::Receiver<viz::mojom::CompositorFrameSinkClient> client_receiver_{this};
 
   viz::FrameSinkId frame_sink_id_;
   viz::LocalSurfaceId local_surface_id_;
+  gfx::Size size_;
+  bool wants_begin_frames_ = false;
+  base::flat_map<uint64_t, Adopted> buffers_;
+  base::flat_map<viz::ResourceId, uint64_t> resource_to_buffer_;
+  viz::ResourceId next_resource_id_{1};
+  viz::FrameTokenGenerator next_frame_token_;
 };
 
 // A client's dmabuf, as mojo wants it. The fds are duplicated: the caller keeps
@@ -369,16 +491,25 @@ struct DomicileEngine {
     }
 
     base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
+    domicile::Surface* raw = iter->second.get();
     broker_->ImportBuffer(
-        iter->second->frame_sink_id(), std::move(handle),
+        raw->frame_sink_id(), std::move(handle),
         gfx::Size(static_cast<int>(dmabuf.width),
                   static_cast<int>(dmabuf.height)),
         base::BindOnce(
-            [](base::RunLoop* loop, DomicileBufferId* imported, uint64_t id) {
-              *imported = id;
+            [](base::RunLoop* loop, DomicileBufferId* imported,
+               domicile::Surface* surface, uint64_t id,
+               std::optional<gpu::ExportedSharedImage> exported) {
+              // Naming the browser's SharedImage is what lets this process
+              // build its own TransferableResource. Without it there is
+              // nothing to submit, so the import counts as refused.
+              if (id != 0 && exported.has_value()) {
+                surface->Adopt(id, std::move(exported).value());
+                *imported = id;
+              }
               loop->Quit();
             },
-            &loop, imported));
+            &loop, imported, raw));
     loop.Run();
   }
 
@@ -386,8 +517,8 @@ struct DomicileEngine {
                             DomicileBufferId buffer,
                             const gfx::Rect& damage) {
     auto iter = surfaces_.find(surface);
-    if (iter != surfaces_.end() && broker_) {
-      broker_->SubmitBuffer(iter->second->frame_sink_id(), buffer, damage);
+    if (iter != surfaces_.end()) {
+      iter->second->Submit(buffer, damage);
     }
   }
 
@@ -412,6 +543,7 @@ struct DomicileEngine {
                              DomicileBufferId buffer) {
     auto iter = surfaces_.find(surface);
     if (iter != surfaces_.end() && broker_) {
+      iter->second->Forget(buffer);
       broker_->DestroyBuffer(iter->second->frame_sink_id(), buffer);
     }
   }

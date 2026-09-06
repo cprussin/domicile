@@ -116,8 +116,10 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
   }
 }
 
-uint64_t BrokeredFrameSink::ImportBuffer(gfx::GpuMemoryBufferHandle handle,
-                                         const gfx::Size& size) {
+uint64_t BrokeredFrameSink::ImportBuffer(
+    gfx::GpuMemoryBufferHandle handle,
+    const gfx::Size& size,
+    std::optional<gpu::ExportedSharedImage>* exported) {
   gpu::SharedImageInterface* sii = get_shared_image_interface_.Run();
   if (!sii) {
     LOG(ERROR) << "domicile: no GPU to import a buffer into. The ozone "
@@ -145,6 +147,12 @@ uint64_t BrokeredFrameSink::ImportBuffer(gfx::GpuMemoryBufferHandle handle,
       sii->GenVerifiedSyncToken());
   buffer.resource.id = next_resource_id_;
   next_resource_id_ = viz::ResourceId(next_resource_id_.GetUnsafeValue() + 1);
+
+  // Whether anything outside the browser can name this SharedImage is the
+  // question "Whether the producer can submit its own frames" asks. Exported
+  // unconditionally, because the answer is the same either way and the cost is
+  // a mailbox and a sync token.
+  *exported = shared_image->Export();
   buffer.shared_image = std::move(shared_image);
 
   const uint64_t buffer_id = next_buffer_id_++;

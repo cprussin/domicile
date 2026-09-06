@@ -8,6 +8,7 @@ import "services/viz/public/mojom/compositing/compositor_frame_sink.mojom";
 import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
 import "services/viz/public/mojom/compositing/local_surface_id.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
+import "gpu/ipc/common/exported_shared_image.mojom";
 import "ui/gfx/mojom/buffer_types.mojom";
 
 // Tells a producer which surface to submit to.
@@ -108,10 +109,17 @@ interface FrameSinkBroker {
   //
   // The buffer is kept until DestroyBuffer or until the sink goes away, so a
   // client that reuses a buffer imports it once.
+  // `exported` is the SharedImage the browser made, as something another
+  // client can name: a mailbox and a verified sync token, which are bytes once
+  // the browser has verified them. A producer that takes it can build its own
+  // TransferableResource and submit its own CompositorFrame to the sink it
+  // already holds — no mailbox is minted outside the browser and no GPU channel
+  // moves. Null when the browser owns the sink, where nothing outside it needs
+  // to name the resource.
   ImportBuffer(viz.mojom.FrameSinkId frame_sink_id,
                gfx.mojom.GpuMemoryBufferHandle buffer_handle,
                gfx.mojom.Size size)
-      => (uint64 buffer_id);
+      => (uint64 buffer_id, gpu.mojom.ExportedSharedImage? exported);
 
   // Submits a frame showing `buffer_id`, damaging `damage`.
   //

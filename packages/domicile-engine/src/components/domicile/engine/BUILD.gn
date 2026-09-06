@@ -52,6 +52,8 @@ shared_library("domicile_engine") {
     "//components/domicile/mojom",
     "//components/domicile/spike/mojom",
     "//components/viz/common",
+    "//gpu/command_buffer/client",
+    "//gpu/ipc/common:interfaces",
     "//mojo/core/embedder",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/platform",
