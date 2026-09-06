@@ -1,0 +1,77 @@
+# Copyright 2026 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# libdomicile_engine.so: the seam between domicile-compositor and the browser.
+#
+# Step 2 established that a mojom-generated Rust crate cannot reach a cargo
+# build, and that the bridge is therefore a GN-built library behind a C ABI.
+# This is that library. See docs/architecture/ENGINE-FORK.md in the Domicile
+# repository, "The seam: a C ABI, and what crosses it".
+#
+# Nothing in `chrome` depends on it; build it by name:
+#
+#   autoninja -C out/Domicile domicile_engine
+
+# The part with logic in it, split out so it can be tested without a browser to
+# connect to: what the library has to tell the compositor, and the fd it says
+# it on.
+source_set("event_queue") {
+  sources = [
+    "engine_event_queue.cc",
+    "engine_event_queue.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
+source_set("event_queue_unit_tests") {
+  testonly = true
+
+  sources = [ "engine_event_queue_unittest.cc" ]
+
+  deps = [
+    ":event_queue",
+    "//base",
+    "//testing/gtest",
+  ]
+}
+
+shared_library("domicile_engine") {
+  output_name = "domicile_engine"
+
+  sources = [
+    "domicile_engine.cc",
+    "domicile_engine.h",
+  ]
+
+  deps = [
+    ":event_queue",
+    "//base",
+    "//components/domicile/mojom",
+    "//components/viz/common",
+    "//mojo/core/embedder",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/platform",
+    "//mojo/public/cpp/system",
+    "//services/viz/public/mojom",
+    "//ui/gfx/geometry",
+  ]
+}
+
+# THROWAWAY. What the library has to be able to do, asserted from C — which is
+# also the compiler checking that the header is the C ABI it claims to be.
+executable("engine_smoke") {
+  output_name = "domicile_engine_smoke"
+
+  sources = [ "engine_smoke.c" ]
+
+  # The raw_ptr plugin reads `void* user_data` in the C ABI's callback struct
+  # and asks for a raw_ptr<T>, which is a C++ type that cannot appear in a C
+  # header. Dropped here rather than by adding this directory to
+  # build/config/raw_ptr_plugin_config.yaml, because that is a file Chromium
+  # owns and this is a file we own.
+  configs -= [ "//build/config/clang:find_bad_constructs" ]
+
+  deps = [ ":domicile_engine" ]
+}

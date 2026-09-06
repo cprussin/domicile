@@ -16,15 +16,18 @@ BrokeredFrameSink::BrokeredFrameSink(
     viz::HostFrameSinkManager* host_frame_sink_manager,
     const viz::FrameSinkId& frame_sink_id,
     mojo::PendingRemote<mojom::SurfaceObserver> observer,
-    mojo::ReceiverId owner)
+    mojo::ReceiverId owner,
+    const std::string& debug_label)
     : host_frame_sink_manager_(host_frame_sink_manager),
       frame_sink_id_(frame_sink_id),
       observer_(std::move(observer)),
       owner_(owner) {
   host_frame_sink_manager_->RegisterFrameSinkId(
       frame_sink_id_, this, viz::ReportFirstSurfaceActivation::kNo);
-  host_frame_sink_manager_->SetFrameSinkDebugLabel(frame_sink_id_,
-                                                   "BrokeredFrameSink");
+  // What the producer calls this window, so that a viz trace names the app
+  // rather than the mechanism.
+  host_frame_sink_manager_->SetFrameSinkDebugLabel(
+      frame_sink_id_, debug_label.empty() ? "BrokeredFrameSink" : debug_label);
 }
 
 BrokeredFrameSink::~BrokeredFrameSink() {

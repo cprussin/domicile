@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_BROKERED_FRAME_SINK_H_
 #define COMPONENTS_DOMICILE_BROWSER_BROKERED_FRAME_SINK_H_
 
+#include <string>
+
 #include "base/memory/raw_ptr.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
@@ -35,7 +37,8 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient {
   BrokeredFrameSink(viz::HostFrameSinkManager* host_frame_sink_manager,
                     const viz::FrameSinkId& frame_sink_id,
                     mojo::PendingRemote<mojom::SurfaceObserver> observer,
-                    mojo::ReceiverId owner);
+                    mojo::ReceiverId owner,
+                    const std::string& debug_label);
 
   BrokeredFrameSink(const BrokeredFrameSink&) = delete;
   BrokeredFrameSink& operator=(const BrokeredFrameSink&) = delete;

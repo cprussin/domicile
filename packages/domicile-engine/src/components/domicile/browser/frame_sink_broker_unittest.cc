@@ -98,9 +98,9 @@ class FrameSinkBrokerTest : public testing::Test {
       mojo::Remote<viz::mojom::CompositorFrameSink>& sink,
       mojo::PendingRemote<mojom::SurfaceObserver> observer) {
     base::test::TestFuture<const viz::FrameSinkId&> future;
-    remote->CreateFrameSink(sink_client.BindInterfaceRemote(),
-                            sink.BindNewPipeAndPassReceiver(),
-                            std::move(observer), future.GetCallback());
+    remote->CreateFrameSink(
+        sink_client.BindInterfaceRemote(), sink.BindNewPipeAndPassReceiver(),
+        std::move(observer), "test-app", future.GetCallback());
     return future.Get();
   }
 
@@ -164,8 +164,8 @@ TEST_F(FrameSinkBrokerTest, BrokersASinkToACallerThatIsNotARenderer) {
 
   base::test::TestFuture<const viz::FrameSinkId&> future;
   remote->CreateFrameSink(sink_client.BindInterfaceRemote(),
-                          sink.BindNewPipeAndPassReceiver(),
-                          mojo::NullRemote(), future.GetCallback());
+                          sink.BindNewPipeAndPassReceiver(), mojo::NullRemote(),
+                          "test-app", future.GetCallback());
 
   const viz::FrameSinkId frame_sink_id = future.Get();
   EXPECT_TRUE(frame_sink_id.is_valid());
@@ -187,14 +187,14 @@ TEST_F(FrameSinkBrokerTest, AllocatesADistinctIdPerSink) {
   base::test::TestFuture<const viz::FrameSinkId&> first;
   remote->CreateFrameSink(first_client.BindInterfaceRemote(),
                           first_sink.BindNewPipeAndPassReceiver(),
-                          mojo::NullRemote(), first.GetCallback());
+                          mojo::NullRemote(), "test-app", first.GetCallback());
 
   viz::MockCompositorFrameSinkClient second_client;
   mojo::Remote<viz::mojom::CompositorFrameSink> second_sink;
   base::test::TestFuture<const viz::FrameSinkId&> second;
   remote->CreateFrameSink(second_client.BindInterfaceRemote(),
                           second_sink.BindNewPipeAndPassReceiver(),
-                          mojo::NullRemote(), second.GetCallback());
+                          mojo::NullRemote(), "test-app", second.GetCallback());
 
   EXPECT_NE(first.Get(), second.Get());
 
@@ -218,8 +218,8 @@ TEST_F(FrameSinkBrokerTest, DestroyFrameSinkRemovesTheSinkFromViz) {
   mojo::Remote<viz::mojom::CompositorFrameSink> sink;
   base::test::TestFuture<const viz::FrameSinkId&> future;
   remote->CreateFrameSink(sink_client.BindInterfaceRemote(),
-                          sink.BindNewPipeAndPassReceiver(),
-                          mojo::NullRemote(), future.GetCallback());
+                          sink.BindNewPipeAndPassReceiver(), mojo::NullRemote(),
+                          "test-app", future.GetCallback());
   const viz::FrameSinkId frame_sink_id = future.Get();
   RunUntilIdle();
   ASSERT_TRUE(VizHasFrameSink(frame_sink_id));
@@ -240,9 +240,9 @@ TEST_F(FrameSinkBrokerTest, DroppingTheConnectionDestroysEverySink) {
   viz::MockCompositorFrameSinkClient sink_client;
   mojo::Remote<viz::mojom::CompositorFrameSink> sink;
   base::test::TestFuture<const viz::FrameSinkId&> future;
-  (*remote)->CreateFrameSink(sink_client.BindInterfaceRemote(),
-                             sink.BindNewPipeAndPassReceiver(),
-                             mojo::NullRemote(), future.GetCallback());
+  (*remote)->CreateFrameSink(
+      sink_client.BindInterfaceRemote(), sink.BindNewPipeAndPassReceiver(),
+      mojo::NullRemote(), "test-app", future.GetCallback());
   const viz::FrameSinkId frame_sink_id = future.Get();
   RunUntilIdle();
   ASSERT_TRUE(VizHasFrameSink(frame_sink_id));

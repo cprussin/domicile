@@ -67,12 +67,13 @@ void FrameSinkBroker::CreateFrameSink(
     mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
     mojo::PendingReceiver<viz::mojom::CompositorFrameSink> receiver,
     mojo::PendingRemote<mojom::SurfaceObserver> observer,
+    const std::string& debug_label,
     CreateFrameSinkCallback callback) {
   const viz::FrameSinkId frame_sink_id = allocate_frame_sink_id_.Run();
 
   auto frame_sink = std::make_unique<BrokeredFrameSink>(
       host_frame_sink_manager_, frame_sink_id, std::move(observer),
-      receivers_.current_receiver());
+      receivers_.current_receiver(), debug_label);
   frame_sink->CreateCompositorFrameSink(std::move(client), std::move(receiver));
   BrokeredFrameSink* raw_frame_sink = frame_sink.get();
   frame_sink_map_[frame_sink_id] = std::move(frame_sink);

@@ -297,13 +297,19 @@ element at `0` and below one at `2`, with both of them *after* it in document
 order so that document order alone would not have put it there. Bands failed
 exactly here.
 
-`transform`'s 285 pixels are a one-pixel outline — `interior` counts
-mismatching pixels every one of whose neighbours within 2px also mismatch, and
-there are none. A `translate/rotate/scale` resamples a surface's texture where
-it rasterises a `<div>`'s edge from a vector, so the two round differently
-along the boundary and nowhere else. That is what a hardware-composited
-`<video>` does under the same transform, which makes it parity rather than a
-gap — but it is a real difference and it is the one cell that is not bit-exact.
+**`transform`'s 285 pixels were software rasterisation, not the mechanism.**
+The table above is `--disable-gpu`, which every measurement in this project was
+until phase 1 found that `crux` has a GPU. On the GPU, with nothing else
+changed, **every cell is 0** — `transform` included, and resize with it:
+
+| | differ | interior | worst Δ |
+|---|---|---|---|
+| all seven properties | **0** | 0 | 0–3 |
+
+So an `<app>` is not "a `<div>` up to a one-pixel outline"; it is a `<div>`.
+The outline was two software raster passes disagreeing in the last bit, and it
+is gone on the hardware a user would have. `GPU=1 scripts/spike-step4.sh` is
+that run.
 
 Two things stop this from passing for the wrong reason. Each property cell is
 also compared against the baseline cell, and a cell whose property never took
@@ -312,7 +318,50 @@ both halves plain, and two plain halves match; the run fails unless every
 property visibly changed its cell. And the last cell's control is a colour the
 producer never submits, so a diff that cannot see a difference fails there.
 
+### Whether an `<app>` is an out-of-process `<iframe>`
+
+**No, and it does not need to be.** The claim in the row above — that an `<app>`
+differs from a `<div>` only the way any surface-backed element does, an OOPIF
+included — was read off `child_frame_compositing_helper.cc` and never measured.
+Measured, on the GPU, under the same `transform`, with a cross-site `<iframe>`
+in a renderer of its own (`scripts/spike-iframe.sh`, 7 renderer processes at
+peak):
+
+| | differ | interior | worst Δ | |
+|---|---|---|---|---|
+| `<app>` vs `<div>` | **0** | 0 | 0 | the requirement, met exactly |
+| `<app>` vs OOPIF | 255 | 0 | 52 | not a requirement |
+| OOPIF vs `<div>` | 255 | 0 | 52 | Chromium's own embedder is not pixel-exact |
+
+The argument was wrong and the conclusion is better than the argument. An
+`<app>` is pixel-identical to an ordinary element; **the OOPIF is the one that
+is not**, and it differs from an `<app>` and from a `<div>` by the same 255
+edge pixels. So "as good as an `<iframe>`" was the wrong bar — this clears it
+and then clears the real one, which is the requirement's own wording: no CSS
+behaves differently for an `<app>` than for any other element.
+
+The third row is what keeps the first honest. If an OOPIF ever matched a `<div>`
+exactly, the iframe would not be out of process, and all three rows would be
+comparing an `<app>` against `<div>`s.
+
+Two differences between the call sites were found and are *not* the cause,
+recorded so the next person does not re-derive them.
+`SurfaceLayerBridge::CreateSurfaceLayer` sets `SetStretchContentToFillBounds`
+and `SetOverrideChildPaintFlags`, and the OOPIF path sets neither. Stretching
+changes which branch `SurfaceAggregator` takes for content scale
+(`surface_aggregator.cc:857`) but computes 1.0 either way when the surface is
+the size of its box, which it is by construction here. And
+`SetOverrideChildPaintFlags(bool)` **writes `true` whatever it is passed**
+(`cc/layers/surface_layer.cc:138`), so a layer the bridge built cannot have it
+unset — upstream's bug, and the one configuration difference that cannot be
+closed from outside. Matching the OOPIF's `SetMasksToBounds(true)` is also not
+available after the fact: on an attached layer in layer-list mode it fails
+`DCHECK(!IsAttached() || !IsUsingLayerLists())`, which is a renderer crash
+rather than a difference in a pixel.
+
 ### What it costs
+
+
 
 One display frame — which is what it costs to ask the question at all.
 
@@ -413,7 +462,7 @@ known and it is a build-system cost, not a language one.
 | Requirement | How |
 |---|---|
 | **Latency parity** | The client's dmabuf becomes a `SharedImage` and rides in a texture quad. Viz aggregates it into the display frame — the same single composite any Wayland compositor does — and its `OverlayProcessor` can promote the quad to direct scanout. No readback, no socket, no `putImageData`. **Measured** as far as `crux` allows: one display frame, indistinguishable from the probe's own floor. See *What it costs* |
-| **CSS parity** | The window is a `cc::Layer`. Whatever CSS works on a hardware-composited `<video>` works, because it is the same layer type through the same property trees. This is the requirement's own wording — "just like a `<webview>` or `<iframe>` or `<video>`" — met by using literally that mechanism. **Measured**: seven properties, six of them bit-exact against an ordinary element. See *What CSS does to an `<app>`* |
+| **CSS parity** | The window is a `cc::Layer`. Whatever CSS works on a hardware-composited `<video>` works, because it is the same layer type through the same property trees. This is the requirement's own wording — "just like a `<webview>` or `<iframe>` or `<video>`" — met by using literally that mechanism. **Measured on a GPU: seven properties, every one bit-exact against an ordinary element**, and an `<app>` is closer to a `<div>` than an out-of-process `<iframe>` is. See *What CSS does to an `<app>`* and *Whether an `<app>` is an out-of-process `<iframe>`* |
 | **Shell simplicity** | `<app>` stays a custom element wrapping a `<canvas>`, which is what `<domicile-app>` already is. What changes is what fills the canvas, not what a shell author writes |
 
 The third row is the surprise: the shell-side API barely moves. The SDK keeps
@@ -625,7 +674,70 @@ somewhere obvious to go, and the release path in particular is not a detail:
 without it the compositor would reuse a dmabuf viz is still sampling, which is
 a tear rather than an error.
 
+### The GPU was there all along
+
+Every measurement in this project up to phase 1 ran `--ozone-platform=headless
+--disable-gpu`, and the doc said the dmabuf path was therefore unexercised. The
+first thing phase 1 did was check the machine rather than the assumption:
+
+| | |
+|---|---|
+| render node | `/dev/dri/renderD128`, mode `crw-rw-rw-` |
+| GPU | NVIDIA GeForce GTX 970, proprietary driver 580.173.02 |
+| displays | none — every connector reads `disconnected` |
+| Chromium's renderer string | `ANGLE (NVIDIA Corporation, NVIDIA GeForce GTX 970/PCIe/SSE2, OpenGL ES 3.2)` |
+| `scripts/e2e-dmabuf.sh` | **passes on `crux`** — a real GPU client's buffers are imported and delivered. It does not skip |
+
+**What kept the engine on `--disable-gpu` was a library path, not the absence of
+a GPU.** ANGLE dlopens `libEGL.so.1`, which is glvnd's, and Chromium's own
+toolchain shell does not carry it; NixOS keeps the vendor libraries in
+`/run/opengl-driver/lib` and the dispatch library somewhere else again.
+`GPU=1 scripts/spike.sh` sets that path, and everything downstream of it — the
+whole of step 4, and the iframe cell — runs on the hardware.
+
+That matters beyond convenience: **step 4's one imperfect cell was an artifact
+of software rasterisation**, and on the GPU there is no imperfect cell.
+
+### Why `domicile_surface_import` cannot be written yet
+
+Not for want of a GPU, and not for want of NVIDIA. **The ozone platform every
+measurement uses cannot import a dmabuf at all.**
+
+A dmabuf becomes a `SharedImage` through
+`SurfaceFactoryOzone::CreateNativePixmapFromHandle`, and exactly four platforms
+in the tree implement it:
+
+| implements it | does not |
+|---|---|
+| `drm` (gbm), `wayland`, `x11`, `flatland` | **`headless`** |
+
+`HeadlessSurfaceFactory::CreateNativePixmap` returns a `TestPixmap` — a stub —
+and `CreateNativePixmapFromHandle` is not overridden, so the base class's
+"unsupported" answer stands. Under `--ozone-platform=headless` there is nothing
+for an imported buffer to become, and writing the import against it would
+produce a function that compiles, links, and is never once exercised.
+
+So the import needs a different platform, and the shape of the answer is
+already in phase 3:
+
+- **`wayland`** — the build already sets `ozone_platform_wayland = true`, and
+  the engine would run as a client of a headless compositor. `crux` has weston
+  in the full dev shell. This is the cheap one and it is the recommendation.
+- **`drm`** — phase 3's own target, and what a real Domicile is. Needs DRM
+  master, and `crux`'s connectors are all disconnected, so a headless KMS setup
+  is its own piece of work.
+- **`x11`** — Xvfb is already used elsewhere in this repo, but X11 plus the
+  NVIDIA proprietary driver plus dmabuf import is the least travelled of the
+  three.
+
+**This is the largest remaining unknown in phase 1 and it is now a named one.**
+What is not yet known is whether NVIDIA's proprietary driver satisfies
+`CreateNativePixmapFromHandle` once a platform that implements it is running:
+Chromium's GBM path assumes Mesa, and that assumption has not been tested here.
+
 ### The open part
+
+
 
 Whether the compositor holds one `DomicileEngine` and N surfaces, or one per
 app, is not settled — it follows from the "one surface per document" question
@@ -638,17 +750,24 @@ authority to hold.
 Phase 1 — real pixels. **Ordered: nothing in phase 2 can start until the
 compositor can submit a frame, because phase 2 deletes what draws today.**
 
-- [ ] `libdomicile_engine.so` behind the C ABI above — invitation, broker pipe,
-      pollable fd
+- [x] `libdomicile_engine.so` behind the C ABI above — invitation, broker pipe,
+      pollable fd. `components/domicile/engine/` in the series, asserted by
+      `scripts/spike-engine.sh`: a **C** process that is not Chromium joins the
+      browser's mojo graph, is brokered a frame sink, and takes a configure and
+      a frame off `domicile_engine_fd` through `domicile_engine_dispatch`
+- [x] `frame` → `wl_surface.frame`. Arrives once an embedder exists, which is
+      also when `SetNeedsBeginFrame` is worth asking for
+- [x] the embedder's `LocalSurfaceId` drives `xdg_toplevel.configure` — the
+      C ABI's `configure` callback carries the page's layout box
 - [ ] port `exo::Buffer`'s dmabuf → `SharedImage` → `TransferableResource`
-      behind `domicile_surface_import`
+      behind `domicile_surface_import` — **blocked on the ozone platform, see
+      below**
 - [ ] `domicile-compositor` submits a client's buffer instead of reading it back
 - [ ] `released` → `wl_buffer.release`, so a buffer viz still samples is not
-      reused
-- [ ] `frame` → `wl_surface.frame`
-- [ ] the embedder's `LocalSurfaceId` drives `xdg_toplevel.configure`
-- [ ] **on a machine with a GPU** — every measurement so far is headless and
-      `--disable-gpu`, so the dmabuf path itself is still unexercised
+      reused. The path is built and the callback is declared; nothing can
+      release a buffer until something imports one
+- [x] ~~**on a machine with a GPU**~~ — `crux` is one. See *The GPU was there
+      all along*
 
 Phase 2 — collect the winnings. **After phase 1, not beside it:** deleting the
 copy path before the compositor can submit leaves nothing drawing at all.
@@ -708,12 +827,22 @@ Phase 3 — be the display server:
   upstream's number rather than the fork's: whatever a six-week upstream diff
   costs to rebuild, carrying this adds seconds to it. This repo's CI still will
   not carry either.
-- ~~**Not verified by measurement.**~~ Closed. All seven properties are
-  observed rather than read off the mechanism — see *What CSS does to an
-  `<app>`*. What remains unmeasured is **presentation**: `crux` has no display
-  and no compositor to compare against, so the latency number is "one display
-  frame into the display compositor's output" and not "commit to scanout". That
-  needs the machine phase 3 needs, and it is not a spike's to get.
+- ~~**Not verified by measurement.**~~ Closed twice over. All seven properties
+  are observed rather than read off the mechanism, and on a GPU every one is
+  bit-exact; the last argued claim — that an OOPIF differs from a `<div>` the
+  same way an `<app>` does — was measured and turned out to be false in the
+  direction that helps. See *Whether an `<app>` is an out-of-process
+  `<iframe>`*. What remains unmeasured is **presentation**: `crux` has a GPU
+  but no display and no compositor to compare against, so the latency number is
+  "one display frame into the display compositor's output" and not "commit to
+  scanout". That needs the machine phase 3 needs.
+- **Whether NVIDIA can satisfy `CreateNativePixmapFromHandle`.** The dmabuf
+  import is blocked on the ozone platform rather than the hardware — see *Why
+  `domicile_surface_import` cannot be written yet* — and the next thing to find
+  out is whether Chromium's GBM path, which assumes Mesa, works against the
+  proprietary driver once `ozone_platform_wayland` is running. Recommendation:
+  nest the engine in a headless weston and find out before porting
+  `exo::Buffer`, because the port is worth nothing if the answer is no.
 - **One surface per document, in the spike only.** The measurement puts eight
   `<app>` elements on one page against one producer, and it does that by
   sharing the `LocalSurfaceId` the renderer allocated across the document. A

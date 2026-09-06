@@ -40,6 +40,7 @@ source_set("unit_tests") {
 
   deps = [
     ":browser",
+    "//components/domicile/engine:event_queue_unit_tests",
     "//base",
     "//base/test:test_support",
     "//components/domicile/spike:window_diff",
@@ -61,5 +62,14 @@ group("spike") {
   deps = [
     "//components/domicile/spike:css_parity",
     "//components/domicile/spike:solid_color_submitter",
+  ]
+}
+
+# Phase 1's library, reachable the same way and for the same reason: GN only
+# loads a BUILD.gn something references.
+group("engine") {
+  deps = [
+    "//components/domicile/engine:domicile_engine",
+    "//components/domicile/engine:engine_smoke",
   ]
 }

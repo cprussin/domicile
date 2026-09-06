@@ -27,9 +27,9 @@
 #   --ozone-platform=headless   crux has no display server and no Wayland
 #                               compositor. This is why build.sh turns
 #                               ozone_platform_headless on
-#   --disable-gpu               software compositing. Solid-colour quads need
-#                               no GPU resources, which is half of why the
-#                               producer submits them
+#   --disable-gpu               software compositing, and only by default. See
+#                               GPU=1 below: crux turns out to have a real GPU,
+#                               so this is a choice rather than a constraint
 #   --password-store=basic      without it Chrome blocks on a keyring that is
 #                               not there, and never creates a window
 #   --no-sandbox                the producer is not a child process
@@ -53,6 +53,27 @@ PAGE="${PAGE:-$SCRIPTS/spike-page.html}"
 PAGE_QUERY="${PAGE_QUERY:-}"
 PRODUCER="${PRODUCER:-domicile_solid_color_submitter}"
 WINDOW_SIZE="${WINDOW_SIZE:-1024,768}"
+# The whole URL, when a check needs one this cannot build from a file path —
+# the iframe check is served over HTTP so that its <iframe> can be cross-site.
+URL="${URL:-}"
+
+# GPU=1 runs the engine on real hardware instead of software compositing.
+#
+# crux has a GTX 970 on the proprietary driver and Chromium drives it — the
+# renderer string is "ANGLE (NVIDIA Corporation, NVIDIA GeForce GTX 970/PCIe/
+# SSE2, OpenGL ES 3.2)". What kept every earlier measurement on --disable-gpu
+# was not the absence of a GPU but the absence of a library path: ANGLE dlopens
+# libEGL.so.1, which is glvnd's, and Chromium's own toolchain shell does not
+# carry it. GL_LIBS is that path, and it is the Domicile full dev shell's.
+GPU="${GPU:-0}"
+GL_LIBS="${GL_LIBS:-/run/opengl-driver/lib:/nix/store/dwc1r464zf5379jr69vv9gl84h28bzc0-libglvnd-1.7.0/lib:/nix/store/vpfv85fjpjjcx8184a8vhch0kdygchql-mesa-26.2.0/lib:/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib}"
+
+if [ "$GPU" = "1" ]; then
+  GPU_FLAGS=()
+  export LD_LIBRARY_PATH="$GL_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+else
+  GPU_FLAGS=(--disable-gpu)
+fi
 
 OUT="${OUT:-out/Domicile}"
 SOCKET="${SOCKET:-/tmp/domicile-spike}"
@@ -76,17 +97,18 @@ if [ ! -x "$OUT/chrome" ] || [ ! -x "$OUT/$PRODUCER" ]; then
   echo "build them first: ./scripts/build.sh $CHROMIUM" >&2
   exit 1
 fi
-if [ ! -f "$PAGE" ]; then
+if [ -z "$URL" ] && [ ! -f "$PAGE" ]; then
   echo "no page at $PAGE" >&2
   exit 1
 fi
+[ -n "$URL" ] || URL="file://$PAGE$PAGE_QUERY"
 
 rm -f "$SOCKET"
 rm -rf "$PROFILE" && mkdir -p "$PROFILE"
 
 "$OUT/chrome" \
   --ozone-platform=headless \
-  --disable-gpu \
+  "${GPU_FLAGS[@]}" \
   --no-sandbox \
   --password-store=basic \
   --no-first-run \
@@ -96,7 +118,7 @@ rm -rf "$PROFILE" && mkdir -p "$PROFILE"
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$SOCKET" \
   "${ENGINE_FLAGS[@]}" \
-  "file://$PAGE$PAGE_QUERY" > /tmp/domicile-spike-engine.log 2>&1 &
+  "$URL" > /tmp/domicile-spike-engine.log 2>&1 &
 ENGINE=$!
 
 # The socket appearing is the page having asked to embed, which is the only

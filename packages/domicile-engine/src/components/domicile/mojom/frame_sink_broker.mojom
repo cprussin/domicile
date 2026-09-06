@@ -59,10 +59,15 @@ interface FrameSinkBroker {
   // it has no way to learn the LocalSurfaceId, and it may not invent one. That
   // is a sink with no surface, which is a useful thing to be able to ask for in
   // a test and nowhere else.
+  // `debug_label` is what the producer calls this window — an app id, for
+  // domicile-compositor. It reaches viz as the frame sink's debug label, which
+  // is where a name is useful and where a wrong one is harmless: nothing
+  // dispatches on it.
   CreateFrameSink(
       pending_remote<viz.mojom.CompositorFrameSinkClient> client,
       pending_receiver<viz.mojom.CompositorFrameSink> receiver,
-      pending_remote<SurfaceObserver>? observer)
+      pending_remote<SurfaceObserver>? observer,
+      string debug_label)
       => (viz.mojom.FrameSinkId frame_sink_id);
 
   // Destroys the sink for `frame_sink_id` and invalidates the id. Every sink

@@ -32,8 +32,11 @@ same reason.
 | `scripts/spike.sh` | run one step of the spike end to end; the producer's exit code is the verdict |
 | `scripts/spike-page.html` | steps 2 and 3's page: a `<canvas>` that embeds instead of drawing |
 | `scripts/spike-step4.sh` | the measurement: seven CSS properties and the latency |
+| `scripts/spike-iframe.sh` | an `<app>` against an out-of-process `<iframe>`, over HTTP so the iframe can be cross-site |
+| `scripts/spike-engine.sh` | phase 1's library, end to end, from a C process |
 | `scripts/spike-css-page.html` | its page — each property on an `<app>` and on a `<div>` beside it |
 | `scripts/spike-resize-page.html` | the resize cell, which needs a page to itself |
+| `scripts/spike-iframe-page.html`, `spike-iframe-inner.html` | the iframe cell and the document it frames |
 
 ## Working on it
 
@@ -103,7 +106,26 @@ per subsequent edit. The rebase number is still missing: it needs
 
 ## State
 
-The spike in `ENGINE-FORK.md` is finished. All four steps, none killed: a
+The spike in `ENGINE-FORK.md` is finished and **phase 1 is under way**: the C
+ABI library is built and proven, and the dmabuf import behind it is blocked on
+a named thing rather than an unknown one. See `ENGINE-FORK.md`'s *Why
+`domicile_surface_import` cannot be written yet*.
+
+Two things that were assumed and are not true:
+
+- **`crux` has a GPU** — a GTX 970 on the proprietary driver, and Chromium
+  drives it. `--disable-gpu` everywhere was a missing `libEGL.so.1` on the
+  toolchain shell's path, not the absence of hardware. `GPU=1` on any of the
+  spike scripts turns it on, and `scripts/e2e-dmabuf.sh` **passes** here rather
+  than skipping.
+- **On the GPU, an `<app>` is bit-exact against an ordinary element for every
+  property, `transform` included.** Step 4's one imperfect cell was software
+  rasterisation. An out-of-process `<iframe>` is the thing that is *not*
+  pixel-identical to a `<div>`.
+
+### The spike
+
+All four steps, none killed: a
 process the browser did not launch gets a frame sink from the browser's own
 namespace, a `<canvas>` in an ordinary web page embeds the surface it submits
 to, and CSS treats that canvas the way it treats any other element.
@@ -155,8 +177,17 @@ Kept:
 | `components/domicile/browser/external_surface_provider.{h,cc}` | the renderer-facing shim over the broker |
 | `components/domicile/browser/frame_sink_broker_unittest.cc` | nine tests, against a real `HostFrameSinkManager` and an in-process `FrameSinkManagerImpl` |
 | `components/domicile/spike/window_diff_unittest.cc` | six, over the rule step 4's verdicts come out of: what counts as a difference, and what counts as an edge rather than a region |
+| `components/domicile/engine/engine_event_queue_unittest.cc` | five, over the fd the compositor polls: that an idle queue does not wake it, that a burst arrives whole, and that a push racing a drain is not lost |
 | `content/browser/domicile/domicile_frame_sink_broker.{h,cc}` | the browser process's one instance, wired to `content::GetHostFrameSinkManager()` and `content::AllocateFrameSinkId()`, and the named socket a producer reaches it over |
 | `third_party/blink/renderer/platform/graphics/external_surface_embedder.{h,cc}` | the page's half: allocates the `LocalSurfaceId`, asks the browser for the `FrameSinkId`, pairs them |
+
+Phase 1's library, which is not throwaway — it is the seam:
+
+| | |
+|---|---|
+| `components/domicile/engine/domicile_engine.{h,cc}` | `libdomicile_engine.so`. The C ABI, the invitation, the broker pipe, and the pollable fd. The header is C, and `engine_smoke.c` is the compiler checking that |
+| `components/domicile/engine/engine_event_queue.{h,cc}` | mojo's thread pushes, the compositor's thread drains, an eventfd in between. Five tests |
+| `components/domicile/engine/engine_smoke.c` | what the library has to be able to do, asserted from C. Throwaway |
 
 **Throwaway**, and deleted when `domicile-compositor` submits real buffers:
 
@@ -183,7 +214,8 @@ Run the tests with:
 
 ```sh
 autoninja -C out/Domicile components_unittests
-./out/Domicile/components_unittests --gtest_filter='FrameSinkBroker*:WindowDiff*'
+./out/Domicile/components_unittests \
+  --gtest_filter='FrameSinkBroker*:WindowDiff*:EngineEventQueue*'
 ```
 
 Neither the Blink half nor the probe has a unit test. Chromium does not unit

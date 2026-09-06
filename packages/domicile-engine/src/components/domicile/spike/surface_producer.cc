@@ -68,7 +68,7 @@ void SurfaceProducer::Start(BrokeredCallback on_brokered) {
   client_receiver_.Bind(client.InitWithNewPipeAndPassReceiver());
   broker_->CreateFrameSink(
       std::move(client), sink_.BindNewPipeAndPassReceiver(),
-      observer_receiver_.BindNewPipeAndPassRemote(),
+      observer_receiver_.BindNewPipeAndPassRemote(), "domicile-spike",
       base::BindOnce(&SurfaceProducer::OnFrameSinkCreated,
                      base::Unretained(this), std::move(on_brokered)));
 }
