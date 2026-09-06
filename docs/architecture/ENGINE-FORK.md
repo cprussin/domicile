@@ -764,6 +764,17 @@ No error, no bad-message report.
 | GPU authority | unmoved. Naming a mailbox is not authority to mint one, and no GPU channel crosses |
 | what the library gained | `gpu::ClientSharedImage` and `viz::TransferableResource` — types, not a channel |
 
+**Settled: the types are an acceptable cost.** The objection to brokering the
+channel was two things — GPU authority, and dragging the `gpu::` client stack
+into the library. The first is untouched: naming a mailbox is not authority to
+mint one. The second is partly incurred, and it is worth it, because
+`ClientSharedImage::ImportUnowned(ExportedSharedImage)`
+(`gpu/command_buffer/client/client_shared_image.h:279`) is Chromium's own
+first-class way to say *another client holds this*. Taking the serialisation
+types for a supported handoff is not the same as taking a command buffer, and
+what it buys is a hop off the path of the one requirement that cannot be
+traded.
+
 So `domicile-compositor` submits its own frames, and the browser-owned sink
 stays only as the shape a producer gets by passing no receiver to
 `CreateFrameSink`. What follows was true while that was the only path:
@@ -939,7 +950,13 @@ compositor can submit a frame, because phase 2 deletes what draws today.**
       repo's CI does not have and cannot get. `dlopen` at runtime, behind the
       same `disposition` the compositor already branches on, keeps `cargo
       build` working everywhere and keeps the fork out of the default build.
-      Recommendation: `dlopen`, and decide it before writing the binding
+      **Settled: `dlopen`** — but for build hygiene only. `cargo build` must
+      not require a Chromium checkout; that is the whole reason. It is *not* a
+      licence to fall back silently when the library is absent. Until phase 2
+      the copy path is still there and a missing engine can degrade to it; once
+      phase 2 deletes the copy path, a missing `libdomicile_engine.so` is a
+      startup failure that says so, because a compositor that silently shows
+      nothing is the defect ERRORS.md exists to prevent
 - [x] ~~**on a machine with a GPU**~~ — `crux` is one. See *The GPU was there
       all along*
 
