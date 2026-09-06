@@ -34,6 +34,7 @@ same reason.
 | `scripts/spike-step4.sh` | the measurement: seven CSS properties and the latency |
 | `scripts/spike-iframe.sh` | an `<app>` against an out-of-process `<iframe>`, over HTTP so the iframe can be cross-site |
 | `scripts/spike-engine.sh` | phase 1's library, end to end, from a C process |
+| `scripts/spike-wayland.sh` | runs another check under a nested wlroots compositor on the GPU — the only platform that can import a dmabuf |
 | `scripts/spike-css-page.html` | its page — each property on an `<app>` and on a `<div>` beside it |
 | `scripts/spike-resize-page.html` | the resize cell, which needs a page to itself |
 | `scripts/spike-iframe-page.html`, `spike-iframe-inner.html` | the iframe cell and the document it frames |
@@ -122,6 +123,22 @@ Two things that were assumed and are not true:
   property, `transform` included.** Step 4's one imperfect cell was software
   rasterisation. An out-of-process `<iframe>` is the thing that is *not*
   pixel-identical to a `<div>`.
+- **A dmabuf can be imported on this machine**, under
+  `scripts/spike-wayland.sh` — `--ozone-platform=wayland` nested in a headless
+  wlroots compositor. NVIDIA ships its own GBM backend and its EGL imports
+  dmabufs, so Chromium's GBM path does not assume Mesa. Weston's headless
+  backend cannot be used for it: it advertises no `zwp_linux_dmabuf_v1`.
+
+What stops `domicile_surface_import` now is not the GPU: the producer has no
+GPU channel, and `exo::Buffer` gets its `SharedImageInterface` from `aura::Env`,
+which is browser-only. That needs a decision — see `ENGINE-FORK.md`'s *What
+`domicile_surface_import` still needs*.
+
+`spike-wayland.sh` suits checks that do not have to find the page by scanning
+for a full-width row of its background colour, which is how the pixel checks
+locate the viewport: under Wayland the browser window carries client-side
+decorations and a shadow, so no row qualifies. The pixel checks stay on
+`--ozone-platform=headless`, where the window is undecorated.
 
 ### The spike
 

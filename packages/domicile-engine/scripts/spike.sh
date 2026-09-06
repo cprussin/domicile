@@ -24,9 +24,10 @@
 #
 # The engine flags are not incidental, and each is here because it was needed:
 #
-#   --ozone-platform=headless   crux has no display server and no Wayland
-#                               compositor. This is why build.sh turns
-#                               ozone_platform_headless on
+#   --ozone-platform=headless   the default, and the only one that needs no
+#                               compositor. OZONE=wayland runs under a nested
+#                               one instead — see spike-wayland.sh, and note
+#                               that headless CANNOT import a dmabuf
 #   --disable-gpu               software compositing, and only by default. See
 #                               GPU=1 below: crux turns out to have a real GPU,
 #                               so this is a choice rather than a constraint
@@ -65,6 +66,13 @@ URL="${URL:-}"
 # was not the absence of a GPU but the absence of a library path: ANGLE dlopens
 # libEGL.so.1, which is glvnd's, and Chromium's own toolchain shell does not
 # carry it. GL_LIBS is that path, and it is the Domicile full dev shell's.
+# Which ozone platform to run on. `headless` needs nothing and is the default.
+# `wayland` needs a compositor on $WAYLAND_DISPLAY — spike-wayland.sh brings one
+# up — and is the only way to reach a dmabuf import: HeadlessSurfaceFactory does
+# not implement CreateNativePixmapFromHandle, so under headless there is nothing
+# for an imported buffer to become.
+OZONE="${OZONE:-headless}"
+
 GPU="${GPU:-0}"
 GL_LIBS="${GL_LIBS:-/run/opengl-driver/lib:/nix/store/dwc1r464zf5379jr69vv9gl84h28bzc0-libglvnd-1.7.0/lib:/nix/store/vpfv85fjpjjcx8184a8vhch0kdygchql-mesa-26.2.0/lib:/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib}"
 
@@ -107,7 +115,7 @@ rm -f "$SOCKET"
 rm -rf "$PROFILE" && mkdir -p "$PROFILE"
 
 "$OUT/chrome" \
-  --ozone-platform=headless \
+  --ozone-platform="$OZONE" \
   "${GPU_FLAGS[@]}" \
   --no-sandbox \
   --password-store=basic \
