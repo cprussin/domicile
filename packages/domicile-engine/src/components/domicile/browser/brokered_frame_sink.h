@@ -120,6 +120,7 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   // frames".
   uint64_t ImportBuffer(gfx::GpuMemoryBufferHandle handle,
                         const gfx::Size& size,
+                        uint32_t fourcc,
                         std::optional<gpu::ExportedSharedImage>* exported);
 
   // Submits a frame showing `buffer_id`. False if there is no such buffer, or

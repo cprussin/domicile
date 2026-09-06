@@ -56,6 +56,11 @@ command -v nix >/dev/null || {
 export XDG_RUNTIME_DIR="${SPIKE_RUNTIME_DIR:-/tmp/domicile-spike-wl-rt}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
+# A compositor that was killed leaves its socket behind, and the wait below
+# takes the first one it finds — which would be the dead one, and every client
+# then fails with "Connection refused" against a compositor that is running
+# perfectly well next to it.
+rm -f "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null || true
 # The virtual output has to be bigger than the largest page any check drives,
 # or the compositor clamps the window and the page does not fit. wlroots'
 # headless output defaults to 1280x720, which is smaller than step 4's grid.

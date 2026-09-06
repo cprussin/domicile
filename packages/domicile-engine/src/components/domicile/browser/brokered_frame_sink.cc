@@ -5,6 +5,7 @@
 #include "components/domicile/browser/brokered_frame_sink.h"
 
 #include <optional>
+#include <ostream>
 #include <utility>
 
 #include "base/logging.h"
@@ -34,6 +35,28 @@ namespace {
 // then never drawn. Overlay promotion is phase 3's, with a real display.
 constexpr gpu::SharedImageUsageSet kWindowUsage =
     gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
+
+// The client's DRM format, as viz names the same bytes.
+//
+// A dmabuf says its layout in a fourcc and a SharedImage says it in a
+// SharedImageFormat, and getting the two out of step does not fail — it draws
+// the window with its channels permuted. DRM names a pixel from the most
+// significant byte down and viz names it in memory order, which is why
+// ARGB8888 is BGRA_8888 here.
+std::optional<viz::SharedImageFormat> FormatFromFourcc(uint32_t fourcc) {
+  switch (fourcc) {
+    case 0x34325241:  // DRM_FORMAT_ARGB8888
+      return viz::SinglePlaneFormat::kBGRA_8888;
+    case 0x34325258:  // DRM_FORMAT_XRGB8888
+      return viz::SinglePlaneFormat::kBGRX_8888;
+    case 0x34324241:  // DRM_FORMAT_ABGR8888
+      return viz::SinglePlaneFormat::kRGBA_8888;
+    case 0x34324258:  // DRM_FORMAT_XBGR8888
+      return viz::SinglePlaneFormat::kRGBX_8888;
+    default:
+      return std::nullopt;
+  }
+}
 
 }  // namespace
 
@@ -119,7 +142,17 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
 uint64_t BrokeredFrameSink::ImportBuffer(
     gfx::GpuMemoryBufferHandle handle,
     const gfx::Size& size,
+    uint32_t fourcc,
     std::optional<gpu::ExportedSharedImage>* exported) {
+  const std::optional<viz::SharedImageFormat> format = FormatFromFourcc(fourcc);
+  if (!format) {
+    LOG(ERROR) << "domicile: no SharedImageFormat for DRM fourcc 0x" << std::hex
+               << fourcc
+               << ". The window would be drawn with its channels permuted, so "
+                  "it is refused instead.";
+    return 0;
+  }
+
   gpu::SharedImageInterface* sii = get_shared_image_interface_.Run();
   if (!sii) {
     LOG(ERROR) << "domicile: no GPU to import a buffer into. The ozone "
@@ -132,8 +165,8 @@ uint64_t BrokeredFrameSink::ImportBuffer(
   // caching, release fences, protected content, YUV — is either viz's job on
   // this side of the seam or not phase 1's.
   scoped_refptr<gpu::ClientSharedImage> shared_image = sii->CreateSharedImage(
-      {viz::SinglePlaneFormat::kRGBA_8888, size, gfx::ColorSpace::CreateSRGB(),
-       kWindowUsage, "DomicileWindow"},
+      {*format, size, gfx::ColorSpace::CreateSRGB(), kWindowUsage,
+       "DomicileWindow"},
       std::move(handle));
   if (!shared_image) {
     LOG(ERROR) << "domicile: the GPU refused the dmabuf";

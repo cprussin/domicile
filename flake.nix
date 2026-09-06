@@ -95,6 +95,10 @@
         gtk3
         libdrm
         libxshmfence
+        # libudev.so.1, which Chromium opens to enumerate input and GPU
+        # devices. `udev` is an alias of this in nixpkgs; naming the package it
+        # actually comes from keeps the list one entry per store path.
+        systemd
         # Chromium links a wider set of X client libraries than winit does, and
         # needs them whether or not it runs on X: the ozone platform is chosen
         # at runtime, so they have to resolve either way.

@@ -2,33 +2,20 @@
 # Phase 1's deliverable: a real Wayland client's window on the page, and the
 # colour it drew coming back out of the display compositor.
 #
-#   NIX_SHELL_RUN=".../scripts/spike-wayland.sh /build/chromium/src \
-#     .../scripts/spike-client-window.sh /build/chromium/src" \
-#     nix-shell /build/chromium/src/tools/nix/shell.nix
+#   nix develop .#full --command \
+#     ./packages/domicile-engine/scripts/spike-wayland.sh /build/chromium/src \
+#     ./packages/domicile-engine/scripts/spike-client-window.sh /build/chromium/src
+#
+# From Domicile's full shell, not Chromium's: `engineRuntimeLibs` in flake.nix
+# puts Chromium's runtime libraries beside the GL stack, and this needs both —
+# the GL stack or no client can hand the compositor a dmabuf at all, Chromium's
+# or libdomicile_engine.so will not load.
 #
 # Every pixel check before this one was the weak form — "the buffer's own zeroed
 # content rather than the fallback" — because no harness had a GL context to
 # draw known content with. A real client does. kitty is a real GL client and its
 # background colour is settable, so the assertion here is the strong one: the
 # colour the client drew.
-#
-# NOT YET PASSING, AND THE REASON IS THE ENVIRONMENT RATHER THAN THE PATH.
-# The compositor has to see two library sets at once and currently sees one:
-# the Domicile full dev shell's GL stack (without which it reports "no EGL
-# renderer: serving wl_shm clients only" and no client can hand it a dmabuf at
-# all) and the Chromium toolchain shell's, which is what libdomicile_engine.so
-# was linked against — it needs libglib-2.0.so.0 among others. Started from
-# Chromium's shell the first is missing; started from Domicile's the second is.
-# Both are nix shells and neither is a superset.
-#
-# What that is NOT is a failure of the seam. The compositor refuses to start and
-# says which library and why, which is the error path working:
-#
-#   Error: Library { path: "libdomicile_engine.so",
-#           source: DlOpen { desc: "libglib-2.0.so.0: cannot open shared
-#           object file" } }
-#
-# Making one environment that has both is the next thing to do here.
 #
 # FOUR PROCESSES, AND THE ORDER MATTERS.
 #
@@ -73,12 +60,21 @@ COMPOSITOR="$ROOT/target/debug/domicile-compositor"
 ENGINE_LOG=$(mktemp)
 COMP_LOG=$(mktemp)
 CLI_LOG=$(mktemp)
-CHROME=""; COMP=""; CLI=""
+# Collected rather than three variables, because two of the three may never be
+# set — a run that fails early, and the negative control, which starts no
+# client — and `kill ""` is an error rather than a no-op.
+STARTED=()
 cleanup() {
-  kill $CHROME $COMP $CLI 2>/dev/null
+  if [ ${#STARTED[@]} -gt 0 ]; then
+    kill "${STARTED[@]}" 2>/dev/null
+  fi
   rm -f "$ENGINE_LOG" "$COMP_LOG" "$CLI_LOG"
 }
 trap cleanup EXIT
+
+# Into the checkout before anything is looked for: OUT is relative to it, the
+# way build.sh and spike.sh treat it.
+cd "$CHROMIUM" || exit 1
 
 [ -x "$OUT/chrome" ] || { echo "build the engine first: ./scripts/build.sh $CHROMIUM" >&2; exit 1; }
 [ -f "$OUT/libdomicile_engine.so" ] || {
@@ -101,7 +97,6 @@ else
   exit 77
 fi
 
-cd "$CHROMIUM" || exit 1
 rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
 # The engine, on the page that embeds. GPU because a dmabuf import needs one,
@@ -115,7 +110,7 @@ rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" \
   "file://$SCRIPTS/spike-page.html" >"$ENGINE_LOG" 2>&1 &
-CHROME=$!
+STARTED+=($!)
 
 for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done
 [ -S "$BROKER" ] || {
@@ -136,6 +131,7 @@ RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
     --session "$COMP_SOCK.session" \
     --engine-socket "$BROKER" >"$COMP_LOG" 2>&1 &
 COMP=$!
+STARTED+=("$COMP")
 
 for _ in $(seq 1 120); do
   grep -q "brokered a frame sink" "$COMP_LOG" 2>/dev/null && break
@@ -161,7 +157,7 @@ else
           -o "background=#$COLOR" \
           -o initial_window_width=640 -o initial_window_height=480 \
           sh -c 'while :; do sleep 0.2; done' >"$CLI_LOG" 2>&1 &
-  CLI=$!
+  STARTED+=($!)
 fi
 
 # The compositor logs what viz drew each time it submits.
