@@ -8,6 +8,7 @@ import "services/viz/public/mojom/compositing/compositor_frame_sink.mojom";
 import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
 import "services/viz/public/mojom/compositing/local_surface_id.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
+import "ui/gfx/mojom/buffer_types.mojom";
 
 // Tells a producer which surface to submit to.
 //
@@ -24,8 +25,24 @@ import "ui/gfx/geometry/mojom/geometry.mojom";
 interface SurfaceObserver {
   // The embedder is showing `size` of this producer's surface at
   // `local_surface_id`. Submit to that id, at that size, until told another.
+  //
+  // This is xdg_toplevel.configure.
   OnSurfaceEmbedded(viz.mojom.LocalSurfaceId local_surface_id,
                     gfx.mojom.Size size);
+
+  // Viz asked for a frame. Only sent to a producer whose sink the browser
+  // owns — one that passed no receiver to CreateFrameSink — because a producer
+  // holding its own sink is already viz's client and hears this directly.
+  //
+  // This is wl_surface.frame.
+  OnFrame(int64 deadline_us);
+
+  // Viz has stopped sampling `buffer_id` and the producer may draw into it
+  // again. Without this the compositor reuses a dmabuf viz is still reading,
+  // which is a tear rather than an error.
+  //
+  // This is wl_buffer.release.
+  OnBufferReleased(uint64 buffer_id);
 };
 
 // Brokers viz frame sinks to a compositing producer that is not a renderer.
@@ -63,12 +80,50 @@ interface FrameSinkBroker {
   // domicile-compositor. It reaches viz as the frame sink's debug label, which
   // is where a name is useful and where a wrong one is harmless: nothing
   // dispatches on it.
+  // `client` and `receiver` are how a producer that assembles its own
+  // CompositorFrames talks to viz directly: the receiver is forwarded on and
+  // the two never meet the browser again. That is what the spike's submitters
+  // do, and they can, because a solid colour needs no GPU resource.
+  //
+  // **Pass neither to have the browser own the sink.** A producer with a
+  // dmabuf cannot assemble its own frame — a TransferableResource names a
+  // mailbox, and minting one needs a GPU channel this producer deliberately
+  // does not have — so it imports buffers here and names them in SubmitBuffer,
+  // and the browser puts the matching resource in the frame. It then hears
+  // BeginFrames and releases through SurfaceObserver instead of directly.
   CreateFrameSink(
-      pending_remote<viz.mojom.CompositorFrameSinkClient> client,
-      pending_receiver<viz.mojom.CompositorFrameSink> receiver,
+      pending_remote<viz.mojom.CompositorFrameSinkClient>? client,
+      pending_receiver<viz.mojom.CompositorFrameSink>? receiver,
       pending_remote<SurfaceObserver>? observer,
       string debug_label)
       => (viz.mojom.FrameSinkId frame_sink_id);
+
+  // Imports a dmabuf and returns the id to name it by, or 0.
+  //
+  // This is zwp_linux_dmabuf_v1: the fds the client already sent. The browser
+  // does what components/exo/buffer.cc does with them — a NativePixmap, a
+  // SharedImage, a TransferableResource — because it is the process that has
+  // an aura::Env to reach a SharedImageInterface through. The producer never
+  // sees a mailbox.
+  //
+  // The buffer is kept until DestroyBuffer or until the sink goes away, so a
+  // client that reuses a buffer imports it once.
+  ImportBuffer(viz.mojom.FrameSinkId frame_sink_id,
+               gfx.mojom.GpuMemoryBufferHandle buffer_handle,
+               gfx.mojom.Size size)
+      => (uint64 buffer_id);
+
+  // Submits a frame showing `buffer_id`, damaging `damage`.
+  //
+  // This is wl_surface.commit. Only meaningful for a sink the browser owns;
+  // a producer holding its own sink submits to viz itself.
+  SubmitBuffer(viz.mojom.FrameSinkId frame_sink_id,
+               uint64 buffer_id,
+               gfx.mojom.Rect damage);
+
+  // Drops an imported buffer. Every buffer is dropped anyway when its sink is,
+  // so this is for a client that destroys one of its own.
+  DestroyBuffer(viz.mojom.FrameSinkId frame_sink_id, uint64 buffer_id);
 
   // Destroys the sink for `frame_sink_id` and invalidates the id. Every sink
   // this interface brokered is destroyed anyway when the connection drops; this

@@ -13,6 +13,7 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "components/domicile/browser/brokered_frame_sink.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
@@ -26,8 +27,6 @@ class HostFrameSinkManager;
 }
 
 namespace domicile {
-
-class BrokeredFrameSink;
 
 // Brokers viz frame sinks to a compositing producer that is not a renderer, and
 // introduces each one to the page that embeds it.
@@ -49,11 +48,20 @@ class BrokeredFrameSink;
 class FrameSinkBroker : public mojom::FrameSinkBroker {
  public:
   using FrameSinkIdAllocator = base::RepeatingCallback<viz::FrameSinkId()>;
+  using SharedImageInterfaceGetter =
+      BrokeredFrameSink::SharedImageInterfaceGetter;
   using EmbedCallback =
       base::OnceCallback<void(const std::optional<viz::FrameSinkId>&)>;
 
-  FrameSinkBroker(viz::HostFrameSinkManager* host_frame_sink_manager,
-                  FrameSinkIdAllocator allocate_frame_sink_id);
+  // `get_shared_image_interface` is how an imported dmabuf reaches a GPU, and
+  // is injected for the same reason the allocator is: the only route to one is
+  // aura::Env, and this deliberately does not depend on //ui/aura. It may
+  // return null, which is what every headless run does.
+  FrameSinkBroker(
+      viz::HostFrameSinkManager* host_frame_sink_manager,
+      FrameSinkIdAllocator allocate_frame_sink_id,
+      SharedImageInterfaceGetter get_shared_image_interface =
+          SharedImageInterfaceGetter());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -89,6 +97,15 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       const std::string& debug_label,
       CreateFrameSinkCallback callback) override;
   void DestroyFrameSink(const viz::FrameSinkId& frame_sink_id) override;
+  void ImportBuffer(const viz::FrameSinkId& frame_sink_id,
+                    gfx::GpuMemoryBufferHandle handle,
+                    const gfx::Size& size,
+                    ImportBufferCallback callback) override;
+  void SubmitBuffer(const viz::FrameSinkId& frame_sink_id,
+                    uint64_t buffer_id,
+                    const gfx::Rect& damage) override;
+  void DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
+                     uint64_t buffer_id) override;
 
  private:
   // A page that asked to embed before any producer had connected.
@@ -116,8 +133,12 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // else is watching the producer, so this is what unregisters its ids.
   void OnProducerDisconnected();
 
+  // The sink `frame_sink_id` names, if this producer owns one.
+  BrokeredFrameSink* OwnedFrameSink(const viz::FrameSinkId& frame_sink_id);
+
   const raw_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   const FrameSinkIdAllocator allocate_frame_sink_id_;
+  const SharedImageInterfaceGetter get_shared_image_interface_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
 

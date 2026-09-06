@@ -35,6 +35,7 @@ same reason.
 | `scripts/spike-iframe.sh` | an `<app>` against an out-of-process `<iframe>`, over HTTP so the iframe can be cross-site |
 | `scripts/spike-engine.sh` | phase 1's library, end to end, from a C process |
 | `scripts/spike-wayland.sh` | runs another check under a nested wlroots compositor on the GPU — the only platform that can import a dmabuf |
+| `scripts/spike-dmabuf.sh` | a real dmabuf, imported, submitted and released. Always under `spike-wayland.sh` |
 | `scripts/spike-css-page.html` | its page — each property on an `<app>` and on a `<div>` beside it |
 | `scripts/spike-resize-page.html` | the resize cell, which needs a page to itself |
 | `scripts/spike-iframe-page.html`, `spike-iframe-inner.html` | the iframe cell and the document it frames |
@@ -129,10 +130,21 @@ Two things that were assumed and are not true:
   dmabufs, so Chromium's GBM path does not assume Mesa. Weston's headless
   backend cannot be used for it: it advertises no `zwp_linux_dmabuf_v1`.
 
-What stops `domicile_surface_import` now is not the GPU: the producer has no
-GPU channel, and `exo::Buffer` gets its `SharedImageInterface` from `aura::Env`,
-which is browser-only. That needs a decision — see `ENGINE-FORK.md`'s *What
-`domicile_surface_import` still needs*.
+- **A dmabuf now reaches the page.** `scripts/spike-dmabuf.sh` allocates two
+  buffers on the render node, imports them through the C ABI, submits one and
+  then the other, and `released` fires for the first — `wl_buffer.release`, the
+  first time it has. The producer never sees a mailbox: the browser does the
+  import and builds the frame, which is why the `exo::Buffer` port lives in
+  `components/domicile/browser/`.
+
+Two things that shape the assertion, both measured. **On this GPU a buffer is
+CPU-writable or sampleable, never both** — NVIDIA's gbm refuses
+`rendering|linear`, and a linear buffer imports without error then draws as the
+fallback. So the harness allocates a renderable one it cannot fill, and asserts
+the pixel is the buffer's own zeroed content rather than the fallback.
+`LINEAR=1` runs it the other way and fails, which is what documents the limit.
+And **it takes two frames to see a release**, because viz holds whatever is on
+screen — which is exactly why a Wayland client double-buffers.
 
 `spike-wayland.sh` suits checks that do not have to find the page by scanning
 for a full-width row of its background colour, which is how the pixel checks
@@ -205,6 +217,8 @@ Phase 1's library, which is not throwaway — it is the seam:
 | `components/domicile/engine/domicile_engine.{h,cc}` | `libdomicile_engine.so`. The C ABI, the invitation, the broker pipe, and the pollable fd. The header is C, and `engine_smoke.c` is the compiler checking that |
 | `components/domicile/engine/engine_event_queue.{h,cc}` | mojo's thread pushes, the compositor's thread drains, an eventfd in between. Five tests |
 | `components/domicile/engine/engine_smoke.c` | what the library has to be able to do, asserted from C. Throwaway |
+| `components/domicile/engine/engine_dmabuf_smoke.cc` | the same for a real dmabuf: allocate on the render node, import, submit twice, see the release. Throwaway |
+| `components/domicile/browser/brokered_frame_sink.{h,cc}` | the `exo::Buffer` port. A dmabuf becomes a `SharedImage` and a `TransferableResource` here, in the browser, because that is where `aura::Env` is |
 
 **Throwaway**, and deleted when `domicile-compositor` submits real buffers:
 

@@ -43,12 +43,14 @@ shared_library("domicile_engine") {
   sources = [
     "domicile_engine.cc",
     "domicile_engine.h",
+    "domicile_engine_spike.h",
   ]
 
   deps = [
     ":event_queue",
     "//base",
     "//components/domicile/mojom",
+    "//components/domicile/spike/mojom",
     "//components/viz/common",
     "//mojo/core/embedder",
     "//mojo/public/cpp/bindings",
@@ -74,4 +76,20 @@ executable("engine_smoke") {
   configs -= [ "//build/config/clang:find_bad_constructs" ]
 
   deps = [ ":domicile_engine" ]
+}
+
+# THROWAWAY. Phase 1's last assertion: a real dmabuf, allocated by something
+# that is not Chromium, reaching the screen through a page.
+executable("engine_dmabuf_smoke") {
+  output_name = "domicile_engine_dmabuf_smoke"
+
+  sources = [ "engine_dmabuf_smoke.cc" ]
+
+  deps = [
+    ":domicile_engine",
+    "//base",
+    "//skia",
+    "//ui/gfx/geometry",
+    "//ui/gfx/linux:gbm",
+  ]
 }

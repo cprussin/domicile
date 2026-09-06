@@ -109,6 +109,13 @@ class SurfaceProducer : public viz::mojom::CompositorFrameSinkClient,
   // mojom::SurfaceObserver:
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
                          const gfx::Size& size) override;
+  // Never sent to this producer, and could not be acted on if it were: it
+  // holds its own CompositorFrameSink, so it is viz's client and hears
+  // BeginFrames directly, and it submits solid colours rather than importing
+  // buffers. Both are for a producer whose sink the browser owns — the engine
+  // library — which is why they are empty here rather than absent.
+  void OnFrame(int64_t deadline_us) override;
+  void OnBufferReleased(uint64_t buffer_id) override;
 
   // viz::mojom::CompositorFrameSinkClient:
   void DidReceiveCompositorFrameAck(

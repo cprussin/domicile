@@ -14,5 +14,6 @@ mojom("mojom") {
     "//services/viz/public/mojom",
     "//services/viz/public/mojom:surfaces",
     "//ui/gfx/geometry/mojom",
+    "//ui/gfx/mojom",
   ]
 }

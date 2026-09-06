@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/at_exit.h"
+#include "base/containers/span.h"
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
@@ -21,10 +22,10 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "components/domicile/engine/engine_event_queue.h"
+#include "components/domicile/engine/domicile_engine_spike.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
-#include "components/viz/common/frame_sinks/begin_frame_args.h"
-#include "components/viz/common/frame_timing_details_map.h"
-#include "components/viz/common/resources/returned_resource.h"
+#include "components/domicile/spike/mojom/spike_probe.mojom.h"
+#include "base/posix/eintr_wrapper.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "mojo/core/embedder/embedder.h"
@@ -36,7 +37,11 @@
 #include "mojo/public/cpp/platform/platform_channel_endpoint.h"
 #include "mojo/public/cpp/system/invitation.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/gpu_memory_buffer_handle.h"
+#include "ui/gfx/native_pixmap_handle.h"
 
 namespace domicile {
 namespace {
@@ -46,6 +51,9 @@ namespace {
 // first four bytes of its name, so string-named attachments all collide on
 // index 0.
 constexpr uint64_t kBrokerPipeName = 0;
+// THROWAWAY, with domicile_engine_spike.h: the probe the browser attaches
+// beside the broker so a harness can ask what viz drew.
+constexpr uint64_t kProbePipeName = 1;
 
 // Once per process, however many engines are created and destroyed.
 //
@@ -63,12 +71,18 @@ void EnsureMojoInitialized() {
   (void)initialized;
 }
 
-// One brokered frame sink, and the client half viz talks back through.
+// One brokered frame sink.
 //
 // Everything here runs on the engine's mojo thread. The only thing that leaves
 // it is a push onto the EngineEventQueue, which is what the compositor polls.
-class Surface : public viz::mojom::CompositorFrameSinkClient,
-                public mojom::SurfaceObserver {
+//
+// It is deliberately not viz's CompositorFrameSinkClient. The browser owns the
+// sink — that is what passing no receiver to CreateFrameSink asks for — because
+// this process cannot assemble a CompositorFrame containing a dmabuf: a
+// TransferableResource names a mailbox and minting one needs a GPU channel this
+// process does not have and should not have. So BeginFrames and buffer
+// releases arrive on SurfaceObserver instead, forwarded by the browser.
+class Surface : public mojom::SurfaceObserver {
  public:
   Surface(DomicileSurfaceId id, EngineEventQueue* queue)
       : id_(id), queue_(queue) {}
@@ -81,10 +95,8 @@ class Surface : public viz::mojom::CompositorFrameSinkClient,
   void Create(mojom::FrameSinkBroker* broker,
               const std::string& app_id,
               base::OnceCallback<void(bool)> done) {
-    mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client;
-    client_receiver_.Bind(client.InitWithNewPipeAndPassReceiver());
     broker->CreateFrameSink(
-        std::move(client), sink_.BindNewPipeAndPassReceiver(),
+        /*client=*/mojo::NullRemote(), /*receiver=*/mojo::NullReceiver(),
         observer_receiver_.BindNewPipeAndPassRemote(), app_id,
         base::BindOnce(&Surface::OnCreated, base::Unretained(this),
                        std::move(done)));
@@ -106,71 +118,57 @@ class Surface : public viz::mojom::CompositorFrameSinkClient,
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
                          const gfx::Size& size) override {
     local_surface_id_ = local_surface_id;
-    // Asked for once and only once an embedder exists, because until one does
-    // there is nothing to drive: registering the frame sink is what creates
-    // the sink, and registering the hierarchy — which Embed() does on the
-    // browser side — is what makes BeginFrames arrive. Step 2 measured that
-    // those are two different things.
-    if (!wants_begin_frames_) {
-      wants_begin_frames_ = true;
-      sink_->SetNeedsBeginFrame(true);
-    }
     queue_->Push({.type = EngineEvent::Type::kConfigure,
                   .surface = id_,
                   .width = static_cast<uint32_t>(size.width()),
                   .height = static_cast<uint32_t>(size.height())});
   }
 
-  // viz::mojom::CompositorFrameSinkClient:
-  void OnBeginFrame(const viz::BeginFrameArgs& args,
-                    const viz::FrameTimingDetailsMap& timing_details,
-                    std::vector<viz::ReturnedResource> resources) override {
-    ReturnResources(resources);
+  void OnFrame(int64_t deadline_us) override {
     queue_->Push({.type = EngineEvent::Type::kFrame,
                   .surface = id_,
-                  .deadline_us = static_cast<uint64_t>(
-                      args.deadline.since_origin().InMicroseconds())});
+                  .deadline_us = static_cast<uint64_t>(deadline_us)});
   }
 
-  void DidReceiveCompositorFrameAck(
-      std::vector<viz::ReturnedResource> resources) override {
-    ReturnResources(resources);
+  // wl_buffer.release: viz has stopped sampling that dmabuf and the client may
+  // draw into it again.
+  void OnBufferReleased(uint64_t buffer_id) override {
+    queue_->Push({.type = EngineEvent::Type::kReleased,
+                  .surface = id_,
+                  .buffer = buffer_id});
   }
-
-  void ReclaimResources(
-      std::vector<viz::ReturnedResource> resources) override {
-    ReturnResources(resources);
-  }
-
-  // A resource viz hands back is a buffer it has stopped sampling, which is
-  // exactly wl_buffer.release. Nothing submits resources yet — that is
-  // domicile_surface_import's half — so this does not fire, and it is here
-  // rather than later because the lifecycle stops being optional the moment it
-  // does.
-  void ReturnResources(const std::vector<viz::ReturnedResource>& resources) {
-    for (const viz::ReturnedResource& resource : resources) {
-      queue_->Push({.type = EngineEvent::Type::kReleased,
-                    .surface = id_,
-                    .buffer = resource.id.GetUnsafeValue()});
-    }
-  }
-
-  void OnBeginFramePausedChanged(bool paused) override {}
-  void OnCompositorFrameTransitionDirectiveProcessed(
-      uint32_t sequence_id) override {}
-  void OnSurfaceEvicted(const viz::LocalSurfaceId& local_surface_id) override {}
 
   const DomicileSurfaceId id_;
   const raw_ptr<EngineEventQueue> queue_;
 
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink_;
-  mojo::Receiver<viz::mojom::CompositorFrameSinkClient> client_receiver_{this};
   mojo::Receiver<mojom::SurfaceObserver> observer_receiver_{this};
 
   viz::FrameSinkId frame_sink_id_;
   viz::LocalSurfaceId local_surface_id_;
-  bool wants_begin_frames_ = false;
 };
+
+// A client's dmabuf, as mojo wants it. The fds are duplicated: the caller keeps
+// the originals, which is what a compositor holding a wl_buffer expects.
+gfx::GpuMemoryBufferHandle ToGpuMemoryBufferHandle(
+    const DomicileDmabuf& dmabuf) {
+  gfx::NativePixmapHandle pixmap;
+  pixmap.modifier = dmabuf.modifier;
+  // Through a span because the ABI carries a fixed C array and a raw index into
+  // one is not something -Wunsafe-buffer-usage will take.
+  const auto planes = base::span(dmabuf.planes);
+  const uint32_t count = std::min<uint32_t>(dmabuf.plane_count, planes.size());
+  for (uint32_t i = 0; i < count; ++i) {
+    const DomicileDmabufPlane& plane = planes[i];
+    base::ScopedFD duplicated(HANDLE_EINTR(dup(plane.fd)));
+    if (!duplicated.is_valid()) {
+      PLOG(ERROR) << "domicile: could not dup a dmabuf fd";
+      return gfx::GpuMemoryBufferHandle();
+    }
+    pixmap.planes.emplace_back(plane.stride, plane.offset, /*size=*/0,
+                               std::move(duplicated));
+  }
+  return gfx::GpuMemoryBufferHandle(std::move(pixmap));
+}
 
 }  // namespace
 }  // namespace domicile
@@ -253,6 +251,42 @@ struct DomicileEngine {
                                       base::Unretained(this), surface));
   }
 
+  // Blocking, and only once per buffer rather than once per frame: the caller
+  // cannot attach a buffer that does not exist yet.
+  DomicileBufferId ImportBuffer(DomicileSurfaceId surface,
+                                const DomicileDmabuf& dmabuf) {
+    DomicileBufferId imported = 0;
+    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::ImportBufferOnThread,
+                                      base::Unretained(this), surface,
+                                      std::ref(dmabuf), &imported));
+    return imported;
+  }
+
+  void SubmitBuffer(DomicileSurfaceId surface,
+                    DomicileBufferId buffer,
+                    const gfx::Rect& damage) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::SubmitBufferOnThread,
+                       base::Unretained(this), surface, buffer, damage));
+  }
+
+  // THROWAWAY. See domicile_engine_spike.h.
+  bool SampleWindowCenter(uint32_t* argb) {
+    bool sampled = false;
+    RunOnThreadAndWait(base::BindOnce(
+        &DomicileEngine::SampleWindowCenterOnThread, base::Unretained(this),
+        &sampled, argb));
+    return sampled;
+  }
+
+  void DestroyBuffer(DomicileSurfaceId surface, DomicileBufferId buffer) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::DestroyBufferOnThread,
+                       base::Unretained(this), surface, buffer));
+  }
+
  private:
   void ConnectOnThread(const std::string& socket_path, bool* connected) {
     mojo::PlatformChannelEndpoint endpoint =
@@ -279,6 +313,8 @@ struct DomicileEngine {
 
     broker_.Bind(mojo::PendingRemote<domicile::mojom::FrameSinkBroker>(
         invitation.ExtractMessagePipe(domicile::kBrokerPipeName), 0));
+    probe_.Bind(mojo::PendingRemote<domicile::mojom::SpikeProbe>(
+        invitation.ExtractMessagePipe(domicile::kProbePipeName), 0));
     *connected = broker_.is_bound();
   }
 
@@ -319,9 +355,73 @@ struct DomicileEngine {
     surfaces_.erase(surface);
   }
 
+  void ImportBufferOnThread(DomicileSurfaceId surface,
+                            const DomicileDmabuf& dmabuf,
+                            DomicileBufferId* imported) {
+    auto iter = surfaces_.find(surface);
+    if (iter == surfaces_.end() || !broker_) {
+      return;
+    }
+    gfx::GpuMemoryBufferHandle handle =
+        domicile::ToGpuMemoryBufferHandle(dmabuf);
+    if (handle.is_null()) {
+      return;
+    }
+
+    base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
+    broker_->ImportBuffer(
+        iter->second->frame_sink_id(), std::move(handle),
+        gfx::Size(static_cast<int>(dmabuf.width),
+                  static_cast<int>(dmabuf.height)),
+        base::BindOnce(
+            [](base::RunLoop* loop, DomicileBufferId* imported, uint64_t id) {
+              *imported = id;
+              loop->Quit();
+            },
+            &loop, imported));
+    loop.Run();
+  }
+
+  void SubmitBufferOnThread(DomicileSurfaceId surface,
+                            DomicileBufferId buffer,
+                            const gfx::Rect& damage) {
+    auto iter = surfaces_.find(surface);
+    if (iter != surfaces_.end() && broker_) {
+      broker_->SubmitBuffer(iter->second->frame_sink_id(), buffer, damage);
+    }
+  }
+
+  void SampleWindowCenterOnThread(bool* sampled, uint32_t* argb) {
+    if (!probe_) {
+      return;
+    }
+    base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
+    probe_->SampleWindowCenter(
+        base::BindOnce(
+            [](base::RunLoop* loop, bool* sampled, uint32_t* argb, bool ok,
+               uint32_t colour) {
+              *sampled = ok;
+              *argb = colour;
+              loop->Quit();
+            },
+            &loop, sampled, argb));
+    loop.Run();
+  }
+
+  void DestroyBufferOnThread(DomicileSurfaceId surface,
+                             DomicileBufferId buffer) {
+    auto iter = surfaces_.find(surface);
+    if (iter != surfaces_.end() && broker_) {
+      broker_->DestroyBuffer(iter->second->frame_sink_id(), buffer);
+    }
+  }
+
   void TearDown() {
     surfaces_.clear();
     broker_.reset();
+    // Bound on this thread, so it has to die on it: a mojo::Remote validates
+    // the sequence it is destroyed on.
+    probe_.reset();
   }
 
   void RunOnThreadAndWait(base::OnceClosure task) {
@@ -341,6 +441,8 @@ struct DomicileEngine {
   base::Thread thread_;
   std::unique_ptr<mojo::core::ScopedIPCSupport> ipc_support_;
   mojo::Remote<domicile::mojom::FrameSinkBroker> broker_;
+  // THROWAWAY. See domicile_engine_spike.h.
+  mojo::Remote<domicile::mojom::SpikeProbe> probe_;
   base::flat_map<DomicileSurfaceId, std::unique_ptr<domicile::Surface>>
       surfaces_;
   DomicileSurfaceId next_surface_id_ = 1;
@@ -390,6 +492,45 @@ void domicile_surface_destroy(DomicileEngine* engine,
   if (engine) {
     engine->DestroySurface(surface);
   }
+}
+
+DomicileBufferId domicile_surface_import(DomicileEngine* engine,
+                                         DomicileSurfaceId surface,
+                                         const DomicileDmabuf* dmabuf) {
+  if (!engine || !dmabuf) {
+    return 0;
+  }
+  return engine->ImportBuffer(surface, *dmabuf);
+}
+
+void domicile_surface_submit(DomicileEngine* engine,
+                             DomicileSurfaceId surface,
+                             DomicileBufferId buffer,
+                             int32_t damage_x,
+                             int32_t damage_y,
+                             int32_t damage_width,
+                             int32_t damage_height) {
+  if (engine) {
+    engine->SubmitBuffer(
+        surface, buffer,
+        gfx::Rect(damage_x, damage_y, damage_width, damage_height));
+  }
+}
+
+void domicile_buffer_destroy(DomicileEngine* engine,
+                             DomicileSurfaceId surface,
+                             DomicileBufferId buffer) {
+  if (engine) {
+    engine->DestroyBuffer(surface, buffer);
+  }
+}
+
+bool domicile_engine_spike_sample_window_center(DomicileEngine* engine,
+                                                uint32_t* argb) {
+  if (!engine || !argb) {
+    return false;
+  }
+  return engine->SampleWindowCenter(argb);
 }
 
 }  // extern "C"

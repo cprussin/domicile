@@ -19,7 +19,11 @@
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/domicile/domicile_spike_probe.h"
+#include "components/viz/common/gpu/raster_context_provider.h"
 #include "content/public/browser/browser_thread.h"
+#include "gpu/command_buffer/client/shared_image_interface.h"
+#include "ui/aura/env.h"
+#include "ui/compositor/compositor.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel_server_endpoint.h"
 #include "mojo/public/cpp/system/invitation.h"
@@ -40,6 +44,25 @@ constexpr char kSocketSwitch[] = "domicile-broker-socket";
 constexpr uint64_t kBrokerPipeName = 0;
 constexpr uint64_t kProbePipeName = 1;
 
+// How an imported dmabuf reaches a GPU, and the reason the exo::Buffer port
+// lives in the browser: components/exo/buffer.cc:95 does exactly this, and
+// aura::Env exists in no other process. Null when there is no GPU — every
+// --disable-gpu run, and every --ozone-platform=headless one, where a dmabuf
+// could not be imported anyway.
+gpu::SharedImageInterface* GetSharedImageInterface() {
+  ui::ContextFactory* context_factory =
+      aura::Env::GetInstance()->context_factory();
+  if (!context_factory) {
+    return nullptr;
+  }
+  scoped_refptr<viz::RasterContextProvider> context_provider =
+      context_factory->SharedMainThreadRasterContextProvider();
+  if (!context_provider) {
+    return nullptr;
+  }
+  return context_provider->SharedImageInterface();
+}
+
 // The browser's frame sink broker and the socket a producer reaches it over.
 //
 // The socket path is the access control, and it is the whole of it. Holding a
@@ -51,7 +74,8 @@ class DomicileBrowserService {
  public:
   DomicileBrowserService()
       : broker_(GetHostFrameSinkManager(),
-                base::BindRepeating(&AllocateFrameSinkId)),
+                base::BindRepeating(&AllocateFrameSinkId),
+                base::BindRepeating(&GetSharedImageInterface)),
         provider_(&broker_) {
     const base::CommandLine& command_line =
         *base::CommandLine::ForCurrentProcess();

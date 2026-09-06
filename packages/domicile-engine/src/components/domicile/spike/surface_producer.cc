@@ -109,6 +109,10 @@ void SurfaceProducer::OnSurfaceEmbedded(
   on_embedded_.Run(local_surface_id, size);
 }
 
+void SurfaceProducer::OnFrame(int64_t deadline_us) {}
+
+void SurfaceProducer::OnBufferReleased(uint64_t buffer_id) {}
+
 void SurfaceProducer::Submit(const viz::BeginFrameAck& ack) {
   const gfx::Rect rect(size_);
 
