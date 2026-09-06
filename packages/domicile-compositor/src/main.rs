@@ -103,7 +103,6 @@ mod dmabuf_import;
 mod engine;
 mod engine_buffers;
 mod engine_session;
-mod exo;
 mod modifiers;
 mod outbound;
 mod over_window;
@@ -207,18 +206,6 @@ mod grepped {
     /// unrowed script's pattern was green. That is the failure the test below
     /// is written against, and this constant was living in it.
     pub const ADVERTISING: &str = "advertising output scale";
-    /// `probe-delegated-compositing.sh`: the engine bound the augmenter at all.
-    pub const AUGMENTER_BOUND: &str = "the engine bound surface_augmenter";
-    /// `probe-delegated-compositing.sh`: said loudly at startup, because a
-    /// desktop running with this on has told the engine a lie about what it
-    /// can do with a surface and every window is a guess from there.
-    pub const AUGMENTER_ADVERTISED: &str =
-        "advertising surface_augmenter, which is NOT implemented: this is an \
-         experiment and not a desktop to use";
-    /// `probe-delegated-compositing.sh`: and what it asked the augmenter for.
-    /// A `kind="subsurface"` is the engine naming a quad it means to place,
-    /// which is the whole question this experiment exists to answer.
-    pub const AUGMENTED: &str = "the engine asked the augmenter for something";
     /// `e2e-bands.sh`: a chrome frame recognised as the band it says it is.
     /// The only trace the label's read-back leaves, and the whole of what says
     /// the round trip closed rather than stalled.
@@ -5087,207 +5074,6 @@ impl DmabufHandler for DomicileCompositor {
     }
 }
 
-// The protocols Chromium asks for before it will delegate its layer tree. Both
-// are hints and neither sends an event back, so answering is accepting the
-// object and letting the request stand — see `exo`. What they buy is not their
-// own behaviour but Chromium's willingness to delegate at all.
-mod exo_dispatch {
-    use smithay::reexports::wayland_server::{
-        Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
-    };
-
-    use crate::exo::alpha_compositing::{zcr_alpha_compositing_v1, zcr_blending_v1};
-    use crate::exo::overlay_prioritizer::{overlay_prioritized_surface, overlay_prioritizer};
-    use crate::exo::surface_augmenter::{
-        augmented_sub_surface, augmented_surface, surface_augmenter, wl_buffer,
-    };
-    use crate::DomicileCompositor;
-    use tracing::{debug, info};
-
-    macro_rules! accepts {
-        ($global:path, $child:path) => {
-            impl GlobalDispatch<$global, ()> for DomicileCompositor {
-                fn bind(
-                    _: &mut Self,
-                    _: &DisplayHandle,
-                    _: &Client,
-                    resource: New<$global>,
-                    _: &(),
-                    data_init: &mut DataInit<'_, Self>,
-                ) {
-                    data_init.init(resource, ());
-                }
-            }
-
-            impl Dispatch<$child, ()> for DomicileCompositor {
-                fn request(
-                    _: &mut Self,
-                    _: &Client,
-                    _: &$child,
-                    _: <$child as Resource>::Request,
-                    _: &(),
-                    _: &DisplayHandle,
-                    _: &mut DataInit<'_, Self>,
-                ) {
-                    // A hint taken and not acted on. The compositor already
-                    // draws premultiplied alpha and has no overlay planes to
-                    // prioritise into, so there is nothing here to honour that
-                    // it is not doing.
-                }
-            }
-        };
-    }
-
-    accepts!(
-        overlay_prioritizer::OverlayPrioritizer,
-        overlay_prioritized_surface::OverlayPrioritizedSurface
-    );
-    accepts!(
-        zcr_alpha_compositing_v1::ZcrAlphaCompositingV1,
-        zcr_blending_v1::ZcrBlendingV1
-    );
-
-    // The augmenter is not a hint and is not implemented. It is advertised
-    // only behind `--experiment-augmenter`, and only to answer one question:
-    // whether the engine sends its layer tree as a quad per subsurface when it
-    // finds a compositor shaped like `exo`, which is the one server that is
-    // known to make it do so.
-    //
-    // Measured without it, on a machine with a render node: the engine
-    // delegates a 600x400 page as a single 632x442 buffer whether the page has
-    // one composited layer or eight, and never stacks anything. Everything
-    // else it asks for is implemented and colour management was ruled out by
-    // switching the engine's own feature off. This is the last difference
-    // between this compositor and `exo`.
-    //
-    // **Every request is logged and none is honoured**, which is why this is
-    // behind a flag that says `experiment` and defaults off. Advertising a
-    // protocol without honouring it is what broke every dense display in #167;
-    // the difference here is that this cannot reach a desktop, and that the
-    // log *is* the result — what the engine asks of an augmenter is exactly
-    // the evidence this run exists to collect.
-    impl GlobalDispatch<surface_augmenter::SurfaceAugmenter, ()> for DomicileCompositor {
-        fn bind(
-            _: &mut Self,
-            _: &DisplayHandle,
-            _: &Client,
-            resource: New<surface_augmenter::SurfaceAugmenter>,
-            _: &(),
-            data_init: &mut DataInit<'_, Self>,
-        ) {
-            info!("{}", crate::grepped::AUGMENTER_BOUND);
-            data_init.init(resource, ());
-        }
-    }
-
-    impl Dispatch<surface_augmenter::SurfaceAugmenter, ()> for DomicileCompositor {
-        fn request(
-            _: &mut Self,
-            _: &Client,
-            _: &surface_augmenter::SurfaceAugmenter,
-            request: surface_augmenter::Request,
-            _: &(),
-            _: &DisplayHandle,
-            data_init: &mut DataInit<'_, Self>,
-        ) {
-            match request {
-                surface_augmenter::Request::GetAugmentedSurface { id, .. } => {
-                    info!(kind = "surface", "{}", crate::grepped::AUGMENTED);
-                    data_init.init(id, ());
-                }
-                surface_augmenter::Request::GetAugmentedSubsurface { id, .. } => {
-                    // The one that would say the tree arrived: an augmented
-                    // *subsurface* is a quad the engine means to place.
-                    info!(kind = "subsurface", "{}", crate::grepped::AUGMENTED);
-                    data_init.init(id, ());
-                }
-                surface_augmenter::Request::CreateSolidColorBuffer { id, .. } => {
-                    info!(
-                        kind = "solid colour buffer",
-                        "{}",
-                        crate::grepped::AUGMENTED
-                    );
-                    data_init.init(id, ());
-                }
-                _ => {}
-            }
-        }
-    }
-
-    impl Dispatch<augmented_surface::AugmentedSurface, ()> for DomicileCompositor {
-        fn request(
-            _: &mut Self,
-            _: &Client,
-            _: &augmented_surface::AugmentedSurface,
-            request: augmented_surface::Request,
-            _: &(),
-            _: &DisplayHandle,
-            _: &mut DataInit<'_, Self>,
-        ) {
-            debug!(?request, "an augmented surface was told something");
-        }
-    }
-
-    impl Dispatch<augmented_sub_surface::AugmentedSubSurface, ()> for DomicileCompositor {
-        fn request(
-            _: &mut Self,
-            _: &Client,
-            _: &augmented_sub_surface::AugmentedSubSurface,
-            request: augmented_sub_surface::Request,
-            _: &(),
-            _: &DisplayHandle,
-            _: &mut DataInit<'_, Self>,
-        ) {
-            debug!(?request, "an augmented subsurface was told something");
-        }
-    }
-
-    impl Dispatch<wl_buffer::WlBuffer, ()> for DomicileCompositor {
-        fn request(
-            _: &mut Self,
-            _: &Client,
-            _: &wl_buffer::WlBuffer,
-            _: <wl_buffer::WlBuffer as Resource>::Request,
-            _: &(),
-            _: &DisplayHandle,
-            _: &mut DataInit<'_, Self>,
-        ) {
-        }
-    }
-
-    impl Dispatch<overlay_prioritizer::OverlayPrioritizer, ()> for DomicileCompositor {
-        fn request(
-            _: &mut Self,
-            _: &Client,
-            _: &overlay_prioritizer::OverlayPrioritizer,
-            request: overlay_prioritizer::Request,
-            _: &(),
-            _: &DisplayHandle,
-            data_init: &mut DataInit<'_, Self>,
-        ) {
-            if let overlay_prioritizer::Request::GetOverlayPrioritizedSurface { id, .. } = request {
-                data_init.init(id, ());
-            }
-        }
-    }
-
-    impl Dispatch<zcr_alpha_compositing_v1::ZcrAlphaCompositingV1, ()> for DomicileCompositor {
-        fn request(
-            _: &mut Self,
-            _: &Client,
-            _: &zcr_alpha_compositing_v1::ZcrAlphaCompositingV1,
-            request: zcr_alpha_compositing_v1::Request,
-            _: &(),
-            _: &DisplayHandle,
-            data_init: &mut DataInit<'_, Self>,
-        ) {
-            if let zcr_alpha_compositing_v1::Request::GetBlending { id, .. } = request {
-                data_init.init(id, ());
-            }
-        }
-    }
-}
-
 delegate_compositor!(DomicileCompositor);
 delegate_viewporter!(DomicileCompositor);
 delegate_single_pixel_buffer!(DomicileCompositor);
@@ -5942,17 +5728,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ViewporterState::new::<DomicileCompositor>(&dh);
     SinglePixelBufferState::new::<DomicileCompositor>(&dh);
     ContentTypeState::new::<DomicileCompositor>(&dh);
-    // And Chromium's own two, which nothing packages — see `exo`.
-    dh.create_global::<DomicileCompositor, exo::overlay_prioritizer::overlay_prioritizer::OverlayPrioritizer, _>(1, ());
-    dh.create_global::<DomicileCompositor, exo::alpha_compositing::zcr_alpha_compositing_v1::ZcrAlphaCompositingV1, _>(1, ());
-    // Only when asked for, and asked for only by an experiment. See
-    // `Arguments::experiment_augmenter`: this compositor does not implement
-    // the augmenter, it logs what the engine asks of one, and the log is the
-    // point. A desktop must never be run with this on.
-    if arguments.experiment_augmenter {
-        warn!("{}", grepped::AUGMENTER_ADVERTISED);
-        dh.create_global::<DomicileCompositor, exo::surface_augmenter::surface_augmenter::SurfaceAugmenter, _>(13, ());
-    }
 
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);

@@ -326,8 +326,10 @@ and it was ruled out rather than assumed: with the engine's own
 `WaylandWpColorManagerV1` feature switched off, so that the protocol is out of
 the question entirely, nothing changes.
 
-What `scripts/probe-delegated-compositing.sh` measures on a machine with a
-render node, with `WaylandOverlayDelegation` on:
+What `scripts/probe-delegated-compositing.sh` measured on a machine with a
+render node, with `WaylandOverlayDelegation` on — the script was deleted in
+phase 2 of the engine fork along with the protocols it exercised, and is in the
+history under that path:
 
 | | |
 |---|---|

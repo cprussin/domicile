@@ -518,7 +518,7 @@ form, that is acceptable" is taken up, but the bill is smaller than that:
 | `place_portal`'s matrix, and the per-frame `requestAnimationFrame` measure loop | Layout positions the layer. The page stops reporting where its own boxes are |
 | `compositor/src/compose.rs`'s CSS reimplementation — rounded corners, shadows, blend | cc does it, correctly, for every property rather than the ones we shimmed |
 | `compositor/src/stacking.rs`, `Layer::clip` region-clipping | Same |
-| The vendored exo protocols and `--experiment-augmenter` | The engine is no longer a Wayland client of ours |
+| ~~The vendored exo protocols and `--experiment-augmenter`~~ | **Gone.** The engine is no longer a Wayland client of ours, so the protocols it asked for have no one to ask. `src/exo.rs`, `protocols/`, the flag, `scripts/probe-delegated-compositing.sh` and the `wayland-scanner` build dependency went with them |
 | Electron | We ship the fork |
 
 Kept: the Wayland server itself, input and seat handling, the output/config
@@ -1004,6 +1004,20 @@ compositor can submit a frame, because phase 2 deletes what draws today.**
 Phase 2 — collect the winnings. **After phase 1, not beside it:** deleting the
 copy path before the compositor can submit leaves nothing drawing at all.
 
+- [x] delete the vendored exo protocols and `--experiment-augmenter` — the
+      self-contained one, and the only one that touches nothing else
+- [ ] **`--engine-socket` becomes required.** Settled but not yet done, and the
+      order matters: 18 things start the compositor without it — every
+      `scripts/e2e-*.sh`, the integration tests — so requiring it before the
+      copy path goes breaks the suite that guards the deletion. It lands in the
+      same change as the deletion, not before
+- [ ] **an shm→dmabuf upload, before the copy path goes.** `publish_frame`
+      submits only `CommittedBuffer::Gpu`; an shm client rides the copy path
+      today. Settled: those clients get an upload rather than nothing — a
+      desktop that silently drops every toolkit not using GL is the defect
+      ERRORS.md is about, and "deliberately dropped" does not make it a
+      smaller one. The upload is the prerequisite, and it is real work rather
+      than a decision
 - [ ] delete bands, the copy path, `AppFrame`, the measure loop, the shaders
 - [ ] `<domicile-app>` becomes a `<canvas>` and one call
 

@@ -34,23 +34,6 @@ pub struct Arguments {
     /// is the defect this flag would otherwise introduce. See
     /// `docs/architecture/ENGINE-FORK.md`.
     pub engine_socket: Option<PathBuf>,
-
-    /// Advertise Chromium's `surface_augmenter`, which this compositor does
-    /// not implement.
-    ///
-    /// An experiment and nothing else, which is why the flag says so and why
-    /// it defaults off. Every request through the augmenter is logged and none
-    /// is honoured, so a desktop run with this on would be one where the
-    /// engine has been told a lie about what its windows can be told to do.
-    ///
-    /// What it is for: measured without it, the engine delegates a whole page
-    /// as one quad however many composited layers the page has. `exo`, the
-    /// ChromeOS compositor, is the one server known to make it send a quad per
-    /// layer, and this protocol is the last difference between that server and
-    /// this one. Whether the engine gates per-quad delegation on finding an
-    /// augmenter cannot be answered from outside it, so it is answered by
-    /// advertising one and reading what the engine then asks for.
-    pub experiment_augmenter: bool,
 }
 
 /// A command line the compositor will not run.
@@ -81,7 +64,6 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut session = None;
     let mut config = None;
     let mut present = false;
-    let mut experiment_augmenter = false;
     let mut engine_socket = None;
 
     let mut args = args.into_iter();
@@ -97,13 +79,6 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         }
         seen.push(flag.clone());
         let slot = match flag.as_str() {
-            EXPERIMENT_AUGMENTER => {
-                if joined.is_some() {
-                    return Err(ArgumentError::UnwantedValue { flag });
-                }
-                experiment_augmenter = true;
-                continue;
-            }
             PRESENT => {
                 // `--present=false` used to turn presenting *on*: the value
                 // went nowhere and the flag's presence was the whole answer.
@@ -139,7 +114,6 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         session: session.ok_or(ArgumentError::Missing { flag: SESSION })?,
         config,
         present,
-        experiment_augmenter,
         engine_socket,
     })
 }
@@ -148,7 +122,6 @@ const CHROME_SOCKET: &str = "--chrome-socket";
 const SESSION: &str = "--session";
 const CONFIG: &str = "--config";
 const PRESENT: &str = "--present";
-const EXPERIMENT_AUGMENTER: &str = "--experiment-augmenter";
 const ENGINE_SOCKET: &str = "--engine-socket";
 
 /// One argument, split at the first `=` if it has one.

@@ -360,8 +360,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tracing",
  "tracing-subscriber",
- "wayland-backend",
- "wayland-scanner",
 ]
 
 [[package]]

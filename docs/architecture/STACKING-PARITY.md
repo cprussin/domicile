@@ -96,10 +96,16 @@ question.
 ## Reproducing the measurements
 
 ```sh
-nix run .#probe-delegated-compositing    # four engine runs + wire report + verdict
 nix run .#e2e-a-dense-display            # the fractional-scale regression
 nix run .#smoke-compositor               # asserts the advertised globals
 ```
+
+`nix run .#probe-delegated-compositing` was the first of these and **no longer
+exists.** It went with the vendored exo protocols in phase 2 of the engine fork,
+because the engine stopped being a Wayland client of ours and there was nothing
+left for it to probe. Its measurements stand — they are the table below and in
+`WINDOW-COMPOSITING.md` — and the script itself is in the history if it is ever
+wanted: `git log --diff-filter=D -- scripts/probe-delegated-compositing.sh`.
 
 The probe needs **a DRM render node**. This dev container has none, so the GPU
 process exits during init, there is no Viz compositor to delegate from, and no
