@@ -25,6 +25,16 @@ pub struct Arguments {
     /// their pixels to the chrome.
     pub present: bool,
 
+    /// Submit client buffers to the forked engine over this socket, instead of
+    /// reading them back and sending pixels to the chrome.
+    ///
+    /// `None` runs the compositor as it always has. When it is set the engine
+    /// is required: `libdomicile_engine.so` not being loadable is a startup
+    /// failure that says so, because a compositor that silently shows nothing
+    /// is the defect this flag would otherwise introduce. See
+    /// `docs/architecture/ENGINE-FORK.md`.
+    pub engine_socket: Option<PathBuf>,
+
     /// Advertise Chromium's `surface_augmenter`, which this compositor does
     /// not implement.
     ///
@@ -72,6 +82,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut config = None;
     let mut present = false;
     let mut experiment_augmenter = false;
+    let mut engine_socket = None;
 
     let mut args = args.into_iter();
     let mut seen = Vec::new();
@@ -106,6 +117,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             CHROME_SOCKET => &mut chrome_socket,
             SESSION => &mut session,
             CONFIG => &mut config,
+            ENGINE_SOCKET => &mut engine_socket,
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         };
         let value = match joined {
@@ -128,6 +140,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         config,
         present,
         experiment_augmenter,
+        engine_socket,
     })
 }
 
@@ -136,6 +149,7 @@ const SESSION: &str = "--session";
 const CONFIG: &str = "--config";
 const PRESENT: &str = "--present";
 const EXPERIMENT_AUGMENTER: &str = "--experiment-augmenter";
+const ENGINE_SOCKET: &str = "--engine-socket";
 
 /// One argument, split at the first `=` if it has one.
 ///

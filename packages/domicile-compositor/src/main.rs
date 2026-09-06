@@ -100,6 +100,7 @@ mod compose;
 mod damage;
 mod dmabuf_descriptor;
 mod dmabuf_import;
+mod engine;
 mod exo;
 mod modifiers;
 mod outbound;
