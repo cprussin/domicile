@@ -719,12 +719,24 @@ mention. Two ways, and this is a design decision rather than a detail:
 | **broker the channel** | the browser gives the producer a `viz.mojom.Gpu` — `viz::GpuClient` is exactly this, and is what a renderer gets (`render_process_host_impl_receiver_bindings.cc:256`) — and the producer creates its own `SharedImage`s | zero extra hops; hands an external process unrestricted GPU authority, and pulls the whole `gpu::` client stack into the library |
 | **broker the import** | the producer sends the dmabuf over the socket it already has; the browser does what `exo::Buffer` does and returns a mailbox and sync token | GPU authority stays in the browser, the port lands in `components/domicile/browser/` beside the broker, and the library keeps its small dependency set. One extra hop per *buffer*, not per frame — buffers are imported once and reused, which is what `released` exists to make safe |
 
-**Recommendation: broker the import.** The cost is paid once per buffer rather
-than per frame, it keeps the authority argument the rest of this design has
-been careful about — a page cannot reach a `FrameSinkBroker`, and by the same
+**Settled: broker the import.** The cost is paid once per buffer rather than
+per frame, it keeps the authority argument the rest of this design has been
+careful about — a page cannot reach a `FrameSinkBroker`, and by the same
 reasoning a Wayland compositor should not need a GPU channel to show a window —
 and it puts the `exo::Buffer` port in the process that already has everything
 `exo::Buffer` uses.
+
+Two things settle it beyond the recommendation. `exo::Buffer` takes its
+`SharedImageInterface` from `aura::Env::GetInstance()->context_factory()`
+(`components/exo/buffer.cc:95`), so brokering the import ports it *into the
+environment it was written for* rather than adapting it to a new one — strictly
+less work and less risk. And `released` already exists, so the per-buffer hop is
+amortised by a mechanism that is built rather than hoped for.
+
+What this adds to the ABI is one call and one reply, not a new capability:
+`domicile_surface_import` sends the dmabuf's fds and description over the socket
+already held, and gets back an opaque `BufferId`. The library never sees a
+mailbox and never holds a GPU channel.
 
 ### How the ozone platform blocked it before that
 
