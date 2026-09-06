@@ -957,13 +957,18 @@ compositor can submit a frame, because phase 2 deletes what draws today.**
       phase 2 deletes the copy path, a missing `libdomicile_engine.so` is a
       startup failure that says so, because a compositor that silently shows
       nothing is the defect ERRORS.md exists to prevent.
-      **The binding is written** — `packages/domicile-compositor/src/engine.rs`,
-      with the error contract above under test — and `--engine-socket` is
-      parsed and carried. **The call sites are not.** What remains is the
-      commit path: import a client's dmabuf on `wl_surface.commit`, submit it,
-      and hold `wl_buffer.release` until the engine says viz is done with it —
-      and with it the first full-strength pixel assertion, because a real
-      client has a GL context and can draw a known colour
+      **The binding and its call sites are written.** The compositor loads the
+      engine or refuses to start, polls `domicile_engine_fd` in its own
+      calloop, imports a client's dmabuf once per `wl_buffer`, submits it, and
+      holds `wl_buffer.release` until viz says it is done — with a deadline, so
+      a release that never arrives takes the buffer back loudly rather than
+      stopping the client. `Configure` drives `xdg_toplevel.configure`.
+      **What is not done is the assertion**: `scripts/spike-client-window.sh`
+      is written and does not pass, because the compositor has to see both the
+      Domicile full shell's GL stack and the Chromium shell's libraries at once
+      and no single environment has both. That is a nix problem rather than a
+      seam problem — the error path names the missing library and stops, which
+      is what it is for — and it is the last thing between here and phase 2
 - [x] ~~**on a machine with a GPU**~~ — `crux` is one. See *The GPU was there
       all along*
 
