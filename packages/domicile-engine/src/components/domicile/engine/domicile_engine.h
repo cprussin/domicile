@@ -27,12 +27,11 @@
 // compositor already runs. Callbacks fire from inside dispatch, on the caller's
 // thread, and never from anywhere else.
 //
-// WHAT IS NOT HERE YET. domicile_surface_import and domicile_surface_submit —
-// the dmabuf half — are phase 1's next step and deliberately absent rather than
-// stubbed: an import that silently succeeds without a SharedImage behind it is
-// worse than one that has not been written. `released` is declared because the
-// buffer lifecycle is not optional once submit exists, and it cannot fire until
-// it does.
+// IT NEVER SEES A MAILBOX AND NEVER HOLDS A GPU CHANNEL. A dmabuf is sent over
+// the socket already held and the browser imports it, because the browser is
+// the process with an aura::Env to reach a SharedImageInterface through — which
+// is where components/exo/buffer.cc already lives. What comes back is an opaque
+// BufferId. See ENGINE-FORK.md, "Settled: broker the import".
 
 // Chromium builds with -fvisibility=hidden, so every entry point says so.
 #define DOMICILE_ENGINE_EXPORT __attribute__((visibility("default")))
@@ -46,6 +45,31 @@ typedef struct DomicileEngine DomicileEngine;
 // A surface, as the compositor names one. Zero is never valid, so it doubles as
 // the failure return of domicile_surface_create.
 typedef uint32_t DomicileSurfaceId;
+
+// An imported buffer. Zero is never valid, so it doubles as the failure return
+// of domicile_surface_import.
+typedef uint64_t DomicileBufferId;
+
+// One plane of a dmabuf, as zwp_linux_buffer_params_v1.add sends it.
+typedef struct DomicileDmabufPlane {
+  int fd;
+  uint32_t offset;
+  uint32_t stride;
+} DomicileDmabufPlane;
+
+// A client's buffer, exactly as the compositor already has it.
+//
+// The fds are borrowed for the duration of the call: the library duplicates
+// what it sends and the caller keeps ownership of the originals.
+typedef struct DomicileDmabuf {
+  uint32_t width;
+  uint32_t height;
+  // DRM_FORMAT_*, as the client sent it.
+  uint32_t fourcc;
+  uint64_t modifier;
+  uint32_t plane_count;
+  DomicileDmabufPlane planes[4];
+} DomicileDmabuf;
 
 // What the browser has to tell the compositor. Each maps onto a Wayland request
 // the compositor already speaks, which is why this is a translation table
@@ -114,6 +138,40 @@ domicile_surface_create(DomicileEngine* engine, const char* app_id);
 // Drops the surface and the frame sink behind it.
 DOMICILE_ENGINE_EXPORT void domicile_surface_destroy(DomicileEngine* engine,
                                                      DomicileSurfaceId surface);
+
+// Imports a client's dmabuf and returns the id to name it by, or zero.
+//
+// This is zwp_linux_dmabuf_v1: the fds the client already sent. Blocking,
+// because a buffer that does not exist is not something the compositor can
+// attach — and it happens once per buffer, not once per frame.
+//
+// Zero means the browser refused it. The commonest reason by far is that there
+// is no GPU to import into: an ozone platform that does not implement
+// CreateNativePixmapFromHandle — headless is one — cannot do this at all.
+DOMICILE_ENGINE_EXPORT DomicileBufferId
+domicile_surface_import(DomicileEngine* engine,
+                        DomicileSurfaceId surface,
+                        const DomicileDmabuf* dmabuf);
+
+// Submits a frame showing `buffer`, damaging the given rectangle. An empty
+// rectangle — zero width or height — means the whole surface.
+//
+// This is wl_surface.commit. The browser puts the matching
+// TransferableResource in the CompositorFrame; the producer never names a
+// mailbox because it never has one.
+DOMICILE_ENGINE_EXPORT void domicile_surface_submit(DomicileEngine* engine,
+                                                    DomicileSurfaceId surface,
+                                                    DomicileBufferId buffer,
+                                                    int32_t damage_x,
+                                                    int32_t damage_y,
+                                                    int32_t damage_width,
+                                                    int32_t damage_height);
+
+// Drops an imported buffer. Every buffer goes when its surface does, so this is
+// for a client that destroys one of its own.
+DOMICILE_ENGINE_EXPORT void domicile_buffer_destroy(DomicileEngine* engine,
+                                                    DomicileSurfaceId surface,
+                                                    DomicileBufferId buffer);
 
 #ifdef __cplusplus
 }  // extern "C"

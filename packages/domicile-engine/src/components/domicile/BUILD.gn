@@ -25,7 +25,9 @@ source_set("browser") {
     "//components/domicile/mojom",
     "//components/viz/common",
     "//components/viz/host",
+    "//gpu/command_buffer/client",
     "//mojo/public/cpp/bindings",
+    "//ui/gfx",
     "//ui/gfx/geometry",
   ]
 }
@@ -70,6 +72,7 @@ group("spike") {
 group("engine") {
   deps = [
     "//components/domicile/engine:domicile_engine",
+    "//components/domicile/engine:engine_dmabuf_smoke",
     "//components/domicile/engine:engine_smoke",
   ]
 }

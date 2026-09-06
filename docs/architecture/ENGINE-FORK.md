@@ -738,6 +738,61 @@ What this adds to the ABI is one call and one reply, not a new capability:
 already held, and gets back an opaque `BufferId`. The library never sees a
 mailbox and never holds a GPU channel.
 
+**One consequence that was not obvious when this was settled: the browser has
+to own the `CompositorFrameSink` too.** If the producer never sees a mailbox
+then it cannot assemble the `CompositorFrame` either, so `domicile_surface_submit`
+names a `BufferId` and the browser builds the frame around the matching
+`TransferableResource`. That makes the per-frame path go through the browser,
+where the table above says only the import would. A producer that submits its
+own frames — the spike's solid-colour ones — still talks to viz directly, and
+`CreateFrameSink` takes a null client and receiver to ask for the other shape.
+Whether the frame hop costs anything measurable is not established; the
+producer submits at most one frame per BeginFrame either way.
+
+### What the port measures
+
+`scripts/spike-dmabuf.sh`, under `spike-wayland.sh` because nothing else can:
+
+```
+allocated two 992x639 dmabufs as rendering, 1 plane(s), modifier 0x300000000cdb014
+imported: buffers 1 and 2
+submitted the first
+submitted the second, which is what frees the first
+released: surface 1 buffer 1 — wl_buffer.release
+drew #00000000 from an unfilled renderable dmabuf — sampled, so the texture path works
+```
+
+A buffer allocated by a process that is not Chromium, on the render node,
+reaches the page as a `TransferableResource` the producer never sees, and comes
+back when a later frame replaces it. **`released` fires**, which is the first
+time it has.
+
+**It takes two frames to see a release, and that is not a quirk of the test.**
+Viz holds the buffer that is on screen; it hands it back when something
+replaces it. A compositor that drew into the buffer it had just committed would
+tear, which is why a Wayland client double-buffers, and why the harness submits
+twice.
+
+**On this GPU a buffer is CPU-writable or sampleable, never both.** NVIDIA's
+gbm refuses `rendering|linear` outright. A linear buffer imports without error
+and then draws as the embedder's fallback; a tiled renderable one is sampled.
+Since the harness has no GL context it cannot put known content in the second,
+so the pixel assertion is "the buffer's own zeroed content rather than the
+fallback" — `#00000000` against an opaque `#FF000000` — rather than a colour
+chosen in advance. `LINEAR=1` runs it the other way and fails, which is what
+documents the limitation. A real client renders with the GPU and lands on the
+working path; `domicile-compositor` submitting a real client's buffer is what
+closes this to a full-strength assertion, and it is the next item.
+
+**Not `SCANOUT`.** A `SharedImage` may only claim it if the buffer was
+allocated for it, and a render node with no KMS behind it will not. Claiming it
+anyway produces a `SharedImage` that is created and then never drawn — an
+afternoon, that one. Overlay promotion is phase 3's, with a display.
+
+The submit path was proved separately before the texture was trusted: the same
+browser-owned sink, submitting a `SolidColorDrawQuad`, draws the right pixel.
+So a black frame meant the texture and not the plumbing.
+
 ### How the ozone platform blocked it before that
 
 Not for want of a GPU, and not for want of NVIDIA. **The ozone platform every
@@ -820,14 +875,16 @@ compositor can submit a frame, because phase 2 deletes what draws today.**
 - [x] **a platform that can import a dmabuf** — `scripts/spike-wayland.sh`,
       and the NVIDIA driver satisfies every gate. See *What
       `domicile_surface_import` still needs*
-- [ ] port `exo::Buffer`'s dmabuf → `SharedImage` → `TransferableResource`
-      behind `domicile_surface_import` — **needs a decision first**: the
-      producer has no GPU channel, so either the browser brokers one or the
-      browser does the import. Recommendation and costs in the same section
-- [ ] `domicile-compositor` submits a client's buffer instead of reading it back
-- [ ] `released` → `wl_buffer.release`, so a buffer viz still samples is not
-      reused. The path is built and the callback is declared; nothing can
-      release a buffer until something imports one
+- [x] port `exo::Buffer`'s dmabuf → `SharedImage` → `TransferableResource`
+      behind `domicile_surface_import` — done, under the brokered import.
+      `components/domicile/browser/brokered_frame_sink.cc` is the port;
+      `scripts/spike-dmabuf.sh` is the assertion
+- [x] `released` → `wl_buffer.release` — **fires**, and it took two frames to
+      see it: viz holds whatever is on screen and hands it back when a later
+      frame replaces it, which is why a client double-buffers
+- [ ] `domicile-compositor` submits a client's buffer instead of reading it
+      back — the only item left in phase 1, and the first that touches the
+      compositor
 - [x] ~~**on a machine with a GPU**~~ — `crux` is one. See *The GPU was there
       all along*
 

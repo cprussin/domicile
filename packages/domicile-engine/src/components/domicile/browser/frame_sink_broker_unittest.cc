@@ -55,7 +55,17 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
     embedded_.SetValue(local_surface_id, size);
   }
 
+  // Only sent to a producer whose sink the browser owns, which these tests
+  // never ask for: brokering a sink and embedding it is what they are about,
+  // and neither needs a GPU to import into.
+  void OnFrame(int64_t deadline_us) override { frames_++; }
+  void OnBufferReleased(uint64_t buffer_id) override {
+    released_.push_back(buffer_id);
+  }
+
   base::test::TestFuture<viz::LocalSurfaceId, gfx::Size> embedded_;
+  int frames_ = 0;
+  std::vector<uint64_t> released_;
 
  private:
   mojo::Receiver<mojom::SurfaceObserver> receiver_{this};
@@ -312,8 +322,8 @@ TEST_F(FrameSinkBrokerTest, EmbedTellsTheProducerWhichSurfaceToSubmitTo) {
   broker()->Embed(kPageFrameSinkId, local_surface_id, kEmbeddedSize,
                   embedded.GetCallback());
 
-  EXPECT_EQ(local_surface_id, observer.embedded_.Get<0>());
-  EXPECT_EQ(kEmbeddedSize, observer.embedded_.Get<1>());
+  EXPECT_EQ(local_surface_id, observer.embedded_.Get<viz::LocalSurfaceId>());
+  EXPECT_EQ(kEmbeddedSize, observer.embedded_.Get<gfx::Size>());
 }
 
 // Embedding is also what puts the producer under the page in the frame sink
