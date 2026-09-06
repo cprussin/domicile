@@ -1,7 +1,7 @@
 //! The command line a shell starts the compositor with.
 
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use domicile_launch::arguments::{arguments, ArgumentError, Arguments};
 
@@ -241,5 +241,39 @@ fn present_may_still_be_given_twice_over() {
         ArgumentError::Repeated {
             flag: "--present".into()
         }
+    );
+}
+
+/// The engine path is opt-in, and off is the shape every existing shell writes.
+#[test]
+fn the_engine_socket_is_absent_unless_asked_for() {
+    let parsed = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+    ])
+    .expect("a command line without the engine parses");
+
+    assert_eq!(parsed.engine_socket, None);
+}
+
+/// Where the forked engine is listening. A path like every other, so it takes
+/// a value the same way and refuses an empty one the same way.
+#[test]
+fn the_engine_socket_is_read_as_a_path() {
+    let parsed = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--engine-socket",
+        "/run/domicile-engine.sock",
+    ])
+    .expect("an engine socket parses");
+
+    assert_eq!(
+        parsed.engine_socket.as_deref(),
+        Some(Path::new("/run/domicile-engine.sock"))
     );
 }

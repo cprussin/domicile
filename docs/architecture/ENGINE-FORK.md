@@ -956,7 +956,14 @@ compositor can submit a frame, because phase 2 deletes what draws today.**
       the copy path is still there and a missing engine can degrade to it; once
       phase 2 deletes the copy path, a missing `libdomicile_engine.so` is a
       startup failure that says so, because a compositor that silently shows
-      nothing is the defect ERRORS.md exists to prevent
+      nothing is the defect ERRORS.md exists to prevent.
+      **The binding is written** — `packages/domicile-compositor/src/engine.rs`,
+      with the error contract above under test — and `--engine-socket` is
+      parsed and carried. **The call sites are not.** What remains is the
+      commit path: import a client's dmabuf on `wl_surface.commit`, submit it,
+      and hold `wl_buffer.release` until the engine says viz is done with it —
+      and with it the first full-strength pixel assertion, because a real
+      client has a GL context and can draw a known colour
 - [x] ~~**on a machine with a GPU**~~ — `crux` is one. See *The GPU was there
       all along*
 
