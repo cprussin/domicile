@@ -1011,13 +1011,24 @@ copy path before the compositor can submit leaves nothing drawing at all.
       `scripts/e2e-*.sh`, the integration tests — so requiring it before the
       copy path goes breaks the suite that guards the deletion. It lands in the
       same change as the deletion, not before
-- [ ] **an shm→dmabuf upload, before the copy path goes.** `publish_frame`
+- [ ] **an shm→dmabuf upload, *after* the copy path goes.** `publish_frame`
       submits only `CommittedBuffer::Gpu`; an shm client rides the copy path
-      today. Settled: those clients get an upload rather than nothing — a
-      desktop that silently drops every toolkit not using GL is the defect
-      ERRORS.md is about, and "deliberately dropped" does not make it a
-      smaller one. The upload is the prerequisite, and it is real work rather
-      than a decision
+      today, so deleting that path takes the window away from every toolkit
+      that does not render with GL — which is most of them.
+
+      **Settled by the project owner, and settled the other way from the
+      recommendation.** The upload is not a prerequisite: the copy path goes
+      first and shm clients break in the interim. Nothing is released and
+      nobody is using it, so the regression costs nothing real, and the
+      shortest route to the end state is worth more than keeping an interim
+      tree usable. The upload lands afterwards, on the engine path, once
+      there is one path to write it against instead of two.
+
+      This is a deliberate, time-boxed regression rather than a change of
+      mind about the principle: a shipped desktop that silently shows no
+      window is still the defect ERRORS.md is about. Whoever closes this box
+      should make an shm client's failure *say* so rather than draw nothing,
+      and the box is not closed until the upload exists
 - [ ] delete bands, the copy path, `AppFrame`, the measure loop, the shaders
 - [ ] `<domicile-app>` becomes a `<canvas>` and one call
 
