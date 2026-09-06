@@ -698,7 +698,47 @@ whole of step 4, and the iframe cell — runs on the hardware.
 That matters beyond convenience: **step 4's one imperfect cell was an artifact
 of software rasterisation**, and on the GPU there is no imperfect cell.
 
-### Why `domicile_surface_import` cannot be written yet
+### What `domicile_surface_import` still needs, and it is not the GPU
+
+The platform is no longer the blocker. The producer is.
+
+**`exo::Buffer` is browser-process code.** It reaches its `SharedImageInterface`
+through `aura::Env::GetInstance()->context_factory()`
+(`components/exo/buffer.cc:95`), and `aura::Env` exists only in the browser.
+`libdomicile_engine.so` runs in a process the browser did not launch: it holds a
+`FrameSinkBroker` pipe and a `CompositorFrameSink`, and **nothing that can make
+a `SharedImage`**. A `CompositorFrame` cannot carry a raw dmabuf fd — a
+`TransferableResource` names a mailbox, and a mailbox has to be minted by
+something with a GPU channel.
+
+So the port needs a second capability brokered, which the ABI table does not
+mention. Two ways, and this is a design decision rather than a detail:
+
+| | | |
+|---|---|---|
+| **broker the channel** | the browser gives the producer a `viz.mojom.Gpu` — `viz::GpuClient` is exactly this, and is what a renderer gets (`render_process_host_impl_receiver_bindings.cc:256`) — and the producer creates its own `SharedImage`s | zero extra hops; hands an external process unrestricted GPU authority, and pulls the whole `gpu::` client stack into the library |
+| **broker the import** | the producer sends the dmabuf over the socket it already has; the browser does what `exo::Buffer` does and returns a mailbox and sync token | GPU authority stays in the browser, the port lands in `components/domicile/browser/` beside the broker, and the library keeps its small dependency set. One extra hop per *buffer*, not per frame — buffers are imported once and reused, which is what `released` exists to make safe |
+
+**Settled: broker the import.** The cost is paid once per buffer rather than
+per frame, it keeps the authority argument the rest of this design has been
+careful about — a page cannot reach a `FrameSinkBroker`, and by the same
+reasoning a Wayland compositor should not need a GPU channel to show a window —
+and it puts the `exo::Buffer` port in the process that already has everything
+`exo::Buffer` uses.
+
+Two things settle it beyond the recommendation. `exo::Buffer` takes its
+`SharedImageInterface` from `aura::Env::GetInstance()->context_factory()`
+(`components/exo/buffer.cc:95`), so brokering the import ports it *into the
+environment it was written for* rather than adapting it to a new one — strictly
+less work and less risk. And `released` already exists, so the per-buffer hop is
+amortised by a mechanism that is built rather than hoped for.
+
+What this adds to the ABI is one call and one reply, not a new capability:
+`domicile_surface_import` sends the dmabuf's fds and description over the socket
+already held, and gets back an opaque `BufferId`. The library never sees a
+mailbox and never holds a GPU channel.
+
+### How the ozone platform blocked it before that
 
 Not for want of a GPU, and not for want of NVIDIA. **The ozone platform every
 measurement uses cannot import a dmabuf at all.**
@@ -730,10 +770,28 @@ already in phase 3:
   NVIDIA proprietary driver plus dmabuf import is the least travelled of the
   three.
 
-**This is the largest remaining unknown in phase 1 and it is now a named one.**
-What is not yet known is whether NVIDIA's proprietary driver satisfies
-`CreateNativePixmapFromHandle` once a platform that implements it is running:
-Chromium's GBM path assumes Mesa, and that assumption has not been tested here.
+**Measured, and the answer is yes.** `scripts/spike-wayland.sh` nests the
+engine in a headless wlroots compositor and runs any other check under
+`--ozone-platform=wayland` on the GPU. Every gate in
+`WaylandBufferManagerGpu::GetGbmDevice()` is satisfied on `crux`:
+
+| gate | |
+|---|---|
+| `use_wayland_gbm` | already `true` in the build |
+| host advertises `zwp_linux_dmabuf_v1` | **sway yes, weston no** — see below |
+| `EGL_EXT_image_dma_buf_import` | **yes**, on the NVIDIA display: `EGL vendor string: NVIDIA` lists it and `..._modifiers` |
+| a GBM backend for the device | **yes** — the proprietary driver ships `nvidia-drm_gbm.so` |
+| `gbm_create_device()` on the render node | **succeeds** — Chromium picks `/dev/dri/renderD128` ("picking nvidia-drm") and GL then initialises with `EGL_PLATFORM_GBM_KHR` as its native display, which only happens on that path |
+
+**Chromium's GBM path does not assume Mesa.** That worry was unfounded: NVIDIA
+ships its own GBM backend and its EGL imports dmabufs.
+
+**Weston is the wrong compositor for this and wlroots is the right one.**
+Weston's headless backend advertises `wl_shm` and nothing else — measured, its
+globals contain no `zwp_linux_dmabuf_v1` — and `GetGbmDevice()` returns null
+unless the *host* supports dmabuf, so under weston the device is never created
+however capable the GPU is. A wlroots headless backend advertises it, because
+it builds a renderer on the render node whether or not anything is on screen.
 
 ### The open part
 
@@ -759,9 +817,13 @@ compositor can submit a frame, because phase 2 deletes what draws today.**
       also when `SetNeedsBeginFrame` is worth asking for
 - [x] the embedder's `LocalSurfaceId` drives `xdg_toplevel.configure` — the
       C ABI's `configure` callback carries the page's layout box
+- [x] **a platform that can import a dmabuf** — `scripts/spike-wayland.sh`,
+      and the NVIDIA driver satisfies every gate. See *What
+      `domicile_surface_import` still needs*
 - [ ] port `exo::Buffer`'s dmabuf → `SharedImage` → `TransferableResource`
-      behind `domicile_surface_import` — **blocked on the ozone platform, see
-      below**
+      behind `domicile_surface_import` — **needs a decision first**: the
+      producer has no GPU channel, so either the browser brokers one or the
+      browser does the import. Recommendation and costs in the same section
 - [ ] `domicile-compositor` submits a client's buffer instead of reading it back
 - [ ] `released` → `wl_buffer.release`, so a buffer viz still samples is not
       reused. The path is built and the callback is declared; nothing can
@@ -836,13 +898,15 @@ Phase 3 — be the display server:
   but no display and no compositor to compare against, so the latency number is
   "one display frame into the display compositor's output" and not "commit to
   scanout". That needs the machine phase 3 needs.
-- **Whether NVIDIA can satisfy `CreateNativePixmapFromHandle`.** The dmabuf
-  import is blocked on the ozone platform rather than the hardware — see *Why
-  `domicile_surface_import` cannot be written yet* — and the next thing to find
-  out is whether Chromium's GBM path, which assumes Mesa, works against the
-  proprietary driver once `ozone_platform_wayland` is running. Recommendation:
-  nest the engine in a headless weston and find out before porting
-  `exo::Buffer`, because the port is worth nothing if the answer is no.
+- ~~**Whether NVIDIA can satisfy `CreateNativePixmapFromHandle`.**~~ Closed: it
+  can, under a wlroots headless compositor. The GBM path does not assume Mesa.
+- **How the producer gets to make a `SharedImage`.** It cannot today, and this
+  is the last thing between phase 1 and real pixels. Broker a GPU channel to an
+  external process, or have the browser do the import and hand back a mailbox?
+  Recommendation is the second, with the reasoning in *What
+  `domicile_surface_import` still needs*. **This is a decision, not a detail:**
+  the first hands a process the browser did not launch the same GPU authority a
+  renderer has.
 - **One surface per document, in the spike only.** The measurement puts eight
   `<app>` elements on one page against one producer, and it does that by
   sharing the `LocalSurfaceId` the renderer allocated across the document. A
