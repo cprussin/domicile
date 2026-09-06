@@ -63,6 +63,50 @@
         xdotool
       ];
 
+      # What `libdomicile_engine.so` was linked against.
+      #
+      # The engine is a Chromium component, so it needs Chromium's runtime
+      # libraries — and the compositor `dlopen`s it, which means they have to
+      # be on the loader path of the shell the *compositor* runs in, not the
+      # one the engine was built in. Before this the two sets lived in
+      # different shells and neither was a superset: from the full shell the
+      # engine would not load (`libglib-2.0.so.0: cannot open shared object
+      # file`), and from Chromium's toolchain shell there was no EGL, so no
+      # client could hand the compositor a dmabuf in the first place.
+      #
+      # Its own list rather than folded into `hostLibs` because nothing here is
+      # Domicile's: it is what a prebuilt Chromium needs, and it changes when
+      # Chromium's does. `packages/domicile-engine/CHROMIUM_PIN` says which
+      # Chromium that is.
+      engineRuntimeLibs = with pkgs; [
+        glib
+        nss
+        nspr
+        dbus
+        # `atk` and `at-spi2-atk` are aliases of this in current nixpkgs, so
+        # naming all three would put the same store path on the path thrice.
+        at-spi2-core
+        cups
+        expat
+        alsa-lib
+        pango
+        cairo
+        gdk-pixbuf
+        gtk3
+        libdrm
+        libxshmfence
+        # Chromium links a wider set of X client libraries than winit does, and
+        # needs them whether or not it runs on X: the ozone platform is chosen
+        # at runtime, so they have to resolve either way.
+        libxcomposite
+        libxdamage
+        libxext
+        libxfixes
+        libxrender
+        libxtst
+        libxcb
+      ];
+
       # ── What a user installs ────────────────────────────────────────────
       #
       # A shell, and nothing else. That is the whole arrangement Domicile is
@@ -527,7 +571,7 @@
               pkgs.libxcursor
               pkgs.libxrandr
               pkgs.libxi
-            ]}";
+            ]}:${pkgs.lib.makeLibraryPath engineRuntimeLibs}";
           shellHook = ''
             echo "domicile dev shell (full: +wayland +drm +gl)"
           '';
