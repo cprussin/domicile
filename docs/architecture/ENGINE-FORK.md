@@ -749,6 +749,22 @@ own frames — the spike's solid-colour ones — still talks to viz directly, an
 Whether the frame hop costs anything measurable is not established; the
 producer submits at most one frame per BeginFrame either way.
 
+**The premise of that consequence should be tested before it hardens.** "If the
+producer never sees a mailbox" is the load-bearing clause, and the decision this
+sits under says the browser returns *a mailbox and sync token*. A
+`gpu::SyncToken` is a POD of four fields — `verified_flush_`, `namespace_id_`,
+`command_buffer_id_`, `release_count_` (`gpu/command_buffer/common/sync_token.h:101`)
+— so once the browser has verified one it is bytes, and a producer can carry it
+in a `TransferableResource` without a GPU channel of its own. If viz accepts a
+resource whose `SharedImage` a different client created, the producer can build
+and submit its own frames: the per-buffer hop stays, the per-frame hop goes, and
+no GPU authority moves.
+
+That is worth an experiment rather than an assumption, because requirement 1 is
+the one that cannot be traded and this hop is on its path. **Test it before
+phase 2**, which deletes the copy path this would otherwise be compared
+against.
+
 ### What the port measures
 
 `scripts/spike-dmabuf.sh`, under `spike-wayland.sh` because nothing else can:
