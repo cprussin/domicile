@@ -496,6 +496,7 @@ struct DomicileEngine {
         raw->frame_sink_id(), std::move(handle),
         gfx::Size(static_cast<int>(dmabuf.width),
                   static_cast<int>(dmabuf.height)),
+        dmabuf.fourcc,
         base::BindOnce(
             [](base::RunLoop* loop, DomicileBufferId* imported,
                domicile::Surface* surface, uint64_t id,

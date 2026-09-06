@@ -806,6 +806,41 @@ the one that cannot be traded and this hop is on its path. **Test it before
 phase 2**, which deletes the copy path this would otherwise be compared
 against.
 
+### A client's window on the page
+
+**Phase 1's deliverable, and the first full-strength pixel assertion in this
+fork.** Every earlier check compared a surface against an ordinary element, or
+a buffer against the embedder's fallback. This one is a real Wayland client
+drawing a colour of its own choosing and that colour coming back out of the
+display compositor:
+
+```
+$ nix develop .#full --command \
+    scripts/spike-wayland.sh /build/chromium/src \
+    scripts/spike-client-window.sh /build/chromium/src
+the engine is listening on /tmp/domicile-client-window-broker
+driving kitty, drawing #3366CC
+the engine drew #FF3366CC; the client drew #3366CC
+PASS: a Wayland client's own window is on the page, in its own colour
+```
+
+Exact, twice, on two colours. And `NEGATIVE=1` — the same run with no client —
+reports `nothing drew` and would fail if anything had.
+
+Four processes: a headless wlroots compositor for the engine to be a client of,
+the engine on a page whose `<canvas>` embeds, `domicile-compositor` with
+`--engine-socket` as the producer, and kitty as a GL client of *that*. The
+compositor is the only process that can ask what viz drew — one producer per
+socket — so it logs the pixel and the script reads it.
+
+**The format has to cross the seam, and a real client is what showed it.** The
+first run came back `#FFCC6633` against a client drawing `#3366CC`: red and
+blue swapped. Every producer in the spike had allocated `ABGR8888`, which
+happens to match the `RGBA_8888` the import hardcoded; kitty allocates
+`ARGB8888`, which is BGRA in memory. Nothing failed — the window simply drew
+with its channels permuted. `ImportBuffer` now carries the client's DRM fourcc
+and refuses a format it cannot name rather than guessing.
+
 ### What the port measures
 
 `scripts/spike-dmabuf.sh`, under `spike-wayland.sh` because nothing else can:
@@ -957,18 +992,12 @@ compositor can submit a frame, because phase 2 deletes what draws today.**
       phase 2 deletes the copy path, a missing `libdomicile_engine.so` is a
       startup failure that says so, because a compositor that silently shows
       nothing is the defect ERRORS.md exists to prevent.
-      **The binding and its call sites are written.** The compositor loads the
-      engine or refuses to start, polls `domicile_engine_fd` in its own
-      calloop, imports a client's dmabuf once per `wl_buffer`, submits it, and
-      holds `wl_buffer.release` until viz says it is done — with a deadline, so
-      a release that never arrives takes the buffer back loudly rather than
-      stopping the client. `Configure` drives `xdg_toplevel.configure`.
-      **What is not done is the assertion**: `scripts/spike-client-window.sh`
-      is written and does not pass, because the compositor has to see both the
-      Domicile full shell's GL stack and the Chromium shell's libraries at once
-      and no single environment has both. That is a nix problem rather than a
-      seam problem — the error path names the missing library and stops, which
-      is what it is for — and it is the last thing between here and phase 2
+      **Done.** The compositor loads the engine or refuses to start, polls
+      `domicile_engine_fd` in its own calloop, imports a client's dmabuf once
+      per `wl_buffer`, submits it, and holds `wl_buffer.release` until viz says
+      it is done — with a deadline, so a release that never arrives takes the
+      buffer back loudly rather than stopping the client. See *A client's
+      window on the page*
 - [x] ~~**on a machine with a GPU**~~ — `crux` is one. See *The GPU was there
       all along*
 

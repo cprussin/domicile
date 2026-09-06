@@ -100,6 +100,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   void ImportBuffer(const viz::FrameSinkId& frame_sink_id,
                     gfx::GpuMemoryBufferHandle handle,
                     const gfx::Size& size,
+                    uint32_t fourcc,
                     ImportBufferCallback callback) override;
   void SubmitBuffer(const viz::FrameSinkId& frame_sink_id,
                     uint64_t buffer_id,

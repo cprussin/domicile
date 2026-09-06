@@ -116,9 +116,15 @@ interface FrameSinkBroker {
   // already holds — no mailbox is minted outside the browser and no GPU channel
   // moves. Null when the browser owns the sink, where nothing outside it needs
   // to name the resource.
+  // `fourcc` is the DRM format the client allocated in, and it is not
+  // optional: the byte order it names is the difference between a window and
+  // the same window with its red and blue swapped. A real client picks
+  // ARGB8888 where the spike's own producers picked ABGR8888, which is how
+  // this went unnoticed until one was pointed at the seam.
   ImportBuffer(viz.mojom.FrameSinkId frame_sink_id,
                gfx.mojom.GpuMemoryBufferHandle buffer_handle,
-               gfx.mojom.Size size)
+               gfx.mojom.Size size,
+               uint32 fourcc)
       => (uint64 buffer_id, gpu.mojom.ExportedSharedImage? exported);
 
   // Submits a frame showing `buffer_id`, damaging `damage`.
