@@ -9,6 +9,7 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
+#include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 
@@ -135,10 +136,13 @@ void FrameSinkBroker::ImportBuffer(const viz::FrameSinkId& frame_sink_id,
                                    ImportBufferCallback callback) {
   BrokeredFrameSink* frame_sink = OwnedFrameSink(frame_sink_id);
   if (!frame_sink) {
-    std::move(callback).Run(0);
+    std::move(callback).Run(0, std::nullopt);
     return;
   }
-  std::move(callback).Run(frame_sink->ImportBuffer(std::move(handle), size));
+  std::optional<gpu::ExportedSharedImage> exported;
+  const uint64_t buffer_id =
+      frame_sink->ImportBuffer(std::move(handle), size, &exported);
+  std::move(callback).Run(buffer_id, std::move(exported));
 }
 
 void FrameSinkBroker::SubmitBuffer(const viz::FrameSinkId& frame_sink_id,

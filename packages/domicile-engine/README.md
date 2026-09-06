@@ -130,6 +130,12 @@ Two things that were assumed and are not true:
   dmabufs, so Chromium's GBM path does not assume Mesa. Weston's headless
   backend cannot be used for it: it advertises no `zwp_linux_dmabuf_v1`.
 
+- **The producer submits its own frames.** The browser imports the dmabuf and
+  hands back a `gpu::ExportedSharedImage` — a mailbox and a verified sync token
+  — and the producer builds its own `TransferableResource` and submits straight
+  to viz. Viz accepts a resource whose `SharedImage` another client created, and
+  returns it through the producer's own sink. The per-buffer hop stays, the
+  per-frame hop is gone, and no GPU channel moves.
 - **A dmabuf now reaches the page.** `scripts/spike-dmabuf.sh` allocates two
   buffers on the render node, imports them through the C ABI, submits one and
   then the other, and `released` fires for the first — `wl_buffer.release`, the

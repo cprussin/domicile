@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,7 @@
 namespace gpu {
 class ClientSharedImage;
 class SharedImageInterface;
+struct ExportedSharedImage;
 }  // namespace gpu
 
 namespace viz {
@@ -112,8 +114,13 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   // components/exo/buffer.cc path: a GpuMemoryBufferHandle becomes a
   // SharedImage, and a SharedImage becomes a TransferableResource the producer
   // never has to see.
+  // `exported` is filled with something another client can name the same
+  // SharedImage by, so that a producer holding its own sink can submit its own
+  // frames. See ENGINE-FORK.md, "Whether the producer can submit its own
+  // frames".
   uint64_t ImportBuffer(gfx::GpuMemoryBufferHandle handle,
-                        const gfx::Size& size);
+                        const gfx::Size& size,
+                        std::optional<gpu::ExportedSharedImage>* exported);
 
   // Submits a frame showing `buffer_id`. False if there is no such buffer, or
   // no surface to submit to yet.
