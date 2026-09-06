@@ -101,6 +101,8 @@ mod damage;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod engine;
+mod engine_buffers;
+mod engine_session;
 mod exo;
 mod modifiers;
 mod outbound;
@@ -112,6 +114,9 @@ mod stacking;
 mod straight_alpha;
 mod timing_window;
 mod viewport;
+
+use crate::engine_buffers::Returned;
+use crate::engine_session::EngineSession;
 
 use crate::bands::{hold_the_frame, Bands, Layered, Next};
 use crate::chrome_frame::{what_arrived, Arrival, Buffer};
@@ -1593,6 +1598,13 @@ struct DomicileCompositor {
     /// Set when the window is closed, which is the user closing the desktop.
     /// Read by the event loop, which is the only thing that can act on it.
     stop: Arc<AtomicBool>,
+    /// The forked engine, when `--engine-socket` asked for one.
+    ///
+    /// `None` is the compositor as it has always been: a client's pixels are
+    /// read back and sent to the chrome. `Some` submits the client's own dmabuf
+    /// to viz instead, and with it takes on holding `wl_buffer.release` until
+    /// viz is done sampling — see [`engine_session::EngineSession`].
+    engine: Option<EngineSession>,
 }
 
 /// Per-client state required by the compositor global.
@@ -2187,6 +2199,78 @@ impl DomicileCompositor {
 
     /// Turn a client's newly-attached buffer into pixels for the chrome,
     /// throttled to ~30fps per app.
+    /// Runs the engine's pending work and acts on what it said.
+    ///
+    /// Called from the engine's calloop source and nowhere else: the ABI's
+    /// callbacks fire inside `dispatch`, so this is the one place they land.
+    fn pump_the_engine(&mut self) {
+        let Some(session) = self.engine.as_mut() else {
+            return;
+        };
+        let (events, releases) = session.dispatch();
+        // Buffers viz has sat on past the deadline, taken back so the client
+        // can draw. A single-buffered client with its one buffer outstanding
+        // cannot draw at all, and a compositor that quietly stops a client is
+        // worse than one that tears once and says why.
+        let overdue = session.overdue(Instant::now());
+
+        for release in releases.into_iter().chain(overdue) {
+            match release.why {
+                Returned::Released => {}
+                Returned::Expired => tracing::error!(
+                    "the engine never released a client buffer; taking it back so the client can \
+                     draw. Something in viz is holding a dmabuf it has finished with"
+                ),
+                Returned::Abandoned => {
+                    tracing::debug!("a held buffer came back because its window went away")
+                }
+            }
+            release.buffer.release();
+        }
+
+        for event in events {
+            match event {
+                // xdg_toplevel.configure: the page's layout box changed, so the
+                // client is told to draw at the new size.
+                engine::Event::Configure {
+                    surface,
+                    width,
+                    height,
+                } => {
+                    let app_id = self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.app_for(surface))
+                        .map(str::to_owned);
+                    let Some(app_id) = app_id else {
+                        continue;
+                    };
+                    let Some(toplevel) = self.toplevel_for(&app_id) else {
+                        tracing::debug!(%app_id, "the engine configured an app with no toplevel");
+                        continue;
+                    };
+                    tracing::debug!(%app_id, width, height, "engine configure -> client");
+                    toplevel.with_pending_state(|state| {
+                        state.size = Some((width as i32, height as i32).into());
+                    });
+                    // Only sends when the size differs from the last configure
+                    // the client acknowledged.
+                    toplevel.send_pending_configure();
+                }
+                // wl_surface.frame is still sent at commit, as it always has
+                // been. Driving it from viz instead changes how often every
+                // client draws, which is not this change's to decide.
+                engine::Event::Frame { .. } => {}
+                // Handled above, where the buffer is.
+                engine::Event::Released { .. } => {}
+            }
+        }
+    }
+
+    /// Show this app's frame, and say whether the engine took the buffer.
+    ///
+    /// `true` means viz is sampling the client's dmabuf and the caller must not
+    /// release it — see the commit path, which is the only caller.
     fn publish_frame(
         &mut self,
         app_id: &str,
@@ -2194,10 +2278,44 @@ impl DomicileCompositor {
         buffer_scale: i32,
         damaged: Option<Region>,
         viewport: Viewport,
-    ) {
+    ) -> bool {
         let Some(committed) = committed_buffer(buffer) else {
-            return;
+            return false;
         };
+
+        // The engine path replaces the copy path rather than running beside it:
+        // the client's own buffer goes to viz and the page's <app> element
+        // embeds the surface, so there is nothing to send the chrome.
+        //
+        // Only a GPU buffer can go. An shm buffer has no dmabuf to import, and
+        // a client using one keeps the copy path underneath it.
+        if let (Some(session), CommittedBuffer::Gpu(dmabuf)) = (self.engine.as_mut(), &committed) {
+            let descriptor = descriptor_from(dmabuf);
+            // Whole-surface damage. The engine takes a rectangle and the client
+            // reports one in `damaged`, but mapping between them is its own
+            // correctness question — a wrong rectangle leaves stale pixels on
+            // screen — and getting a client's window there at all is this
+            // change.
+            let submitted =
+                session.submit(app_id, buffer, &descriptor, (0, 0, 0, 0), Instant::now());
+            if submitted {
+                // THROWAWAY. The spike's assertion, and the only place it can
+                // be made: the compositor holds the browser's invitation, so
+                // nothing else can ask what viz drew. Logged rather than
+                // returned because the thing that checks it is a shell script.
+                if let Some(drawn) = self
+                    .engine
+                    .as_ref()
+                    .and_then(EngineSession::spike_window_centre)
+                {
+                    tracing::info!(
+                        target: "domicile::engine::spike",
+                        "engine drew #{drawn:08X} at the centre of the browser's window"
+                    );
+                }
+                return true;
+            }
+        }
         // Two sizes from here on, and they are not the same one at scale > 1:
         // the buffer's own device pixels, which are the pixel data and so the
         // canvas backing store, and the logical size the chrome lays out in
@@ -2264,7 +2382,7 @@ impl DomicileCompositor {
         );
         if taking == Disposition::Throttle {
             self.hub.timings.lock().unwrap().throttled += 1;
-            return;
+            return false;
         }
         self.last_frame.insert(app_id.to_string(), now);
         // What the chrome is getting, decided above and needed here: the
@@ -2363,6 +2481,10 @@ impl DomicileCompositor {
                 self.pending_damage.remove(app_id);
             }
         }
+
+        // Nothing was submitted, so the buffer is still the caller's to
+        // release — which is what every path but a taken app frame relies on.
+        false
     }
 
     /// Read a client's GPU frame back as RGBA, recording the buffer it came
@@ -4879,18 +5001,31 @@ impl CompositorHandler for DomicileCompositor {
                     }
                 }
             }
-            match &committer {
+            let engine_holds = match &committer {
                 Committer::App(app_id) => {
                     self.publish_frame(app_id, &buffer, buffer_scale, damaged, viewport)
                 }
-                Committer::Chrome => self.publish_chrome_frame(&buffer, buffer_scale, viewport),
-            }
+                Committer::Chrome => {
+                    self.publish_chrome_frame(&buffer, buffer_scale, viewport);
+                    false
+                }
+            };
             // The client may redraw into this buffer the instant it is
             // released, so the release comes after the pixels are out of it —
             // and it happens even for a frame the throttle dropped, or a
             // single-buffered client never draws again.
-            buffer.release();
-            tracing::debug!(?committer, "buffer released");
+            //
+            // The one exception is a buffer the engine took: viz is sampling
+            // that dmabuf directly, so releasing it here is the tear this path
+            // exists to avoid. It comes back through the engine's own release
+            // instead, and if that never arrives `EngineSession::overdue` takes
+            // it back rather than leaving the client stopped. Everything else
+            // still releases here — the chrome, a frame the throttle dropped,
+            // and any app frame the engine would not take.
+            if !engine_holds {
+                buffer.release();
+                tracing::debug!(?committer, "buffer released");
+            }
             let done = Instant::now();
             self.hub
                 .timings
@@ -4904,7 +5039,16 @@ impl CompositorHandler for DomicileCompositor {
 }
 
 impl BufferHandler for DomicileCompositor {
-    fn buffer_destroyed(&mut self, _buffer: &wl_buffer::WlBuffer) {}
+    /// The client threw the buffer away. Drops the import behind it, so the
+    /// browser lets go of its fds, and forgets any hold — no release will
+    /// arrive for a buffer whose object is gone.
+    fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) {
+        if let Some(session) = self.engine.as_mut() {
+            if session.buffer_destroyed(buffer).is_some() {
+                tracing::debug!("a buffer the engine still held was destroyed by its client");
+            }
+        }
+    }
 }
 
 impl ShmHandler for DomicileCompositor {
@@ -5413,6 +5557,17 @@ impl XdgShellHandler for DomicileCompositor {
             .position(|(_, t)| t.wl_surface() == surface.wl_surface())
         {
             let (app_id, _) = self.toplevels.remove(pos);
+            // Anything the engine was holding for this window comes back now.
+            // No release will ever arrive for a surface that is gone, and the
+            // client may still be running.
+            let abandoned = self
+                .engine
+                .as_mut()
+                .map(|session| session.window_gone(&app_id))
+                .unwrap_or_default();
+            for release in abandoned {
+                release.buffer.release();
+            }
             self.last_frame.remove(&app_id);
             self.bridge.remove(&app_id);
             self.latest_frames.remove(&app_id);
@@ -5966,6 +6121,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         advertise_dmabuf(&mut dmabuf_state, &dh, importer_device, formats)
     });
 
+    // The engine, when the shell asked for one. Loudly or not at all: a
+    // compositor told to use the engine and unable to load it must say which
+    // library and why, because the alternative is a desktop that comes up with
+    // no windows on it and no reason given. `dlopen` is build hygiene — it
+    // keeps `cargo build` from needing a Chromium checkout — and not a licence
+    // to carry on without the library.
+    let engine = match arguments.engine_socket.as_deref() {
+        Some(socket) => Some(EngineSession::load(socket)?),
+        None => None,
+    };
+
     let state = DomicileCompositor {
         compositor_state: CompositorState::new::<DomicileCompositor>(&dh),
         xdg_shell_state: XdgShellState::new::<DomicileCompositor>(&dh),
@@ -6013,6 +6179,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         needs_present: false,
         window_input_seen: HashSet::new(),
         stop: Arc::new(AtomicBool::new(false)),
+        engine,
     };
 
     let mut data = CalloopData { display, state };
@@ -6042,6 +6209,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(PostAction::Continue)
         },
     )?;
+
+    // The engine's own fd, in the same loop as everything else. This is the
+    // whole of why the ABI hands one out: mojo wants a task runner and the
+    // compositor already has one, so the library does its work when told and
+    // never on a thread this does not know about.
+    if let Some(session) = data.state.engine.as_ref() {
+        // Duplicated rather than borrowed: the source outlives this scope, and
+        // the engine owns the original and closes it when it is dropped.
+        let engine_fd =
+            unsafe { std::os::fd::BorrowedFd::borrow_raw(session.fd()) }.try_clone_to_owned()?;
+        handle.insert_source(
+            Generic::new(engine_fd, Interest::READ, Mode::Level),
+            |_, _, data: &mut CalloopData| {
+                data.state.pump_the_engine();
+                Ok(PostAction::Continue)
+            },
+        )?;
+    }
 
     // Inject forwarded input (from chrome threads) on the Wayland thread.
     handle.insert_source(request_rx, |event, _, data: &mut CalloopData| {

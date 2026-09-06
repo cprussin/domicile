@@ -16,23 +16,10 @@
 //! here degrades quietly, because a compositor that comes up and shows nothing
 //! is the defect `ERRORS.md` exists to prevent.
 //!
-//! # Nothing calls this yet
-//!
-//! The seam is built and its error contract is tested; the call sites are not
-//! written. `--engine-socket` is parsed and carried
-//! (`domicile_launch::arguments`), and what remains is the commit path: import
-//! a client's dmabuf on `wl_surface.commit`, submit it, and hold
-//! `wl_buffer.release` until [`Event::Released`] says viz is done with it.
-//!
-//! The `allow` below is that, said out loud rather than left for clippy to
-//! find. It comes off in the change that writes those call sites, and if it is
-//! still here after one then something has gone wrong with the plan rather
-//! than with the lint.
-#![allow(dead_code)]
 
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_void, CString, NulError};
-use std::os::fd::{BorrowedFd, RawFd};
+use std::os::fd::RawFd;
 use std::path::{Path, PathBuf};
 
 use domicile_bridge::DmabufDescriptor;
@@ -313,6 +300,26 @@ impl Engine {
         unsafe { f(self.handle, surface, buffer) };
     }
 
+    /// THROWAWAY, with the rest of the spike. What the display compositor drew
+    /// at the centre of the browser's window, which is where every spike page
+    /// puts the `<app>`.
+    ///
+    /// Here because only one process may hold the browser's invitation and the
+    /// compositor is now that process, so nothing else can ask. It goes when
+    /// the spike's pages do.
+    pub fn spike_window_centre(&self) -> Option<u32> {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, *mut u32) -> bool> = self
+            .symbol(
+                b"domicile_engine_spike_sample_window_center\0",
+                "domicile_engine_spike_sample_window_center",
+            )
+            .ok()?;
+        let mut argb = 0u32;
+        // SAFETY: as elsewhere — the handle is live, and `argb` outlives the
+        // call.
+        unsafe { f(self.handle, &mut argb) }.then_some(argb)
+    }
+
     fn symbol<T>(&self, name: &[u8], readable: &'static str) -> Result<Symbol<'_, T>, EngineError> {
         symbol(&self.library, &self.path, name, readable)
     }
@@ -384,17 +391,6 @@ fn push(user_data: *mut c_void, event: Event) {
     // borrow.
     let events = unsafe { &*(user_data as *const RefCell<Vec<Event>>) };
     events.borrow_mut().push(event);
-}
-
-/// A borrowed view of the fd, for a caller that wants one.
-///
-/// # Safety
-///
-/// The fd belongs to the engine and is closed when it is dropped.
-pub fn borrowed_fd(engine: &Engine) -> BorrowedFd<'_> {
-    // SAFETY: the fd is open for as long as the engine is, which is the
-    // lifetime this borrows for.
-    unsafe { BorrowedFd::borrow_raw(engine.fd()) }
 }
 
 #[cfg(test)]
