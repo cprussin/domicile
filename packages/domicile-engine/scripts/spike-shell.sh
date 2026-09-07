@@ -130,20 +130,33 @@ command -v bun >/dev/null || {
 # electron-forge runs, which is what makes a pass mean anything about a shell
 # someone writes.
 #
-# `prepare` before it, because `styled-system/` is generated and gitignored and
-# nothing in this checkout has necessarily made it — the nix node_modules
-# derivation installs with `--ignore-scripts`, so a fresh runner has the
-# imports and not the files behind them. Without this the vite build fails on
-# an unresolvable import, which is a confusing way to learn that a codegen step
-# was skipped.
+# Two generated things have to exist first, and neither is in the checkout.
+#
+# `styled-system/` is gitignored and made by the package's own `prepare`
+# (panda codegen); the nix node_modules derivation installs with
+# `--ignore-scripts`, so a fresh runner has the imports and not the files
+# behind them.
+#
+# And the workspace packages the shell imports are published from `dist/`:
+# `@domicile/chrome-sdk`'s exports map every entry point to `./dist/*.js`, so
+# on a checkout where nothing has been built, `@domicile/chrome-sdk/bridge`
+# does not resolve and the page builds without the SDK in it. That is what
+# this guard failed on three times — a developer's machine has `dist/` from
+# some earlier build and never sees it.
+#
+# `^...` is turbo for "this package's dependencies, not this package": the
+# shell's own `build` is electron-forge packaging and is not wanted here.
 #
 # Kept, not discarded. Every other failure in this file prints what it read;
 # swallowing this one leaves "the shell's page did not build" as the whole
 # account of a build that had plenty to say.
 echo "building $SHELL_NAME's page"
 BUILD_LOG=$(mktemp)
-if ! (cd "$SHELL_DIR" &&
+SHELL_PKG="@domicile/shell-$SHELL_NAME"
+if ! (cd "$ROOT" &&
         bun install --frozen-lockfile &&
+        bun run turbo build --filter="$SHELL_PKG^..." &&
+        cd "$SHELL_DIR" &&
         bun run prepare &&
         bunx vite build --config vite.renderer.config.ts) >"$BUILD_LOG" 2>&1; then
   annotate_from "spike-shell: $SHELL_NAME's page did not build" "$BUILD_LOG"
