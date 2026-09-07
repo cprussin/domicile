@@ -79,6 +79,36 @@ export const serveShell = (options: ServeOptions): Serving => {
     fetch: async (request, self) => {
       const url = new URL(request.url);
       if (url.pathname === SESSION_PATH) {
+        // ONLY THE PAGE THIS BRIDGE IS SERVING, and this is not a nicety.
+        //
+        // What is on the other side of this upgrade is a byte pipe to the
+        // compositor's control socket, and that protocol carries `spawn` —
+        // arbitrary commands, on the machine running the desktop. The bridge
+        // listens on a TCP port because a page cannot open a unix socket and
+        // `file:` has no origin to derive one from; a loopback port is
+        // reachable by every process on the machine *and* by any page in any
+        // browser on it.
+        //
+        // A WebSocket is not stopped by CORS. The browser sends `Origin` and
+        // the server is what has to refuse it, so without this check any
+        // website the user visits could scan a few thousand ephemeral ports,
+        // find this one, and run whatever it liked. Measured before it was
+        // fixed: an upgrade carrying `Origin: https://evil.example` was
+        // accepted, and `{"type":"spawn","command":["xcalc"]}` reached the
+        // compositor socket unaltered.
+        //
+        // WHAT THIS DOES NOT STOP, said plainly rather than left to be
+        // discovered: another *local* process. `curl` sets any header it
+        // likes, so an origin proves a browser's caller and nothing else. The
+        // fix for that is not a token — the page has to read one, and anything
+        // local can read the page — it is not using a TCP port at all, which
+        // the fork could arrange with a scheme of its own. That is real work
+        // and it is not this. This closes the drive-by, which is the half a
+        // stranger can reach.
+        const origin = request.headers.get("origin");
+        if (origin !== null && origin !== ourOrigin(self)) {
+          return new Response("not this desktop's page", { status: 403 });
+        }
         return self.upgrade(request, { data: { pending: [] } })
           ? undefined
           : new Response("this path is a websocket", { status: 426 });
@@ -236,6 +266,21 @@ const sockets = new WeakMap<
   BridgedSocket,
   { end: () => void; write: (data: string | Uint8Array) => void }
 >();
+
+/**
+ * The origin this bridge serves its own page on.
+ *
+ * Asked of the running server rather than built from the options, because the
+ * port is the kernel's: `port: 0` is how this avoids colliding with whatever
+ * else is on the machine, so nothing knows the number until it is listening.
+ *
+ * A page served from here sends exactly this in `Origin`, and every other page
+ * in the world sends something else.
+ */
+const ourOrigin = (server: {
+  hostname: string | undefined;
+  port: number | undefined;
+}): string => `http://${server.hostname ?? ""}:${String(server.port ?? "")}`;
 
 /**
  * The one file a request has to resolve to for Domicile to write the page.

@@ -1103,6 +1103,91 @@ Phase 3 — be the display server:
 
 - [ ] Ozone/DRM instead of a nested backend
 
+## The page is served over a TCP port, and it should not be
+
+**Found by a user asking why the bridge binds an HTTP port at all**, and it is
+the fork's next piece of work rather than the bridge's.
+
+A shell is a page inside our Chromium. For the engine to load it, and for the
+page's JavaScript to open a channel to the compositor, it needs a URL with a
+real origin: `file:` has no origin — no WebSocket, restricted `fetch` — and
+JavaScript cannot open a unix socket. So `engine-chrome-host` serves both from
+`http://127.0.0.1:<kernel-chosen>`, and `connectToHost` derives the socket's URL
+from the page's own.
+
+That works, and it costs more than it looks.
+
+**What is reachable on that port.** The WebSocket at `/domicile-session` is a
+byte pipe to the compositor's control socket, and `ChromeMessage` carries
+`Spawn { command }` — arbitrary commands on the machine running the desktop —
+plus synthetic `Key` and `PointerButton` into any window. Coming back are
+`AppTitled`, `Displays` and `Modifiers`: every window title and every keystroke.
+It is not a page server with a socket beside it. **It is the desktop's control
+plane.**
+
+A WebSocket is not stopped by CORS — the browser sends `Origin` and the server
+has to refuse it — so until an origin check was added, any page in any browser
+on the machine could scan a few thousand ephemeral ports, find this one, and
+take the desktop. Measured, against the real `serveShell`: an upgrade carrying
+`Origin: https://evil.example` was accepted and `{"type":"spawn",…}` reached the
+compositor socket unaltered.
+
+**The origin check is a stopgap and only closes half.** A loopback port is
+reachable by every process on the machine, and `curl` forges any header in one
+flag. No header can fix that. What fixes it is not having a port.
+
+### What replaces it
+
+Two halves, and *both* have to move. Serving the page over a custom scheme
+while the page still opens a WebSocket to a TCP port improves nothing.
+
+1. **`domicile://` serves the shell.** Registered as a *standard* scheme so it
+   has a real origin, and deliberately **not** web-safe and **not**
+   CORS-enabled, so ordinary web content can neither navigate to it nor fetch
+   it. The seams are `ContentClient::AddAdditionalSchemes` for the registry and
+   `ContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories` plus
+   its subresource twin for the loader. The engine already takes the shell's
+   location on its command line in spirit — `--domicile-shell-root` and
+   `--domicile-shell-module` are the same shape as
+   `--domicile-broker-socket`.
+
+   This moves `shellDocument` into the fork. That is a real consequence and not
+   a detail: the document is currently written in TypeScript and tested there,
+   and the C++ that replaces it needs the same three properties — a charset, a
+   viewport, and a root with no margin, because *eight pixels of default body
+   margin is eight pixels the compositor believes it has and does not*.
+
+2. **The control channel becomes a binding, not a socket the page opens.** The
+   engine process *already holds a unix socket to the compositor* —
+   `--domicile-broker-socket`, how client dmabufs are handed over. The
+   WebSocket is a second, parallel channel carrying a different protocol on a
+   different socket, and it exists only because the page's JavaScript cannot
+   reach a socket its own browser process already has.
+
+   Patch 0002 is the precedent: it adds an IDL method to `HTMLCanvasElement`,
+   so exposing something to the page is established practice in this series
+   rather than a new kind of change. Patch 0004 is the other half of the
+   precedent — it opens a unix socket at browser startup for exactly this sort
+   of reason.
+
+Together those delete `engine-chrome-host`'s HTTP server, the WebSocket, the
+port, and the origin check that guards it — not by hardening them but by
+leaving nothing to harden. The only thing left to connect to is the
+compositor's socket under `XDG_RUNTIME_DIR`, which is mode 700 and the user's.
+
+### Why it is not done yet
+
+It is browser-process Chromium C++ against a pinned revision, and the two APIs
+it turns on — the scheme registry and the non-network loader factories — have
+both churned across versions and are used nowhere in this series, so there is
+no local example to follow. Writing it without the Chromium source to hand
+means writing it from memory and finding out four hours later on `crux`.
+
+So the prerequisite is not a decision, it is a checkout: either a session on a
+machine with the tree, or network access to `chromium.googlesource.com` at the
+pin. The design above is settled; the signatures are what has to be read rather
+than recalled.
+
 ## Open questions
 
 - **Input.** `SurfaceLayer::SetSurfaceHitTestable` exists and viz has a

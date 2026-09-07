@@ -304,13 +304,30 @@ echo "the engine is taking the $PLATFORM platform"
 # `spike-step4.sh` reports as "page starts at y=146" and a user would call
 # broken. It also drops the browser's own keyboard shortcuts, which a shell has
 # to be able to bind.
+# THE SANDBOX STAYS ON. It was `--no-sandbox`, unconditionally, and that was
+# wrong twice over: it turns off the thing standing between a page and the rest
+# of the machine, and Chromium says so in a yellow infobar across the top of
+# the desktop — which is what a user sees first and reasonably reads as broken.
+#
+# It was there for the container this is developed in, where an unprivileged
+# user namespace is not available and Chromium refuses to start without it. But
+# that is a fact about *a* machine, so it belongs in the environment rather
+# than in the command every machine runs. An ordinary host — NixOS included —
+# has user namespaces and needs nothing.
+#
+# `DOMICILE_ENGINE_ARGS` rather than a `--no-sandbox` flag of our own: whatever
+# a given machine needs is its business, and a list it can extend is smaller
+# than a flag per problem. Word-split deliberately, which is what an argument
+# list in an environment variable is for.
+# shellcheck disable=SC2086
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform="$PLATFORM" \
   --app="$URL" \
-  --no-sandbox --password-store=basic --no-first-run \
+  --password-store=basic --no-first-run \
   --user-data-dir="$PROFILE" \
   --enable-blink-features=DomicileExternalSurface \
-  --domicile-broker-socket="$BROKER" &
+  --domicile-broker-socket="$BROKER" \
+  ${DOMICILE_ENGINE_ARGS:-} &
 STARTED+=($!)
 
 for _ in $(seq 1 300); do [ -S "$BROKER" ] && break; sleep 0.1; done
