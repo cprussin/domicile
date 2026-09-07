@@ -1,14 +1,14 @@
-// Entry point for the shell's renderer. The compositor loads the built
-// index.html, the host injects its half of the transport at
-// `window.domicileHost`, and this wires the SDK to it and mounts the React
+// Entry point for the shell's renderer. `connectToHost` finds the compositor
+// whichever way this page was opened — the fork, Electron, or a plain browser
+// with no desktop at all — and this wires the SDK to it and mounts the React
 // chrome on top.
 
 import {
   BridgeClient,
   describeHandshakeFailure,
 } from "@domicile/chrome-sdk/bridge";
+import { connectToHost, hasHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
-import { postedTransport } from "@domicile/chrome-sdk/host-transport";
 import { placementTiming } from "@domicile/chrome-sdk/placement-timing";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
@@ -34,24 +34,22 @@ const REPORT_EVERY_MS = 5000;
 // this for the pre-bundle paint; this call covers the rest of the chrome.)
 applyPreference(loadPreference());
 
-// The host exposes its half of the transport; the pixels come by `postMessage`
-// and this joins the two. Fall back to a no-op so the shell can be opened in a
-// plain browser for styling work.
-const host = window.domicileHost;
-const transport =
-  host === undefined
-    ? { onMessage: () => undefined, send: () => undefined }
-    : postedTransport(window, host);
-
-const bridge = new BridgeClient(transport);
+// One call, three places. Under the fork this opens a WebSocket to the bridge
+// serving this page; under Electron it takes the channel the preload injected;
+// in a plain browser it does nothing, so the shell still opens for styling
+// work against a desktop that will never arrive.
+const bridge = new BridgeClient(
+  connectToHost(window, (url) => new WebSocket(url)),
+);
 
 // And where the desktop comes from, which is the same question one answer
 // later: a host describes one, and with no host nothing ever will, so the
 // window is the only geometry there is. Built here rather than in the chrome
 // because this is where the host's absence is already known, and once rather
 // than per render because a source is the connection.
-const displays =
-  host === undefined ? viewportDisplays(window) : displaysFrom(bridge);
+const displays = hasHost(window)
+  ? displaysFrom(bridge)
+  : viewportDisplays(window);
 const appElements = new AppElements();
 registerElements(bridge);
 

@@ -32,6 +32,26 @@ import { webSocketTransport } from "./websocket-transport";
 /** Where the session is served, on the page's own origin. */
 export const SESSION_PATH = "/domicile-session";
 
+/**
+ * Whether anything will ever describe a desktop to this page.
+ *
+ * A second question from `connectToHost`'s, and one a shell genuinely has to
+ * ask: with no host there is no display to lay windows out on, so a shell
+ * takes the viewport's geometry instead. It used to be spelled
+ * `window.domicileHost === undefined`, which stopped meaning that the moment
+ * the fork arrived — under the fork there is no injected channel and there
+ * very much is a host.
+ *
+ * `connectToHost` is written in terms of this so the two cannot disagree.
+ */
+export const hasHost = (target: HostWindow): boolean => {
+  if (target.domicileHost !== undefined) {
+    return true;
+  }
+  const { host, protocol } = target.location;
+  return (protocol === "http:" || protocol === "https:") && host !== "";
+};
+
 /** The globals this reads, named so a test can supply them. */
 export type HostWindow = {
   readonly domicileHost?: HostChannel | undefined;
@@ -62,11 +82,11 @@ export const connectToHost = (
     return postedTransport(target, injected);
   }
 
-  // `http:` and `https:` and nothing else. A page on `file:` has a `location`
-  // whose `host` is empty, and `ws://` at an empty host is not a URL — it
-  // would throw where this promises not to.
-  const { host, protocol } = target.location;
-  if ((protocol === "http:" || protocol === "https:") && host !== "") {
+  // `http:` and `https:` and nothing else, which is what `hasHost` decides. A
+  // page on `file:` has a `location` whose `host` is empty, and `ws://` at an
+  // empty host is not a URL — it would throw where this promises not to.
+  if (hasHost(target)) {
+    const { host, protocol } = target.location;
     const scheme = protocol === "https:" ? "wss:" : "ws:";
     return webSocketTransport(open(`${scheme}//${host}${SESSION_PATH}`));
   }

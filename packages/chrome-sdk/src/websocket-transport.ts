@@ -30,18 +30,22 @@ const monotonicNow = (): number => performance.now();
  */
 export type WebSocketLike = {
   readonly readyState: number;
+  /**
+   * `data` is optional so that a real `WebSocket` satisfies this. Its
+   * `addEventListener` is typed against `Event`, which carries no `data` at
+   * all — and a listener that required one would make the browser's own
+   * socket unassignable here, which would leave a cast at every call site
+   * standing in for a type that could simply be right.
+   */
   addEventListener: (
     type: "message" | "open" | "close",
-    listener: (event: never) => void,
+    listener: (event: { data?: unknown }) => void,
   ) => void;
   send: (data: string) => void;
 };
 
 /** `WebSocket.OPEN`, spelled out so this file needs no DOM lib at runtime. */
 const OPEN = 1;
-
-/** What a message event carries. `data` is a Blob, a string, or an buffer. */
-type MessageEventLike = { data: unknown };
 
 /**
  * A [`Transport`] over `socket`.
@@ -83,8 +87,8 @@ export const webSocketTransport = (
     }
   };
 
-  socket.addEventListener("message", (event: never) => {
-    const { data } = event as MessageEventLike;
+  socket.addEventListener("message", (event) => {
+    const { data } = event;
     // Stamped per chunk rather than per message: the chunk is what arrived,
     // and every message in it arrived with it. The same reasoning, and the
     // same stamp, as the preload path — so a number from either is comparable

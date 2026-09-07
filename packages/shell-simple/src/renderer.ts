@@ -1,6 +1,7 @@
 // Entry point for the simple shell's renderer, and the whole of its wiring.
 //
-// The host injects its half of the transport at `window.domicileHost`; this
+// `connectToHost` finds the compositor whichever way this page was opened —
+// the fork, Electron, or a plain browser with no desktop at all — and this
 // joins the SDK to it, puts a window on the desktop for every client the host
 // announces, and hands the pointer to `installWindowGestures`. There is nothing
 // else — no chrome around the windows, and no state that is not a window's box.
@@ -11,8 +12,8 @@ import {
   BridgeClient,
   describeHandshakeFailure,
 } from "@domicile/chrome-sdk/bridge";
+import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
-import { postedTransport } from "@domicile/chrome-sdk/host-transport";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
 import { endCatchUpOnFocusChange } from "./catch-up";
@@ -23,16 +24,13 @@ import { installWindowGestures } from "./window-gestures";
 
 import "./global.css";
 
-// The pixels come by `postMessage` and this joins the two halves. Fall back to
-// a no-op so the desktop can be opened in a plain browser, where the gestures
-// still work against windows that will never arrive.
-const host = window.domicileHost;
-const transport =
-  host === undefined
-    ? { onMessage: () => undefined, send: () => undefined }
-    : postedTransport(window, host);
-
-const bridge = new BridgeClient(transport);
+// One call, three places. Under the fork this opens a WebSocket to the bridge
+// serving this page; under Electron it takes the channel the preload injected;
+// in a plain browser it does nothing at all, so the desktop still opens and the
+// gestures still work against windows that will never arrive.
+const bridge = new BridgeClient(
+  connectToHost(window, (url) => new WebSocket(url)),
+);
 registerElements(bridge);
 
 // The one thing an empty desktop has to say — this shell is Alt and nothing

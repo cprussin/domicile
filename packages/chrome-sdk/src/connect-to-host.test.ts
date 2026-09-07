@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { HostWindow } from "./connect-to-host";
-import { connectToHost } from "./connect-to-host";
+import { connectToHost, hasHost } from "./connect-to-host";
 import type { WebSocketLike } from "./websocket-transport";
 
 const openNothing = (): WebSocketLike => ({
@@ -87,5 +87,34 @@ describe("connectToHost", () => {
     });
 
     expect(asked).toEqual([]);
+  });
+});
+
+describe("hasHost", () => {
+  it("is true when a preload injected a channel", () => {
+    expect(
+      hasHost(
+        page("file:", "", { listen: () => undefined, send: () => undefined }),
+      ),
+    ).toBeTrue();
+  });
+
+  it("is true for a page served over http", () => {
+    expect(hasHost(page("http:", "127.0.0.1:7777"))).toBeTrue();
+  });
+
+  it("is false for a page opened from a file", () => {
+    expect(hasHost(page("file:", ""))).toBeFalse();
+  });
+
+  // The question it exists to answer. Under the fork there is no injected
+  // channel and there very much is a host, so a shell asking
+  // `window.domicileHost === undefined` would take the viewport's geometry
+  // and lay its windows out on a desktop nobody described.
+  it("does not agree with the old test for a preload", () => {
+    const fork = page("http:", "127.0.0.1:7777");
+
+    expect(fork.domicileHost).toBeUndefined();
+    expect(hasHost(fork)).toBeTrue();
   });
 });
