@@ -156,6 +156,18 @@ jobs:
             exit 1
           }
 
+          # In this checkout's own config, not the environment. `git am` writes
+          # commits and refuses to without an identity; this unit has no
+          # ~/.gitconfig, because its HOME is the work directory the module
+          # deletes on every start. The GIT_* environment variables would do
+          # it too — except apply.sh runs inside upstream's buildFHSEnv, whose
+          # bwrap hands the command a curated environment, and an identity that
+          # may or may not survive that is not one to depend on. The config
+          # lives in .git/config, which `reset --hard` does not touch and which
+          # is the same file from inside the sandbox.
+          git -C "$CHROMIUM" config user.name "domicile CI"
+          git -C "$CHROMIUM" config user.email "ci@domicile.invalid"
+
       # Asked afterwards, out here, for the reason the reset step gives: a
       # command run through NIX_SHELL_RUN can fail without failing this step.
       # `git am` commits each patch, so a HEAD still at the pin means the

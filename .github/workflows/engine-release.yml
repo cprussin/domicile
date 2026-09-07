@@ -88,6 +88,10 @@ jobs:
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
           git -C "$CHROMIUM" am --abort 2>/dev/null || true
           git -C "$CHROMIUM" reset --hard "$pin"
+          # See engine.yml: in the checkout's config rather than the
+          # environment, because apply.sh runs inside a bwrap FHS shell.
+          git -C "$CHROMIUM" config user.name "domicile CI"
+          git -C "$CHROMIUM" config user.email "ci@domicile.invalid"
           (cd packages/domicile-engine/src && find . -type f -print0) |
             while IFS= read -r -d '' file; do
               rm -f "$CHROMIUM/${file#./}"
