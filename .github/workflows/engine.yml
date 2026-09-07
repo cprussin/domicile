@@ -284,3 +284,13 @@ jobs:
           echo "what was drawn, if anything:"
           grep -ahoE 'engine drew #[0-9A-F]{8}( at \([0-9]+,[0-9]+\))?' \
             /tmp/domicile-*-compositor.log 2>/dev/null | sort -u | sed 's/^/  /' || true
+
+          # Every distinct complaint, with how many times it was made. One
+          # message repeated four hundred times is one fact, and a tail long
+          # enough to hold it is a tail too long to read; the message that
+          # appeared once is usually the one that matters. tracing colours its
+          # field names, so the escapes come out first or nothing groups.
+          echo "what was complained about:"
+          sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
+            grep -aoE '(WARN|ERROR) .*' | cut -c1-200 | sort | uniq -c |
+            sort -rn | head -20 | sed 's/^/  /' || true
