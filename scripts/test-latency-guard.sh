@@ -52,7 +52,7 @@ spread() { # $1 label, $2 median
   say "latency $1: min $2, median $2, max $2 ms over 60 (median 1.0 frames)"
 }
 
-run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending
+run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered
   local f; f="$(mktemp "$FIXTURES/XXXXXX")"
   {
     [ -n "$1" ] && spread floor "$1"
@@ -65,7 +65,7 @@ run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 endin
       say "latency key to pixel: nothing measured"
     fi
     say "latency: $3 round(s) abandoned by the client"
-    say "latency: 0 round(s) whose key was never delivered"
+    say "latency: ${5:-0} round(s) whose key was never delivered"
     case "$4" in
       completed) say "latency: the run completed" ;;
       unsettled) say "latency: the run gave up — the screen at the probe point never held still, so the probe could not be priced against it" ;;
@@ -135,11 +135,27 @@ expect "a dark probe points at the page or the browser" \
   "::error::spike-latency: the probe stopped answering, so nothing could be read. Either the page never embedded or the browser is not compositing" \
   "$(verdict "$(run_log '' '' 0 dark)" 0)"
 
-# A completed run with no numbers in it is not a pass.
+# A completed run with no numbers in it is not a pass. The message is asserted
+# and not only the exit code: `latency_within` refuses an unreadable operand
+# too, so a code-only check passes through that instead of through the branch
+# it names — and the branch could be deleted outright with these still green.
 expect "a completed run with no floor is not a measurement" \
-  "1" "$(verdict_code "$(run_log '' 16.68 0 completed)" 0)"
+  "::error::spike-latency: the run completed without both a floor and a commit-to-pixel figure, so there is nothing to compare" \
+  "$(verdict "$(run_log '' 16.68 0 completed)" 0)"
 expect "nor one with no commit-to-pixel" \
-  "1" "$(verdict_code "$(run_log 16.67 '' 0 completed)" 0)"
+  "::error::spike-latency: the run completed without both a floor and a commit-to-pixel figure, so there is nothing to compare" \
+  "$(verdict "$(run_log 16.67 '' 0 completed)" 0)"
+
+# One unanswered round out of sixty is the signal this guard exists for, and
+# the only abandoned fixture above uses four — which a `-gt 3` would let past.
+expect "even a single unanswered round fails" \
+  "1" "$(verdict_code "$(run_log 16.67 16.68 1 completed)" 0)"
+
+# A round whose key we never delivered is our failure, not the client's, and it
+# means the median is over a smaller run than the one reported.
+expect "an undelivered key fails, and is not the client's fault" \
+  "::error::spike-latency: 2 round(s) never had their key delivered, so the run measured fewer rounds than it set out to and the compositor is what failed, not the client" \
+  "$(verdict "$(run_log 16.67 16.68 0 completed 2)" 0)"
 
 # A run that never reported at all. Distinct from every case above, which all
 # have an ending: a round only advances on a commit, so a client that answers a
@@ -187,6 +203,13 @@ expect "a control that never priced the probe fails" \
   "1" "$(verdict_code "$(run_log '' '' 3 completed)" 1)"
 expect "a control where nothing was abandoned fails" \
   "1" "$(verdict_code "$(run_log 16.67 '' 0 completed)" 1)"
+
+# And one is enough. What the control proves is that the guard *notices* a
+# client answering nothing, so the check is "at least one", not "how many" —
+# without this, tightening it to demand several would go unnoticed and a
+# control that worked would start failing.
+expect "a control with a single abandoned round is enough" \
+  "0" "$(verdict_code "$(run_log 16.67 '' 1 completed)" 1)"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

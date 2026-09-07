@@ -1544,10 +1544,20 @@ impl DomicileCompositor {
     /// It does not deadlock against the engine: `SamplePixel` parks on a
     /// `WaitableEvent` while the engine's own thread runs a nested run loop,
     /// so the reply does not need this thread back.
-    fn drive_latency(&mut self, app_id: &str, committed: Instant) {
+    fn drive_latency(&mut self, app_id: &str, committed: Instant, held: bool) {
         let (Some(point), Some(budget)) = (spike_latency_point(), spike_latency_budget()) else {
             return;
         };
+        // Only a frame the engine took can answer a keystroke, and waiting for
+        // one is also what keeps the run from starting before there is
+        // anything to read. Started on the client's first commit instead, the
+        // probe refuses — no engine yet, or a browser window that has not
+        // painted — and a refusal costs no time at all, so the floor spends
+        // its whole run of them inside that one callback and the run is over
+        // as `ProbeWentDark` before the desktop has finished starting.
+        if !held {
+            return;
+        }
         // The first app to commit is the one measured, and it keeps the run
         // for the whole of it: a second window appearing partway would
         // otherwise contribute commits to rounds its keys never caused.
@@ -1896,7 +1906,17 @@ impl DomicileCompositor {
             self.last_find = Some(Instant::now());
         }
 
-        if spike_probe_points().is_empty() && spike_find_colours().is_empty() {
+        // Not while a latency run is going, and this is not tidiness. This
+        // capture is a `CopyOutputRequest` that forces a draw and waits, and it
+        // runs on the submit path — inside the window `commit_to_pixel` is
+        // timed over, which starts before `publish_frame`. The floor is one
+        // capture and this would make every round two, so the ratio the guard
+        // asserts would sit on its own threshold and fail, blaming the product
+        // for the instrument's own readback.
+        if spike_probe_points().is_empty()
+            && spike_find_colours().is_empty()
+            && spike_latency_point().is_none()
+        {
             if let Some(drawn) = session.spike_window_centre() {
                 tracing::info!(
                     target: "domicile::engine::spike",
@@ -2928,7 +2948,7 @@ impl CompositorHandler for DomicileCompositor {
                     // something submitted to find — but timed from `started`,
                     // which is before it. The import and the submit are ours,
                     // and a round's second half is meant to contain them.
-                    self.drive_latency(app_id, started);
+                    self.drive_latency(app_id, started, held);
                     held
                 }
                 Committer::Chrome => {

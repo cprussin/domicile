@@ -327,20 +327,23 @@ impl Budget {
         if parts.next().is_some() {
             return None;
         }
+        // Room for the floor to restart several times over, scaled to the
+        // floor asked for: a short control that never settles should say so in
+        // about a second rather than block a desktop for the default's six and
+        // three quarters. Never below the floor it has to contain, never above
+        // the default. Computed once, because the refusal cap below is derived
+        // from it and two copies of this arithmetic could drift into breaking
+        // the invariant between them with nothing to catch it.
+        let max_floor_asks = floor_samples.saturating_mul(8).clamp(24, MAX_FLOOR_ASKS);
         let budget = Self {
             rounds,
             floor_samples,
-            // Room for the floor to restart several times over, scaled to
-            // the floor asked for: a short control that never settles should
-            // report that in half a second rather than block a desktop for the
-            // default's six and three quarters. Never below the floor it has
-            // to contain, never above the default.
-            max_floor_asks: floor_samples.saturating_mul(8).clamp(24, MAX_FLOOR_ASKS),
+            max_floor_asks,
             // Kept under `max_floor_asks`, which is the condition that lets a
             // probe refusing from the first ask reach its own cap first and so
-            // be reported as the probe.
-            max_refusals_running: MAX_REFUSALS_RUNNING
-                .min(floor_samples.saturating_mul(8).clamp(24, MAX_FLOOR_ASKS) - 1),
+            // be reported as the probe. The `- 1` cannot underflow: the clamp
+            // above has a floor of 24.
+            max_refusals_running: MAX_REFUSALS_RUNNING.min(max_floor_asks - 1),
             max_polls: u32::try_from(max_polls).ok()?,
         };
         budget.usable().then_some(budget)

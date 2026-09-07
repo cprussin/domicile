@@ -57,6 +57,20 @@ latency_abandoned() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
+# How many rounds this compositor failed to deliver a key for. Empty when the
+# run never said.
+#
+# Its own reader because it is its own accusation: an abandoned round is the
+# client not answering, and one of these is us never asking. A guard that read
+# only `abandoned` would pass a run where most rounds measured and the rest
+# never happened, over a median of whatever was left.
+latency_undelivered() {
+  local log="$1"
+  grep -a "round(s) whose key was never delivered" "$log" 2>/dev/null |
+    tail -1 |
+    sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
+}
+
 # Whether `$1` is at most `$2` times `$3`, in floating point.
 #
 # `awk` because these are milliseconds with two decimals and `[` compares

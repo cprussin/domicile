@@ -230,9 +230,10 @@ OURS="$(latency_median "commit to pixel" "$COMP_LOG")"
 THEIRS="$(latency_median "key to commit" "$COMP_LOG")"
 WHOLE="$(latency_median "key to pixel" "$COMP_LOG")"
 ABANDONED="$(latency_abandoned "$COMP_LOG")"
+UNDELIVERED="$(latency_undelivered "$COMP_LOG")"
 echo "ended: $ENDED; floor ${FLOOR:-none} ms; commit to pixel ${OURS:-none} ms;"
 echo "key to commit ${THEIRS:-none} ms; key to pixel ${WHOLE:-none} ms;"
-echo "abandoned ${ABANDONED:-none}"
+echo "abandoned ${ABANDONED:-none}; undelivered ${UNDELIVERED:-none}"
 
 if [ "$NEGATIVE" = "1" ]; then
   # A control that passes because the whole run fell over proves nothing: the
@@ -280,6 +281,17 @@ if [ "${ABANDONED:-0}" -gt 0 ]; then
        "not change colour when a key was pressed, so what was measured is not" \
        "a keystroke reaching a pixel"
   grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
+  exit 1
+fi
+
+# The other half of that, and a different end: a round whose key this
+# compositor never delivered. The median would be over whatever rounds
+# survived, which is a number about a smaller run than the one reported.
+if [ "${UNDELIVERED:-0}" -gt 0 ]; then
+  annotate "spike-latency: $UNDELIVERED round(s) never had their key delivered," \
+       "so the run measured fewer rounds than it set out to and the compositor" \
+       "is what failed, not the client"
+  grep -aE "latency|no surface" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
   exit 1
 fi
 

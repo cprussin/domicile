@@ -94,8 +94,11 @@ done
 echo "what a keystroke cost, if it was measured:"
 for log in /tmp/domicile-*-compositor.log; do
   [ -f "$log" ] || continue
+  # Capped like every other loop here. A run reports about eight lines, but a
+  # `press_went_nowhere` warns once per round, and sixty of those would bury
+  # the numbers this section exists to show.
   sed 's/\x1b\[[0-9;]*m//g' "$log" 2>/dev/null |
-    grep -aE 'latency( |:)' | cut -c1-200 |
+    grep -aE 'latency( |:)' | tail -20 | cut -c1-200 |
     sed "s|^|  $(basename "$log"): |" || true
 done
 
