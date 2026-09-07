@@ -590,8 +590,12 @@ autoninja -C out/Domicile chrome
 ./out/Domicile/chrome --ozone-platform=wayland
 ```
 
-Phase 3 swaps `ozone_platform_wayland` for `ozone_platform_drm`; nothing else
-about the build changes.
+The build sets all three ozone platforms and lets `--ozone-platform` choose at
+runtime, so which one a desktop uses is a property of where it was started
+rather than of which build was fetched: `wayland` nested in a session,
+`drm` on a tty with no display server under it, `headless` for a machine with
+no display at all. Phase 3 is then a matter of passing `drm`, not of building
+something else.
 
 `ozone_platform_headless` is not part of the design — it is what the
 measurement machine needs. `crux` has no display server and no Wayland

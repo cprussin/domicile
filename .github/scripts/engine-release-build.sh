@@ -24,8 +24,8 @@
 #   dcheck_always_on = false    a release should not abort on a DCHECK
 #
 # The ozone arguments are copied from build.sh rather than shared, because they
-# are the same for a reason that could stop being true: phase 3 swaps
-# ozone_platform_drm in, and it will want to do that here first.
+# are the same for a reason that could stop being true: this is the build a
+# person downloads, and it can want a platform the measurement build does not.
 set -u
 
 CHROMIUM="${1:-}"
@@ -69,7 +69,13 @@ gn gen "$OUT" --args='
   ozone_auto_platforms = false
   ozone_platform_wayland = true
   ozone_platform_headless = true
+  ozone_platform_drm = true
 ' || exit 1
+# `ozone_platform_drm` is what makes a tty a display: chrome takes KMS itself
+# and there is no compositor under it, which is a Domicile session rather than
+# a window inside somebody else's. One binary carries all three platforms
+# because ozone chooses at runtime, so which one a desktop uses is a property
+# of where it was started and not of which build was fetched.
 
 # `chrome` is the browser; `domicile_engine` is the library the compositor
 # dlopens and nothing in chrome depends on, so it has to be named.

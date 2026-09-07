@@ -4,8 +4,18 @@
 #   ./scripts/build.sh /build/chromium/src
 #
 # Small and fast rather than shippable: a component build with no symbols and
-# every Ozone platform off but Wayland and headless. Phase 3 swaps in
-# ozone_platform_drm.
+# every Ozone platform off but the three this needs.
+#
+# ALL THREE, not one at a time. Ozone picks its platform at runtime from
+# `--ozone-platform`, so one binary covers every way a desktop gets on a
+# screen, and which one is a property of where it is started rather than of
+# which build somebody fetched:
+#
+#   wayland   nested in an existing session — a window, like running sway
+#             inside sway. What a developer has, and what CI drives
+#   drm       a tty, with no display server under it. The whole screen, and
+#             the real thing: this is a Domicile session
+#   headless  no display at all, which is what `crux` has
 #
 # Headless is not part of the design; it is what the measurement machine needs.
 # crux has no display server and no Wayland compositor, so without it the engine
@@ -31,6 +41,7 @@ if [ ! -f "$OUT/build.ninja" ]; then
     ozone_auto_platforms = false
     ozone_platform_wayland = true
     ozone_platform_headless = true
+    ozone_platform_drm = true
   ' || exit 1
 fi
 
