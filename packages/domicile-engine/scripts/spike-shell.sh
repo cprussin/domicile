@@ -88,9 +88,15 @@ STARTED=()
 # disagree, is exactly the pair worth reading side by side.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
-LOG_COPY="${LOG_COPY:-/tmp/domicile-shell$WHICH-compositor.log}"
-ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-shell$WHICH-engine.log}"
-BRIDGE_LOG_COPY="${BRIDGE_LOG_COPY:-/tmp/domicile-shell$WHICH-bridge.log}"
+# The shell's name is in the log's, because more than one shell is driven now
+# and the diagnostics glob picks these up by name. Without it, two runs write
+# over each other and a failure is read against whichever went last — which is
+# the "logs from another guard entirely" problem the two-window guard already
+# had once.
+WHOSE="shell-$SHELL_NAME$WHICH"
+LOG_COPY="${LOG_COPY:-/tmp/domicile-$WHOSE-compositor.log}"
+ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-$WHOSE-engine.log}"
+BRIDGE_LOG_COPY="${BRIDGE_LOG_COPY:-/tmp/domicile-$WHOSE-bridge.log}"
 cleanup() {
   cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
   cp "$ENGINE_LOG" "$ENGINE_LOG_COPY" 2>/dev/null
@@ -345,8 +351,16 @@ STARTED+=($!)
 # without establishing the first is how a guard blames the wrong end.
 EMBEDDED=0
 ANNOUNCED=0
+# And a third end, which arrived with the first shell that has one. A chrome
+# that lays its windows out on a screen renders nothing at all until the host
+# has described a desktop — manganese's `OnTheFirstScreen` is exactly that —
+# so "told about a client, embedded nothing" is true of a page that heard
+# everything and simply had nowhere to put a window. Blaming the announcement
+# path for that sends whoever reads it to the wrong protocol.
+DESKTOP=0
 for _ in $(seq 1 60); do
   grep -aq 'app_appeared' "$COMP_LOG" 2>/dev/null && ANNOUNCED=1
+  grep -aqE 'told the chrome about [1-9]' "$COMP_LOG" 2>/dev/null && DESKTOP=1
   if grep -aq 'domicile: embedding' "$ENGINE_LOG" 2>/dev/null; then
     EMBEDDED=1
     break
@@ -360,13 +374,18 @@ done
 # ever mapped" about a client that did. Which is the same wrong sentence this
 # stage exists to stop printing, pointed the other way.
 grep -aq 'app_appeared' "$COMP_LOG" 2>/dev/null && ANNOUNCED=1
+grep -aqE 'told the chrome about [1-9]' "$COMP_LOG" 2>/dev/null && DESKTOP=1
 if [ "$EMBEDDED" != "1" ]; then
-  if [ "$ANNOUNCED" = "1" ]; then
-    annotate "spike-shell: $SHELL_NAME was announced a client and never" \
-         "embedded it, so the page is not hearing the host"
-  else
+  if [ "$ANNOUNCED" != "1" ]; then
     annotate "spike-shell: no client ever mapped on $CLIENT_DISPLAY, so the" \
          "shell was told about nothing and there was nothing to embed"
+  elif [ "$DESKTOP" != "1" ]; then
+    annotate "spike-shell: $SHELL_NAME was announced a client and its" \
+         "handshake carried no display, so a chrome that lays out on a screen" \
+         "had nowhere to put a window. The desktop, not the announcement"
+  else
+    annotate "spike-shell: $SHELL_NAME was announced a client and never" \
+         "embedded it, so the page is not hearing the host"
   fi
   echo "the shell embedded nothing. What each side said:" >&2
   echo "--- the compositor said:" >&2
@@ -420,6 +439,24 @@ if [ "$NEGATIVE" = "1" ]; then
   fi
   echo "negative control: correct, the guard does not match a colour no client drew"
   exit 0
+fi
+
+# WHICH FAILURE IT WAS, not whether there was one. The probe runs inside
+# `publish_frame`, so a colour is only ever searched for on a client submit and
+# `engine found` therefore implies this line — it cannot make the pass stricter
+# and does not claim to. What it does is split the failure: "the client never
+# got a frame to the engine" and "the client drew and its window is not on the
+# page" are different ends, and the guard used to print the second about both.
+#
+# The vacuity this does NOT close is the shell's own chrome painting the search
+# colour. Nothing on this side can: the engine reports one bounding box over
+# the whole browser window, and a page painting that colour anywhere satisfies
+# it. `NEGATIVE=1` is what closes it, which is why manganese has one too.
+if ! grep -aq "first frame" "$COMP_LOG" 2>/dev/null; then
+  annotate "spike-shell: the engine never took a frame from $SHELL_NAME's" \
+       "client, so whatever is on the page is not the client's window"
+  grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
+  exit 1
 fi
 
 if [ -z "$FOUND" ]; then

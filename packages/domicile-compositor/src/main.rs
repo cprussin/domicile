@@ -570,7 +570,28 @@ fn freshened(hub: &ChromeHub, message: HostMessage) -> HostMessage {
     if !matches!(message, HostMessage::Displays { .. }) {
         return message;
     }
-    hub.host.lock().unwrap().describe_desktop()
+    let fresh = hub.host.lock().unwrap().describe_desktop();
+    // Said out loud because a chrome that lays its windows out on a screen
+    // draws nothing at all until it has been given one, and "the page was told
+    // about a client and embedded nothing" reads identically whether the page
+    // ignored the host or simply had nowhere to put a window. This side is the
+    // only one that can tell those apart, and a guard that cannot blames the
+    // wrong end. The count is in the text so a reader — and `spike-shell.sh` —
+    // can tell an empty desktop from a described one.
+    //
+    // THE HANDSHAKE, AND IT SAYS SO. `freshened` is on the response path, and
+    // the only response carrying a desktop is the answer to a chrome's Hello;
+    // the two runtime re-describes reach a chrome through `hub.broadcast`,
+    // which does not come through here. A line claiming to cover those would
+    // be wrong about a chrome that got its first display from one of them.
+    let HostMessage::Displays { displays } = &fresh else {
+        unreachable!("describe_desktop returns Displays and nothing else");
+    };
+    info!(
+        "told the chrome about {} display(s) in its handshake",
+        displays.len()
+    );
+    fresh
 }
 
 /// Encode and write everything bound for the chrome, off the Wayland thread.
