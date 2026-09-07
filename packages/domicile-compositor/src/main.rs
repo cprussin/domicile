@@ -1545,7 +1545,7 @@ impl DomicileCompositor {
     /// `WaitableEvent` while the engine's own thread runs a nested run loop,
     /// so the reply does not need this thread back.
     fn drive_latency(&mut self, app_id: &str, committed: Instant) {
-        let Some((x, y)) = spike_latency_point() else {
+        let (Some(point), Some(budget)) = (spike_latency_point(), spike_latency_budget()) else {
             return;
         };
         // The first app to commit is the one measured, and it keeps the run
@@ -1558,10 +1558,7 @@ impl DomicileCompositor {
         // `self`, and put back at the end. There is no early return between
         // the two — if one is ever added it has to restore this, because a run
         // dropped here starts over from an empty floor on the next commit.
-        let mut run = self
-            .latency
-            .take()
-            .unwrap_or_else(|| Latency::new(latency::Budget::default()));
+        let mut run = self.latency.take().unwrap_or_else(|| Latency::new(budget));
         // The caller's stamp, from before `publish_frame` ran. The import and
         // the submit are this design's cost and belong in `commit_to_pixel`;
         // stamping here would have put them in the client's half instead.
@@ -1569,11 +1566,10 @@ impl DomicileCompositor {
         loop {
             match run.next(Instant::now()) {
                 LatencyStep::Sample => {
-                    match self
-                        .engine
-                        .as_mut()
-                        .and_then(|engine| engine.spike_pixel(x, y))
-                    {
+                    match self.engine.as_mut().and_then(|engine| match point {
+                        LatencyPoint::Centre => engine.spike_window_centre(),
+                        LatencyPoint::At(x, y) => engine.spike_pixel(x, y),
+                    }) {
                         Some(argb) => run.sampled(Instant::now(), argb),
                         None => run.unreadable(),
                     }
@@ -3973,25 +3969,71 @@ const ADVERTISED_REFRESH_MHZ: i32 = 60_000;
 /// the least exotic way to make one do that on demand.
 const LATENCY_KEY: u32 = 28;
 
-/// THROWAWAY, with the rest of the spike. Where to watch for the client's
-/// answer, from `DOMICILE_SPIKE_LATENCY` as `x,y`.
+/// THROWAWAY, with the rest of the spike. Where the latency run watches for
+/// the client's answer, from `DOMICILE_SPIKE_LATENCY`.
+///
+/// `centre` — the browser window's middle, which is what a guard wants: a page
+/// with one `<app>` on it has the client's window under the centre, so nothing
+/// has to name a coordinate that would go stale the moment the page's CSS
+/// changed. `spike-client-window.sh` reads the drawn colour the same way and
+/// for the same reason.
+///
+/// `x,y` — a point, for a page where the centre is not over the client.
 ///
 /// Unset means no run, which is every guard but one: the measurement presses
 /// keys into whatever has focus and would be a strange thing to do by default.
-/// The point is in the browser's window, and it has to be inside the client's
-/// window within it — `spike_find` is how a guard finds out where that is.
-fn spike_latency_point() -> Option<(i32, i32)> {
-    static POINT: std::sync::OnceLock<Option<(i32, i32)>> = std::sync::OnceLock::new();
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LatencyPoint {
+    Centre,
+    At(i32, i32),
+}
+
+fn spike_latency_point() -> Option<LatencyPoint> {
+    static POINT: std::sync::OnceLock<Option<LatencyPoint>> = std::sync::OnceLock::new();
     *POINT.get_or_init(|| {
         let raw = std::env::var("DOMICILE_SPIKE_LATENCY").ok()?;
-        let point = parse_point(raw.trim());
-        if point.is_none() {
+        let raw = raw.trim();
+        if raw.eq_ignore_ascii_case("centre") || raw.eq_ignore_ascii_case("center") {
+            return Some(LatencyPoint::Centre);
+        }
+        match parse_point(raw) {
+            Some((x, y)) => Some(LatencyPoint::At(x, y)),
+            None => {
+                warn!(
+                    raw,
+                    "DOMICILE_SPIKE_LATENCY: not `centre` or an `x,y` point; no latency run"
+                );
+                None
+            }
+        }
+    })
+}
+
+/// THROWAWAY, with the rest of the spike. What a latency run may spend, from
+/// `DOMICILE_SPIKE_LATENCY_BUDGET` as `rounds,floor_samples,max_polls`.
+///
+/// Unset is the real measurement's sixty and sixty. A guard's negative control
+/// sets it small, because what a control proves — that a client answering no
+/// keys makes the guard fail — needs three rounds rather than sixty, and sixty
+/// of them abandoning is minutes of a blocked desktop.
+///
+/// A value the run could not use is refused with a warning and no run, rather
+/// than clamped: see `Budget::parse`.
+fn spike_latency_budget() -> Option<latency::Budget> {
+    static BUDGET: std::sync::OnceLock<Option<latency::Budget>> = std::sync::OnceLock::new();
+    *BUDGET.get_or_init(|| {
+        let Ok(raw) = std::env::var("DOMICILE_SPIKE_LATENCY_BUDGET") else {
+            return Some(latency::Budget::default());
+        };
+        let parsed = latency::Budget::parse(raw.trim());
+        if parsed.is_none() {
             warn!(
                 raw,
-                "DOMICILE_SPIKE_LATENCY: not an `x,y` point; no latency run"
+                "DOMICILE_SPIKE_LATENCY_BUDGET: not `rounds,floor,polls`, or nothing \
+                 a run could measure with; no latency run"
             );
         }
-        point
+        parsed
     })
 }
 

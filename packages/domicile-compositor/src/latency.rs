@@ -291,7 +291,7 @@ const MAX_POLLS: u32 = 200;
 /// is a call nobody can read and a swap the compiler cannot catch. Every one is
 /// a bound on how long the Wayland thread blocks, which is why they are all
 /// here together and none of them is optional.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Budget {
     /// Rounds to measure.
     pub rounds: usize,
@@ -304,6 +304,68 @@ pub struct Budget {
     pub max_refusals_running: usize,
     /// Answers one round waits through before giving up on the client.
     pub max_polls: u32,
+}
+
+impl Budget {
+    /// A budget from `rounds,floor_samples,max_polls`, the three a caller has
+    /// any reason to change.
+    ///
+    /// The other two are bounds on hanging rather than on measuring, and are
+    /// left at their defaults so a short run cannot accidentally remove the
+    /// protection: `max_floor_asks` scales with the floor so a smaller floor
+    /// still gets room to restart, and `max_refusals_running` stays below it,
+    /// which is what keeps the two give-up reasons apart.
+    ///
+    /// `None` for anything `Latency::new` would refuse, rather than a clamp
+    /// or a default: a caller who asked for a run of no rounds asked for
+    /// something, and quietly giving them sixty is how a control that was
+    /// meant to be short becomes a four-minute one nobody notices.
+    pub fn parse(raw: &str) -> Option<Self> {
+        let mut parts = raw.split(',');
+        let mut number = || parts.next()?.trim().parse::<usize>().ok();
+        let (rounds, floor_samples, max_polls) = (number()?, number()?, number()?);
+        if parts.next().is_some() {
+            return None;
+        }
+        let budget = Self {
+            rounds,
+            floor_samples,
+            // Room for the floor to restart several times over, scaled to
+            // the floor asked for: a short control that never settles should
+            // report that in half a second rather than block a desktop for the
+            // default's six and three quarters. Never below the floor it has
+            // to contain, never above the default.
+            max_floor_asks: floor_samples.saturating_mul(8).clamp(24, MAX_FLOOR_ASKS),
+            // Kept under `max_floor_asks`, which is the condition that lets a
+            // probe refusing from the first ask reach its own cap first and so
+            // be reported as the probe.
+            max_refusals_running: MAX_REFUSALS_RUNNING
+                .min(floor_samples.saturating_mul(8).clamp(24, MAX_FLOOR_ASKS) - 1),
+            max_polls: u32::try_from(max_polls).ok()?,
+        };
+        budget.usable().then_some(budget)
+    }
+
+    /// Whether a run built on this could measure anything.
+    ///
+    /// Each condition is one that silently disabled something when it did not
+    /// hold: a floor of one sample prices the probe against nothing; a floor
+    /// budget no larger than the floor cannot let one complete; a refusal cap
+    /// at or above the floor's budget means a probe refusing from the first
+    /// ask is reported as a screen that would not hold still; and no rounds or
+    /// no polls measure nothing at all.
+    ///
+    /// A question rather than an assertion so a caller reading an environment
+    /// can refuse a run instead of panicking a desktop. [`Latency::new`] is
+    /// the one that panics, because by then it is a bug rather than a typo.
+    fn usable(&self) -> bool {
+        self.rounds > 0
+            && self.floor_samples > 1
+            && self.max_floor_asks > self.floor_samples
+            && self.max_refusals_running > 0
+            && self.max_refusals_running < self.max_floor_asks
+            && self.max_polls > 0
+    }
 }
 
 impl Default for Budget {
@@ -342,30 +404,14 @@ pub struct Latency {
 impl Latency {
     /// # Panics
     ///
-    /// On a budget that cannot measure anything, which is a caller's mistake
-    /// rather than a run's outcome and is therefore loud. Every one of these
-    /// silently disabled something: a floor of one sample prices the probe
-    /// against nothing, a floor budget no larger than the floor cannot let one
-    /// complete, and a refusal cap at or above the floor's budget means a probe
-    /// that refuses from the first ask is reported as a screen that would not
-    /// hold still.
+    /// On a budget [`Budget::usable`] rejects, which is a caller's mistake
+    /// rather than a run's outcome and is therefore loud. Asked there rather
+    /// than repeated here, because two copies of the same conditions are two
+    /// copies to drift apart.
     pub fn new(budget: Budget) -> Self {
-        assert!(budget.rounds > 0, "a run of no rounds measures nothing");
         assert!(
-            budget.floor_samples > 1,
-            "a floor of one sample prices the probe against nothing"
-        );
-        assert!(
-            budget.max_floor_asks > budget.floor_samples,
-            "the floor cannot complete inside its own budget"
-        );
-        assert!(
-            budget.max_refusals_running > 0 && budget.max_refusals_running < budget.max_floor_asks,
-            "the refusal cap has to be reachable, and reachable first"
-        );
-        assert!(
-            budget.max_polls > 0,
-            "a round of no polls cannot see a change"
+            budget.usable(),
+            "a budget that cannot measure anything: {budget:?}"
         );
         Self {
             budget,
@@ -724,6 +770,40 @@ mod tests {
             self.colour = self.colour.wrapping_add(0x0000_1000);
             let colour = self.colour;
             self.latency.sampled(self.now, colour);
+        }
+    }
+
+    /// The three a caller changes, and nothing else. A short control is the
+    /// only reason this exists, so the cases that matter are a short one being
+    /// accepted and a useless one being refused rather than quietly replaced.
+    #[test]
+    fn a_budget_is_three_numbers_and_the_rest_is_not_a_callers_business() {
+        let short = Budget::parse("3,4,5").unwrap();
+        assert_eq!(short.rounds, 3);
+        assert_eq!(short.floor_samples, 4);
+        assert_eq!(short.max_polls, 5);
+        // Scaled to the floor, and still large enough to contain it.
+        assert!(short.max_floor_asks > short.floor_samples);
+        assert!(short.max_refusals_running < short.max_floor_asks);
+        assert!(short.usable());
+    }
+
+    /// Refused rather than clamped or defaulted: a caller who asked for a run
+    /// of no rounds asked for something, and quietly handing them sixty is how
+    /// a control meant to be short becomes a four-minute one nobody notices.
+    #[test]
+    fn a_budget_that_could_not_measure_anything_is_refused() {
+        for raw in [
+            "0,4,5",     // no rounds
+            "3,1,5",     // a floor of one prices the probe against nothing
+            "3,4,0",     // no polls
+            "3,4",       // not three numbers
+            "3,4,5,6",   // nor four
+            "3,-4,5",    // nor a negative one
+            "three,4,5", // nor a word
+            "",
+        ] {
+            assert_eq!(Budget::parse(raw), None, "{raw:?} was accepted");
         }
     }
 
