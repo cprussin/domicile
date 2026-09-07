@@ -390,6 +390,14 @@ jobs:
           # enough to hold it is a tail too long to read; the message that
           # appeared once is usually the one that matters. tracing colours its
           # field names, so the escapes come out first or nothing groups.
+          # Last, because it is first in the order things go wrong: nothing
+          # below it runs if the series did not go on. `pipefail` means the
+          # step dies inside the pipeline rather than at the check after it,
+          # so the handler there never gets to print this.
+          echo "what apply.sh said:"
+          tail -40 /tmp/domicile-apply.log 2>/dev/null | sed 's/^/  /' ||
+            echo "  (it wrote nothing, so it did not get as far as running)"
+
           echo "what was complained about:"
           sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
             grep -aoE '(WARN|ERROR) .*' | cut -c1-200 | sort | uniq -c |
