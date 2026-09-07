@@ -232,14 +232,59 @@ done
 }
 echo "the shell is at $URL"
 
+# WHERE IT WAS STARTED DECIDES WHAT IT IS — for the one case that works today.
+# The engine is built with `wayland` and `headless` and nothing else, so a
+# desktop is a window inside an existing Wayland session, and the two other
+# ways to start one are refused rather than attempted.
+#
+# `ozone_platform_drm` is what would make a tty the whole screen, and it cannot
+# be set at this Chromium pin: `ui/ozone/platform/drm/BUILD.gn` opens with
+# `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`, and `//ui/ozone`
+# depends on it the moment the argument is true, so `gn gen` refuses before
+# anything compiles. Measured, run 34152521286;
+# `docs/architecture/ENGINE-FORK.md` carries it. Handing `--ozone-platform=drm`
+# to a binary with no drm platform in it is a black screen and a Chromium
+# fatal, so this says the true thing instead.
+#
+# `WAYLAND_DISPLAY` is the question for the case that does work: it is what a
+# Wayland client uses to find its compositor, so unset means there is nothing
+# to be a window inside of. `OZONE` overrides everything — `headless` is a real
+# answer on a machine with no display and no environment variable says so, and
+# somebody trying the tty once it is patched should not have to edit this file.
+if [ -n "${OZONE:-}" ]; then
+  PLATFORM="$OZONE"
+elif [ -n "${WAYLAND_DISPLAY:-}" ]; then
+  PLATFORM=wayland
+elif [ -n "${DISPLAY:-}" ]; then
+  echo "run-engine.sh: this is an X11 session, and this engine has no x11" >&2
+  echo "  platform — it is built for wayland and headless. Start it from a" >&2
+  echo "  Wayland session for a window; OZONE=headless runs it with no" >&2
+  echo "  display at all." >&2
+  exit 1
+else
+  echo "run-engine.sh: there is no display server here, and a tty needs the" >&2
+  echo "  drm ozone platform, which cannot be built at this Chromium pin —" >&2
+  echo "  see docs/architecture/ENGINE-FORK.md. Start this from a Wayland" >&2
+  echo "  session for a window; OZONE=headless runs it with no display." >&2
+  exit 1
+fi
+echo "the engine is taking the $PLATFORM platform"
+
 # 2. The engine, on that page.
+#
+# `--app` because a desktop is not a browser looking at a page. Without it the
+# window carries a tab strip, an address bar and a bookmarks row — about 146
+# pixels of somebody else's chrome above the shell's own, which
+# `spike-step4.sh` reports as "page starts at y=146" and a user would call
+# broken. It also drops the browser's own keyboard shortcuts, which a shell has
+# to be able to bind.
 "$CHROMIUM/$OUT/chrome" \
-  --ozone-platform="${OZONE:-wayland}" \
+  --ozone-platform="$PLATFORM" \
+  --app="$URL" \
   --no-sandbox --password-store=basic --no-first-run \
   --user-data-dir="$PROFILE" \
   --enable-blink-features=DomicileExternalSurface \
-  --domicile-broker-socket="$BROKER" \
-  "$URL" &
+  --domicile-broker-socket="$BROKER" &
 STARTED+=($!)
 
 for _ in $(seq 1 300); do [ -S "$BROKER" ] && break; sleep 0.1; done
