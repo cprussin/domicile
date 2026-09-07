@@ -520,6 +520,7 @@ fn push(user_data: *mut c_void, event: Event) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use domicile_bridge::DmabufPlane as BridgePlane;
 
     /// What the C header's `static_assert` cannot see: that this side still
@@ -534,7 +535,6 @@ mod tests {
             6 * std::mem::size_of::<i32>()
         );
     }
-    use super::*;
 
     fn descriptor(planes: usize) -> DmabufDescriptor {
         DmabufDescriptor {

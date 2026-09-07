@@ -1906,11 +1906,10 @@ impl DomicileCompositor {
             Some(at) => at.elapsed() >= FIND_EVERY,
         };
         if find_due && !spike_find_colours().is_empty() && !self.find_settled {
-            // The first tick that has something to look for. That is the
-            // first tick of the run in practice, because the colours come from
-            // an environment variable read once — so this is a budget on the
-            // compositor's life, not on the search, and it is generous enough
-            // that the difference does not matter.
+            // The first search, which is the first frame a client committed
+            // and the engine took: this whole block runs on the submit path.
+            // So a desktop with no client yet is not searching for anything
+            // and is not spending the budget waiting for one.
             let since = *self.find_since.get_or_insert_with(Instant::now);
             if since.elapsed() >= FIND_FOR {
                 // Once, on its own flag. Firing it from the loop condition

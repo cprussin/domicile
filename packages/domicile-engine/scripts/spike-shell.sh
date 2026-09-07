@@ -38,7 +38,7 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
 SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
 [ -d "$SHELL_DIR" ] || {
-  echo "no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME." >&2
+  echo "::error::spike-shell: no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME"
   exit 1
 }
 
@@ -90,16 +90,32 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# An annotation that carries what it read.
+#
+# GitHub reads `%0A` inside a workflow command as a newline, so a failure can
+# put the last of a log into the annotation itself. That matters because the
+# job log is where this would otherwise go, and the job log is a thousand lines
+# of Chromium's startup noise with a byte budget on top — the failure is in
+# there and unreachable, which is how the shell guard failed three times
+# saying only that it had.
+annotate_from() {
+  local title="$1" file="$2" body
+  body=$(tail -25 "$file" 2>/dev/null |
+           sed -e 's/%/%25/g' -e 's/\r/%0D/g' |
+           awk '{ printf "%s%%0A", $0 }')
+  echo "::error::$title%0A%0A$body"
+}
+
 [ -x "$CHROMIUM/$OUT/chrome" ] || {
-  echo "build the engine first: ./packages/domicile-engine/scripts/build.sh $CHROMIUM" >&2
+  echo "::error::spike-shell: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
   exit 1
 }
 [ -f "$CHROMIUM/$OUT/libdomicile_engine.so" ] || {
-  echo "no libdomicile_engine.so in $CHROMIUM/$OUT; build it: autoninja -C $OUT domicile_engine" >&2
+  echo "::error::spike-shell: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
   exit 1
 }
 [ -x "$COMPOSITOR" ] || {
-  echo "build the compositor first: nix develop .#full -c cargo build -p domicile-compositor" >&2
+  echo "::error::spike-shell: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
 if command -v kitty >/dev/null; then
@@ -107,11 +123,11 @@ if command -v kitty >/dev/null; then
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  echo "::error::spike-shell: no kitty to draw with, and no nix to fetch one"
+  echo "SKIP: no kitty to draw with, and no nix to fetch one."
   exit 77
 fi
 command -v bun >/dev/null || {
-  echo "::error::spike-shell: no bun, and the shell's page is built with its own vite config"
+  echo "SKIP: no bun, and the shell's page is built with its own vite config."
   exit 77
 }
 
@@ -136,7 +152,7 @@ if ! (cd "$SHELL_DIR" &&
         bun install --frozen-lockfile &&
         bun run prepare &&
         bunx vite build --config vite.renderer.config.ts) >"$BUILD_LOG" 2>&1; then
-  echo "::error::spike-shell: $SHELL_NAME's page did not build"
+  annotate_from "spike-shell: $SHELL_NAME's page did not build" "$BUILD_LOG"
   echo "the shell's page did not build. It said:" >&2
   tail -40 "$BUILD_LOG" >&2
   rm -f "$BUILD_LOG"
@@ -176,7 +192,7 @@ for _ in $(seq 1 300); do
   sleep 0.1
 done
 [ -n "$URL" ] || {
-  echo "::error::spike-shell: the bridge never said where it was serving"
+  annotate_from "spike-shell: the bridge never said where it was serving" "$BRIDGE_LOG"
   echo "the bridge never said where it was serving. It said:" >&2
   cat "$BRIDGE_LOG" >&2
   exit 1
@@ -199,7 +215,7 @@ STARTED+=($!)
 
 for _ in $(seq 1 240); do [ -S "$BROKER" ] && break; sleep 0.5; done
 [ -S "$BROKER" ] || {
-  echo "::error::spike-shell: the engine never opened its broker socket at $BROKER"
+  annotate_from "spike-shell: the engine never opened its broker socket at $BROKER" "$ENGINE_LOG"
   echo "the engine never opened its broker socket. It said:" >&2
   tail -20 "$ENGINE_LOG" >&2
   exit 1
@@ -223,7 +239,7 @@ for _ in $(seq 1 120); do
   sleep 0.5
 done
 if ! kill -0 $COMP 2>/dev/null; then
-  echo "::error::spike-shell: the compositor did not start"
+  annotate_from "spike-shell: the compositor did not start" "$COMP_LOG"
   echo "the compositor did not start. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -276,7 +292,19 @@ NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout 180 \
   "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
         -o "background=#$DRAWN" \
         -o initial_window_width=640 -o initial_window_height=480 \
-        sh -c 'while :; do sleep 0.2; done' >>"$CLI_LOG" 2>&1 &
+        # Prints, rather than sitting idle. The probe runs on the submit
+        # path — it is called when a client commits a frame the engine
+        # takes — so a client that stops drawing stops the measurement
+        # dead, and a guard waiting for a box to hold still would then be
+        # measuring the client's idleness. kitty redraws for its cursor
+        # blink and gives up on that after about fifteen seconds; a
+        # character every fifth of a second keeps it committing for as
+        # long as the guard is watching.
+        #
+        # The dots are foreground pixels and the box is the background
+        # colour's extent, so they cost nothing the measurement cares
+        # about.
+        sh -c 'while :; do printf .; sleep 0.2; done' >>"$CLI_LOG" 2>&1 &
 STARTED+=($!)
 
 FOUND=""

@@ -176,7 +176,19 @@ else
     "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
           -o "background=#$COLOR" \
           -o initial_window_width=640 -o initial_window_height=480 \
-          sh -c 'while :; do sleep 0.2; done' >"$CLI_LOG" 2>&1 &
+          # Prints, rather than sitting idle. The probe runs on the submit
+          # path — it is called when a client commits a frame the engine
+          # takes — so a client that stops drawing stops the measurement
+          # dead, and a guard waiting for a box to hold still would then be
+          # measuring the client's idleness. kitty redraws for its cursor
+          # blink and gives up on that after about fifteen seconds; a
+          # character every fifth of a second keeps it committing for as
+          # long as the guard is watching.
+          #
+          # The dots are foreground pixels and the box is the background
+          # colour's extent, so they cost nothing the measurement cares
+          # about.
+          sh -c 'while :; do printf .; sleep 0.2; done' >"$CLI_LOG" 2>&1 &
   STARTED+=($!)
 fi
 

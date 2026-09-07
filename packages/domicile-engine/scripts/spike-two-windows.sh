@@ -94,15 +94,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cd "$CHROMIUM" || exit 1
+cd "$CHROMIUM" || {
+  echo "::error::spike-two-windows: $CHROMIUM is not a directory this can enter"
+  exit 1
+}
 
-[ -x "$OUT/chrome" ] || { echo "build the engine first: ./scripts/build.sh $CHROMIUM" >&2; exit 1; }
+[ -x "$OUT/chrome" ] || {
+  echo "::error::spike-two-windows: no engine at $CHROMIUM/$OUT/chrome; build it with ./scripts/build.sh"
+  exit 1
+}
 [ -f "$OUT/libdomicile_engine.so" ] || {
-  echo "no libdomicile_engine.so in $OUT; build it: autoninja -C $OUT domicile_engine" >&2
+  echo "::error::spike-two-windows: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
   exit 1
 }
 [ -x "$COMPOSITOR" ] || {
-  echo "build the compositor first: nix develop .#full -c cargo build -p domicile-compositor" >&2
+  echo "::error::spike-two-windows: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
 if command -v kitty >/dev/null; then
@@ -110,7 +116,7 @@ if command -v kitty >/dev/null; then
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  echo "::error::spike-two-windows: no kitty to draw with, and no nix to fetch one"
+  echo "SKIP: no kitty to draw with, and no nix to fetch one."
   exit 77
 fi
 
@@ -179,7 +185,19 @@ start_client() {
     "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
           -o "background=#$colour" \
           -o initial_window_width=640 -o initial_window_height=480 \
-          sh -c 'while :; do sleep 0.2; done' >>"$CLI_LOG" 2>&1 &
+          # Prints, rather than sitting idle. The probe runs on the submit
+          # path — it is called when a client commits a frame the engine
+          # takes — so a client that stops drawing stops the measurement
+          # dead, and a guard waiting for a box to hold still would then be
+          # measuring the client's idleness. kitty redraws for its cursor
+          # blink and gives up on that after about fifteen seconds; a
+          # character every fifth of a second keeps it committing for as
+          # long as the guard is watching.
+          #
+          # The dots are foreground pixels and the box is the background
+          # colour's extent, so they cost nothing the measurement cares
+          # about.
+          sh -c 'while :; do printf .; sleep 0.2; done' >>"$CLI_LOG" 2>&1 &
   STARTED+=($!)
 }
 
@@ -248,7 +266,7 @@ numbers_in() {
   echo "$1" | grep -oE "[0-9]+" | tr '\n' ' '
 }
 
-# Poll until each box has been the SAME for two consecutive looks.
+# Poll until each box has been the SAME across two separate MEASUREMENTS.
 #
 # Not until it is merely non-empty. The compositor writes a box down when it
 # moves, so the first one it writes is the window mid-paint — narrower than it
@@ -256,19 +274,27 @@ numbers_in() {
 # working seam as "a sliver", and would let the negative control pass a client
 # that covers the whole page by catching it before it had.
 #
-# In the script rather than in the compositor: two consecutive equal readings a
-# second apart is the whole of the idea, and it needs no marker to be agreed
-# across the seam.
+# Three seconds between looks, not one, and that is the whole reason the
+# interval is written down: the compositor searches every two seconds
+# (`FIND_EVERY` in main.rs), so two looks a second apart can both land inside
+# one measurement and read the same line twice. Two looks three seconds apart
+# straddle two.
+#
+# The other half is the client, which is why it prints: the search runs on the
+# submit path, so a client that stops drawing freezes the box and "it has not
+# changed" stops being a statement about the page.
+POLL_EVERY=3
+# Past the page's own patience for an embed (EMBED_DEADLINE_MS, 20s in
+# spike-two-windows.html), so a mis-dispatched second canvas that embeds late
+# has turned up before the negative control concludes it never will.
+LEAST_LOOKS=8
 PREV_A=""
 PREV_B=""
 BOX_A=""
 BOX_B=""
-# Long enough that a second client which is merely slow has appeared. Only the
-# negative control waits it out; a positive run leaves as soon as both boxes
-# hold still.
-LEAST_LOOKS=10
 LOOKS=0
-for _ in $(seq 1 90); do
+STEADY=0
+for _ in $(seq 1 30); do
   PREV_A="$BOX_A"
   PREV_B="$BOX_B"
   BOX_A=$(box_of "$COLOR_A")
@@ -280,12 +306,29 @@ for _ in $(seq 1 90); do
     # The one client's box has to hold still, and the other colour has to have
     # had its chance to turn up: "it is not there" said after one look is not a
     # measurement.
-    [ "$STEADY_A" = "1" ] && [ "$LOOKS" -ge "$LEAST_LOOKS" ] && break
-  else
-    [ "$STEADY_A" = "1" ] && [ -n "$BOX_B" ] && [ "$BOX_B" = "$PREV_B" ] && break
+    if [ "$STEADY_A" = "1" ] && [ "$LOOKS" -ge "$LEAST_LOOKS" ]; then
+      STEADY=1
+      break
+    fi
+  elif [ "$STEADY_A" = "1" ] && [ -n "$BOX_B" ] && [ "$BOX_B" = "$PREV_B" ]; then
+    STEADY=1
+    break
   fi
-  sleep 1
+  sleep "$POLL_EVERY"
 done
+
+# Never holding still is its own answer, and it is not "the boxes are wrong".
+# Falling through into the assertions would measure an unsettled reading and
+# report whatever it happened to catch.
+if [ "$STEADY" != "1" ]; then
+  echo "::error::spike-two-windows: no box ever held still across two" \
+       "measurements, so nothing here was measured. The client may have" \
+       "stopped drawing, which stops the probe: it runs on the submit path."
+  echo "the last thing each colour was seen at:" >&2
+  echo "  #$COLOR_A: ${BOX_A:-nowhere}" >&2
+  echo "  #$COLOR_B: ${BOX_B:-nowhere}" >&2
+  exit 1
+fi
 
 echo
 echo "#$COLOR_A: ${BOX_A:-nowhere in the window}"
@@ -304,9 +347,12 @@ if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
   exit 1
 fi
 
-# Both come off the same lines, so a box implies a window size.
+# `box_of` matches a prefix of the line that `window_size` reads the end of,
+# so a half-flushed line can satisfy one and not the other. Checked rather than
+# reasoned about: an empty WINDOW makes both thresholds zero, which turns the
+# negative control into a lie and the sliver check into a no-op.
 WINDOW=$(window_size)
-if [ -z "$BOX_A" ]; then
+if [ -z "$BOX_A" ] || [ -z "$WINDOW" ]; then
   echo "::error::spike-two-windows: the first client never reached the page" \
        "at all, so nothing here is about two windows"
   echo "--- the compositor's last words:" >&2
