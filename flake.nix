@@ -315,7 +315,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-Mi6j/u97lxV7jYcqe/dq5xWYNqdwytEOAbVroupazjA=";
+        outputHash = "sha256-yDj9Sae+v/qU28vcEXOwI3W/MdkOfMBMFAryy1KB1PA=";
       };
 
       # What settles how Node parses the bundles, beside the bundles.
