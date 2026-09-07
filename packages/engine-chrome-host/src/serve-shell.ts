@@ -14,6 +14,8 @@
 
 import { connect } from "bun";
 
+import { shellDocument } from "./shell-document";
+import type { ShellManifest } from "./shell-manifest";
 import { fileForRequest } from "./static-path";
 
 /** Where the session is served. The page derives this; nothing configures it. */
@@ -24,6 +26,18 @@ export type ServeOptions = {
   socketPath: string;
   /** The shell's built page. Served as-is; nothing is compiled here. */
   root: string;
+  /**
+   * The shell's manifest, when it has one.
+   *
+   * With it, `/` is a document written from `module` and `styles` rather than
+   * a file read off disk — see `shell-document.ts` for why Domicile owns that
+   * document. Without it, `/` is `index.html` under {@link root}, which is
+   * what a workspace shell built by vite still produces.
+   *
+   * Everything else is served from {@link root} either way: a manifest names
+   * where its parts are, it does not change where they are read from.
+   */
+  manifest?: ShellManifest;
   /** 0, the default, asks the kernel for one and reports what it gave. */
   port?: number;
   /**
@@ -56,6 +70,7 @@ export type Serving = {
 /** Serve `root` and the compositor's session on one port. */
 export const serveShell = (options: ServeOptions): Serving => {
   const root = options.root;
+  const manifest = options.manifest;
   const socketPath = options.socketPath;
   const reachForMs = options.reachForMs ?? REACH_FOR_MS;
 
@@ -66,6 +81,15 @@ export const serveShell = (options: ServeOptions): Serving => {
         return self.upgrade(request, { data: { pending: [] } })
           ? undefined
           : new Response("this path is a websocket", { status: 426 });
+      }
+      // The document, before anything is read off disk. A shell with a
+      // manifest ships no `index.html` — there is nothing on disk to serve
+      // here — and one without falls through to the file, which is what the
+      // workspace shells still have.
+      if (manifest !== undefined && isTheDocument(url.pathname)) {
+        return new Response(shellDocument(manifest), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
       }
       const file = fileForRequest(root, url.pathname);
       if (file === undefined) {
@@ -201,3 +225,13 @@ const sockets = new WeakMap<
   BridgedSocket,
   { end: () => void; write: (data: string | Uint8Array) => void }
 >();
+
+/**
+ * Whether a path is the page itself rather than something it loads.
+ *
+ * `/` and `/index.html` both, because the second is what a browser resolves a
+ * bookmark or a reload to and serving a 404 for it would be a page that works
+ * until somebody presses enter in an address bar.
+ */
+const isTheDocument = (pathname: string): boolean =>
+  pathname === "/" || pathname === "/index.html";

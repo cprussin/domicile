@@ -77,6 +77,76 @@ describe("serveShell", () => {
     expect(await response.text()).toBe("<title>a shell</title>");
   });
 
+  // WITH A MANIFEST THERE IS NO index.html TO SERVE, and that is the point: a
+  // shell ships JavaScript and CSS, and the document it loads in is written
+  // here so that no shell can get it wrong. See `shell-document.ts`.
+  it("writes the document when the shell has a manifest", async () => {
+    const host = await compositor();
+    const serving = serveShell({
+      manifest: { module: "shell.js", name: "my-desktop", styles: [] },
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
+    cleanups.push(() => serving.stop());
+
+    const response = await fetch(serving.url);
+    const body = await response.text();
+
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).toContain('<script src="shell.js" type="module">');
+    expect(body).toContain("<title>my-desktop</title>");
+  });
+
+  // A reload or a bookmark resolves to `/index.html`, so serving a 404 there
+  // would be a desktop that works until somebody presses enter in an address
+  // bar — and with a manifest there is no such file to fall through to.
+  it("writes the document for /index.html too", async () => {
+    const host = await compositor();
+    const serving = serveShell({
+      manifest: { module: "shell.js", name: "my-desktop", styles: [] },
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
+    cleanups.push(() => serving.stop());
+
+    const response = await fetch(`${serving.url}index.html`);
+
+    expect(await response.text()).toContain('<script src="shell.js"');
+  });
+
+  // Everything the document names is still read off disk: a manifest says
+  // where a shell's parts are, it does not change where they are served from.
+  it("still serves the files the document names", async () => {
+    const host = await compositor();
+    await writeFile(path.join(host.dir, "shell.js"), "export const x = 1;");
+    const serving = serveShell({
+      manifest: { module: "shell.js", name: "my-desktop", styles: [] },
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
+    cleanups.push(() => serving.stop());
+
+    const response = await fetch(`${serving.url}shell.js`);
+
+    expect(await response.text()).toBe("export const x = 1;");
+  });
+
+  // A shell that has no manifest is a shell that built an index.html, which is
+  // what the workspace's own two still do. Nothing about them changes yet.
+  it("serves the file when there is no manifest", async () => {
+    const host = await compositor();
+    await writeFile(
+      path.join(host.dir, "index.html"),
+      "<title>on disk</title>",
+    );
+    const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
+    cleanups.push(() => serving.stop());
+
+    expect(await (await fetch(serving.url)).text()).toBe(
+      "<title>on disk</title>",
+    );
+  });
+
   it("answers 404 for a path outside the root", async () => {
     const host = await compositor();
     const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
