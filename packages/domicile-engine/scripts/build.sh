@@ -32,17 +32,24 @@ fi
 
 cd "$CHROMIUM" || exit 1
 
-if [ ! -f "$OUT/build.ninja" ]; then
-  gn gen "$OUT" --args='
-    is_debug = false
-    symbol_level = 0
-    is_component_build = true
-    use_ozone = true
-    ozone_auto_platforms = false
-    ozone_platform_wayland = true
-    ozone_platform_headless = true
-    ozone_platform_drm = true
-  ' || exit 1
-fi
+# EVERY TIME, not only when there is no build.ninja. `gn gen` decides for
+# itself whether anything changed by comparing the arguments, so passing them
+# always costs nothing and is what makes editing this file take effect.
+#
+# Gated, it did not. `crux` keeps a warm tree on purpose, so a change to these
+# arguments was applied on a machine with no `out/Domicile` and silently
+# skipped on the one that runs the guards — which means CI went green having
+# built with the old arguments and said nothing. The release script has always
+# done it this way and says so; this one is the copy that drifted.
+gn gen "$OUT" --args='
+  is_debug = false
+  symbol_level = 0
+  is_component_build = true
+  use_ozone = true
+  ozone_auto_platforms = false
+  ozone_platform_wayland = true
+  ozone_platform_headless = true
+  ozone_platform_drm = true
+' || exit 1
 
 exec autoninja -C "$OUT" chrome domicile_solid_color_submitter
