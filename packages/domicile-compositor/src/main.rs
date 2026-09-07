@@ -1830,11 +1830,10 @@ impl DomicileCompositor {
                             warn!(
                                 x,
                                 y,
-                                "the probe would not answer for this point: either \
-                                 libdomicile_engine.so has no \
-                                 domicile_engine_spike_sample_pixel, or the point is \
-                                 outside the browser's window. Nothing drew is a \
-                                 different thing and would say so"
+                                "the probe refused this point, so it is outside the \
+                                 browser's window — a missing symbol says so on its own \
+                                 account and this is not that. Nothing drew is a third \
+                                 thing and would say so"
                             );
                         }
                     }
