@@ -160,12 +160,12 @@ else
   exit 1
 fi
 
-# 4) The compositor should extract the client's pixels and broadcast frames.
-if wait_for "$LOG" "broadcast app frame" 50; then
-  echo "OK: real client pixels extracted (shm -> RGBA) and pushed to the chrome"
-else
-  echo "FAIL: no app frames were broadcast"; exit 1
-fi
+# 4) There used to be a step here asserting the compositor extracted the
+#    client's pixels and broadcast them. That path is deleted: a client's
+#    buffer goes to the display compositor and no pixels cross this socket.
+#    The steps below — the real shell answering a real key combination and
+#    placing the window — are what this script is now for, and they never
+#    depended on a frame arriving.
 
 # 5) And Alt+Tab should float that window, all the way through the real shell:
 # the page answers the combination, re-lays the window out into a box of its

@@ -119,14 +119,14 @@ else
   echo "FAIL: the chrome came up to an empty desktop with a client still drawing"; exit 1
 fi
 
-# 4) And pixels have to follow. Proves the placement is wired to the copy path
-#    and not just an element with nothing behind it.
+# 4) There used to be a fourth step here: pixels had to follow the placement,
+#    proving it was wired to the copy path rather than being an element with
+#    nothing behind it. No pixels cross the chrome socket now — a client's
+#    buffer goes to the display compositor — so the observable is gone.
 #
-#    What this does not prove is that the canvas has the pixels *in* it —
-#    nothing the chrome sends back says so. `place_portal` is as far into the
-#    page as this script can see.
-if wait_for "$LOG" "broadcast app frame" 50; then
-  echo "PASS: a client that was already running gets its window back"
-else
-  echo "FAIL: no app frames were broadcast"; exit 1
-fi
+#    **The claim is not replaced.** Whether a window that was already running
+#    actually reappears for a chrome that connects late is now only visible
+#    through the engine, and asserting it needs what
+#    `spike-client-window.sh` needs. What survives above is the placement,
+#    which is what told the page where to put the window in the first place.
+echo "PASS: a client that was already running is placed for a chrome that connected late"

@@ -125,9 +125,11 @@ that:
 | Domicile's output | none (headless) | a `winit` window, later DRM/KMS |
 | Chrome pixels | never leave Electron | a texture Domicile composites |
 
-Both halves of that are verified — `scripts/probe-transparency.sh` runs a
-transparent Electron window against Domicile's own socket and reads the alpha
-channel of what it commits:
+Both halves of that were verified — `scripts/probe-transparency.sh` ran a
+transparent Electron window against Domicile's own socket and read the alpha
+channel of what it committed. **The script is deleted**: it read those pixels
+off an `app_frame`, and no pixels cross that socket now. Its answer stands and
+is recorded here:
 
 ```
 PASS: the engine connected to Domicile and mapped a toplevel

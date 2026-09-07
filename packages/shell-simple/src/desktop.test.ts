@@ -61,8 +61,6 @@ const recordingDesktop = () => {
   return { acted, desktop: new Desktop(freshRoot()), placements };
 };
 
-const pixels = new Uint8Array([0, 0, 0, 255]);
-
 const windowFor = (root: HTMLElement, appId: string): HTMLElement => {
   const element = root.querySelector(`${APP_TAG_NAME}[app-id="${appId}"]`);
   if (element instanceof HTMLElement) {
@@ -276,23 +274,6 @@ describe("Desktop", () => {
       expect(desktop.appIdAt(windowFor(root, "term"))).toBe("term");
     });
 
-    it("names it for a descendant too", () => {
-      // A window with pixels has a canvas over it, and that is what a pointer
-      // event's target actually is once the client has drawn.
-      const root = freshRoot();
-      const desktop = new Desktop(root);
-      desktop.open("term", [640, 480]);
-      desktop.drawFrame({
-        app_id: "term",
-        height: 1,
-        pixels,
-        scale: 1,
-        width: 1,
-      });
-      const canvas = windowFor(root, "term").querySelector("canvas");
-      expect(desktop.appIdAt(canvas)).toBe("term");
-    });
-
     it("names nothing for the desktop itself", () => {
       const root = freshRoot();
       const desktop = new Desktop(root);
@@ -302,20 +283,6 @@ describe("Desktop", () => {
   });
 
   describe("what the host pushes at a window", () => {
-    it("draws a client's frames into its window", () => {
-      const root = freshRoot();
-      const desktop = new Desktop(root);
-      desktop.open("term", [640, 480]);
-      desktop.drawFrame({
-        app_id: "term",
-        height: 1,
-        pixels,
-        scale: 1,
-        width: 1,
-      });
-      expect(windowFor(root, "term").querySelector("canvas")).not.toBeNull();
-    });
-
     it("takes the placeholder down when the client says how big it drew", () => {
       // The one thing `app_resized` is load-bearing for here: where the
       // compositor draws the client's own surface no frame ever arrives, so
@@ -337,38 +304,6 @@ describe("Desktop", () => {
       desktop.open("term", [640, 480]);
       desktop.applyCursor({ app_id: "term", cursor: "text" });
       expect(windowFor(root, "term").style.cursor).toBe("text");
-    });
-
-    it("drops the copied pixels once the compositor is drawing the window", () => {
-      // The chrome is composited over the client, so a canvas still holding the
-      // last copied frame would hide the live window behind a still of itself.
-      const root = freshRoot();
-      const desktop = new Desktop(root);
-      desktop.open("term", [640, 480]);
-      desktop.drawFrame({
-        app_id: "term",
-        height: 1,
-        pixels,
-        scale: 1,
-        width: 1,
-      });
-      desktop.dropSurface({ app_id: "term" });
-      expect(windowFor(root, "term").querySelector("canvas")).toBeNull();
-    });
-
-    it("ignores what the host pushes at a window that has gone", () => {
-      // The host may still be draining frames for a client whose `app_closed`
-      // this desktop has already acted on.
-      const desktop = new Desktop(freshRoot());
-      expect(() => {
-        desktop.drawFrame({
-          app_id: "term",
-          height: 1,
-          pixels,
-          scale: 1,
-          width: 1,
-        });
-      }).not.toThrow();
     });
   });
 });

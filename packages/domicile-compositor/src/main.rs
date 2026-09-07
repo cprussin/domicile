@@ -105,7 +105,6 @@ mod engine_buffers;
 mod engine_session;
 mod modifiers;
 mod outbound;
-mod over_window;
 mod scale;
 mod screens;
 mod shortcut;
@@ -127,7 +126,6 @@ use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
-use crate::over_window::{texel_over, what_the_chrome_shows, Verdict};
 use crate::scale::{desktop_size, logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::shortcut::Shortcuts;
@@ -209,11 +207,6 @@ mod grepped {
     /// The only trace the label's read-back leaves, and the whole of what says
     /// the round trip closed rather than stalled.
     pub const BAND_ANSWERED: &str = "a band answered";
-    /// `e2e-window-shows-through.sh`: what the chrome painted where a window
-    /// is — the only thing in the tree that says a *copied* client's pixels
-    /// reach the screen at all. Nothing says it for a window the compositor
-    /// draws itself; see `over_window`.
-    pub const CHROME_OVER_WINDOW: &str = "the chrome over a window";
 }
 
 /// The renderer client buffers are imported on, and the policy that chose it.
@@ -374,14 +367,15 @@ enum ClientRequest {
     /// The scene is mutated on the chrome's own thread, which draws nothing
     /// and cannot wake the event loop. Without this a placement waits for an
     /// unrelated reason to redraw — and one of the things it waits for is the
-    /// hand-over to the engine, which only runs while presenting.
     ScenePlaced,
     /// A chrome's page said `hello`. Whatever it is, it holds no pixels yet.
     ChromeHello,
-    /// The chrome unmounted an app's element, which took its canvas with it.
-    PortalRemoved {
-        app_id: String,
-    },
+    /// The chrome unmounted an app's element.
+    ///
+    /// Carries no app id: what it triggers is a re-place of every window,
+    /// because a window with no portal is on every display and the one that
+    /// just lost its element has nothing laid out to place it by.
+    PortalRemoved,
 }
 
 /// Shared between the Wayland thread (calloop) and the chrome-connection threads.
@@ -590,71 +584,36 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
     // would leave it silent however hard it was working.
     while let Some(next) = outbound.recv_until(REPORT_EVERY) {
         let Some(item) = next else {
-            report(&mut window, &outbound, &hub);
+            report(&mut window, &hub);
             continue;
         };
-        // A frame is a header line followed by its pixels; everything else is
-        // just the line. The pixels go out as bytes rather than base64 inside
-        // the JSON — see `HostMessage::AppFrame` for why that matters.
-        let (message, pixels) = match item {
-            Outbound::Message(message) => (message, Arc::new(Vec::new())),
-            Outbound::Frame {
-                app_id,
-                width,
-                height,
-                scale,
-                rgba,
-                region,
-            } => (
-                HostMessage::AppFrame {
-                    app_id,
-                    width,
-                    height,
-                    scale,
-                    format: "rgba".to_string(),
-                    bytes: rgba.len() as u32,
-                    region,
-                },
-                rgba,
-            ),
-        };
+        // Every item is one line now. Pixels used to follow a frame's header
+        // as raw bytes; a client's buffer goes to the display compositor
+        // instead and nothing on this socket is larger than its JSON.
+        let Outbound::Message(message) = item;
         let line = to_line(&message);
-        let is_frame = !pixels.is_empty();
-        let started = Instant::now();
         let mut chromes = hub.chromes.lock().unwrap();
         chromes.retain(|writer| {
             let mut stream = writer.lock().unwrap();
             stream
                 .write_all(line.as_bytes())
-                .and_then(|_| stream.write_all(&pixels))
                 .and_then(|_| stream.flush())
                 .is_ok()
         });
         drop(chromes);
 
-        if is_frame {
-            window.sent += 1;
-            window.bytes += line.len() + pixels.len();
-            window.writing += started.elapsed();
-        }
-        report(&mut window, &outbound, &hub);
+        report(&mut window, &hub);
     }
 }
 
 /// Print one line, if the window that just closed saw anything.
-fn report(window: &mut FrameWindow, outbound: &OutboundReceiver, hub: &Arc<ChromeHub>) {
-    let Some(report) = window.due(outbound, hub) else {
+fn report(window: &mut FrameWindow, hub: &Arc<ChromeHub>) {
+    let Some(report) = window.due(hub) else {
         return;
     };
     info!(
-        sent = report.sent,
         composited = report.composited,
-        dropped = report.dropped,
         fps = report.fps,
-        mb_per_s = report.mb_per_s,
-        write_ms = report.write_ms,
-        readback_ms = report.readback_ms,
-        readback_worst_ms = report.readback_worst_ms,
         commit_ms = report.commit_ms,
         composite_ms = report.composite_ms,
         composite_worst_ms = report.composite_worst_ms,
@@ -663,7 +622,6 @@ fn report(window: &mut FrameWindow, outbound: &OutboundReceiver, hub: &Arc<Chrom
         idle_ms = report.idle_ms,
         response_ms = report.response_ms,
         response_worst_ms = report.response_worst_ms,
-        throttled = report.throttled,
         chromes = hub.chromes.lock().unwrap().len(),
         "frames"
     );
@@ -678,8 +636,6 @@ fn report(window: &mut FrameWindow, outbound: &OutboundReceiver, hub: &Arc<Chrom
 /// one sitting idle between a client's commits look identical from there.
 #[derive(Default)]
 struct FrameTimings {
-    /// Time inside the GPU readback: the copy the CEF bridge deletes.
-    readback: TimingWindow,
     /// Time handling one commit end to end — the readback plus everything the
     /// Wayland thread does around it.
     commit: TimingWindow,
@@ -704,40 +660,24 @@ struct FrameTimings {
     submit: TimingWindow,
     /// How many of them there were.
     composited: usize,
-    /// Commits the ~30fps throttle refused. Every one is a redraw the client
-    /// made and the chrome never saw, so if the client then goes idle the
-    /// screen holds stale pixels until it happens to redraw again — which for
-    /// a terminal answering a keystroke is latency the user feels directly.
-    throttled: usize,
 }
 
-/// What the writer thread has done since it last said so.
+/// When the writer thread last reported.
 ///
-/// Its own half: how many frames went out and how long the sockets took.
-/// `dropped` climbing while `fps` stays flat means pixels are being made faster
-/// than the chrome can drink them; a high `write_ms` means the socket itself is
-/// what backs up. [`FrameTimings`] carries the Wayland thread's half, and the
-/// report joins the two.
+/// It used to carry a half of the numbers as well — frames sent, bytes
+/// written, time in the sockets — because the frame path ran through it. No
+/// pixels cross that socket now, so what it knows is the schedule and
+/// [`FrameTimings`] has the rest.
 #[derive(Default)]
 struct FrameWindow {
     since: Option<Instant>,
-    sent: usize,
-    bytes: usize,
-    writing: Duration,
 }
 
 /// One window's worth of numbers, rounded for reading.
 struct FrameReport {
-    sent: usize,
-    /// Frames drawn into the window. The native path's answer to `sent`: the
-    /// pixels went to the screen instead of to the chrome.
+    /// Frames drawn into the window.
     composited: usize,
-    dropped: usize,
     fps: u32,
-    mb_per_s: u32,
-    write_ms: u32,
-    readback_ms: u32,
-    readback_worst_ms: u32,
     commit_ms: u32,
     idle_ms: u32,
     response_ms: u32,
@@ -750,7 +690,6 @@ struct FrameReport {
     /// The submit, which on a nested window blocks for a frame callback.
     submit_ms: u32,
     submit_worst_ms: u32,
-    throttled: usize,
 }
 
 /// How often the writer thread reports. Long enough that the line is not noise,
@@ -758,64 +697,42 @@ struct FrameReport {
 const REPORT_EVERY: Duration = Duration::from_secs(5);
 
 impl FrameWindow {
-    fn due(&mut self, outbound: &OutboundReceiver, hub: &ChromeHub) -> Option<FrameReport> {
+    fn due(&mut self, hub: &ChromeHub) -> Option<FrameReport> {
         let since = *self.since.get_or_insert_with(Instant::now);
         let elapsed = since.elapsed();
         if elapsed < REPORT_EVERY {
             None
         } else {
-            let dropped = outbound.take_dropped();
             let mut timings = hub.timings.lock().unwrap();
             // Nothing to say when nothing is being composited; an idle desktop
-            // should not fill the log. Throttled commits count as something
-            // happening: a window where every frame was refused is exactly the
-            // one worth seeing, and it has no `sent` to announce itself with.
+            // should not fill the log.
             let composited = std::mem::take(&mut timings.composited);
-            let report =
-                worth_reporting(self.sent, dropped, timings.throttled, composited).then(|| {
-                    // A path that recorded nothing reads as zero: "did not run" and
-                    // "took no time" are the same claim in a log line.
-                    let (readback, commit, idle, response, composite) = (
-                        timings.readback.take().unwrap_or_default(),
-                        timings.commit.take().unwrap_or_default(),
-                        timings.idle.take().unwrap_or_default(),
-                        timings.response.take().unwrap_or_default(),
-                        timings.composite.take().unwrap_or_default(),
-                    );
-                    let submit = timings.submit.take().unwrap_or_default();
-                    FrameReport {
-                        sent: self.sent,
-                        composited,
-                        dropped,
-                        // Frames that got somewhere, which is a different somewhere
-                        // on each path: sent to the chrome, or drawn into the
-                        // window. Exactly one of the two can be non-zero, because
-                        // a compositor with a window sends no pixels and one
-                        // without draws none.
-                        fps: ((self.sent + composited) as f64 / elapsed.as_secs_f64()).round()
-                            as u32,
-                        mb_per_s: (self.bytes as f64 / 1e6 / elapsed.as_secs_f64()).round() as u32,
-                        write_ms: self
-                            .writing
-                            .checked_div(self.sent.max(1) as u32)
-                            .map_or(0, |per| per.as_millis() as u32),
-                        readback_ms: readback.average.as_millis() as u32,
-                        readback_worst_ms: readback.worst.as_millis() as u32,
-                        commit_ms: commit.average.as_millis() as u32,
-                        idle_ms: idle.average.as_millis() as u32,
-                        response_ms: response.average.as_millis() as u32,
-                        response_worst_ms: response.worst.as_millis() as u32,
-                        composite_ms: composite.average.as_millis() as u32,
-                        composite_worst_ms: composite.worst.as_millis() as u32,
-                        submit_ms: submit.average.as_millis() as u32,
-                        submit_worst_ms: submit.worst.as_millis() as u32,
-                        throttled: std::mem::take(&mut timings.throttled),
-                    }
-                });
+            let report = (composited > 0).then(|| {
+                // A path that recorded nothing reads as zero: "did not run" and
+                // "took no time" are the same claim in a log line.
+                let (commit, idle, response, composite) = (
+                    timings.commit.take().unwrap_or_default(),
+                    timings.idle.take().unwrap_or_default(),
+                    timings.response.take().unwrap_or_default(),
+                    timings.composite.take().unwrap_or_default(),
+                );
+                let submit = timings.submit.take().unwrap_or_default();
+                FrameReport {
+                    composited,
+                    fps: (composited as f64 / elapsed.as_secs_f64()).round() as u32,
+                    commit_ms: commit.average.as_millis() as u32,
+                    idle_ms: idle.average.as_millis() as u32,
+                    response_ms: response.average.as_millis() as u32,
+                    response_worst_ms: response.worst.as_millis() as u32,
+                    composite_ms: composite.average.as_millis() as u32,
+                    composite_worst_ms: composite.worst.as_millis() as u32,
+                    submit_ms: submit.average.as_millis() as u32,
+                    submit_worst_ms: submit.worst.as_millis() as u32,
+                }
+            });
             drop(timings);
             *self = FrameWindow {
                 since: Some(Instant::now()),
-                ..FrameWindow::default()
             };
             report
         }
@@ -1097,7 +1014,7 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                     apply_chrome_message(&mut host, &mut ready, message)
                 };
                 hub.send_request(match unmounted {
-                    Some(app_id) => ClientRequest::PortalRemoved { app_id },
+                    Some(_) => ClientRequest::PortalRemoved,
                     None => ClientRequest::ScenePlaced,
                 });
                 responses
@@ -1238,29 +1155,6 @@ struct DomicileCompositor {
     /// `None` before the first frame, which is the one case that has to report
     /// everything: there is no previous picture for a difference to be against.
     painted: Option<damage::Frame>,
-    /// Which apps the chrome holds a frame of, and at what buffer size.
-    ///
-    /// The compositor cannot see the page, so this is its own record rather
-    /// than an observation, and exactly four things change it: a frame the
-    /// chrome took goes in; `app_composited` — which is us telling the chrome
-    /// to drop the canvas — takes one out; so does the element being
-    /// unmounted, which arrives as `remove_portal`; and a chrome that has just
-    /// said `hello` empties it, because that page has no canvas in it yet.
-    ///
-    /// Not a placement that says `native`. The chrome keeps its canvas until
-    /// told, and it cannot be told until there is a frame to put in its place.
-    /// Not a window leaving the scene either — a backgrounded window does that
-    /// with its element still in the page. See [`unmounts_the_element`].
-    ///
-    /// One map rather than a set beside it, because the size is what decides
-    /// whether a partial frame is safe and the two must agree: `drawFrame`
-    /// assigns `canvas.width`/`canvas.height` from these, and assigning either
-    /// resets the backing store to transparent. The logical size is not a
-    /// proxy for it — at scale 2 a buffer can go 806x491 to 1612x982 with the
-    /// logical size unmoved, and 801 and 800 both floor to 400 — so a record
-    /// that says "held" without saying "at what" is a canvas the chrome
-    /// silently blanks while the compositor patches it.
-    held: HashMap<String, (u32, u32)>,
     /// Each app's latest surface as a texture, when presenting. Kept rather
     /// than read back and dropped: this *is* the client's buffer, and drawing
     /// it is what costs nothing.
@@ -1305,14 +1199,6 @@ struct DomicileCompositor {
     chrome_is_current: bool,
     /// Frames held since the depths last changed. See `bands::hold_the_frame`.
     frames_held: u32,
-    /// How many readings have been taken over each window *since the chrome
-    /// was given its pixels*, while the answer is still opaque. A window
-    /// leaves here the moment it settles. See
-    /// `over_window::what_the_chrome_shows`.
-    looks: HashMap<String, u32>,
-    /// The windows whose reading is final, so they are looked at no more.
-    /// See `over_window::what_the_chrome_shows`.
-    settled: HashSet<String>,
     /// Clients already told their shm buffer cannot be shown. A client commits
     /// at its frame rate and the refusal does not change, so it is said once
     /// each rather than once a frame.
@@ -1524,7 +1410,6 @@ impl DomicileCompositor {
                 // chrome and says nothing about what the others painted, and
                 // the flattened frame is what would hide a window if anything
                 // does.
-                self.look_over_the_windows();
             }
             // Unreachable by construction — the arms above cover every
             // arrival that carries a usable frame — but stated so that the
@@ -1535,167 +1420,6 @@ impl DomicileCompositor {
             Arrival::Nothing => return,
         }
         self.needs_present = true;
-    }
-
-    /// Report what the chrome painted where each window is.
-    ///
-    /// A background on any element *behind* a `<domicile-app>` composites
-    /// under the window and hides it — every window, if the element spans the
-    /// desktop, and nothing on screen says why. This is the only thing in the
-    /// tree that would notice; see `over_window` for what a texel over a
-    /// window means, which is not the obvious thing.
-    ///
-    /// Only a window the chrome is holding the pixels of is read at all, and
-    /// only until it has an answer. Both halves are about the stall a texel
-    /// read-back costs: a window the compositor draws itself puts nothing in
-    /// the page and is never read, and a window that has answered is not read
-    /// again. In between the reading is taken on each whole-page frame,
-    /// because a page given a window is not showing it until it has repainted
-    /// since — and that is bounded too, by `PATIENCE`.
-    fn look_over_the_windows(&mut self) {
-        let Some(chrome) = self.chrome_texture.as_ref() else {
-            return;
-        };
-        let page = chrome.logical_size;
-        let frame = (chrome.texture.width(), chrome.texture.height());
-        let y_inverted = chrome.y_inverted;
-        // Where each window is, from the same scene `present` draws from —
-        // read here rather than passed in, because this runs whenever a chrome
-        // frame arrives and `present` returns early on a desktop with no
-        // window of its own to draw into.
-        let placed: Vec<(String, SceneTransform)> = {
-            let host = self.hub.host.lock().unwrap();
-            host.scene()
-                .draw_order()
-                .into_iter()
-                .map(|portal| (portal.app_id.clone(), portal.surface_to_output()))
-                .collect()
-        };
-        // The window's own box, from the page's placement of its
-        // `<domicile-app>` — not from any texture the compositor holds for the
-        // client. It may hold none: a window on the copy path is drawn by the
-        // engine, and a desktop with no window of its own composites nothing.
-        // What is being looked at here is the page.
-        let unsettled: Vec<(String, (f64, f64))> = placed
-            .into_iter()
-            .filter(|(app_id, _)| !self.settled.contains(app_id))
-            // Only a window whose pixels the chrome is holding. Anything else
-            // has nothing of itself in the page for a texel to be about — and
-            // a window the compositor draws itself is never in `held`, so
-            // without this it would cost a `copy_texture` and a `map_texture`
-            // on every whole-page frame for the life of the session, which is
-            // the pipeline stall the native path exists to avoid. See
-            // `what_the_chrome_shows`, which is only ever asked about a window
-            // that got past here.
-            .filter(|(app_id, _)| self.held.contains_key(app_id))
-            .map(|(app_id, surface_to_output)| {
-                // Inside the window, which is all a background behind it
-                // needs to be covered by — and a quarter of the way down
-                // rather than the middle, because the element's own
-                // placeholder is a single line of text that `place-items:
-                // center` puts exactly at the middle. That placeholder is
-                // opaque ink, and a texel of it is a reading of the element
-                // rather than of what is behind it. `surface_to_output` maps
-                // the *unit square* onto the window's box — it is the portal's
-                // size scaled and then placed — so this is (0.5, 0.25) and not
-                // a quarter of anything.
-                let inside = surface_to_output.apply(ScenePoint::new(0.5, 0.25));
-                (app_id, (inside.x, inside.y))
-            })
-            .collect();
-        for (app_id, centre) in unsettled {
-            let Some(texel) = texel_over(centre, page, frame, y_inverted) else {
-                // Off the page, so there is no pixel of the chrome over it and
-                // nothing to say. Left unsettled: a window dragged back on is
-                // one to read again.
-                continue;
-            };
-            let Some(pixel) = self.chrome_pixel_at(texel) else {
-                // No renderer, or a read that failed — said where it failed,
-                // and left unsettled so the next frame tries again.
-                continue;
-            };
-            let taken = self.looks.entry(app_id.clone()).or_insert(0);
-            let looks = *taken;
-            *taken += 1;
-            match what_the_chrome_shows(pixel[3], looks) {
-                // Not an answer. Left unsettled, so the next whole-page frame
-                // asks again.
-                Verdict::LookAgain => {}
-                Verdict::OnScreen => {
-                    self.settle(&app_id, pixel);
-                }
-                Verdict::Hidden => {
-                    self.settle(&app_id, pixel);
-                    warn!(
-                        app_id,
-                        "the chrome is fully opaque where this window is, so the \
-                         window cannot be seen: something behind its \
-                         <domicile-app> element is painting a background"
-                    );
-                }
-                // The absence of a verdict rather than one, so it is said in a
-                // line of its own rather than in the one the check reads.
-                // Stopping is the point: a page that has this window's pixels
-                // and has painted nothing where it is has answered nothing,
-                // and a texel read back every frame for ever is a stall.
-                Verdict::NothingToRead => {
-                    self.looks.remove(&app_id);
-                    self.settled.insert(app_id.clone());
-                    info!(
-                        app_id,
-                        "the page holds this window's pixels and has painted \
-                         nothing where it is; not looking again"
-                    );
-                }
-            }
-        }
-    }
-
-    /// Record what the chrome turned out to show over `app_id`, and stop
-    /// looking.
-    ///
-    /// The colour is reported beside the alpha, and not only because it is
-    /// free: the two failures this can report look identical without it. A
-    /// background behind the element and a frame of the page from before it
-    /// had the window in it are both `opaque=true`, and which one a red run is
-    /// deciding is the whole question. It earned that immediately — a run
-    /// against a deliberate `#123456` behind the stage read `rgb="#193253"`,
-    /// which is the half-opaque window composited over it to the byte.
-    fn settle(&mut self, app_id: &str, pixel: [u8; 4]) {
-        self.looks.remove(app_id);
-        self.settled.insert(app_id.to_string());
-        let alpha = pixel[3];
-        info!(
-            app_id,
-            alpha,
-            opaque = alpha == u8::MAX,
-            rgb = format!("#{:02x}{:02x}{:02x}", pixel[0], pixel[1], pixel[2]),
-            "{}",
-            grepped::CHROME_OVER_WINDOW
-        );
-    }
-
-    /// One texel of the chrome's last frame, as R, G, B, A.
-    fn chrome_pixel_at(&mut self, (x, y): (i32, i32)) -> Option<[u8; 4]> {
-        let texture = self.chrome_texture.as_ref()?.texture.clone();
-        let at = Rectangle::new((x, y).into(), (1, 1).into());
-        let gpu = self.gpu.as_mut()?;
-        let mapping = match gpu.renderer().copy_texture(&texture, at, Fourcc::Abgr8888) {
-            Ok(mapping) => mapping,
-            Err(err) => {
-                warn!(%err, "the chrome over a window would not copy");
-                return None;
-            }
-        };
-        let read = match gpu.renderer().map_texture(&mapping) {
-            Ok(read) => read,
-            Err(err) => {
-                warn!(%err, "the chrome over a window would not map");
-                return None;
-            }
-        };
-        <[u8; 4]>::try_from(read.get(..4)?).ok()
     }
 
     /// Which band this frame's own pixels say it is.
@@ -3197,17 +2921,10 @@ impl DomicileCompositor {
                 // Nothing is held and nothing is owed. The windows a chrome
                 // needs are re-supplied by the hand-over pass in `present`,
                 // which is what an empty `held` asks for.
-                self.held.clear();
                 self.needs_present = true;
                 announce_open_apps(&self.hub);
             }
-            ClientRequest::PortalRemoved { app_id } => {
-                // The element left the page and its canvas went with it, so
-                // the chrome no longer holds this window's pixels. Mounted
-                // again it is a fresh element with nothing in it, and needs
-                // the hand-over a remembered record would skip.
-                self.held.remove(&app_id);
-                // And nothing is owed to a canvas that no longer exists.
+            ClientRequest::PortalRemoved => {
                 // A window with no portal is on every display, and this
                 // window has just lost one: its element left the page, so
                 // there is nothing laid out to place it by. Told nothing, it
@@ -3405,17 +3122,6 @@ fn shadow_in_pixels(shadow: domicile_scene::Shadow, scale: f64) -> Shadow {
         dy: (shadow.dy * scale) as f32,
         spread: (shadow.spread * scale) as f32,
     }
-}
-
-/// Whether a reporting window saw anything worth a line.
-///
-/// An idle desktop should not fill the log, but "idle" has to mean idle on
-/// *either* path. Counting only what the copy path produces leaves the native
-/// one silent however hard it is working — which is what happened the moment
-/// the throttle stopped firing, and it read as a compositor doing nothing
-/// rather than as instrumentation that could not see it.
-fn worth_reporting(sent: usize, dropped: usize, throttled: usize, composited: usize) -> bool {
-    sent > 0 || dropped > 0 || throttled > 0 || composited > 0
 }
 
 /// Record what one present cost, with the submit's time kept out of the
@@ -4150,10 +3856,6 @@ impl XdgShellHandler for DomicileCompositor {
             // it: a desktop with no chrome at all until something re-declared.
             self.bands = Bands::default();
             self.band_textures.clear();
-            // A new page is a new answer to what it paints over a window, so
-            // every window is one to read again.
-            self.looks.clear();
-            self.settled.clear();
             let keyboard = self.seat.get_keyboard().unwrap();
             let serial = SERIAL_COUNTER.next_serial();
             keyboard.set_focus(self, None, serial);
@@ -4183,13 +3885,10 @@ impl XdgShellHandler for DomicileCompositor {
             // monotonic, so no later window takes this name — but it would sit
             // there for the life of the process.
             self.content.remove(&app_id);
-            self.held.remove(&app_id);
             // And nothing is owed to a canvas that no longer exists.
             self.textures.remove(&app_id);
             // An app id can come back — a client that reconnects, a portal
             // re-created — and the window it names then is a different one.
-            self.looks.remove(&app_id);
-            self.settled.remove(&app_id);
             if self.pointer_app.as_deref() == Some(app_id.as_str()) {
                 self.pointer_app = None;
             }
@@ -4722,9 +4421,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // no windows on it and no reason given. `dlopen` is build hygiene — it
     // keeps `cargo build` from needing a Chromium checkout — and not a licence
     // to carry on without the library.
+    //
+    // **Without the flag there is no path to a window at all**, now that the
+    // copy path is gone. That is a running configuration rather than a
+    // mistake — every check in `scripts/` drives the chrome, input, displays
+    // and bands, none of which need a client's pixels, and none of them has a
+    // Chromium build to point at. So it is allowed and it is *said*: a
+    // compositor that shows no window has to give the reason, whether the
+    // reason is a failure or a choice.
     let engine = match arguments.engine_socket.as_deref() {
         Some(socket) => Some(EngineSession::load(socket)?),
-        None => None,
+        None => {
+            warn!(
+                "no --engine-socket, so no client window will be shown: the engine is what puts \
+                 one on the page and the copy path that used to draw them here is gone. The \
+                 chrome, input and the desktop all work as before"
+            );
+            None
+        }
     };
 
     let state = DomicileCompositor {
@@ -4747,7 +4461,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         bridge: BridgeRegistry::new(),
         content: HashMap::new(),
         painted: None,
-        held: HashMap::new(),
         textures: HashMap::new(),
         toplevels: Vec::new(),
         pointer_app: None,
@@ -4759,9 +4472,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         band_textures: HashMap::new(),
         chrome_is_current: false,
         frames_held: 0,
-        looks: HashMap::new(),
         shm_refused: HashSet::new(),
-        settled: HashSet::new(),
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
@@ -5089,27 +4800,6 @@ mod tests {
                 include_str!("../../../scripts/e2e-bands.sh"),
                 "e2e-bands.sh",
             ),
-            (
-                // With the tail the script keeps: it prints the whole line as
-                // the reading, so the trailing `.*` is part of what has to
-                // agree.
-                format!("{}.*", crate::grepped::CHROME_OVER_WINDOW),
-                include_str!("../../../scripts/e2e-window-shows-through.sh"),
-                "e2e-window-shows-through.sh",
-            ),
-            (
-                // The *value*, not just the message. That check passes on the
-                // texel over the window being the window's own half-opaque
-                // pixels rather than merely on it not being fully opaque, so
-                // the number the client draws at is part of the agreement and
-                // this is what stops the two drifting.
-                format!(
-                    "alpha={} opaque=false",
-                    domicile_test_client::TRANSLUCENT_ALPHA
-                ),
-                include_str!("../../../scripts/e2e-window-shows-through.sh"),
-                "e2e-window-shows-through.sh",
-            ),
             // And the colour, which is what the alpha cannot do on its own: a
             // background behind the element whose own alpha happens to be the
             // client's reads as `alpha=128 opaque=false` and is the background
@@ -5118,22 +4808,6 @@ mod tests {
             // `rgb="#101828"`. Premultiplied, which is what the chrome
             // commits, so these are the low three bytes of the colours the
             // client draws.
-            (
-                format!(
-                    "#{:06x}",
-                    domicile_test_client::TRANSLUCENT_COLOURS[0] & 0xff_ffff
-                ),
-                include_str!("../../../scripts/e2e-window-shows-through.sh"),
-                "e2e-window-shows-through.sh",
-            ),
-            (
-                format!(
-                    "#{:06x}",
-                    domicile_test_client::TRANSLUCENT_COLOURS[1] & 0xff_ffff
-                ),
-                include_str!("../../../scripts/e2e-window-shows-through.sh"),
-                "e2e-window-shows-through.sh",
-            ),
         ] {
             assert!(
                 script.contains(&format!("\"{pattern}\"")),
@@ -5575,10 +5249,8 @@ mod tests {
     fn queued(outbound: &crate::outbound::OutboundReceiver) -> Vec<HostMessage> {
         let mut seen = Vec::new();
         while let Some(Some(item)) = outbound.recv_until(Duration::from_millis(100)) {
-            match item {
-                Outbound::Message(message) => seen.push(message),
-                Outbound::Frame { .. } => panic!("a frame was queued, not a message"),
-            }
+            let Outbound::Message(message) = item;
+            seen.push(message);
         }
         seen
     }

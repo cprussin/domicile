@@ -11,7 +11,6 @@ import type { DomicileAppElement } from "@domicile/chrome-sdk/app-element";
 import type {
   AppCompositedMessage,
   AppCursorMessage,
-  AppFrameMessage,
   AppResizedMessage,
 } from "@domicile/chrome-sdk/protocol";
 import { APP_TAG_NAME } from "@domicile/chrome-sdk/register-elements";
@@ -212,22 +211,6 @@ export class Desktop {
   // What the host pushes at one window. Each is a no-op for a window that is
   // not here, unlike the methods above: the host may still be draining frames
   // for a client whose `app_closed` this desktop has already acted on.
-
-  drawFrame({
-    app_id,
-    width,
-    height,
-    scale,
-    pixels,
-    region,
-  }: Pick<
-    AppFrameMessage,
-    "app_id" | "height" | "pixels" | "region" | "scale" | "width"
-  >): void {
-    this.#windows
-      .get(app_id)
-      ?.element.drawFrame(width, height, scale, pixels, region);
-  }
 
   // The client redrew at a new resolution. The element needs it to scale
   // pointer coordinates before the first frame at that size arrives — and

@@ -83,14 +83,12 @@ else
   exit 1
 fi
 
-echo
-echo "== reading an area back off the GPU =="
-if run_filtered dmabuf_import::readback 2; then
-  echo "PASS: a readback gives the rows it was asked for, packed tight"
-else
-  echo "FAIL: the readback is not the pixels the region names."
-  echo "  The region arithmetic is tested without a renderer; a failure here"
-  echo "  with those passing means the copy out of the framebuffer: the"
-  echo "  rectangle's origin, or the stride the mapping is packed at."
-  exit 1
-fi
+# There was a third check here: `dmabuf_import::readback`, which read an area
+# back off the GPU and asserted the rows it got were the ones it asked for,
+# packed tight. It is gone with the copy path — nothing reads a client's buffer
+# back any more, so `copy_out` and `area_to_read` were deleted and the module
+# with them.
+#
+# Removed rather than lowered to a floor of zero, deliberately: `run_filtered`
+# exists because cargo treats a filter matching nothing as a pass, so a floor of
+# zero is the exact silence that guard was built to catch.

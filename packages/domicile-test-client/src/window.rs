@@ -56,7 +56,7 @@ const COLOURS: [u32; 2] = [0x00_20_30_50, 0x00_30_50_80];
 /// How opaque a `--translucent` window is.
 ///
 /// Half. Neither end of the range would do: clear is a window with nothing to
-/// see, and opaque is the answer `e2e-window-shows-through.sh` has to be able
+/// see, and opaque is the answer `e2e-window-shows-through.sh` had to be able
 /// to tell a background painted over the window apart from.
 ///
 /// Public because that check asserts on this exact number in the compositor's
@@ -76,7 +76,7 @@ const _: () = assert!(
 /// window draws.
 ///
 /// Public for the same reason [`TRANSLUCENT_ALPHA`] is:
-/// `e2e-window-shows-through.sh` asserts on these exact colours in the
+/// `e2e-window-shows-through.sh` asserted on these exact colours in the
 /// compositor's log — they are what says the texel over the window is the
 /// window rather than something else at the same alpha — and
 /// `the_grepped_log_messages_are_what_the_scripts_expect` pins the two
@@ -1096,7 +1096,7 @@ mod tests {
         // `Argb8888` is premultiplied alpha. A channel above the alpha is a
         // colour brighter than it is opaque, which no compositor owes an
         // answer for — and the answer this one gives is what
-        // `e2e-window-shows-through.sh` reads.
+        // `e2e-window-shows-through.sh` read.
         for (translucent, opaque) in TRANSLUCENT_COLOURS.iter().zip(COLOURS) {
             let [alpha, red, green, blue] = translucent.to_be_bytes();
             assert_eq!(alpha, TRANSLUCENT_ALPHA, "{translucent:#010x}");

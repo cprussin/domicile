@@ -350,42 +350,6 @@ pub enum HostMessage {
     /// buffer's own pixels, which at scale > 1 are more numerous.
     AppResized { app_id: String, size: [f64; 2] },
 
-    /// A new pixel frame for an app surface, to draw into its `<app>` element.
-    ///
-    /// The pixels are **not** in this message: `bytes` says how many follow the
-    /// header line, as raw row-major RGBA (`width * height * 4`). They travel
-    /// outside the JSON because base64 is the most expensive step in the frame
-    /// path — encoding, escaping and decoding one full-window frame costs ~50ms
-    /// between the two processes, ~31ms of it on the renderer thread that also
-    /// handles the keyboard.
-    ///
-    /// This is still the copy-based stopgap until the dmabuf/CEF bridge lands.
-    AppFrame {
-        app_id: String,
-        /// The buffer's own dimensions, in device pixels. This is the size of
-        /// the pixel data and so of the canvas backing store; divide by
-        /// `scale` for the logical size the element is laid out at.
-        width: u32,
-        height: u32,
-        /// How many device pixels the client drew per logical unit. 1 for a
-        /// client that does not scale, which is the graceful floor: its frame
-        /// is then exactly as sharp as it was before any of this existed.
-        scale: u32,
-        format: String,
-        bytes: u32,
-        /// Which part of the buffer these bytes are, as `[x, y, width,
-        /// height]` in buffer pixels. Absent means all of it.
-        ///
-        /// The copy path's cost is bytes — a frame crosses a Unix socket and
-        /// then the engine's process boundary — so a client that changed a
-        /// cursor cell sends a cursor cell. Only ever present when the chrome
-        /// still holds the frame this one patches; the compositor sends the
-        /// whole buffer for a first frame, a resize, or a window whose pixels
-        /// it just handed back.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        region: Option<[u32; 4]>,
-    },
-
     /// A client went away; the chrome should unmount its `<app>` element.
     AppClosed { app_id: String },
 

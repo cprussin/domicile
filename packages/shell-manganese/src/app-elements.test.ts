@@ -26,8 +26,6 @@ const fakeElement = (calls: Call[]): DomicileAppElement =>
     },
   }) as unknown as DomicileAppElement;
 
-const pixels = new Uint8Array([0, 0, 0, 255]);
-
 describe("AppElements", () => {
   describe("a client that already had a surface", () => {
     it("tells an element that mounts after the announcement", () => {
@@ -82,30 +80,6 @@ describe("AppElements", () => {
       expect(remounted).toStrictEqual([["size", 800, 600]]);
     });
 
-    it("does not take a copied frame's physical pixels for the size", () => {
-      // A frame carries device pixels and the scale to divide them by, and
-      // only the element holds that conversion — so recording one here would
-      // put `1920x1080` behind a client whose surface is `960x540`, and the
-      // next portal to mount would map every click at twice its distance.
-      // Nothing is lost by leaving it: `note_content_size` runs on the
-      // logical size for a copied frame too, so a frame at a new size has
-      // already sent the `app_resized` that records it.
-      const elements = new AppElements();
-      elements.register("term", fakeElement([]));
-      elements.drawFrame({
-        app_id: "term",
-        height: 1080,
-        pixels,
-        scale: 2,
-        width: 1920,
-      });
-      elements.unregister("term");
-
-      const remounted: Call[] = [];
-      elements.register("term", fakeElement(remounted));
-      expect(remounted).toStrictEqual([]);
-    });
-
     it("drops the record when the client goes", () => {
       // Not when its portal unmounts: the shell stops rendering a window for
       // reasons the client knows nothing about — an empty display list, say —
@@ -128,22 +102,6 @@ describe("AppElements", () => {
   });
 
   describe("routing host events", () => {
-    it("draws a frame onto the element registered for its app", () => {
-      const calls: Call[] = [];
-      const elements = new AppElements();
-      elements.register("term", fakeElement(calls));
-      elements.drawFrame({
-        app_id: "term",
-        height: 1,
-        pixels,
-        scale: 1,
-        width: 1,
-      });
-      // The scale rides along: the element needs it to tell the buffer's
-      // device pixels from the logical size it maps the pointer through.
-      expect(calls).toStrictEqual([["draw", 1, 1, 1]]);
-    });
-
     it("carries a resize to the element so it can scale pointer coordinates", () => {
       const calls: Call[] = [];
       const elements = new AppElements();
@@ -169,47 +127,6 @@ describe("AppElements", () => {
       elements.register("term", fakeElement(calls));
       elements.composited({ app_id: "term" });
       expect(calls).toStrictEqual([["drop"]]);
-    });
-
-    it("drops a frame for an app the shell is not showing an element for", () => {
-      const calls: Call[] = [];
-      const elements = new AppElements();
-      elements.register("term", fakeElement(calls));
-      elements.unregister("term");
-      elements.drawFrame({
-        app_id: "term",
-        height: 1,
-        pixels,
-        scale: 1,
-        width: 1,
-      });
-      expect(calls).toStrictEqual([]);
-    });
-  });
-
-  describe("draw timing", () => {
-    it("prices only the draws that actually happened", () => {
-      const clock = [10, 17];
-      const elements = new AppElements(() => clock.shift() ?? 0);
-      elements.register("term", fakeElement([]));
-      elements.drawFrame({
-        app_id: "term",
-        height: 1,
-        pixels,
-        scale: 1,
-        width: 1,
-      });
-      elements.drawFrame({
-        app_id: "ghost",
-        height: 1,
-        pixels,
-        scale: 1,
-        width: 1,
-      });
-      expect(elements.drawTiming.take()).toMatchObject({
-        averageMs: 7,
-        count: 1,
-      });
     });
   });
 });

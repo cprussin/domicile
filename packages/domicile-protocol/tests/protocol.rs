@@ -135,15 +135,6 @@ fn host_messages_round_trip() {
         app_id: "term".into(),
         size: [800.0, 600.0],
     });
-    host_round_trip(&HostMessage::AppFrame {
-        app_id: "term".into(),
-        width: 2,
-        height: 1,
-        scale: 1,
-        format: "rgba".into(),
-        bytes: 8,
-        region: Some([1, 2, 3, 4]),
-    });
     host_round_trip(&HostMessage::AppClosed {
         app_id: "term".into(),
     });
@@ -218,22 +209,6 @@ fn a_desktop_of_no_displays_is_a_message_rather_than_a_silence() {
     let v = serde_json::to_value(HostMessage::Displays { displays: vec![] }).unwrap();
     assert_eq!(v["type"], "displays");
     assert_eq!(v["displays"], serde_json::json!([]));
-}
-
-#[test]
-fn an_app_frame_without_a_region_is_the_whole_buffer() {
-    // The field is what makes a partial frame legible, so a frame that does
-    // not carry one has to mean all of it. Defaulting the other way would draw
-    // every window from its own top-left corner outwards.
-    let frame: HostMessage = serde_json::from_str(
-        r#"{"type":"app_frame","app_id":"term","width":4,"height":3,
-            "scale":1,"format":"rgba","bytes":48}"#,
-    )
-    .unwrap();
-    let HostMessage::AppFrame { region, .. } = frame else {
-        panic!("not an app_frame");
-    };
-    assert_eq!(region, None);
 }
 
 #[test]

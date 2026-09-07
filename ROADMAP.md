@@ -58,7 +58,7 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 
 # Headless end-to-end. No display needed — use these to verify changes.
 # `./scripts/check.sh` runs every `e2e-*.sh` and `test-*.sh`, and is the whole
-# answer before a push. `smoke-compositor` and `probe-transparency` are below
+# answer before a push. `smoke-compositor` is below
 # but not in that loop — run them by hand.
 # Most build the compositor first; `e2e-compose` drives cargo test directly and
 # `e2e-chrome-without-a-host` builds no Rust at all. Every one has a flake app, so
@@ -66,16 +66,13 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/smoke-compositor.sh    # a real client binds our globals
 ./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow
 ./scripts/e2e-late-chrome.sh     # a chrome arriving to a client already running (reload)
-./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised; with a GPU, frames arrive
-./scripts/e2e-window-alpha.sh    # a translucent client's premultiplied alpha is undone once
+./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised
 ./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel
 ./scripts/e2e-chrome-without-a-host.sh   # a chrome whose host socket is dead says so once and stops
 ./scripts/e2e-chrome-fills-the-desktop.sh # a real chrome commits at the described desktop's size, and follows it
 ./scripts/e2e-chrome-fills-a-window.sh # the same where the desktop *is* Domicile's window (--present)
 ./scripts/e2e-window-follows-the-desktop.sh # a described desktop that grows takes its window with it (--present)
 ./scripts/e2e-shell-launch.sh    # running the *shell* brings up a compositor and the chrome inside it
-./scripts/e2e-window-shows-through.sh # nothing behind a <domicile-app> paints over the window, so the client is on screen
-./scripts/probe-transparency.sh  # the engine, as our client, commits real alpha
 
 # Needs a real display — run on the user's machine.
 nix run 'github:cprussin/domicile#native'      # Domicile: a window, composited
@@ -227,7 +224,7 @@ below.
 
   | also needs | which scripts |
   |---|---|
-  | `electron` | `e2e-electron`, `e2e-late-chrome`, `e2e-chrome-without-a-host`, `e2e-window-alpha`, both `e2e-chrome-fills-*` |
+  | `electron` | `e2e-electron`, `e2e-late-chrome`, `e2e-chrome-without-a-host`, both `e2e-chrome-fills-*` |
   | `xvfb` | `e2e-electron`, `e2e-late-chrome`, `e2e-chrome-without-a-host`, `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` |
   | a GL/EGL stack | `e2e-compose` (a software rasteriser is enough) |
   | `libxkbcommon-x11-0`, `xdotool` | `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` — they open a real window, and there is no WM on an Xvfb to resize it or measure it |
@@ -446,11 +443,12 @@ Inside `domicile-compositor`: `compose.rs` is the drawing (layers, the CSS matri
 as the renderer's, desktop↔target mapping, where the chrome lands) and is where
 the offscreen pixel tests live; `screens.rs` is what the desktop is made of and
 how a reloaded display list is matched against the running one; `damage.rs` is
-which rectangles changed between two frames; `dmabuf_import.rs` is the import and
-the readback; `scale.rs` is the output scale arithmetic; `outbound.rs` is the copy
-path's queueing policy; `coalesce.rs` is the config watcher's settling;
-`shortcut.rs`, `straight_alpha.rs`, `timing_window.rs` and `dmabuf_descriptor.rs`
-are each one small thing named after it.
+which rectangles changed between two frames; `dmabuf_import.rs` is the import;
+`scale.rs` is the output scale arithmetic; `outbound.rs` is the queue to the
+chrome; `coalesce.rs` is the config watcher's settling; `shortcut.rs`,
+`timing_window.rs` and `dmabuf_descriptor.rs` are each one small thing named
+after it. `engine.rs`, `engine_session.rs` and `engine_buffers.rs` are the seam
+to the forked engine and what it is holding.
 
 ### How input & pixels actually flow
 
@@ -595,7 +593,11 @@ falloff the shadow uses, is the next candidate to move it.
   Wayland client of ours and the compositor reads each band off the frames it
   commits. Reading the wrong row of the texture, or painting a different
   sentinel, turns it red — which is the only check there is on any of that.
-- ~~a **pixel probe for a chrome that paints where a window is**~~ — done.
+- ~~a **pixel probe for a chrome that paints where a window is**~~ — done, and
+  since **deleted with the copy path**: it asserted on copied pixels reaching a
+  chrome, which no longer happens. The equivalent for the engine path is
+  `packages/domicile-engine/scripts/spike-client-window.sh`, which asserts the
+  colour a real client drew. What follows is why it mattered.
   `e2e-window-shows-through.sh`. Nothing checked that a client's pixels reach
   the screen at all: the chrome is composited over every window, so a
   background anywhere behind a `<domicile-app>` fills in the hole the client

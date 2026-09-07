@@ -32,8 +32,6 @@ const stubMeasure: Measure = () => ({
   zIndex: 0,
 });
 
-const pixels = new Uint8Array([0, 0, 0, 255]);
-
 const portal = (container: HTMLElement): Element => {
   const element = container.querySelector(APP_TAG_NAME);
   if (element === null) {
@@ -84,54 +82,5 @@ describe("AppWindow", () => {
       />,
     );
     expect(portal(container)).not.toBeVisible();
-  });
-
-  describe("frame routing", () => {
-    it("registers the mounted portal so the host's frames reach it", () => {
-      const appElements = new AppElements();
-      const { container } = render(
-        <AppWindow
-          appElements={appElements}
-          appId="term"
-          clickThrough={false}
-          dragging={false}
-          floating={undefined}
-          focused
-          onScreen
-        />,
-      );
-      appElements.drawFrame({
-        app_id: "term",
-        height: 1,
-        pixels,
-        scale: 1,
-        width: 1,
-      });
-      expect(portal(container).querySelector("canvas")).not.toBeNull();
-    });
-
-    it("unregisters the portal when the window unmounts", () => {
-      const appElements = new AppElements();
-      const { unmount } = render(
-        <AppWindow
-          appElements={appElements}
-          appId="term"
-          clickThrough={false}
-          dragging={false}
-          floating={undefined}
-          focused
-          onScreen
-        />,
-      );
-      unmount();
-      appElements.drawFrame({
-        app_id: "term",
-        height: 1,
-        pixels,
-        scale: 1,
-        width: 1,
-      });
-      expect(appElements.drawTiming.take()).toBeUndefined();
-    });
   });
 });

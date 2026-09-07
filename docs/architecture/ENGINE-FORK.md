@@ -1006,11 +1006,13 @@ copy path before the compositor can submit leaves nothing drawing at all.
 
 - [x] delete the vendored exo protocols and `--experiment-augmenter` — the
       self-contained one, and the only one that touches nothing else
-- [ ] **`--engine-socket` becomes required.** Settled but not yet done, and the
-      order matters: 18 things start the compositor without it — every
-      `scripts/e2e-*.sh`, the integration tests — so requiring it before the
-      copy path goes breaks the suite that guards the deletion. It lands in the
-      same change as the deletion, not before
+- [x] ~~**`--engine-socket` becomes required.**~~ **Reversed by the attempt.**
+      It cannot be required: CI has no Chromium build, so requiring it fails
+      every `scripts/e2e-*.sh` and the integration tests — the suite that
+      guards the deletion. What ships instead is a compositor that announces
+      the no-engine configuration at startup, because without the flag there
+      is now no path to a window at all and a desktop showing none has to give
+      the reason whether the reason is a failure or a choice
 - [ ] **an shm→dmabuf upload, *after* the copy path goes.** `publish_frame`
       submits only `CommittedBuffer::Gpu`; an shm client rides the copy path
       today, so deleting that path takes the window away from every toolkit
@@ -1028,9 +1030,31 @@ copy path before the compositor can submit leaves nothing drawing at all.
       mind about the principle: a shipped desktop that silently shows no
       window is still the defect ERRORS.md is about. Whoever closes this box
       should make an shm client's failure *say* so rather than draw nothing,
-      and the box is not closed until the upload exists
-- [ ] delete bands, the copy path, `AppFrame`, the measure loop, the shaders
-- [ ] `<domicile-app>` becomes a `<canvas>` and one call
+      and the box is not closed until the upload exists.
+
+      **The saying-so is done**: `publish_frame` refuses a non-dmabuf buffer
+      once per client, naming the client and pointing here. The upload is not
+- [x] delete the copy path, `AppFrame`, the hand-over pass, the over-window
+      pass and the measure loop's frame half — 5,238 lines out over two
+      commits. `straight_alpha.rs`, `over_window.rs`, most of
+      `dmabuf_import.rs`, the outbound frame queue, `host-stream.ts`'s byte
+      framing and both shells' frame handlers went with them
+
+      Two instruments were **kept and emptied rather than deleted**, with the
+      reason in a doc comment on each: `BridgeClient.roundTrip` and
+      `AppElements.drawTiming` measured keystroke-to-pixel latency, and could
+      only do it because the bridge drew the frame. That is the measurement
+      this fork answers to, so it has to be rebuilt in the compositor, which
+      sends the key and holds the engine connection that knows when viz
+      presented
+- [ ] **rebuild the latency measurement** in the compositor — see above. Until
+      it exists nothing measures the requirement the fork is for
+- [ ] bands, the shaders and `compose.rs`'s CSS reimplementation. Still
+      standing: they draw the chrome and the desktop, which the engine path
+      does not replace
+- [ ] `<domicile-app>` becomes a `<canvas>` and one call. Its old canvas and
+      `drawFrame` are gone; what remains is the canvas that *embeds*, which is
+      engine work rather than deletion
 
 Phase 3 — be the display server:
 

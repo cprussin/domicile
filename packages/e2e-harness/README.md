@@ -1,7 +1,7 @@
 # @domicile/e2e-harness
 
 Headless chrome stand-ins for the scripts in `/scripts` — the `e2e-*.sh`
-checks, the `measure*.sh` benchmarks, and `probe-transparency.sh` — plus the
+checks and the `measure*.sh` benchmarks — plus the
 check on those scripts' own machinery. The real chrome is the Electron app in
 [`packages/shell-manganese`](../shell-manganese/README.md); these speak the same
 protocol over the same socket without needing a display, so the message plane
@@ -10,8 +10,6 @@ can be verified in CI and on a headless box.
 | Entry | Used by | What it does |
 |---|---|---|
 | `src/mock-chrome.ts` | `e2e-dmabuf.sh` | Connects, handshakes, and prints every frame the host pushes so the calling script can grep for one. |
-| `src/alpha-probe.ts` | `probe-transparency.sh` | Reports whether the frames an app commits carry real transparency, which is the assumption hole-punching rests on. |
-| `src/straight-alpha-probe.ts` | `e2e-window-alpha.sh` | Reports whether frames reaching a chrome carry *straight* alpha, i.e. that the compositor divided out what the client premultiplied. |
 | `src/keystroke-driver.ts` | `measure.sh` | Types over the host socket at a steady rate, so the latency numbers are measured against a known count of keystrokes. |
 | `src/chrome-typist.ts` | `measure-round-trip.sh` | Types with real input events into the chrome's own window instead, which is what puts the chrome's own clock back in the measured loop. |
 

@@ -10,18 +10,23 @@ import type { DomicileAppElement } from "@domicile/chrome-sdk/app-element";
 import type {
   AppCompositedMessage,
   AppCursorMessage,
-  AppFrameMessage,
   AppResizedMessage,
 } from "@domicile/chrome-sdk/protocol";
 import { SampleWindow } from "@domicile/chrome-sdk/sample-window";
 
-/** The clock the draw timing reads; a parameter so tests can hold it. */
-const monotonicNow = (): number => performance.now();
-
 export class AppElements {
   /**
-   * How long the canvas draw is taking — the last stage of the round trip, and
-   * one of the two the compositor cannot see. Read by whoever reports.
+   * How long a client's frame took to reach the screen.
+   *
+   * **Empty, and that is a gap rather than a tidy-up.** This shell used to
+   * draw a client's pixels into a canvas and priced that draw. A client's
+   * buffer now goes to the display compositor and the page embeds the
+   * surface, so no drawing happens here to time.
+   *
+   * Kept rather than deleted because it is one half of the instrument for the
+   * requirement this fork answers to — that the compositor add no latency a
+   * user can see. See `BridgeClient.roundTrip` for the other half and where
+   * both have to be rebuilt.
    */
   readonly drawTiming = new SampleWindow();
 
@@ -39,17 +44,8 @@ export class AppElements {
    * with nothing coming to correct it where the compositor draws the client
    * itself.
    *
-   * A copied frame is not recorded here. It is the same fact, but a remounted
-   * portal on the copy path is re-supplied by the hand-over the compositor
-   * does for it, so the element is told again; and the sizes a frame carries
-   * are physical rather than logical, which only `drawFrame` converts.
    */
   readonly #drawnAlready = new Map<string, readonly [number, number]>();
-  readonly #now: typeof monotonicNow;
-
-  constructor(now: typeof monotonicNow = monotonicNow) {
-    this.#now = now;
-  }
 
   register(appId: string, element: DomicileAppElement): void {
     this.#elements.set(appId, element);
@@ -104,29 +100,6 @@ export class AppElements {
     if (size !== undefined) {
       this.#drawnAlready.set(appId, size);
       this.#elements.get(appId)?.setSurfaceSize(size[0], size[1]);
-    }
-  }
-
-  // A frame for an app with no element is a no-op: the host may still be
-  // draining frames for a portal this chrome has already torn down.
-  drawFrame({
-    app_id,
-    width,
-    height,
-    scale,
-    pixels,
-    region,
-  }: Pick<
-    AppFrameMessage,
-    "app_id" | "width" | "height" | "scale" | "pixels" | "region"
-  >): void {
-    const element = this.#elements.get(app_id);
-    // Only a draw that happened is priced: recording a zero for a frame that
-    // hit no element would pull the average down with work never done.
-    if (element !== undefined) {
-      const started = this.#now();
-      element.drawFrame(width, height, scale, pixels, region);
-      this.drawTiming.record(this.#now() - started);
     }
   }
 

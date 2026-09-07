@@ -17,8 +17,6 @@ import type { CursorShape } from "./protocol";
 import { surfaceLocal } from "./surface-coordinates";
 import { axisFromWheel } from "./wheel-axis";
 
-const BYTES_PER_PIXEL = 4;
-
 /** The class name the shell stylesheet uses to hide the empty placeholder. */
 const HAS_SURFACE_CLASS = "has-surface";
 
@@ -49,13 +47,6 @@ export type DomicileAppElement = HTMLElement & {
    * Draw a frame the host pushed. `region`, when given, is the part of the
    * surface `pixels` covers; without it they are the whole surface.
    */
-  drawFrame(
-    width: number,
-    height: number,
-    scale: number,
-    pixels: Uint8Array<ArrayBuffer>,
-    region?: readonly [x: number, y: number, width: number, height: number],
-  ): void;
 };
 
 /**
@@ -247,66 +238,6 @@ export const createAppElement = (
       this.style.cursor = cursor;
     }
 
-    /**
-     * Draw a client frame (raw row-major RGBA) into this element's canvas.
-     *
-     * `width` and `height` are the buffer's own device pixels and `scale` says
-     * how many of those the client drew per logical unit. The two are only the
-     * same number at scale 1: the canvas backing store takes the pixels, while
-     * the surface size — what pointer coordinates are mapped through — is
-     * logical.
-     */
-    drawFrame(
-      width: number,
-      height: number,
-      scale: number,
-      pixels: Uint8Array<ArrayBuffer>,
-      region?: readonly [x: number, y: number, width: number, height: number],
-    ): void {
-      // A scale of zero would divide the surface out of existence; it can only
-      // arrive from a host that disagrees with this build about the protocol.
-      const logical = Math.max(1, Math.trunc(scale));
-      this.setSurfaceSize(width / logical, height / logical);
-      const canvas = this.#ensureCanvas();
-      // The backing store is the buffer's device pixels while CSS keeps the
-      // element its logical size, which is what puts one canvas pixel on one
-      // display pixel. Assigning either dimension resets the canvas, so only do
-      // it when the surface actually changed size.
-      if (canvas.width !== width) {
-        canvas.width = width;
-      }
-      if (canvas.height !== height) {
-        canvas.height = height;
-      }
-      // Not `context`: that name is the element's collaborators, closed over
-      // by the whole class, and a canvas that shadowed it would let an edit in
-      // here reach for `context.bridge` and typecheck against the wrong thing.
-      const canvasContext = canvas.getContext("2d");
-      // A DOM implementation without a 2d context (test environments) still
-      // exercises the canvas-creation and sizing paths above; there is nothing
-      // to draw into.
-      if (canvasContext !== null) {
-        // A partial frame is only the part the client changed, so its rows are
-        // the *region's* width and it lands at the region's corner. Sizing the
-        // patch by the buffer would read past the bytes that arrived; placing it
-        // at the origin would draw the window out of its own top-left corner.
-        const [x, y, patchWidth, patchHeight] = region ?? [0, 0, width, height];
-        canvasContext.putImageData(
-          new ImageData(
-            new Uint8ClampedArray(
-              pixels.buffer,
-              pixels.byteOffset,
-              patchWidth * patchHeight * BYTES_PER_PIXEL,
-            ),
-            patchWidth,
-            patchHeight,
-          ),
-          x,
-          y,
-        );
-      }
-    }
-
     #place(): void {
       // Priced whether or not anything is sent, and whether or not it finishes.
       // What costs is the measuring, and the measuring happens every frame for
@@ -392,11 +323,6 @@ export const createAppElement = (
       }
     }
 
-    #ensureCanvas(): HTMLCanvasElement {
-      this.#canvas ??= this.appendChild(createSurfaceCanvas());
-      return this.#canvas;
-    }
-
     // Pointer input over this element belongs to the client underneath it, in
     // surface-local coordinates. Keyboard input is document-level and is wired up
     // by `registerElements` instead.
@@ -470,44 +396,3 @@ export const createAppElement = (
       }
     }
   };
-
-const createSurfaceCanvas = (): HTMLCanvasElement => {
-  const canvas = document.createElement("canvas");
-  canvas.className = "domicile-app-surface";
-  // On the copy path the client's pixels are ordinary content, and the box
-  // that holds them does not clip them: `border-radius` on the element rounds
-  // the element and does nothing to a child. A window sent down this path
-  // *because* of its radius would then be drawn square by the very path meant
-  // to draw it round.
-  //
-  // On the canvas rather than as `overflow` on the element, because a replaced
-  // element's own content *is* clipped to its border radius — and the
-  // element's inline style belongs to whoever wrote the chrome, not to us.
-  canvas.style.borderRadius = "inherit";
-  // Filled to the element, because a canvas has no size of its own beyond its
-  // backing store: it lays out at the *buffer's* dimensions, in CSS pixels.
-  // Left to itself it draws the window at whatever size the client last drew
-  // at, so the same window changes size when it falls to this path. On a 2x
-  // display that is twice the element, permanently; at any scale it is wrong
-  // for as long as the element and the buffer disagree, which is every resize
-  // until the client has answered it.
-  //
-  // Not a style choice a chrome makes — a chrome that wants the window a
-  // different size sizes the *element*. Two limits on how far this follows it:
-  // a percentage resolves against the element's *content* box while the
-  // compositor draws across its border box, so padding on a `<domicile-app>`
-  // insets this path's window and not the other's; and where the element has
-  // no definite block size, `100%` computes to `auto` and a replaced element
-  // then takes its block size from its aspect ratio rather than filling.
-  // Neither is reachable from the shell in this repo, whose windows are
-  // `position: absolute; inset: 0` with no padding.
-  //
-  // `display` with them: a canvas is inline by default, and an inline box sits
-  // on the text baseline with a descender's worth of gap beneath it — enough
-  // to show a strip of whatever is behind the window. A chrome with a CSS
-  // reset already gets this; the SDK cannot assume one.
-  canvas.style.display = "block";
-  canvas.style.inlineSize = "100%";
-  canvas.style.blockSize = "100%";
-  return canvas;
-};
