@@ -320,6 +320,25 @@ impl Engine {
         unsafe { f(self.handle, &mut argb) }.then_some(argb)
     }
 
+    /// THROWAWAY, with the rest of the spike. What the display compositor drew
+    /// at `x`, `y` in the browser's window.
+    ///
+    /// The centre stops being enough the moment a page holds two `<app>`
+    /// elements: side by side, no pixel is inside both, and two windows on one
+    /// page is the claim the broker's unit tests cannot make for themselves.
+    pub fn spike_pixel(&self, x: i32, y: i32) -> Option<u32> {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, i32, i32, *mut u32) -> bool> = self
+            .symbol(
+                b"domicile_engine_spike_sample_pixel\0",
+                "domicile_engine_spike_sample_pixel",
+            )
+            .ok()?;
+        let mut argb = 0u32;
+        // SAFETY: as elsewhere — the handle is live, and `argb` outlives the
+        // call.
+        unsafe { f(self.handle, x, y, &mut argb) }.then_some(argb)
+    }
+
     fn symbol<T>(&self, name: &[u8], readable: &'static str) -> Result<Symbol<'_, T>, EngineError> {
         symbol(&self.library, &self.path, name, readable)
     }

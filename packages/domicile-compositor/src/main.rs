@@ -1773,15 +1773,25 @@ impl DomicileCompositor {
         // the compositor holds the browser's invitation, so nothing else can
         // ask what viz drew. Logged rather than returned because the thing that
         // checks it is a shell script.
-        if let Some(drawn) = self
-            .engine
-            .as_ref()
-            .and_then(EngineSession::spike_window_centre)
-        {
-            tracing::info!(
-                target: "domicile::engine::spike",
-                "engine drew #{drawn:08X} at the centre of the browser's window"
-            );
+        let Some(session) = self.engine.as_ref() else {
+            return true;
+        };
+        if spike_probe_points().is_empty() {
+            if let Some(drawn) = session.spike_window_centre() {
+                tracing::info!(
+                    target: "domicile::engine::spike",
+                    "engine drew #{drawn:08X} at the centre of the browser's window"
+                );
+            }
+        } else {
+            for &(x, y) in spike_probe_points() {
+                if let Some(drawn) = session.spike_pixel(x, y) {
+                    tracing::info!(
+                        target: "domicile::engine::spike",
+                        "engine drew #{drawn:08X} at ({x},{y}) of the browser's window"
+                    );
+                }
+            }
         }
         true
     }
@@ -4721,6 +4731,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     })?;
     Ok(())
+}
+
+/// THROWAWAY, with the rest of the spike. Where in the browser's window to
+/// ask what viz drew, from `DOMICILE_SPIKE_PROBE` as `x,y;x,y`.
+///
+/// Empty -- the ordinary case -- means the window's centre, which is where a
+/// one-`<app>` page puts its canvas. A page with two of them has no pixel
+/// inside both, so the two-window guard names one point per canvas. Parsed
+/// once: this is called from the submit path, at the client's frame rate.
+///
+/// A malformed entry is dropped with a warning rather than failing the run.
+/// The guard checks for the colours it expects and reports their absence, so
+/// a probe that silently sampled nothing still fails -- loudly, and in the
+/// place that knows what it was looking for.
+fn spike_probe_points() -> &'static [(i32, i32)] {
+    static POINTS: std::sync::OnceLock<Vec<(i32, i32)>> = std::sync::OnceLock::new();
+    POINTS.get_or_init(|| {
+        let Ok(raw) = std::env::var("DOMICILE_SPIKE_PROBE") else {
+            return Vec::new();
+        };
+        raw.split(';')
+            .filter(|entry| !entry.trim().is_empty())
+            .filter_map(|entry| {
+                let (x, y) = entry.split_once(',')?;
+                match (x.trim().parse(), y.trim().parse()) {
+                    (Ok(x), Ok(y)) => Some((x, y)),
+                    _ => {
+                        warn!(entry, "DOMICILE_SPIKE_PROBE: not an `x,y` point; ignored");
+                        None
+                    }
+                }
+            })
+            .collect()
+    })
 }
 
 #[cfg(test)]

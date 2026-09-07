@@ -402,6 +402,15 @@ struct DomicileEngine {
     return sampled;
   }
 
+  // THROWAWAY. See domicile_engine_spike.h.
+  bool SamplePixel(int32_t x, int32_t y, uint32_t* argb) {
+    bool sampled = false;
+    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::SamplePixelOnThread,
+                                      base::Unretained(this), x, y, &sampled,
+                                      argb));
+    return sampled;
+  }
+
   void DestroyBuffer(DomicileSurfaceId surface, DomicileBufferId buffer) {
     thread_.task_runner()->PostTask(
         FROM_HERE,
@@ -540,6 +549,27 @@ struct DomicileEngine {
     loop.Run();
   }
 
+  void SamplePixelOnThread(int32_t x,
+                           int32_t y,
+                           bool* sampled,
+                           uint32_t* argb) {
+    if (!probe_) {
+      return;
+    }
+    base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
+    probe_->SamplePixel(
+        gfx::Point(x, y),
+        base::BindOnce(
+            [](base::RunLoop* loop, bool* sampled, uint32_t* argb, bool ok,
+               uint32_t colour) {
+              *sampled = ok;
+              *argb = colour;
+              loop->Quit();
+            },
+            &loop, sampled, argb));
+    loop.Run();
+  }
+
   void DestroyBufferOnThread(DomicileSurfaceId surface,
                              DomicileBufferId buffer) {
     auto iter = surfaces_.find(surface);
@@ -664,6 +694,16 @@ bool domicile_engine_spike_sample_window_center(DomicileEngine* engine,
     return false;
   }
   return engine->SampleWindowCenter(argb);
+}
+
+bool domicile_engine_spike_sample_pixel(DomicileEngine* engine,
+                                        int32_t x,
+                                        int32_t y,
+                                        uint32_t* argb) {
+  if (!engine || !argb) {
+    return false;
+  }
+  return engine->SamplePixel(x, y, argb);
 }
 
 }  // extern "C"

@@ -201,6 +201,31 @@ jobs:
             packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
             packages/domicile-engine/scripts/spike-client-window.sh "$CHROMIUM"
 
+      # Two clients, two windows, one page — the claim the broker's unit tests
+      # cannot make for themselves. They assert that two apps get two sinks;
+      # whether viz then resolves two SurfaceDrawQuads in one aggregation is a
+      # different question, and a shell is a desktop of windows.
+      - name: Two clients' windows on one page
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-two-windows.sh "$CHROMIUM"
+
+      # Its control is sharper than the one above, and it is the one that would
+      # have caught the heuristic this replaced: with a single client running,
+      # the second canvas must show its own fallback rather than the first
+      # client's window. A broker that dispatched on nothing would pass the
+      # two-client run and fail this.
+      - name: The second window is not the first
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-two-windows.sh "$CHROMIUM"
+
       # Everything the guard writes down, because none of it is on stdout.
       #
       # `spike-wayland.sh` sends sway's output to a file and then says only "no
@@ -214,7 +239,8 @@ jobs:
         if: ${{ failure() }}
         run: |
           for log in /tmp/domicile-spike-wayland.log \
-                     /tmp/domicile-client-window-compositor.log; do
+                     /tmp/domicile-client-window-compositor.log \
+                     /tmp/domicile-two-windows-compositor.log; do
             echo "::group::$log"
             tail -200 "$log" 2>&1 || true
             echo "::endgroup::"

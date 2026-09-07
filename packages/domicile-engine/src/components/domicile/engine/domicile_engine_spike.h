@@ -36,6 +36,25 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_window_center(
     DomicileEngine* engine,
     uint32_t* argb);
 
+// The colour at `x`, `y` in the browser's window, as SkColor (ARGB). False if
+// there is no window yet, nothing has been drawn, or the point is outside it.
+//
+// The centre is not enough once a page holds more than one <app>: two windows
+// side by side have no pixel that is both, and "viz aggregated two surfaces
+// into one page" is exactly the claim the unit tests cannot make -- they
+// exercise the broker's bookkeeping, not the aggregator. So the two-window
+// guard names a point inside each canvas and asserts a different client's
+// colour at each.
+//
+// Outside the window fails rather than clamps, the same way SpikeProbe's
+// SamplePixel does: a measurement that silently samples the wrong pixel is
+// worse than one that stops.
+DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
+    DomicileEngine* engine,
+    int32_t x,
+    int32_t y,
+    uint32_t* argb);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
