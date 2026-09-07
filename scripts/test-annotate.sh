@@ -65,7 +65,7 @@ expect "a percent sign in the message" \
 expect "nothing to say" "::error::" "$(annotate "")"
 
 # The body is the end of a log, newest first: GitHub truncates a long
-# annotation from the end, and the end of a build log is where the error is.
+# annotation from the end, so what a run stopped on has to be near the front.
 LOG="$(file_of 'first
 middle
 ERROR: the last word')"
@@ -98,37 +98,31 @@ last
 # A skip is not a failure. CI exits 77 and fails the step on its own; an
 # annotation that says `error` would paint a red mark on a run where a skip
 # was expected and allowed.
-# A build log does not end with its error. turbo prints eight lines of summary
-# after the failing task's output, so a window of a dozen carries the summary
-# and not the reason — which is the whole of what the annotation is for.
-BUILD_LOG="$(file_of 'ERROR: the thing that actually broke
-vite output
-vite output
-vite output
-vite output
-vite output
-vite output
-vite output
-vite output
-vite output
-vite output
-ERROR command finished
-
-Tasks:    1 successful
+# A build log does not end with its error, and the reason has to survive both
+# the window and the reversal. turbo prints eight lines of summary after the
+# failing task and vite several more, so the error sits a dozen or so lines
+# from the end — inside a window of forty, outside one of twelve.
+#
+# The whole reversed body is compared, not a substring, which is this file's
+# rule and is what makes the ORDER visible: the reason must land near the top
+# of the annotation, because the far end is what GitHub eats.
+BUILD_LOG="$(file_of 'vite v8.2.1 building for production...
+transforming...
+ERROR: the thing that actually broke
+    at someFrame
+    at anotherFrame
+✗ Built in 1.39s
+error during build
+@domicile/shell-simple:build:vite: failed
+ERROR command finished with 1
+Tasks:    0 successful
 Cached:   0 cached
 Time:     2s
-Failed:   one
-
+Failed:   @domicile/shell-simple#build:vite
 ERROR  run failed')"
-case "$(annotate_from "build failed" "$BUILD_LOG")" in
-  *"ERROR: the thing that actually broke"*)
-    printf '  ok    %s\n' "a build failure keeps its error, not just the summary" ;;
-  *)
-    printf '  FAIL  %s\n    got: %s\n' \
-      "a build failure keeps its error, not just the summary" \
-      "$(annotate_from "build failed" "$BUILD_LOG")"
-    FAILED=$((FAILED + 1)) ;;
-esac
+expect "a build failure keeps its error, near the front" \
+  "::error::build failed%0A%0AERROR  run failed%0AFailed:   @domicile/shell-simple#build:vite%0ATime:     2s%0ACached:   0 cached%0ATasks:    0 successful%0AERROR command finished with 1%0A@domicile/shell-simple:build:vite: failed%0Aerror during build%0A✗ Built in 1.39s%0A    at anotherFrame%0A    at someFrame%0AERROR: the thing that actually broke%0Atransforming...%0Avite v8.2.1 building for production..." \
+  "$(annotate_from "build failed" "$BUILD_LOG")"
 
 expect "a skip is a notice, not an error" \
   "SKIP: no kitty

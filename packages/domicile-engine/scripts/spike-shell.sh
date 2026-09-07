@@ -126,9 +126,9 @@ command -v bun >/dev/null || {
 }
 
 # The shell's page, built the way the repository builds a shell: turbo's
-# `build:vite`, filtered to this shell. Ten scripts in `scripts/` already spell
-# it that way, `run-native.sh` — this guard's direct counterpart — among them,
-# and that is the point: a guard that built the page its own way would be
+# `build:vite`, filtered to this shell. Twelve scripts in `scripts/` already
+# spell it that way, `run-native.sh` — this guard's direct counterpart — among
+# them, and that is the point: a guard that built the page its own way would be
 # measuring a page nobody ships.
 #
 # It matters because two generated things have to exist and neither is in the
@@ -140,9 +140,14 @@ command -v bun >/dev/null || {
 #
 # `CI=1` because turbo's `//#build:install-modules` runs a NON-frozen
 # `bun install` when it is unset, one line after the frozen one above asked for
-# the opposite — and that task declares `bun.lock` an output, so even a cache
-# hit writes a lockfile over the working tree's. `flake.nix` sets it for the
-# same reason.
+# the opposite. `flake.nix` sets it too, for its own reason — there is no
+# network in that sandbox.
+#
+# It closes the execution path and not the other one: that task declares
+# `bun.lock` an output and `CI` is not in `globalEnv`, so a cache entry a
+# developer populated is replayed here and the restore writes a lockfile over
+# the tree's whatever this is set to. That is a property of `turbo.json` and
+# wants fixing there.
 #
 # `build:vite` has both edges — `^prepare` and `^build` — which is why it is
 # the whole answer and `turbo build` plus a `prepare` here was not: it built

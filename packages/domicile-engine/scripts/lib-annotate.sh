@@ -33,12 +33,14 @@ annotate() {
 # A failure that carries the end of the log it read.
 #
 # The LAST lines, and reversed so the newest is first: GitHub truncates a long
-# annotation from the end, and the end of a log is the part worth keeping.
+# annotation from the end, and what a run stopped on is near the end of what it
+# wrote.
 #
-# Forty of them, not a dozen. A build log does not end with its error — turbo
-# prints eight lines of summary after the failing task, and vite several more —
-# so a small window carries the epilogue and drops the reason, which is the one
-# thing the annotation exists to carry.
+# Near, not at. A build log ends with a summary — turbo prints eight lines
+# after the failing task, and vite several more — so the window has to reach
+# past the epilogue to the reason. Forty does; a dozen did not. Reversed, the
+# reason then sits a few lines into the annotation rather than at its far end,
+# which is the point of reversing at all.
 annotate_from() {
   local title="$1" file="$2" body
   # Reversed in awk rather than by `tac`, which preserves a missing final

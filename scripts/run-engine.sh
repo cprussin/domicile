@@ -65,12 +65,14 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # The page, built the way the repository builds a shell — turbo's `build:vite`,
-# filtered to this one, which is how run-native.sh and every other script here
-# builds one. Nothing here is a second way to build a shell.
+# filtered to this one, which is how run-native.sh and every other script that
+# builds a workspace shell does it. Nothing here is a second way to build a
+# shell.
 #
 # `CI=1` because turbo's `//#build:install-modules` runs a non-frozen
-# `bun install` without it, and declares `bun.lock` an output, so it can write
-# a lockfile over the one in the tree.
+# `bun install` without it. It does not close the other half: that task
+# declares `bun.lock` an output, so a cache hit restores a lockfile over the
+# tree's regardless. That belongs in `turbo.json`.
 #
 # Not just this package's vite: `build:vite` depends on `^prepare` and
 # `^build`, and both are needed on a checkout where nothing has been built.

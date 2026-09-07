@@ -160,6 +160,13 @@ DomicileBrowserService& GetDomicileBrowserService() {
 
 }  // namespace
 
+void StartDomicileFrameSinkBroker() {
+  // Constructing it is what opens the socket, and the constructor is the one
+  // that checks for the switch — so a browser that was not given a path does
+  // nothing here beyond building an object that binds nothing.
+  GetDomicileBrowserService();
+}
+
 void BindDomicileExternalSurfaceProvider(
     mojo::PendingReceiver<domicile::mojom::ExternalSurfaceProvider> receiver) {
   GetDomicileBrowserService().Bind(std::move(receiver));
