@@ -163,6 +163,11 @@ impl EngineSession {
         self.engine.spike_pixel(x, y)
     }
 
+    /// THROWAWAY. See [`crate::engine::Engine::spike_find`].
+    pub fn spike_find(&self, argb: u32) -> Option<(i32, i32)> {
+        self.engine.spike_find(argb)
+    }
+
     /// Which app a surface belongs to, for an event that names only the
     /// surface. One engine holds a handful of windows, so a scan beats keeping
     /// a second map honest.

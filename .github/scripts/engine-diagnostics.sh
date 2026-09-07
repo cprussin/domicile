@@ -9,10 +9,12 @@ set -u
 
 for log in /tmp/domicile-spike-wayland.log \
            /tmp/domicile-client-window-compositor.log \
-           /tmp/domicile-two-windows-compositor.log; do
+           /tmp/domicile-two-windows-compositor.log \
+           /tmp/domicile-shell-compositor.log \
+           /tmp/domicile-shell-bridge.log; do
   [ -f "$log" ] || continue
   echo "::group::$log"
-  grep -aE 'app_appeared|brokered a frame sink|configure ->|first frame|engine drew|never released|refused|ERROR|WARN|panic' \
+  grep -aE 'app_appeared|brokered a frame sink|configure ->|first frame|engine drew|engine found|has not drawn|agreed the protocol|never released|refused|ERROR|WARN|panic' \
     "$log" | tail -40 || true
   echo "--- last 10 lines:"
   tail -10 "$log" 2>&1 | cut -c1-300 || true
@@ -60,6 +62,11 @@ echo "whose frames the engine took:"
 sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
   grep -a "first frame" | sed 's/.*the engine took/  the engine took/' |
   cut -c1-200 | sort -u || true
+
+echo "what was looked for and found, if anything:"
+sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
+  grep -aoE 'engine (found|has not drawn) #[0-9A-F]{8}.*' | cut -c1-200 |
+  sort -u | sed 's/^/  /' || true
 
 echo "what was drawn, if anything:"
 grep -ahoE 'engine drew #[0-9A-F]{8}( at \([0-9]+,[0-9]+\))?' \

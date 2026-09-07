@@ -355,6 +355,38 @@ impl Engine {
         unsafe { f(self.handle, x, y, &mut argb) }.then_some(argb)
     }
 
+    /// THROWAWAY, with the rest of the spike. Where `argb` is in the browser's
+    /// window, if it is anywhere in it.
+    ///
+    /// The question a shell guard has. A named point is the spike pages'
+    /// question, because those pages put their canvases where the harness can
+    /// compute them; a shell decides where its windows go in its own layout,
+    /// and a guard naming a pixel would be asserting the shell's CSS rather
+    /// than the seam.
+    pub fn spike_find(&self, argb: u32) -> Option<(i32, i32)> {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *mut i32, *mut i32) -> bool> =
+            match self.symbol(
+                b"domicile_engine_spike_find_colour\0",
+                "domicile_engine_spike_find_colour",
+            ) {
+                Ok(symbol) => symbol,
+                Err(err) => {
+                    tracing::error!(
+                        %err,
+                        "libdomicile_engine.so has no domicile_engine_spike_find_colour; it \
+                         was built before the shell guard existed. Rebuild it: autoninja -C \
+                         out/Domicile domicile_engine"
+                    );
+                    return None;
+                }
+            };
+        let mut x = 0i32;
+        let mut y = 0i32;
+        // SAFETY: as elsewhere — the handle is live, and both outputs outlive
+        // the call.
+        unsafe { f(self.handle, argb, &mut x, &mut y) }.then_some((x, y))
+    }
+
     fn symbol<T>(&self, name: &[u8], readable: &'static str) -> Result<Symbol<'_, T>, EngineError> {
         symbol(&self.library, &self.path, name, readable)
     }

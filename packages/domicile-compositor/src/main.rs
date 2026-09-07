@@ -1225,6 +1225,15 @@ struct DomicileCompositor {
     /// THROWAWAY. Points the probe has already refused, so that saying so
     /// costs one line rather than one per submit.
     probe_refused: HashSet<(i32, i32)>,
+
+    /// THROWAWAY. Colours `DOMICILE_SPIKE_FIND` asked for that have turned up.
+    /// The search captures the whole window, so a colour already found is not
+    /// looked for again.
+    probe_found: HashSet<u32>,
+
+    /// THROWAWAY. Colours already reported absent, so a guard that polls for
+    /// ninety seconds gets one line rather than three hundred.
+    probe_missing: HashSet<u32>,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1814,7 +1823,41 @@ impl DomicileCompositor {
         let Some(session) = self.engine.as_ref() else {
             return true;
         };
-        if spike_probe_points().is_empty() {
+        // Colours to find anywhere in the window, for a guard that cannot name
+        // a point because the shell decides where its windows go. Each is
+        // dropped once it has been found: the capture is the whole window and
+        // costs ~3 MB a time, so a guard that has its answer stops paying for
+        // it.
+        if !spike_find_colours().is_empty() {
+            for &argb in spike_find_colours() {
+                if self.probe_found.contains(&argb) {
+                    continue;
+                }
+                match session.spike_find(argb) {
+                    Some((x, y)) => {
+                        self.probe_found.insert(argb);
+                        tracing::info!(
+                            target: "domicile::engine::spike",
+                            "engine found #{argb:08X} at ({x},{y}) of the browser's window"
+                        );
+                    }
+                    // Once, and only the first time. The guard polls, so this
+                    // is the state for most of a run and saying it every tick
+                    // would bury the line that matters.
+                    None => {
+                        if self.probe_missing.insert(argb) {
+                            tracing::info!(
+                                target: "domicile::engine::spike",
+                                "engine has not drawn #{argb:08X} anywhere in the \
+                                 browser's window yet"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        if spike_probe_points().is_empty() && spike_find_colours().is_empty() {
             if let Some(drawn) = session.spike_window_centre() {
                 tracing::info!(
                     target: "domicile::engine::spike",
@@ -4562,6 +4605,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         submitted: HashSet::new(),
         last_probe: None,
         probe_refused: HashSet::new(),
+        probe_found: HashSet::new(),
+        probe_missing: HashSet::new(),
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
@@ -4846,6 +4891,59 @@ fn spike_probe_points() -> &'static [(i32, i32)] {
     })
 }
 
+/// THROWAWAY, with the rest of the spike. Colours to look for anywhere in the
+/// browser's window, from `DOMICILE_SPIKE_FIND` as `RRGGBB;RRGGBB` or
+/// `AARRGGBB;AARRGGBB`.
+///
+/// The shell guard's question rather than the spike pages'. Those pages put
+/// their canvases where the harness can compute a point; a shell puts its
+/// windows where its own layout decides, so a guard that named a pixel would
+/// be asserting the shell's CSS. "This client's window is on the screen
+/// somewhere" is the claim that survives the shell being rewritten.
+///
+/// Six hex digits are taken as fully opaque, because that is what a colour
+/// written down in a guard means and `FF` in front of it is noise.
+fn spike_find_colours() -> &'static [u32] {
+    static COLOURS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
+    COLOURS.get_or_init(|| match std::env::var("DOMICILE_SPIKE_FIND") {
+        Ok(raw) => parse_find_colours(&raw),
+        Err(_) => Vec::new(),
+    })
+}
+
+/// The parse [`spike_find_colours`] does, without the environment around it —
+/// which is what makes it testable at all, since the variable is read once per
+/// process.
+///
+/// A malformed entry is dropped with a warning rather than failing the run, on
+/// the same reasoning as `DOMICILE_SPIKE_PROBE`: the guard checks for the
+/// colour it expects and reports its absence, so a search that quietly looked
+/// for nothing still fails, loudly, where it is known what was wanted.
+fn parse_find_colours(raw: &str) -> Vec<u32> {
+    raw.split(';')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .filter_map(|entry| {
+            let digits = entry.strip_prefix('#').unwrap_or(entry);
+            match (digits.len(), u32::from_str_radix(digits, 16)) {
+                // Six digits are fully opaque, because that is what a colour
+                // written down in a guard means and `FF` in front of it is
+                // noise. The window's pixels are opaque, so a colour with no
+                // alpha would match nothing at all.
+                (6, Ok(rgb)) => Some(0xFF00_0000 | rgb),
+                (8, Ok(argb)) => Some(argb),
+                _ => {
+                    warn!(
+                        entry,
+                        "DOMICILE_SPIKE_FIND: not an `RRGGBB` or `AARRGGBB` colour; ignored"
+                    );
+                    None
+                }
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::{OsStr, OsString};
@@ -4863,8 +4961,9 @@ mod tests {
     use super::{
         announce_open_apps, answers_keystroke, bgra_to_rgba, broadcast_closed,
         broadcast_focus_decision, channel, chrome_connection, client_command, cursor_shape,
-        freshened, record_present, shadow_in_pixels, to_line, unmounts_the_element,
-        write_responses, ChromeHub, ClientRequest, Committer, FrameTimings, Outbound,
+        freshened, parse_find_colours, record_present, shadow_in_pixels, to_line,
+        unmounts_the_element, write_responses, ChromeHub, ClientRequest, Committer, FrameTimings,
+        Outbound,
     };
 
     use std::sync::Arc;
@@ -5685,5 +5784,43 @@ mod tests {
             "the wait belongs to the submit, not to the drawing: {:?}",
             composite.worst
         );
+    }
+
+    /// Six digits mean opaque, because the window's pixels are and a colour
+    /// with no alpha would match none of them.
+    #[test]
+    fn a_colour_with_no_alpha_is_opaque() {
+        assert_eq!(parse_find_colours("19B36B"), vec![0xFF19_B36B]);
+    }
+
+    #[test]
+    fn an_alpha_that_is_written_down_is_kept() {
+        assert_eq!(parse_find_colours("8019B36B"), vec![0x8019_B36B]);
+    }
+
+    /// A guard writes colours the way CSS does, and the harness that passes
+    /// them along should not have to strip anything.
+    #[test]
+    fn a_leading_hash_and_the_spaces_around_an_entry_are_not_part_of_the_colour() {
+        assert_eq!(
+            parse_find_colours(" #19B36B ; CC6633"),
+            vec![0xFF19_B36B, 0xFFCC_6633]
+        );
+    }
+
+    /// The run continues on a malformed entry, so a typo costs the colour that
+    /// was mistyped and not the ones beside it.
+    #[test]
+    fn an_entry_that_is_not_a_colour_is_dropped_and_the_rest_are_kept() {
+        assert_eq!(
+            parse_find_colours("19B36B;nonsense;CC6633"),
+            vec![0xFF19_B36B, 0xFFCC_6633]
+        );
+    }
+
+    #[test]
+    fn nothing_to_look_for_is_nothing_to_look_for() {
+        assert!(parse_find_colours("").is_empty());
+        assert!(parse_find_colours(";  ;").is_empty());
     }
 }

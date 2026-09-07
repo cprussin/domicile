@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+# A real shell, on the fork, with a real client's window in it.
+#
+#   nix develop .#full --command \
+#     ./packages/domicile-engine/scripts/spike-wayland.sh /build/chromium/src \
+#     ./packages/domicile-engine/scripts/spike-shell.sh /build/chromium/src
+#
+# WHY THIS EXISTS. Every guard before it drives a page written for the guard:
+# spike-page.html and spike-two-windows.html put their canvases where the
+# harness can compute a probe point, and name app ids the harness chose. They
+# measure the seam. None of them measures the thing the seam is *for* — a shell
+# nobody wrote for this, built by its own vite config, joined to the compositor
+# by the SDK's own `connectToHost`, mounting `<domicile-app>` elements for
+# windows it learns about from the host.
+#
+# That is three things at once and each has failed on its own: the bridge
+# serving the page and the session on one port, the SDK reaching it over a
+# WebSocket rather than an Electron preload, and `<domicile-app>` calling
+# `embedExternalSurface` for an app id the shell was told about rather than one
+# a query string named.
+#
+# WHAT IT ASSERTS, AND WHY NOT A PIXEL. The shell decides where its windows go.
+# A guard that named a coordinate would be asserting shell-simple's CSS, and
+# would fail the day someone moved a window — which is not this guard's
+# question. So it asks the engine where the client's colour *is*, over the
+# whole window, and asserts only that it is somewhere. See
+# `domicile_engine_spike_find_colour`.
+set -u
+
+CHROMIUM="${1:-}"
+if [ -z "$CHROMIUM" ]; then
+  echo "usage: spike-shell.sh <path to chromium/src> [shell]" >&2
+  exit 1
+fi
+SHELL_NAME="${2:-simple}"
+
+SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
+SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
+[ -d "$SHELL_DIR" ] || {
+  echo "no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME." >&2
+  exit 1
+}
+
+# Not either spike canvas's fallback and not either two-window colour, so a log
+# left over from another guard cannot be mistaken for this one's answer.
+COLOR="${COLOR:-19B36B}"
+
+# The negative control's client draws this instead. A control with no client at
+# all would prove nothing here: the probe only runs when a client commits, so a
+# run with nothing to submit never measures anything and "did not find it"
+# would be true of a completely broken pipeline. A client drawing the *wrong*
+# colour exercises every step and still fails if the guard matches whatever
+# happens to be on screen.
+OTHER_COLOR="${OTHER_COLOR:-B3196B}"
+
+# NEGATIVE=1 runs the client with OTHER_COLOR. COLOR must never turn up.
+NEGATIVE="${NEGATIVE:-0}"
+
+OUT="${OUT:-out/Domicile}"
+RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
+BROKER="${BROKER:-/tmp/domicile-shell-broker}"
+PROFILE="${PROFILE:-/tmp/domicile-shell-profile}"
+COMPOSITOR="$ROOT/target/debug/domicile-compositor"
+WIDTH="${WIDTH:-1024}"
+HEIGHT="${HEIGHT:-768}"
+
+BRIDGE_LOG=$(mktemp)
+ENGINE_LOG=$(mktemp)
+COMP_LOG=$(mktemp)
+CLI_LOG=$(mktemp)
+STARTED=()
+LOG_COPY="${LOG_COPY:-/tmp/domicile-shell-compositor.log}"
+ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-shell-engine.log}"
+BRIDGE_LOG_COPY="${BRIDGE_LOG_COPY:-/tmp/domicile-shell-bridge.log}"
+cleanup() {
+  cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
+  cp "$ENGINE_LOG" "$ENGINE_LOG_COPY" 2>/dev/null
+  cp "$BRIDGE_LOG" "$BRIDGE_LOG_COPY" 2>/dev/null
+  if [ ${#STARTED[@]} -gt 0 ]; then
+    kill "${STARTED[@]}" 2>/dev/null
+  fi
+  rm -f "$BRIDGE_LOG" "$ENGINE_LOG" "$COMP_LOG" "$CLI_LOG"
+}
+trap cleanup EXIT
+
+[ -x "$CHROMIUM/$OUT/chrome" ] || {
+  echo "build the engine first: ./packages/domicile-engine/scripts/build.sh $CHROMIUM" >&2
+  exit 1
+}
+[ -f "$CHROMIUM/$OUT/libdomicile_engine.so" ] || {
+  echo "no libdomicile_engine.so in $CHROMIUM/$OUT; build it: autoninja -C $OUT domicile_engine" >&2
+  exit 1
+}
+[ -x "$COMPOSITOR" ] || {
+  echo "build the compositor first: nix develop .#full -c cargo build -p domicile-compositor" >&2
+  exit 1
+}
+if command -v kitty >/dev/null; then
+  KITTY=(kitty)
+elif command -v nix >/dev/null; then
+  KITTY=(nix shell nixpkgs#kitty --command kitty)
+else
+  echo "SKIP: no kitty to draw with, and no nix to fetch one."
+  exit 77
+fi
+command -v bun >/dev/null || {
+  echo "SKIP: no bun, and the shell's page is built with its own vite config."
+  exit 77
+}
+
+# The shell's page, built the way the shell builds it. Nothing here is a second
+# way to build a shell: this is the same `vite.renderer.config.ts` electron-forge
+# runs, which is what makes a pass mean anything about a shell someone writes.
+echo "building $SHELL_NAME's page"
+(cd "$SHELL_DIR" && bun install --frozen-lockfile >/dev/null 2>&1 &&
+   bunx vite build --config vite.renderer.config.ts >/dev/null 2>&1) || {
+  echo "the shell's page did not build" >&2
+  exit 1
+}
+PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
+[ -f "$PAGE_DIR/index.html" ] || {
+  echo "the shell built no index.html; looked in $PAGE_DIR" >&2
+  exit 1
+}
+
+export XDG_RUNTIME_DIR="$RUNTIME"
+COMP_SOCK="$RUNTIME/domicile-shell.sock"
+rm -f "$BROKER" "$COMP_SOCK" "$COMP_SOCK.session"
+rm -rf "$PROFILE"; mkdir -p "$PROFILE"
+
+# 1. The bridge, first, because chrome needs a URL and the page has no way to
+#    open a unix socket. It tolerates a compositor that does not exist yet,
+#    which is the whole reason it can go first.
+DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_ROOT="$PAGE_DIR" \
+  bun "$ROOT/packages/engine-chrome-host/src/main.ts" >"$BRIDGE_LOG" 2>&1 &
+STARTED+=($!)
+
+URL=""
+for _ in $(seq 1 300); do
+  URL="$(sed -n 's/^domicile: serving //p' "$BRIDGE_LOG" | head -1)"
+  [ -n "$URL" ] && break
+  sleep 0.1
+done
+[ -n "$URL" ] || {
+  echo "the bridge never said where it was serving. It said:" >&2
+  cat "$BRIDGE_LOG" >&2
+  exit 1
+}
+echo "the shell is at $URL"
+
+# 2. The engine, on that page. No --enable-logging=stderr flood here beyond
+#    what the guards read: the page's own console lines are the record of
+#    whether the SDK reached the bridge.
+"$CHROMIUM/$OUT/chrome" \
+  --ozone-platform=wayland \
+  --no-sandbox --password-store=basic --no-first-run \
+  --user-data-dir="$PROFILE" \
+  --window-size="$WIDTH,$HEIGHT" \
+  --enable-blink-features=DomicileExternalSurface \
+  --enable-logging=stderr --log-level=0 \
+  --domicile-broker-socket="$BROKER" \
+  "$URL" >"$ENGINE_LOG" 2>&1 &
+STARTED+=($!)
+
+for _ in $(seq 1 240); do [ -S "$BROKER" ] && break; sleep 0.5; done
+[ -S "$BROKER" ] || {
+  echo "the engine never opened its broker socket at $BROKER. It said:" >&2
+  tail -20 "$ENGINE_LOG" >&2
+  exit 1
+}
+
+# 3. The compositor, as a producer to it, looking for one colour anywhere in
+#    the browser's window.
+LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
+DOMICILE_SPIKE_FIND="$COLOR" \
+  "$COMPOSITOR" \
+    --chrome-socket "$COMP_SOCK" \
+    --session "$COMP_SOCK.session" \
+    --engine-socket "$BROKER" >"$COMP_LOG" 2>&1 &
+COMP=$!
+STARTED+=("$COMP")
+
+for _ in $(seq 1 120); do
+  grep -q "wayland-[0-9]" "$COMP_LOG" 2>/dev/null && break
+  kill -0 $COMP 2>/dev/null || break
+  sleep 0.5
+done
+if ! kill -0 $COMP 2>/dev/null; then
+  echo "the compositor did not start. It said:" >&2
+  tail -20 "$COMP_LOG" >&2
+  exit 1
+fi
+CLIENT_DISPLAY=$(grep -oE "wayland-[0-9]+" "$COMP_LOG" | head -1)
+CLIENT_DISPLAY="${CLIENT_DISPLAY:-wayland-1}"
+
+# The shell has to be joined to the compositor before a window it is told about
+# can mean anything: the host announces nothing until a chrome has agreed the
+# protocol, so a client started before that is announced to nobody.
+#
+# This is the first of the three new things this guard measures, and the one
+# that fails on its own — it is the SDK reaching the bridge over a WebSocket
+# rather than taking a channel an Electron preload injected.
+JOINED=0
+for _ in $(seq 1 90); do
+  if grep -aq "chrome agreed the protocol" "$COMP_LOG" 2>/dev/null; then
+    JOINED=1
+    break
+  fi
+  kill -0 $COMP 2>/dev/null || break
+  sleep 1
+done
+[ "$JOINED" = "1" ] || {
+  echo "the shell never joined the compositor, so no window would be announced to it." >&2
+  echo "--- the compositor said:" >&2
+  grep -aE "chrome|protocol|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
+  echo "--- the page said:" >&2
+  grep -aE "domicile:|CONSOLE" "$ENGINE_LOG" | tail -12 | cut -c1-200 | sed 's/^/  /' >&2
+  echo "--- the bridge said:" >&2
+  tail -12 "$BRIDGE_LOG" | sed 's/^/  /' >&2
+  exit 1
+}
+echo "the shell joined the compositor"
+
+DRAWN="$COLOR"
+[ "$NEGATIVE" = "1" ] && DRAWN="$OTHER_COLOR"
+echo "driving kitty, drawing #$DRAWN"
+NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout 180 \
+  "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
+        -o "background=#$DRAWN" \
+        -o initial_window_width=640 -o initial_window_height=480 \
+        sh -c 'while :; do sleep 0.2; done' >>"$CLI_LOG" 2>&1 &
+STARTED+=($!)
+
+FOUND=""
+for _ in $(seq 1 90); do
+  FOUND=$(grep -aoE "engine found #[0-9A-F]{8} at \([0-9]+,[0-9]+\)" "$COMP_LOG" 2>/dev/null |
+            tail -1)
+  [ -n "$FOUND" ] && break
+  kill -0 $COMP 2>/dev/null || break
+  sleep 1
+done
+
+echo
+if [ "$NEGATIVE" = "1" ]; then
+  if [ -n "$FOUND" ]; then
+    echo "NEGATIVE CONTROL FAILED: $FOUND, and the client drew #$OTHER_COLOR." \
+         "The guard is matching something other than the client's pixels." >&2
+    exit 1
+  fi
+  # A control that passes because the whole run fell over proves nothing. The
+  # client has to have got as far as a frame the engine took, and the probe has
+  # to have run and answered "not yet".
+  if ! grep -aq "first frame" "$COMP_LOG" 2>/dev/null; then
+    echo "NEGATIVE CONTROL INCONCLUSIVE: the engine never took a frame from the" \
+         "client, so nothing was measured." >&2
+    grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
+    exit 1
+  fi
+  if ! grep -aq "has not drawn" "$COMP_LOG" 2>/dev/null; then
+    echo "NEGATIVE CONTROL INCONCLUSIVE: the probe never ran, so nothing was" \
+         "measured." >&2
+    grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
+    exit 1
+  fi
+  echo "negative control: correct, the guard does not match a colour no client drew"
+  exit 0
+fi
+
+if [ -z "$FOUND" ]; then
+  echo "FAIL: the client's window is not on the shell's page" >&2
+  echo "--- the compositor's last words:" >&2
+  grep -aE "engine|frame sink|chrome|buffer|ERROR" "$COMP_LOG" | tail -15 | sed 's/^/  /' >&2
+  echo "--- the page's:" >&2
+  grep -aE "domicile:|CONSOLE" "$ENGINE_LOG" | tail -15 | cut -c1-200 | sed 's/^/  /' >&2
+  exit 1
+fi
+
+echo "PASS: $FOUND — a shell nobody wrote for this guard is showing a real"
+echo "client's window, on the fork, with no Electron anywhere."

@@ -55,6 +55,29 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
     int32_t y,
     uint32_t* argb);
 
+// Where `argb` appears in the browser's window, if it appears at all. False if
+// there is no window, nothing has been drawn, or the colour is not in it.
+//
+// A named point is the wrong question to ask of a shell. The spike pages put
+// their canvases where the harness can compute them; a real shell decides
+// where its windows go, in its own layout, and a guard that hard-coded a pixel
+// would be asserting the shell's CSS rather than the seam. So this asks the
+// question the guard actually has: is this client's window on the screen at
+// all.
+//
+// One CaptureWindow rather than a grid of SamplePixel calls, which is a
+// blocking readback each and starves the producer's thread — the reason the
+// point probe is throttled in the first place.
+//
+// Exact match, like every other assertion in the spike: the clients draw one
+// flat colour and a near-match would mean the compositor's own background, an
+// anti-aliased edge, or a blend, none of which is a client's window.
+DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_find_colour(
+    DomicileEngine* engine,
+    uint32_t argb,
+    int32_t* x,
+    int32_t* y);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

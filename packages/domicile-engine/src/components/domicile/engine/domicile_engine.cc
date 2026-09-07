@@ -411,6 +411,15 @@ struct DomicileEngine {
     return sampled;
   }
 
+  // THROWAWAY. See domicile_engine_spike.h.
+  bool FindColour(uint32_t argb, int32_t* x, int32_t* y) {
+    bool found = false;
+    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::FindColourOnThread,
+                                      base::Unretained(this), argb, &found, x,
+                                      y));
+    return found;
+  }
+
   void DestroyBuffer(DomicileSurfaceId surface, DomicileBufferId buffer) {
     thread_.task_runner()->PostTask(
         FROM_HERE,
@@ -570,6 +579,37 @@ struct DomicileEngine {
     loop.Run();
   }
 
+  void FindColourOnThread(uint32_t argb, bool* found, int32_t* x, int32_t* y) {
+    if (!probe_) {
+      return;
+    }
+    base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
+    probe_->CaptureWindow(base::BindOnce(
+        [](base::RunLoop* loop, uint32_t wanted, bool* found, int32_t* x,
+           int32_t* y, bool captured, const gfx::Size& size,
+           const std::vector<uint32_t>& pixels) {
+          // Row-major, and `size` is what to index it by — so the first match
+          // is the topmost-then-leftmost pixel of that colour, which is the
+          // corner of the window if the window is a rectangle of it. A short
+          // buffer is not trusted to be padded with anything: the loop is
+          // bounded by what actually arrived.
+          if (captured && size.width() > 0) {
+            const size_t width = static_cast<size_t>(size.width());
+            for (size_t i = 0; i < pixels.size(); ++i) {
+              if (pixels[i] == wanted) {
+                *found = true;
+                *x = static_cast<int32_t>(i % width);
+                *y = static_cast<int32_t>(i / width);
+                break;
+              }
+            }
+          }
+          loop->Quit();
+        },
+        &loop, argb, found, x, y));
+    loop.Run();
+  }
+
   void DestroyBufferOnThread(DomicileSurfaceId surface,
                              DomicileBufferId buffer) {
     auto iter = surfaces_.find(surface);
@@ -704,6 +744,16 @@ bool domicile_engine_spike_sample_pixel(DomicileEngine* engine,
     return false;
   }
   return engine->SamplePixel(x, y, argb);
+}
+
+bool domicile_engine_spike_find_colour(DomicileEngine* engine,
+                                       uint32_t argb,
+                                       int32_t* x,
+                                       int32_t* y) {
+  if (!engine || !x || !y) {
+    return false;
+  }
+  return engine->FindColour(argb, x, y);
 }
 
 }  // extern "C"
