@@ -27,6 +27,10 @@
       "types": "./dist/chrome-message.d.ts",
       "default": "./dist/chrome-message.js"
     },
+    "./connect-to-host": {
+      "types": "./dist/connect-to-host.d.ts",
+      "default": "./dist/connect-to-host.js"
+    },
     "./device-pixel-ratio": {
       "types": "./dist/device-pixel-ratio.d.ts",
       "default": "./dist/device-pixel-ratio.js"
@@ -90,6 +94,10 @@
     "./surface-coordinates": {
       "types": "./dist/surface-coordinates.d.ts",
       "default": "./dist/surface-coordinates.js"
+    },
+    "./websocket-transport": {
+      "types": "./dist/websocket-transport.d.ts",
+      "default": "./dist/websocket-transport.js"
     },
     "./webview-element": {
       "types": "./dist/webview-element.d.ts",

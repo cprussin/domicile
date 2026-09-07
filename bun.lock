@@ -85,6 +85,18 @@
         "electron": "catalog:",
       },
     },
+    "packages/engine-chrome-host": {
+      "name": "@domicile/engine-chrome-host",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile/chrome-sdk": "workspace:*",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/shell-manganese": {
       "name": "@domicile/shell-manganese",
       "version": "0.0.0",
@@ -271,6 +283,8 @@
     "@domicile/e2e-harness": ["@domicile/e2e-harness@workspace:packages/e2e-harness"],
 
     "@domicile/electron-chrome-host": ["@domicile/electron-chrome-host@workspace:packages/electron-chrome-host"],
+
+    "@domicile/engine-chrome-host": ["@domicile/engine-chrome-host@workspace:packages/engine-chrome-host"],
 
     "@domicile/shell-manganese": ["@domicile/shell-manganese@workspace:packages/shell-manganese"],
 
