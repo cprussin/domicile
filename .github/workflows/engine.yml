@@ -97,8 +97,22 @@ jobs:
 
       # `apply.sh` is idempotent for `src/` (a copy) and not for `patches/` —
       # `git am` refuses to apply a patch twice — so the tree has to go back to
-      # the pin before every run. `reset --hard` and no `clean`: `out/Domicile`
-      # is gitignored and must survive, because it is the warm tree.
+      # the pin before every run.
+      #
+      # AND THE SERIES' OWN FILES HAVE TO GO WITH IT, which `reset --hard` does
+      # not do: they are untracked in Chromium's repository, and `reset` only
+      # touches what is tracked. `apply.sh` refuses a tree that
+      # `git status --porcelain` calls dirty — deliberately, it is not going to
+      # guess — so from the second run onward it stopped before it began, and
+      # because a command run through NIX_SHELL_RUN does not reliably carry its
+      # exit status out, nothing noticed. Every run after the first used the
+      # first one's sources and the first one's build.
+      #
+      # Removed file by file rather than with `git clean`, which would be the
+      # obvious tool and is the wrong one here: `-fd` would also delete
+      # anything else untracked that gclient's hooks put in this tree, and
+      # rebuilding it is four hours. The series knows exactly which files it
+      # lays down, so it removes exactly those.
       #
       # `am --abort` first, in case a previous run died mid-series and left the
       # rebase-apply state behind. It fails when there is nothing to abort,
@@ -109,12 +123,33 @@ jobs:
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
           git -C "$CHROMIUM" am --abort 2>/dev/null || true
           git -C "$CHROMIUM" reset --hard "$pin"
+          (cd packages/domicile-engine/src && find . -type f -print0) |
+            while IFS= read -r -d '' file; do
+              rm -f "$CHROMIUM/${file#./}"
+            done
+          dirty="$(git -C "$CHROMIUM" status --porcelain | head -5)"
+          [ -z "$dirty" ] || {
+            echo "::error::$CHROMIUM is still dirty after the reset, so apply.sh will refuse it:" >&2
+            echo "$dirty" >&2
+            exit 1
+          }
 
+      # Asked afterwards, out here, for the reason the reset step gives: a
+      # command run through NIX_SHELL_RUN can fail without failing this step.
+      # `git am` commits each patch, so a HEAD still at the pin means the
+      # series did not go on — which is the failure that went unnoticed for
+      # five runs.
       - name: Apply the series
         run: |
           set -euo pipefail
+          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
           NIX_SHELL_RUN="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/apply.sh $CHROMIUM" \
             nix develop "path:$CHROMIUM/tools/nix"
+          [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
+            echo "::error::the checkout is still at the pin, so no patch was applied" >&2
+            exit 1
+          }
+          echo "series applied: $(git -C "$CHROMIUM" log --oneline "$pin..HEAD" | wc -l) patches"
 
       # `build.sh` builds `chrome` and the spike's submitter. The guard also
       # needs `libdomicile_engine.so` — the compositor dlopens it by name — and

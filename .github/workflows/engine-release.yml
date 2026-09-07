@@ -68,14 +68,27 @@ jobs:
             exit 1
           }
 
+      # The series' own files are untracked in Chromium's repository, so
+      # `reset --hard` leaves them and `apply.sh` then refuses the tree as
+      # dirty. See engine.yml, which had this hole and used five runs' worth of
+      # stale sources before anything noticed — a command run through
+      # NIX_SHELL_RUN does not reliably carry its exit status out here either.
       - name: Reset the checkout to the pin and apply the series
         run: |
           set -euo pipefail
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
           git -C "$CHROMIUM" am --abort 2>/dev/null || true
           git -C "$CHROMIUM" reset --hard "$pin"
+          (cd packages/domicile-engine/src && find . -type f -print0) |
+            while IFS= read -r -d '' file; do
+              rm -f "$CHROMIUM/${file#./}"
+            done
           NIX_SHELL_RUN="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/apply.sh $CHROMIUM" \
             nix develop "path:$CHROMIUM/tools/nix"
+          [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
+            echo "::error::the checkout is still at the pin, so no patch was applied" >&2
+            exit 1
+          }
 
       # Not build.sh: that one is the measured configuration and should stay
       # the thing a person runs by hand. This is the shippable one, and the
