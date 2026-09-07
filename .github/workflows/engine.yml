@@ -135,6 +135,48 @@ jobs:
           NIX_SHELL_RUN="autoninja -C $CHROMIUM/out/Domicile domicile_engine components_unittests" \
             nix develop "path:$CHROMIUM/tools/nix"
 
+      # WHETHER THE BUILD ABOVE ACTUALLY BUILT, asked out here rather than
+      # trusted from in there.
+      #
+      # `nix develop` is entered with NIX_SHELL_RUN because upstream's shell is
+      # a buildFHSEnv whose shellHook execs bwrap — and a command run that way
+      # does not reliably carry its exit status back out. A failed `autoninja`
+      # can therefore leave this step green, and what runs next is then the
+      # previous build: the guards load a `libdomicile_engine.so` that is
+      # older than the source they were changed to test.
+      #
+      # That is not a hypothetical. It is what happened: the two-window guard
+      # spent five runs reporting that nothing drew, because the library it
+      # loaded had been built before the probe grew a coordinate, and the
+      # compositor's `dlsym` for the new entry point returned nothing.
+      #
+      # The symbols are matched as bytes rather than with `nm`, which is not on
+      # this unit's PATH out here. A name absent from the file is certainly not
+      # exported from it, which is the direction that matters.
+      - name: The build produced what the guards load
+        run: |
+          set -euo pipefail
+          out="$CHROMIUM/out/Domicile"
+          for artefact in chrome libdomicile_engine.so components_unittests; do
+            [ -e "$out/$artefact" ] || {
+              echo "::error::the build produced no $artefact" >&2
+              exit 1
+            }
+          done
+          ls -l "$out/chrome" "$out/libdomicile_engine.so"
+
+          missing=""
+          for symbol in domicile_engine_connect \
+                        domicile_engine_spike_sample_window_center \
+                        domicile_engine_spike_sample_pixel; do
+            grep -qa "$symbol" "$out/libdomicile_engine.so" || missing="$missing $symbol"
+          done
+          [ -z "$missing" ] || {
+            echo "::error::libdomicile_engine.so is missing:$missing — it is older than the source. The build did not fail loudly enough." >&2
+            exit 1
+          }
+          echo "libdomicile_engine.so exports what the compositor looks up"
+
       # The browser's own unit tests. These are the cheapest thing that can
       # fail and the only ones that exercise the broker's bookkeeping directly
       # — a surface brokered per app, an embed held for the app it names — so
