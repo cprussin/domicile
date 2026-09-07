@@ -20,12 +20,22 @@
 </style>
 <canvas height="480" id="app" width="640" ></canvas>
 <script>
+  // Which app's window this <app> shows. The broker dispatches on it now — an
+  // element asking for the editor is not answered with the terminal — so it
+  // has to match the app id the producer created its surface with. The
+  // harnesses pass it. The default is 'app-1' and that is a finding rather than
+  // a convenience: the id crossing the seam is the compositor's own synthetic
+  // one, assigned in the order windows appear, NOT the client's
+  // xdg_toplevel.app_id. A shell naming a window has to know which.
+  const APP_ID =
+    new URLSearchParams(location.search).get('app') ?? 'app-1';
+
   const canvas = document.getElementById('app');
   if (canvas.embedExternalSurface) {
     // Resolves only once a producer has been brokered a frame sink, which may
     // be well after load: the browser holds the reply until then, because an
     // <app> element exists before the window behind it does.
-    canvas.embedExternalSurface().then(
+    canvas.embedExternalSurface(APP_ID).then(
       () => { console.log('domicile: embedded'); },
       (error) => { console.log('domicile: refused: ' + error.message); });
   } else {
