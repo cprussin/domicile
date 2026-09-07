@@ -204,13 +204,38 @@ jobs:
       # convention for a component's tests; the alternative is a `test()` target
       # of our own, and that is worth doing only if this link turns out to
       # dominate the run.
+      # THE SHELL HAS TO PROVE IT RAN THE COMMAND.
+      #
+      # `NIX_SHELL_RUN` is upstream's documented escape hatch for scripting
+      # this shell, and it was measured working — by a person, at a terminal.
+      # In CI this step returned success in one second, which is not a Chromium
+      # build of any kind, and the artifact check below is what noticed. A
+      # shell that silently runs nothing is the same failure as the apply step
+      # above, one layer along.
+      #
+      # So the command writes a sentinel and the step checks for it. If the
+      # documented mechanism did not run, the commands are piped in on stdin
+      # instead — which is what reaches a `runScript` that turned out to be
+      # a plain bash — and the sentinel is checked again. Whichever worked,
+      # the artifact check after this is still the thing that decides.
       - name: Build
         run: |
           set -euo pipefail
-          NIX_SHELL_RUN="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/build.sh $CHROMIUM" \
-            nix develop "path:$CHROMIUM/tools/nix"
-          NIX_SHELL_RUN="autoninja -C $CHROMIUM/out/Domicile domicile_engine components_unittests" \
-            nix develop "path:$CHROMIUM/tools/nix"
+          done=/tmp/domicile-build-ran
+          rm -f "$done"
+          build="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/build.sh $CHROMIUM \
+            && autoninja -C $CHROMIUM/out/Domicile domicile_engine components_unittests \
+            && touch $done"
+
+          NIX_SHELL_RUN="bash -c '$build'" nix develop "path:$CHROMIUM/tools/nix" || true
+          if [ ! -e "$done" ]; then
+            echo "NIX_SHELL_RUN ran nothing; feeding the shell on stdin instead"
+            printf '%s\n' "$build" | nix develop "path:$CHROMIUM/tools/nix" || true
+          fi
+          [ -e "$done" ] || {
+            echo "::error::neither way of scripting Chromium's shell ran the build" >&2
+            exit 1
+          }
 
       # WHETHER THE BUILD ABOVE ACTUALLY BUILT, asked out here rather than
       # trusted from in there.

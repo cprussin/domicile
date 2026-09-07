@@ -109,11 +109,25 @@ jobs:
       # the thing a person runs by hand. This is the shippable one, and the
       # only differences that matter are is_component_build and the crashpad
       # handler coming with it.
+      # The shell has to prove it ran the command; see engine.yml, where
+      # NIX_SHELL_RUN returned success in one second having built nothing.
       - name: Build
         run: |
           set -euo pipefail
-          NIX_SHELL_RUN="$GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh $CHROMIUM $OUT" \
-            nix develop "path:$CHROMIUM/tools/nix"
+          done=/tmp/domicile-release-build-ran
+          rm -f "$done"
+          build="$GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh $CHROMIUM $OUT \
+            && touch $done"
+
+          NIX_SHELL_RUN="bash -c '$build'" nix develop "path:$CHROMIUM/tools/nix" || true
+          if [ ! -e "$done" ]; then
+            echo "NIX_SHELL_RUN ran nothing; feeding the shell on stdin instead"
+            printf '%s\n' "$build" | nix develop "path:$CHROMIUM/tools/nix" || true
+          fi
+          [ -e "$done" ] || {
+            echo "::error::neither way of scripting Chromium's shell ran the build" >&2
+            exit 1
+          }
 
       - name: Package
         id: package
