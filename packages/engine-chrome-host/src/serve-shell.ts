@@ -12,6 +12,8 @@
 // that parses is a bridge that can corrupt, and the framing already has a
 // tested implementation at the end that needs it.
 
+import path from "node:path";
+
 import { connect } from "bun";
 
 import { shellDocument } from "./shell-document";
@@ -81,18 +83,28 @@ export const serveShell = (options: ServeOptions): Serving => {
           ? undefined
           : new Response("this path is a websocket", { status: 426 });
       }
+      const file = fileForRequest(root, url.pathname);
+      if (file === undefined) {
+        return new Response("not found", { status: 404 });
+      }
       // The document, before anything is read off disk. A shell that is a
       // module ships no `index.html` — there is nothing on disk to serve here
       // — and one built from an HTML entry falls through to the file, which is
       // what the workspace shells still have.
-      if (module !== undefined && isTheDocument(url.pathname)) {
+      //
+      // Decided from the *resolved* path rather than from the request's own
+      // spelling, and that is the whole of this: `fileForRequest` decodes and
+      // normalises, so a guard that compared `url.pathname` against `"/"` and
+      // `"/index.html"` disagreed with it about every other way to write the
+      // same file. `GET //`, `GET /.//` and `GET /%69ndex.html` all missed the
+      // guard, fell through, and served the shell's own `index.html` —
+      // defeating, with one character, the property this exists for. Measured
+      // over a raw socket, because `fetch` and `URL` normalise `//` away
+      // before a server ever sees it.
+      if (module !== undefined && file === documentIn(root)) {
         return new Response(shellDocument(module), {
           headers: { "content-type": "text/html; charset=utf-8" },
         });
-      }
-      const file = fileForRequest(root, url.pathname);
-      if (file === undefined) {
-        return new Response("not found", { status: 404 });
       }
       // Checked rather than streamed hopefully. `new Response(Bun.file(...))`
       // for a file that is not there fails while the body is being written,
@@ -226,11 +238,16 @@ const sockets = new WeakMap<
 >();
 
 /**
- * Whether a path is the page itself rather than something it loads.
+ * The one file a request has to resolve to for Domicile to write the page.
  *
- * `/` and `/index.html` both, because the second is what a browser resolves a
- * bookmark or a reload to and serving a 404 for it would be a page that works
- * until somebody presses enter in an address bar.
+ * `index.html` in the root, because that is what `fileForRequest` resolves
+ * both `/` and `/index.html` to — the second being what a browser resolves a
+ * bookmark or a reload to, so a 404 for it would be a page that works until
+ * somebody presses enter in an address bar.
+ *
+ * Asked of the same function that finds every other file, so the two cannot
+ * disagree about what a path means. They did: see the comment at the call
+ * site.
  */
-const isTheDocument = (pathname: string): boolean =>
-  pathname === "/" || pathname === "/index.html";
+const documentIn = (root: string): string =>
+  path.join(path.resolve(root), "index.html");

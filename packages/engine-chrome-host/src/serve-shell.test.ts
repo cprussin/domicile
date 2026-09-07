@@ -62,6 +62,29 @@ const eventually = async (until: () => boolean) => {
   return false;
 };
 
+/**
+ * One HTTP GET, written on the socket exactly as given.
+ *
+ * `fetch` normalises a path before it sends it — `//` becomes `/`, `%69`
+ * becomes `i` — so it cannot ask a server the questions above. This spells the
+ * request line itself and reads the whole response back.
+ */
+const rawGet = (port: number, pathname: string): Promise<string> =>
+  new Promise((done, fail) => {
+    const socket = net.connect(port, "127.0.0.1", () => {
+      socket.write(
+        `GET ${pathname} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`,
+      );
+    });
+    let received = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      received += chunk;
+    });
+    socket.on("end", () => done(received));
+    socket.on("error", fail);
+  });
+
 describe("serveShell", () => {
   it("serves the shell's page at the root", async () => {
     const host = await compositor();
@@ -113,6 +136,51 @@ describe("serveShell", () => {
 
     expect(await response.text()).toContain('<script src="shell.js"');
   });
+
+  // EVERY OTHER WAY TO SPELL THE SAME FILE, which is where this was wrong.
+  //
+  // The guard used to compare the raw `url.pathname` against `"/"` and
+  // `"/index.html"` while `fileForRequest` decoded and normalised — so three
+  // spellings that resolve to exactly the same file missed the guard, fell
+  // through to disk, and served the shell's own `index.html`. That is the one
+  // property this whole design exists for ("there is no way to supply a
+  // document of your own") defeated by one character.
+  //
+  // Over a raw socket, and that is not incidental: `fetch` collapses these
+  // before a server ever sees them, so a test written with `fetch` cannot
+  // reach this bug at all. It has to be spoken on the wire.
+  //
+  // These three and not a fourth. `/./index.html` looks like it belongs and
+  // does not: WHATWG URL parsing removes single-dot segments, so `new
+  // URL(request.url).pathname` hands the server `/index.html` and the old
+  // guard matched it. Measured — it passed against the broken code, which
+  // makes it a case that proves nothing. What survives URL parsing is an
+  // *empty* segment (`//` stays `//`, and `/.//` becomes it) and a
+  // percent-escape (`%69` is never decoded there). Those are the ways in.
+  it.each(["//", "/.//", "/%69ndex.html"])(
+    "writes the document for %s, which is the same file",
+    async (spelling) => {
+      const host = await compositor();
+      // An index.html on disk to be served *instead*, which is what makes this
+      // a real test: without one, falling through reaches a 404 and the wrong
+      // behaviour looks like the right one.
+      await writeFile(
+        path.join(host.dir, "index.html"),
+        "<title>THE SHELL'S OWN</title>",
+      );
+      const serving = serveShell({
+        module: "shell.js",
+        root: host.dir,
+        socketPath: host.socketPath,
+      });
+      cleanups.push(() => serving.stop());
+
+      const body = await rawGet(Number(new URL(serving.url).port), spelling);
+
+      expect(body).toContain('<script src="shell.js"');
+      expect(body).not.toContain("THE SHELL'S OWN");
+    },
+  );
 
   // The module itself is still read off disk, along with whatever it imports:
   // naming it does not change where it is served from.

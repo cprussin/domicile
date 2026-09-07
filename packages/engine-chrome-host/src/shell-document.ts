@@ -34,7 +34,25 @@
 // no better — so it says Domicile until the shell says otherwise, which it
 // does with `document.title` like any other page.
 
-/** Write the document for a shell's module. */
+/**
+ * Write the document for a shell's module.
+ *
+ * `encodeURIComponent` and nothing else, which is one escape doing two jobs.
+ * The name came off somebody's disk and lands in the most privileged page in
+ * this system, so it has to be safe in a double-quoted attribute *and* mean
+ * the file the author named — and the encoding is strictly the stronger of the
+ * two answers: its output is unreserved characters and `%XX`, so no `"`, `<`,
+ * `>` or `&` survives it to be parsed as markup.
+ *
+ * There was an HTML escaper here as well, and it went for the reason this repo
+ * deletes anything: nothing could make it fire. Measured — with the encoding
+ * in place, replacing the escaper with the identity failed no test, because by
+ * the time it ran there was nothing left to escape. What it did not do was the
+ * job it looked like it was doing: `#`, `?` and `%` are legal in a POSIX
+ * filename and none is HTML-special, so `a#b.js` went out verbatim, the
+ * browser asked for `/a`, and the desktop was a blank screen with nothing in
+ * any log.
+ */
 export const shellDocument = (module: string): string =>
   `<!doctype html>
 <html lang="en">
@@ -54,23 +72,7 @@ export const shellDocument = (module: string): string =>
     </style>
   </head>
   <body>
-    <script src="${attribute(module)}" type="module"></script>
+    <script src="${encodeURIComponent(module)}" type="module"></script>
   </body>
 </html>
 `;
-
-/**
- * A value going into a double-quoted attribute.
- *
- * The module's name came off somebody's disk and lands in the most privileged
- * page in this system, so a file called `"></script><script>…` would otherwise
- * run whatever it liked in the desktop's own document.
- *
- * `&` first, or escaping the others would escape the ampersands this puts in.
- */
-const attribute = (value: string): string =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");

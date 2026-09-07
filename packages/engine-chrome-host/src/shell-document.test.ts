@@ -41,12 +41,46 @@ describe("shellDocument", () => {
   it("escapes a module name that would close the tag", () => {
     const html = document('"></script><script>fetch("/steal")</script>');
     expect(html).not.toContain("<script>fetch");
-    expect(html).toContain("&quot;&gt;&lt;/script&gt;");
+    expect(html).not.toContain("</script><script>");
   });
 
-  // Ampersand first, or the escapes would escape each other's output and a
-  // name with a legitimate `&` in it would break.
-  it("escapes an ampersand once", () => {
-    expect(document("a&b.js")).toContain('src="a&amp;b.js"');
+  // THE FILE THE AUTHOR NAMED IS THE FILE THE BROWSER ASKS FOR, whatever is in
+  // its name. This is the assertion the escaping alone did not make: `#`, `?`
+  // and `%` are all legal in a POSIX filename and none of them is
+  // HTML-special, so a module called `a#b.js` was written out verbatim, the
+  // browser asked for `/a`, and the desktop came up blank with nothing in any
+  // log. `%` failed differently and just as silently — the request reached the
+  // bridge and its decode threw, so a file sitting right there answered 404.
+  //
+  // Asked by resolving the `src` the way a browser would and decoding it back,
+  // rather than by pinning the escaped spelling: what has to hold is the round
+  // trip, and which encoding gets there is not this module's contract.
+  it.each([
+    "shell.js",
+    "a#b.js",
+    "a?b.js",
+    "a%b.js",
+    "a b.js",
+    "a&b.js",
+    "índex.js",
+  ])("asks for %s itself, not a prefix of it", (name) => {
+    const src = /src="([^"]*)"/.exec(document(name))?.[1] ?? "";
+
+    expect(decodeURIComponent(new URL(src, "http://host/").pathname)).toBe(
+      `/${name}`,
+    );
   });
+
+  // And nothing reaches the markup as markup. The round-trip cases above are
+  // what says the *right* file is asked for; this is what says no name can
+  // become a tag on the way — which the encoding gives for free, since none of
+  // `" < > &` survives it.
+  it.each(['"></script><script>x', "a&b.js", "a<b.js"])(
+    "writes %s as text, not as markup",
+    (name) => {
+      const src = /src="([^"]*)"/.exec(document(name))?.[1] ?? "";
+
+      expect(src).not.toMatch(/["<>&]/);
+    },
+  );
 });
