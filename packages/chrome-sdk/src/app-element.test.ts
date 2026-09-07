@@ -117,6 +117,15 @@ const recordEmbeds = (): string[] => {
   return embedded;
 };
 
+/** As above, but the engine refuses — the case a live window fails on. */
+const refuseEmbeds = (why: string): void => {
+  HTMLCanvasElement.prototype.embedExternalSurface = () =>
+    Promise.reject(new Error(why));
+  restoreEmbed = () => {
+    delete HTMLCanvasElement.prototype.embedExternalSurface;
+  };
+};
+
 let restoreEmbed: (() => void) | undefined;
 
 afterEach(() => {
@@ -870,5 +879,72 @@ describe("<domicile-app>", () => {
 
       expect(element.querySelector("canvas")).toBeNull();
     });
+  });
+});
+
+// A REFUSED EMBED USED TO BE SWALLOWED WHOLE, and the comment that did it said
+// why: both ways it can reject "are this element being torn down, and neither
+// is worth reporting". That is checkable, and it is false. An element still in
+// the document when the refusal lands is not being torn down — it is a window
+// that will show `app surface: …` over a running client for as long as it is
+// open, with nothing in any log. Observed on a real desktop: a terminal moved
+// into a floating window went to the placeholder and stayed there.
+//
+// So the teardown case stays silent and the other one talks. The two are told
+// apart by the only thing that distinguishes them, which is whether the
+// element is still connected when the answer arrives.
+/**
+ * What the SDK said on `console.error` while `act` ran, and nothing else.
+ *
+ * The same shape as `warningsFrom` above, for the same reason: the report is
+ * the behaviour under test, so it has to be captured rather than suppressed.
+ */
+const errorsWhile = async (act: () => void): Promise<string[]> => {
+  const said: string[] = [];
+  // biome-ignore lint/suspicious/noConsole: capturing what the SDK reports
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    said.push(args.join(" "));
+  };
+  try {
+    act();
+    // Two turns: one for the rejection to settle, one for the handler on it.
+    await Promise.resolve();
+    await Promise.resolve();
+  } finally {
+    console.error = original;
+  }
+  return said;
+};
+
+// A REFUSED EMBED USED TO BE SWALLOWED WHOLE, and the comment that did it said
+// why: both ways it can reject "are this element being torn down, and neither
+// is worth reporting". That is checkable, and it is false. An element still in
+// the document when the refusal lands is not being torn down — it is a window
+// that will show `app surface: …` over a running client for as long as it is
+// open, with nothing in any log. Observed on a real desktop: a terminal moved
+// into a floating window went to the placeholder and stayed there.
+//
+// So the teardown case stays silent and the other one talks. The two are told
+// apart by the only thing that distinguishes them, which is whether the
+// element is still connected when the answer arrives.
+describe("a refused surface", () => {
+  it("says so when the element is still in the document", async () => {
+    refuseEmbeds("already has a surface");
+    let element: HTMLElement | undefined;
+    const said = await errorsWhile(() => {
+      element = mountApp("app-1");
+    });
+    expect(element?.isConnected).toBe(true);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("app-1");
+  });
+
+  it("stays silent for an element that has gone away", async () => {
+    refuseEmbeds("the element went away");
+    const said = await errorsWhile(() => {
+      mountApp("app-1").remove();
+    });
+    expect(said).toHaveLength(0);
   });
 });

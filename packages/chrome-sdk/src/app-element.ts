@@ -260,10 +260,30 @@ export const createAppElement = (
       }
       this.#canvas = this.appendChild(canvas);
       this.classList.remove(HAS_SURFACE_CLASS);
-      // Rejects if the canvas already has a surface, or if the element goes
-      // away while the browser is still holding the reply — both of which are
-      // this element being torn down, and neither is worth reporting.
-      void canvas.embedExternalSurface(appId).catch(() => undefined);
+      // A REFUSAL IS ONLY UNINTERESTING IF THIS ELEMENT IS GONE. It rejects
+      // when the element goes away while the browser is still holding the
+      // reply, which is a teardown and says nothing; and it rejects when the
+      // browser will not give this canvas the surface, which is a window that
+      // shows `app surface: …` over a running client for as long as it is
+      // open. This used to swallow both, on the claim that they were the same
+      // event — they are not, and the difference is exactly whether the
+      // element is still in the document when the answer lands.
+      //
+      // Observed on a real desktop before this said anything: a terminal moved
+      // into a floating window went to the placeholder and stayed there, with
+      // nothing in any log to say the embed had been refused at all.
+      void canvas.embedExternalSurface(appId).catch((refusal: unknown) => {
+        if (!this.isConnected) {
+          return;
+        }
+        // biome-ignore lint/suspicious/noConsole: the only channel to the author
+        console.error(
+          `domicile: the engine refused this chrome a surface for ${appId}, so` +
+            " its window will not be shown. The element is still on the page" +
+            " and still routing pointers; only the pixels are missing.",
+          refusal,
+        );
+      });
     }
 
     /** Show the cursor a client asked for while the pointer is over this app. */
