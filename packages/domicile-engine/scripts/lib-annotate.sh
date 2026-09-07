@@ -40,9 +40,10 @@ annotate_from() {
   # newline and so joins the last log line to the one before it.
   body=$(tail -12 "$file" 2>/dev/null |
            awk '{ line[NR] = $0 } END { for (i = NR; i > 0; i--) print line[i] }')
-  # No body, no blank line: a log that is empty or absent is a failure with
-  # nothing to show rather than one with something to show and nothing in it.
-  if [ -z "$body" ]; then
+  # No body, no blank line: a log that is empty, absent or nothing but
+  # whitespace is a failure with nothing to show rather than one with
+  # something to show and nothing in it.
+  if [ -z "${body//[[:space:]]/}" ]; then
     annotate "$title"
     return
   fi
@@ -50,9 +51,14 @@ annotate_from() {
 }
 
 # A guard that could not run at all. `SKIP:` is the repo's convention and
-# `scripts/check.sh` parses it; the annotation is because CI runs these under
-# `set -e`, where 77 is a step failure and a silent one.
+# `scripts/check.sh` parses it for the reason.
+#
+# A notice, not an error. Exiting 77 fails the step on its own where CI runs
+# these under `set -e`, and `check.sh` has `DOMICILE_CHECK_ALLOW_SKIP` for the
+# runs where a skip is expected — an error annotation would put a red mark on
+# one of those. Saying it is still worth it: a skip that says nothing is how a
+# guard silently stops guarding.
 skip() {
   echo "SKIP: $1"
-  annotate "$1"
+  echo "::notice::$(domicile_escape "$*")"
 }

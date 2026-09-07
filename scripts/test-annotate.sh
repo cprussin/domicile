@@ -29,8 +29,18 @@ expect() {
   fi
 }
 
+# One directory, removed whole. Not a list of files: `file_of` is called from
+# inside `$( )`, so anything it appended to an array would be appended in a
+# subshell and the parent would never see it — which is how the first version
+# of this leaked a fixture per call on every CI job.
+FIXTURES="$(mktemp -d)"
+trap 'rm -rf "$FIXTURES"' EXIT
+
 file_of() {
-  local f; f="$(mktemp)"
+  # `mktemp` rather than a counter for the same reason: a counter incremented
+  # inside `$( )` increments in the subshell, so every fixture would be handed
+  # the same name and two live at once would be one.
+  local f; f="$(mktemp "$FIXTURES/XXXXXX")"
   printf '%s' "$1" >"$f"
   echo "$f"
 }
@@ -71,12 +81,26 @@ expect "a failure whose log is not there" \
   "::error::it broke" \
   "$(annotate_from "it broke" /nonexistent/log)"
 
-# A skip is not a failure, and the repo parses `SKIP:` for the reason — but CI
-# runs these under `set -e`, where exiting 77 is a step failure, so it says it
-# both ways.
-expect "a guard that could not run" \
+# A log of nothing but whitespace counts as silence, the same way
+# test-xvfb-verdict.sh treats one. Otherwise the annotation ends in the blank
+# block that having a body at all is supposed to earn.
+expect "a failure whose log is only whitespace" \
+  "::error::it broke" \
+  "$(annotate_from "it broke" "$(file_of '   ')")"
+
+# The ordinary case: a log that ends in a newline, which every real one does.
+expect "a failure whose log ends in a newline" \
+  "::error::it broke%0A%0Alast%0Afirst" \
+  "$(annotate_from "it broke" "$(file_of 'first
+last
+')")"
+
+# A skip is not a failure. CI exits 77 and fails the step on its own; an
+# annotation that says `error` would paint a red mark on a run where a skip
+# was expected and allowed.
+expect "a skip is a notice, not an error" \
   "SKIP: no kitty
-::error::no kitty" \
+::notice::no kitty" \
   "$(skip "no kitty")"
 
 if [ "$FAILED" -gt 0 ]; then

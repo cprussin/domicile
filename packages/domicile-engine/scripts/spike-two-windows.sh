@@ -58,16 +58,12 @@ APP_B="${APP_B:-app-2}"
 # from success.
 NEGATIVE="${NEGATIVE:-0}"
 
-# How long a client is given. Longer than everything that can happen before and
-# during the poll — two waits for a sink at 60s each, then 90s of polling —
+# How long a client is given. Longer than everything that can happen after it
+# starts — a wait for the second client's sink at 60s, then 90s of polling —
 # because the search runs on the submit path, so a client reaped mid-poll stops
 # the measurement and the guard reports "it never settled", which points at the
-# wrong thing entirely.
-#
-# Longer than the compositor's own search budget (`FIND_FOR`, 300s) rather than
-# equal to it. Those are two different failures — a client that went away and a
-# search that gave up — and this guard has a branch for each, which is no use
-# if they always happen together.
+# wrong thing entirely. 420 is that with room, not a number tuned against
+# anything else.
 CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-420}"
 
 # What the compositor is asked to look for. The negative run does not ask for
@@ -329,6 +325,11 @@ WINDOW=$(window_size)
 # assertions, because each of them is a different fact from "the boxes are
 # wrong" and reporting one as another is what sent the last several runs
 # chasing the wrong thing.
+#
+# The first of them is unreachable at today's numbers — the compositor looks
+# for 300s (`FIND_FOR`) and this polls for at most 150 from the first frame —
+# and is kept for the day someone lengthens the poll, so that doing so cannot
+# quietly turn "we stopped looking" into "it is not there".
 if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
   annotate "spike-two-windows: the compositor stopped searching before" \
        "this poll ran out, so 'not found' here means 'not looked for'"
@@ -347,10 +348,15 @@ if [ -z "$WINDOW" ]; then
 fi
 if [ "$SETTLED" != "1" ]; then
   annotate "spike-two-windows: the compositor never said it had settled" \
-       "after $((LOOKED * POLL_EVERY))s, so the boxes below were still moving." \
-       "A client that stops drawing stops the search: it runs on the submit path"
+       "after $((LOOKED * POLL_EVERY))s, so what it had measured was still" \
+       "moving. A client that stops drawing stops the search: it runs on the" \
+       "submit path"
   echo "  #$COLOR_A: ${BOX_A:-nowhere}" >&2
-  [ "$NEGATIVE" = "1" ] || echo "  #$COLOR_B: ${BOX_B:-nowhere}" >&2
+  if [ "$NEGATIVE" = "1" ]; then
+    echo "  #$COLOR_B: not searched for — no client is drawing it" >&2
+  else
+    echo "  #$COLOR_B: ${BOX_B:-nowhere}" >&2
+  fi
   exit 1
 fi
 
