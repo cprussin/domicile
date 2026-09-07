@@ -29,14 +29,84 @@ if [ -z "$CHROMIUM" ]; then
   echo "usage: run-engine.sh <path to chromium/src> [shell]" >&2
   exit 1
 fi
-SHELL_NAME="${2:-simple}"
+SHELL_ARG="${2:-simple}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
-[ -d "$SHELL_DIR" ] || {
-  echo "no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME." >&2
-  exit 1
-}
+
+# THREE THINGS THIS NEEDS, AND TWO WAYS TO HAVE EACH. A checkout builds them —
+# turbo for the page, cargo for the compositor, the workspace's own source for
+# the bridge — and that is what a developer with this repo open wants. A
+# package has them built already, in the store, and building anything at
+# startup would be both slower and a second way to produce them.
+#
+# So each is a path that can be handed in, and the checkout's own build is what
+# happens when it is not. Nothing here is a fallback: an unset variable means
+# "build it", which is a different instruction rather than a recovery from a
+# failure to find something.
+PAGE_DIR="${DOMICILE_PAGE:-}"
+COMPOSITOR="${DOMICILE_COMPOSITOR:-}"
+BRIDGE="${DOMICILE_BRIDGE:-}"
+
+# A shell is named or it is a path. `simple` is a shell in this workspace;
+# `./my-desktop/dist` is somebody else's, built however they like, and the only
+# thing this needs from it is a directory with an `index.html` in it. A file is
+# taken as one in that directory, so pointing at a built entry point works as
+# well as pointing at what contains it.
+#
+# A BARE NAME THAT IS ALSO A DIRECTORY IS A PATH. `run-engine.sh . dist` from
+# inside a shell's source tree used to be refused with "there is no
+# packages/shell-dist, and it is not a path to a built one either" — the second
+# half of which was false, and the check that would have known it was never
+# run. A directory here is what somebody meant.
+SHELL_NAME="$SHELL_ARG"
+IS_PATH=no
+case "$SHELL_ARG" in
+  (*/*|.|..) IS_PATH=yes ;;
+  (*) [ -d "$SHELL_ARG" ] && IS_PATH=yes ;;
+esac
+
+if [ "$IS_PATH" = yes ]; then
+  # TWO INSTRUCTIONS THAT DISAGREE. A handed-in page and a path argument are
+  # both somebody saying which page to serve, and the first version validated
+  # the argument and then discarded it — so a run could fail because a path it
+  # was never going to use did not exist, and succeed while serving a different
+  # page than the one typed. Neither reading is safe to pick.
+  if [ -n "$PAGE_DIR" ]; then
+    echo "run-engine.sh: given both a page and a path to one, and they are" >&2
+    echo "  not the same instruction:" >&2
+    echo "    DOMICILE_PAGE=$PAGE_DIR" >&2
+    echo "    the argument   $SHELL_ARG" >&2
+    echo "  Pass one." >&2
+    exit 1
+  fi
+  if [ -f "$SHELL_ARG" ]; then
+    WHERE="$(dirname "$SHELL_ARG")"
+  elif [ -d "$SHELL_ARG" ]; then
+    WHERE="$SHELL_ARG"
+  else
+    echo "no shell at '$SHELL_ARG' — it is neither a file nor a directory." >&2
+    exit 1
+  fi
+  # Checked, because `$(cd … && pwd)` swallows a failure into the empty string
+  # and `set -u` then reports an unbound variable three steps later, about a
+  # directory that exists and cannot be read.
+  PAGE_DIR="$(cd "$WHERE" && pwd)" || {
+    echo "cannot read '$WHERE', so there is no page to serve from it." >&2
+    exit 1
+  }
+  [ -n "$PAGE_DIR" ] || {
+    echo "cannot read '$WHERE', so there is no page to serve from it." >&2
+    exit 1
+  }
+  SHELL_NAME="$(basename "$PAGE_DIR")"
+elif [ -z "$PAGE_DIR" ]; then
+  SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
+  [ -d "$SHELL_DIR" ] || {
+    echo "no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME," >&2
+    echo "  and there is no directory of that name here either." >&2
+    exit 1
+  }
+fi
 
 OUT="${OUT:-out/Domicile}"
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp/domicile-engine-rt}"
@@ -80,23 +150,39 @@ trap cleanup EXIT INT TERM
 # shell imports are published from `dist/` — `@domicile/chrome-sdk`'s exports
 # map every entry point to `./dist/*.js`, so without it the page builds
 # without the SDK in it and the shell never joins the compositor.
-echo "building $SHELL_NAME's page"
-(cd "$ROOT" && bun install --frozen-lockfile >/dev/null &&
-   CI=1 bun run turbo build:vite --filter="@domicile/shell-$SHELL_NAME") || {
-  echo "the shell's page did not build" >&2
-  exit 1
-}
-# Where the shell's own renderer config puts it. `main_window` is what the
-# shell's `vite.renderer.config.ts` names the one window it opens, and it stays
-# that here rather than being special-cased: this runs the shell's build, not a
-# second one of our own.
-PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
+if [ -z "$PAGE_DIR" ]; then
+  echo "building $SHELL_NAME's page"
+  (cd "$ROOT" && bun install --frozen-lockfile >/dev/null &&
+     CI=1 bun run turbo build:vite --filter="@domicile/shell-$SHELL_NAME") || {
+    echo "the shell's page did not build" >&2
+    exit 1
+  }
+  # Where the shell's own renderer config puts it. `main_window` is what the
+  # shell's `vite.renderer.config.ts` names the one window it opens, and it
+  # stays that here rather than being special-cased: this runs the shell's
+  # build, not a second one of our own.
+  PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
+fi
 [ -f "$PAGE_DIR/index.html" ] || {
-  echo "the shell built no index.html; looked in $PAGE_DIR" >&2
+  echo "no index.html in $PAGE_DIR, so there is no page to serve. A shell is a" >&2
+  echo "  built web page: a directory with an index.html and whatever it loads." >&2
   exit 1
 }
 
-cargo build -p domicile-compositor || exit 1
+if [ -z "$COMPOSITOR" ]; then
+  cargo build -p domicile-compositor || exit 1
+  COMPOSITOR="$ROOT/target/debug/domicile-compositor"
+fi
+[ -f "$COMPOSITOR" ] && [ -x "$COMPOSITOR" ] || {
+  echo "no compositor at $COMPOSITOR" >&2
+  exit 1
+}
+
+BRIDGE="${BRIDGE:-$ROOT/packages/engine-chrome-host/src/main.ts}"
+[ -f "$BRIDGE" ] || {
+  echo "no bridge at $BRIDGE" >&2
+  exit 1
+}
 
 rm -f "$BROKER" "$COMP_SOCK" "$COMP_SOCK.session"
 rm -rf "$PROFILE"; mkdir -p "$PROFILE"
@@ -106,7 +192,7 @@ rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 echo "serving $SHELL_NAME from $PAGE_DIR"
 BRIDGE_URL_FILE="$(mktemp)"
 DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_ROOT="$PAGE_DIR" \
-  bun "$ROOT/packages/engine-chrome-host/src/main.ts" >"$BRIDGE_URL_FILE" 2>&1 &
+  bun "$BRIDGE" >"$BRIDGE_URL_FILE" 2>&1 &
 STARTED+=($!)
 
 URL=""
@@ -141,7 +227,7 @@ for _ in $(seq 1 300); do [ -S "$BROKER" ] && break; sleep 0.1; done
 # 3. The compositor, as a producer to it.
 LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
-  "$ROOT/target/debug/domicile-compositor" \
+  "$COMPOSITOR" \
     --chrome-socket "$COMP_SOCK" \
     --session "$COMP_SOCK.session" \
     --engine-socket "$BROKER" &
