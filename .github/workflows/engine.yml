@@ -241,15 +241,30 @@ jobs:
             tail -15 /tmp/domicile-shell.log | sed 's/^/   | /'
           }
 
-          # `nix-shell` with the shell.nix, first, because that is the form
+          # `<nixpkgs>` has to resolve or the shell builds nothing.
+          #
+          # tools/nix/shell.nix imports it, and a systemd service has no
+          # NIX_PATH: that is a thing NixOS sets up for an interactive user and
+          # this unit is not one. Without it nix-shell reports
+          # "file 'nixpkgs' was not found in the Nix search path", says "uses
+          # bash from your environment", and hands the script an ambient shell
+          # with no Chromium toolchain in it — which is exactly what
+          # `exec: autoninja: not found` was.
+          #
+          # Taken from the flake registry rather than written down, because the
+          # registry is what pins nixpkgs on this machine and a second copy of
+          # that pin here would be a second thing to keep true.
+          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
+          echo "nixpkgs is $nixpkgs"
+          export NIX_PATH="nixpkgs=$nixpkgs"
+
+          # `nix-shell` with the shell.nix, because that is the form
           # spike-client-window.sh and spike-wayland.sh use and those have
           # actually run on this machine. `nix develop path:` wants a flake.nix
-          # and this directory ships a shell.nix, which is why it returned in
-          # no time at all having entered nothing.
+          # and this directory ships a shell.nix; it entered nothing, exited 0,
+          # and was indistinguishable from success until the sentinel.
           attempt "nix-shell tools/nix/shell.nix, NIX_SHELL_RUN" \
             env NIX_SHELL_RUN="bash -c '$build'" nix-shell "$CHROMIUM/tools/nix/shell.nix"
-          attempt "nix develop path:tools/nix, NIX_SHELL_RUN" \
-            env NIX_SHELL_RUN="bash -c '$build'" nix develop "path:$CHROMIUM/tools/nix"
 
           [ -e "$done" ] || {
             echo "::error::no way of scripting Chromium's shell ran the build; each attempt's last words are above" >&2

@@ -119,8 +119,14 @@ jobs:
           build="$GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh $CHROMIUM $OUT \
             && touch $done"
 
+          # `<nixpkgs>` has to resolve or the shell builds nothing and hands
+          # the script an ambient bash with no toolchain. A systemd service has
+          # no NIX_PATH. See engine.yml.
+          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
+          export NIX_PATH="nixpkgs=$nixpkgs"
+
           # nix-shell with the shell.nix: the form the spike scripts use, and
-          # the ones that have run on this machine. See engine.yml.
+          # the ones that have run on this machine.
           env NIX_SHELL_RUN="bash -c '$build'" \
             nix-shell "$CHROMIUM/tools/nix/shell.nix" || true
           [ -e "$done" ] || {
