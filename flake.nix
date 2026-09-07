@@ -28,6 +28,29 @@
         bun
         biome
         nodejs_24
+        # `scripts/update-engine-release.sh` reads a GitHub release with curl
+        # and jq; `.github/scripts/engine-release-*.sh` do the same and pack a
+        # zstd tarball; `spike-iframe.sh` fetches a page. In the core shell
+        # rather than the full one because the release workflow runs in it.
+        #
+        # Fetching the engine itself is NOT among these any more: that is a
+        # `fetchurl` in a derivation now, and nix does the download, the hash
+        # and the cache.
+        curl
+        jq
+        zstd
+        # WITH THE CA BUNDLE, because this curl shadows the system's inside
+        # every shell and every `nix run` app. It reads CAs from OpenSSL's
+        # default path, which on a Fedora- or SUSE-shaped host holds nothing —
+        # and the release scripts would report a certificate failure as "no
+        # release tagged engine-nightly", the least true message available.
+        #
+        # This package alone is what fixes it: its setup hook exports
+        # `NIX_SSL_CERT_FILE`, which nixpkgs' OpenSSL honours. Setting
+        # `SSL_CERT_FILE` on the shells instead does nothing at all — it is in
+        # nix's own ignore list and never reaches the shell, which is worth
+        # writing down because it looks like it would.
+        cacert
       ];
 
       # Native libraries the Wayland host (domicile-host, Smithay) and the CEF
@@ -94,6 +117,11 @@
         gdk-pixbuf
         gtk3
         libdrm
+        # libgbm.so.1, which Chromium needs to allocate buffers on a GPU. It
+        # was on the dev shell's library path separately and missing here, so
+        # the list called "what a prebuilt Chromium needs" did not have it —
+        # which `autoPatchelfHook` said the first time anything asked.
+        libgbm
         libxshmfence
         # libudev.so.1, which Chromium opens to enumerate input and GPU
         # devices. `udev` is an alias of this in nixpkgs; naming the package it
@@ -110,6 +138,65 @@
         libxtst
         libxcb
       ];
+
+      # ── The engine CI built, as a package ───────────────────────────────
+      #
+      # The alternative was a script that curled the release, checked a
+      # checksum, cached the result by name and patched the ELF — every one of
+      # which nix already does, and does better: `fetchurl` is the checksum and
+      # the cache, the store path is the name, and `autoPatchelfHook` is the
+      # patching. It is also the only version that works on NixOS, where a
+      # generic-linux Chromium cannot start at all: `/lib64/ld-linux-x86-64.so.2`
+      # is a stub whose whole job is to say so.
+      #
+      # `dontStrip` because this is somebody else's release build and stripping
+      # a 517 MB binary buys nothing here. `autoPatchelfIgnoreMissingDeps` is
+      # not set: a library Chromium needs and this list lacks should fail the
+      # build rather than the desktop.
+      engineRelease = import ./packages/domicile-engine/engine-release.nix;
+      domicileEngine = pkgs.stdenv.mkDerivation {
+        pname = "domicile-engine";
+        version = builtins.substring 0 7 engineRelease.commit;
+
+        src = pkgs.fetchurl { inherit (engineRelease) url hash; };
+
+        nativeBuildInputs = [ pkgs.autoPatchelfHook pkgs.zstd ];
+        buildInputs = engineRuntimeLibs;
+        dontStrip = true;
+
+        # The tarball holds one directory; `run-engine.sh` joins `$CHROMIUM` and
+        # `$OUT`, so `OUT=.` and this is that directory.
+        unpackPhase = ''
+          runHook preUnpack
+          mkdir -p unpacked
+          tar --use-compress-program=unzstd -xf "$src" -C unpacked
+          cd unpacked/*
+          runHook postUnpack
+        '';
+
+        installPhase = ''
+          runHook preInstall
+          mkdir -p "$out"
+          cp -R . "$out/"
+          runHook postInstall
+        '';
+
+        # The two things every consumer of this looks up by name, so a release
+        # missing one fails here rather than four minutes into a desktop.
+        doInstallCheck = true;
+        installCheckPhase = ''
+          for needed in chrome libdomicile_engine.so; do
+            [ -e "$out/$needed" ] || {
+              echo "the published engine has no $needed" >&2
+              exit 1
+            }
+          done
+          "$out/chrome" --version
+        '';
+
+        meta.description =
+          "The patched Chromium domicile-compositor uses as its engine";
+      };
 
       # ── What a user installs ────────────────────────────────────────────
       #
@@ -439,11 +526,16 @@
       # checkout-based commands in the README do. The staging dir is keyed by
       # the source's store path, so re-running one revision reuses its build
       # artifacts and a new revision never inherits stale ones.
-      runInFullShell = name: script:
+      # `prelude` is shell run before the staging, for an app that needs
+      # something in its environment. Per-app rather than shared: putting the
+      # engine's path in every app's environment would make `nix run .#check`
+      # depend on a 215 MB download it has no use for.
+      runInFullShell = name: script: prelude:
         pkgs.writeShellApplication {
           name = "domicile-${name}";
           runtimeInputs = [ pkgs.nix ];
           text = ''
+            ${prelude}
             work="''${DOMICILE_RUN_DIR:-''${XDG_CACHE_HOME:-$HOME/.cache}/domicile/${builtins.baseNameOf self}}"
             if [ ! -e "$work/.domicile-staged" ]; then
               echo "domicile: staging the source in $work" >&2
@@ -472,11 +564,31 @@
             # rather than this one baking the words in; those parameters are the
             # trailing `"$@"`, since `bash -c CMD name args...` is how a `-c`
             # command is given any.
-            exec nix develop "${self}#full" --command bash -c \
+            # The features are named again because a CLI flag does not reach a
+            # nested invocation. `nix run --extra-experimental-features
+            # 'nix-command flakes' github:cprussin/domicile#engine` is how a
+            # machine that has not edited nix.conf runs any of this, and until
+            # now it got all the way through staging the source and then died
+            # here saying nix-command was disabled — which reads as the flake
+            # being broken rather than as a flag that needed repeating. On a
+            # machine that has them enabled this changes nothing.
+            exec nix --extra-experimental-features "nix-command flakes" \
+              develop "${self}#full" --command bash -c \
               "bun install --frozen-lockfile && cargo build -p domicile-compositor && exec ./scripts/${script} \"\$@\"" \
               domicile-${name} "$@"
           '';
         };
+
+      # A desktop on the forked engine — the one app here that needs neither a
+      # Chromium checkout nor four hours:
+      #
+      #   nix run github:cprussin/domicile#engine -- manganese
+      #
+      # Its own entry rather than one of `scriptApps` because it is the only
+      # one carrying a package in its environment.
+      engineApp = runInFullShell "engine" "run-engine-release.sh" ''
+        export DOMICILE_ENGINE="${domicileEngine}"
+      '';
 
       # `nix run .#<attr>` → `scripts/<script>.sh`. `native` is also the default
       # app, so a bare `nix run github:cprussin/domicile` starts the compositor
@@ -485,7 +597,7 @@
       scriptApps = pkgs.lib.mapAttrs
         (name: script: {
           type = "app";
-          program = pkgs.lib.getExe (runInFullShell name script);
+          program = pkgs.lib.getExe (runInFullShell name script "");
           meta.description = "Run scripts/${script} with no checkout";
         })
         {
@@ -521,9 +633,19 @@
           name = "simple";
           description = "The smallest Domicile desktop: floating windows on the Alt key, Alt+Enter for a terminal";
         };
+        # The engine on its own, for `nix build .#engine` and for anyone who
+        # wants the path to hand to `run-engine.sh` themselves.
+        engine = domicileEngine;
       };
 
-      apps.${system} = scriptApps // { default = scriptApps.native; };
+      apps.${system} = scriptApps // {
+        default = scriptApps.native;
+        engine = {
+          type = "app";
+          program = pkgs.lib.getExe engineApp;
+          meta.description = "Run a Domicile desktop on the engine CI published";
+        };
+      };
 
       devShells.${system} = {
         # Default shell: everything needed for the TDD pure-logic core.

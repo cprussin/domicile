@@ -19,6 +19,25 @@ nix run github:cprussin/domicile              # manganese: tabs, stage, address 
 nix run github:cprussin/domicile -- simple    # simple: floating windows only
 ```
 
+Those run the shells under Electron, which is what ships today. To run one on
+the **forked engine** instead — the browser as the display compositor, with the
+compositor as a producer and no Electron anywhere — use `#engine`:
+
+```sh
+nix run github:cprussin/domicile#engine -- manganese
+nix run github:cprussin/domicile#engine -- simple
+```
+
+The engine is a nix package: `nix build .#engine` fetches the build CI
+published (a few hundred megabytes, once, into the store), checks it against
+the hash in `packages/domicile-engine/engine-release.nix`, and patches it to
+run — which is what makes it work on NixOS, where a generic-linux Chromium
+cannot start at all. `scripts/update-engine-release.sh` moves that file to the
+newest release, so which engine a given revision runs is a commit you can read.
+
+Building the engine yourself instead needs a Chromium checkout and about four
+hours; see [docs/architecture/ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
+
 From a checkout:
 
 ```sh
