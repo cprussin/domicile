@@ -1203,6 +1203,17 @@ struct DomicileCompositor {
     /// at its frame rate and the refusal does not change, so it is said once
     /// each rather than once a frame.
     shm_refused: HashSet<String>,
+
+    /// THROWAWAY, with the rest of the spike. When the pixel probe last ran.
+    ///
+    /// The probe forces a CopyOutputRequest and blocks this thread until viz
+    /// answers, so running it per submit costs a full readback per client per
+    /// frame. One client absorbed that; two did not — buffers stopped being
+    /// released at all, because this thread was inside the probe instead of
+    /// draining the engine's events. The guards poll for tens of seconds, so
+    /// four times a second is plenty and the cost is bounded whatever the
+    /// clients' frame rate.
+    last_probe: Option<Instant>,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1773,6 +1784,19 @@ impl DomicileCompositor {
         // the compositor holds the browser's invitation, so nothing else can
         // ask what viz drew. Logged rather than returned because the thing that
         // checks it is a shell script.
+        // Throttled, and checked before the session is borrowed so that
+        // updating it does not fight the borrow.
+        const PROBE_EVERY: Duration = Duration::from_millis(250);
+        // `match` rather than `is_none_or`, which is stable later than this
+        // crate's MSRV, or `map_or(true, ..)`, which clippy rewrites into it.
+        let due = match self.last_probe {
+            None => true,
+            Some(at) => at.elapsed() >= PROBE_EVERY,
+        };
+        if !due {
+            return true;
+        }
+        self.last_probe = Some(Instant::now());
         let Some(session) = self.engine.as_ref() else {
             return true;
         };
@@ -4483,6 +4507,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_is_current: false,
         frames_held: 0,
         shm_refused: HashSet::new(),
+        last_probe: None,
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
