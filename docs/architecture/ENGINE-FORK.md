@@ -1136,9 +1136,18 @@ Phase 3 — be the display server:
   `domicile_surface_import` still needs*. **This is a decision, not a detail:**
   the first hands a process the browser did not launch the same GPU authority a
   renderer has.
-- **One surface per document, in the spike only.** The measurement puts eight
-  `<app>` elements on one page against one producer, and it does that by
-  sharing the `LocalSurfaceId` the renderer allocated across the document. A
-  shell has one surface per app and which one an element shows is keyed by
-  which app it names — the chrome protocol's job, which is why the broker does
-  not do it. Phase 1 is where the key stops being "the only one".
+- ~~**One surface per document, in the spike only.**~~ Closed, and it was not
+  a simplification that could be left standing. The measurement puts eight
+  `<app>` elements on one page against one producer by sharing a
+  `LocalSurfaceId` across the document — but a `LocalSurfaceId` carries an
+  `embed_token`, and viz keys `SurfaceAllocationGroup` on that token *alone*:
+  `SurfaceManager::GetOrCreateAllocationGroupForSurfaceId` refuses a second
+  `FrameSinkId` under a token another sink already owns ("Cannot reuse embed
+  token across frame sinks") and never creates the surface. So one token per
+  document does not mean "eight elements, one producer" — it means the second
+  window's surface does not exist and the element embedding it resolves through
+  the *first* window's allocation group. Two windows, both showing window one,
+  which is what `spike-two-windows.sh` measured. `ExternalSurfaceEmbedder` now
+  keeps one allocator per app id: elements naming one app still share a
+  surface, which is all the CSS measurement ever needed, and elements naming
+  different apps get different tokens, which is what a desktop is.

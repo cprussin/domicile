@@ -71,8 +71,15 @@ STARTED=()
 # the client's colour, the compositor's log is the only place that says which
 # app id it brokered — and that is now the thing an embed is dispatched on.
 LOG_COPY="${LOG_COPY:-/tmp/domicile-client-window-compositor.log}"
+# The browser's own log, which used to be thrown away with the tempfile.
+# It is where the page's console lines are — which element embedded which
+# app, and which was refused — and a run where the page showed the wrong
+# window cannot be told apart from one where a client never drew without
+# them.
+ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-client-window-engine.log}"
 cleanup() {
   cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
+  cp "$ENGINE_LOG" "$ENGINE_LOG_COPY" 2>/dev/null
   if [ ${#STARTED[@]} -gt 0 ]; then
     kill "${STARTED[@]}" 2>/dev/null
   fi

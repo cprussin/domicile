@@ -44,12 +44,13 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
 
   // Which LocalSurfaceId to embed at.
   enum class Allocation {
-    // Whichever one this renderer is already showing, allocating it if there
-    // is none yet. So several elements embed one surface and all of them show
-    // the same producer, which is what lets the CSS measurement put six <app>
-    // elements on one page against one producer. A real shell has one surface
-    // per app and keys them by which app an element names; that is the chrome
-    // protocol's job and not this layer's.
+    // Whichever one this app is already showing, allocating it if there is
+    // none yet. So several elements naming one app embed one surface and all
+    // of them show that producer, which is what lets the CSS measurement put
+    // six <app> elements on one page against one producer. Elements naming
+    // different apps get different surfaces, because they are different
+    // windows — and because viz refuses two frame sinks under one embed token
+    // outright. See AllocatorForApp().
     kAdopt,
     // A new one, bumping parent_sequence_number. The embedder's box changed
     // and the producer has to render at the new size: this is the embedder
@@ -87,6 +88,7 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
 
  private:
   void OnEmbedded(EmbeddedCallback callback,
+                  const String& app_id,
                   const viz::LocalSurfaceId& local_surface_id,
                   const std::optional<viz::FrameSinkId>& frame_sink_id);
 

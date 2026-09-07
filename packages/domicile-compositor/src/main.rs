@@ -1204,6 +1204,13 @@ struct DomicileCompositor {
     /// each rather than once a frame.
     shm_refused: HashSet<String>,
 
+    /// Apps whose first frame the engine has taken. A window that maps, is
+    /// brokered a sink and is configured has still shown nothing until it
+    /// commits a buffer the engine accepts, and those are three different
+    /// facts. Said once per app rather than once a frame, so a two-window run
+    /// says which of its windows ever drew.
+    submitted: HashSet<String>,
+
     /// THROWAWAY, with the rest of the spike. When the pixel probe last ran.
     ///
     /// The probe forces a CopyOutputRequest and blocks this thread until viz
@@ -1783,6 +1790,9 @@ impl DomicileCompositor {
         // — a wrong rectangle leaves stale pixels on screen.
         if !session.submit(app_id, buffer, &descriptor, (0, 0, 0, 0), Instant::now()) {
             return false;
+        }
+        if self.submitted.insert(app_id.to_string()) {
+            info!(app_id, "the engine took this app's first frame");
         }
         // THROWAWAY. The spike's assertion, and the only place it can be made:
         // the compositor holds the browser's invitation, so nothing else can
@@ -4549,6 +4559,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_is_current: false,
         frames_held: 0,
         shm_refused: HashSet::new(),
+        submitted: HashSet::new(),
         last_probe: None,
         probe_refused: HashSet::new(),
         chrome_toplevel: None,
