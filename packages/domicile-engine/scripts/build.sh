@@ -6,15 +6,17 @@
 # Small and fast rather than shippable: a component build with no symbols and
 # every Ozone platform off but the three this needs.
 #
-# ALL THREE, not one at a time. Ozone picks its platform at runtime from
-# `--ozone-platform`, so one binary covers every way a desktop gets on a
-# screen, and which one is a property of where it is started rather than of
-# which build somebody fetched:
+# Wayland and headless, and NOT drm. `ozone_platform_drm` is what would make a
+# tty a display, and it cannot be set here: at this Chromium pin
+# `ui/ozone/platform/drm/BUILD.gn` opens with
+# `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`, and
+# `//ui/ozone/BUILD.gn` makes `platform/drm:gbm` a dependency the moment the
+# argument is true, so `gn gen` refuses before anything is compiled. Measured,
+# not read: run 34152521286. A tty needs a patch in the series or a different
+# `target_os`, and either is its own piece of work.
 #
 #   wayland   nested in an existing session — a window, like running sway
 #             inside sway. What a developer has, and what CI drives
-#   drm       a tty, with no display server under it. The whole screen, and
-#             the real thing: this is a Domicile session
 #   headless  no display at all, which is what `crux` has
 #
 # Headless is not part of the design; it is what the measurement machine needs.
@@ -49,7 +51,6 @@ gn gen "$OUT" --args='
   ozone_auto_platforms = false
   ozone_platform_wayland = true
   ozone_platform_headless = true
-  ozone_platform_drm = true
 ' || exit 1
 
 exec autoninja -C "$OUT" chrome domicile_solid_color_submitter

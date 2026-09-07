@@ -69,13 +69,7 @@ gn gen "$OUT" --args='
   ozone_auto_platforms = false
   ozone_platform_wayland = true
   ozone_platform_headless = true
-  ozone_platform_drm = true
 ' || exit 1
-# `ozone_platform_drm` is what makes a tty a display: chrome takes KMS itself
-# and there is no compositor under it, which is a Domicile session rather than
-# a window inside somebody else's. One binary carries all three platforms
-# because ozone chooses at runtime, so which one a desktop uses is a property
-# of where it was started and not of which build was fetched.
 
 # `chrome` is the browser; `domicile_engine` is the library the compositor
 # dlopens and nothing in chrome depends on, so it has to be named.
