@@ -96,8 +96,10 @@ jobs:
             while IFS= read -r -d '' file; do
               rm -f "$CHROMIUM/${file#./}"
             done
-          NIX_SHELL_RUN="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/apply.sh $CHROMIUM" \
-            nix develop "path:$CHROMIUM/tools/nix"
+          # Directly, not through Chromium's shell: apply.sh needs no host
+          # tool, and the sandbox swallowed both its exit status and its
+          # output. See engine.yml.
+          packages/domicile-engine/scripts/apply.sh "$CHROMIUM"
           [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
             echo "::error::the checkout is still at the pin, so no patch was applied" >&2
             exit 1

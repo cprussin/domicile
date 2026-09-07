@@ -168,20 +168,27 @@ jobs:
           git -C "$CHROMIUM" config user.name "domicile CI"
           git -C "$CHROMIUM" config user.email "ci@domicile.invalid"
 
-      # Asked afterwards, out here, for the reason the reset step gives: a
-      # command run through NIX_SHELL_RUN can fail without failing this step.
-      # `git am` commits each patch, so a HEAD still at the pin means the
-      # series did not go on — which is the failure that went unnoticed for
-      # five runs.
+      # NOT through Chromium's shell, and that was a mistake worth naming.
+      #
+      # This step used to enter it with NIX_SHELL_RUN, copied from the build
+      # step below without asking whether it needed to. `apply.sh` is `git`,
+      # `grep`, `cp` and `find` — every one of them already on this unit's
+      # PATH, and not one of them a Chromium host tool. What the wrapper bought
+      # was a sandbox that swallowed the script's exit status AND its output:
+      # five runs failed here saying nothing, and three more were spent
+      # building instruments to find out what.
+      #
+      # Run directly, the exit status is this step's and the error is in this
+      # log. The HEAD check stays anyway: `git am` commits each patch, so a
+      # HEAD still at the pin means the series did not go on, and that is worth
+      # asserting rather than inferring from an exit code.
       - name: Apply the series
         run: |
           set -euo pipefail
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-          NIX_SHELL_RUN="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/apply.sh $CHROMIUM" \
-            nix develop "path:$CHROMIUM/tools/nix" 2>&1 | tee /tmp/domicile-apply.log
+          packages/domicile-engine/scripts/apply.sh "$CHROMIUM"
           [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
-            echo "::error::the checkout is still at the pin, so no patch was applied. apply.sh said:" >&2
-            tail -30 /tmp/domicile-apply.log >&2
+            echo "::error::apply.sh succeeded but the checkout is still at the pin, so no patch was applied" >&2
             exit 1
           }
           echo "series applied: $(git -C "$CHROMIUM" log --oneline "$pin..HEAD" | wc -l) patches"
@@ -402,14 +409,6 @@ jobs:
           # enough to hold it is a tail too long to read; the message that
           # appeared once is usually the one that matters. tracing colours its
           # field names, so the escapes come out first or nothing groups.
-          # Last, because it is first in the order things go wrong: nothing
-          # below it runs if the series did not go on. `pipefail` means the
-          # step dies inside the pipeline rather than at the check after it,
-          # so the handler there never gets to print this.
-          echo "what apply.sh said:"
-          tail -40 /tmp/domicile-apply.log 2>/dev/null | sed 's/^/  /' ||
-            echo "  (it wrote nothing, so it did not get as far as running)"
-
           echo "what was complained about:"
           sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
             grep -aoE '(WARN|ERROR) .*' | cut -c1-200 | sort | uniq -c |
