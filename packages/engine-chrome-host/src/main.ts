@@ -17,15 +17,12 @@
 // It prints where it is serving, on one line, in a shape a script can read:
 // the caller needs the port and the kernel chose it.
 
-import path from "node:path";
-
 import { serveShell } from "./serve-shell";
+import { shellFromEnvironment } from "./shell-from-env";
 import { wholeNumberFromEnv } from "./whole-number-env";
 
 // biome-ignore lint/style/noProcessEnv: this is the program; it is its own env.
 const environment = process.env;
-
-const modulePath = environment.DOMICILE_MODULE;
 
 /** Refusing is exiting: nothing downstream can do anything useful with a
  * setting the launcher meant and got wrong. */
@@ -41,35 +38,14 @@ const socketPath =
   environment.DOMICILE_SOCKET ??
   refuse("domicile: DOMICILE_SOCKET is required");
 
-// One or the other. A caller that sets both has said two different things
-// about which shell to serve, and there is no reading that makes it one — the
-// same refusal `run-engine.sh` makes about a page and a path.
-if (modulePath !== undefined && environment.DOMICILE_ROOT !== undefined) {
-  refuse(
-    "domicile: DOMICILE_MODULE and DOMICILE_ROOT both name a shell, and they" +
-      " are not the same instruction. Pass one.",
-  );
-}
-
-// The module is served from the directory it is in, so a shell's own layout is
-// its own business: whatever it put beside its entry is reachable, and nothing
-// above that is. `static-path.ts` is what holds that line for every request.
-const shell =
-  modulePath === undefined
-    ? undefined
-    : await (async () => {
-        if (!(await Bun.file(modulePath).exists())) {
-          return refuse(`domicile: there is no module at ${modulePath}`);
-        }
-        const resolved = path.resolve(modulePath);
-        const directory = path.dirname(resolved);
-        return { module: path.basename(resolved), root: directory };
-      })();
-
-const root =
-  shell?.root ??
-  environment.DOMICILE_ROOT ??
-  refuse("domicile: one of DOMICILE_MODULE or DOMICILE_ROOT is required");
+// Which shell, and where it is served from — `shell-from-env.ts`, which is
+// the part of this program that is a decision rather than a side effect, and
+// so the part that has tests.
+const shell = await shellFromEnvironment(
+  { module: environment.DOMICILE_MODULE, root: environment.DOMICILE_ROOT },
+  (file) => Bun.file(file).exists(),
+  refuse,
+);
 
 const port = wholeNumberFromEnv(
   "DOMICILE_PORT",
@@ -83,9 +59,9 @@ const reachForMs = wholeNumberFromEnv(
 );
 
 const serving = serveShell({
-  root,
+  root: shell.root,
   socketPath,
-  ...(shell === undefined ? {} : { module: shell.module }),
+  ...(shell.module === undefined ? {} : { module: shell.module }),
   ...(port === undefined ? {} : { port }),
   // How long a page waits for a compositor that has not started yet. The
   // default suits a desktop; a CI runner starting a debug Chromium needs
