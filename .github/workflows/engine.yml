@@ -262,3 +262,25 @@ jobs:
           ls -l /dev/dri || true
           echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-unset}"
           echo "::endgroup::"
+
+          # Dead last on purpose. A failed job's log is read from the end, and
+          # the useful question is almost always "how far down the sequence did
+          # it get" — a sink brokered, the page configuring it, a frame drawn —
+          # which is four numbers rather than four hundred lines. Anything that
+          # has to be read by scrolling up will be read late.
+          echo "counts, per log:"
+          for log in /tmp/domicile-spike-wayland.log \
+                     /tmp/domicile-client-window-compositor.log \
+                     /tmp/domicile-two-windows-compositor.log; do
+            [ -f "$log" ] || continue
+            printf '  %-42s appeared=%s brokered=%s configured=%s drew=%s stuck=%s\n' \
+              "$(basename "$log")" \
+              "$(grep -ac 'app_appeared' "$log" || true)" \
+              "$(grep -ac 'brokered a frame sink' "$log" || true)" \
+              "$(grep -ac 'configure ->' "$log" || true)" \
+              "$(grep -ac 'engine drew' "$log" || true)" \
+              "$(grep -ac 'never released' "$log" || true)"
+          done
+          echo "what was drawn, if anything:"
+          grep -ahoE 'engine drew #[0-9A-F]{8}( at \([0-9]+,[0-9]+\))?' \
+            /tmp/domicile-*-compositor.log 2>/dev/null | sort -u | sed 's/^/  /' || true
