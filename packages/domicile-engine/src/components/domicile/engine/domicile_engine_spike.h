@@ -55,14 +55,32 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
     int32_t y,
     uint32_t* argb);
 
+typedef struct DomicileSpikeCapture {
+  // The colour's bounding box in the captured bitmap.
+  int32_t x;
+  int32_t y;
+  int32_t width;
+  int32_t height;
+  // The captured bitmap's own size, which is not obliged to be the size the
+  // browser's window was asked for.
+  int32_t window_width;
+  int32_t window_height;
+} DomicileSpikeCapture;
+
+// The Rust side mirrors this as a #[repr(C)] struct of six i32. Six int32_t
+// with no padding is what that assumes, and an assertion is cheaper than
+// finding out from a wrong bounding box.
+#ifdef __cplusplus
+static_assert(sizeof(DomicileSpikeCapture) == 6 * sizeof(int32_t),
+              "DomicileSpikeCapture must stay six packed int32_t");
+#endif
+
 // Where `argb` is in the browser's window, and how big that window is.
 //
 //   -1  the window could not be captured — no window yet, nothing drawn, or
 //       no probe pipe. Nothing was measured and nothing follows about the
 //       colour.
-//    0  captured, and the colour is not in it. This is a measurement, and it
-//       includes a capture that came back with no pixels at all: a 0x0 window
-//       is a fact about the coordinate space, not a failure to read one.
+//    0  captured, and the colour is not in it. This is a measurement.
 //    1  captured, and the colour is in it.
 //
 // Three values rather than a bool, because a guard's negative control turns on
@@ -98,18 +116,6 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
 // Exact match, like every other assertion in the spike: the clients draw one
 // flat colour and a near-match would mean the compositor's own background, an
 // anti-aliased edge, or a blend, none of which is a client's window.
-typedef struct DomicileSpikeCapture {
-  // The colour's bounding box in the captured bitmap.
-  int32_t x;
-  int32_t y;
-  int32_t width;
-  int32_t height;
-  // The captured bitmap's own size, which is not obliged to be the size the
-  // browser's window was asked for.
-  int32_t window_width;
-  int32_t window_height;
-} DomicileSpikeCapture;
-
 DOMICILE_ENGINE_EXPORT int32_t domicile_engine_spike_find_colour(
     DomicileEngine* engine,
     uint32_t argb,

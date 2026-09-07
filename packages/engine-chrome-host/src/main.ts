@@ -12,6 +12,7 @@
 // the caller needs the port and the kernel chose it.
 
 import { serveShell } from "./serve-shell";
+import { wholeNumberFromEnv } from "./whole-number-env";
 
 // biome-ignore lint/style/noProcessEnv: this is the program; it is its own env.
 const environment = process.env;
@@ -26,41 +27,22 @@ if (socketPath === undefined || root === undefined) {
   process.exit(2);
 }
 
-/**
- * A whole number of milliseconds, or nothing.
- *
- * `Number()` alone is not enough at this boundary and the failure is not
- * cosmetic: `Number("soon")` is `NaN`, `now() + NaN >= until` is *never* true,
- * and a reach budget of `NaN` makes the bridge retry until the process dies —
- * a page with a dead-looking transport and nothing said, which is the failure
- * `reachForMs` was added to prevent. Set-but-empty is the other trap: it reads
- * as `0`, which gives up on the first attempt.
- *
- * Refused rather than defaulted. A launcher that passed something meaningless
- * meant something by it, and quietly running with a different number is how a
- * guard measures a configuration nobody chose.
- */
-const milliseconds = (
-  name: string,
-  raw: string | undefined,
-): number | undefined => {
-  if (raw === undefined) {
-    return undefined;
-  }
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 0) {
-    process.stderr.write(
-      `domicile: ${name} must be a whole number of milliseconds, not ${JSON.stringify(raw)}\n`,
-    );
-    process.exit(2);
-  }
-  return value;
+/** Refusing is exiting: nothing downstream can do anything useful with a
+ * setting the launcher meant and got wrong. */
+const refuse = (message: string): never => {
+  process.stderr.write(`${message}\n`);
+  process.exit(2);
 };
 
-const port = milliseconds("DOMICILE_PORT", environment.DOMICILE_PORT);
-const reachForMs = milliseconds(
+const port = wholeNumberFromEnv(
+  "DOMICILE_PORT",
+  environment.DOMICILE_PORT,
+  refuse,
+);
+const reachForMs = wholeNumberFromEnv(
   "DOMICILE_REACH_MS",
   environment.DOMICILE_REACH_MS,
+  refuse,
 );
 
 const serving = serveShell({

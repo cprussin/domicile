@@ -591,16 +591,15 @@ struct DomicileEngine {
         [](base::RunLoop* loop, uint32_t wanted, int32_t* found,
            DomicileSpikeCapture* out, bool captured, const gfx::Size& size,
            const std::vector<uint32_t>& pixels) {
+          // `captured` already implies a non-empty bitmap: SpikeProbe answers
+          // false for anything `SkBitmap::drawsNothing()` is true of, and that
+          // is exactly an empty or null one. So there is no zero-sized case to
+          // handle here — a branch for it would be a branch nothing can reach.
           if (captured) {
-            // Written whenever the window could be read at all, a zero-sized
-            // one included: a capture that comes back 0x0 is a fact about the
-            // coordinate space and reporting it as "nothing was measured"
-            // hides exactly the kind of mismatch this call exists to expose.
             out->window_width = size.width();
             out->window_height = size.height();
             *found = 0;
-          }
-          if (captured && size.width() > 0 && size.height() > 0) {
+
             // Bounded by the smaller of what arrived and what `size` says: a
             // short reply must not be read past, and a long one must not
             // report a row below the bottom of the window.

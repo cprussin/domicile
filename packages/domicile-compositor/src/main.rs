@@ -1247,12 +1247,11 @@ struct DomicileCompositor {
     /// than the point probe beside it.
     last_find: Option<Instant>,
 
-    /// THROWAWAY. How many times the colour search has run. Bounded, because a
-    /// colour that never appears would otherwise buy a whole-window readback
-    /// every couple of seconds for the whole of a guard's poll — and a
-    /// readback is time this thread is not handing the client its buffers
-    /// back.
-    find_tries: u32,
+    /// THROWAWAY. When the colour search first ran, which is what its budget
+    /// is measured from. Set on the first search rather than at startup: a
+    /// desktop with no client yet is not searching for anything, and starting
+    /// the clock then would spend the budget waiting.
+    find_since: Option<Instant>,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1889,16 +1888,20 @@ impl DomicileCompositor {
         // a search that never succeeds is a search that keeps taking this
         // thread away from draining the engine's events and expiring the
         // client's holds — the compositor would then be manufacturing the very
-        // "never released" errors the log is being read for. A colour that is
-        // going to appear appears within a few seconds of the client drawing;
-        // twenty tries is forty seconds of a ninety second poll.
+        // "never released" errors the log is being read for.
         //
-        // Forty-five at two seconds is ninety, which is what
-        // `spike-two-windows.sh` and `spike-shell.sh` poll for. Fewer would
-        // have the compositor stop looking while a guard is still asking, and
-        // a colour that turned up late would then be reported as never having
-        // turned up at all.
-        const FIND_TRIES: u32 = 45;
+        // A wall clock rather than a count of tries, because a count cannot be
+        // matched to what the guards do. Their poll starts after waiting for a
+        // broker socket, a compositor, a protocol handshake and a client to
+        // map — minutes, on a loaded runner — while this counts from the first
+        // frame the engine takes. A bound of "ninety tries at two seconds is
+        // the ninety seconds they poll for" is two clocks with different
+        // origins pretending to be one, and the compositor would stop looking
+        // before the guard had started asking.
+        //
+        // Five minutes, which is longer than any guard's whole run and still
+        // finite, so a wedged desktop is not paying for a readback forever.
+        const FIND_FOR: Duration = Duration::from_secs(300);
         let wanted = spike_find_colours()
             .iter()
             .copied()
@@ -1908,8 +1911,8 @@ impl DomicileCompositor {
             None => true,
             Some(at) => at.elapsed() >= FIND_EVERY,
         };
-        if find_due && !wanted.is_empty() && self.find_tries < FIND_TRIES {
-            self.find_tries += 1;
+        let searching_since = *self.find_since.get_or_insert_with(Instant::now);
+        if find_due && !wanted.is_empty() && searching_since.elapsed() < FIND_FOR {
             for argb in wanted {
                 match session.spike_find(argb) {
                     Some(Capture {
@@ -1972,11 +1975,15 @@ impl DomicileCompositor {
             // Stamped *after* the captures, not before: the interval is meant
             // to be a gap between readbacks, and a capture longer than the
             // interval would otherwise run back to back with no gap at all.
-            self.last_find = Some(Instant::now());
-            if self.find_tries == FIND_TRIES {
+            let now = Instant::now();
+            self.last_find = Some(now);
+            // Said once, on the tick that crosses the budget: a guard that
+            // reads "not found" needs to know whether that means "looked for
+            // and not there" or "stopped looking".
+            if searching_since.elapsed() >= FIND_FOR {
                 tracing::warn!(
                     target: "domicile::engine::spike",
-                    tries = FIND_TRIES,
+                    seconds = FIND_FOR.as_secs(),
                     "giving up looking for the colours that have not turned up; a whole-window \
                      readback is time this thread is not releasing the client's buffers, and it \
                      is not worth paying for a colour that was going to appear long ago"
@@ -4736,7 +4743,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         probe_missing: HashSet::new(),
         probe_unreadable: HashSet::new(),
         last_find: None,
-        find_tries: 0,
+        find_since: None,
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
