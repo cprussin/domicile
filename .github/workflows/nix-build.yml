@@ -169,3 +169,25 @@ jobs:
               exit 1
             }
           done
+
+          # And Domicile itself, which is the opposite refusal: the desktops
+          # have their page chosen and take no argument, this one *is* the
+          # argument. Asserted because the wrapper cannot be run where it is
+          # written — the flake's own `bun install` derivation needs a network
+          # the dev container does not have — so this job is the only place the
+          # built thing is ever started.
+          #
+          # `run-engine.sh`'s default shell is `simple`, meaning "build
+          # packages/shell-simple out of the checkout", and there is no
+          # checkout in the store. Without the refusal a bare
+          # `nix run github:cprussin/domicile` fails somewhere further in,
+          # about a workspace directory the person never mentioned.
+          out="$(nix build --no-link --print-out-paths .#domicile)"
+          [ -x "$out/bin/domicile" ] || {
+            echo "domicile: no bin/domicile in $out"
+            exit 1
+          }
+          "$out/bin/domicile" 2>&1 | grep -q "which shell?" || {
+            echo "domicile: given no shell, it did not say so"
+            exit 1
+          }

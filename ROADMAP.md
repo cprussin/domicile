@@ -72,7 +72,8 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 ./scripts/e2e-a-dense-display.sh # the desktop on a 1.5x screen: sized by the ratio, not by the rounded scale
 
 # Needs a real display — run on the user's machine.
-nix run 'github:cprussin/domicile'             # the desktop, on the fork
+nix run 'github:cprussin/domicile#manganese'   # the desktop, on the fork
+nix run 'github:cprussin/domicile' -- ./dist   # or a shell of your own
 ```
 
 `e2e-compose.sh` needs a GL stack (it gets a software rasteriser where there is
