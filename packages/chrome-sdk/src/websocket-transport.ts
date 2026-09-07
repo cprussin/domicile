@@ -31,6 +31,15 @@ const monotonicNow = (): number => performance.now();
 export type WebSocketLike = {
   readonly readyState: number;
   /**
+   * Which shape a binary frame arrives in. Set to `"arraybuffer"` below,
+   * because a browser's default is `"blob"` and a Blob is unreadable here.
+   *
+   * Optional so a test's socket need not carry one, and typed as a plain
+   * string so a real `WebSocket` — whose own type is the narrow
+   * `BinaryType` — is assignable.
+   */
+  binaryType?: string;
+  /**
    * `data` is optional so that a real `WebSocket` satisfies this. Its
    * `addEventListener` is typed against `Event`, which carries no `data` at
    * all — and a listener that required one would make the browser's own
@@ -74,6 +83,24 @@ export const webSocketTransport = (
   socket: WebSocketLike,
   now: typeof monotonicNow = monotonicNow,
 ): Transport => {
+  // THE PAGE HEARS NOTHING WITHOUT THIS, and hears it silently.
+  //
+  // A browser's `WebSocket` hands a binary frame over as a `Blob` unless it is
+  // told otherwise, and a Blob is only readable asynchronously — `bytes` below
+  // cannot take one without reordering the stream, so it returns no bytes at
+  // all. Every message from the host would be dropped while the page's own
+  // `hello` still went out, which looks exactly like a compositor that
+  // announced nothing: no windows, no error, nothing in any log.
+  //
+  // Written unconditionally rather than only when it is `"blob"`: the property
+  // is settable on every WebSocket implementation this runs on, and a socket a
+  // test supplies without one takes the assignment and ignores it.
+  //
+  // Bun's client defaults to a Buffer rather than a Blob, which is a view and
+  // reads fine — which is why the SDK ran end to end outside a browser while
+  // the shell on the fork saw nothing.
+  socket.binaryType = "arraybuffer";
+
   const read = createHostStreamReader();
   const held: { text: string; at: number }[] = [];
   const unsent: string[] = [];
@@ -129,13 +156,17 @@ export const webSocketTransport = (
 /**
  * What a message event's `data` is, as bytes.
  *
- * The bridge sends binary frames, which a browser hands over as an
- * `ArrayBuffer` when `binaryType` is set and as a `Blob` when it is not —
- * and a Blob is only readable asynchronously, which would reorder the stream.
- * So a string is accepted too and encoded: it is what a bridge that forwarded
- * text would produce, and the line reader cannot tell the difference.
- * Anything else is not a frame this understands, and an empty chunk is what
- * the reader does nothing with.
+ * The bridge sends binary frames. `binaryType` is set to `"arraybuffer"` when
+ * the transport is built, so a browser hands one over as an `ArrayBuffer`;
+ * Bun's client hands over a view; and a string is accepted too, because that
+ * is what a bridge forwarding text would produce and the line reader cannot
+ * tell the difference.
+ *
+ * A Blob is what arrives when `binaryType` did not take, and it cannot be
+ * supported: it is only readable asynchronously, which would reorder the
+ * stream. That and anything else yields no bytes — which the reader does
+ * nothing with — and is complained about, because being unable to read the
+ * host is not something a page should discover as an absence of windows.
  */
 const bytes = (data: unknown): Uint8Array => {
   if (data instanceof ArrayBuffer) {
@@ -147,5 +178,29 @@ const bytes = (data: unknown): Uint8Array => {
   if (typeof data === "string") {
     return new TextEncoder().encode(data);
   }
+  complainOnce(data);
   return new Uint8Array();
+};
+
+/**
+ * Say, once, that a frame arrived in a shape this cannot read.
+ *
+ * Once because the host talks continuously and a per-frame message would be
+ * the console; at all because the alternative is what this bug was — a page
+ * that hears nothing, says nothing, and is indistinguishable from a desktop
+ * with no windows open. A Blob here means `binaryType` did not take.
+ */
+let complained = false;
+const complainOnce = (data: unknown): void => {
+  if (!complained) {
+    complained = true;
+    // biome-ignore lint/suspicious/noConsole: the page's only channel, and this is the failure that has none
+    console.error(
+      "domicile: the host sent a frame this transport cannot read, so nothing" +
+        " it says will arrive. It is a",
+      typeof data === "object" && data !== null
+        ? (Object.getPrototypeOf(data)?.constructor?.name ?? "object")
+        : typeof data,
+    );
+  }
 };

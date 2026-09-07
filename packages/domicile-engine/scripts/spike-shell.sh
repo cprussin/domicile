@@ -320,6 +320,43 @@ NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
         sh -c 'while :; do printf .; sleep 0.2; done' >>"$CLI_LOG" 2>&1 &
 STARTED+=($!)
 
+# Before the pixels, the seam: the page has to hear about the client at all.
+#
+# Split out because "the colour is not on screen" is the same sentence for a
+# window in the wrong place, a window drawn the wrong colour, and a page that
+# was never told a client exists — and the third is the one this guard exists
+# to find. It is also the one with no other evidence anywhere: the page joins,
+# its handshake reaches the compositor, a frame sink is brokered for the
+# client, and the only sign that nothing arrived back is a window that does
+# not open. That is exactly how a WebSocket delivering Blobs the transport
+# could not read presented, for a full poll, with nothing in any log.
+#
+# `domicile: embedding` is the browser's own line, from the embedder, so this
+# reads the engine rather than the page: a shell that heard the announcement
+# mounts an <app>, and mounting one calls embedExternalSurface.
+EMBEDDED=0
+for _ in $(seq 1 60); do
+  if grep -aq 'domicile: embedding' "$ENGINE_LOG" 2>/dev/null; then
+    EMBEDDED=1
+    break
+  fi
+  kill -0 $COMP 2>/dev/null || break
+  sleep 1
+done
+[ "$EMBEDDED" = "1" ] || {
+  annotate "spike-shell: $SHELL_NAME was announced a client and never embedded" \
+       "it, so the page is not hearing the host"
+  echo "the shell embedded nothing. What each side said:" >&2
+  echo "--- the compositor said:" >&2
+  grep -aE "app_appeared|brokered|chrome|ERROR" "$COMP_LOG" | tail -12 |
+    sed 's/^/  /' >&2
+  echo "--- the page said:" >&2
+  grep -aE "domicile:|CONSOLE" "$ENGINE_LOG" | tail -12 | cut -c1-200 |
+    sed 's/^/  /' >&2
+  exit 1
+}
+echo "the shell embedded the client it was announced"
+
 FOUND=""
 for _ in $(seq 1 90); do
   FOUND=$(grep -aoE "engine found #[0-9A-F]{8} over .*" "$COMP_LOG" 2>/dev/null |

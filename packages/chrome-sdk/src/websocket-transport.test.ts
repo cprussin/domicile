@@ -11,6 +11,8 @@ const socket = (readyState = 1) => {
     addEventListener: (type: string, listener: (event: never) => void) => {
       listeners.set(type, [...(listeners.get(type) ?? []), listener]);
     },
+    // What a browser's WebSocket starts as, so a test can see it change.
+    binaryType: "blob",
     readyState,
     send: (data: string) => {
       sent.push(data);
@@ -25,6 +27,7 @@ const socket = (readyState = 1) => {
     arrive: (text: string) =>
       fire("message", { data: new TextEncoder().encode(text) }),
     arriveRaw: (data: unknown) => fire("message", { data }),
+    binaryType: () => fake.binaryType,
     fake: fake as unknown as WebSocketLike,
     open: () => {
       fake.readyState = 1;
@@ -120,6 +123,19 @@ describe("webSocketTransport", () => {
       '{"type":"hello"}\n',
       '{"type":"declare_screens"}\n',
     ]);
+  });
+
+  // A browser's WebSocket delivers a binary frame as a Blob unless it is told
+  // otherwise, and `bytes` cannot read one — so an unset binaryType is a page
+  // that hears nothing from the host while its own handshake still goes out.
+  // That is the whole of what the shell on the fork did: it joined the
+  // compositor, was announced a client, and never opened a window for it.
+  it("asks for buffers, because a Blob is unreadable here", () => {
+    const wire = socket();
+
+    webSocketTransport(wire.fake);
+
+    expect(wire.binaryType()).toBe("arraybuffer");
   });
 
   // Three shapes reach `data` depending on the bridge and the socket's
