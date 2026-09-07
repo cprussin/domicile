@@ -60,11 +60,13 @@ OTHER_COLOR="${OTHER_COLOR:-B3196B}"
 # NEGATIVE=1 runs the client with OTHER_COLOR. COLOR must never turn up.
 NEGATIVE="${NEGATIVE:-0}"
 
-# How long a client is given. Longer than everything that can happen before and
-# during the poll — two waits for a sink at 60s each, then 90s of polling —
-# because the search runs on the submit path, so a client reaped mid-poll stops
-# the measurement and the guard reports "it never settled", which points at the
-# wrong thing entirely.
+# How long a client is given. Longer than everything that can happen after it
+# starts — 60s waiting for the page to embed it, then 90s looking for its
+# colour — because the search runs on the submit path, so a client reaped
+# mid-poll stops the measurement dead and the guard would report "not found",
+# which points at the wrong thing entirely. 150s against 420s, and the
+# compositor's own FIND_FOR budget is clocked from the first submit rather than
+# from its start, so the embed stage does not eat into it.
 CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-420}"
 
 OUT="${OUT:-out/Domicile}"
@@ -331,11 +333,20 @@ STARTED+=($!)
 # not open. That is exactly how a WebSocket delivering Blobs the transport
 # could not read presented, for a full poll, with nothing in any log.
 #
-# `domicile: embedding` is the browser's own line, from the embedder, so this
-# reads the engine rather than the page: a shell that heard the announcement
-# mounts an <app>, and mounting one calls embedExternalSurface.
+# `domicile: embedding` is a renderer-process line, from the embedder, so this
+# reads the engine's own log rather than the page's console: a shell that heard
+# the announcement mounts an <app>, and mounting one calls embedExternalSurface.
+#
+# BOTH HALVES ARE CHECKED, because "the page never heard" and "there was
+# nothing to hear" produce the same absence. The compositor logs
+# `Host::app_appeared` when a toplevel maps, so a kitty that never started —
+# or a client that mapped on the wrong Wayland display — is a different
+# sentence from a page that was told and did nothing. Asserting the second
+# without establishing the first is how a guard blames the wrong end.
 EMBEDDED=0
+ANNOUNCED=0
 for _ in $(seq 1 60); do
+  grep -aq 'app_appeared' "$COMP_LOG" 2>/dev/null && ANNOUNCED=1
   if grep -aq 'domicile: embedding' "$ENGINE_LOG" 2>/dev/null; then
     EMBEDDED=1
     break
@@ -343,9 +354,20 @@ for _ in $(seq 1 60); do
   kill -0 $COMP 2>/dev/null || break
   sleep 1
 done
-[ "$EMBEDDED" = "1" ] || {
-  annotate "spike-shell: $SHELL_NAME was announced a client and never embedded" \
-       "it, so the page is not hearing the host"
+# Once more, after the loop. The flag is read at the top of each pass, so an
+# announcement written during the last `sleep 1` — or between that grep and the
+# compositor dying — would be missed, and the guard would report "no client
+# ever mapped" about a client that did. Which is the same wrong sentence this
+# stage exists to stop printing, pointed the other way.
+grep -aq 'app_appeared' "$COMP_LOG" 2>/dev/null && ANNOUNCED=1
+if [ "$EMBEDDED" != "1" ]; then
+  if [ "$ANNOUNCED" = "1" ]; then
+    annotate "spike-shell: $SHELL_NAME was announced a client and never" \
+         "embedded it, so the page is not hearing the host"
+  else
+    annotate "spike-shell: no client ever mapped on $CLIENT_DISPLAY, so the" \
+         "shell was told about nothing and there was nothing to embed"
+  fi
   echo "the shell embedded nothing. What each side said:" >&2
   echo "--- the compositor said:" >&2
   grep -aE "app_appeared|brokered|chrome|ERROR" "$COMP_LOG" | tail -12 |
@@ -353,8 +375,12 @@ done
   echo "--- the page said:" >&2
   grep -aE "domicile:|CONSOLE" "$ENGINE_LOG" | tail -12 | cut -c1-200 |
     sed 's/^/  /' >&2
+  echo "--- the bridge said:" >&2
+  tail -12 "$BRIDGE_LOG" | sed 's/^/  /' >&2
+  echo "--- the client said:" >&2
+  tail -12 "$CLI_LOG" | sed 's/^/  /' >&2
   exit 1
-}
+fi
 echo "the shell embedded the client it was announced"
 
 FOUND=""

@@ -34,9 +34,9 @@ export type WebSocketLike = {
    * Which shape a binary frame arrives in. Set to `"arraybuffer"` below,
    * because a browser's default is `"blob"` and a Blob is unreadable here.
    *
-   * Optional so a test's socket need not carry one, and typed as a plain
-   * string so a real `WebSocket` — whose own type is the narrow
-   * `BinaryType` — is assignable.
+   * Optional so a test's socket need not carry one — `connect-to-host`'s does
+   * not — and typed as a plain string so a real `WebSocket`, whose own type is
+   * the narrow `BinaryType`, stays assignable.
    */
   binaryType?: string;
   /**
@@ -87,18 +87,15 @@ export const webSocketTransport = (
   //
   // A browser's `WebSocket` hands a binary frame over as a `Blob` unless it is
   // told otherwise, and a Blob is only readable asynchronously — `bytes` below
-  // cannot take one without reordering the stream, so it returns no bytes at
-  // all. Every message from the host would be dropped while the page's own
-  // `hello` still went out, which looks exactly like a compositor that
-  // announced nothing: no windows, no error, nothing in any log.
+  // cannot take one without reordering the stream, so it throws. Without this
+  // line every message from the host would reach that throw while the page's
+  // own `hello` still went out: a desktop that never opens a window, and a
+  // console full of the reason.
   //
-  // Written unconditionally rather than only when it is `"blob"`: the property
-  // is settable on every WebSocket implementation this runs on, and a socket a
-  // test supplies without one takes the assignment and ignores it.
-  //
-  // Bun's client defaults to a Buffer rather than a Blob, which is a view and
-  // reads fine — which is why the SDK ran end to end outside a browser while
-  // the shell on the fork saw nothing.
+  // Written unconditionally rather than only when it is `"blob"`: it is
+  // settable on every WebSocket this runs on — the DOM's and Bun's — and on a
+  // plain object a test supplies it is an ordinary property, which is what the
+  // test for this reads back.
   socket.binaryType = "arraybuffer";
 
   const read = createHostStreamReader();
@@ -156,17 +153,23 @@ export const webSocketTransport = (
 /**
  * What a message event's `data` is, as bytes.
  *
- * The bridge sends binary frames. `binaryType` is set to `"arraybuffer"` when
- * the transport is built, so a browser hands one over as an `ArrayBuffer`;
- * Bun's client hands over a view; and a string is accepted too, because that
- * is what a bridge forwarding text would produce and the line reader cannot
- * tell the difference.
+ * Three shapes are the same stream and are all read: an `ArrayBuffer`, which
+ * is what `binaryType` above buys from every WebSocket that honours it; a view
+ * over one; and a string, which is what a bridge forwarding text rather than
+ * binary would produce and which the line reader cannot tell apart.
  *
- * A Blob is what arrives when `binaryType` did not take, and it cannot be
- * supported: it is only readable asynchronously, which would reorder the
- * stream. That and anything else yields no bytes — which the reader does
- * nothing with — and is complained about, because being unable to read the
- * host is not something a page should discover as an absence of windows.
+ * **Anything else throws.** A Blob is the case that matters — it means the
+ * `binaryType` assignment did not take — and it cannot be supported anyway,
+ * because it is only readable asynchronously and reading it would reorder the
+ * stream. Returning no bytes instead is a silent fallback of exactly the kind
+ * ERRORS.md forbids, and this function is where that was: every frame the host
+ * sent was dropped, the page's own handshake still went out, and the whole
+ * visible symptom was a desktop with no windows in it and nothing written down
+ * anywhere. It throws once per frame rather than once per connection, which is
+ * the trade the previous shape was avoiding — a host that keeps talking fills
+ * the console — and the console is where it belongs: an unreadable frame means
+ * this page is not going to work. The reader is never entered, because this is
+ * the argument to it, so nothing downstream sees a partial stream.
  */
 const bytes = (data: unknown): Uint8Array => {
   if (data instanceof ArrayBuffer) {
@@ -178,29 +181,18 @@ const bytes = (data: unknown): Uint8Array => {
   if (typeof data === "string") {
     return new TextEncoder().encode(data);
   }
-  complainOnce(data);
-  return new Uint8Array();
+  throw new Error(
+    `domicile: the host sent a frame this transport cannot read, so nothing it says will arrive. It is a ${nameOf(data)}`,
+  );
 };
 
-/**
- * Say, once, that a frame arrived in a shape this cannot read.
- *
- * Once because the host talks continuously and a per-frame message would be
- * the console; at all because the alternative is what this bug was — a page
- * that hears nothing, says nothing, and is indistinguishable from a desktop
- * with no windows open. A Blob here means `binaryType` did not take.
- */
-let complained = false;
-const complainOnce = (data: unknown): void => {
-  if (!complained) {
-    complained = true;
-    // biome-ignore lint/suspicious/noConsole: the page's only channel, and this is the failure that has none
-    console.error(
-      "domicile: the host sent a frame this transport cannot read, so nothing" +
-        " it says will arrive. It is a",
-      typeof data === "object" && data !== null
-        ? (Object.getPrototypeOf(data)?.constructor?.name ?? "object")
-        : typeof data,
-    );
+/** What to call `data` in the throw above; its constructor, or its typeof. */
+const nameOf = (data: unknown): string => {
+  if (typeof data !== "object" || data === null) {
+    return typeof data;
   }
+  // `||` rather than `??`: an anonymous class's `name` is the empty string,
+  // which is a worse answer than "object" and which `??` would keep.
+  const named: unknown = Object.getPrototypeOf(data)?.constructor?.name;
+  return typeof named === "string" && named !== "" ? named : "object";
 };

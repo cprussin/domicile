@@ -131,6 +131,8 @@ describe("webSocketTransport", () => {
   // That is the whole of what the shell on the fork did: it joined the
   // compositor, was announced a client, and never opened a window for it.
   it("asks for buffers, because a Blob is unreadable here", () => {
+    // Starts at what a browser's own socket starts at, so this cannot pass by
+    // the property never having existed.
     const wire = socket();
 
     webSocketTransport(wire.fake);
@@ -138,11 +140,9 @@ describe("webSocketTransport", () => {
     expect(wire.binaryType()).toBe("arraybuffer");
   });
 
-  // Three shapes reach `data` depending on the bridge and the socket's
-  // binaryType, and all three are the same stream: an ArrayBuffer, a view over
-  // one, and — from a bridge that forwarded text rather than binary — a
-  // string. A Blob is the fourth and is deliberately not supported: it is only
-  // readable asynchronously, which would reorder the stream.
+  // Three shapes reach `data` and all three are the same stream: an
+  // ArrayBuffer, which is what the binaryType above buys; a view over one; and
+  // — from a bridge that forwarded text rather than binary — a string.
   it("reads a buffer, a view and a string as the same bytes", () => {
     for (const frame of [
       new TextEncoder().encode('{"type":"welcome"}\n').buffer,
@@ -160,18 +160,20 @@ describe("webSocketTransport", () => {
     }
   });
 
-  // Anything else is not a frame this understands. Silence rather than a
-  // throw: a stray frame must not take the desktop down, and the reader does
-  // nothing with an empty chunk.
-  it("ignores a frame that is not bytes or text", () => {
+  // Loudly, and this is the fix rather than a detail of it. Returning no bytes
+  // is what dropped every frame the host sent while the page's own handshake
+  // still went out — a desktop with no windows in it and nothing written down
+  // anywhere. A Blob is the shape that gets here when binaryType did not take,
+  // and it names itself so the console says which.
+  it("throws on a frame it cannot read, naming what arrived", () => {
     const wire = socket();
-    const transport = webSocketTransport(wire.fake);
-    const seen: string[] = [];
-    transport.onMessage((text) => seen.push(text));
+    webSocketTransport(wire.fake);
 
-    wire.arriveRaw({ not: "a frame" });
-    wire.arrive('{"type":"welcome"}\n');
-
-    expect(seen).toEqual(['{"type":"welcome"}']);
+    expect(() => {
+      wire.arriveRaw(new Blob([new Uint8Array([1, 2, 3])]));
+    }).toThrow(/cannot read.*Blob/);
+    expect(() => {
+      wire.arriveRaw({ not: "a frame" });
+    }).toThrow(/cannot read.*Object/);
   });
 });
