@@ -1252,6 +1252,17 @@ struct DomicileCompositor {
     /// desktop with no client yet is not searching for anything, and starting
     /// the clock then would spend the budget waiting.
     find_since: Option<Instant>,
+
+    /// THROWAWAY. The last box logged for each colour, so a box is written
+    /// down when it moves rather than once when it first appears. A window
+    /// still painting is smaller than it will be, and how much of the page
+    /// each one covers is what the two-window guard asserts.
+    probe_boxes: HashMap<u32, Bounds>,
+
+    /// THROWAWAY. Whether the search is over — every colour found and none of
+    /// them moving, or the budget spent. A whole-window readback is a blocking
+    /// one, so a finished search stops paying for them.
+    find_settled: bool,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1871,124 +1882,122 @@ impl DomicileCompositor {
             return true;
         };
         // Colours to find anywhere in the window, for a guard that cannot name
-        // a point because the shell decides where its windows go. Each is
-        // dropped once it has been found: the search captures the whole window
-        // and costs ~3 MB a time, so a guard that has its answer stops paying
-        // for it.
+        // a point because the shell decides where its windows go — and, as it
+        // turned out, because the coordinate space a named point is in is not
+        // the one the browser was asked for.
         //
-        // Slower than the point probe, and for the same reason that one is
-        // throttled at all — a blocking readback on this thread is a readback
-        // the engine's events are not being drained during, and this one is a
-        // whole window rather than a pixel. A guard polls for tens of seconds
-        // and a colour that is going to appear appears early, so twice a
-        // second buys nothing that once every two seconds does not.
+        // Searched until every wanted colour has been found AND none of their
+        // boxes moved between two rounds. A box logged at first sight is a box
+        // measured mid-paint: a window that is still filling in is smaller
+        // than it will be, and the guard's assertion is about how much of the
+        // page each window covers. Settling also means the two boxes agree
+        // about one moment rather than being snapshots of different frames.
+        //
+        // Then it stops. The search captures the whole window and costs ~3 MB
+        // and a blocking readback a time, and `HeldBuffers`' deadline is
+        // 500ms — a search that runs forever is the compositor manufacturing
+        // the "never released" errors the log is being read for.
         const FIND_EVERY: Duration = Duration::from_secs(2);
-        // Bounded, and this is not a nicety. `HeldBuffers`' deadline is 500ms
-        // and a capture takes the main thread for the whole of a readback, so
-        // a search that never succeeds is a search that keeps taking this
-        // thread away from draining the engine's events and expiring the
-        // client's holds — the compositor would then be manufacturing the very
-        // "never released" errors the log is being read for.
-        //
-        // A wall clock rather than a count of tries, because a count cannot be
-        // matched to what the guards do. Their poll starts after waiting for a
-        // broker socket, a compositor, a protocol handshake and a client to
-        // map — minutes, on a loaded runner — while this counts from the first
-        // frame the engine takes. A bound of "ninety tries at two seconds is
-        // the ninety seconds they poll for" is two clocks with different
-        // origins pretending to be one, and the compositor would stop looking
-        // before the guard had started asking.
-        //
-        // Five minutes, which is longer than any guard's whole run and still
-        // finite, so a wedged desktop is not paying for a readback forever.
+        // A wall clock, not a count of rounds. The guards' poll begins after
+        // waiting for a broker socket, a compositor, a handshake and a client
+        // to map, so no number of rounds here can be matched to it. Five
+        // minutes is longer than any guard's whole run and still finite.
         const FIND_FOR: Duration = Duration::from_secs(300);
-        let wanted = spike_find_colours()
-            .iter()
-            .copied()
-            .filter(|argb| !self.probe_found.contains(argb))
-            .collect::<Vec<_>>();
         let find_due = match self.last_find {
             None => true,
             Some(at) => at.elapsed() >= FIND_EVERY,
         };
-        let searching_since = *self.find_since.get_or_insert_with(Instant::now);
-        if find_due && !wanted.is_empty() && searching_since.elapsed() < FIND_FOR {
-            for argb in wanted {
-                match session.spike_find(argb) {
-                    Some(Capture {
-                        window: (w, h),
-                        bounds:
-                            Some(Bounds {
-                                height,
-                                width,
-                                x,
-                                y,
-                            }),
-                    }) => {
-                        self.probe_found.insert(argb);
-                        // The whole extent and the window it is in, because a
-                        // guard whose named point read the wrong colour needs
-                        // to know where the region actually is and what
-                        // coordinate space it is being measured in.
-                        tracing::info!(
-                            target: "domicile::engine::spike",
-                            "engine found #{argb:08X} over ({x},{y}) {width}x{height} of the \
-                             browser's {w}x{h} window"
-                        );
-                    }
-                    // Once, and only the first time. The guard polls, so this
-                    // is the state for most of a run and saying it every tick
-                    // would bury the line that matters.
-                    Some(Capture {
-                        window: (w, h),
-                        bounds: None,
-                    }) => {
-                        if self.probe_missing.insert(argb) {
-                            tracing::info!(
-                                target: "domicile::engine::spike",
-                                "engine has not drawn #{argb:08X} anywhere in the browser's \
-                                 {w}x{h} window yet"
-                            );
-                        }
-                    }
-                    // Its own set, not `probe_missing`. Sharing one would let
-                    // a single transient unreadable capture silence the real
-                    // "has not drawn" measurement for the rest of the run —
-                    // and that line is what the negative controls grep for, so
-                    // the two answers this split exists to separate would be
-                    // merged again by the thing meant to keep them apart.
-                    //
-                    // Worded to match the shape the summaries grep for, so the
-                    // third answer is not the one that never appears in them.
-                    None => {
-                        if self.probe_unreadable.insert(argb) {
-                            warn!(
-                                target: "domicile::engine::spike",
-                                "engine could not read the window at all looking for \
-                                 #{argb:08X}, so nothing was measured about it — which is \
-                                 not the same as the colour being absent"
-                            );
-                        }
-                    }
-                }
-            }
-            // Stamped *after* the captures, not before: the interval is meant
-            // to be a gap between readbacks, and a capture longer than the
-            // interval would otherwise run back to back with no gap at all.
-            let now = Instant::now();
-            self.last_find = Some(now);
-            // Said once, on the tick that crosses the budget: a guard that
-            // reads "not found" needs to know whether that means "looked for
-            // and not there" or "stopped looking".
-            if searching_since.elapsed() >= FIND_FOR {
-                tracing::warn!(
+        if find_due && !spike_find_colours().is_empty() && !self.find_settled {
+            // Started here rather than at startup, and inside this branch
+            // rather than above it: a desktop with nothing to look for is not
+            // searching, and starting the clock then would spend the budget
+            // waiting for a client.
+            let since = *self.find_since.get_or_insert_with(Instant::now);
+            if since.elapsed() >= FIND_FOR {
+                // Once, on its own flag. Firing it from the loop condition
+                // meant it could only be said on a round that happened to
+                // straddle the budget, which is a few milliseconds out of
+                // every two seconds — so it was never said, and a guard
+                // reading "not found" could not tell that from "not
+                // looked for".
+                self.find_settled = true;
+                warn!(
                     target: "domicile::engine::spike",
                     seconds = FIND_FOR.as_secs(),
                     "giving up looking for the colours that have not turned up; a whole-window \
                      readback is time this thread is not releasing the client's buffers, and it \
                      is not worth paying for a colour that was going to appear long ago"
                 );
+            } else {
+                let mut every_colour_found = true;
+                let mut nothing_moved = true;
+                for &argb in spike_find_colours() {
+                    match session.spike_find(argb) {
+                        Some(Capture {
+                            window: (w, h),
+                            bounds: Some(bounds),
+                        }) => {
+                            self.probe_found.insert(argb);
+                            // Logged when it changes, so a page that has
+                            // settled says its geometry once and a page still
+                            // painting says it as often as it moves.
+                            if self.probe_boxes.insert(argb, bounds) != Some(bounds) {
+                                nothing_moved = false;
+                                let Bounds {
+                                    height,
+                                    width,
+                                    x,
+                                    y,
+                                } = bounds;
+                                tracing::info!(
+                                    target: "domicile::engine::spike",
+                                    "engine found #{argb:08X} over ({x},{y}) {width}x{height} \
+                                     of the browser's {w}x{h} window"
+                                );
+                            }
+                        }
+                        // Once, and only the first time. The guard polls, so
+                        // this is the state for most of a run and saying it
+                        // every tick would bury the line that matters.
+                        Some(Capture {
+                            window: (w, h),
+                            bounds: None,
+                        }) => {
+                            every_colour_found = false;
+                            if self.probe_missing.insert(argb) {
+                                tracing::info!(
+                                    target: "domicile::engine::spike",
+                                    "engine has not drawn #{argb:08X} anywhere in the browser's \
+                                     {w}x{h} window yet"
+                                );
+                            }
+                        }
+                        // Its own set, not `probe_missing`. Sharing one would
+                        // let a single transient unreadable capture silence
+                        // the real "has not drawn" measurement for the rest of
+                        // the run — and that line is what the negative
+                        // controls grep for, so the two answers this split
+                        // exists to separate would be merged again by the
+                        // thing meant to keep them apart.
+                        None => {
+                            every_colour_found = false;
+                            if self.probe_unreadable.insert(argb) {
+                                warn!(
+                                    target: "domicile::engine::spike",
+                                    "engine could not read the window at all looking for \
+                                     #{argb:08X}, so nothing was measured about it — which is \
+                                     not the same as the colour being absent"
+                                );
+                            }
+                        }
+                    }
+                }
+                self.find_settled = every_colour_found && nothing_moved;
             }
+            // Stamped after the captures, not before: the interval is meant to
+            // be a gap between readbacks, and a capture longer than it would
+            // otherwise run back to back with no gap at all.
+            self.last_find = Some(Instant::now());
         }
 
         if spike_probe_points().is_empty() && spike_find_colours().is_empty() {
@@ -4744,6 +4753,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         probe_unreadable: HashSet::new(),
         last_find: None,
         find_since: None,
+        probe_boxes: HashMap::new(),
+        find_settled: false,
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,

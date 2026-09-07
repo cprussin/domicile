@@ -520,6 +520,18 @@ fn push(user_data: *mut c_void, event: Event) {
 
 #[cfg(test)]
 mod tests {
+    /// What the C header's `static_assert` cannot see: that this side still
+    /// has six fields. `#[repr(C)]` fixes the layout, so the size is the whole
+    /// of the contract — a field added or dropped here without the header
+    /// changing to match would read the wrong half of a bounding box.
+    #[test]
+    fn a_capture_is_the_six_int32_the_c_header_declares() {
+        assert_eq!(
+            std::mem::size_of::<RawCapture>(),
+            6 * std::mem::size_of::<i32>()
+        );
+    }
+
     use domicile_bridge::DmabufPlane as BridgePlane;
 
     use super::*;

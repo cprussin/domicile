@@ -315,7 +315,8 @@ fi
 if [ -z "$FOUND" ]; then
   if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
     echo "INCONCLUSIVE: the compositor stopped searching before this poll ran" \
-         "out, so 'not found' means 'not looked for'. Raise FIND_TRIES." >&2
+         "out, so 'not found' means 'not looked for'. Its budget is FIND_FOR" \
+         "in domicile-compositor's main.rs." >&2
     exit 1
   fi
   echo "FAIL: the client's window is not on the shell's page" >&2

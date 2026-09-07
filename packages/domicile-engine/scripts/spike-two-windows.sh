@@ -19,8 +19,8 @@
 #
 # The one-window heuristic this replaced (`MostRecentlyBrokeredSink`) would
 # pass a test that only checked the first window. That is what the negative
-# control below is built to catch: with one client running, the second client's
-# colour must be nowhere on the page.
+# control below is built to catch: with one client running, that client's
+# window must cover its own half of the page and not the whole of it.
 #
 # WHAT IT ASSERTS. Where each client's colour *is*, as a box, and that the two
 # boxes are side by side and do not overlap. Not what colour is at a named
@@ -48,10 +48,11 @@ COLOR_B="${COLOR_B:-CC6633}"
 APP_A="${APP_A:-app-1}"
 APP_B="${APP_B:-app-2}"
 
-# NEGATIVE=1 runs one client instead of two. The first window must still be
-# right and the second must NOT be the first — which is the failure a broker
-# that dispatches on nothing produces, and the failure a two-window run with
-# both clients up cannot distinguish from success.
+# NEGATIVE=1 runs one client instead of two. That client must fill its own
+# half and no more — a broker that dispatches on nothing gives both canvases
+# the same surface, and with only one client running that shows as one colour
+# across the whole page. It is the failure a two-client run cannot tell apart
+# from success.
 NEGATIVE="${NEGATIVE:-0}"
 
 OUT="${OUT:-out/Domicile}"
@@ -202,7 +203,7 @@ start_client "$COLOR_A"
 await_broker "$APP_A" || exit 1
 
 if [ "$NEGATIVE" = "1" ]; then
-  echo "negative control: only one client, so the second canvas must stay its own colour"
+  echo "negative control: one client, which must fill one half and not the page"
 else
   start_client "$COLOR_B"
   await_broker "$APP_B" || exit 1
@@ -224,11 +225,23 @@ fi
 # browser into one page's layer tree" and is the whole question this script
 # exists to ask.
 box_of() {
+  # The geometry only. `grep -o` on the whole line would hand the caller the
+  # colour too, and `#FF3366CC` contains the digit run `3366` — which is what
+  # the first version of this did, so its comparison was a function of the
+  # colour strings rather than of where anything was drawn. Two boxes covering
+  # the identical region passed it.
   grep -aoE "engine found #FF$1 over \([0-9]+,[0-9]+\) [0-9]+x[0-9]+" "$COMP_LOG" \
-    2>/dev/null | tail -1
+    2>/dev/null | tail -1 | grep -oE "\([0-9]+,[0-9]+\) [0-9]+x[0-9]+"
 }
 
-# `(x,y) WxH` -> the four numbers, space separated.
+# How big the window the boxes are in is, so a box can be compared against it
+# rather than against a number this script made up.
+window_size() {
+  grep -aoE "of the browser's [0-9]+x[0-9]+ window" "$COMP_LOG" 2>/dev/null |
+    tail -1 | grep -oE "[0-9]+x[0-9]+"
+}
+
+# `(x,y) WxH` -> x y w h, space separated. Only ever given the geometry.
 numbers_in() {
   echo "$1" | grep -oE "[0-9]+" | tr '\n' ' '
 }
@@ -265,7 +278,8 @@ if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
   exit 1
 fi
 
-if [ -z "$BOX_A" ]; then
+WINDOW=$(window_size)
+if [ -z "$BOX_A" ] || [ -z "$WINDOW" ]; then
   echo "INCONCLUSIVE: the first client never reached the page at all, so nothing" \
        "here is about two windows." >&2
   echo "--- the compositor's last words:" >&2
@@ -274,11 +288,34 @@ if [ -z "$BOX_A" ]; then
 fi
 
 if [ "$NEGATIVE" = "1" ]; then
+  # "The other colour is nowhere" is not the control. Nobody is drawing
+  # #$COLOR_B, so it is nowhere whether the broker dispatches correctly or not
+  # — the check would pass on the very heuristic it exists to catch.
+  #
+  # What tells them apart is how much of the page the ONE running client
+  # covers. Dispatched on app id, canvas B waits for a producer that never
+  # arrives and client A fills its own half. Dispatched on nothing, canvas B
+  # embeds client A's surface too and A's colour spans the whole width. So the
+  # control is an upper bound on A's box.
+  read -r A_X A_Y A_W A_H <<EOF
+$(numbers_in "$BOX_A")
+EOF
+  WINDOW_W=$(echo "$WINDOW" | cut -dx -f1)
+  MOST=$((WINDOW_W * 2 / 3))
+  echo
+  echo "in a $WINDOW window: #$COLOR_A is ${A_W}x${A_H} at $A_X,$A_Y"
   if [ -n "$BOX_B" ]; then
     echo "NEGATIVE CONTROL FAILED: #$COLOR_B is on screen and no client drew it." >&2
     exit 1
   fi
-  echo "negative control: correct, only the running client's window is on the page"
+  if [ "$A_W" -ge "$MOST" ]; then
+    echo "NEGATIVE CONTROL FAILED: the one client's window is ${A_W}px of a" \
+         "${WINDOW_W}px page, so both canvases are showing it and the embed is" \
+         "not dispatched on app id at all" >&2
+    exit 1
+  fi
+  echo "negative control: correct, the one running client fills its own half and" \
+       "the other canvas is not showing it"
   exit 0
 fi
 
@@ -287,18 +324,46 @@ if [ -z "$BOX_B" ]; then
   exit 1
 fi
 
-# Side by side and disjoint. Read as: A ends before B begins.
-set -- $(numbers_in "$BOX_A"); A_X="$1"; A_W="$3"
-set -- $(numbers_in "$BOX_B"); B_X="$1"; B_W="$3"
+# Disjoint, and each about half the page.
+#
+# Disjointness alone is not enough: a stray pixel of each colour in opposite
+# corners is disjoint, and so is one window drawn beside a sliver of another.
+# The claim is that the page put two windows side by side, so each has to be
+# most of its half — and "half" is measured against the window the probe
+# reported, not against a number this script chose.
+read -r A_X A_Y A_W A_H <<EOF
+$(numbers_in "$BOX_A")
+EOF
+read -r B_X B_Y B_W B_H <<EOF
+$(numbers_in "$BOX_B")
+EOF
 A_RIGHT=$((A_X + A_W))
 B_RIGHT=$((B_X + B_W))
+WINDOW_W=$(echo "$WINDOW" | cut -dx -f1)
+# A third rather than a half, because the browser's own chrome and the page's
+# margins come out of the width before the canvases do.
+LEAST=$((WINDOW_W / 3))
 
-if [ "$A_RIGHT" -le "$B_X" ]; then
-  echo "PASS: two clients' windows are on one page, side by side —" \
-       "#$COLOR_A across $A_X..$A_RIGHT and #$COLOR_B across $B_X..$B_RIGHT"
+FAILURE=""
+# Overlap in either order, rather than "A ends before B begins": two disjoint
+# windows in the other order is a page laying its canvases out right to left,
+# which is not this guard's business and is not a failure of the seam.
+if [ "$A_RIGHT" -gt "$B_X" ] && [ "$B_RIGHT" -gt "$A_X" ]; then
+  FAILURE="the two windows overlap, so the page is not showing two of them"
+elif [ "$A_W" -lt "$LEAST" ] || [ "$B_W" -lt "$LEAST" ]; then
+  FAILURE="one of the windows is a sliver rather than half the page (each must \
+be at least ${LEAST}px of a ${WINDOW_W}px window)"
+fi
+
+echo
+echo "in a $WINDOW window:"
+echo "  #$COLOR_A across $A_X..$A_RIGHT (${A_W}x${A_H})"
+echo "  #$COLOR_B across $B_X..$B_RIGHT (${B_W}x${B_H})"
+
+if [ -z "$FAILURE" ]; then
+  echo "PASS: two clients' windows are on one page, side by side, each its own half"
   exit 0
 fi
 
-echo "FAIL: the two clients' windows overlap, so they are not two windows" >&2
-echo "  #$COLOR_A across $A_X..$A_RIGHT, #$COLOR_B across $B_X..$B_RIGHT" >&2
+echo "FAIL: $FAILURE" >&2
 exit 1
