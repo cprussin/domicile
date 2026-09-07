@@ -198,6 +198,94 @@
           "The patched Chromium domicile-compositor uses as its engine";
       };
 
+      # ── The three things a desktop is made of ───────────────────────────
+      #
+      # `run-engine.sh` starts a bridge, an engine and a compositor, and takes
+      # each as a path. A checkout builds them; these are the same three built
+      # once, in the store, so `nix run` starts a desktop instead of a build.
+
+      # The page. Only the renderer bundle: `build:vite` also produces the
+      # launcher, main and preload bundles, and none of those is a web page —
+      # they are how a shell is started somewhere that is not a browser.
+      shellPage = name: pkgs.stdenv.mkDerivation {
+        pname = "domicile-page-${name}";
+        version = "0.0.0";
+        src = self;
+        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
+        configurePhase = sharedShellConfigure;
+        buildPhase = ''
+          runHook preBuild
+          node_modules/.bin/turbo build:vite \
+            --filter "@domicile/shell-${name}" --no-daemon
+          runHook postBuild
+        '';
+        # `main_window` is what the shell's own `vite.renderer.config.ts` calls
+        # the one window it opens, and it stays that here: this installs the
+        # shell's build rather than rearranging it.
+        installPhase = ''
+          runHook preInstall
+          cp -R "packages/shell-${name}/.vite/renderer/main_window" "$out"
+          runHook postInstall
+        '';
+        # A page with no index.html is not a page, and the way that fails at
+        # runtime is a browser on a blank screen — which reads as the seam.
+        doInstallCheck = true;
+        installCheckPhase = ''
+          [ -f "$out/index.html" ] || {
+            echo "${name} built no index.html" >&2
+            exit 1
+          }
+        '';
+      };
+
+      # The bridge, which is a bun program and stays one: it serves the page
+      # and proxies the compositor's socket, and bundling it would be a second
+      # way to build something that has exactly one entry point.
+      domicileBridge = pkgs.stdenv.mkDerivation {
+        pname = "domicile-bridge-host";
+        version = "0.0.0";
+        src = self;
+        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
+        configurePhase = sharedShellConfigure;
+        dontBuild = true;
+        installPhase = ''
+          runHook preInstall
+          mkdir -p "$out"
+          cp -R packages "$out/packages"
+          cp -R node_modules "$out/node_modules"
+          cp package.json "$out/package.json"
+          runHook postInstall
+        '';
+        passthru.entry = "packages/engine-chrome-host/src/main.ts";
+      };
+
+      # A desktop: the page, the engine, the compositor and the bridge, handed
+      # to the one script that knows how to start them in the order they have
+      # to start in. Every one is `:-` against what is already set, because
+      # each is something a developer legitimately overrides — a compositor
+      # built from a checkout, a page they are iterating on — and a wrapper
+      # that set them outright would take that away.
+      desktop = { name, description }:
+        pkgs.writeShellApplication {
+          name = "domicile-${name}";
+          runtimeInputs = [ pkgs.bun ];
+          text = ''
+            export DOMICILE_PAGE="''${DOMICILE_PAGE:-${shellPage name}}"
+            export DOMICILE_ENGINE="''${DOMICILE_ENGINE:-${domicileEngine}}"
+            export DOMICILE_COMPOSITOR="''${DOMICILE_COMPOSITOR:-${domicile-compositor}/bin/domicile-compositor}"
+            export DOMICILE_BRIDGE="''${DOMICILE_BRIDGE:-${domicileBridge}/${domicileBridge.passthru.entry}}"
+            # `OUT=.` because a published engine *is* the out directory, where
+            # a Chromium checkout has one under `out/Domicile`.
+            export OUT=.
+            exec ${self}/scripts/run-engine.sh "$DOMICILE_ENGINE" ${name} "$@"
+          '';
+          meta = {
+            inherit description;
+            mainProgram = "domicile-${name}";
+            platforms = [ system ];
+          };
+        };
+
       # ── What a user installs ────────────────────────────────────────────
       #
       # A shell, and nothing else. That is the whole arrangement Domicile is
@@ -433,19 +521,12 @@
       # `bin/` stub in the source is what ends up on `PATH`, unchanged except
       # for being told where the compositor and Electron are. It finds its own
       # bundle relative to itself, so the whole `.vite` tree comes along.
-      shell = { name, description }:
-        pkgs.stdenv.mkDerivation {
-          pname = "domicile-shell-${name}";
-          version = "0.0.0";
-          src = self;
-
-          # Node as well as bun: the workspace's binaries are installed as
-          # `#!/usr/bin/env node` shims, so turbo and vite are run by node
-          # even though bun is what installed them. Pinned to the major
-          # `package.json` asks for, same as the dev shell.
-          nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 pkgs.makeWrapper ];
-
-          configurePhase = ''
+      # Everything a workspace build needs before it can run turbo: the
+      # installed modules copied in writable, shebangs patched to the store's
+      # node, and turbo's own writable directories. Shared by the three
+      # derivations that build out of this workspace, because a second copy of
+      # it is a second thing to keep true.
+      sharedShellConfigure = ''
             runHook preConfigure
             cp -a "${nodeModules}/node_modules" node_modules
             for tree in "${nodeModules}"/packages/*/node_modules; do
@@ -468,6 +549,20 @@
             export TURBO_TELEMETRY_DISABLED=1
             runHook postConfigure
           '';
+
+      shell = { name, description }:
+        pkgs.stdenv.mkDerivation {
+          pname = "domicile-shell-${name}";
+          version = "0.0.0";
+          src = self;
+
+          # Node as well as bun: the workspace's binaries are installed as
+          # `#!/usr/bin/env node` shims, so turbo and vite are run by node
+          # even though bun is what installed them. Pinned to the major
+          # `package.json` asks for, same as the dev shell.
+          nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 pkgs.makeWrapper ];
+
+          configurePhase = sharedShellConfigure;
 
           buildPhase = ''
             runHook preBuild
@@ -590,6 +685,29 @@
         export DOMICILE_ENGINE="${domicileEngine}"
       '';
 
+      # The two desktops this repository ships. Bound once so that
+      # `packages` and `apps` are the same two things rather than two lists
+      # that have to be kept saying the same thing.
+      desktops = {
+        manganese = desktop {
+          name = "manganese";
+          description = "The Domicile desktop: tabbed windows, a launcher, and a settings surface";
+        };
+        simple = desktop {
+          name = "simple";
+          description = "The smallest Domicile desktop: floating windows on the Alt key, Alt+Enter for a terminal";
+        };
+      };
+
+      # The two desktops, as things to run rather than things to install.
+      domicileApps = pkgs.lib.mapAttrs
+        (name: package: {
+          type = "app";
+          program = pkgs.lib.getExe package;
+          meta.description = package.meta.description;
+        })
+        desktops;
+
       # `nix run .#<attr>` → `scripts/<script>.sh`. `native` is also the default
       # app, so a bare `nix run github:cprussin/domicile` starts the compositor
       # — which is the only thing here that is one. The copy path is reached
@@ -624,28 +742,42 @@
       # Two, and no `default`. `nix build` on its own has nothing to build
       # here on purpose: which desktop you want is the only question this
       # flake cannot answer for you.
-      packages.${system} = {
-        manganese = shell {
-          name = "manganese";
-          description = "The Domicile desktop: tabbed windows, a launcher, and a settings surface";
-        };
-        simple = shell {
-          name = "simple";
-          description = "The smallest Domicile desktop: floating windows on the Alt key, Alt+Enter for a terminal";
-        };
+      packages.${system} = desktops // {
         # The engine on its own, for `nix build .#engine` and for anyone who
         # wants the path to hand to `run-engine.sh` themselves.
         engine = domicileEngine;
       };
 
-      apps.${system} = scriptApps // {
-        default = scriptApps.native;
+      # WHAT `nix run` OFFERS, AND WHY IT IS THIS SHORT.
+      #
+      # There are two things a person wants from this flake: run a desktop, or
+      # build the engine one runs on. Everything else here drives a checkout —
+      # `check.sh`, the e2e scripts, the measurements — and those belong to
+      # somebody who has cloned the repository, where `./scripts/<name>.sh` is
+      # a shorter way to say the same thing. They stayed on the top level
+      # because it cost nothing to put them there, and the cost turned out to
+      # be that `nix run github:cprussin/domicile#<tab>` offers twenty things
+      # and buries the two.
+      #
+      # They are still reachable, each prefixed `dev-`, which says who they are
+      # for and keeps them sorted together underneath the three that are not.
+
+      apps.${system} = {
+        # A bare `nix run github:cprussin/domicile` is the desktop this
+        # project is for. Not `native` any more: that ran the shells under
+        # Electron with the compositor compositing, which is the architecture
+        # the fork replaced.
+        default = domicileApps.manganese;
+        inherit (domicileApps) manganese simple;
         engine = {
           type = "app";
-          program = pkgs.lib.getExe engineApp;
-          meta.description = "Run a Domicile desktop on the engine CI published";
+          program = "${domicileEngine}/chrome";
+          meta.description =
+            "The patched Chromium a Domicile desktop runs on, on its own";
         };
-      };
+      } // pkgs.lib.mapAttrs'
+        (name: app: pkgs.lib.nameValuePair "dev-${name}" app)
+        scriptApps;
 
       devShells.${system} = {
         # Default shell: everything needed for the TDD pure-logic core.
