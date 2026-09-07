@@ -222,15 +222,21 @@ echo "the shell is at $URL"
 # 2. The engine, on that page. No --enable-logging=stderr flood here beyond
 #    what the guards read: the page's own console lines are the record of
 #    whether the SDK reached the bridge.
+#
+#    `--app` for the reason `run-engine.sh` uses it: a desktop is not a browser
+#    looking at a page, and a tab strip above the shell is the difference
+#    between something a person would use and something they would call broken.
+#    The guard runs the configuration the product runs, or it is guarding
+#    something else.
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=wayland \
+  --app="$URL" \
   --no-sandbox --password-store=basic --no-first-run \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
   --enable-blink-features=DomicileExternalSurface \
   --enable-logging=stderr --log-level=0 \
-  --domicile-broker-socket="$BROKER" \
-  "$URL" >"$ENGINE_LOG" 2>&1 &
+  --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
 for _ in $(seq 1 240); do [ -S "$BROKER" ] && break; sleep 0.5; done
