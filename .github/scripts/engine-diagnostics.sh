@@ -51,9 +51,19 @@ for log in /tmp/domicile-*-compositor.log; do
     "$(grep -ac 'never released' "$log" || true)"
 done
 
-echo "which element embedded which surface:"
-grep -ahoE 'domicile: (embedded|embedding|no surface for) .*' /tmp/domicile-*-engine.log 2>/dev/null |
-  cut -c1-200 | sort -u | sed 's/^/  /' || true
+# Which app, not which element: the embedder logs the app id it was asked for
+# and the SurfaceId it got, and the element that asked is not in the line.
+#
+# With the filename, and not deduplicated across files. Each guard and each of
+# its negative controls writes its own log, so a bare `sort -u` over all of
+# them puts the control's embeds in the same list as the run that failed with
+# nothing to say which was which.
+echo "which app embedded which surface:"
+for log in /tmp/domicile-*-engine.log; do
+  [ -f "$log" ] || continue
+  grep -ahoE 'domicile: (embedded|embedding|no surface for) .*' "$log" 2>/dev/null |
+    cut -c1-200 | sort -u | sed "s|^|  $(basename "$log"): |" || true
+done
 
 # A window that maps, is brokered a sink and is configured has still shown
 # nothing until it commits a buffer the engine accepts. Two windows and one
@@ -69,8 +79,11 @@ sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
   sort -u | sed 's/^/  /' || true
 
 echo "what was drawn, if anything:"
-grep -ahoE 'engine drew #[0-9A-F]{8}( at \([0-9]+,[0-9]+\))?' \
-  /tmp/domicile-*-compositor.log 2>/dev/null | sort -u | sed 's/^/  /' || true
+for log in /tmp/domicile-*-compositor.log; do
+  [ -f "$log" ] || continue
+  grep -ahoE 'engine drew #[0-9A-F]{8}( at \([0-9]+,[0-9]+\))?' "$log" 2>/dev/null |
+    sort -u | sed "s|^|  $(basename "$log"): |" || true
+done
 
 echo "what was complained about:"
 sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |

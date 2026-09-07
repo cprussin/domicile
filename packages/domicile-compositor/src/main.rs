@@ -1209,7 +1209,7 @@ struct DomicileCompositor {
     /// commits a buffer the engine accepts, and those are three different
     /// facts. Said once per app rather than once a frame, so a two-window run
     /// says which of its windows ever drew.
-    submitted: HashSet<String>,
+    first_frame_logged: HashSet<String>,
 
     /// THROWAWAY, with the rest of the spike. When the pixel probe last ran.
     ///
@@ -1234,6 +1234,11 @@ struct DomicileCompositor {
     /// THROWAWAY. Colours already reported absent, so a guard that polls for
     /// ninety seconds gets one line rather than three hundred.
     probe_missing: HashSet<u32>,
+
+    /// THROWAWAY. When the colour search last ran. Its own clock, because it
+    /// captures the whole window rather than a pixel and is throttled harder
+    /// than the point probe beside it.
+    last_find: Option<Instant>,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1800,7 +1805,11 @@ impl DomicileCompositor {
         if !session.submit(app_id, buffer, &descriptor, (0, 0, 0, 0), Instant::now()) {
             return false;
         }
-        if self.submitted.insert(app_id.to_string()) {
+        // Tested before inserting: this is the submit path, at the client's
+        // frame rate, and `insert` would allocate a String for every frame of
+        // every window to answer a question it has already answered.
+        if !self.first_frame_logged.contains(app_id) {
+            self.first_frame_logged.insert(app_id.to_string());
             info!(app_id, "the engine took this app's first frame");
         }
         // THROWAWAY. The spike's assertion, and the only place it can be made:
@@ -1825,10 +1834,23 @@ impl DomicileCompositor {
         };
         // Colours to find anywhere in the window, for a guard that cannot name
         // a point because the shell decides where its windows go. Each is
-        // dropped once it has been found: the capture is the whole window and
-        // costs ~3 MB a time, so a guard that has its answer stops paying for
-        // it.
-        if !spike_find_colours().is_empty() {
+        // dropped once it has been found: the search captures the whole window
+        // and costs ~3 MB a time, so a guard that has its answer stops paying
+        // for it.
+        //
+        // Slower than the point probe, and for the same reason that one is
+        // throttled at all — a blocking readback on this thread is a readback
+        // the engine's events are not being drained during, and this one is a
+        // whole window rather than a pixel. A guard polls for tens of seconds
+        // and a colour that is going to appear appears early, so twice a
+        // second buys nothing that once every two seconds does not.
+        const FIND_EVERY: Duration = Duration::from_secs(2);
+        let find_due = match self.last_find {
+            None => true,
+            Some(at) => at.elapsed() >= FIND_EVERY,
+        };
+        if find_due && !spike_find_colours().is_empty() {
+            self.last_find = Some(Instant::now());
             for &argb in spike_find_colours() {
                 if self.probe_found.contains(&argb) {
                     continue;
@@ -4602,11 +4624,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_is_current: false,
         frames_held: 0,
         shm_refused: HashSet::new(),
-        submitted: HashSet::new(),
+        first_frame_logged: HashSet::new(),
         last_probe: None,
         probe_refused: HashSet::new(),
         probe_found: HashSet::new(),
         probe_missing: HashSet::new(),
+        last_find: None,
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,

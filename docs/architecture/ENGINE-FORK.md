@@ -944,11 +944,11 @@ it builds a renderer on the render node whether or not anything is on screen.
 
 
 
-Whether the compositor holds one `DomicileEngine` and N surfaces, or one per
-app, is not settled — it follows from the "one surface per document" question
-step 4 raised, which is the chrome protocol's to answer. One engine and N
-surfaces is the assumption here, because one socket to the browser is one
-authority to hold.
+One `DomicileEngine` and N surfaces, not one engine per app: one socket to the
+browser is one authority to hold. The "one surface per document" question that
+used to be attached to this is settled and was never the chrome protocol's —
+the renderer keeps one `LocalSurfaceId` per app id, because viz will not let it
+do otherwise. See *Open questions*.
 
 ## Plan
 
@@ -1136,18 +1136,19 @@ Phase 3 — be the display server:
   `domicile_surface_import` still needs*. **This is a decision, not a detail:**
   the first hands a process the browser did not launch the same GPU authority a
   renderer has.
-- ~~**One surface per document, in the spike only.**~~ Closed, and it was not
-  a simplification that could be left standing. The measurement puts eight
-  `<app>` elements on one page against one producer by sharing a
-  `LocalSurfaceId` across the document — but a `LocalSurfaceId` carries an
-  `embed_token`, and viz keys `SurfaceAllocationGroup` on that token *alone*:
-  `SurfaceManager::GetOrCreateAllocationGroupForSurfaceId` refuses a second
-  `FrameSinkId` under a token another sink already owns ("Cannot reuse embed
-  token across frame sinks") and never creates the surface. So one token per
-  document does not mean "eight elements, one producer" — it means the second
-  window's surface does not exist and the element embedding it resolves through
-  the *first* window's allocation group. Two windows, both showing window one,
-  which is what `spike-two-windows.sh` measured. `ExternalSurfaceEmbedder` now
-  keeps one allocator per app id: elements naming one app still share a
-  surface, which is all the CSS measurement ever needed, and elements naming
-  different apps get different tokens, which is what a desktop is.
+- ~~**One surface per document, in the spike only.**~~ Closed, and it was never
+  a simplification that could have been left standing. viz keys
+  `SurfaceAllocationGroup` on a `LocalSurfaceId`'s `embed_token` alone and
+  refuses a second `FrameSinkId` under a token another sink owns, so one token
+  per document does not give eight elements one producer — it gives the second
+  window no surface at all and shows the first window in its place.
+  `spike-two-windows.sh` measured exactly that. `ExternalSurfaceEmbedder` now
+  keeps one allocator per app id; the reasoning is in `AllocatorForApp`.
+- **Nothing invalidates a renderer's token when a producer goes away.** The map
+  above is keyed on an app id, and app ids are minted from a counter that
+  starts over when the compositor restarts. So a compositor restarting under a
+  running browser gets `app-1` brokered a new `FrameSinkId` while the page
+  still holds `app-1`'s old token, and every embed of it is refused from then
+  on. The browser knows when a producer disconnects — `OnProducerDisconnected`
+  drops its sinks — and does not tell the renderer. Phase 1's, and it is the
+  reload case a shell hits first.

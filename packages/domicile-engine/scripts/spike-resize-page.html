@@ -109,6 +109,13 @@
     }
   };
 
+  // The window this page resizes. `app-1` is what a compositor mints for the
+  // first window that appears, and the re-embed below names the same one: a
+  // reconfigure is the same surface at a new box, and naming another app would
+  // be embedding a different window rather than resizing this one.
+  const APP_ID =
+    new URLSearchParams(location.search).get('app') ?? 'app-1';
+
   /**
    * Grows the box and asks to be re-embedded at it. Only the CSS box changes:
    * the canvas keeps its width and height attributes, so what the producer is
@@ -117,7 +124,7 @@
    */
   const reconfigure = () => {
     setSize(TO);
-    app.embedExternalSurface().then(
+    app.embedExternalSurface(APP_ID).then(
       () => {
         console.log('domicile: reconfigured to ' + TO.width + 'x' + TO.height);
       },
@@ -132,7 +139,7 @@
     console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
                 'flag is off');
   } else {
-    app.embedExternalSurface().then(
+    app.embedExternalSurface(APP_ID).then(
       () => {
         console.log('domicile: embedded at ' + FROM.width + 'x' + FROM.height);
         setTimeout(reconfigure, HOLD_MS);

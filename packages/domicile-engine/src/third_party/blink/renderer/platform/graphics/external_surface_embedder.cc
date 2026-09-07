@@ -43,6 +43,20 @@ namespace {
 //
 // What does not change is who allocates: the embedder, because the embed_token
 // is the capability the producer needs in order to submit at all.
+//
+// NOT INVALIDATED, and that is a live limitation rather than an oversight. A
+// compositor that restarts under a running browser mints `app-1` again from a
+// counter that starts over, and the browser brokers it a *new* FrameSinkId
+// while this map still holds the old app's token — which is the same refusal
+// as above, permanently, for as long as the page lives. Nothing today notices
+// a producer going away on this side of the seam. It wants the browser to say
+// so; see the open questions in docs/architecture/ENGINE-FORK.md.
+//
+// `std::map` rather than the `base::flat_map` the rest of this fork uses, and
+// the difference is load-bearing: this hands back a reference into the
+// container and a flat_map is a sorted vector, so the next app to turn up
+// would move the allocator out from under a caller still holding one. Do not
+// "tidy" it into a flat_map.
 viz::ParentLocalSurfaceIdAllocator& AllocatorForApp(const String& app_id) {
   static base::NoDestructor<
       std::map<std::string, viz::ParentLocalSurfaceIdAllocator>>

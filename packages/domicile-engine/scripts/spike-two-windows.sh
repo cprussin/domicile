@@ -73,11 +73,10 @@ COMP_LOG=$(mktemp)
 CLI_LOG=$(mktemp)
 STARTED=()
 LOG_COPY="${LOG_COPY:-/tmp/domicile-two-windows-compositor.log}"
-# The browser's own log, which used to be thrown away with the tempfile.
-# It is where the page's console lines are — which element embedded which
-# app, and which was refused — and a run where the page showed the wrong
-# window cannot be told apart from one where a client never drew without
-# them.
+# The browser's own log, which used to be thrown away with the tempfile. It is
+# where the page's console lines are — which app was embedded, at which
+# SurfaceId, and which was refused — and a run where the page showed the wrong
+# window cannot be told apart from one where a client never drew without them.
 ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-two-windows-engine.log}"
 cleanup() {
   cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
@@ -133,12 +132,20 @@ echo "the engine is listening on $BROKER"
 # The compositor, told where to look. Without DOMICILE_SPIKE_PROBE it samples
 # the window's centre, which on this page is the seam between the two canvases
 # and inside neither.
+#
+# DOMICILE_SPIKE_FIND asks a second, weaker question beside it: is each colour
+# anywhere in the window at all. The assertion is still the two points — a
+# colour in the wrong canvas is a failure — but the two answers together say
+# *which* failure. A colour that is on screen somewhere and not where it
+# belongs is a layout or a coordinate problem; a colour that is nowhere is a
+# client whose pixels never arrived, and the two have nothing in common.
 export XDG_RUNTIME_DIR="$RUNTIME"
 COMP_SOCK="$RUNTIME/domicile-two-windows.sock"
 rm -f "$COMP_SOCK" "$COMP_SOCK.session"
 LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
 DOMICILE_SPIKE_PROBE="$PROBE_A_X,$PROBE_Y;$PROBE_B_X,$PROBE_Y" \
+DOMICILE_SPIKE_FIND="$COLOR_A;$COLOR_B" \
   "$COMPOSITOR" \
     --chrome-socket "$COMP_SOCK" \
     --session "$COMP_SOCK.session" \
@@ -227,6 +234,9 @@ done
 echo
 echo "at ($PROBE_A_X,$PROBE_Y): #${DREW_A:-nothing}   expected #FF$COLOR_A"
 echo "at ($PROBE_B_X,$PROBE_Y): #${DREW_B:-nothing}   expected #FF$COLOR_B"
+echo "anywhere in the window:"
+grep -aoE "engine (found|has not drawn) #[0-9A-F]{8}.*" "$COMP_LOG" 2>/dev/null |
+  sort -u | sed 's/^/  /'
 
 if [ -z "$DREW_A" ] && [ -z "$DREW_B" ]; then
   echo "the engine never drew a client frame at either point"

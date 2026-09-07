@@ -47,10 +47,12 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
     // Whichever one this app is already showing, allocating it if there is
     // none yet. So several elements naming one app embed one surface and all
     // of them show that producer, which is what lets the CSS measurement put
-    // six <app> elements on one page against one producer. Elements naming
+    // eight <app> elements on one page against one producer. Elements naming
     // different apps get different surfaces, because they are different
-    // windows — and because viz refuses two frame sinks under one embed token
-    // outright. See AllocatorForApp().
+    // windows — and because viz refuses two frame sinks under one embed
+    // token outright, so sharing one across apps does not make several
+    // elements show one producer, it makes the second app's surface not
+    // exist. The allocator this resolves against is per app id; see the .cc.
     kAdopt,
     // A new one, bumping parent_sequence_number. The embedder's box changed
     // and the producer has to render at the new size: this is the embedder

@@ -208,16 +208,26 @@
 
   const canvases = CELLS.map(buildCell);
 
+  // The one window this page measures against. `app-1` is what a compositor
+  // mints for the first window that appears, and every element here names it
+  // on purpose: the measurement is several <app> elements against ONE
+  // producer, laid out beside ordinary elements, so they have to be the same
+  // window. Elements naming different apps get different surfaces — see
+  // ExternalSurfaceEmbedder's AllocatorForApp.
+  const APP_ID =
+    new URLSearchParams(location.search).get('app') ?? 'app-1';
+
   if (canvases[0].embedExternalSurface === undefined) {
     console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
                 'flag is off');
   } else {
-    // Every canvas embeds the same surface: there is one producer, so there is
-    // one surface, and the renderer shares the LocalSurfaceId it allocated for
-    // it across the document. Each promise resolves only once a producer has
-    // been brokered a frame sink, which may be well after load.
-    Promise.all(canvases.map((canvas) => canvas.embedExternalSurface())).then(
-      () => { console.log('domicile: embedded ' + canvases.length); },
-      (error) => { console.log('domicile: refused: ' + error.message); });
+    // Every canvas embeds the same surface, because every one of them names
+    // the same app: one window, so one surface, and the renderer keeps one
+    // LocalSurfaceId per app. Each promise resolves only once a producer has
+    // been brokered a frame sink for it, which may be well after load.
+    Promise.all(canvases.map((canvas) => canvas.embedExternalSurface(APP_ID)))
+      .then(
+        () => { console.log('domicile: embedded ' + canvases.length); },
+        (error) => { console.log('domicile: refused: ' + error.message); });
   }
 </script>
