@@ -1227,11 +1227,6 @@ struct DomicileCompositor {
     /// costs one line rather than one per submit.
     probe_refused: HashSet<(i32, i32)>,
 
-    /// THROWAWAY. Colours `DOMICILE_SPIKE_FIND` asked for that have turned up.
-    /// The search captures the whole window, so a colour already found is not
-    /// looked for again.
-    probe_found: HashSet<u32>,
-
     /// THROWAWAY. Colours already reported absent, so a guard that polls for
     /// ninety seconds gets one line rather than three hundred.
     probe_missing: HashSet<u32>,
@@ -1256,7 +1251,10 @@ struct DomicileCompositor {
     /// THROWAWAY. The last box logged for each colour, so a box is written
     /// down when it moves rather than once when it first appears. A window
     /// still painting is smaller than it will be, and how much of the page
-    /// each one covers is what the two-window guard asserts.
+    /// each one covers is what the two-window guard asserts — which is also
+    /// why the guard waits for two consecutive readings that agree.
+    ///
+    /// Presence is what "found" means; a colour that goes absent is removed.
     probe_boxes: HashMap<u32, Bounds>,
 
     /// THROWAWAY. Whether the search is over — every colour found and none of
@@ -1908,10 +1906,11 @@ impl DomicileCompositor {
             Some(at) => at.elapsed() >= FIND_EVERY,
         };
         if find_due && !spike_find_colours().is_empty() && !self.find_settled {
-            // Started here rather than at startup, and inside this branch
-            // rather than above it: a desktop with nothing to look for is not
-            // searching, and starting the clock then would spend the budget
-            // waiting for a client.
+            // The first tick that has something to look for. That is the
+            // first tick of the run in practice, because the colours come from
+            // an environment variable read once — so this is a budget on the
+            // compositor's life, not on the search, and it is generous enough
+            // that the difference does not matter.
             let since = *self.find_since.get_or_insert_with(Instant::now);
             if since.elapsed() >= FIND_FOR {
                 // Once, on its own flag. Firing it from the loop condition
@@ -1937,7 +1936,6 @@ impl DomicileCompositor {
                             window: (w, h),
                             bounds: Some(bounds),
                         }) => {
-                            self.probe_found.insert(argb);
                             // Logged when it changes, so a page that has
                             // settled says its geometry once and a page still
                             // painting says it as often as it moves.
@@ -1964,6 +1962,12 @@ impl DomicileCompositor {
                             bounds: None,
                         }) => {
                             every_colour_found = false;
+                            // Forgotten, not kept. A colour that is found,
+                            // then absent, then found again would otherwise
+                            // settle by matching a box measured two rounds
+                            // earlier — which is not two consecutive readings
+                            // of the same thing, which is the whole point.
+                            self.probe_boxes.remove(&argb);
                             if self.probe_missing.insert(argb) {
                                 tracing::info!(
                                     target: "domicile::engine::spike",
@@ -1981,6 +1985,7 @@ impl DomicileCompositor {
                         // thing meant to keep them apart.
                         None => {
                             every_colour_found = false;
+                            self.probe_boxes.remove(&argb);
                             if self.probe_unreadable.insert(argb) {
                                 warn!(
                                     target: "domicile::engine::spike",
@@ -4748,7 +4753,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         first_frame_logged: HashSet::new(),
         last_probe: None,
         probe_refused: HashSet::new(),
-        probe_found: HashSet::new(),
         probe_missing: HashSet::new(),
         probe_unreadable: HashSet::new(),
         last_find: None,

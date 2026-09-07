@@ -520,10 +520,13 @@ fn push(user_data: *mut c_void, event: Event) {
 
 #[cfg(test)]
 mod tests {
+    use domicile_bridge::DmabufPlane as BridgePlane;
+
     /// What the C header's `static_assert` cannot see: that this side still
-    /// has six fields. `#[repr(C)]` fixes the layout, so the size is the whole
-    /// of the contract — a field added or dropped here without the header
-    /// changing to match would read the wrong half of a bounding box.
+    /// has six fields. It catches a field added or dropped, which is the
+    /// mistake that reads the wrong half of a bounding box. It does not catch
+    /// a reorder or a signedness change — those keep the size and there is
+    /// nothing on this side that could notice them.
     #[test]
     fn a_capture_is_the_six_int32_the_c_header_declares() {
         assert_eq!(
@@ -531,9 +534,6 @@ mod tests {
             6 * std::mem::size_of::<i32>()
         );
     }
-
-    use domicile_bridge::DmabufPlane as BridgePlane;
-
     use super::*;
 
     fn descriptor(planes: usize) -> DmabufDescriptor {

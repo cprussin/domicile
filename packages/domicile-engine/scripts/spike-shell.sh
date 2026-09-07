@@ -107,11 +107,11 @@ if command -v kitty >/dev/null; then
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  echo "SKIP: no kitty to draw with, and no nix to fetch one."
+  echo "::error::spike-shell: no kitty to draw with, and no nix to fetch one"
   exit 77
 fi
 command -v bun >/dev/null || {
-  echo "SKIP: no bun, and the shell's page is built with its own vite config."
+  echo "::error::spike-shell: no bun, and the shell's page is built with its own vite config"
   exit 77
 }
 
@@ -136,6 +136,7 @@ if ! (cd "$SHELL_DIR" &&
         bun install --frozen-lockfile &&
         bun run prepare &&
         bunx vite build --config vite.renderer.config.ts) >"$BUILD_LOG" 2>&1; then
+  echo "::error::spike-shell: $SHELL_NAME's page did not build"
   echo "the shell's page did not build. It said:" >&2
   tail -40 "$BUILD_LOG" >&2
   rm -f "$BUILD_LOG"
@@ -144,7 +145,7 @@ fi
 rm -f "$BUILD_LOG"
 PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 [ -f "$PAGE_DIR/index.html" ] || {
-  echo "the shell built no index.html; looked in $PAGE_DIR" >&2
+  echo "::error::spike-shell: $SHELL_NAME built no index.html in $PAGE_DIR"
   exit 1
 }
 
@@ -175,6 +176,7 @@ for _ in $(seq 1 300); do
   sleep 0.1
 done
 [ -n "$URL" ] || {
+  echo "::error::spike-shell: the bridge never said where it was serving"
   echo "the bridge never said where it was serving. It said:" >&2
   cat "$BRIDGE_LOG" >&2
   exit 1
@@ -197,7 +199,8 @@ STARTED+=($!)
 
 for _ in $(seq 1 240); do [ -S "$BROKER" ] && break; sleep 0.5; done
 [ -S "$BROKER" ] || {
-  echo "the engine never opened its broker socket at $BROKER. It said:" >&2
+  echo "::error::spike-shell: the engine never opened its broker socket at $BROKER"
+  echo "the engine never opened its broker socket. It said:" >&2
   tail -20 "$ENGINE_LOG" >&2
   exit 1
 }
@@ -220,6 +223,7 @@ for _ in $(seq 1 120); do
   sleep 0.5
 done
 if ! kill -0 $COMP 2>/dev/null; then
+  echo "::error::spike-shell: the compositor did not start"
   echo "the compositor did not start. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -230,6 +234,7 @@ fi
 # not on screen".
 CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
 [ -n "$CLIENT_DISPLAY" ] || {
+  echo "::error::spike-shell: the compositor never named its Wayland display"
   echo "the compositor never named its Wayland display. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -252,7 +257,8 @@ for _ in $(seq 1 90); do
   sleep 1
 done
 [ "$JOINED" = "1" ] || {
-  echo "the shell never joined the compositor, so no window would be announced to it." >&2
+  echo "::error::spike-shell: $SHELL_NAME never joined the compositor, so no window would be announced to it"
+  echo "the shell never joined the compositor. Everything each side said:" >&2
   echo "--- the compositor said:" >&2
   grep -aE "chrome|protocol|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
   echo "--- the page said:" >&2
@@ -285,16 +291,16 @@ done
 echo
 if [ "$NEGATIVE" = "1" ]; then
   if [ -n "$FOUND" ]; then
-    echo "NEGATIVE CONTROL FAILED: $FOUND, and the client drew #$OTHER_COLOR." \
-         "The guard is matching something other than the client's pixels." >&2
+    echo "::error::spike-shell negative control: $FOUND, and the client drew" \
+         "#$OTHER_COLOR — the guard is matching something other than the client's pixels"
     exit 1
   fi
   # A control that passes because the whole run fell over proves nothing. The
   # client has to have got as far as a frame the engine took, and the probe has
   # to have run and answered "not yet".
   if ! grep -aq "first frame" "$COMP_LOG" 2>/dev/null; then
-    echo "NEGATIVE CONTROL INCONCLUSIVE: the engine never took a frame from the" \
-         "client, so nothing was measured." >&2
+    echo "::error::spike-shell negative control: the engine never took a frame" \
+         "from the client, so nothing was measured"
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
   fi
@@ -303,8 +309,8 @@ if [ "$NEGATIVE" = "1" ]; then
   # else — see spike_find's three answers — so this cannot go green on a
   # measurement that never happened.
   if ! grep -aq "has not drawn" "$COMP_LOG" 2>/dev/null; then
-    echo "NEGATIVE CONTROL INCONCLUSIVE: the probe never read the window, so" \
-         "nothing was measured." >&2
+    echo "::error::spike-shell negative control: the probe never read the" \
+         "window, so nothing was measured"
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
   fi
@@ -314,12 +320,13 @@ fi
 
 if [ -z "$FOUND" ]; then
   if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
-    echo "INCONCLUSIVE: the compositor stopped searching before this poll ran" \
-         "out, so 'not found' means 'not looked for'. Its budget is FIND_FOR" \
-         "in domicile-compositor's main.rs." >&2
+    echo "::error::spike-shell: the compositor stopped searching before this" \
+         "poll ran out, so 'not found' means 'not looked for'. Its budget is" \
+         "FIND_FOR in domicile-compositor's main.rs"
     exit 1
   fi
-  echo "FAIL: the client's window is not on the shell's page" >&2
+  echo "::error::spike-shell: the client's window is not on $SHELL_NAME's page"
+  echo "what each side said:" >&2
   echo "--- the compositor's last words:" >&2
   grep -aE "engine|frame sink|chrome|buffer|ERROR" "$COMP_LOG" | tail -15 | sed 's/^/  /' >&2
   echo "--- the page's:" >&2

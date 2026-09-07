@@ -110,7 +110,7 @@ if command -v kitty >/dev/null; then
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  echo "SKIP: no kitty to draw with, and no nix to fetch one."
+  echo "::error::spike-two-windows: no kitty to draw with, and no nix to fetch one"
   exit 77
 fi
 
@@ -129,7 +129,8 @@ STARTED+=($!)
 
 for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done
 [ -S "$BROKER" ] || {
-  echo "the page never asked to embed; the engine said:" >&2
+  echo "::error::spike-two-windows: the page never asked to embed"
+  echo "the engine said:" >&2
   tail -20 "$ENGINE_LOG" >&2
   exit 1
 }
@@ -158,6 +159,7 @@ for _ in $(seq 1 120); do
   sleep 0.5
 done
 if ! kill -0 $COMP 2>/dev/null; then
+  echo "::error::spike-two-windows: the compositor did not start"
   echo "the compositor did not start. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -194,7 +196,7 @@ await_broker() {
     fi
     sleep 1
   done
-  echo "no frame sink was ever brokered for $app" >&2
+  echo "::error::spike-two-windows: no frame sink was ever brokered for $app"
   grep -aE "brokered|frame sink|app_id" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
   return 1
 }
@@ -246,18 +248,41 @@ numbers_in() {
   echo "$1" | grep -oE "[0-9]+" | tr '\n' ' '
 }
 
+# Poll until each box has been the SAME for two consecutive looks.
+#
+# Not until it is merely non-empty. The compositor writes a box down when it
+# moves, so the first one it writes is the window mid-paint — narrower than it
+# will be — and the assertions below are about width. Reading that would fail a
+# working seam as "a sliver", and would let the negative control pass a client
+# that covers the whole page by catching it before it had.
+#
+# In the script rather than in the compositor: two consecutive equal readings a
+# second apart is the whole of the idea, and it needs no marker to be agreed
+# across the seam.
+PREV_A=""
+PREV_B=""
 BOX_A=""
 BOX_B=""
+# Long enough that a second client which is merely slow has appeared. Only the
+# negative control waits it out; a positive run leaves as soon as both boxes
+# hold still.
+LEAST_LOOKS=10
+LOOKS=0
 for _ in $(seq 1 90); do
+  PREV_A="$BOX_A"
+  PREV_B="$BOX_B"
   BOX_A=$(box_of "$COLOR_A")
   BOX_B=$(box_of "$COLOR_B")
+  LOOKS=$((LOOKS + 1))
+  STEADY_A=0
+  [ -n "$BOX_A" ] && [ "$BOX_A" = "$PREV_A" ] && STEADY_A=1
   if [ "$NEGATIVE" = "1" ]; then
-    # Nothing to wait for but the one client: the control's whole claim is that
-    # the other colour never turns up, and waiting for it to would be waiting
-    # for the run to fail.
-    [ -n "$BOX_A" ] && break
+    # The one client's box has to hold still, and the other colour has to have
+    # had its chance to turn up: "it is not there" said after one look is not a
+    # measurement.
+    [ "$STEADY_A" = "1" ] && [ "$LOOKS" -ge "$LEAST_LOOKS" ] && break
   else
-    [ -n "$BOX_A" ] && [ -n "$BOX_B" ] && break
+    [ "$STEADY_A" = "1" ] && [ -n "$BOX_B" ] && [ "$BOX_B" = "$PREV_B" ] && break
   fi
   sleep 1
 done
@@ -266,22 +291,24 @@ echo
 echo "#$COLOR_A: ${BOX_A:-nowhere in the window}"
 echo "#$COLOR_B: ${BOX_B:-nowhere in the window}"
 echo "everything the probe said:"
+# In the order they were written, not sorted: a box appears again each time it
+# moves, and watching one settle is what these lines are for.
 grep -aoE "engine (found|has not drawn|could not read the window at all looking for) #[0-9A-F]{8}.*" \
-  "$COMP_LOG" 2>/dev/null |
-  sort -u | sed 's/^/  /'
+  "$COMP_LOG" 2>/dev/null | sed 's/^/  /'
 
 # A search that stopped is not a search that found nothing, and reporting the
 # first as the second is how a slow runner becomes a wrong diagnosis.
 if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
-  echo "INCONCLUSIVE: the compositor stopped searching before this poll ran out," \
-       "so 'not found' here means 'not looked for'." >&2
+  echo "::error::spike-two-windows: the compositor stopped searching before" \
+       "this poll ran out, so 'not found' here means 'not looked for'"
   exit 1
 fi
 
+# Both come off the same lines, so a box implies a window size.
 WINDOW=$(window_size)
-if [ -z "$BOX_A" ] || [ -z "$WINDOW" ]; then
-  echo "INCONCLUSIVE: the first client never reached the page at all, so nothing" \
-       "here is about two windows." >&2
+if [ -z "$BOX_A" ]; then
+  echo "::error::spike-two-windows: the first client never reached the page" \
+       "at all, so nothing here is about two windows"
   echo "--- the compositor's last words:" >&2
   grep -aE "engine|frame sink|buffer|dmabuf" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
   exit 1
@@ -301,17 +328,27 @@ if [ "$NEGATIVE" = "1" ]; then
 $(numbers_in "$BOX_A")
 EOF
   WINDOW_W=$(echo "$WINDOW" | cut -dx -f1)
-  MOST=$((WINDOW_W * 2 / 3))
+  # Both bounds, because the claim has two halves: the one client covers its
+  # own half (so the run measured a window rather than a sliver) and not the
+  # page (so the other canvas is not showing it too).
+  LEAST=$((WINDOW_W * 45 / 100))
+  MOST=$((WINDOW_W * 55 / 100))
   echo
   echo "in a $WINDOW window: #$COLOR_A is ${A_W}x${A_H} at $A_X,$A_Y"
   if [ -n "$BOX_B" ]; then
-    echo "NEGATIVE CONTROL FAILED: #$COLOR_B is on screen and no client drew it." >&2
+    echo "::error::spike-two-windows negative control: #$COLOR_B is on screen and no client drew it"
+    exit 1
+  fi
+  if [ "$A_W" -lt "$LEAST" ]; then
+    echo "::error::spike-two-windows negative control: the one client's window is" \
+         "only ${A_W}px of a ${WINDOW_W}px page, so this measured a sliver rather" \
+         "than a window and says nothing about dispatch"
     exit 1
   fi
   if [ "$A_W" -ge "$MOST" ]; then
-    echo "NEGATIVE CONTROL FAILED: the one client's window is ${A_W}px of a" \
-         "${WINDOW_W}px page, so both canvases are showing it and the embed is" \
-         "not dispatched on app id at all" >&2
+    echo "::error::spike-two-windows negative control: the one client's window" \
+         "is ${A_W}px of a ${WINDOW_W}px page, so both canvases are showing it" \
+         "and the embed is not dispatched on app id at all"
     exit 1
   fi
   echo "negative control: correct, the one running client fills its own half and" \
@@ -320,7 +357,7 @@ EOF
 fi
 
 if [ -z "$BOX_B" ]; then
-  echo "FAIL: only one client's window reached the page; #$COLOR_B is nowhere in it" >&2
+  echo "::error::spike-two-windows: only one client's window reached the page; #$COLOR_B is nowhere in it"
   exit 1
 fi
 
@@ -340,9 +377,11 @@ EOF
 A_RIGHT=$((A_X + A_W))
 B_RIGHT=$((B_X + B_W))
 WINDOW_W=$(echo "$WINDOW" | cut -dx -f1)
-# A third rather than a half, because the browser's own chrome and the page's
-# margins come out of the width before the canvases do.
-LEAST=$((WINDOW_W / 3))
+# 45%, not a third. The measured half is 800 of a 1620 capture — 49.4%, the
+# missing 0.6% being about ten pixels of window border per side. Browser chrome
+# costs height, not width. A third would admit a box a third narrower than the
+# truth, which is most of the way to a sliver.
+LEAST=$((WINDOW_W * 45 / 100))
 
 FAILURE=""
 # Overlap in either order, rather than "A ends before B begins": two disjoint
@@ -365,5 +404,5 @@ if [ -z "$FAILURE" ]; then
   exit 0
 fi
 
-echo "FAIL: $FAILURE" >&2
+echo "::error::spike-two-windows: $FAILURE"
 exit 1
