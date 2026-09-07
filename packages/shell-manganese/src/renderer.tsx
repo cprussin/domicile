@@ -20,6 +20,7 @@ import { createRoot } from "react-dom/client";
 import { AppElements } from "./app-elements";
 import { diagnosticLines } from "./diagnostic-lines";
 import { displaysFrom } from "./display-source";
+import { mountPoint } from "./mount-point";
 import { Shell } from "./Shell";
 import { viewportDisplays } from "./viewport-display";
 
@@ -28,9 +29,12 @@ import "./global.css";
 /** Matches the compositor's reporting interval so the two lines interleave. */
 const REPORT_EVERY_MS = 5000;
 
-// Apply the persisted (or system) theme before React mounts so the first paint
-// uses the right semantic-token values. (`index.html` runs an inline copy of
-// this for the pre-bundle paint; this call covers the rest of the chrome.)
+// Apply the persisted (or system) theme before React mounts, so the first paint
+// uses the right semantic-token values. There is no paint before this: the
+// stylesheet travels inside this module rather than in a render-blocking
+// `<link>`, which is what ended this shell's theme flash — see
+// `@domicile/component-library/vite-shell`. It used to say an `index.html` ran
+// an inline copy of this first, and that file is gone.
 applyPreference(loadPreference());
 
 // One call, three places. Under the fork this opens a WebSocket to the bridge
@@ -52,16 +56,14 @@ const displays = hasHost(window)
 const appElements = new AppElements();
 registerElements(bridge);
 
-// The markup this entry point mounts into is its own file, so a missing id is
-// a mismatch between the two rather than a condition to handle.
-const container = document.getElementById("root");
-if (container === null) {
-  throw new Error("shell: index.html is missing #root");
-} else {
-  createRoot(container).render(
-    <Shell appElements={appElements} bridge={bridge} displays={displays} />,
-  );
-}
+// The markup this mounts into is made rather than found — see
+// `mount-point.ts`. This used to look up an id that came from an `index.html`
+// this shell had of its own, and there is no second file any more: Domicile
+// writes the document and writes no such element, so every launch threw here
+// before React was reached and the desktop was a white window.
+createRoot(mountPoint(document)).render(
+  <Shell appElements={appElements} bridge={bridge} displays={displays} />,
+);
 
 // The compositor logs its own half of the frame path every 5s; this is the
 // other half, on the same cadence and in the same shape, so the two lines can

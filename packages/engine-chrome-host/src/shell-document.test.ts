@@ -31,7 +31,13 @@ describe("shellDocument", () => {
     ["a charset", '<meta charset="utf-8" />'],
     ["a viewport", 'content="width=device-width, initial-scale=1"'],
     ["no body margin", "margin: 0;"],
-    ["a full-height root", "block-size: 100%;"],
+    // The *body* is the full-height root — `docs/WRITING-A-SHELL.md` promises
+    // "a root that fills the window with no margin" and this is it. Named
+    // precisely because the vaguer reading cost a desktop: manganese read
+    // "root" as an element with that id, looked one up, found nothing, and
+    // threw before it rendered. Domicile writes no element for a shell to
+    // mount into and does not mean to — a shell makes its own.
+    ["a full-height body", "block-size: 100%;"],
   ])("always carries %s", (_, expected) => {
     expect(document()).toContain(expected);
   });

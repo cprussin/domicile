@@ -197,10 +197,19 @@ never mounted, because a close for something never announced means the page and
 the compositor disagree about what is on screen.
 
 There is no second file. **Domicile writes the document**: a charset, a
-viewport, and a root that fills the window with no margin. That last one is not
-a nicety — eight pixels of default body margin is eight pixels the compositor
-believes it has and does not, and a client's window drawn eight pixels out
-looks like the seam rather than like a stylesheet.
+viewport, and a `<body>` that fills the window with no margin. That last one is
+not a nicety — eight pixels of default body margin is eight pixels the
+compositor believes it has and does not, and a client's window drawn eight
+pixels out looks like the seam rather than like a stylesheet.
+
+**Nothing else, and in particular no element to mount into.** The body and the
+script tag that loads you are the whole of it, so a shell that renders into a
+container makes its own — `document.body.append` on the first line, as the
+example above does. Worth stating because the vaguer wording this sentence used
+to have ("a root that fills the window") cost a desktop: `shell-manganese` read
+it as an element with that id, looked one up, got `null`, and threw before it
+rendered anything. Under `--app` there is no console to read, so the whole
+failure was a white window.
 
 What is left to you is the background: make it transparent wherever an app
 shows through, because a `<domicile-app>` is a hole in your page and a
