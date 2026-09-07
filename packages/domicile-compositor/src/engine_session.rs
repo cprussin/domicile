@@ -82,7 +82,7 @@ impl EngineSession {
         // buffer viz has only just been handed, which is the tear this whole
         // path exists to avoid. The one release the client is owed arrives when
         // viz is done with the submission it actually has.
-        drop(self.held.hold(id, surface, buffer.clone(), now));
+        drop(self.held.hold(surface, id, buffer.clone(), now));
         true
     }
 
@@ -96,8 +96,8 @@ impl EngineSession {
         let releases = events
             .iter()
             .filter_map(|event| match event {
-                Event::Released { buffer, .. } => {
-                    self.held.release(*buffer).map(|buffer| Release {
+                Event::Released { surface, buffer } => {
+                    self.held.release(*surface, *buffer).map(|buffer| Release {
                         buffer,
                         why: Returned::Released,
                     })
@@ -147,7 +147,7 @@ impl EngineSession {
     pub fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) -> Option<Release> {
         let (surface, id) = self.imports.remove(&buffer.id())?;
         self.engine.forget(surface, id);
-        self.held.release(id).map(|buffer| Release {
+        self.held.release(surface, id).map(|buffer| Release {
             buffer,
             why: Returned::Abandoned,
         })

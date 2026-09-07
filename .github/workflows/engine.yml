@@ -238,11 +238,20 @@ jobs:
       - name: What the guard wrote down
         if: ${{ failure() }}
         run: |
+          # Filtered, not tailed. These logs are mostly two 4KB dumps of every
+          # EGL and GL extension the NVIDIA driver has, and a raw tail of 200
+          # lines is all of that and none of the seam. What is left is the
+          # sequence that says where it stopped: a window appeared, a sink was
+          # brokered for it, the page configured it, a frame was drawn.
           for log in /tmp/domicile-spike-wayland.log \
                      /tmp/domicile-client-window-compositor.log \
                      /tmp/domicile-two-windows-compositor.log; do
+            [ -f "$log" ] || continue
             echo "::group::$log"
-            tail -200 "$log" 2>&1 || true
+            grep -aE 'app_appeared|brokered a frame sink|configure ->|engine drew|never released|refused|ERROR|WARN|panic' \
+              "$log" | tail -60 || true
+            echo "--- last 15 lines, whatever they are:"
+            tail -15 "$log" 2>&1 | cut -c1-300 || true
             echo "::endgroup::"
           done
           # What the compositor is being asked to run on, for the case where
