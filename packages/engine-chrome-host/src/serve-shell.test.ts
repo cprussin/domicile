@@ -62,6 +62,29 @@ const eventually = async (until: () => boolean) => {
   return false;
 };
 
+/**
+ * One HTTP GET, written on the socket exactly as given.
+ *
+ * `fetch` normalises a path before it sends it — `//` becomes `/`, `%69`
+ * becomes `i` — so it cannot ask a server the questions above. This spells the
+ * request line itself and reads the whole response back.
+ */
+const rawGet = (port: number, pathname: string): Promise<string> =>
+  new Promise((done, fail) => {
+    const socket = net.connect(port, "127.0.0.1", () => {
+      socket.write(
+        `GET ${pathname} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`,
+      );
+    });
+    let received = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      received += chunk;
+    });
+    socket.on("end", () => done(received));
+    socket.on("error", fail);
+  });
+
 describe("serveShell", () => {
   it("serves the shell's page at the root", async () => {
     const host = await compositor();
@@ -75,6 +98,121 @@ describe("serveShell", () => {
     const response = await fetch(serving.url);
 
     expect(await response.text()).toBe("<title>a shell</title>");
+  });
+
+  // WITH A MANIFEST THERE IS NO index.html TO SERVE, and that is the point: a
+  // shell ships JavaScript and CSS, and the document it loads in is written
+  // here so that no shell can get it wrong. See `shell-document.ts`.
+  it("writes the document when the shell is a module", async () => {
+    const host = await compositor();
+    const serving = serveShell({
+      module: "shell.js",
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
+    cleanups.push(() => serving.stop());
+
+    const response = await fetch(serving.url);
+    const body = await response.text();
+
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).toContain('<script src="shell.js" type="module">');
+    expect(body).toContain("<title>Domicile</title>");
+  });
+
+  // A reload or a bookmark resolves to `/index.html`, so serving a 404 there
+  // would be a desktop that works until somebody presses enter in an address
+  // bar — and a shell that is a module ships no such file to fall back on.
+  it("writes the document for /index.html too", async () => {
+    const host = await compositor();
+    const serving = serveShell({
+      module: "shell.js",
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
+    cleanups.push(() => serving.stop());
+
+    const response = await fetch(`${serving.url}index.html`);
+
+    expect(await response.text()).toContain('<script src="shell.js"');
+  });
+
+  // EVERY OTHER WAY TO SPELL THE SAME FILE, which is where this was wrong.
+  //
+  // The guard used to compare the raw `url.pathname` against `"/"` and
+  // `"/index.html"` while `fileForRequest` decoded and normalised — so three
+  // spellings that resolve to exactly the same file missed the guard, fell
+  // through to disk, and served the shell's own `index.html`. That is the one
+  // property this whole design exists for ("there is no way to supply a
+  // document of your own") defeated by one character.
+  //
+  // Over a raw socket, and that is not incidental: `fetch` collapses these
+  // before a server ever sees them, so a test written with `fetch` cannot
+  // reach this bug at all. It has to be spoken on the wire.
+  //
+  // These three and not a fourth. `/./index.html` looks like it belongs and
+  // does not: WHATWG URL parsing removes single-dot segments, so `new
+  // URL(request.url).pathname` hands the server `/index.html` and the old
+  // guard matched it. Measured — it passed against the broken code, which
+  // makes it a case that proves nothing. What survives URL parsing is an
+  // *empty* segment (`//` stays `//`, and `/.//` becomes it) and a
+  // percent-escape (`%69` is never decoded there). Those are the ways in.
+  it.each(["//", "/.//", "/%69ndex.html"])(
+    "writes the document for %s, which is the same file",
+    async (spelling) => {
+      const host = await compositor();
+      // An index.html on disk to be served *instead*, which is what makes this
+      // a real test: without one, falling through reaches a 404 and the wrong
+      // behaviour looks like the right one.
+      await writeFile(
+        path.join(host.dir, "index.html"),
+        "<title>THE SHELL'S OWN</title>",
+      );
+      const serving = serveShell({
+        module: "shell.js",
+        root: host.dir,
+        socketPath: host.socketPath,
+      });
+      cleanups.push(() => serving.stop());
+
+      const body = await rawGet(Number(new URL(serving.url).port), spelling);
+
+      expect(body).toContain('<script src="shell.js"');
+      expect(body).not.toContain("THE SHELL'S OWN");
+    },
+  );
+
+  // The module itself is still read off disk, along with whatever it imports:
+  // naming it does not change where it is served from.
+  it("still serves the files the document names", async () => {
+    const host = await compositor();
+    await writeFile(path.join(host.dir, "shell.js"), "export const x = 1;");
+    const serving = serveShell({
+      module: "shell.js",
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
+    cleanups.push(() => serving.stop());
+
+    const response = await fetch(`${serving.url}shell.js`);
+
+    expect(await response.text()).toBe("export const x = 1;");
+  });
+
+  // A shell that is not a module is one built from an HTML entry, which is
+  // what the workspace's own two still do. Nothing about them changes yet.
+  it("serves the file when the shell is not a module", async () => {
+    const host = await compositor();
+    await writeFile(
+      path.join(host.dir, "index.html"),
+      "<title>on disk</title>",
+    );
+    const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
+    cleanups.push(() => serving.stop());
+
+    expect(await (await fetch(serving.url)).text()).toBe(
+      "<title>on disk</title>",
+    );
   });
 
   it("answers 404 for a path outside the root", async () => {

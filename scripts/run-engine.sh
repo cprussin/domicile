@@ -60,10 +60,11 @@ COMPOSITOR="${DOMICILE_COMPOSITOR:-}"
 BRIDGE="${DOMICILE_BRIDGE:-}"
 
 # A shell is named or it is a path. `simple` is a shell in this workspace;
-# `./my-desktop/dist` is somebody else's, built however they like, and the only
-# thing this needs from it is a directory with an `index.html` in it. A file is
-# taken as one in that directory, so pointing at a built entry point works as
-# well as pointing at what contains it.
+# `./my-desktop/dist` is somebody else's, built however they like, and what
+# this needs from it is a directory with a built shell in it. A file is taken
+# as one in that directory, so `./my-desktop/dist/shell.js` — pointing straight
+# at the module, which is what a shell now is — works as well as pointing at
+# what contains it.
 #
 # A BARE NAME THAT IS ALSO A DIRECTORY IS A PATH. `run-engine.sh . dist` from
 # inside a shell's source tree used to be refused with "there is no
@@ -187,11 +188,25 @@ if [ -z "$PAGE_DIR" ]; then
   # build, not a second one of our own.
   PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 fi
-[ -f "$PAGE_DIR/index.html" ] || {
-  echo "no index.html in $PAGE_DIR, so there is no page to serve. A shell is a" >&2
-  echo "  built web page: a directory with an index.html and whatever it loads." >&2
+# WHAT A SHELL IS, IN THE ORDER THIS LOOKS FOR IT. A module is what the two in
+# this workspace build and what `docs/WRITING-A-SHELL.md` describes; a document
+# is what a shell built from an HTML entry has, which anything predating the
+# module still is. Both are served, and which one this found is what it hands
+# the bridge — `DOMICILE_MODULE` for the first, `DOMICILE_ROOT` for the second.
+#
+# `shell.js` by name rather than by search, because that is the name
+# `shellBuild` pins for exactly this: a content hash in it would change every
+# time the shell did, and then nothing could name the file — not this script,
+# not the flake, not a person typing a path.
+MODULE=""
+if [ -f "$PAGE_DIR/shell.js" ]; then
+  MODULE="$PAGE_DIR/shell.js"
+elif [ ! -f "$PAGE_DIR/index.html" ]; then
+  echo "nothing to serve from $PAGE_DIR. A shell is a built page: either a" >&2
+  echo "  shell.js Domicile writes the document for, or an index.html of its" >&2
+  echo "  own with whatever it loads beside it. There is neither here." >&2
   exit 1
-}
+fi
 
 if [ -z "$COMPOSITOR" ]; then
   cargo build -p domicile-compositor || exit 1
@@ -213,10 +228,21 @@ rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
 # 1. The bridge. It tolerates a compositor that is not there yet, which it
 #    will not be for another second or so.
-echo "serving $SHELL_NAME from $PAGE_DIR"
+if [ -n "$MODULE" ]; then
+  echo "serving $SHELL_NAME from $MODULE"
+else
+  echo "serving $SHELL_NAME from $PAGE_DIR"
+fi
 BRIDGE_URL_FILE="$(mktemp)"
-DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_ROOT="$PAGE_DIR" \
-  bun "$BRIDGE" >"$BRIDGE_URL_FILE" 2>&1 &
+# One or the other, never both: the bridge refuses a shell named twice, and
+# rightly — they are two answers to which page to serve.
+if [ -n "$MODULE" ]; then
+  DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_MODULE="$MODULE" \
+    bun "$BRIDGE" >"$BRIDGE_URL_FILE" 2>&1 &
+else
+  DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_ROOT="$PAGE_DIR" \
+    bun "$BRIDGE" >"$BRIDGE_URL_FILE" 2>&1 &
+fi
 STARTED+=($!)
 
 URL=""

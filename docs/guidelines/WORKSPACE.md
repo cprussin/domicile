@@ -26,7 +26,7 @@ The `shell-` prefix is a directory convention, not part of a shell's identity:
 `packages/` is shared with the cargo crates, and the prefix is what keeps the
 shells together in one tree. A shell's own name is what the flake calls its app
 — `simple`, `manganese` — which is what a user types after `nix run`. A shell
-has no `bin/` entry and nothing to install: it is a built web page, and
+has no `bin/` entry and nothing to install: it is a built module, and
 `nix run github:cprussin/domicile#simple` is the whole of running one. Out of a
 checkout, `scripts/run-engine.sh <chromium/src> simple` builds the page and
 runs the engine and the compositor against it. The end-to-end scripts drive the

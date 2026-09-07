@@ -138,38 +138,35 @@ if ! ( cd "$SHELL_DIR" && bun run build >"$WORK/build.log" 2>&1 ); then
   exit 1
 fi
 
-# WHAT A SHELL IS, AND THEREFORE WHAT ITS BUILD HAS TO PRODUCE: a directory
-# with a document in it and whatever that document loads. There used to be five
+# WHAT A SHELL IS, AND THEREFORE WHAT ITS BUILD HAS TO PRODUCE: one module,
+# under a name something other than the shell can say. There used to be five
 # artifacts here — a launcher, an Electron main bundle, a preload, a
 # `package.json` naming the module type, and the page — because a shell was an
-# application. Under the fork it is a page, and this is the whole of it.
+# application. Then there was a page and a document. Domicile writes the
+# document now, so this is the whole of it.
 #
-# The bundle as well as the document, because they fail apart: a build that
-# emits an `index.html` referring to a script it did not write is a desktop
-# that comes up blank, and a green build says nothing about it.
+# BY NAME, and that is the assertion. Vite hashes an entry chunk by default, so
+# a config that dropped `entryFileNames` still builds, still exits zero, and
+# emits `assets/index-<hash>.js` — which `DOMICILE_MODULE` cannot name, because
+# the hash changes every time the shell does. The failure is a desktop that
+# comes up blank with a 404 nobody is looking at.
 PAGE="$SHELL_DIR/.vite/renderer/main_window"
-if [ ! -f "$PAGE/index.html" ]; then
-  echo "FAIL: the build emitted no index.html, which is what Domicile serves. It has:"
+if [ ! -f "$PAGE/shell.js" ]; then
+  echo "FAIL: the build emitted no shell.js, which is what Domicile serves. It has:"
   find "$SHELL_DIR/.vite" -type f 2>/dev/null | sed "s|$SHELL_DIR/|    |" | head -10
-  exit 1
-fi
-# Every local script the document names, resolved against the directory it was
-# emitted into. `base: "./"` is what makes those relative, so this is also what
-# would catch a config that stopped setting it: an absolute `/assets/...` names
-# a path that is not under the page's own root.
-MISSING=""
-for src in $(sed -n 's/.*<script[^>]*src="\([^"]*\)".*/\1/p' "$PAGE/index.html"); do
-  case "$src" in
-    (http:*|https:*|//*) continue ;;
-  esac
-  [ -f "$PAGE/${src#./}" ] || MISSING="$MISSING $src"
-done
-if [ -n "$MISSING" ]; then
-  echo "FAIL: the document names scripts the build did not emit beside it:"
-  for src in $MISSING; do echo "    $src"; done
-  echo "  A page whose bundle is not there is a desktop that comes up blank,"
-  echo "  and the build that produced it exited zero."
+  echo "  A hashed entry name is the likely cause: nothing outside the build"
+  echo "  can name one, so there would be no path to hand Domicile."
   exit 1
 fi
 
-echo "PASS: a shell outside this repo builds against the published SDK and emits the page Domicile serves"
+# And no document, because shipping one is how a shell would try to take back
+# the part Domicile owns. `serve-shell.ts` prefers a module, so an `index.html`
+# beside one is a file nothing fetches — dead weight that reads like a page.
+if [ -f "$PAGE/index.html" ]; then
+  echo "FAIL: the build emitted an index.html beside the module. Domicile"
+  echo "  writes the document; a shell that ships one has built a file nothing"
+  echo "  will ever load."
+  exit 1
+fi
+
+echo "PASS: a shell outside this repo builds against the published SDK and emits the module Domicile serves"

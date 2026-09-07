@@ -223,12 +223,19 @@
           cp -R "packages/shell-${name}/.vite/renderer/main_window" "$out"
           runHook postInstall
         '';
-        # A page with no index.html is not a page, and the way that fails at
+        # A page with nothing to load is not a page, and the way that fails at
         # runtime is a browser on a blank screen — which reads as the seam.
+        #
+        # `shell.js` now rather than `index.html`: a shell in this workspace is
+        # a *module*, Domicile writes the document, and the name is fixed by
+        # `@domicile/component-library/vite-shell` precisely so that something
+        # other than the shell can name it. A build that emitted a hashed entry
+        # would satisfy no check anybody could write.
         doInstallCheck = true;
         installCheckPhase = ''
-          [ -f "$out/index.html" ] || {
-            echo "${name} built no index.html" >&2
+          [ -f "$out/shell.js" ] || {
+            echo "${name} built no shell.js; it has:" >&2
+            ls "$out" >&2
             exit 1
           }
         '';

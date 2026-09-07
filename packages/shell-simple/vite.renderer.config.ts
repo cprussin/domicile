@@ -1,14 +1,22 @@
+import { shellBuild } from "@domicile/component-library/vite-shell";
 import pandacssPostcssPlugin from "@pandacss/dev/postcss";
 import { defineConfig } from "vite";
 
-// The chrome itself. `base: "./"` keeps the emitted asset URLs relative so the
-// bundle loads over `file://` when Electron opens it directly.
+// The chrome itself, built as a module rather than from a document.
+//
+// Domicile writes the document and serves this directory, so there is no
+// `index.html` here and the stylesheet travels inside the bundle. All three of
+// those decisions are `shellBuild`'s — see
+// `@domicile/component-library/vite-shell` for why each one, and what breaks
+// quietly without it.
+//
+// `base: "./"` so the emitted URLs are relative to the document Domicile
+// writes rather than to a server root.
+const shell = shellBuild({ entry: "src/renderer.ts" });
+
 export default defineConfig({
   base: "./",
-  build: {
-    outDir: ".vite/renderer/main_window",
-    sourcemap: true,
-  },
+  build: { ...shell.build, outDir: ".vite/renderer/main_window" },
   css: {
     postcss: {
       // @pandacss/dev bundles its own postcss while the catalog (and Vite) use
@@ -20,4 +28,5 @@ export default defineConfig({
       plugins: [pandacssPostcssPlugin as never],
     },
   },
+  plugins: shell.plugins,
 });

@@ -4,6 +4,7 @@
   "globalPassThroughEnv": [
     "BIOME_BINARY",
     "DOMICILE_COMPOSITOR",
+    "DOMICILE_MODULE",
     "DOMICILE_PORT",
     "DOMICILE_REACH_MS",
     "DOMICILE_ROOT",
