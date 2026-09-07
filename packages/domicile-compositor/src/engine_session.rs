@@ -20,6 +20,11 @@ use crate::engine_buffers::{HeldBuffers, Returned};
 #[derive(Debug)]
 pub struct Release {
     pub buffer: wl_buffer::WlBuffer,
+    /// Which window's it was. Carried rather than looked up by the caller
+    /// because by the time an expiry is reported the only thing that knows is
+    /// the hold it came out of — and "a buffer was never released" says
+    /// nothing useful without saying whose.
+    pub surface: SurfaceId,
     pub why: Returned,
 }
 
@@ -99,6 +104,7 @@ impl EngineSession {
                 Event::Released { surface, buffer } => {
                     self.held.release(*surface, *buffer).map(|buffer| Release {
                         buffer,
+                        surface: *surface,
                         why: Returned::Released,
                     })
                 }
@@ -115,8 +121,9 @@ impl EngineSession {
         self.held
             .expired(now)
             .into_iter()
-            .map(|(_, buffer)| Release {
+            .map(|((surface, _), buffer)| Release {
                 buffer,
+                surface,
                 why: Returned::Expired,
             })
             .collect()
@@ -134,8 +141,9 @@ impl EngineSession {
         self.held
             .abandon(surface)
             .into_iter()
-            .map(|(_, buffer)| Release {
+            .map(|((surface, _), buffer)| Release {
                 buffer,
+                surface,
                 why: Returned::Abandoned,
             })
             .collect()
@@ -149,6 +157,7 @@ impl EngineSession {
         self.engine.forget(surface, id);
         self.held.release(surface, id).map(|buffer| Release {
             buffer,
+            surface,
             why: Returned::Abandoned,
         })
     }

@@ -1712,10 +1712,22 @@ impl DomicileCompositor {
         for release in releases.into_iter().chain(overdue) {
             match release.why {
                 Returned::Released => {}
-                Returned::Expired => tracing::error!(
-                    "the engine never released a client buffer; taking it back so the client can \
-                     draw. Something in viz is holding a dmabuf it has finished with"
-                ),
+                // With the app id: "a buffer was never released" is a
+                // different fact about one window of two than about both, and
+                // a surface viz is not drawing at all is exactly the case
+                // where only one window's holds expire.
+                Returned::Expired => {
+                    let app_id = self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.app_for(release.surface))
+                        .unwrap_or("an app that is already gone");
+                    tracing::error!(
+                        app_id,
+                        "the engine never released a client buffer; taking it back so the client \
+                         can draw. Something in viz is holding a dmabuf it has finished with"
+                    );
+                }
                 Returned::Abandoned => {
                     tracing::debug!("a held buffer came back because its window went away")
                 }
