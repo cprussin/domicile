@@ -14,6 +14,7 @@
 #include "components/viz/common/surfaces/surface_id.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace blink {
@@ -71,10 +72,15 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
   // BeginFrames reach it. `size` is how much of the surface the caller will
   // show, and is what the producer is told to render at.
   //
-  // The browser holds the reply until some producer has been brokered a sink,
-  // because an <app> element exists before the window behind it does. So this
-  // may take arbitrarily long, and if no producer ever connects it never runs.
-  void Embed(const viz::FrameSinkId& parent_frame_sink_id,
+  // `app_id` names which window's surface to embed — a desktop is several of
+  // them and each canvas gets its own.
+  //
+  // The browser holds the reply until a producer has been brokered a sink *for
+  // that app*, because an <app> element exists before the window behind it
+  // does. So this may take arbitrarily long, and if that producer never
+  // connects it never runs.
+  void Embed(const String& app_id,
+             const viz::FrameSinkId& parent_frame_sink_id,
              const gfx::Size& size,
              Allocation allocation,
              EmbeddedCallback callback);

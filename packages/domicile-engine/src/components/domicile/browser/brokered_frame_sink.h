@@ -77,7 +77,7 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
                     const viz::FrameSinkId& frame_sink_id,
                     mojo::PendingRemote<mojom::SurfaceObserver> observer,
                     mojo::ReceiverId owner,
-                    const std::string& debug_label,
+                    const std::string& app_id,
                     SharedImageInterfaceGetter get_shared_image_interface);
 
   BrokeredFrameSink(const BrokeredFrameSink&) = delete;
@@ -86,6 +86,14 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   ~BrokeredFrameSink() override;
 
   const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
+
+  // What the producer calls the window this sink is for.
+  //
+  // Load-bearing rather than decorative: it is how a page's <app> element says
+  // *which* window it wants, so a desktop of windows embeds a different
+  // surface in each. It doubles as the viz debug label, which is all it used
+  // to be.
+  const std::string& app_id() const { return app_id_; }
 
   // The FrameSinkBroker connection that asked for this sink. A producer only
   // gets to destroy its own, and loses all of them when it disconnects.
@@ -169,6 +177,7 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
 
   const raw_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   const viz::FrameSinkId frame_sink_id_;
+  const std::string app_id_;
 
   // Null for a producer that does not want to be told, which is every producer
   // that will never submit — the sink alone is useless without the surface.

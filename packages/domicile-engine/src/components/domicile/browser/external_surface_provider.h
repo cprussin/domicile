@@ -36,7 +36,8 @@ class ExternalSurfaceProvider : public mojom::ExternalSurfaceProvider {
   void Bind(mojo::PendingReceiver<mojom::ExternalSurfaceProvider> receiver);
 
   // mojom::ExternalSurfaceProvider implementation.
-  void Embed(const viz::FrameSinkId& parent_frame_sink_id,
+  void Embed(const std::string& app_id,
+             const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
              EmbedCallback callback) override;

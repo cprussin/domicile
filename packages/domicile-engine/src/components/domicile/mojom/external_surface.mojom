@@ -27,16 +27,22 @@ interface ExternalSurfaceProvider {
   //
   // Replies with the brokered FrameSinkId, which the page pairs with its
   // LocalSurfaceId to get the SurfaceId to embed. The reply is deferred until a
-  // producer has actually been brokered a sink: an <app> element exists before
-  // the client window behind it does, and a page that embeds early should wait
-  // rather than fail. Null only if the connection drops first.
+  // producer has actually been brokered a sink *for that app*: an <app>
+  // element exists before the client window behind it does, and a page that
+  // embeds early should wait rather than fail. Null only if the connection
+  // drops first.
   //
   // A page naming a surface it was not offered gains nothing. It allocates the
   // LocalSurfaceId, so the surface it would embed is one no producer is
   // submitting to — an empty surface, not somebody else's window. That is the
   // capability argument from the LocalSurfaceId header holding in the direction
   // that matters here.
-  Embed(viz.mojom.FrameSinkId parent_frame_sink_id,
+  //
+  // `app_id` names which window. A page showing several windows has an <app>
+  // element for each, and without a name every one of them would embed
+  // whichever surface was brokered last — one window drawn several times.
+  Embed(string app_id,
+        viz.mojom.FrameSinkId parent_frame_sink_id,
         viz.mojom.LocalSurfaceId local_surface_id,
         gfx.mojom.Size size)
       => (viz.mojom.FrameSinkId? frame_sink_id);

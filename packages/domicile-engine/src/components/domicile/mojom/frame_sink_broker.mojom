@@ -77,10 +77,16 @@ interface FrameSinkBroker {
   // it has no way to learn the LocalSurfaceId, and it may not invent one. That
   // is a sink with no surface, which is a useful thing to be able to ask for in
   // a test and nowhere else.
-  // `debug_label` is what the producer calls this window — an app id, for
-  // domicile-compositor. It reaches viz as the frame sink's debug label, which
-  // is where a name is useful and where a wrong one is harmless: nothing
-  // dispatches on it.
+  // `app_id` is what the producer calls this window. It **is** dispatched on:
+  // a page's <app> element names the app it wants and the broker matches this
+  // string, which is how a desktop of windows embeds a different surface in
+  // each. It also reaches viz as the frame sink's debug label, which is what
+  // it used to be and only be.
+  //
+  // Two producers claiming one app id is a producer bug the broker does not
+  // adjudicate: the first sink found wins the embed. There is one producer per
+  // socket and it is the compositor, which keys its own surfaces by app id, so
+  // a collision means it has two windows under one name.
   // `client` and `receiver` are how a producer that assembles its own
   // CompositorFrames talks to viz directly: the receiver is forwarded on and
   // the two never meet the browser again. That is what the spike's submitters
@@ -96,7 +102,7 @@ interface FrameSinkBroker {
       pending_remote<viz.mojom.CompositorFrameSinkClient>? client,
       pending_receiver<viz.mojom.CompositorFrameSink>? receiver,
       pending_remote<SurfaceObserver>? observer,
-      string debug_label)
+      string app_id)
       => (viz.mojom.FrameSinkId frame_sink_id);
 
   // Imports a dmabuf and returns the id to name it by, or 0.

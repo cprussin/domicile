@@ -71,10 +71,11 @@ BrokeredFrameSink::BrokeredFrameSink(
     const viz::FrameSinkId& frame_sink_id,
     mojo::PendingRemote<mojom::SurfaceObserver> observer,
     mojo::ReceiverId owner,
-    const std::string& debug_label,
+    const std::string& app_id,
     SharedImageInterfaceGetter get_shared_image_interface)
     : host_frame_sink_manager_(host_frame_sink_manager),
       frame_sink_id_(frame_sink_id),
+      app_id_(app_id),
       observer_(std::move(observer)),
       owner_(owner),
       get_shared_image_interface_(std::move(get_shared_image_interface)) {
@@ -83,7 +84,7 @@ BrokeredFrameSink::BrokeredFrameSink(
   // What the producer calls this window, so that a viz trace names the app
   // rather than the mechanism.
   host_frame_sink_manager_->SetFrameSinkDebugLabel(
-      frame_sink_id_, debug_label.empty() ? "BrokeredFrameSink" : debug_label);
+      frame_sink_id_, app_id_.empty() ? "BrokeredFrameSink" : app_id_);
 }
 
 BrokeredFrameSink::~BrokeredFrameSink() {

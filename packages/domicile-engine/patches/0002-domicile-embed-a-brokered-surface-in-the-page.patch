@@ -111,6 +111,7 @@ index 3f4754bec03d6..de27286498141 100644
  }
  
 +ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
++    const String& app_id,
 +    ScriptState* script_state,
 +    ExceptionState& exception_state) {
 +  LocalFrame* frame = GetDocument().GetFrame();
@@ -144,6 +145,7 @@ index 3f4754bec03d6..de27286498141 100644
 +
 +  external_surface_embedder_ = std::make_unique<ExternalSurfaceEmbedder>();
 +  external_surface_embedder_->Embed(
++      app_id,
 +      frame->GetPage()->GetChromeClient().GetFrameSinkId(frame), Size(),
 +      BindOnce(&HTMLCanvasElement::OnExternalSurfaceEmbedded,
 +                    WrapPersistent(this), WrapPersistent(resolver)));
@@ -211,6 +213,7 @@ index baf81793fff62..d4d7f140b95bb 100644
 +  // when the surface is embedded, which waits for a producer to connect.
 +  ScriptPromise<IDLUndefined> embedExternalSurface(
 +      ScriptState* script_state,
++      const String& app_id,
 +      ExceptionState& exception_state);
 +
    void DetachContext() override { context_ = nullptr; }
@@ -252,7 +255,11 @@ index 1ee80fb479181..127ee0a8e136d 100644
 +    // Fills this canvas with a viz surface submitted to from outside the
 +    // renderer, instead of with anything drawn through a rendering context.
 +    // Resolves once the surface is embedded, which waits for a producer.
-+    [RuntimeEnabled=DomicileExternalSurface, CallWith=ScriptState, RaisesException] Promise<undefined> embedExternalSurface();
++    //
++    // `appId` names which window. A desktop is several of them and each has a
++    // canvas of its own; without a name every canvas would embed whichever
++    // surface was brokered last.
++    [RuntimeEnabled=DomicileExternalSurface, CallWith=ScriptState, RaisesException] Promise<undefined> embedExternalSurface(DOMString appId);
  };
  
  // https://html.spec.whatwg.org/C/#blobcallback

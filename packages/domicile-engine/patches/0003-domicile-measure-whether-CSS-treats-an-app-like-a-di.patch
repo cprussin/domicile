@@ -73,6 +73,7 @@ index de27286498141..18835f07e516e 100644
 +    external_surface_embedder_ = std::make_unique<ExternalSurfaceEmbedder>();
 +  }
    external_surface_embedder_->Embed(
+       app_id,
 -      frame->GetPage()->GetChromeClient().GetFrameSinkId(frame), Size(),
 +      frame->GetPage()->GetChromeClient().GetFrameSinkId(frame),
 +      ExternalSurfaceSize(),
