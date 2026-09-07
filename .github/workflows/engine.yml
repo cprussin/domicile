@@ -1,0 +1,229 @@
+name: Engine
+
+# The Chromium fork, built and asserted on the one machine that can.
+#
+# `packages/domicile-engine` carries a patch series against a pinned Chromium.
+# A clean build of it is 4h16m and 97G; an incremental one against a warm tree
+# is 65s. No GitHub-hosted runner can hold that tree — the Actions cache is 10G
+# per repository and the runners' disks are smaller than the checkout — so this
+# job runs on `crux`, which has the tree, the GPU and the render node.
+#
+# Everything else in this repository still runs on `ubuntu-latest`. This job is
+# the exception, and it is scoped to the paths that can affect the engine so
+# that an ordinary change never waits on it.
+on:
+  push:
+    branches: [main]
+    paths: [packages/domicile-engine/**, .github/workflows/engine.yml]
+  pull_request:
+    paths: [packages/domicile-engine/**, .github/workflows/engine.yml]
+  workflow_dispatch:
+
+# Serialised, and never cancelled mid-flight.
+#
+# One runner is one job at a time, so this mostly queues rather than overlaps —
+# but a cancelled `autoninja` leaves a half-linked `out/Domicile` that the next
+# run inherits, and the failure it produces looks like a code error rather than
+# an interrupted build. Waiting is cheaper than that.
+concurrency:
+  group: engine
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    # `crux` is a label, not the runner's name. Both are set in
+    # cprussin/dotfiles: config/machines/crux/domicile-ci.nix.
+    #
+    # SECURITY, and it is not enforceable here: this runner executes as a real
+    # user on a machine in a house, and this repository is public and forkable.
+    # It is safe only while fork pull requests cannot run on it — Settings ->
+    # Actions -> "Require approval for all external contributors".
+    # Same-repository branches are the intended case and are what makes an
+    # engine change reviewable before it merges — which is why this is on
+    # `pull_request` and not only `push`, against the more cautious advice in
+    # domicile-ci.nix. A pixel assertion that only runs after a merge is not a
+    # check on the change, and the approval gate is the control either way.
+    runs-on: [self-hosted, crux]
+
+    # An incremental build is ~1m and the guard a few minutes more. The budget
+    # is for the case this exists to survive: a pin roll, where the series
+    # lands on a fresh upstream revision and the build is not incremental at
+    # all.
+    timeout-minutes: 360
+
+    env:
+      # The warm tree. Outside the workspace on purpose, and for a stronger
+      # reason than "Actions wipes `_work` between runs": the runner unit's own
+      # ExecStartPre deletes the whole work directory on every start, so
+      # nothing that lives under the checkout survives a restart or a deploy.
+      # Re-creating 97G is what this job is built to avoid.
+      CHROMIUM: /build/chromium/src
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # TWO SHELLS, AND WHICH ONE A STEP NEEDS IS NOT A DETAIL.
+      #
+      # Chromium's own toolchain shell (`$CHROMIUM/tools/nix`) supplies the
+      # host tools `gn` probes for, and applying and building need it.
+      #
+      # Domicile's full shell (`.#full`) is what the pixel guard needs, and it
+      # is not a superset: `engineRuntimeLibs` in flake.nix puts Chromium's
+      # runtime libraries beside the GL stack, and the guard needs both. The GL
+      # stack, or no client can hand the compositor a dmabuf at all; Chromium's,
+      # or libdomicile_engine.so will not load. `spike-client-window.sh` says
+      # so in its own header.
+      #
+      # `--command` does not work with Chromium's shell: upstream's is a
+      # buildFHSEnv whose shellHook execs bwrap before nix's appended `exec` is
+      # reached, so you land in an interactive bash having run nothing.
+      # `NIX_SHELL_RUN` is upstream's own escape hatch for scripting it.
+      # Domicile's shell is an ordinary mkShell, so `--command` is fine there.
+      # See cprussin/dotfiles chromium-build.nix, which measured all of this.
+
+      - name: Check the tree is at the pin this series expects
+        run: |
+          set -euo pipefail
+          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+          echo "series expects $pin"
+          git -C "$CHROMIUM" cat-file -e "$pin^{commit}" 2>/dev/null || {
+            echo "::error::$CHROMIUM has no commit $pin. Roll the checkout forward by hand:" >&2
+            echo "  git -C $CHROMIUM fetch origin && gclient sync" >&2
+            exit 1
+          }
+
+      # `apply.sh` is idempotent for `src/` (a copy) and not for `patches/` —
+      # `git am` refuses to apply a patch twice — so the tree has to go back to
+      # the pin before every run. `reset --hard` and no `clean`: `out/Domicile`
+      # is gitignored and must survive, because it is the warm tree.
+      #
+      # `am --abort` first, in case a previous run died mid-series and left the
+      # rebase-apply state behind. It fails when there is nothing to abort,
+      # which is the ordinary case.
+      - name: Reset the checkout to the pin
+        run: |
+          set -euo pipefail
+          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+          git -C "$CHROMIUM" am --abort 2>/dev/null || true
+          git -C "$CHROMIUM" reset --hard "$pin"
+
+      - name: Apply the series
+        run: |
+          set -euo pipefail
+          NIX_SHELL_RUN="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/apply.sh $CHROMIUM" \
+            nix develop "path:$CHROMIUM/tools/nix"
+
+      # `build.sh` builds `chrome` and the spike's submitter. The guard also
+      # needs `libdomicile_engine.so` — the compositor dlopens it by name — and
+      # the step below needs `components_unittests`, so both are named here
+      # rather than in `build.sh`, which is what a person runs by hand and
+      # should stay the small thing.
+      #
+      # `components_unittests` is a large link. Domicile's tests are a
+      # `source_set` that patch 0001 registers into it, which is Chromium's own
+      # convention for a component's tests; the alternative is a `test()` target
+      # of our own, and that is worth doing only if this link turns out to
+      # dominate the run.
+      - name: Build
+        run: |
+          set -euo pipefail
+          NIX_SHELL_RUN="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/build.sh $CHROMIUM" \
+            nix develop "path:$CHROMIUM/tools/nix"
+          NIX_SHELL_RUN="autoninja -C $CHROMIUM/out/Domicile domicile_engine components_unittests" \
+            nix develop "path:$CHROMIUM/tools/nix"
+
+      # The browser's own unit tests. These are the cheapest thing that can
+      # fail and the only ones that exercise the broker's bookkeeping directly
+      # — a surface brokered per app, an embed held for the app it names — so
+      # they run before the pixel assertion, which takes longer and says less
+      # about why.
+      #
+      # Filtered rather than run whole: `components_unittests` is every
+      # component's tests, and the rest of them are upstream's business.
+      #
+      # From the full shell and from inside the out directory, for the same two
+      # reasons: this is a component build, so the binary loads its own .so
+      # files from beside it, and the shell is where Chromium's runtime
+      # libraries are. `#full` is spelled against $GITHUB_WORKSPACE rather than
+      # `.` because this step is not in the workspace.
+      - name: The engine's unit tests
+        working-directory: /build/chromium/src/out/Domicile
+        run: |
+          set -euo pipefail
+          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*'
+          # `--gtest_filter` matching nothing exits 0, so a suite that was
+          # renamed or never linked would be a silent pass. Test names are the
+          # indented lines of --gtest_list_tests; suite names are not.
+          count=$(nix develop "$GITHUB_WORKSPACE#full" --command \
+            ./components_unittests --gtest_filter="$filter" --gtest_list_tests |
+            grep -cE '^  ' || true)
+          echo "$count tests match $filter"
+          # 11 in FrameSinkBrokerTest alone at the time of writing.
+          [ "$count" -ge 11 ] || {
+            echo "::error::only $count tests matched; the suites were renamed or did not link" >&2
+            exit 1
+          }
+          nix develop "$GITHUB_WORKSPACE#full" --command \
+            ./components_unittests --gtest_filter="$filter"
+
+      # The guard's producer. Built here rather than by the script, which only
+      # checks for it — and the runner deletes its work directory when the
+      # unit starts, so the first job after every restart or deploy finds no
+      # `target/` at all. Later jobs in the same session do reuse it.
+      - name: Build the compositor
+        run: nix develop .#full --command cargo build -p domicile-compositor
+
+      # The guard. A real Wayland client draws a colour, the compositor submits
+      # its buffer to the engine, and the page's canvas is read back — the one
+      # check that says a client's own pixels reach the page.
+      #
+      # `spike-wayland.sh` starts a headless wlroots compositor for the engine
+      # to be a client of, because `--ozone-platform=headless` cannot import a
+      # dmabuf at all.
+      - name: A client's window on the page
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-client-window.sh "$CHROMIUM"
+
+      # A guard that cannot fail is not a guard. The same run with no client
+      # must report that nothing drew.
+      - name: The guard can still fail
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-client-window.sh "$CHROMIUM"
+
+      # Everything the guard writes down, because none of it is on stdout.
+      #
+      # `spike-wayland.sh` sends sway's output to a file and then says only "no
+      # compositor came up"; `spike-client-window.sh` keeps the compositor's
+      # log because it is the only place that says which app id a surface was
+      # brokered under, and a failure there is usually a mismatch. Under
+      # `PrivateTmp=true` both are inside the runner unit's own /tmp, so they
+      # are unreachable once the job ends — they have to be printed here or
+      # they are lost.
+      - name: What the guard wrote down
+        if: ${{ failure() }}
+        run: |
+          for log in /tmp/domicile-spike-wayland.log \
+                     /tmp/domicile-client-window-compositor.log; do
+            echo "::group::$log"
+            tail -200 "$log" 2>&1 || true
+            echo "::endgroup::"
+          done
+          # What the compositor is being asked to run on, for the case where
+          # sway itself never started: a service has no login session, and the
+          # render node is the one piece of the guard that needs a real device.
+          echo "::group::the environment sway got"
+          id
+          ls -l /dev/dri || true
+          echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-unset}"
+          echo "::endgroup::"

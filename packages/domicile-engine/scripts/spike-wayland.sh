@@ -81,7 +81,14 @@ CONFIG_EOF
 # renderer on; without it, it picks the first card and on a machine whose only
 # GPU is behind nvidia-drm that is the wrong answer often enough to be worth
 # pinning.
-nix shell nixpkgs#sway --command env \
+# `nixpkgs#dbus` for `dbus-daemon`, which is not sway's own binary and is the
+# difference between this working at a terminal and not working in CI.
+# nixpkgs' sway wrapper execs `dbus-run-session`, and that looks `dbus-daemon`
+# up on PATH rather than by store path — so in a login session it finds the
+# one the session already has, and under a systemd service it finds nothing and
+# says `failed to execute message bus daemon`. sway then never starts, and the
+# only symptom out here is "no compositor came up".
+nix shell nixpkgs#sway nixpkgs#dbus --command env \
   XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
   WLR_BACKENDS=headless \
   WLR_LIBINPUT_NO_DEVICES=1 \
