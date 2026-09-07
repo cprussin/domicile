@@ -96,10 +96,8 @@ class DomicileBrowserService {
   }
 
  private:
-  // Binding the socket is a mkdir and a bind, so it cannot happen here: this
-  // runs on the UI thread, where a page's first embed request arrives, and the
-  // UI thread disallows blocking. Step 2 never met that — it ran in
-  // PostCreateThreads, where blocking is allowed.
+  // Binding the socket is a mkdir and a bind, and this is the UI thread. So it
+  // is posted, wherever it is called from.
   //
   // Nothing waits for the result. A producer connects whenever the socket turns
   // up, and a page that embedded first is already waiting in the broker.

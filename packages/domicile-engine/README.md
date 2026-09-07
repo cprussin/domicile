@@ -238,13 +238,15 @@ Phase 1's library, which is not throwaway — it is the seam:
 | `components/domicile/spike/mojom/spike_probe.mojom`, `content/browser/domicile/domicile_spike_probe.{h,cc}` | the pixel probe. A `CopyOutputRequest` on the browser's window, because the embedding layer belongs to the page now and there is no other way to keep the proof a pixel |
 | `scripts/spike-page.html`, `spike-css-page.html`, `spike-resize-page.html` | the pages |
 
-Nothing hooks browser startup. The broker, its socket and the probe are created
-when a page first calls `embedExternalSurface()`, and the browser holds that
-page's request until a producer connects — an `<app>` element exists before the
-client window behind it does. Step 2's one line in `browser_main_loop.cc` is
-gone.
+The broker, its socket and the probe are created at browser startup, from one
+line in `browser_main_loop.cc`, whenever `--domicile-broker-socket` names a
+path. A shell's page cannot embed until a window exists and no window exists
+until the compositor has connected over that socket, so opening it on a page's
+first `embedExternalSurface()` was a deadlock. The browser still holds an
+embed until a producer connects — an `<app>` element exists before the client
+window behind it does — which is what makes it safe for a page to ask early.
 
-The series edits eight files Chromium owns; `ENGINE-FORK.md`'s *Minimise edited
+The series edits nine files Chromium owns; `ENGINE-FORK.md`'s *Minimise edited
 files* has the list and what each is for.
 
 Run the tests with:

@@ -17,10 +17,11 @@
 # Flags before `--` go to the engine, after it to the producer. Exits 0 only if
 # the pixel viz drew where the canvas is is the one the producer sent.
 #
-# The order matters and is not the obvious one. The engine opens the broker
-# socket when a page first asks to embed, not at startup — there is no startup
-# hook in the series any more — so the page runs first, its request waits in the
-# browser, and the producer that turns up later is what completes it.
+# The order matters and is not the obvious one. The page runs first and its
+# request waits in the browser — an <app> element exists before the window
+# behind it does — and the producer that turns up later is what completes it.
+# The socket itself is open from browser startup, so the producer could also
+# have gone first; what it cannot do is arrive before the browser.
 #
 # The engine flags are not incidental, and each is here because it was needed:
 #

@@ -257,12 +257,15 @@ Two new interfaces carry that, both narrow on purpose:
 is unrestricted authority to allocate frame sinks in viz, and no renderer holds
 it.
 
-**The reply waits for a producer, and that removed the startup hook.** An
-`<app>` element exists before the client window behind it does, so a page that
-embeds early is held rather than failed, and is answered when a producer
-connects. Which means nothing has to be started at browser startup: the broker
-and its socket are created when a page first asks. Step 2's one line in
-`browser_main_loop.cc` is gone and nothing replaced it.
+**The reply waits for a producer.** An `<app>` element exists before the client
+window behind it does, so a page that embeds early is held rather than failed,
+and is answered when a producer connects.
+
+**The socket opens at browser startup**, from one line in
+`browser_main_loop.cc`. It cannot wait for a page to ask: a shell's page mounts
+an `<app>` element only once the host announces a window, the host learns of
+windows from the compositor, and the compositor is the producer that connects
+over that socket.
 
 One thing binding it from a free function costs, and it is worth stating rather
 than discovering later: **the browser does not check that the renderer owns the
@@ -453,7 +456,7 @@ known and it is a build-system cost, not a language one.
 | dmabuf → `gpu::SharedImageInterface::CreateSharedImage` → `viz::TransferableResource` | ported from `components/exo/buffer.cc` | new |
 | Submitting `CompositorFrame`s for a sink | new external viz client | **proven** — step 2's throwaway submits from a process the browser never launched and viz aggregates it |
 | Brokering a `FrameSinkId` and sink to a non-renderer process | `components/domicile/`, modelled on `content/browser/renderer_host/embedded_frame_sink_provider_impl.cc` | **done** — new files + 4 lines across two `BUILD.gn`. Not `render_process_host_impl_receiver_bindings.cc` as first guessed: nothing about it hangs off a `RenderProcessHost` |
-| Getting the producer to the broker | `mojo::NamedPlatformChannel` + a real invitation | **done** — see *How the producer reaches the broker*. No edited file: the socket opens when a page first asks to embed, so it hangs off the same lazily-created service |
+| Getting the producer to the broker | `mojo::NamedPlatformChannel` + a real invitation | **done** — see *How the producer reaches the broker*. One edited file: the socket opens at browser startup, because a shell's page cannot embed until a window exists and no window exists until a producer has connected over it |
 | Pushing the `SurfaceId` to the page | `components/domicile/mojom/external_surface.mojom`, modelled on the `RemoteFrame` path | **done** — new files, plus one binder line in `render_process_host_impl_receiver_bindings.cc` |
 | An element that embeds it | `HTMLCanvasElement`, which already owns a `SurfaceLayerBridge` and a `cc::SurfaceLayer` for `transferControlToOffscreen` | **done** — `canvas.embedExternalSurface()`, 2 files + IDL as guessed, plus the flag and one `BUILD.gn` |
 
@@ -490,12 +493,13 @@ its custom element and loses the `AppFrame` plumbing behind it.
   placeholder.
 - **Minimise edited files, not added ones.** A fork's carrying cost is conflicts,
   and new files do not conflict. "Roughly four places" was the estimate before
-  the page half existed; measured, with steps 1–3 landed, it is **eight**, five
+  the page half existed; measured, with steps 1–3 landed, it is **nine**, five
   of them Blink's:
 
   | | |
   |---|---|
   | `components/BUILD.gn`, `content/browser/BUILD.gn` | source lists and deps |
+  | `content/browser/browser_main_loop.cc` | one call, opening the producer's socket at startup |
   | `content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc` | one `AddUIThreadInterface` beside the one for `EmbeddedFrameSinkProvider` |
   | `third_party/blink/renderer/core/html/canvas/html_canvas_element.{h,cc,idl}` | the method |
   | `third_party/blink/renderer/platform/runtime_enabled_features.json5` | the flag |

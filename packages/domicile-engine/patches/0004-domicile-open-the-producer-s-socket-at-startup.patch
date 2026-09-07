@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: domicile <noreply@domicile.invalid>
-Date: Sun, 7 Sep 2026 11:00:00 +0000
+From: Connor Prussin <connor@prussin.net>
+Date: Mon, 7 Sep 2026 11:38:02 +0000
 Subject: [PATCH] domicile: open the producer's socket at startup
 
 A desktop cannot boot without this.
@@ -10,20 +10,17 @@ calling canvas.embedExternalSurface(). That is right for every spike page,
 which embeds as it loads. It is wrong for a shell, which mounts an <app>
 element when the host announces a window, learns of windows from the
 compositor, and reaches the compositor -- the producer -- over this socket.
-So the socket waited for an embed, the embed waited for a window, and the
-window waited for the socket.
+So the socket waited for an embed, the embed for a window, and the window
+for the socket.
 
 spike-shell.sh found it by being the first thing to drive a real shell
 rather than a page written for the guard.
-
-Here rather than anywhere earlier: GetHostFrameSinkManager() reads through
-ImageTransportFactory, which is set two lines above, and binding the socket
-is a mkdir and a bind that PostCreateThreads is allowed to post off-thread.
 ---
- content/browser/browser_main_loop.cc | 9 +++++++++
- 1 file changed, 9 insertions(+)
+ content/browser/browser_main_loop.cc | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
 
 diff --git a/content/browser/browser_main_loop.cc b/content/browser/browser_main_loop.cc
+index 90d60c44cc235..18b6265b4018e 100644
 --- a/content/browser/browser_main_loop.cc
 +++ b/content/browser/browser_main_loop.cc
 @@ -74,6 +74,7 @@
@@ -34,18 +31,22 @@ diff --git a/content/browser/browser_main_loop.cc b/content/browser/browser_main
  #include "content/browser/download/save_file_manager.h"
  #include "content/browser/field_trial_synchronizer.h"
  #include "content/browser/first_party_sets/first_party_set_parser.h"
-@@ -1427,6 +1428,14 @@ void BrowserMainLoop::PostCreateThreadsImpl() {
-       compositing_mode_reporter_impl_.get());
+@@ -1429,6 +1430,18 @@ void BrowserMainLoop::PostCreateThreadsImpl() {
    transport_factory->ConnectHostFrameSinkManager();
    ImageTransportFactory::SetFactory(std::move(transport_factory));
-+
-+  // Domicile's producer socket, if this browser was given a path for one. It
-+  // has to be open before any page embeds, because in a shell the page cannot
-+  // embed until a window exists and no window can exist until the compositor
-+  // has connected over it. Nothing happens without
-+  // --domicile-broker-socket. See
-+  // content/browser/domicile/domicile_frame_sink_broker.h.
-+  StartDomicileFrameSinkBroker();
  
++  // Domicile's producer socket, if this browser was given a path for one.
++  //
++  // It has to be open before any page embeds. A shell's page mounts an <app>
++  // element only once a window exists, no window exists until the compositor
++  // has connected over this socket, so opening it on a page's first embed is a
++  // deadlock. Nothing happens without --domicile-broker-socket. See
++  // content/browser/domicile/domicile_frame_sink_broker.h.
++  //
++  // After ImageTransportFactory::SetFactory because GetHostFrameSinkManager()
++  // reads through it.
++  StartDomicileFrameSinkBroker();
++
  #if defined(USE_AURA)
    env_->set_context_factory(GetContextFactory());
+ #endif  // defined(USE_AURA)
