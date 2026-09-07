@@ -15,13 +15,22 @@ frames are still read back and sent to the engine
 Needs Nix and a display. Nothing to clone.
 
 ```sh
-nix run github:cprussin/domicile           # manganese: tabs, stage, address bar
-nix run github:cprussin/domicile#simple    # simple: floating windows only
+nix run github:cprussin/domicile#manganese   # manganese: tabs, stage, address bar
+nix run github:cprussin/domicile#simple      # simple: floating windows only
 ```
 
-Which desktop is **which app**, not an argument to one of them. Both run on the
-forked engine — the browser is the display compositor, the compositor is a
-producer, and there is no Electron anywhere.
+Which desktop is **which app**, not an argument to one of them.
+
+A bare `nix run github:cprussin/domicile` is Domicile itself, and it wants the
+shell to run — because a shell is a page somebody built, and the two here are
+not privileged:
+
+```sh
+nix run github:cprussin/domicile -- ./my-desktop/dist
+```
+
+Everything runs on the forked engine — the browser is the display compositor,
+the compositor is a producer, and there is no Electron anywhere.
 
 A Wayland session gets a window, the way starting sway inside sway does. A tty
 is refused for now: the whole screen needs an ozone platform Chromium will not

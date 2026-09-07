@@ -67,8 +67,10 @@ nix run github:cprussin/domicile#simple
 
 That starts the engine on this shell's page with the compositor underneath, and
 puts the desktop in a window on your display. Which desktop you get is which app
-you run: a bare `nix run github:cprussin/domicile` gives you the reference
-chrome ([`@domicile/shell-manganese`](../shell-manganese/README.md)) instead.
+you run — `#manganese` is the reference chrome
+([`@domicile/shell-manganese`](../shell-manganese/README.md)) — and a bare
+`nix run github:cprussin/domicile` is Domicile itself, which wants a shell of
+your own to point at.
 
 Nix hands the app the source read-only in the store while the build writes into
 the tree, so it first stages the fetched source under

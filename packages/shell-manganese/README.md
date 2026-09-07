@@ -245,7 +245,7 @@ emits the chrome to `.vite/renderer/main_window/`, which is the whole of what a
 shell builds: a page and what it loads.
 
 ```sh
-nix run 'github:cprussin/domicile'
+nix run 'github:cprussin/domicile#manganese'
 ```
 
 runs it — the bridge, the engine on that page, and the compositor as a producer

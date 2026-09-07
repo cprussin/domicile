@@ -290,13 +290,16 @@
 
       # ── What a user installs ────────────────────────────────────────────
       #
-      # A shell, and nothing else. That is the whole arrangement Domicile is
-      # built around: a shell is the program on `PATH`, it owns the
-      # configuration, and it starts the compositor underneath itself. So the
-      # build outputs here are shells — `nix build .#manganese`, `.#simple` —
-      # and there is deliberately no `default` and nothing called `domicile`.
-      # A user picks a desktop; they do not install a compositor and then look
-      # for something to point at it.
+      # A desktop, or Domicile itself. A desktop — `nix build .#manganese`,
+      # `.#simple` — is Domicile with a page already chosen, and is what
+      # somebody who wants one of the two this repository ships installs.
+      # `.#domicile` is the same runner with the choice left open, for somebody
+      # whose desktop is their own; it takes the path to a built shell.
+      #
+      # What there is still no `default` *package* for is the same reason as
+      # ever: which desktop you want is the one question this flake cannot
+      # answer for you. `nix run` does have a default, and it is Domicile
+      # asking that question rather than answering it.
 
       # The workspace's Rust crates, by the file that makes one.
       rustCrates = builtins.attrNames (pkgs.lib.filterAttrs
@@ -542,6 +545,54 @@
           '';
         };
 
+      # Domicile itself: the thing you point at a shell.
+      #
+      # `nix run github:cprussin/domicile -- ./my-desktop/dist` is the whole
+      # interface a shell author has. The two desktops below are this with a
+      # page already chosen; this is the same runner with the choice left to
+      # whoever runs it, which is what makes an out-of-tree shell a first-class
+      # thing rather than something the flake has to have heard of.
+      #
+      # It sets three of the four inputs and deliberately not `DOMICILE_PAGE`:
+      # that one is the argument. A desktop that named it *and* passed a shell
+      # name would be handing `run-engine.sh` two answers to one question.
+      domicileCli = pkgs.writeShellApplication {
+        name = "domicile";
+        runtimeInputs = [ pkgs.bun ];
+        text = ''
+          # REFUSED RATHER THAN DEFAULTED. `run-engine.sh`'s own default is
+          # `simple`, which means "build packages/shell-simple out of the
+          # checkout" — and there is no checkout here, only the flake source in
+          # the store. A bare `nix run github:cprussin/domicile` would go
+          # looking for a workspace it cannot build and fail somewhere further
+          # in, about a directory the person never mentioned. The desktops are
+          # their own apps; this one needs to be told.
+          if [ "$#" -eq 0 ]; then
+            echo "domicile: which shell? Give me the directory your shell built," >&2
+            echo "  or the entry point inside it:" >&2
+            echo "" >&2
+            echo "    nix run github:cprussin/domicile -- ./my-desktop/dist" >&2
+            echo "" >&2
+            echo "  The two desktops this repository ships are apps of their own:" >&2
+            echo "    nix run github:cprussin/domicile#manganese" >&2
+            echo "    nix run github:cprussin/domicile#simple" >&2
+            exit 2
+          fi
+          export DOMICILE_ENGINE="''${DOMICILE_ENGINE:-${domicileEngine}}"
+          export DOMICILE_COMPOSITOR="''${DOMICILE_COMPOSITOR:-${domicile-compositor}/bin/domicile-compositor}"
+          export DOMICILE_BRIDGE="''${DOMICILE_BRIDGE:-${domicileBridge}/${domicileBridge.passthru.entry}}"
+          # `OUT=.` because a published engine *is* the out directory, where a
+          # Chromium checkout has one under `out/Domicile`.
+          export OUT="''${OUT:-.}"
+          exec ${self}/scripts/run-engine.sh "$DOMICILE_ENGINE" "$@"
+        '';
+        meta = {
+          description = "Run a Domicile desktop from a shell you built yourself";
+          mainProgram = "domicile";
+          platforms = [ system ];
+        };
+      };
+
       # The two desktops this repository ships. Bound once so that
       # `packages` and `apps` are the same two things rather than two lists
       # that have to be kept saying the same thing.
@@ -587,10 +638,13 @@
         };
     in
     {
-      # Two, and no `default`. `nix build` on its own has nothing to build
-      # here on purpose: which desktop you want is the only question this
-      # flake cannot answer for you.
+      # No `default`. `nix build` on its own has nothing to build here on
+      # purpose: which desktop you want is the only question this flake cannot
+      # answer for you, and `.#domicile` is the runner rather than a desktop.
       packages.${system} = desktops // {
+        # Domicile itself, so `nix profile install .#domicile` puts `domicile`
+        # on `PATH` for somebody whose desktop is their own.
+        domicile = domicileCli;
         # The engine on its own, for `nix build .#engine` and for anyone who
         # wants the path to hand to `run-engine.sh` themselves.
         engine = domicileEngine;
@@ -611,9 +665,16 @@
       # for and keeps them sorted together underneath the three that are not.
 
       apps.${system} = {
-        # A bare `nix run github:cprussin/domicile` is the desktop this
-        # project is for.
-        default = domicileApps.manganese;
+        # A bare `nix run github:cprussin/domicile` is Domicile itself, taking
+        # the shell to run. Not manganese, which it was: a desktop is a page
+        # somebody built, and the flake having two of its own does not make
+        # either of them the default answer to "run Domicile". `#manganese`
+        # and `#simple` are how you ask for those.
+        default = {
+          type = "app";
+          program = pkgs.lib.getExe domicileCli;
+          meta.description = domicileCli.meta.description;
+        };
         inherit (domicileApps) manganese simple;
         # No `engine` app. `nix build .#engine` is how you get the engine —
         # it is a browser, not a thing to run — and an app here would have
