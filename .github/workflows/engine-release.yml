@@ -1,0 +1,132 @@
+name: Engine release
+
+# A patched Chromium somebody can run without building one.
+#
+# The engine workflow proves a change; this publishes the result of it. They
+# are separate because they want different builds: that one is a component
+# build with no symbols, which is small and fast and links to several hundred
+# .so files in a tree nobody can move. This is `is_component_build = false`,
+# which is the shape you can put in a tarball.
+#
+# THEY SHARE A CONCURRENCY GROUP, AND MUST. Both reset /build/chromium/src to
+# the pin and apply the series over it. Two of them in the same tree at once is
+# a `git reset --hard` under a running `git am`.
+on:
+  push:
+    tags: [engine-v*]
+  workflow_dispatch:
+
+concurrency:
+  group: engine
+  cancel-in-progress: false
+
+# To create the release and upload to it.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: [self-hosted, crux]
+    timeout-minutes: 600
+
+    env:
+      CHROMIUM: /build/chromium/src
+      # Its own output directory, kept warm between releases for the same
+      # reason out/Domicile is: a clean Chromium build is four hours. It is the
+      # second one on a 200G quota whose first is already 97G, hence the space
+      # check below — an overrun should fail this job with a sentence, not fill
+      # the dataset the machine's other work lives on.
+      OUT: out/Release
+      # Where the tarball is assembled and where the packaged tree is put back
+      # to be tested. Both under /build for the same reason everything else is.
+      STAGE: /build/engine-release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Room to build in
+        run: |
+          set -euo pipefail
+          free_gb=$(df -BG --output=avail /build | tail -1 | tr -dc '0-9')
+          echo "/build has ${free_gb}G free"
+          # A non-component Chromium is ~40G of objects. Under 60 there is no
+          # point starting: the failure four hours in is a full dataset, and
+          # /build is also where this machine's interactive builds live.
+          [ "$free_gb" -ge 60 ] || {
+            echo "::error::only ${free_gb}G free on /build; a release build needs ~40G and this will not fit" >&2
+            echo "Reclaim it by removing $CHROMIUM/$OUT, which is a cache and nothing else." >&2
+            exit 1
+          }
+
+      - name: Check the tree is at the pin this series expects
+        run: |
+          set -euo pipefail
+          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+          echo "series expects $pin"
+          git -C "$CHROMIUM" cat-file -e "$pin^{commit}" 2>/dev/null || {
+            echo "::error::$CHROMIUM has no commit $pin. Roll the checkout forward by hand." >&2
+            exit 1
+          }
+
+      - name: Reset the checkout to the pin and apply the series
+        run: |
+          set -euo pipefail
+          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+          git -C "$CHROMIUM" am --abort 2>/dev/null || true
+          git -C "$CHROMIUM" reset --hard "$pin"
+          NIX_SHELL_RUN="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/apply.sh $CHROMIUM" \
+            nix develop "path:$CHROMIUM/tools/nix"
+
+      # Not build.sh: that one is the measured configuration and should stay
+      # the thing a person runs by hand. This is the shippable one, and the
+      # only differences that matter are is_component_build and the crashpad
+      # handler coming with it.
+      - name: Build
+        run: |
+          set -euo pipefail
+          NIX_SHELL_RUN="$GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh $CHROMIUM $OUT" \
+            nix develop "path:$CHROMIUM/tools/nix"
+
+      - name: Package
+        id: package
+        run: |
+          set -euo pipefail
+          .github/scripts/engine-release-package.sh "$CHROMIUM" "$OUT" "$STAGE"
+
+      # The release artifact is asserted by the same pixel guard that asserts
+      # the dev build: the tarball is unpacked back into the checkout as an out
+      # directory of its own and the guard is pointed at it with OUT. An
+      # artifact that cannot show a client's window is not a release, and
+      # nothing else here would have noticed a file left out of the manifest.
+      - name: The packaged build passes the guard
+        env:
+          OUT: out/Release-staged
+        run: |
+          set -euo pipefail
+          rm -rf "$CHROMIUM/out/Release-staged"
+          mkdir -p "$CHROMIUM/out/Release-staged"
+          tar -xf "$STAGE/${{ steps.package.outputs.tarball }}" \
+            -C "$CHROMIUM/out/Release-staged" --strip-components=1
+          nix develop .#full --command cargo build -p domicile-compositor
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-client-window.sh "$CHROMIUM"
+
+      - name: Publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARBALL: ${{ steps.package.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          .github/scripts/engine-release-publish.sh "$STAGE" "$TARBALL"
+
+      - name: What the guard wrote down
+        if: ${{ failure() }}
+        run: |
+          for log in /tmp/domicile-spike-wayland.log \
+                     /tmp/domicile-client-window-compositor.log; do
+            echo "::group::$log"
+            tail -200 "$log" 2>&1 || true
+            echo "::endgroup::"
+          done
+          df -h /build || true
