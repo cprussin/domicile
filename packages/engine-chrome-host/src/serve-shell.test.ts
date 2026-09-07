@@ -280,6 +280,82 @@ describe("serveShell", () => {
   });
 });
 
+describe("serveShell, and who may drive the compositor", () => {
+  const cleanups: (() => void)[] = [];
+  afterEach(() => {
+    for (const cleanup of cleanups.splice(0)) {
+      cleanup();
+    }
+  });
+
+  /**
+   * Try the upgrade with the origin `chosen` names, and say whether it was
+   * allowed.
+   *
+   * `chosen` is given the bridge's *own* origin, because the port is the
+   * kernel's — nothing knows it until the server is listening, so a test that
+   * wants to send the legitimate one has to be handed it here.
+   */
+  const upgradeFrom = async (
+    chosen: (ours: string) => string | undefined,
+  ): Promise<boolean> => {
+    const host = await compositor();
+    const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
+    cleanups.push(() => serving.stop());
+    const where = new URL(serving.url).origin;
+    const origin = chosen(where);
+    const response = await fetch(`${where}${SESSION_PATH}`, {
+      headers: {
+        connection: "Upgrade",
+        upgrade: "websocket",
+        ...(origin === undefined ? {} : { origin }),
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+        "sec-websocket-version": "13",
+      },
+    });
+    return response.status !== 403;
+  };
+
+  // WHAT IS ON THE OTHER SIDE OF THIS is a byte pipe to the compositor's
+  // control socket, and that protocol carries `spawn` — arbitrary commands on
+  // the machine running the desktop — plus synthetic input into any window and
+  // every window's title as it changes.
+  //
+  // The bridge listens on a TCP port because a page cannot open a unix socket,
+  // and a loopback port is reachable by any page in any browser on the machine.
+  // A WebSocket is not stopped by CORS: the browser sends `Origin` and the
+  // server has to refuse it. Measured before this existed — an upgrade carrying
+  // `Origin: https://evil.example` was accepted and a `spawn` reached the
+  // compositor socket unaltered.
+  it("refuses an upgrade from a page it did not serve", async () => {
+    expect(await upgradeFrom(() => "https://evil.example")).toBeFalse();
+  });
+
+  // `null` is what a sandboxed iframe and a `file:` page send. Neither is the
+  // desktop's page, and "null" is not a name anything can be trusted by.
+  it("refuses a null origin", async () => {
+    expect(await upgradeFrom(() => "null")).toBeFalse();
+  });
+
+  it("allows the page it is serving", async () => {
+    // The one that has to keep working: this is the desktop connecting to its
+    // own compositor, and a check that refused it would be a desktop that
+    // never starts.
+    expect(await upgradeFrom((ours) => ours)).toBeTrue();
+  });
+
+  // DELIBERATE, and worth stating because it looks like a hole. A browser
+  // always sends `Origin` on a WebSocket handshake, so nothing reachable from
+  // a web page arrives without one — this cannot be the drive-by. What it
+  // admits is a local non-browser client, which could set any origin it liked
+  // anyway: `curl` forges a header in one flag, so refusing here would cost
+  // honest tooling and stop no attacker. The line this check draws is against
+  // *pages*, and it says so.
+  it("allows a client that sends no origin at all", async () => {
+    expect(await upgradeFrom(() => undefined)).toBeTrue();
+  });
+});
+
 describe("serveShell, before the compositor exists", () => {
   // The launch order forces this. The browser has to be running before the
   // compositor can connect to it as a producer, so the page — and this

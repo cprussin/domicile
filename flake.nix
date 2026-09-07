@@ -156,7 +156,7 @@
 
         src = pkgs.fetchurl { inherit (engineRelease) url hash; };
 
-        nativeBuildInputs = [ pkgs.autoPatchelfHook pkgs.zstd ];
+        nativeBuildInputs = [ pkgs.autoPatchelfHook pkgs.zstd pkgs.makeWrapper ];
         buildInputs = engineRuntimeLibs;
         dontStrip = true;
 
@@ -177,6 +177,43 @@
           runHook postInstall
         '';
 
+        # WHAT `autoPatchelfHook` CANNOT SEE. It rewrites the interpreter and
+        # the rpath from what a binary *links*, and Chromium does not link its
+        # GL stack — it `dlopen`s `libEGL.so.1` at run time and decides what it
+        # got. So the patched engine started, ran, and lost its GPU process on
+        # every machine:
+        #
+        #   Could not dlopen native EGL: libEGL.so.1: cannot open shared
+        #   object file: No such file or directory
+        #   … Exiting GPU process due to errors during initialization
+        #
+        # which is a white window and a desktop that never draws. Reported from
+        # a real machine with a working AMD GPU, whose compositor half had
+        # already found the same card and imported dmabufs from it.
+        #
+        # A wrapper rather than an rpath, and this is the one place that
+        # distinction has bitten before: chrome re-execs itself for its zygote
+        # and its renderers, so anything that has to survive into the children
+        # must be inherited. An environment variable is; a loader invoked by
+        # hand is not.
+        #
+        # `/run/opengl-driver/lib` first, because on NixOS that is the vendor
+        # library matching the running kernel driver, and the nixpkgs copies
+        # behind it are what a non-NixOS host has instead. The dev shell's own
+        # `LD_LIBRARY_PATH` is built the same way and says the same thing.
+        postFixup = ''
+          mv "$out/chrome" "$out/.chrome-unwrapped"
+          makeWrapper "$out/.chrome-unwrapped" "$out/chrome" \
+            --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib:${
+              pkgs.lib.makeLibraryPath [
+                pkgs.libglvnd
+                pkgs.mesa
+                pkgs.libgbm
+                pkgs.libGL
+              ]
+            }"
+        '';
+
         # The two things every consumer of this looks up by name, so a release
         # missing one fails here rather than four minutes into a desktop.
         doInstallCheck = true;
@@ -187,7 +224,15 @@
               exit 1
             }
           done
+          # Through the wrapper, which is the only way anything starts this.
           "$out/chrome" --version
+          # And that the wrapper is one: a `mv` that silently did nothing
+          # leaves the real binary here under its own name, `--version` still
+          # works, and the GPU process still dies on the machine that runs it.
+          grep -q LD_LIBRARY_PATH "$out/chrome" || {
+            echo "the engine's chrome is not wrapped, so it carries no GL path" >&2
+            exit 1
+          }
         '';
 
         meta.description =
