@@ -223,9 +223,21 @@ jobs:
           set -euo pipefail
           done=/tmp/domicile-build-ran
           rm -f "$done"
-          build="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/build.sh $CHROMIUM \
-            && autoninja -C $CHROMIUM/out/Domicile domicile_engine components_unittests \
-            && touch $done"
+          # depot_tools on PATH, because `autoninja` and `gn` are its, not the
+          # nix shell's. An interactive user has it from their shell config;
+          # this unit has no shell config, which is what `exec: autoninja: not
+          # found` was once <nixpkgs> resolved and the FHS env actually built.
+          #
+          # The checkout's own copy first: a gclient checkout vendors
+          # depot_tools at third_party/depot_tools, so it is the one that
+          # matches this tree rather than whatever is beside it on the disk.
+          tools="$CHROMIUM/third_party/depot_tools:/build/depot_tools"
+          build="export PATH=$tools:\$PATH; \
+            command -v autoninja >/dev/null || \
+              { echo 'no autoninja on PATH; looked in $tools' >&2; exit 127; }; \
+            $GITHUB_WORKSPACE/packages/domicile-engine/scripts/build.sh $CHROMIUM && \
+            autoninja -C $CHROMIUM/out/Domicile domicile_engine components_unittests && \
+            touch $done"
 
           # Each attempt says what it did. `|| true` on its own is how the
           # last two rounds threw away the error that would have named this.

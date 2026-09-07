@@ -116,8 +116,15 @@ jobs:
           set -euo pipefail
           done=/tmp/domicile-release-build-ran
           rm -f "$done"
-          build="$GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh $CHROMIUM $OUT \
-            && touch $done"
+          # depot_tools on PATH: `gn` and `autoninja` are its, and this unit
+          # has no shell config to put it there. The checkout's vendored copy
+          # first, since it is the one that matches this tree. See engine.yml.
+          tools="$CHROMIUM/third_party/depot_tools:/build/depot_tools"
+          build="export PATH=$tools:\$PATH; \
+            command -v autoninja >/dev/null || \
+              { echo 'no autoninja on PATH; looked in $tools' >&2; exit 127; }; \
+            $GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh $CHROMIUM $OUT && \
+            touch $done"
 
           # `<nixpkgs>` has to resolve or the shell builds nothing and hands
           # the script an ambient bash with no toolchain. A systemd service has
