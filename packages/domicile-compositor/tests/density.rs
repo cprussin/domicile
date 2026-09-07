@@ -129,51 +129,34 @@ fn a_chrome_reporting_two(compositor: &Compositor) -> domicile_test_chrome::Chro
 /// The frame and the resize read off one commit: `app_resized` rides ahead of
 /// the frame, so a wait for the frame is a wait for both.
 #[test]
-fn the_mode_and_the_frame_carry_the_density_and_the_size_is_logical() {
+fn the_mode_carries_the_density() {
     let compositor = Compositor::started_with(FOLLOWING);
-    let mut chrome = a_chrome_reporting_two(&compositor);
+    let _chrome = a_chrome_reporting_two(&compositor);
     let mut client = compositor.client("app");
 
-    // The mode first, and read from the client rather than from the chrome:
-    // it is the half of the advertisement a buffer scale cannot speak for, and
-    // the only place it is visible. A mode is physical pixels, so raising the
-    // density has to raise it — left at the logical size, `xdg_output` reports
-    // half the desktop and every client is told the screen is half the size
-    // the chrome lays out against.
-    //
-    // Its own assertion rather than a second check: it fails for the same
-    // reason as the rest of this one — a density that did not reach the output
-    // — and a second compositor would buy nothing.
+    // Read from the client rather than from the chrome: it is the half of the
+    // advertisement a buffer scale cannot speak for, and the only place it is
+    // visible. A mode is physical pixels, so raising the density has to raise
+    // it — left at the logical size, `xdg_output` reports half the desktop and
+    // every client is told the screen is half the size the chrome lays out
+    // against.
     assert!(
         client.wait_for_trace(&format!(".mode(3, {}, {},", 900 * 2, 600 * 2), 1),
         "the mode did not grow with the density, so every client computes a \
          desktop half the size the chrome is laid out at; it traced:\n{}",
         client.trace()
     );
-
-    let framed = chrome
-        .wait_for(|message| matches!(message, HostMessage::AppFrame { scale: 2, .. }))
-        .expect(
-            "no frame reached the chrome carrying the density it reported, so it has no size to \
-             make its canvas",
-        );
-    let HostMessage::AppFrame { app_id, width, .. } = framed else {
-        unreachable!("the wait matched on this variant")
-    };
-
-    let resized = chrome
-        .wait_for(|message| matches!(message, HostMessage::AppResized { .. }))
-        .expect("the chrome is told the size to lay the element out at");
-    let HostMessage::AppResized { size, .. } = resized else {
-        unreachable!("the wait matched on this variant")
-    };
-
-    assert_eq!(
-        size[0] * DENSITY,
-        f64::from(width),
-        "the window {app_id} committed {width} device pixels across and the chrome was told to \
-         lay it out at {} — at density {DENSITY} that is the buffer's own pixels rather than \
-         logical units, so every pointer coordinate would be off by the scale",
-        size[0]
-    );
 }
+
+// The other half of this test went with the copy path. It asserted that an
+// `AppFrame` carried the density and that `AppResized` agreed with the buffer
+// width — the round trip that kept a pointer coordinate honest at scale > 1.
+// Neither message is sent any more: the client's buffer goes to viz and the
+// page's own layout sizes the element.
+//
+// **This is a real gap, not a tidy-up.** Nothing now checks that a window at
+// density 2 is laid out at logical units rather than device pixels, and
+// getting that wrong puts every pointer coordinate out by the scale. The
+// check belongs against the engine path — the size the page lays the `<app>`
+// element out at, against the buffer the client committed — and it does not
+// exist yet.
