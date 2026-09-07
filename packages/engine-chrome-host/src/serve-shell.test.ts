@@ -141,3 +141,42 @@ describe("serveShell", () => {
     expect(host.heard.join("")).toBe('{"type":"hello"}\n');
   });
 });
+
+describe("serveShell, before the compositor exists", () => {
+  // The launch order forces this. The browser has to be running before the
+  // compositor can connect to it as a producer, so the page — and this
+  // websocket — is up while the compositor is still starting. Closing on the
+  // first ENOENT would hand every shell a dead transport on every launch.
+  it("waits for a compositor that is not listening yet", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "domicile-bridge-late-"));
+    const socketPath = path.join(dir, "chrome.sock");
+    cleanups.push(() => rm(dir, { force: true, recursive: true }));
+
+    const serving = serveShell({ root: dir, socketPath });
+    cleanups.push(() => serving.stop());
+
+    const socket = new WebSocket(
+      `${serving.url.replace("http:", "ws:")}${SESSION_PATH.slice(1)}`,
+    );
+    cleanups.push(() => socket.close());
+    const closed: boolean[] = [];
+    socket.addEventListener("close", () => closed.push(true));
+    socket.addEventListener("open", () => socket.send('{"type":"hello"}\n'));
+    await Bun.sleep(150);
+    expect(closed).toEqual([]);
+
+    // Now the compositor turns up, as it does a second or so into a launch.
+    const heard: string[] = [];
+    const late = net.createServer((connection) => {
+      connection.on("data", (chunk: Buffer) => heard.push(chunk.toString()));
+      connection.on("error", () => undefined);
+    });
+    await new Promise<void>((resolve) => late.listen(socketPath, resolve));
+    cleanups.push(() => late.close());
+
+    // And what the page said while it was missing arrives, rather than being
+    // dropped: that message is the handshake.
+    expect(await eventually(() => heard.length > 0)).toBeTrue();
+    expect(heard.join("")).toBe('{"type":"hello"}\n');
+  });
+});

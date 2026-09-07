@@ -88,28 +88,7 @@ export const serveShell = (options: ServeOptions): Serving => {
         }
       },
       open: (ws) => {
-        void connect({
-          socket: {
-            close: () => ws.close(),
-            data: (_socket, chunk) => {
-              // Binary, so the bytes reach the page as the bytes that arrived.
-              ws.send(chunk);
-            },
-            // The compositor going away is the desktop going away. Closing the
-            // websocket is how the page finds out; it is not this process's
-            // place to decide what that means.
-            error: () => ws.close(),
-            open: (socket) => {
-              sockets.set(ws, socket);
-              for (const held of ws.data.pending.splice(0)) {
-                socket.write(held);
-              }
-            },
-          },
-          unix: socketPath,
-        }).catch(() => {
-          ws.close();
-        });
+        void reach(ws, socketPath);
       },
     },
   });
@@ -123,12 +102,88 @@ export const serveShell = (options: ServeOptions): Serving => {
 };
 
 /**
+ * How long to keep trying the compositor's socket before giving up on it.
+ *
+ * **The socket is expected to be missing at first, and that is the launch
+ * order rather than a fault.** The browser has to be running before the
+ * compositor can connect to it as a producer, so the page is loaded — and this
+ * websocket opened — while the compositor is still starting. Closing on the
+ * first ENOENT would hand every shell a dead transport on every launch.
+ *
+ * Bounded, because a page that will never have a compositor should say so
+ * rather than sit there: the websocket closes and the shell finds out.
+ */
+const REACH_FOR_MS = 30_000;
+const RETRY_EVERY_MS = 50;
+
+/**
+ * Connect `ws` to the compositor, waiting for it to exist.
+ *
+ * Anything the page said while this was trying is written the moment it
+ * lands, in order, out of the queue `message` filled.
+ */
+const reach = async (
+  ws: BridgedSocket,
+  socketPath: string,
+  now: () => number = Date.now,
+): Promise<void> => {
+  const until = now() + REACH_FOR_MS;
+  for (;;) {
+    try {
+      await connect({
+        socket: {
+          close: () => ws.close(),
+          data: (_socket, chunk) => {
+            // Binary, so the bytes reach the page as the bytes that arrived.
+            ws.send(chunk);
+          },
+          // The compositor going away is the desktop going away. Closing the
+          // websocket is how the page finds out; it is not this process's
+          // place to decide what that means.
+          error: () => ws.close(),
+          open: (socket) => {
+            sockets.set(ws, socket);
+            for (const held of ws.data.pending.splice(0)) {
+              socket.write(held);
+            }
+          },
+        },
+        unix: socketPath,
+      });
+      return;
+    } catch (failure) {
+      if (now() >= until) {
+        // Said rather than swallowed: a shell whose page has no transport
+        // looks like a shell with no windows, and the reason is here.
+        // biome-ignore lint/suspicious/noConsole: its only channel, and silence is the failure it reports
+        console.error(
+          `domicile: no compositor on ${socketPath} after ${String(
+            REACH_FOR_MS,
+          )}ms:`,
+          failure,
+        );
+        ws.close();
+        return;
+      }
+      await Bun.sleep(RETRY_EVERY_MS);
+    }
+  }
+};
+
+/** As much of a served websocket as the bridge holds on to. */
+type BridgedSocket = {
+  close: () => void;
+  data: { pending: (string | Uint8Array)[] };
+  send: (data: Uint8Array) => void;
+};
+
+/**
  * Which unix socket each open websocket is bridged to.
  *
  * Outside the server rather than in `ws.data` because the socket is not known
  * until `connect` resolves, and `ws.data` is fixed at upgrade.
  */
 const sockets = new WeakMap<
-  { close: () => void; data: { pending: (string | Uint8Array)[] } },
+  BridgedSocket,
   { end: () => void; write: (data: string | Uint8Array) => void }
 >();
