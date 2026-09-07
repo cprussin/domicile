@@ -267,7 +267,10 @@
       # that set them outright would take that away.
       desktop = { name, description }:
         pkgs.writeShellApplication {
-          name = "domicile-${name}";
+          # The desktop's own name, so `nix profile install .#manganese` puts
+          # `manganese` on the PATH rather than something with a prefix nobody
+          # typed. It is also what `mainProgram` says, and what CI checks for.
+          name = name;
           runtimeInputs = [ pkgs.bun ];
           text = ''
             export DOMICILE_PAGE="''${DOMICILE_PAGE:-${shellPage name}}"
@@ -281,7 +284,7 @@
           '';
           meta = {
             inherit description;
-            mainProgram = "domicile-${name}";
+            mainProgram = name;
             platforms = [ system ];
           };
         };

@@ -66,35 +66,59 @@ jobs:
           nix-store --realise --check \
             "$(nix-store -qR "$drv" | grep 'domicile-node-modules.*\.drv$' | head -1)"
 
-      # What the store output has to contain for an installed shell to run: the
-      # stub, the launcher bundle it execs, and the `package.json` that settles
-      # how Node parses it. Asserted rather than assumed — the build succeeding
-      # says the derivation ran, not that it installed the right things.
+      # WHAT AN INSTALLED DESKTOP HAS TO CONTAIN, and this changed shape with
+      # the packages themselves. It used to assert the four Electron bundles
+      # and a launcher that refused arguments, because that is what a desktop
+      # was: an Electron application. It is a runner now — the page, the
+      # engine, the compositor and the bridge, handed to `run-engine.sh` — and
+      # a check still asserting `launch.js` would be asserting the thing that
+      # was removed.
+      #
+      # What it asserts instead is that every store path the runner names is
+      # really there. That is the failure this replaces: a derivation that
+      # stopped being referenced, or one referenced by a path that does not
+      # exist, produces a desktop that starts and then dies on whichever of the
+      # four it reaches first — which reads as the seam rather than as wiring.
       - name: Check what was installed
         run: |
           set -eu
           for name in manganese simple; do
             out="$(nix build --no-link --print-out-paths ".#$name")"
-            # `main.js` in particular: the manifest sits in `build/` so that
-            # `type` reaches it as well as the launcher, and no step in this
-            # job loads it — the launcher below dies on `/bin/false` before
-            # Electron is ever started. The renderer is a separate vite build
-            # reached only over `file://`, so it is the one a config change
-            # could drop with every other check still green.
-            for file in "bin/$name" \
-              .vite/build/launch.js .vite/build/main.js \
-              .vite/build/preload.cjs .vite/build/package.json \
-              .vite/renderer/main_window/index.html; do
-              [ -e "$out/$file" ] || { echo "$name: no $file in $out"; exit 1; }
-            done
-            # The refusal itself, not merely a non-zero exit: a stub that took
-            # the argument would also exit non-zero on a runner with no
-            # runtime dir and no display, so exit status alone stays green on
-            # the very shell this exists to catch.
-            if ! "$out/bin/$name" --nope 2>&1 | grep -q "takes no arguments"; then
-              echo "$name: took an argument it should have refused"
+            [ -x "$out/bin/$name" ] || {
+              echo "$name: no bin/$name in $out"
               exit 1
-            fi
+            }
+            # Every `/nix/store/...` the wrapper names, which is the four
+            # inputs and whatever they are reached through. The closing brace
+            # and the colon are in the stop set because these sit inside
+            # `${VAR:-/nix/store/...}` and on `PATH`, and without them the
+            # first version of this check read the brace as part of the path
+            # and reported every one of them missing. `sort -u` because the
+            # same path is named more than once.
+            paths="$(grep -oE '/nix/store/[a-z0-9]{32}-[^"'"'"'}: ]*' \
+                       "$out/bin/$name" | sort -u)"
+            [ -n "$paths" ] || {
+              echo "$name: names no store paths at all, so it cannot be a"
+              echo "  desktop — it has nothing to start"
+              exit 1
+            }
+            for path in $paths; do
+              [ -e "$path" ] || {
+                echo "$name: names $path, which is not in the store"
+                exit 1
+              }
+            done
+            # The four by role, so a missing one says which. `DOMICILE_ENGINE`
+            # has to be a directory with a `chrome` in it; the others are
+            # checked by the derivations that build them.
+            for want in DOMICILE_PAGE DOMICILE_ENGINE DOMICILE_COMPOSITOR \
+                        DOMICILE_BRIDGE; do
+              grep -q "$want=" "$out/bin/$name" || {
+                echo "$name: does not set $want, so run-engine.sh would build"
+                echo "  or look for that one itself"
+                exit 1
+              }
+            done
           done
 
       # The assertion that needs the bundles to actually load.
