@@ -172,7 +172,9 @@ describe("serveShell, before the compositor exists", () => {
       connection.on("error", () => undefined);
     });
     await new Promise<void>((resolve) => late.listen(socketPath, resolve));
-    cleanups.push(() => late.close());
+    cleanups.push(() => {
+      late.close();
+    });
 
     // And what the page said while it was missing arrives, rather than being
     // dropped: that message is the handshake.
