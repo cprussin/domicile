@@ -112,6 +112,7 @@ mod stacking;
 mod timing_window;
 mod viewport;
 
+use crate::engine::Capture;
 use crate::engine_buffers::Returned;
 use crate::engine_session::EngineSession;
 
@@ -1239,6 +1240,13 @@ struct DomicileCompositor {
     /// captures the whole window rather than a pixel and is throttled harder
     /// than the point probe beside it.
     last_find: Option<Instant>,
+
+    /// THROWAWAY. How many times the colour search has run. Bounded, because a
+    /// colour that never appears would otherwise buy a whole-window readback
+    /// every couple of seconds for the whole of a guard's poll — and a
+    /// readback is time this thread is not handing the client its buffers
+    /// back.
+    find_tries: u32,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1717,16 +1725,29 @@ impl DomicileCompositor {
                 // a surface viz is not drawing at all is exactly the case
                 // where only one window's holds expire.
                 Returned::Expired => {
-                    let app_id = self
+                    // Two messages rather than one with a made-up app id in
+                    // it: every other `app_id` field in this binary carries an
+                    // app id, the diagnostics grep these lines, and a sentence
+                    // sitting in that field reads as an app literally called
+                    // that. `window_gone` abandons every hold it had in the
+                    // same call it forgets the app, so an expiry for a surface
+                    // nothing claims really does mean the window went first.
+                    match self
                         .engine
                         .as_ref()
                         .and_then(|session| session.app_for(release.surface))
-                        .unwrap_or("an app that is already gone");
-                    tracing::error!(
-                        app_id,
-                        "the engine never released a client buffer; taking it back so the client \
-                         can draw. Something in viz is holding a dmabuf it has finished with"
-                    );
+                    {
+                        Some(app_id) => tracing::error!(
+                            app_id,
+                            "the engine never released a client buffer; taking it back so the \
+                             client can draw. Something in viz is holding a dmabuf it has \
+                             finished with"
+                        ),
+                        None => tracing::error!(
+                            "the engine never released a buffer belonging to a window that has \
+                             since gone; taking it back"
+                        ),
+                    }
                 }
                 Returned::Abandoned => {
                     tracing::debug!("a held buffer came back because its window went away")
@@ -1857,37 +1878,85 @@ impl DomicileCompositor {
         // and a colour that is going to appear appears early, so twice a
         // second buys nothing that once every two seconds does not.
         const FIND_EVERY: Duration = Duration::from_secs(2);
+        // Bounded, and this is not a nicety. `HeldBuffers`' deadline is 500ms
+        // and a capture takes the main thread for the whole of a readback, so
+        // a search that never succeeds is a search that keeps taking this
+        // thread away from draining the engine's events and expiring the
+        // client's holds — the compositor would then be manufacturing the very
+        // "never released" errors the log is being read for. A colour that is
+        // going to appear appears within a few seconds of the client drawing;
+        // twenty tries is forty seconds of a ninety second poll.
+        const FIND_TRIES: u32 = 20;
+        let wanted = spike_find_colours()
+            .iter()
+            .copied()
+            .filter(|argb| !self.probe_found.contains(argb))
+            .collect::<Vec<_>>();
         let find_due = match self.last_find {
             None => true,
             Some(at) => at.elapsed() >= FIND_EVERY,
         };
-        if find_due && !spike_find_colours().is_empty() {
-            self.last_find = Some(Instant::now());
-            for &argb in spike_find_colours() {
-                if self.probe_found.contains(&argb) {
-                    continue;
-                }
+        if find_due && !wanted.is_empty() && self.find_tries < FIND_TRIES {
+            self.find_tries += 1;
+            for argb in wanted {
                 match session.spike_find(argb) {
-                    Some((x, y)) => {
+                    Some(Capture {
+                        window: (w, h),
+                        bounds: Some((x, y, width, height)),
+                    }) => {
                         self.probe_found.insert(argb);
+                        // The whole extent and the window it is in, because a
+                        // guard whose named point read the wrong colour needs
+                        // to know where the region actually is and what
+                        // coordinate space it is being measured in.
                         tracing::info!(
                             target: "domicile::engine::spike",
-                            "engine found #{argb:08X} at ({x},{y}) of the browser's window"
+                            "engine found #{argb:08X} over ({x},{y}) {width}x{height} of the \
+                             browser's {w}x{h} window"
                         );
                     }
                     // Once, and only the first time. The guard polls, so this
                     // is the state for most of a run and saying it every tick
                     // would bury the line that matters.
-                    None => {
+                    Some(Capture {
+                        window: (w, h),
+                        bounds: None,
+                    }) => {
                         if self.probe_missing.insert(argb) {
                             tracing::info!(
                                 target: "domicile::engine::spike",
-                                "engine has not drawn #{argb:08X} anywhere in the \
-                                 browser's window yet"
+                                "engine has not drawn #{argb:08X} anywhere in the browser's \
+                                 {w}x{h} window yet"
+                            );
+                        }
+                    }
+                    // Not the same thing, and a negative control that could
+                    // not tell them apart would pass having measured nothing.
+                    None => {
+                        if self.probe_missing.insert(argb) {
+                            warn!(
+                                target: "domicile::engine::spike",
+                                colour = format!("#{argb:08X}"),
+                                "the probe could not read the browser's window at all, so \
+                                 nothing was measured about this colour — which is not the \
+                                 same as the colour being absent"
                             );
                         }
                     }
                 }
+            }
+            // Stamped *after* the captures, not before: the interval is meant
+            // to be a gap between readbacks, and a capture longer than the
+            // interval would otherwise run back to back with no gap at all.
+            self.last_find = Some(Instant::now());
+            if self.find_tries == FIND_TRIES {
+                tracing::warn!(
+                    target: "domicile::engine::spike",
+                    tries = FIND_TRIES,
+                    "giving up looking for the colours that have not turned up; a whole-window \
+                     readback is time this thread is not releasing the client's buffers, and it \
+                     is not worth paying for a colour that was going to appear long ago"
+                );
             }
         }
 
@@ -4642,6 +4711,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         probe_found: HashSet::new(),
         probe_missing: HashSet::new(),
         last_find: None,
+        find_tries: 0,
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
@@ -4940,9 +5010,11 @@ fn spike_probe_points() -> &'static [(i32, i32)] {
 /// written down in a guard means and `FF` in front of it is noise.
 fn spike_find_colours() -> &'static [u32] {
     static COLOURS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
-    COLOURS.get_or_init(|| match std::env::var("DOMICILE_SPIKE_FIND") {
-        Ok(raw) => parse_find_colours(&raw),
-        Err(_) => Vec::new(),
+    COLOURS.get_or_init(|| {
+        let Ok(raw) = std::env::var("DOMICILE_SPIKE_FIND") else {
+            return Vec::new();
+        };
+        parse_find_colours(&raw)
     })
 }
 

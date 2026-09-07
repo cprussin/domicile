@@ -4,6 +4,7 @@
 
 #include "components/domicile/engine/domicile_engine.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -412,11 +413,11 @@ struct DomicileEngine {
   }
 
   // THROWAWAY. See domicile_engine_spike.h.
-  bool FindColour(uint32_t argb, int32_t* x, int32_t* y) {
-    bool found = false;
+  int32_t FindColour(uint32_t argb, int32_t* out) {
+    int32_t found = -1;
     RunOnThreadAndWait(base::BindOnce(&DomicileEngine::FindColourOnThread,
-                                      base::Unretained(this), argb, &found, x,
-                                      y));
+                                      base::Unretained(this), argb, &found,
+                                      out));
     return found;
   }
 
@@ -579,34 +580,56 @@ struct DomicileEngine {
     loop.Run();
   }
 
-  void FindColourOnThread(uint32_t argb, bool* found, int32_t* x, int32_t* y) {
+  void FindColourOnThread(uint32_t argb, int32_t* found, int32_t* out) {
     if (!probe_) {
       return;
     }
     base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
     probe_->CaptureWindow(base::BindOnce(
-        [](base::RunLoop* loop, uint32_t wanted, bool* found, int32_t* x,
-           int32_t* y, bool captured, const gfx::Size& size,
+        [](base::RunLoop* loop, uint32_t wanted, int32_t* found, int32_t* out,
+           bool captured, const gfx::Size& size,
            const std::vector<uint32_t>& pixels) {
-          // Row-major, and `size` is what to index it by — so the first match
-          // is the topmost-then-leftmost pixel of that colour, which is the
-          // corner of the window if the window is a rectangle of it. A short
-          // buffer is not trusted to be padded with anything: the loop is
-          // bounded by what actually arrived.
-          if (captured && size.width() > 0) {
+          if (captured && size.width() > 0 && size.height() > 0) {
+            // Bounded by the smaller of what arrived and what `size` says: a
+            // short reply must not be read past, and a long one must not
+            // report a row below the bottom of the window.
             const size_t width = static_cast<size_t>(size.width());
-            for (size_t i = 0; i < pixels.size(); ++i) {
-              if (pixels[i] == wanted) {
-                *found = true;
-                *x = static_cast<int32_t>(i % width);
-                *y = static_cast<int32_t>(i / width);
-                break;
+            const size_t area = width * static_cast<size_t>(size.height());
+            const size_t last = std::min(area, pixels.size());
+
+            // The whole extent, not the first pixel — see the header. Walked
+            // once, row-major, keeping the corners.
+            int32_t left = size.width();
+            int32_t top = size.height();
+            int32_t right = -1;
+            int32_t bottom = -1;
+            for (size_t i = 0; i < last; ++i) {
+              if (pixels[i] != wanted) {
+                continue;
               }
+              const int32_t x = static_cast<int32_t>(i % width);
+              const int32_t y = static_cast<int32_t>(i / width);
+              left = std::min(left, x);
+              right = std::max(right, x);
+              top = std::min(top, y);
+              bottom = std::max(bottom, y);
+            }
+
+            out[4] = size.width();
+            out[5] = size.height();
+            if (right < 0) {
+              *found = 0;
+            } else {
+              *found = 1;
+              out[0] = left;
+              out[1] = top;
+              out[2] = right - left + 1;
+              out[3] = bottom - top + 1;
             }
           }
           loop->Quit();
         },
-        &loop, argb, found, x, y));
+        &loop, argb, found, out));
     loop.Run();
   }
 
@@ -746,14 +769,13 @@ bool domicile_engine_spike_sample_pixel(DomicileEngine* engine,
   return engine->SamplePixel(x, y, argb);
 }
 
-bool domicile_engine_spike_find_colour(DomicileEngine* engine,
-                                       uint32_t argb,
-                                       int32_t* x,
-                                       int32_t* y) {
-  if (!engine || !x || !y) {
-    return false;
+int32_t domicile_engine_spike_find_colour(DomicileEngine* engine,
+                                          uint32_t argb,
+                                          int32_t* out) {
+  if (!engine || !out) {
+    return -1;
   }
-  return engine->FindColour(argb, x, y);
+  return engine->FindColour(argb, out);
 }
 
 }  // extern "C"

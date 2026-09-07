@@ -7,11 +7,12 @@
 # above it under its own source.
 set -u
 
+# A glob rather than a list: each guard writes its own file and its negative
+# control writes a `-negative` one beside it, and a list is a thing to forget
+# to update when a guard is added.
 for log in /tmp/domicile-spike-wayland.log \
-           /tmp/domicile-client-window-compositor.log \
-           /tmp/domicile-two-windows-compositor.log \
-           /tmp/domicile-shell-compositor.log \
-           /tmp/domicile-shell-bridge.log; do
+           /tmp/domicile-*-compositor.log \
+           /tmp/domicile-*-bridge.log; do
   [ -f "$log" ] || continue
   echo "::group::$log"
   grep -aE 'app_appeared|brokered a frame sink|configure ->|first frame|engine drew|engine found|has not drawn|agreed the protocol|never released|refused|ERROR|WARN|panic' \
@@ -73,10 +74,16 @@ sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
   grep -a "first frame" | sed 's/.*the engine took/  the engine took/' |
   cut -c1-200 | sort -u || true
 
+# Per file, because this is the block that separates "the colour is in the
+# wrong place" from "the colour is not on screen", and a run and its negative
+# control give opposite answers on purpose.
 echo "what was looked for and found, if anything:"
-sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
-  grep -aoE 'engine (found|has not drawn) #[0-9A-F]{8}.*' | cut -c1-200 |
-  sort -u | sed 's/^/  /' || true
+for log in /tmp/domicile-*-compositor.log; do
+  [ -f "$log" ] || continue
+  sed 's/\x1b\[[0-9;]*m//g' "$log" 2>/dev/null |
+    grep -aoE 'engine (found|has not drawn) #[0-9A-F]{8}.*' | cut -c1-200 |
+    sort -u | sed "s|^|  $(basename "$log"): |" || true
+done
 
 echo "what was drawn, if anything:"
 for log in /tmp/domicile-*-compositor.log; do

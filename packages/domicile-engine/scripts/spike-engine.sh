@@ -28,7 +28,7 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 
 PRODUCER=domicile_engine_smoke \
 PAGE="${PAGE:-$SCRIPTS/spike-resize-page.html}" \
-PAGE_QUERY="${PAGE_QUERY:-?color=00C853}" \
+PAGE_QUERY="${PAGE_QUERY:-?color=00C853&app=domicile-engine-smoke}" \
 WINDOW_SIZE="${WINDOW_SIZE:-1200,1000}" \
 SOCKET="${SOCKET:-/tmp/domicile-spike-engine}" \
 PROFILE="${PROFILE:-/tmp/domicile-spike-engine-profile}" \

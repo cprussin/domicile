@@ -32,6 +32,13 @@ const serving = serveShell({
   ...(environment.DOMICILE_PORT === undefined
     ? {}
     : { port: Number(environment.DOMICILE_PORT) }),
+  // How long a page waits for a compositor that has not started yet. The
+  // default suits a desktop; a CI runner starting a debug Chromium needs
+  // longer, and a page whose session gave up looks exactly like a shell that
+  // never joined.
+  ...(environment.DOMICILE_REACH_MS === undefined
+    ? {}
+    : { reachForMs: Number(environment.DOMICILE_REACH_MS) }),
 });
 
 // The line run-engine.sh reads. Prefixed so that anything else this process

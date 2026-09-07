@@ -46,7 +46,7 @@ FAILED=0
 echo "=== CSS parity ==="
 PRODUCER=domicile_css_parity \
 PAGE="$SCRIPTS/spike-css-page.html" \
-PAGE_QUERY="?color=$COLOR" \
+PAGE_QUERY="?color=$COLOR&app=domicile-spike" \
 WINDOW_SIZE="$WINDOW" \
   "$SCRIPTS/spike.sh" "$CHROMIUM" -- \
     "--check=css" "--color=FF$COLOR" || FAILED=1
@@ -55,7 +55,7 @@ echo
 echo "=== resize ==="
 PRODUCER=domicile_css_parity \
 PAGE="$SCRIPTS/spike-resize-page.html" \
-PAGE_QUERY="?color=$COLOR" \
+PAGE_QUERY="?color=$COLOR&app=domicile-spike" \
 WINDOW_SIZE="$WINDOW" \
 SOCKET="${SOCKET:-/tmp/domicile-spike-resize}" \
 PROFILE="${PROFILE:-/tmp/domicile-spike-resize-profile}" \

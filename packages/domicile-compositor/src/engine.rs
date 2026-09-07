@@ -174,6 +174,20 @@ pub struct Engine {
     path: PathBuf,
 }
 
+/// THROWAWAY, with the rest of the spike. What one look at the browser's
+/// window found.
+///
+/// `window` is the captured bitmap's size, which is not obliged to be the size
+/// the browser was asked for — and a probe that could not say so is what makes
+/// a coordinate bug look like a missing surface. `bounds` is the colour's
+/// whole extent as `(x, y, width, height)`, or `None` if it is not in the
+/// window at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Capture {
+    pub window: (i32, i32),
+    pub bounds: Option<(i32, i32, i32, i32)>,
+}
+
 impl Engine {
     /// Loads the library and joins the browser's mojo graph over `socket`.
     /// Surfaces come afterwards, one per window, from [`Engine::create_surface`].
@@ -355,36 +369,47 @@ impl Engine {
         unsafe { f(self.handle, x, y, &mut argb) }.then_some(argb)
     }
 
-    /// THROWAWAY, with the rest of the spike. Where `argb` is in the browser's
-    /// window, if it is anywhere in it.
+    /// THROWAWAY, with the rest of the spike. Where `argb` is in the
+    /// browser's window, and how big that window is.
     ///
-    /// The question a shell guard has. A named point is the spike pages'
-    /// question, because those pages put their canvases where the harness can
-    /// compute them; a shell decides where its windows go in its own layout,
-    /// and a guard naming a pixel would be asserting the shell's CSS rather
-    /// than the seam.
-    pub fn spike_find(&self, argb: u32) -> Option<(i32, i32)> {
-        let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *mut i32, *mut i32) -> bool> =
-            match self.symbol(
-                b"domicile_engine_spike_find_colour\0",
-                "domicile_engine_spike_find_colour",
-            ) {
-                Ok(symbol) => symbol,
-                Err(err) => {
-                    tracing::error!(
-                        %err,
-                        "libdomicile_engine.so has no domicile_engine_spike_find_colour; it \
-                         was built before the shell guard existed. Rebuild it: autoninja -C \
-                         out/Domicile domicile_engine"
-                    );
-                    return None;
-                }
-            };
-        let mut x = 0i32;
-        let mut y = 0i32;
-        // SAFETY: as elsewhere — the handle is live, and both outputs outlive
-        // the call.
-        unsafe { f(self.handle, argb, &mut x, &mut y) }.then_some((x, y))
+    /// `None` means nothing could be read — no window, nothing drawn, or no
+    /// probe. That is not the same as the colour being absent, and a guard's
+    /// negative control turns on the difference: "the colour is not there" is
+    /// the control passing and "nothing was read" is the control having
+    /// measured nothing while looking identical.
+    pub fn spike_find(&self, argb: u32) -> Option<Capture> {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *mut i32) -> i32> = match self.symbol(
+            b"domicile_engine_spike_find_colour\0",
+            "domicile_engine_spike_find_colour",
+        ) {
+            Ok(symbol) => symbol,
+            Err(err) => {
+                tracing::error!(
+                    %err,
+                    "libdomicile_engine.so has no domicile_engine_spike_find_colour; it was \
+                     built before the shell guard existed. Rebuild it: autoninja -C \
+                     out/Domicile domicile_engine"
+                );
+                return None;
+            }
+        };
+        // Six, and the layout is the C header's: the colour's box in the first
+        // four and the captured window's size in the last two.
+        let mut out = [0i32; 6];
+        // SAFETY: as elsewhere — the handle is live, and `out` is the six
+        // int32_t the header documents and outlives the call.
+        let status = unsafe { f(self.handle, argb, out.as_mut_ptr()) };
+        match status {
+            0 => Some(Capture {
+                window: (out[4], out[5]),
+                bounds: None,
+            }),
+            1 => Some(Capture {
+                window: (out[4], out[5]),
+                bounds: Some((out[0], out[1], out[2], out[3])),
+            }),
+            _ => None,
+        }
     }
 
     fn symbol<T>(&self, name: &[u8], readable: &'static str) -> Result<Symbol<'_, T>, EngineError> {

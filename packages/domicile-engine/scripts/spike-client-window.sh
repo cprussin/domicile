@@ -70,12 +70,18 @@ STARTED=()
 # Kept rather than discarded: when the page shows its own background instead of
 # the client's colour, the compositor's log is the only place that says which
 # app id it brokered — and that is now the thing an embed is dispatched on.
-LOG_COPY="${LOG_COPY:-/tmp/domicile-client-window-compositor.log}"
+# A run and its own negative control are two different measurements, so they
+# get two different files. Sharing one meant the control's logs overwrote the
+# run's and the diagnostics printed whichever went last — which, when the two
+# disagree, is exactly the pair worth reading side by side.
+WHICH=""
+[ "$NEGATIVE" = "1" ] && WHICH="-negative"
+LOG_COPY="${LOG_COPY:-/tmp/domicile-client-window$WHICH-compositor.log}"
 # The browser's own log, which used to be thrown away with the tempfile. It is
 # where the page's console lines are — which app was embedded, at which
 # SurfaceId, and which was refused — and a run where the page showed the wrong
 # window cannot be told apart from one where a client never drew without them.
-ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-client-window-engine.log}"
+ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-client-window$WHICH-engine.log}"
 cleanup() {
   cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
   cp "$ENGINE_LOG" "$ENGINE_LOG_COPY" 2>/dev/null

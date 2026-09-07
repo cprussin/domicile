@@ -100,7 +100,7 @@ report_renderers() {
 echo "compositing: $([ "$GPU" = 1 ] && echo "GPU" || echo "software")"
 
 PRODUCER=domicile_css_parity \
-URL="http://localhost:$PORT/spike-iframe-page.html?color=$COLOR" \
+URL="http://localhost:$PORT/spike-iframe-page.html?color=$COLOR&app=domicile-spike" \
 WINDOW_SIZE="$WINDOW" \
 SOCKET="${SOCKET:-/tmp/domicile-spike-iframe}" \
 PROFILE="${PROFILE:-/tmp/domicile-spike-iframe-profile}" \

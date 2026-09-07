@@ -55,15 +55,36 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
     int32_t y,
     uint32_t* argb);
 
-// Where `argb` appears in the browser's window, if it appears at all. False if
-// there is no window, nothing has been drawn, or the colour is not in it.
+// Where `argb` is in the browser's window, and how big that window is.
 //
-// A named point is the wrong question to ask of a shell. The spike pages put
-// their canvases where the harness can compute them; a real shell decides
+//   -1  the window could not be captured — no window yet, nothing drawn, or
+//       no probe pipe. Nothing was measured and nothing follows about the
+//       colour.
+//    0  captured, and the colour is not in it. This is a measurement.
+//    1  captured, and the colour is in it.
+//
+// Three values rather than a bool, because a guard's negative control turns on
+// exactly this distinction: "the colour is not on screen" is the control
+// passing, and "nothing could be read" is the control having measured nothing
+// while looking identical.
+//
+// `out` is six int32_t. On 0 and 1 it carries the captured window's width and
+// height in `out[4]` and `out[5]`; on 1 it also carries the colour's bounding
+// box as x, y, width, height in `out[0]` through `out[3]`. Nothing is written
+// on -1.
+//
+// A BOX AND A SIZE RATHER THAN A POINT, because the first matching pixel
+// answers the wrong question. A guard that samples a named point and gets the
+// wrong colour needs to know whether the colour is elsewhere, *where* the
+// region it belongs to actually is, and what coordinate space the capture is
+// in — the window it was asked for and the bitmap it got back are not
+// obliged to be the same size, and a probe that cannot say so makes a
+// coordinate bug look like a missing surface.
+//
+// A named point is also the wrong question to ask of a shell. The spike pages
+// put their canvases where the harness can compute them; a real shell decides
 // where its windows go, in its own layout, and a guard that hard-coded a pixel
-// would be asserting the shell's CSS rather than the seam. So this asks the
-// question the guard actually has: is this client's window on the screen at
-// all.
+// would be asserting the shell's CSS rather than the seam.
 //
 // One CaptureWindow rather than a grid of SamplePixel calls, which is a
 // blocking readback each and starves the producer's thread — the reason the
@@ -72,11 +93,10 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
 // Exact match, like every other assertion in the spike: the clients draw one
 // flat colour and a near-match would mean the compositor's own background, an
 // anti-aliased edge, or a blend, none of which is a client's window.
-DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_find_colour(
+DOMICILE_ENGINE_EXPORT int32_t domicile_engine_spike_find_colour(
     DomicileEngine* engine,
     uint32_t argb,
-    int32_t* x,
-    int32_t* y);
+    int32_t* out);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -70,9 +70,15 @@ ENGINE_LOG=$(mktemp)
 COMP_LOG=$(mktemp)
 CLI_LOG=$(mktemp)
 STARTED=()
-LOG_COPY="${LOG_COPY:-/tmp/domicile-shell-compositor.log}"
-ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-shell-engine.log}"
-BRIDGE_LOG_COPY="${BRIDGE_LOG_COPY:-/tmp/domicile-shell-bridge.log}"
+# A run and its own negative control are two different measurements, so they
+# get two different files. Sharing one meant the control's logs overwrote the
+# run's and the diagnostics printed whichever went last — which, when the two
+# disagree, is exactly the pair worth reading side by side.
+WHICH=""
+[ "$NEGATIVE" = "1" ] && WHICH="-negative"
+LOG_COPY="${LOG_COPY:-/tmp/domicile-shell$WHICH-compositor.log}"
+ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-shell$WHICH-engine.log}"
+BRIDGE_LOG_COPY="${BRIDGE_LOG_COPY:-/tmp/domicile-shell$WHICH-bridge.log}"
 cleanup() {
   cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
   cp "$ENGINE_LOG" "$ENGINE_LOG_COPY" 2>/dev/null
@@ -110,14 +116,32 @@ command -v bun >/dev/null || {
 }
 
 # The shell's page, built the way the shell builds it. Nothing here is a second
-# way to build a shell: this is the same `vite.renderer.config.ts` electron-forge
-# runs, which is what makes a pass mean anything about a shell someone writes.
+# way to build a shell: this is the same `vite.renderer.config.ts`
+# electron-forge runs, which is what makes a pass mean anything about a shell
+# someone writes.
+#
+# `prepare` before it, because `styled-system/` is generated and gitignored and
+# nothing in this checkout has necessarily made it — the nix node_modules
+# derivation installs with `--ignore-scripts`, so a fresh runner has the
+# imports and not the files behind them. Without this the vite build fails on
+# an unresolvable import, which is a confusing way to learn that a codegen step
+# was skipped.
+#
+# Kept, not discarded. Every other failure in this file prints what it read;
+# swallowing this one leaves "the shell's page did not build" as the whole
+# account of a build that had plenty to say.
 echo "building $SHELL_NAME's page"
-(cd "$SHELL_DIR" && bun install --frozen-lockfile >/dev/null 2>&1 &&
-   bunx vite build --config vite.renderer.config.ts >/dev/null 2>&1) || {
-  echo "the shell's page did not build" >&2
+BUILD_LOG=$(mktemp)
+if ! (cd "$SHELL_DIR" &&
+        bun install --frozen-lockfile &&
+        bun run prepare &&
+        bunx vite build --config vite.renderer.config.ts) >"$BUILD_LOG" 2>&1; then
+  echo "the shell's page did not build. It said:" >&2
+  tail -40 "$BUILD_LOG" >&2
+  rm -f "$BUILD_LOG"
   exit 1
-}
+fi
+rm -f "$BUILD_LOG"
 PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 [ -f "$PAGE_DIR/index.html" ] || {
   echo "the shell built no index.html; looked in $PAGE_DIR" >&2
@@ -132,7 +156,15 @@ rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 # 1. The bridge, first, because chrome needs a URL and the page has no way to
 #    open a unix socket. It tolerates a compositor that does not exist yet,
 #    which is the whole reason it can go first.
+#
+# The reach budget is raised well past its default because the gap this has to
+# cover is the browser starting: the page loads, its session opens, and the
+# compositor does not exist until chrome has created its broker socket, which
+# on a debug build on a loaded runner is minutes. A session that gave up in
+# between would leave the page with a dead transport and the guard would report
+# that the shell never joined, which is not the thing it guards.
 DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_ROOT="$PAGE_DIR" \
+DOMICILE_REACH_MS="${DOMICILE_REACH_MS:-600000}" \
   bun "$ROOT/packages/engine-chrome-host/src/main.ts" >"$BRIDGE_LOG" 2>&1 &
 STARTED+=($!)
 
@@ -183,7 +215,7 @@ COMP=$!
 STARTED+=("$COMP")
 
 for _ in $(seq 1 120); do
-  grep -q "wayland-[0-9]" "$COMP_LOG" 2>/dev/null && break
+  grep -aq "wayland-[0-9]" "$COMP_LOG" 2>/dev/null && break
   kill -0 $COMP 2>/dev/null || break
   sleep 0.5
 done
@@ -192,8 +224,16 @@ if ! kill -0 $COMP 2>/dev/null; then
   tail -20 "$COMP_LOG" >&2
   exit 1
 fi
-CLIENT_DISPLAY=$(grep -oE "wayland-[0-9]+" "$COMP_LOG" | head -1)
-CLIENT_DISPLAY="${CLIENT_DISPLAY:-wayland-1}"
+# No fallback: `wayland-1` is as likely to be the compositor this whole guard
+# is running inside as it is to be ours, and a client that connected to sway
+# instead would draw a window nobody is measuring and fail as "the colour is
+# not on screen".
+CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
+[ -n "$CLIENT_DISPLAY" ] || {
+  echo "the compositor never named its Wayland display. It said:" >&2
+  tail -20 "$COMP_LOG" >&2
+  exit 1
+}
 
 # The shell has to be joined to the compositor before a window it is told about
 # can mean anything: the host announces nothing until a chrome has agreed the
@@ -235,7 +275,7 @@ STARTED+=($!)
 
 FOUND=""
 for _ in $(seq 1 90); do
-  FOUND=$(grep -aoE "engine found #[0-9A-F]{8} at \([0-9]+,[0-9]+\)" "$COMP_LOG" 2>/dev/null |
+  FOUND=$(grep -aoE "engine found #[0-9A-F]{8} over .*" "$COMP_LOG" 2>/dev/null |
             tail -1)
   [ -n "$FOUND" ] && break
   kill -0 $COMP 2>/dev/null || break
@@ -258,9 +298,13 @@ if [ "$NEGATIVE" = "1" ]; then
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
   fi
+  # "has not drawn" is only logged when the window was actually captured and
+  # searched. A probe that could not read the window at all says something
+  # else — see spike_find's three answers — so this cannot go green on a
+  # measurement that never happened.
   if ! grep -aq "has not drawn" "$COMP_LOG" 2>/dev/null; then
-    echo "NEGATIVE CONTROL INCONCLUSIVE: the probe never ran, so nothing was" \
-         "measured." >&2
+    echo "NEGATIVE CONTROL INCONCLUSIVE: the probe never read the window, so" \
+         "nothing was measured." >&2
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
   fi

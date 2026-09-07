@@ -12,7 +12,7 @@ use smithay::reexports::wayland_server::backend::ObjectId;
 use smithay::reexports::wayland_server::protocol::wl_buffer;
 use smithay::reexports::wayland_server::Resource as _;
 
-use crate::engine::{BufferId, Dmabuf, Engine, EngineError, Event, SurfaceId, LIBRARY};
+use crate::engine::{BufferId, Capture, Dmabuf, Engine, EngineError, Event, SurfaceId, LIBRARY};
 use crate::engine_buffers::{HeldBuffers, Returned};
 
 /// A buffer going back to the client, and why. Every one of these is a
@@ -173,7 +173,7 @@ impl EngineSession {
     }
 
     /// THROWAWAY. See [`crate::engine::Engine::spike_find`].
-    pub fn spike_find(&self, argb: u32) -> Option<(i32, i32)> {
+    pub fn spike_find(&self, argb: u32) -> Option<Capture> {
         self.engine.spike_find(argb)
     }
 
