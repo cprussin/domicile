@@ -62,7 +62,7 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 # but not in that loop — run them by hand.
 # Most build the compositor first; `e2e-compose` drives cargo test directly and
 # `e2e-chrome-without-a-host` builds no Rust at all. Every one has a flake app, so
-# `nix run .#<name>` runs any of them against a fresh checkout.
+# `nix run .#dev-<name>` runs any of them against a fresh checkout.
 ./scripts/smoke-compositor.sh    # a real client binds our globals
 ./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow
 ./scripts/e2e-late-chrome.sh     # a chrome arriving to a client already running (reload)

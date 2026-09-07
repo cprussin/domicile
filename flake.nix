@@ -270,7 +270,7 @@
           # The desktop's own name, so `nix profile install .#manganese` puts
           # `manganese` on the PATH rather than something with a prefix nobody
           # typed. It is also what `mainProgram` says, and what CI checks for.
-          name = name;
+          inherit name;
           runtimeInputs = [ pkgs.bun ];
           text = ''
             export DOMICILE_PAGE="''${DOMICILE_PAGE:-${shellPage name}}"
@@ -278,8 +278,11 @@
             export DOMICILE_COMPOSITOR="''${DOMICILE_COMPOSITOR:-${domicile-compositor}/bin/domicile-compositor}"
             export DOMICILE_BRIDGE="''${DOMICILE_BRIDGE:-${domicileBridge}/${domicileBridge.passthru.entry}}"
             # `OUT=.` because a published engine *is* the out directory, where
-            # a Chromium checkout has one under `out/Domicile`.
-            export OUT=.
+            # a Chromium checkout has one under `out/Domicile`. `:-` like the
+            # rest: `DOMICILE_ENGINE=/build/chromium/src` is exactly the
+            # override the four above invite, and it needs `OUT=out/Domicile`
+            # to go with it.
+            export OUT="''${OUT:-.}"
             exec ${self}/scripts/run-engine.sh "$DOMICILE_ENGINE" ${name} "$@"
           '';
           meta = {
@@ -496,27 +499,6 @@
         outputHash = "sha256-4EnU8HGLV+FowAY7k61uhUmVMryVOuPHHL3ctZwUUXc=";
       };
 
-      # What settles how Node parses the bundles, beside the bundles.
-      #
-      # `docs/WRITING-A-SHELL.md` asks a shell to ship a `package.json` so its
-      # ESM launcher and main bundle are read as ESM by something stated rather
-      # than by Node's module detection. The rule is about the *nearest*
-      # `package.json` walking up from those files, so this belongs next to
-      # them rather than at the root of the output.
-      #
-      # At the root it also broke something: a top-level regular file is the
-      # one shape `nix profile` cannot merge, so two shells could not share a
-      # profile — `nix profile add .#simple .#manganese` failed on the
-      # conflict, where before they coexisted. `.vite/` never reaches a profile
-      # at all, the builder skipping dotfiles, so putting it here costs
-      # nothing and keeps both installable.
-      #
-      # `type` only. The guide's other field is `bin`, which is how a *package
-      # manager* finds the stub — and nix links `$out/bin` itself, so it earns
-      # nothing on the install path this flake documents. Written rather than
-      # copied from the workspace, whose manifest carries `workspace:*`
-      # dependencies that are not in the output.
-      manifest = pkgs.writeText "package.json" (builtins.toJSON { type = "module"; });
 
       # A shell, built and installed the way a user runs one.
       #
@@ -553,68 +535,6 @@
             runHook postConfigure
           '';
 
-      shell = { name, description }:
-        pkgs.stdenv.mkDerivation {
-          pname = "domicile-shell-${name}";
-          version = "0.0.0";
-          src = self;
-
-          # Node as well as bun: the workspace's binaries are installed as
-          # `#!/usr/bin/env node` shims, so turbo and vite are run by node
-          # even though bun is what installed them. Pinned to the major
-          # `package.json` asks for, same as the dev shell.
-          nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 pkgs.makeWrapper ];
-
-          configurePhase = sharedShellConfigure;
-
-          buildPhase = ''
-            runHook preBuild
-            node_modules/.bin/turbo build:vite \
-              --filter "@domicile/shell-${name}" --no-daemon
-            runHook postBuild
-          '';
-
-          # The stub's own layout: it resolves `.vite` as `$(dirname $0)/..`,
-          # so `bin/` and `.vite/` have to sit beside each other exactly as
-          # they do in the workspace.
-          installPhase = ''
-            runHook preInstall
-            mkdir -p "$out/bin"
-            cp -R "packages/shell-${name}/.vite" "$out/.vite"
-            install -Dm755 "packages/shell-${name}/bin/${name}" "$out/bin/${name}"
-            # `type`, which is what `docs/WRITING-A-SHELL.md` asks a shell to
-            # ship this for: the launcher and main bundles are ESM and use
-            # `import.meta.url`, and what settles how Node parses a `.js` file
-            # is the nearest `package.json` walking up from it. Without one
-            # they work by Node's detection heuristic rather than by anything
-            # stated — which is the thing that guide names to avoid, and this
-            # flake is its reference implementation.
-            #
-            # Written rather than copied from the workspace: that one carries
-            # `workspace:*` dependencies that are not here and a `devDependencies`
-            # block that means nothing to an installed desktop.
-            install -Dm644 "${manifest}" "$out/.vite/build/package.json"
-            runHook postInstall
-          '';
-
-          # The two programs a shell starts, named rather than looked for.
-          # `--set-default` and not `--set`: both are documented ways to point
-          # a shell at something else — a compositor built from a checkout, an
-          # Electron with different flags — and a wrapper that overrode the
-          # environment would take that away.
-          postFixup = ''
-            wrapProgram "$out/bin/${name}" \
-              --set-default DOMICILE_COMPOSITOR "${domicile-compositor}/bin/domicile-compositor" \
-              --set-default DOMICILE_ELECTRON "${electron}/bin/electron"
-          '';
-
-          meta = {
-            inherit description;
-            mainProgram = name;
-            platforms = [ system ];
-          };
-        };
-
       # The scripts under `scripts/` each drive Domicile out of a checkout:
       # they build in-tree (cargo's `target/`, bun's `node_modules/`) and run
       # what they built. `nix run github:cprussin/domicile#<app>` has no
@@ -624,16 +544,11 @@
       # checkout-based commands in the README do. The staging dir is keyed by
       # the source's store path, so re-running one revision reuses its build
       # artifacts and a new revision never inherits stale ones.
-      # `prelude` is shell run before the staging, for an app that needs
-      # something in its environment. Per-app rather than shared: putting the
-      # engine's path in every app's environment would make `nix run .#check`
-      # depend on a 215 MB download it has no use for.
-      runInFullShell = name: script: prelude:
+      runInFullShell = name: script:
         pkgs.writeShellApplication {
           name = "domicile-${name}";
           runtimeInputs = [ pkgs.nix ];
           text = ''
-            ${prelude}
             work="''${DOMICILE_RUN_DIR:-''${XDG_CACHE_HOME:-$HOME/.cache}/domicile/${builtins.baseNameOf self}}"
             if [ ! -e "$work/.domicile-staged" ]; then
               echo "domicile: staging the source in $work" >&2
@@ -677,17 +592,6 @@
           '';
         };
 
-      # A desktop on the forked engine — the one app here that needs neither a
-      # Chromium checkout nor four hours:
-      #
-      #   nix run github:cprussin/domicile#engine -- manganese
-      #
-      # Its own entry rather than one of `scriptApps` because it is the only
-      # one carrying a package in its environment.
-      engineApp = runInFullShell "engine" "run-engine-release.sh" ''
-        export DOMICILE_ENGINE="${domicileEngine}"
-      '';
-
       # The two desktops this repository ships. Bound once so that
       # `packages` and `apps` are the same two things rather than two lists
       # that have to be kept saying the same thing.
@@ -718,7 +622,7 @@
       scriptApps = pkgs.lib.mapAttrs
         (name: script: {
           type = "app";
-          program = pkgs.lib.getExe (runInFullShell name script "");
+          program = pkgs.lib.getExe (runInFullShell name script);
           meta.description = "Run scripts/${script} with no checkout";
         })
         {
@@ -772,12 +676,11 @@
         # the fork replaced.
         default = domicileApps.manganese;
         inherit (domicileApps) manganese simple;
-        engine = {
-          type = "app";
-          program = "${domicileEngine}/chrome";
-          meta.description =
-            "The patched Chromium a Domicile desktop runs on, on its own";
-        };
+        # No `engine` app. `nix build .#engine` is how you get the engine —
+        # it is a browser, not a thing to run — and an app here would have
+        # been `nix run .#engine -- manganese` launching bare Chromium with
+        # `manganese` as a URL to open. That command used to work and now
+        # means something else, which is worse than it not existing.
       } // pkgs.lib.mapAttrs'
         (name: app: pkgs.lib.nameValuePair "dev-${name}" app)
         scriptApps;

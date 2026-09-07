@@ -30,6 +30,19 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 SHELL_ARG="${2:-simple}"
+# THIRD AND LATER ARGUMENTS ARE REFUSED, because there is nothing for them to
+# mean and the flake hands this a shell name of its own. `nix run
+# github:cprussin/domicile -- simple` reaches here as `<engine> manganese
+# simple`: the desktop is already chosen by which app was run, and quietly
+# dropping the word somebody typed hands them manganese while they read the
+# word simple on their own command line.
+if [ "$#" -gt 2 ]; then
+  echo "run-engine.sh: too many arguments. Which desktop is chosen by which" >&2
+  echo "  app you run — \`nix run github:cprussin/domicile#simple\` rather" >&2
+  echo "  than passing \`simple\` to another one. From a checkout it is the" >&2
+  echo "  second argument and there is no third." >&2
+  exit 1
+fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
