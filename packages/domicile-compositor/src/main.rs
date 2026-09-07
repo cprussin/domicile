@@ -1518,19 +1518,28 @@ impl DomicileCompositor {
     /// then draws, which only `EngineSession` can be asked. See `latency.rs`
     /// for what the numbers are and why they are three.
     ///
-    /// THIS BLOCKS THE WAYLAND THREAD, and how long is worth knowing before
-    /// turning it on. `spike_pixel` is a `CopyOutputRequest` that waits for the
-    /// browser to answer, and the loop below spends one per ask. A round is a
-    /// poll or two. **The floor is not**: it is `FLOOR_SAMPLES` asks back to
-    /// back, about a second at 60Hz, inside the first commit callback — no
-    /// client dispatch and no frame callbacks for the whole of it. Nothing is
-    /// served in that second. It is a spike instrument and off by default, and
-    /// that is the trade.
+    /// THIS BLOCKS THE WAYLAND THREAD, and the worst case is worth knowing
+    /// before turning it on. `spike_pixel` is a `CopyOutputRequest` that waits
+    /// for the browser to answer, and the loop below spends one per ask.
     ///
-    /// It cannot block for ever, and the reason is `latency.rs`'s and not this
-    /// loop's: the floor gives up after `MAX_FLOOR_ASKS` and a round after
-    /// `MAX_POLLS`, so a screen that never holds still — a terminal blinking a
-    /// cursor over the probe point — ends the run instead of the desktop.
+    /// One invocation is either a whole floor or at most one round — the
+    /// `Press` arm breaks. A settling floor is `Budget::floor_samples` asks
+    /// back to back, about a second at 60Hz. A floor that keeps being
+    /// restarted is up to `Budget::max_floor_asks`, about **six and a half
+    /// seconds**, and a round that the client never answers is up to
+    /// `Budget::max_polls`, about **three and a third**. For every one of
+    /// those there is no client dispatch and no frame callbacks: nothing on
+    /// this desktop is served. It is a spike instrument, off unless
+    /// `DOMICILE_SPIKE_LATENCY` names a point, and that is the trade.
+    ///
+    /// **The screen at that point has to hold still, and providing that is the
+    /// caller's job.** A client repainting on its own — a terminal blinking
+    /// its cursor over the probe point — restarts the floor faster than the
+    /// floor completes, so the run spends its whole budget and reports
+    /// `NeverSettled` having measured nothing. That is a legible failure
+    /// rather than a hang, which is what the budgets buy, but it is still a
+    /// run wasted: a guard driving this wants a client whose cursor does not
+    /// blink.
     ///
     /// It does not deadlock against the engine: `SamplePixel` parks on a
     /// `WaitableEvent` while the engine's own thread runs a nested run loop,
@@ -1546,15 +1555,13 @@ impl DomicileCompositor {
             return;
         }
         // Taken out for the drive, because the `Press` arm needs all of
-        // `self`. Put back before every return below — there is one.
-        let mut run = self.latency.take().unwrap_or_else(|| {
-            Latency::new(
-                latency::ROUNDS,
-                latency::FLOOR_SAMPLES,
-                latency::MAX_FLOOR_ASKS,
-                latency::MAX_POLLS,
-            )
-        });
+        // `self`, and put back at the end. There is no early return between
+        // the two — if one is ever added it has to restore this, because a run
+        // dropped here starts over from an empty floor on the next commit.
+        let mut run = self
+            .latency
+            .take()
+            .unwrap_or_else(|| Latency::new(latency::Budget::default()));
         // The caller's stamp, from before `publish_frame` ran. The import and
         // the submit are this design's cost and belong in `commit_to_pixel`;
         // stamping here would have put them in the client's half instead.
@@ -1583,14 +1590,21 @@ impl DomicileCompositor {
                             self.inject_key(LATENCY_KEY, true);
                             self.inject_key(LATENCY_KEY, false);
                         }
-                        // Never silently: `set_focus(None)` unfocuses
-                        // everything, and the key would go nowhere while the
-                        // run sat waiting for a commit that answered it.
-                        None => warn!(
-                            app_id,
-                            "the latency run has no surface to press a key into; \
-                             it will time the round out"
-                        ),
+                        // Never silently, and never merely logged: `next` has
+                        // already started this round, and the only way out of
+                        // a started round is a commit answering the key we
+                        // just failed to send. A client that does not redraw
+                        // on its own would leave the run there for ever with
+                        // no report — which is the shape of every other bug in
+                        // this file. The round is given up instead.
+                        None => {
+                            warn!(
+                                app_id,
+                                "the latency run has no surface to press a key into; \
+                                 giving the round up"
+                            );
+                            run.press_went_nowhere();
+                        }
                     }
                     break;
                 }
