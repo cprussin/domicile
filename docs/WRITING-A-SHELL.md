@@ -228,7 +228,8 @@ Two packages, both published to npm, both usable outside this repo:
 | Package | What |
 |---|---|
 | `@domicile/chrome-sdk` | The in-page half. `BridgeClient` (the protocol), `registerElements` (the `<domicile-app>` and `<domicile-webview>` custom elements), and the pure helpers around them. |
-| `@domicile/electron-chrome-host` | The process half: starting the compositor, the window, the socket, and dying with a reason. |
+| `@domicile/electron-chrome-host` | The process half under Electron: starting the compositor, the window, the socket, and dying with a reason. |
+| `@domicile/engine-chrome-host` | The process half under the forked engine, which is where this is going (see [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md)). One program: it serves the shell's built page and bridges the compositor's socket on the same port, so the page derives the session's URL from its own origin and there is nothing to configure. |
 
 Neither is required. They are what this repo's own shells use, and a shell that
 wants to speak the protocol itself may — it is newline-delimited JSON on a Unix
@@ -250,16 +251,12 @@ Four files. The full version, with the comments, is in
 
 ```ts
 import { BridgeClient } from "@domicile/chrome-sdk/bridge";
-import { postedTransport } from "@domicile/chrome-sdk/host-transport";
+import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-const host = window.domicileHost;
-const transport =
-  host === undefined
-    ? { onMessage: () => undefined, send: () => undefined }
-    : postedTransport(window, host);
-
-const bridge = new BridgeClient(transport);
+const bridge = new BridgeClient(
+  connectToHost(window, (url) => new WebSocket(url)),
+);
 registerElements(bridge);
 
 const mounted = new Map<string, HTMLElement>();
@@ -281,13 +278,32 @@ That is a working desktop: every window full-screen, newest on top. A real
 shell differs from it only in where it puts the elements.
 
 Three things this abbreviates, all of which the example does in full and none of
-which are optional. `window.domicileHost` is `HostChannel | undefined` — the
-page must open in an ordinary browser, where nothing injected it — so it is
-branched on rather than asserted. `app_closed` is handled, because without it
-every window leaks an element. And `bridge.connect()` resolves a `Result` that
-must be reported rather than discarded; the example's `app_closed` also *throws*
-on an app it never mounted, because a close for something never announced means
-the page and the compositor disagree about what is on screen.
+which are optional. `app_closed` is handled, because without it every window
+leaks an element. `bridge.connect()` resolves a `Result` that must be reported
+rather than discarded. And the example's `app_closed` *throws* on an app it
+never mounted, because a close for something never announced means the page and
+the compositor disagree about what is on screen.
+
+**`connectToHost` is where the branching went.** A shell's page runs in three
+places and the difference is not the shell's business: under the forked engine
+it opens a WebSocket to the bridge serving the page; under Electron it takes
+the channel the preload injected at `window.domicileHost`; in an ordinary
+browser — `vite dev` on a shell's page, which is a real thing to do — it does
+nothing at all, so the page still lays out and `<domicile-app>` says once that
+it cannot show a window.
+
+Earlier versions of this document had every shell testing
+`window.domicileHost === undefined` by hand. That was one branch when there was
+one alternative, and it stopped meaning "is there a host" the moment the fork
+arrived: under the fork there is no injected channel and there very much is a
+host. If your shell needs that question — for the geometry to lay windows out
+on, say — ask `hasHost(window)` rather than reconstructing it.
+
+> **The worked example still shows the older form.**
+> [`examples/minimal-shell`](/examples/minimal-shell) builds against the
+> *published* `@domicile/chrome-sdk`, which is the property that makes it worth
+> having, and `connect-to-host` is not in a published version yet. Both shells
+> in this repository do use it. The example follows when the SDK ships it.
 
 **`src/preload.ts`** — connects the socket and hands the page its messages.
 The socket is held by the *preload* rather than the main process, deliberately:
