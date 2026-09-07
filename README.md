@@ -15,18 +15,18 @@ frames are still read back and sent to the engine
 Needs Nix and a display. Nothing to clone.
 
 ```sh
-nix run github:cprussin/domicile              # manganese: tabs, stage, address bar
-nix run github:cprussin/domicile -- simple    # simple: floating windows only
+nix run github:cprussin/domicile           # manganese: tabs, stage, address bar
+nix run github:cprussin/domicile#simple    # simple: floating windows only
 ```
 
-Those run the shells under Electron, which is what ships today. To run one on
-the **forked engine** instead — the browser as the display compositor, with the
-compositor as a producer and no Electron anywhere — use `#engine`:
+Which desktop is **which app**, not an argument to one of them. Both run on the
+forked engine — the browser is the display compositor, the compositor is a
+producer, and there is no Electron anywhere.
 
-```sh
-nix run github:cprussin/domicile#engine -- manganese
-nix run github:cprussin/domicile#engine -- simple
-```
+A Wayland session gets a window, the way starting sway inside sway does. A tty
+is refused for now: the whole screen needs an ozone platform Chromium will not
+build outside ChromeOS, which is written up in
+[docs/architecture/ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
 
 The engine is a nix package: `nix build .#engine` fetches the build CI
 published (a few hundred megabytes, once, into the store), checks it against

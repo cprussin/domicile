@@ -175,7 +175,7 @@ Phase 1 — prove one window composites at all:
 - [x] decide on the number
 
 **The number.** AMD Radeon 890M, kitty, a keystroke every 250ms, release build,
-`nix run .#measure`:
+`nix run .#dev-measure`:
 
 Measured on a copy path that read and sent the whole window every frame, which
 is no longer what it does: damage tracking narrowed the wire and the readback

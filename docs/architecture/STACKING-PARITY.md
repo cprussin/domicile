@@ -96,8 +96,8 @@ question.
 ## Reproducing the measurements
 
 ```sh
-nix run .#e2e-a-dense-display            # the fractional-scale regression
-nix run .#smoke-compositor               # asserts the advertised globals
+nix run .#dev-e2e-a-dense-display            # the fractional-scale regression
+nix run .#dev-smoke-compositor               # asserts the advertised globals
 ```
 
 `nix run .#probe-delegated-compositing` was the first of these and **no longer

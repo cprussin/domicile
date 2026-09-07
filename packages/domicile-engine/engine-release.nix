@@ -1,4 +1,4 @@
-# Which published engine `nix run .#engine` runs.
+# Which published engine `nix build .#engine` produces.
 #
 # A fixed-output derivation needs a hash, and a hash pins a build — which is
 # the point rather than a cost. `engine-nightly` is a rolling tag: without this
