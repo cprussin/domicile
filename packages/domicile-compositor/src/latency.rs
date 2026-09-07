@@ -103,10 +103,10 @@ impl Spread {
 
     /// The line a run reports this spread on.
     ///
-    /// Here, and tested, because a guard reads it: the text is the interface
-    /// between the measurement and whatever asserts on it, and a format string
-    /// nobody checks is one a rewording breaks silently. `spike-latency.sh`
-    /// greps for exactly this shape.
+    /// Here, and tested, because a guard is going to read it: the text is the
+    /// interface between the measurement and whatever asserts on it, and a
+    /// format string nobody checks is one a rewording breaks silently. No
+    /// guard drives this yet — when one does, it greps this shape.
     pub fn line(&self, what: &str, interval: Duration) -> String {
         let frames = self
             .median_frames(interval)
@@ -127,18 +127,59 @@ pub struct Report {
     /// A probe round trip with nothing changing. The floor under everything
     /// else here.
     pub floor: Option<Spread>,
-    /// Press to the client's answering commit — the client's own, not ours.
+    /// Press to the client's answering commit.
+    ///
+    /// Mostly the client's own think-and-redraw, and **not purely** — the
+    /// compositor's own work of putting the key into the seat is in here too,
+    /// because the clock starts before the key is delivered. Small, and named
+    /// rather than hidden: the alternative was starting it after delivery,
+    /// which drops that work out of every number instead of putting it in a
+    /// declared one.
     pub key_to_commit: Option<Spread>,
     /// That commit to the new colour being in the display compositor's
     /// output. **This is the number this design is answerable for.**
+    ///
+    /// **Quantised to the floor, and it cannot not be.** The probe is only
+    /// asked after the commit and each ask costs a display frame, so this is
+    /// the true value rounded up to the next probe boundary and is never below
+    /// one floor even when the pixel was already on screen. Over sixty rounds
+    /// the three numbers collapse onto multiples of it. That is what makes
+    /// "indistinguishable from the floor" the result rather than a hedge — and
+    /// it is also the instrument's resolution: a regression in this half
+    /// smaller than one probe round trip does not show up here. `key_to_commit`
+    /// is not quantised, being timed to the real commit callback, so the two
+    /// do not have the same resolution.
     pub commit_to_pixel: Option<Spread>,
-    /// The whole of it, which is what a user feels.
+    /// The whole of it. Not what a user feels: it has the probe's round trip
+    /// in it, and a user waits for no `CopyOutputRequest`.
     pub key_to_pixel: Option<Spread>,
-    /// Rounds that ran out of polls rather than seeing the colour change, and
-    /// rounds cut short by a probe that stopped reading. A run with any of
-    /// these measured a client that stopped answering, and every median above
-    /// is over whatever did.
+    /// Rounds that ran out of polls rather than seeing the colour change.
+    ///
+    /// The client stopped answering, or never answered a key at all — which is
+    /// what a run against a client that ignores the keyboard looks like, and
+    /// is the whole of what the negative control asserts.
     pub abandoned: usize,
+    /// Why the run stopped, when it was not by running out of rounds.
+    ///
+    /// Separate from `abandoned` because they are different accusations: an
+    /// abandoned round is the *client* not answering, and every one of these
+    /// is the *probe* or the screen. Reporting them as one number sent whoever
+    /// read it to the wrong end.
+    pub ended: Ended,
+}
+
+/// How a run finished.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ended {
+    /// Every round it set out to do.
+    Completed,
+    /// The screen never held still long enough to price the probe against it.
+    /// A client repainting on its own — a blinking cursor over the probe point
+    /// — looks exactly like this, and so does a page that never settles.
+    NeverSettled,
+    /// The probe stopped answering, or never started. Distinct from the screen
+    /// moving: this is no reading at all rather than a different one.
+    ProbeWentDark,
 }
 
 /// Where a run has got to.
@@ -162,6 +203,16 @@ enum Phase {
         taken: usize,
         since: Option<Instant>,
         holding: Option<u32>,
+        /// Every answer this floor has been given, restarts included.
+        ///
+        /// **The floor has to be able to give up, and for the same reason the
+        /// poll does.** A screen that never holds still — a terminal blinking
+        /// its cursor over the probe point is the obvious one — leaves the
+        /// floor asking for ever, and the driver asking for ever is a
+        /// compositor that has stopped serving clients. Bounded, so that case
+        /// reports itself as [`Ended::NeverSettled`] rather than hanging the
+        /// desktop.
+        asked: usize,
     },
     /// Between rounds: the next thing to do is press a key.
     Ready,
@@ -175,7 +226,7 @@ enum Phase {
         polls: u32,
     },
     /// Over. Nothing moves out of this.
-    Done,
+    Done(Ended),
 }
 
 /// How many rounds, and how many floor samples. Sixty of each, which is what
@@ -183,6 +234,13 @@ enum Phase {
 /// producer-side one it is read beside.
 pub const ROUNDS: usize = 60;
 pub const FLOOR_SAMPLES: usize = 60;
+
+/// How many answers the floor asks for before giving up on ever settling.
+///
+/// Generous against `FLOOR_SAMPLES`, because a restart is normal — a page
+/// finishing its first paint costs one — and stingy against for ever, because
+/// the driver blocks on every one of these.
+pub const MAX_FLOOR_ASKS: usize = 400;
 
 /// How many probe answers a round waits through before giving up on it.
 ///
@@ -197,6 +255,7 @@ pub const MAX_POLLS: u32 = 200;
 pub struct Latency {
     rounds: usize,
     floor_samples: usize,
+    max_floor_asks: usize,
     max_polls: u32,
     phase: Phase,
     round: usize,
@@ -212,15 +271,17 @@ pub struct Latency {
 }
 
 impl Latency {
-    pub fn new(rounds: usize, floor_samples: usize, max_polls: u32) -> Self {
+    pub fn new(rounds: usize, floor_samples: usize, max_floor_asks: usize, max_polls: u32) -> Self {
         Self {
             rounds,
             floor_samples,
+            max_floor_asks,
             max_polls,
             phase: Phase::Floor {
                 taken: 0,
                 since: None,
                 holding: None,
+                asked: 0,
             },
             round: 0,
             last: None,
@@ -239,11 +300,17 @@ impl Latency {
     pub fn next(&mut self, now: Instant) -> Step {
         match self.phase {
             Phase::Polling { .. } => Step::Sample,
-            Phase::Floor { taken, holding, .. } => {
+            Phase::Floor {
+                taken,
+                holding,
+                asked,
+                ..
+            } => {
                 self.phase = Phase::Floor {
                     taken,
                     since: Some(now),
                     holding,
+                    asked,
                 };
                 Step::Sample
             }
@@ -253,11 +320,16 @@ impl Latency {
                     // A completed floor is a run of answers that all agreed,
                     // so this is a colour the probe really did report and one
                     // that was holding still when it did.
-                    before: self.last.unwrap_or(0),
+                    // `expect` rather than a fallback: `Ready` is only ever
+                    // entered out of a completed floor, and a completed floor
+                    // has answered. A default here would be a silent one, and
+                    // the round would watch for a change from a colour nobody
+                    // reported.
+                    before: self.last.expect("a completed floor has answered"),
                 };
                 Step::Press
             }
-            Phase::Pressed { .. } | Phase::Done => Step::Wait,
+            Phase::Pressed { .. } | Phase::Done(_) => Step::Wait,
         }
     }
 
@@ -269,23 +341,33 @@ impl Latency {
                 taken,
                 since,
                 holding,
+                asked,
             } => {
+                let asked = asked + 1;
                 self.phase = match (holding, since) {
                     // The screen held still, and there is an earlier answer to
                     // have timed this one from.
-                    (Some(held), Some(asked)) if held == argb => {
-                        self.floor.push(now.saturating_duration_since(asked));
+                    (Some(held), Some(at)) if held == argb => {
+                        self.floor.push(now.saturating_duration_since(at));
                         let taken = taken + 1;
                         if taken >= self.floor_samples {
                             Phase::Ready
                         } else {
+                            // `since` is not written here: `next` sets it when
+                            // it asks, which is the moment being timed from.
                             Phase::Floor {
                                 taken,
-                                since: Some(now),
+                                since,
                                 holding,
+                                asked,
                             }
                         }
                     }
+                    // Out of patience. A screen that will not hold still is a
+                    // real answer about this run — see `Ended::NeverSettled` —
+                    // and it is the one the driver would otherwise ask for
+                    // until the desktop stopped.
+                    _ if asked >= self.max_floor_asks => Phase::Done(Ended::NeverSettled),
                     // Either the first answer of all, or the screen moved.
                     // Both start the floor from here: what was timed before a
                     // move was timed across one, and a floor is the probe's
@@ -294,15 +376,16 @@ impl Latency {
                         self.floor.clear();
                         Phase::Floor {
                             taken: 0,
-                            since: Some(now),
+                            since,
                             holding: Some(argb),
+                            asked,
                         }
                     }
                 };
             }
             // A sample answered while we wait for the commit was asked for
             // before the key went in, so it says nothing about this round.
-            Phase::Ready | Phase::Pressed { .. } | Phase::Done => {}
+            Phase::Ready | Phase::Pressed { .. } | Phase::Done(_) => {}
             Phase::Polling {
                 keyed,
                 committed,
@@ -333,9 +416,10 @@ impl Latency {
 
     /// The client this run is watching committed a frame.
     ///
-    /// Ignored outside a round, which is most commits: a terminal redraws a
-    /// blinking cursor unprompted, and neither settling nor the floor may be
-    /// interrupted by one.
+    /// Ignored outside a round, which is most commits: a client redraws
+    /// unprompted and the floor must not be interrupted by one. (What a
+    /// self-repainting client *does* interrupt is the floor's stillness, which
+    /// is `Ended::NeverSettled`'s job and not this one's.)
     pub fn committed(&mut self, now: Instant) {
         if let Phase::Pressed { at, before } = self.phase {
             self.key_to_commit.push(now.saturating_duration_since(at));
@@ -350,40 +434,57 @@ impl Latency {
 
     /// The probe could not read the window at all.
     ///
-    /// Distinct from "the colour has not changed", and it ends the run rather
-    /// than being survived: every number here is a difference between two
-    /// probe answers, and a run with a hole in the middle is measuring the
-    /// hole. A round in flight when it happens is counted abandoned, so a
-    /// report cannot show a clean count over a run that broke.
+    /// Distinct from "the colour has not changed": that is a reading, this is
+    /// the absence of one. `spike_pixel` gives it for three unrelated reasons
+    /// — a missing symbol, a point outside the window, and a window the
+    /// browser has not composited yet — and only the last is survivable.
+    ///
+    /// **Survivable during the floor, and only there.** The first commit is
+    /// exactly when the page may not have drawn the `<app>` yet, so ending the
+    /// run on one refusal there would end most runs before they started. The
+    /// floor spends an ask on it and carries on. Once rounds are running there
+    /// is nothing to wait for: every number is a difference between two probe
+    /// answers, and one with a hole in it measures the hole.
+    ///
+    /// Either way this is the *probe's* failure, never the client's, so it
+    /// lands in `ended` and not in `abandoned`.
     pub fn unreadable(&mut self) {
-        if matches!(self.phase, Phase::Polling { .. } | Phase::Pressed { .. }) {
-            self.abandoned += 1;
-        }
-        self.phase = Phase::Done;
+        self.phase = match self.phase {
+            Phase::Floor {
+                taken,
+                since,
+                holding,
+                asked,
+            } if asked + 1 < self.max_floor_asks => Phase::Floor {
+                taken,
+                since,
+                holding,
+                asked: asked + 1,
+            },
+            _ => Phase::Done(Ended::ProbeWentDark),
+        };
     }
 
-    /// Whether the run is over, either by finishing its rounds or by the probe
-    /// going dark.
-    pub fn finished(&self) -> bool {
-        self.phase == Phase::Done
-    }
-
-    /// The run's numbers. Only once it is over: a median over a third of a run
-    /// is a number somebody will quote.
+    /// The run's numbers, and how it ended. `None` while it is still running:
+    /// a median over a third of a run is a number somebody will quote.
     pub fn report(&self) -> Option<Report> {
-        self.finished().then(|| Report {
+        let Phase::Done(ended) = self.phase else {
+            return None;
+        };
+        Some(Report {
             floor: Spread::of(&self.floor),
             key_to_commit: Spread::of(&self.key_to_commit),
             commit_to_pixel: Spread::of(&self.commit_to_pixel),
             key_to_pixel: Spread::of(&self.key_to_pixel),
             abandoned: self.abandoned,
+            ended,
         })
     }
 
     fn end_round(&mut self) {
         self.round += 1;
         self.phase = if self.round >= self.rounds {
-            Phase::Done
+            Phase::Done(Ended::Completed)
         } else {
             Phase::Ready
         };
@@ -394,7 +495,7 @@ impl Latency {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use super::{Latency, Spread, Step};
+    use super::{Ended, Latency, Spread, Step};
 
     fn ms(count: u64) -> Duration {
         Duration::from_millis(count)
@@ -411,8 +512,17 @@ mod tests {
 
     impl Driver {
         fn new(rounds: usize, floor_samples: usize, max_polls: u32) -> Self {
+            Self::with_floor_budget(rounds, floor_samples, 400, max_polls)
+        }
+
+        fn with_floor_budget(
+            rounds: usize,
+            floor_samples: usize,
+            max_floor_asks: usize,
+            max_polls: u32,
+        ) -> Self {
             Self {
-                latency: Latency::new(rounds, floor_samples, max_polls),
+                latency: Latency::new(rounds, floor_samples, max_floor_asks, max_polls),
                 now: Instant::now(),
                 colour: 0xFF00_0000,
                 floor_samples,
@@ -518,8 +628,8 @@ mod tests {
     /// going to change on its own — and would report the page's own settling
     /// as a keystroke's answer, fast and in the flattering direction.
     #[test]
-    fn a_page_still_painting_itself_never_finishes_the_floor() {
-        let mut driver = Driver::new(1, 3, 10);
+    fn a_page_still_painting_itself_is_waited_out_rather_than_measured() {
+        let mut driver = Driver::with_floor_budget(1, 3, 40, 10);
         // A screen that changes on every answer, for longer than the floor.
         for step in 0..12 {
             assert_eq!(driver.tick(ms(1)), Step::Sample);
@@ -532,6 +642,113 @@ mod tests {
             "it must still be flooring"
         );
         assert_eq!(driver.latency.report(), None);
+        // And then it settles, and the floor is the settled screen's.
+        driver.colour = 0xFF77_7777;
+        driver.reach_first_press(ms(17));
+        driver.round(ms(5), ms(16));
+        let report = driver.latency.report().unwrap();
+        assert_eq!(report.ended, Ended::Completed);
+        assert_eq!(report.floor.unwrap().max, ms(17));
+    }
+
+    /// A screen that NEVER holds still has to end the run, because the driver
+    /// blocks the Wayland thread on every ask. Without a budget here the
+    /// desktop stops serving clients for as long as a cursor keeps blinking
+    /// over the probe point — which is the client this instrument expects.
+    #[test]
+    fn a_screen_that_never_settles_gives_up_instead_of_asking_for_ever() {
+        let mut driver = Driver::with_floor_budget(1, 3, 8, 10);
+        for step in 0..8 {
+            assert_eq!(driver.tick(ms(1)), Step::Sample);
+            driver.now += ms(17);
+            driver.latency.sampled(driver.now, 0xFF00_0000 + step);
+        }
+        assert_eq!(driver.tick(ms(1)), Step::Wait, "it must have given up");
+        let report = driver.latency.report().unwrap();
+        assert_eq!(report.ended, Ended::NeverSettled);
+        assert_eq!(
+            report.floor, None,
+            "nothing it timed was against a still screen"
+        );
+        assert_eq!(report.abandoned, 0, "the client is not what failed here");
+    }
+
+    /// The first commit is exactly when the page may not have drawn the <app>
+    /// yet, so one refusal during the floor must not end the run — it would
+    /// end most runs before they started.
+    #[test]
+    fn a_probe_that_refuses_during_the_floor_is_waited_through() {
+        let mut driver = Driver::new(1, 3, 10);
+        assert_eq!(driver.tick(ms(0)), Step::Sample);
+        driver.latency.unreadable();
+        assert_eq!(driver.latency.report(), None, "one refusal is not the end");
+
+        driver.reach_first_press(ms(17));
+        driver.round(ms(5), ms(16));
+        let report = driver.latency.report().unwrap();
+        assert_eq!(report.ended, Ended::Completed);
+        assert_eq!(report.commit_to_pixel.unwrap().median, ms(16));
+    }
+
+    /// A probe that refuses for ever is the floor's other way to hang the
+    /// desktop: `sampled` is never reached, so the budget has to be spent from
+    /// here too or nothing ever ends the run.
+    #[test]
+    fn a_probe_that_refuses_for_ever_gives_up_rather_than_asking_for_ever() {
+        let mut driver = Driver::with_floor_budget(1, 3, 5, 10);
+        for _ in 0..5 {
+            assert_eq!(driver.tick(ms(1)), Step::Sample);
+            driver.latency.unreadable();
+        }
+        assert_eq!(driver.tick(ms(1)), Step::Wait, "it must have given up");
+        let report = driver.latency.report().unwrap();
+        assert_eq!(report.ended, Ended::ProbeWentDark);
+        assert_eq!(report.floor, None);
+    }
+
+    /// Once rounds are running there is nothing to wait for: every number is a
+    /// difference between two probe answers. This is the arm the driver
+    /// actually hits, since `unreadable` is called from inside the poll loop.
+    #[test]
+    fn a_probe_that_goes_dark_mid_poll_ends_the_run_as_the_probes_fault() {
+        let mut driver = Driver::new(10, 3, 10);
+        driver.reach_first_press(ms(17));
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+        driver.now += ms(5);
+        driver.latency.committed(driver.now);
+        assert_eq!(driver.latency.next(driver.now), Step::Sample);
+        driver.latency.unreadable();
+
+        let report = driver.latency.report().unwrap();
+        assert_eq!(report.ended, Ended::ProbeWentDark);
+        assert_eq!(report.abandoned, 0, "the probe failed, not the client");
+        assert_eq!(report.commit_to_pixel, None);
+    }
+
+    /// Every round watches for a change from what the probe last answered, so
+    /// the last answer has to be kept in every phase. Kept only during the
+    /// floor, round two would watch for a change from a stale colour and
+    /// complete on its first poll — a fabricated fast number.
+    #[test]
+    fn each_round_watches_for_a_change_from_the_previous_rounds_colour() {
+        let mut driver = Driver::new(2, 3, 10);
+        driver.reach_first_press(ms(17));
+        driver.round(ms(5), ms(16));
+        // Round two's press, then a poll answering round one's colour: that is
+        // no change, and must be waited through rather than counted.
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+        driver.now += ms(5);
+        driver.latency.committed(driver.now);
+        assert_eq!(driver.latency.next(driver.now), Step::Sample);
+        driver.answer(ms(17));
+        assert_eq!(driver.latency.report(), None, "that was not a change");
+
+        driver.colour = driver.colour.wrapping_add(0x0000_1000);
+        let colour = driver.colour;
+        driver.now += ms(16);
+        driver.latency.sampled(driver.now, colour);
+        let report = driver.latency.report().unwrap();
+        assert_eq!(report.commit_to_pixel.unwrap().max, ms(33));
     }
 
     #[test]
@@ -612,14 +829,13 @@ mod tests {
         let mut driver = Driver::new(10, 3, 10);
         driver.reach_first_press(ms(17));
         driver.round(ms(5), ms(16));
-        assert!(!driver.latency.finished());
+        assert_eq!(driver.latency.report(), None);
 
         assert_eq!(driver.tick(ms(0)), Step::Press);
         driver.latency.unreadable();
 
-        assert!(driver.latency.finished());
         let report = driver.latency.report().unwrap();
-        assert_eq!(report.abandoned, 1);
+        assert_eq!(report.ended, Ended::ProbeWentDark);
         assert_eq!(report.commit_to_pixel.unwrap().count, 1);
     }
 

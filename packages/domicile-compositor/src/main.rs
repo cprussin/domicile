@@ -1490,12 +1490,6 @@ impl DomicileCompositor {
         }
     }
 
-    /// Show this app's frame, and say whether the engine took the buffer.
-    ///
-    /// `true` means viz is sampling the client's dmabuf and the caller must not
-    /// release it — see the commit path, which is the only caller.
-    ///
-    /// One path: the buffer goes to the engine or the window does not draw.
     /// Put one key into the seat, and let the focus it already has deliver it.
     ///
     /// Shared by the chrome's keys and the latency run's, because a
@@ -1524,13 +1518,24 @@ impl DomicileCompositor {
     /// then draws, which only `EngineSession` can be asked. See `latency.rs`
     /// for what the numbers are and why they are three.
     ///
-    /// The polls run inline rather than off a timer. `spike_pixel` is a
-    /// `CopyOutputRequest` that blocks until the browser answers, so this
-    /// holds the Wayland thread for a frame or two per round — which costs
-    /// nothing that matters, because what it is waiting for is the browser and
-    /// not the client, and the client has already committed. Between rounds
-    /// the thread is free, which is what lets the next key be answered at all.
-    fn drive_latency(&mut self, app_id: &str) {
+    /// THIS BLOCKS THE WAYLAND THREAD, and how long is worth knowing before
+    /// turning it on. `spike_pixel` is a `CopyOutputRequest` that waits for the
+    /// browser to answer, and the loop below spends one per ask. A round is a
+    /// poll or two. **The floor is not**: it is `FLOOR_SAMPLES` asks back to
+    /// back, about a second at 60Hz, inside the first commit callback — no
+    /// client dispatch and no frame callbacks for the whole of it. Nothing is
+    /// served in that second. It is a spike instrument and off by default, and
+    /// that is the trade.
+    ///
+    /// It cannot block for ever, and the reason is `latency.rs`'s and not this
+    /// loop's: the floor gives up after `MAX_FLOOR_ASKS` and a round after
+    /// `MAX_POLLS`, so a screen that never holds still — a terminal blinking a
+    /// cursor over the probe point — ends the run instead of the desktop.
+    ///
+    /// It does not deadlock against the engine: `SamplePixel` parks on a
+    /// `WaitableEvent` while the engine's own thread runs a nested run loop,
+    /// so the reply does not need this thread back.
+    fn drive_latency(&mut self, app_id: &str, committed: Instant) {
         let Some((x, y)) = spike_latency_point() else {
             return;
         };
@@ -1540,24 +1545,28 @@ impl DomicileCompositor {
         if self.latency_app.get_or_insert_with(|| app_id.to_string()) != app_id {
             return;
         }
-        let run = self.latency.get_or_insert_with(|| {
-            Latency::new(latency::ROUNDS, latency::FLOOR_SAMPLES, latency::MAX_POLLS)
+        // Taken out for the drive, because the `Press` arm needs all of
+        // `self`. Put back before every return below — there is one.
+        let mut run = self.latency.take().unwrap_or_else(|| {
+            Latency::new(
+                latency::ROUNDS,
+                latency::FLOOR_SAMPLES,
+                latency::MAX_FLOOR_ASKS,
+                latency::MAX_POLLS,
+            )
         });
-        run.committed(Instant::now());
+        // The caller's stamp, from before `publish_frame` ran. The import and
+        // the submit are this design's cost and belong in `commit_to_pixel`;
+        // stamping here would have put them in the client's half instead.
+        run.committed(committed);
         loop {
-            let step = self
-                .latency
-                .as_mut()
-                .expect("just inserted")
-                .next(Instant::now());
-            match step {
+            match run.next(Instant::now()) {
                 LatencyStep::Sample => {
-                    let sampled = self
+                    match self
                         .engine
                         .as_mut()
-                        .and_then(|engine| engine.spike_pixel(x, y));
-                    let run = self.latency.as_mut().expect("just inserted");
-                    match sampled {
+                        .and_then(|engine| engine.spike_pixel(x, y))
+                    {
                         Some(argb) => run.sampled(Instant::now(), argb),
                         None => run.unreadable(),
                     }
@@ -1566,17 +1575,29 @@ impl DomicileCompositor {
                     // Focused every round rather than once: the keyboard is
                     // one seat's and anything else that moved it would send
                     // the rest of the run somewhere the probe is not looking.
-                    let surface = self.surface_for(app_id);
-                    let keyboard = self.seat.get_keyboard().unwrap();
-                    let serial = SERIAL_COUNTER.next_serial();
-                    keyboard.set_focus(self, surface, serial);
-                    self.inject_key(LATENCY_KEY, true);
-                    self.inject_key(LATENCY_KEY, false);
+                    match self.surface_for(app_id) {
+                        Some(surface) => {
+                            let keyboard = self.seat.get_keyboard().unwrap();
+                            let serial = SERIAL_COUNTER.next_serial();
+                            keyboard.set_focus(self, Some(surface), serial);
+                            self.inject_key(LATENCY_KEY, true);
+                            self.inject_key(LATENCY_KEY, false);
+                        }
+                        // Never silently: `set_focus(None)` unfocuses
+                        // everything, and the key would go nowhere while the
+                        // run sat waiting for a commit that answered it.
+                        None => warn!(
+                            app_id,
+                            "the latency run has no surface to press a key into; \
+                             it will time the round out"
+                        ),
+                    }
                     break;
                 }
                 LatencyStep::Wait => break,
             }
         }
+        self.latency = Some(run);
         self.report_latency();
     }
 
@@ -1626,12 +1647,37 @@ impl DomicileCompositor {
         say("key to commit", report.key_to_commit.as_ref());
         say("commit to pixel", report.commit_to_pixel.as_ref());
         say("key to pixel", report.key_to_pixel.as_ref());
+        // How it ended and what the client did are two different accusations,
+        // so they are two lines. A run that never settled has no floor and no
+        // rounds, and "0 abandoned" on its own would read like a clean sheet.
         tracing::info!(
             target: "domicile::engine::spike",
-            "latency: {} round(s) abandoned", report.abandoned
+            "latency: {} round(s) abandoned by the client",
+            report.abandoned
         );
+        match report.ended {
+            latency::Ended::Completed => tracing::info!(
+                target: "domicile::engine::spike",
+                "latency: the run completed"
+            ),
+            latency::Ended::NeverSettled => tracing::info!(
+                target: "domicile::engine::spike",
+                "latency: the run gave up — the screen at the probe point never held \
+                 still, so the probe could not be priced against it"
+            ),
+            latency::Ended::ProbeWentDark => tracing::info!(
+                target: "domicile::engine::spike",
+                "latency: the run gave up — the probe stopped answering"
+            ),
+        }
     }
 
+    /// Show this app's frame, and say whether the engine took the buffer.
+    ///
+    /// `true` means viz is sampling the client's dmabuf and the caller must not
+    /// release it — see the commit path, which is the only caller.
+    ///
+    /// One path: the buffer goes to the engine or the window does not draw.
     fn publish_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer) -> bool {
         let Some(committed) = committed_buffer(buffer) else {
             return false;
@@ -2859,10 +2905,11 @@ impl CompositorHandler for DomicileCompositor {
             let engine_holds = match &committer {
                 Committer::App(app_id) => {
                     let held = self.publish_frame(app_id, &buffer);
-                    // After the submit, because a round's second half is the
-                    // time from this commit to what the engine then draws, and
-                    // the submit is the first thing in it.
-                    self.drive_latency(app_id);
+                    // Driven after the submit, because the polling needs
+                    // something submitted to find — but timed from `started`,
+                    // which is before it. The import and the submit are ours,
+                    // and a round's second half is meant to contain them.
+                    self.drive_latency(app_id, started);
                     held
                 }
                 Committer::Chrome => {
@@ -3953,14 +4000,11 @@ fn spike_probe_points() -> &'static [(i32, i32)] {
         raw.split(';')
             .filter(|entry| !entry.trim().is_empty())
             .filter_map(|entry| {
-                let (x, y) = entry.split_once(',')?;
-                match (x.trim().parse(), y.trim().parse()) {
-                    (Ok(x), Ok(y)) => Some((x, y)),
-                    _ => {
-                        warn!(entry, "DOMICILE_SPIKE_PROBE: not an `x,y` point; ignored");
-                        None
-                    }
+                let point = parse_point(entry.trim());
+                if point.is_none() {
+                    warn!(entry, "DOMICILE_SPIKE_PROBE: not an `x,y` point; ignored");
                 }
+                point
             })
             .collect()
     })
