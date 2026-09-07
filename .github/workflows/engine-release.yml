@@ -119,11 +119,10 @@ jobs:
           build="$GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh $CHROMIUM $OUT \
             && touch $done"
 
-          NIX_SHELL_RUN="bash -c '$build'" nix develop "path:$CHROMIUM/tools/nix" || true
-          if [ ! -e "$done" ]; then
-            echo "NIX_SHELL_RUN ran nothing; feeding the shell on stdin instead"
-            printf '%s\n' "$build" | nix develop "path:$CHROMIUM/tools/nix" || true
-          fi
+          # nix-shell with the shell.nix: the form the spike scripts use, and
+          # the ones that have run on this machine. See engine.yml.
+          env NIX_SHELL_RUN="bash -c '$build'" \
+            nix-shell "$CHROMIUM/tools/nix/shell.nix" || true
           [ -e "$done" ] || {
             echo "::error::neither way of scripting Chromium's shell ran the build" >&2
             exit 1

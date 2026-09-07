@@ -227,13 +227,32 @@ jobs:
             && autoninja -C $CHROMIUM/out/Domicile domicile_engine components_unittests \
             && touch $done"
 
-          NIX_SHELL_RUN="bash -c '$build'" nix develop "path:$CHROMIUM/tools/nix" || true
-          if [ ! -e "$done" ]; then
-            echo "NIX_SHELL_RUN ran nothing; feeding the shell on stdin instead"
-            printf '%s\n' "$build" | nix develop "path:$CHROMIUM/tools/nix" || true
-          fi
+          # Each attempt says what it did. `|| true` on its own is how the
+          # last two rounds threw away the error that would have named this.
+          attempt() {
+            local label="$1"; shift
+            [ -e "$done" ] && return 0
+            echo "== $label"
+            if "$@" >/tmp/domicile-shell.log 2>&1; then
+              echo "   exited 0"
+            else
+              echo "   exited $?"
+            fi
+            tail -15 /tmp/domicile-shell.log | sed 's/^/   | /'
+          }
+
+          # `nix-shell` with the shell.nix, first, because that is the form
+          # spike-client-window.sh and spike-wayland.sh use and those have
+          # actually run on this machine. `nix develop path:` wants a flake.nix
+          # and this directory ships a shell.nix, which is why it returned in
+          # no time at all having entered nothing.
+          attempt "nix-shell tools/nix/shell.nix, NIX_SHELL_RUN" \
+            env NIX_SHELL_RUN="bash -c '$build'" nix-shell "$CHROMIUM/tools/nix/shell.nix"
+          attempt "nix develop path:tools/nix, NIX_SHELL_RUN" \
+            env NIX_SHELL_RUN="bash -c '$build'" nix develop "path:$CHROMIUM/tools/nix"
+
           [ -e "$done" ] || {
-            echo "::error::neither way of scripting Chromium's shell ran the build" >&2
+            echo "::error::no way of scripting Chromium's shell ran the build; each attempt's last words are above" >&2
             exit 1
           }
 
