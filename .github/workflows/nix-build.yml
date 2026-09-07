@@ -121,22 +121,32 @@ jobs:
             done
           done
 
-      # The assertion that needs the bundles to actually load.
+      # THE ASSERTION THAT NEEDS THE WRAPPER TO ACTUALLY RUN.
       #
-      # Everything above is `[ -e ]` and a stub that exits in `/bin/sh` before
-      # Node starts. This runs the launcher for real and lets it fail on the
-      # *compositor* — which it only reaches by resolving every import in
-      # `launch.js` with no `node_modules` anywhere near it. A dependency left
-      # external instead of bundled dies before this message, which is exactly
-      # the bug that shipped once already.
-      - name: An installed shell loads its own bundles
+      # Everything above is `[ -e ]` against a path. This starts the desktop
+      # for real and lets it fail on the compositor, which it reaches only by
+      # resolving `run-engine.sh` out of the store — so a wrapper that names
+      # its four inputs correctly and still cannot start says so here rather
+      # than on somebody's machine.
+      #
+      # It used to run the Electron launcher and wait for "the compositor never
+      # published a session", which was that launcher's own words about a
+      # different architecture. The message now is `run-engine.sh` refusing a
+      # compositor that is not there: the same shape of assertion, about the
+      # thing that replaced it.
+      #
+      # A path that cannot exist rather than `/bin/false`, which is a real
+      # executable — the runner would start it, watch it exit, and fail further
+      # along for a reason this step is not asking about.
+      - name: An installed desktop starts and reaches its compositor
         run: |
           set -eu
           for name in manganese simple; do
             out="$(nix build --no-link --print-out-paths ".#$name")"
-            DOMICILE_COMPOSITOR=/bin/false "$out/bin/$name" 2>&1 |
-              grep -q "the compositor never published a session" || {
-                echo "$name: the launcher did not get as far as its compositor"
+            DOMICILE_COMPOSITOR=/nix/store/there-is-no-such-compositor \
+              "$out/bin/$name" 2>&1 |
+              grep -q "no compositor at /nix/store/there-is-no-such-compositor" || {
+                echo "$name: did not get as far as looking for its compositor"
                 exit 1
               }
           done
