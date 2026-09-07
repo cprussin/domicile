@@ -109,35 +109,39 @@ jobs:
       # the thing a person runs by hand. This is the shippable one, and the
       # only differences that matter are is_component_build and the crashpad
       # handler coming with it.
-      # The shell has to prove it ran the command; see engine.yml, where
-      # NIX_SHELL_RUN returned success in one second having built nothing.
+      # The shell has to prove it ran the command, and the command is a path
+      # rather than a string: see engine.yml, where NIX_SHELL_RUN returned
+      # success having built nothing, and where a composed command came out the
+      # far end of three layers of quoting as `looked: command not found`.
       - name: Build
         run: |
           set -euo pipefail
           done=/tmp/domicile-release-build-ran
           rm -f "$done"
-          # depot_tools on PATH: `gn` and `autoninja` are its, and this unit
-          # has no shell config to put it there. The checkout's vendored copy
-          # first, since it is the one that matches this tree. See engine.yml.
-          tools="$CHROMIUM/third_party/depot_tools:/build/depot_tools"
-          build="export PATH=$tools:\$PATH; \
-            command -v autoninja >/dev/null || \
-              { echo 'no autoninja on PATH; looked in $tools' >&2; exit 127; }; \
-            $GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh $CHROMIUM $OUT && \
-            touch $done"
 
-          # `<nixpkgs>` has to resolve or the shell builds nothing and hands
-          # the script an ambient bash with no toolchain. A systemd service has
-          # no NIX_PATH. See engine.yml.
+          # tools/nix/shell.nix imports <nixpkgs>, and a systemd service has no
+          # NIX_PATH. From the registry, which is what pins it on this machine.
           nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
           export NIX_PATH="nixpkgs=$nixpkgs"
 
-          # nix-shell with the shell.nix: the form the spike scripts use, and
-          # the ones that have run on this machine.
-          env NIX_SHELL_RUN="bash -c '$build'" \
-            nix-shell "$CHROMIUM/tools/nix/shell.nix" || true
+          cat > /tmp/domicile-release-build <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh" "$CHROMIUM" "$OUT"
+          touch "$done"
+          EOF
+          chmod +x /tmp/domicile-release-build
+
+          if NIX_SHELL_RUN=/tmp/domicile-release-build \
+               nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-shell.log 2>&1; then
+            echo "the shell exited 0"
+          else
+            echo "the shell exited $?"
+          fi
+          tail -25 /tmp/domicile-shell.log | sed 's/^/  | /'
+
           [ -e "$done" ] || {
-            echo "::error::neither way of scripting Chromium's shell ran the build" >&2
+            echo "::error::Chromium's shell did not run the build; its last words are above" >&2
             exit 1
           }
 

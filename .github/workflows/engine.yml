@@ -223,63 +223,39 @@ jobs:
           set -euo pipefail
           done=/tmp/domicile-build-ran
           rm -f "$done"
-          # depot_tools on PATH, because `autoninja` and `gn` are its, not the
-          # nix shell's. An interactive user has it from their shell config;
-          # this unit has no shell config, which is what `exec: autoninja: not
-          # found` was once <nixpkgs> resolved and the FHS env actually built.
-          #
-          # The checkout's own copy first: a gclient checkout vendors
-          # depot_tools at third_party/depot_tools, so it is the one that
-          # matches this tree rather than whatever is beside it on the disk.
-          tools="$CHROMIUM/third_party/depot_tools:/build/depot_tools"
-          build="export PATH=$tools:\$PATH; \
-            command -v autoninja >/dev/null || \
-              { echo 'no autoninja on PATH; looked in $tools' >&2; exit 127; }; \
-            $GITHUB_WORKSPACE/packages/domicile-engine/scripts/build.sh $CHROMIUM && \
-            autoninja -C $CHROMIUM/out/Domicile domicile_engine components_unittests && \
-            touch $done"
 
-          # Each attempt says what it did. `|| true` on its own is how the
-          # last two rounds threw away the error that would have named this.
-          attempt() {
-            local label="$1"; shift
-            [ -e "$done" ] && return 0
-            echo "== $label"
-            if "$@" >/tmp/domicile-shell.log 2>&1; then
-              echo "   exited 0"
-            else
-              echo "   exited $?"
-            fi
-            tail -15 /tmp/domicile-shell.log | sed 's/^/   | /'
-          }
-
-          # `<nixpkgs>` has to resolve or the shell builds nothing.
-          #
+          # `<nixpkgs>` has to resolve or the shell builds nothing:
           # tools/nix/shell.nix imports it, and a systemd service has no
-          # NIX_PATH: that is a thing NixOS sets up for an interactive user and
-          # this unit is not one. Without it nix-shell reports
-          # "file 'nixpkgs' was not found in the Nix search path", says "uses
-          # bash from your environment", and hands the script an ambient shell
-          # with no Chromium toolchain in it — which is exactly what
-          # `exec: autoninja: not found` was.
+          # NIX_PATH — that is something NixOS arranges for an interactive
+          # user, and this unit is not one. Without it nix-shell says "uses
+          # bash from your environment" and hands the script an ambient shell
+          # with no toolchain in it.
           #
-          # Taken from the flake registry rather than written down, because the
+          # From the flake registry rather than written down, because the
           # registry is what pins nixpkgs on this machine and a second copy of
           # that pin here would be a second thing to keep true.
           nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
           echo "nixpkgs is $nixpkgs"
           export NIX_PATH="nixpkgs=$nixpkgs"
 
-          # `nix-shell` with the shell.nix, because that is the form
-          # spike-client-window.sh and spike-wayland.sh use and those have
-          # actually run on this machine. `nix develop path:` wants a flake.nix
-          # and this directory ships a shell.nix; it entered nothing, exited 0,
-          # and was indistinguishable from success until the sentinel.
-          attempt "nix-shell tools/nix/shell.nix, NIX_SHELL_RUN" \
-            env NIX_SHELL_RUN="bash -c '$build'" nix-shell "$CHROMIUM/tools/nix/shell.nix"
+          # `nix-shell` with the shell.nix, which is the form spike-wayland.sh
+          # and spike-client-window.sh use and the only one that has ever run
+          # on this machine. `nix develop path:` wants a flake.nix and this
+          # directory ships a shell.nix; it entered nothing and exited 0, which
+          # was indistinguishable from success until the sentinel existed.
+          #
+          # A path, not a command: everything in NIX_SHELL_RUN is re-quoted
+          # twice on its way in.
+          if NIX_SHELL_RUN="$GITHUB_WORKSPACE/.github/scripts/engine-build.sh $CHROMIUM $done" \
+               nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-shell.log 2>&1; then
+            echo "the shell exited 0"
+          else
+            echo "the shell exited $?"
+          fi
+          tail -25 /tmp/domicile-shell.log | sed 's/^/  | /'
 
           [ -e "$done" ] || {
-            echo "::error::no way of scripting Chromium's shell ran the build; each attempt's last words are above" >&2
+            echo "::error::Chromium's shell did not run the build; its last words are above" >&2
             exit 1
           }
 

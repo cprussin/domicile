@@ -36,6 +36,17 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
+# `gn` and `autoninja` are depot_tools', not the nix shell's, and a systemd
+# service has no shell config to put them on PATH. The checkout's own vendored
+# copy first, since that is the one matching this tree. See
+# .github/scripts/engine-build.sh, where this cost a round.
+TOOLS="$CHROMIUM/third_party/depot_tools:/build/depot_tools"
+export PATH="$TOOLS:$PATH"
+command -v autoninja >/dev/null || {
+  echo "no autoninja on PATH; looked in $TOOLS" >&2
+  exit 127
+}
+
 cd "$CHROMIUM" || exit 1
 
 # Regenerated whenever the arguments here change, which `gn gen` decides for
