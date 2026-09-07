@@ -27,8 +27,9 @@ compositor keeps the clients, the input, the outputs and the pixels.
 nix run github:cprussin/domicile -- ./my-desktop/dist
 ```
 
-That is the entire interface between a shell and Domicile: a directory with an
-`index.html` in it.
+That is the entire interface between a shell and Domicile: a directory with a
+built module in it, called `shell.js`. **Domicile writes the document** — you
+do not ship one, and there is no way to supply your own.
 
 **A shell used to be a program, and this is the change worth knowing about if
 you read an older version of this page.** It was three: a launcher on the
@@ -195,27 +196,63 @@ rather than discarded. And the example's `app_closed` *throws* on an app it
 never mounted, because a close for something never announced means the page and
 the compositor disagree about what is on screen.
 
-**`index.html`** — the document, which loads that module and does nothing else.
-Give `html, body` a full-size box with no margin, and make the background
-transparent wherever an app shows through: a `<domicile-app>` is a hole in your
-page, and a background painted over it hides the very window it is meant to
-show.
+There is no second file. **Domicile writes the document**: a charset, a
+viewport, and a root that fills the window with no margin. That last one is not
+a nicety — eight pixels of default body margin is eight pixels the compositor
+believes it has and does not, and a client's window drawn eight pixels out
+looks like the seam rather than like a stylesheet.
+
+What is left to you is the background: make it transparent wherever an app
+shows through, because a `<domicile-app>` is a hole in your page and a
+background painted over it hides the very window it is meant to show.
+
+The title is Domicile's until you say otherwise with `document.title`. It does
+not guess — the directory a module came out of is as likely to be `dist` as
+anything a person would recognise.
 
 ## Bundling
 
-One build. The page and everything it imports, the SDK included:
+One build, from your module rather than from a document, emitting one file
+with a name Domicile can find:
 
 ```ts
 // vite.renderer.config.ts
 export default defineConfig({
   base: "./",
-  build: { outDir: ".vite/renderer/main_window" },
+  build: {
+    outDir: "dist",
+    rollupOptions: {
+      input: "src/renderer.ts",
+      output: { entryFileNames: "shell.js" },
+    },
+  },
 });
 ```
 
-`base: "./"` keeps the emitted asset URLs relative to the document, so the
-bundle loads wherever the bridge serves it from rather than from the server's
-root.
+Three things there are not vite's defaults, and each fails quietly:
+
+- **The entry is a `.ts` file**, so nothing emits a document for Domicile to
+  have to ignore.
+- **`entryFileNames` is fixed.** Vite hashes entry names by default, and
+  `DOMICILE_MODULE` is a path — a hash in it changes every time your shell
+  does, so nothing could name the file: not you, not a package manager, not a
+  script.
+- **`base: "./"`** keeps the emitted URLs relative to the document Domicile
+  writes rather than to a server root.
+
+**Your CSS has to travel inside the bundle.** Vite pulls `import "./x.css"`
+out into a separate asset and expects a document to `<link>` it; Domicile's
+document has no link, so an extracted stylesheet is a file nobody fetches and
+your desktop comes up unstyled. Fold it back in with a plugin at
+`generateBundle` — this repo's own is
+[`@domicile/component-library/vite-shell`](/packages/component-library/src/vite-shell.ts),
+which is about thirty lines and worth reading rather than depending on.
+
+That constraint pays for itself. A `<link>` is render-blocking and a
+`type="module"` script is always deferred, so with one the browser paints
+*before* any of your code has run — which is exactly where a theme flash comes
+from. With no link there is nothing to paint yet, and your first line is early
+enough.
 
 There is no `node_modules` beside a shell and nothing resolves at run time, so
 everything the page needs has to be *in* the bundle. That is vite's default for
@@ -223,13 +260,12 @@ a browser build and it is worth knowing you are relying on it.
 
 ## Distributing and running one
 
-A shell is a directory with a document in it:
+A shell is a directory with a module in it:
 
 ```
 my-desktop/
   dist/
-    index.html
-    assets/index-<hash>.js
+    shell.js
 ```
 
 Nothing installs it, nothing registers it, and there is no shells directory.
@@ -238,10 +274,11 @@ derivation — and point Domicile at it:
 
 ```sh
 nix run github:cprussin/domicile -- ./my-desktop/dist
+nix run github:cprussin/domicile -- ./my-desktop/dist/shell.js
 ```
 
-A path to the built entry point works too; Domicile serves the directory that
-contains it, so pointing at either is the same instruction.
+Either works. Domicile serves the directory the module is in, so naming the
+module and naming what contains it are the same instruction.
 
 That is the whole interface. A user of your shell never runs
 `domicile-compositor`, never writes a Domicile config file, and does not need

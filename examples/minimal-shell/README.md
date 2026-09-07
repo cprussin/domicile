@@ -35,14 +35,13 @@ emit to `.d.ts`, or a `catalog:` that survived into a published manifest.
 
 | File | What |
 |---|---|
-| `index.html` | The document, which loads the page and does nothing else. |
-| `src/renderer.ts` | The page: mount a `<domicile-app>` per announced app. The whole of this shell's behaviour. |
+| `src/renderer.ts` | The page: mount a `<domicile-app>` per announced app. The whole of this shell's behaviour — and the whole shell. |
 
-Two files, and that is the point. A shell used to be four bundles and a
+One file, and that is the point. A shell used to be four bundles and a
 launcher — an Electron main process, a preload holding the compositor socket, a
-launcher starting the compositor underneath, and the page. Under the fork the
-engine is the display compositor and Domicile starts it, so all a shell is now
-is a built web page.
+launcher starting the compositor underneath, and the page. Then it was a page
+and a document. Under the fork the engine is the display compositor, Domicile
+starts it *and* writes the document, so all a shell is now is a module.
 
 ## Building and running it
 
@@ -51,7 +50,8 @@ bun install
 bun run build
 ```
 
-emits the page to `.vite/renderer/main_window/`. Point Domicile at it:
+emits `.vite/renderer/main_window/shell.js`, which is the whole build. Point
+Domicile at it:
 
 ```sh
 nix run github:cprussin/domicile -- ./.vite/renderer/main_window

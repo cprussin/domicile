@@ -46,7 +46,8 @@
     "./Tabs": "./src/Tabs/Tabs.tsx",
     "./Textarea": "./src/Textarea/Textarea.tsx",
     "./ThemeProvider": "./src/ThemeSwitch/ThemeProvider.tsx",
-    "./ThemeSwitch": "./src/ThemeSwitch/ThemeSwitch.tsx"
+    "./ThemeSwitch": "./src/ThemeSwitch/ThemeSwitch.tsx",
+    "./vite-shell": "./src/vite-shell.ts"
   },
   "files": [
     "src/**/**",
