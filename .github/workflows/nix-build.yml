@@ -144,8 +144,14 @@ jobs:
       #
       # Reaching the compositor means passing the engine, its library and the
       # page first, so those three are covered here as well as by the `[ -e ]`
-      # loop above. The bridge is not: `run-engine.sh` checks it *after* the
-      # compositor, so nothing here starts it.
+      # loop above. The bridge is not, and cannot be: `run-engine.sh` checks it
+      # *after* the compositor, so this run has already exited by the time it
+      # would matter — and a second run that got past the compositor would
+      # start a browser. That the wrapper names a bridge that exists is the
+      # `[ -e ]` loop's business; that `run-engine.sh` uses the one it is
+      # handed rather than looking for a checkout is
+      # `scripts/test-run-engine-inputs.sh`, which is where deleting
+      # `DOMICILE_BRIDGE` gets caught.
       - name: An installed desktop starts and reaches its compositor
         run: |
           set -eu
