@@ -22,6 +22,23 @@ pub struct Arguments {
     /// default: a buffer release arrives every frame, and the checks that only
     /// need a window open should not pay a write for each one.
     pub trace: bool,
+    /// Whether to take the size the compositor configures rather than keeping
+    /// the one this client asked for.
+    ///
+    /// Off by default, and that default is the older behaviour on purpose:
+    /// almost every check states a size and wants *that* size, so a client
+    /// that quietly grew to whatever a configure said would make those checks
+    /// about the compositor's arithmetic instead of about their own subject.
+    ///
+    /// On, this client is the chrome. A chrome is the one Wayland client of
+    /// Domicile's whose size is not its own to choose — the compositor sizes
+    /// it to the desktop and `present` draws it at the size it committed, so a
+    /// chrome that ignored a configure is a page in the corner of a black
+    /// screen. `e2e-chrome-fills-the-desktop.sh` and
+    /// `e2e-chrome-fills-a-window.sh` are that claim, and this is what they
+    /// put on the chrome's end of it.
+    pub follow_configure: bool,
+
     /// Whether the window is see-through rather than opaque.
     ///
     /// Off by default. `e2e-window-shows-through.sh` was its only caller and
@@ -57,6 +74,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut title = None;
     let mut trace = None;
     let mut translucent = None;
+    let mut follow_configure = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -71,12 +89,16 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--translucent" => {
                 take(&mut translucent, &flag, true)?;
             }
+            "--follow-configure" => {
+                take(&mut follow_configure, &flag, true)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
 
     Ok(Arguments {
         title: title.unwrap_or_else(|| "domicile-test-client".to_string()),
+        follow_configure: follow_configure.unwrap_or(false),
         trace: trace.unwrap_or(false),
         translucent: translucent.unwrap_or(false),
     })

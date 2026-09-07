@@ -1,13 +1,9 @@
-// The page's wire to the host when there is no preload to hold it.
+// The page's wire to the host, and the only one there is.
 //
-// Under Electron the socket is the preload's: it runs in the renderer's
-// isolated world, owns the unix socket, and `postMessage`s across the world
-// boundary. See `host-transport.ts`, which is that.
-//
-// The fork has no preload and no world boundary — docs/architecture
-// /ENGINE-FORK.md is explicit that we ship the fork and Electron goes — and a
-// page cannot open a unix socket. So something outside has to hold that end
-// and offer the page one it can open. This is the page's half of that.
+// A page cannot open a unix socket, and the fork has no preload to hold one on
+// its behalf — docs/architecture/ENGINE-FORK.md is what settled that, and
+// Electron is gone from this repository. So something outside holds that end
+// and offers the page a socket it can open. This is the page's half of that.
 //
 // A DUMB PIPE, DELIBERATELY. WebSocket gives message boundaries and it would
 // be tempting to make each frame one JSON line, but then the bridge has to

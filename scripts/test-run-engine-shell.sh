@@ -119,6 +119,26 @@ expect "a bare dot is a path" \
   "name=built-desktop page=$WORK/built-desktop" \
   "$(cd "$WORK/built-desktop" && dispatch .)"
 
+# THE USER'S OWN `cd` IS NOT AN ARGUMENT. A packaged desktop sets the page and
+# passes its own name for the log, so `nix run github:cprussin/domicile#simple`
+# arrives here as `simple` with a page already handed in. Run from a directory
+# that happens to hold a `simple/`, the bare-name-is-a-directory rule turned
+# that word into a path and the whole command was refused for naming two pages
+# — one of which the user never set and one of which they were not talking
+# about. Reproduced before it was fixed; there is no path in that command line.
+mkdir -p "$WORK/cwd-with-a-desktop-in-it/simple"
+expect "a name that matches a directory here is still a name once a page is given" \
+  "name=simple page=$WORK/built-desktop" \
+  "$(cd "$WORK/cwd-with-a-desktop-in-it" && dispatch simple "$WORK/built-desktop")"
+
+# And the case the refusal was actually written for, which still refuses: a
+# path really is a second answer to the question `DOMICILE_PAGE` already
+# answered, and a slash is what makes it one whatever is in the working
+# directory.
+expect "a page and a slashed path are still two instructions" \
+  "refused" \
+  "$(cd "$WORK/cwd-with-a-desktop-in-it" && dispatch ./simple "$WORK/built-desktop")"
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

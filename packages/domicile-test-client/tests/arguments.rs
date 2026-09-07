@@ -27,6 +27,36 @@ fn a_client_told_nothing_still_opens_a_window() {
         !asked.translucent,
         "a window is opaque unless a check needs to see past it",
     );
+    assert!(
+        !asked.follow_configure,
+        "a client keeps the size it opened at unless a check says otherwise",
+    );
+}
+
+#[test]
+fn a_chrome_is_the_client_that_takes_the_size_it_is_given() {
+    // The one client Domicile sizes rather than the other way round. Off by
+    // default and asserted on both sides, because the default is what almost
+    // every check in `scripts/` depends on: they state a size and want that
+    // size, and a client that quietly grew to whatever a configure said would
+    // make them about the compositor's arithmetic instead of their subject.
+    let asked = given(&["--follow-configure"]).expect("a chrome-shaped client");
+
+    assert!(asked.follow_configure);
+    assert!(!asked.translucent, "and nothing else came on with it");
+    assert!(!asked.trace);
+}
+
+#[test]
+fn following_a_configure_twice_is_refused() {
+    // Like every other flag: a repeated one is a caller who thinks they said
+    // two things and will be obeyed on one of them.
+    assert_eq!(
+        given(&["--follow-configure", "--follow-configure"]),
+        Err(ArgumentError::Repeated {
+            flag: "--follow-configure".to_string()
+        })
+    );
 }
 
 #[test]

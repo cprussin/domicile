@@ -63,6 +63,81 @@ fn a_close_from_the_chrome_reaches_the_client_and_comes_back() {
         .expect("the chrome is told the window it closed is gone");
 }
 
+/// A chrome that connects after a client mapped still comes up to that window.
+///
+/// Ported from `e2e-late-chrome.sh`, which drove a real Electron and asserted
+/// on `place_portal` — the shell's page saying it had mounted a
+/// `<domicile-app>`. That is the page's half; what the compositor owes is the
+/// announcement the page mounts *from*, and this asks for that directly.
+///
+/// The ordering is the whole test. `app_appeared` goes out once, when the
+/// client maps, and a chrome that was not connected then never hears it —
+/// there is nothing to ask for and nothing that repeats. `announce_open_apps`
+/// is what closes that, on `hello`, and without it a live drawing client loses
+/// its window for good. It happens two ways in practice, and neither is rare:
+/// every page reload, and a client that maps in the milliseconds between the
+/// page's handshake and its first commit.
+///
+/// So the client is started first and waited for at the compositor's own log —
+/// not merely spawned, because a chrome that connected while the client was
+/// still binding globals would hear the announcement live and this would be
+/// the easy half wearing the hard half's name.
+///
+/// A unit test covers `announce_open_apps` against a hand-made `Host`
+/// (`a_page_that_says_hello_is_told_what_is_already_running`). What that
+/// cannot reach is the client: whether a real `xdg_toplevel`, mapped with
+/// nobody listening, is in `open_apps` by the time a chrome says hello.
+#[test]
+fn a_chrome_that_connects_late_is_told_about_a_window_already_open() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+
+    let client = compositor.client("early");
+    // Mapped, not started. This is the premise rather than a nicety: until the
+    // toplevel maps there is no window for a late chrome to be late *for*.
+    compositor.wait_for_log("toplevel mapped");
+
+    // And only now. `Compositor::chrome` connects and completes the handshake,
+    // which is the `hello` this is about.
+    let mut chrome = compositor.chrome();
+
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .unwrap_or_else(|_| {
+            panic!(
+                "a chrome that says hello is told about the windows already \
+                 open; this one came up to an empty desktop with a client \
+                 still drawing. The client traced:\n{}",
+                client.trace()
+            )
+        });
+
+    // The window is not named, and it has no size. Both are limits of what a
+    // map-time announcement carries rather than of the replay: the compositor
+    // calls `app_appeared(None, None)` when a toplevel maps, and the title and
+    // the geometry follow as messages of their own. A chrome connected live
+    // gets exactly the same `app_appeared`, which is what makes replaying it
+    // the right catch-up. So what is asserted is that it names *a* window —
+    // this compositor has one client, so an announcement is that client's or
+    // it is an invention.
+    let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert!(
+        !app_id.to_string().is_empty(),
+        "the late chrome was told about a window with no id, which is a window \
+         nothing can be said about afterwards"
+    );
+
+    // And who holds the keyboard, which `open_apps` chains after the windows
+    // and a page that has just loaded has no other way to learn. Asserted
+    // because it is the half of the catch-up that is *not* a repeat of a live
+    // message: a chrome that came up knowing about every window and nothing
+    // about focus draws a desktop where no window is the active one.
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::FocusChanged { .. }))
+        .expect("the catch-up names who has the keyboard, after the windows");
+}
+
 /// A client that names its window has the chrome told the name.
 ///
 /// Ported from `e2e-chrome.sh`, and the only part of it that was not already

@@ -12,29 +12,38 @@
 # lets it read one number instead of two.
 #
 # So nothing had ever drawn a desktop where a CSS pixel and a display pixel are
-# different sizes, and at 1x they never are. Two faults lived in that gap at
-# once and shipped:
+# different sizes, and at 1x they never are. The fault that lived in that gap
+# and shipped: the desktop was sized by the *rounded* output scale rather than
+# by the display's own ratio, so a 1.5x screen became a desktop two thirds its
+# size with every CSS pixel in it drawn a third too large.
 #
-#   - The desktop was sized by the *rounded* output scale rather than by the
-#     display's own ratio, so a 1.5x screen became a desktop two thirds its
-#     size with every CSS pixel in it drawn a third too large.
-#   - `wp_viewporter` was advertised and not honoured. Chromium reads that
-#     global as permission to stop calling `wl_surface.set_buffer_scale` and to
-#     put its logical size in `wp_viewport.set_destination` instead, which
-#     nothing read — so the chrome's surface became twice its true size, and
-#     with it every portal and pointer coordinate. It is honoured now, and the
-#     reading below is written to hold either way round: *which* of the two
-#     forms Chromium picks is its business, and it picks by what is advertised.
-#     What has to agree is the size.
-#
-# Both are one comparison: what the compositor says the desktop is, against
-# what the chrome's surface actually measures. They have to be the same number.
 # The scale is deliberately *fractional* (1.5, so `wl_output.scale` rounds up
 # to 2) because that is the case where the two ways of expressing a size stop
 # agreeing. At a whole ratio a broken compositor and a working one are
-# indistinguishable, which is exactly how both of these shipped.
+# indistinguishable, which is exactly how that shipped.
+#
+# WHAT THIS NO LONGER COVERS, AND IT IS WORTH SAYING RATHER THAN LEAVING TO BE
+# DISCOVERED. There was a second fault here: `wp_viewporter` advertised and not
+# honoured. Chromium reads that global as permission to stop calling
+# `wl_surface.set_buffer_scale` and to put its logical size in
+# `wp_viewport.set_destination` instead, which nothing read — so the chrome's
+# surface became twice its true size, and every portal and pointer coordinate
+# with it. Only a real Chromium chooses between the two forms, and only by what
+# is advertised, so only a real Chromium can catch that half. This drove an
+# Electron until Electron was removed from this repository; the chrome here now
+# is `domicile-test-client --follow-configure`, which speaks
+# `set_buffer_scale` and nothing else. **The viewporter half is uncovered.**
+# Covering it needs the fork, and the fork does not composite — it renders, and
+# the compositor is a producer to it — so there is no arrangement in which the
+# engine is a chrome whose surface this compositor sizes.
+#
+# What survives is the arithmetic, which is where the fault that shipped was:
+# what the compositor says the desktop is, against what the chrome's surface
+# actually measures. They have to be the same number.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
 # shellcheck source=scripts/xvfb-display.sh
 . "$ROOT/scripts/xvfb-display.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
@@ -43,22 +52,15 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
   exit 1
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
-
-if ! command -v electron >/dev/null 2>&1; then
-  ELECTRON_BIN="$(
-    ls -d /nix/store/*-electron-[0-9]*/bin 2>/dev/null |
-      sed 's|^.*-electron-\([^/]*\)/bin$|\1\t&|' |
-      sort -V | tail -1 | cut -f2
-  )"
-  [ -n "$ELECTRON_BIN" ] || { echo "SKIP: no electron to run the chrome with"; exit 77; }
-  PATH="$ELECTRON_BIN:$PATH"; export PATH
-fi
+# 1, not 77: a client this repo builds and cannot build is a broken tree.
+build_test_client || exit 1
 
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-dense"   # short: Unix socket path limit
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/domicile-chrome.sock
-LOG="$(mktemp)"
-COMP=""; XVFB=""
+SOCK="$XDG_RUNTIME_DIR/domicile-chrome.sock"
+LOG="$(mktemp)"; CLOG="$(mktemp)"
+COMP=""; CHROME=""; XVFB=""
 
 wait_for() { local file="$1" pat="$2" n="${3:-150}"; for _ in $(seq 1 "$n"); do grep -q "$pat" "$file" && return 0; sleep 0.2; done; return 1; }
 said() { sed 's/\x1b\[[0-9;]*m//g' "$LOG"; }
@@ -81,26 +83,15 @@ ensure_display 1920x1200x24 60 || exit 1
 # host compositor would say on a real dense screen, and the only number this
 # check needs from outside.
 export WINIT_X11_SCALE_FACTOR=1.5
-cleanup() { kill "$COMP" ${XVFB:-} 2>/dev/null; pkill -P "$COMP" 2>/dev/null; rm -f "$LOG"; }
+cleanup() { kill "$COMP" ${CHROME:-} ${XVFB:-} 2>/dev/null; wait 2>/dev/null; rm -f "$LOG" "$CLOG"; }
 trap cleanup EXIT
 
-# The whole desktop, started the way a user starts it: the shell's own stub,
-# which starts the compositor under itself with `--present` and then runs the
-# chrome as a *Wayland client of it*. That relationship is the point. Starting
-# the two separately, as `e2e-electron.sh` does, puts the chrome on the host's
-# display and its pixels through the socket — the copy path, where the
-# compositor draws nothing and neither fault below can appear.
-( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell-manganese >/dev/null 2>&1 ) \
-  || { echo "the shell failed to build"; exit 1; }
-
-# Chromium's sandbox helper is not setuid in a store build, and this runs as
-# root in a container often enough that the default is the useful one — the
-# same default `run-native.sh` takes, and for the same reason.
-DOMICILE_ELECTRON_ARGS="${DOMICILE_ELECTRON_ARGS---no-sandbox}"
-export DOMICILE_ELECTRON_ARGS
-DOMICILE_COMPOSITOR="$BIN"; export DOMICILE_COMPOSITOR
+# The compositor with a window to draw in, which is what `--present` asks for
+# and what makes every reading below about the draw path. No configured
+# displays, so the window *is* the desktop and its density is the display's —
+# which is the whole subject here.
 NO_COLOR=1 RUST_LOG="info,domicile_compositor=debug" \
-  "$ROOT/packages/shell-manganese/bin/manganese" >"$LOG" 2>&1 &
+  "$BIN" --session "$SOCK.session" --present --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 
 echo "== the compositor has a window to draw in =="
@@ -149,26 +140,47 @@ echo "PASS: 1280x800 at scale 2"
 
 echo
 echo "== and the chrome's surface is that desktop, measured =="
+# The chrome, on the display the compositor named for one: a client is a chrome
+# or an app by which socket it arrived on, and `--follow-configure` is the one
+# behaviour that makes this client a chrome — it takes the size it is
+# configured at rather than keeping the one it opened at.
+#
+# Started only now, after the advertisement above. Not for the ordering's sake:
+# the compositor advertises to whoever is bound, so a chrome that connected
+# first would be told the same thing. It is that a run which failed above has
+# nothing for a chrome to be sized *to*, and starting one anyway would put a
+# second failure under the first.
+CHROME_DISPLAY="$(said | sed -n 's/.*the chrome connects here.*display="\([^"]*\)".*/\1/p' | head -1)"
+if [ -z "$CHROME_DISPLAY" ]; then
+  echo "FAIL: the compositor never said which display the chrome connects on."
+  said | tail -12 | cut -c1-200 | sed 's/^/  /'
+  exit 1
+fi
+WAYLAND_DISPLAY="$CHROME_DISPLAY" \
+  "$TEST_CLIENT" --title chrome --follow-configure >"$CLOG" 2>&1 &
+CHROME=$!
+
 if ! wait_for "$LOG" "the chrome committed a frame" 600; then
   echo "FAIL: the chrome never committed a frame, so there is nothing to measure."
-  said | grep -aiE "electron|chrome|gpu|egl" | cut -c1-200 | tail -12 | sed 's/^/  /'
+  echo "  it said:"
+  tail -12 "$CLOG" | sed 's/^/  /'
+  said | grep -aiE "chrome|gpu|egl" | cut -c1-200 | tail -12 | sed 's/^/  /'
   exit 1
 fi
 FRAME="$(said | grep "the chrome committed a frame" | tail -1)"
-# The logical size, which is the buffer divided by the scale the client set —
-# so this one line carries both halves of what the second fault broke.
-# The size, and deliberately not the buffer scale beside it. Chromium has two
-# ways to state a surface's size and picks by what the compositor advertises:
-# `set_buffer_scale(2)` on a 1280x800 buffer, or `set_destination(1280, 800)`
-# on a 2560x1600 one. Both are the same surface and both are correct; a check
-# that pinned one of them would go red on a protocol being *added*, which is
-# what happened to the first version of this line.
+# The logical size, which is the buffer divided by the scale the client set.
+# Read as a size rather than as a buffer and a scale, deliberately: a surface
+# can state its size either way — `set_buffer_scale(2)` on a 1280x800 buffer,
+# or `set_destination(1280, 800)` on a 2560x1600 one — and both are the same
+# surface. A check that pinned one of them would go red on a protocol being
+# *added*, which is what happened to the first version of this line. This
+# client only ever says it the first way; the header explains what that costs.
 if ! echo "$FRAME" | grep -qE "width=1280(\.0)? height=800(\.0)?"; then
   echo "FAIL: the chrome's surface is not the desktop it was given."
   echo "  It was told 1280x800 and its surface has to measure that, however it"
   echo "  says so. 2560x1600 is the buffer read as though nothing else spoke"
-  echo "  for it — the viewport's destination ignored — and every portal and"
-  echo "  pointer coordinate doubles with it."
+  echo "  for it, and every portal and pointer coordinate doubles with it;"
+  echo "  320x240 is a chrome that never took its configure at all."
   echo "  --- what it said:"
   echo "  $FRAME"
   exit 1

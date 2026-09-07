@@ -25,7 +25,7 @@ someone else's repository would.
 
 [`/scripts/test-out-of-tree-shell.sh`](/scripts/test-out-of-tree-shell.sh)
 packs the SDK, copies this directory somewhere outside the repo, installs the
-tarballs, and builds it there. It runs in `./scripts/check.sh shell`.
+tarball, and builds it there. It runs in `./scripts/check.sh shell`.
 
 So this is not decoration: it is the only thing standing between the SDK and an
 `exports` entry pointing at a file `files` does not ship, a type that will not
@@ -35,11 +35,14 @@ emit to `.d.ts`, or a `catalog:` that survived into a published manifest.
 
 | File | What |
 |---|---|
-| `bin/minimal` | What a user runs, and what an install puts on `PATH`. Runs the launcher under Electron's Node. |
-| `src/launch.ts` | The launcher: start the compositor, then start the chrome inside it. A shell is the program on top. |
-| `src/main.ts` | The Electron main process: read the session, open the window, die with a reason. Everything a page cannot do for itself, and only that. |
-| `src/preload.ts` | Holds the compositor socket and hands the page its messages. The socket lives here rather than in the main process so frames do not cross Electron's IPC. |
+| `index.html` | The document, which loads the page and does nothing else. |
 | `src/renderer.ts` | The page: mount a `<domicile-app>` per announced app. The whole of this shell's behaviour. |
+
+Two files, and that is the point. A shell used to be four bundles and a
+launcher — an Electron main process, a preload holding the compositor socket, a
+launcher starting the compositor underneath, and the page. Under the fork the
+engine is the display compositor and Domicile starts it, so all a shell is now
+is a built web page.
 
 ## Building and running it
 
@@ -48,12 +51,12 @@ bun install
 bun run build
 ```
 
-Then run it — there is nothing else to start:
+emits the page to `.vite/renderer/main_window/`. Point Domicile at it:
 
 ```sh
-./bin/minimal
+nix run github:cprussin/domicile -- ./.vite/renderer/main_window
 ```
 
-It needs `domicile-compositor` on `PATH`, or named in `DOMICILE_COMPOSITOR`.
-Installing it properly means whatever puts `bin/minimal` on a user's `PATH`;
-there is no shells directory and nothing of Domicile's to register with.
+which serves that directory, starts the engine on it and the compositor
+underneath. There is nothing to install and no `bin/` entry: which desktop you
+get is which page Domicile was pointed at.

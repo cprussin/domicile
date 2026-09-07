@@ -204,9 +204,17 @@ mod grepped {
     /// unrowed script's pattern was green. That is the failure the test below
     /// is written against, and this constant was living in it.
     pub const ADVERTISING: &str = "advertising output scale";
-    /// `e2e-bands.sh`: a chrome frame recognised as the band it says it is.
-    /// The only trace the label's read-back leaves, and the whole of what says
-    /// the round trip closed rather than stalled.
+    /// A chrome frame recognised as the band it says it is: the only trace
+    /// the label's read-back leaves, and the whole of what says the round trip
+    /// closed rather than stalled.
+    ///
+    /// Nothing greps it any more. `e2e-bands.sh` did, and went with Electron:
+    /// its whole subject was a label read off a frame a *real browser*
+    /// painted, and no stand-in can stand in for that — a client painting the
+    /// bytes the reader expects asserts this repository against itself. The
+    /// only real browser left is the fork, and the fork does not composite the
+    /// chrome in bands; its own layer tree does. So this is a line to read
+    /// rather than a line a check turns on.
     pub const BAND_ANSWERED: &str = "a band answered";
 }
 
@@ -895,10 +903,11 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                     // too late to see map.
                     //
                     // Measured, with the caveat that matters: swapping these
-                    // two makes `e2e-late-chrome` fail with "the chrome came
-                    // up to an empty desktop with a client still drawing" —
-                    // but only once a delay is inserted between them to widen
-                    // the window. The unmodified swap still passed 3 runs of
+                    // two makes
+                    // `a_chrome_that_connects_late_is_told_about_a_window_already_open`
+                    // (`tests/apps.rs`) fail — but only once a delay is
+                    // inserted between them to widen the window. The
+                    // unmodified swap still passed 3 runs of
                     // 3. So a reader who swaps them, sees green and concludes
                     // this comment is stale has reproduced nothing; the race
                     // is narrow, not absent.
@@ -5203,11 +5212,16 @@ mod tests {
                 "e2e-chrome-fills-a-window.sh",
             ),
             (
-                // Read with its field too: the script tells the bands apart by
-                // the number, so the field's name is part of the agreement.
-                format!("{} band=[0-9]*", crate::grepped::BAND_ANSWERED),
-                include_str!("../../../scripts/e2e-bands.sh"),
-                "e2e-bands.sh",
+                // The second script grepping the same constant, and the reason
+                // the rows are per *pair*: it waits on the bare line and then
+                // reads the fields off it separately, so a row built from the
+                // other script's regex says nothing about this one. This is
+                // exactly the hole the doc above describes — `ADVERTISING` had
+                // two scripts and one row — reopened by a port and closed
+                // again rather than left to be rediscovered.
+                crate::grepped::ADVERTISING.to_string(),
+                include_str!("../../../scripts/e2e-a-dense-display.sh"),
+                "e2e-a-dense-display.sh",
             ),
             // And the colour, which is what the alpha cannot do on its own: a
             // background behind the element whose own alpha happens to be the
@@ -5539,15 +5553,13 @@ mod tests {
         // claim: `tests/input.rs`'s
         // `a_focus_the_chrome_asked_for_comes_back_over_the_socket` does
         // assert a compositor's `focus_changed` reaching a real socket, with
-        // one chrome — it took that over from `e2e-input.sh`, which is gone —
-        // and `e2e-bands.sh` does
-        // run two at once — the shell and `band-declarer.ts` — where a
-        // `render_band` the declarer never asked for reaches the shell over
-        // this same fan-out. That one survives both mutations regardless: the
-        // shell connects first, so it is the chrome a first-chrome-only
-        // fan-out still writes to. Measured: every check that turns on a
-        // message reaching a chrome *other than the first* is a `Displays`
-        // check.
+        // one chrome — it took that over from `e2e-input.sh`, which is gone.
+        // `e2e-bands.sh` used to run two at once — the shell and
+        // `band-declarer.ts` — and has gone with Electron; it would not have
+        // helped here regardless, since the shell connected first and so was
+        // the chrome a first-chrome-only fan-out still writes to. Measured:
+        // every check that turns on a message reaching a chrome *other than
+        // the first* is a `Displays` check.
         //
         // And a fan-out made type-aware — every message to everyone,
         // `FocusChanged` to the first chrome only — passes the Rust suite

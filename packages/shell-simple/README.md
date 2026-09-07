@@ -35,8 +35,6 @@ twelve hundred lines of it. Two neighbours mark the ends it sits between:
 | `src/terminal-shortcut.ts` | Alt+Enter: the one combination this shell claims, and the terminal it opens. |
 | `src/drag.ts` | Where a dragged window lands, as arithmetic — no DOM, so it is testable on its own. |
 | `src/window-box.ts` | A window's box, and where a newly-appeared client's window opens. |
-| `src/main.ts` | Electron main process: opens the window and loads the page into it, and exits with a reason on the renderer's behalf. Wires nothing else onto it — that is the difference from manganese's. |
-| `src/preload.ts` | Opens the compositor connection and exposes it to the page as `window.domicileHost`. Everything with a decision in it — where the socket is, what its death means — is [`@domicile/electron-chrome-host`](../electron-chrome-host/README.md). |
 | `src/domicile-elements.d.ts` | `<domicile-app>` in the DOM's tag-name map, so `createElement` returns the SDK's class. |
 
 ## What it deliberately does not do
@@ -64,13 +62,13 @@ window moves to another screen, or the page is zoomed).
 Nothing to clone and nothing to install but Nix — it fetches the repo itself:
 
 ```sh
-nix run github:cprussin/domicile -- simple
+nix run github:cprussin/domicile#simple
 ```
 
-That builds Domicile's Wayland compositor and this shell, starts both, and puts
-the desktop in a window on your display. The `-- simple` names the directory under
-`packages/shell-*`; without it you get the reference chrome
-([`@domicile/shell-manganese`](../shell-manganese/README.md)) instead.
+That starts the engine on this shell's page with the compositor underneath, and
+puts the desktop in a window on your display. Which desktop you get is which app
+you run: a bare `nix run github:cprussin/domicile` gives you the reference
+chrome ([`@domicile/shell-manganese`](../shell-manganese/README.md)) instead.
 
 Nix hands the app the source read-only in the store while the build writes into
 the tree, so it first stages the fetched source under
@@ -116,27 +114,21 @@ client exits; there is no close button, so quit apps from inside them.
 ## Build & run from a checkout
 
 ```sh
-nix develop .#full -c ./scripts/run-native.sh simple
+nix develop .#full -c ./scripts/run-engine.sh <path to chromium/src> simple
 ```
 
-does the same thing against your working tree. To build the shell alone:
+does the same thing against your working tree — see
+[`packages/domicile-engine`](../domicile-engine/README.md) for how that tree is
+built. To build the shell alone:
 
 ```sh
 bun run turbo build:vite --filter @domicile/shell-simple
 ```
 
-emits the launcher to `.vite/build/launch.js`, the Electron main bundle to
-`.vite/build/main.js`, the preload to `.vite/build/preload.cjs`, and the chrome
-to `.vite/renderer/main_window/`. `bin/simple` runs the launcher, which starts
-the compositor and then the chrome inside it:
-
-```sh
-packages/shell-simple/bin/simple
-```
-
-is the whole desktop. It needs `domicile-compositor` on `PATH`, or named in
-`DOMICILE_COMPOSITOR`; `scripts/run-native.sh simple` builds both halves out of
-a checkout and does that for you.
+emits the page to `.vite/renderer/main_window/`, and that is the whole of what
+a shell builds — there is no main process, no preload and no launcher. A shell
+is a built web page: the bridge serves it, the engine loads it, and the
+compositor is a producer to that engine.
 
 Configuration is this shell's own, at `$XDG_CONFIG_HOME/domicile/simple.json`.
 Nothing of Domicile's is configured directly — what the compositor reads is

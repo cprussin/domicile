@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
 
-# A full Electron and mesa closure per run; a superseded push should not keep
+# A full engine and mesa closure per run; a superseded push should not keep
 # fetching one.
 concurrency:
   group: nix-build-${{ github.ref }}
@@ -26,12 +26,12 @@ jobs:
   #    right most of the time — exactly the shape that reaches a user rather
   #    than a reviewer.
   #
-  # It is also the only check that runs an installed shell at all — bundles
-  # with no `node_modules` beside them, found through the stub's own idea of
-  # where it lives. That takes actually starting one, which is what the
-  # `DOMICILE_COMPOSITOR=/bin/false` step below is for: a build that succeeds
-  # says the derivation ran, and file existence says what it wrote, but
-  # neither would notice a bundle that cannot resolve its own imports.
+  # It is also the only check that runs an installed desktop at all. A desktop
+  # is a wrapper naming four store paths, and a build that succeeds says the
+  # derivation ran while file existence says what it wrote — neither would
+  # notice a wrapper that names them and still cannot start. The two steps
+  # below are what start one: the first that every path it names is in the
+  # store, the second that it gets far enough to look for its compositor.
   packages:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -75,10 +75,18 @@ jobs:
       # was removed.
       #
       # What it asserts instead is that every store path the runner names is
-      # really there. That is the failure this replaces: a derivation that
-      # stopped being referenced, or one referenced by a path that does not
-      # exist, produces a desktop that starts and then dies on whichever of the
-      # four it reaches first — which reads as the seam rather than as wiring.
+      # really there. Most of those are near-tautological — a path interpolated
+      # into the wrapper is a build-time input `nix build` has already realised
+      # — and it is worth saying which two are not: `${self}/scripts/`
+      # `run-engine.sh` and `${domicileBridge}/…/main.ts` name *files inside*
+      # store paths, and nix checks the path rather than what is in it. A
+      # rename on either side leaves a wrapper that starts and dies on
+      # whichever it reaches first, which reads as the seam rather than as
+      # wiring.
+      #
+      # What it does not catch, despite an earlier version of this comment: a
+      # derivation that stopped being referenced contributes no path, so the
+      # loop cannot see one.
       - name: Check what was installed
         run: |
           set -eu
@@ -108,9 +116,10 @@ jobs:
                 exit 1
               }
             done
-            # The four by role, so a missing one says which. `DOMICILE_ENGINE`
-            # has to be a directory with a `chrome` in it; the others are
-            # checked by the derivations that build them.
+            # The four by role, so a missing one says which. That each is the
+            # right *kind* of thing is the business of the derivation that
+            # builds it — `domicileEngine`'s own `installCheckPhase` is what
+            # says its output has a `chrome` in it.
             for want in DOMICILE_PAGE DOMICILE_ENGINE DOMICILE_COMPOSITOR \
                         DOMICILE_BRIDGE; do
               grep -q "$want=" "$out/bin/$name" || {
@@ -129,15 +138,14 @@ jobs:
       # its four inputs correctly and still cannot start says so here rather
       # than on somebody's machine.
       #
-      # It used to run the Electron launcher and wait for "the compositor never
-      # published a session", which was that launcher's own words about a
-      # different architecture. The message now is `run-engine.sh` refusing a
-      # compositor that is not there: the same shape of assertion, about the
-      # thing that replaced it.
-      #
       # A path that cannot exist rather than `/bin/false`, which is a real
       # executable — the runner would start it, watch it exit, and fail further
       # along for a reason this step is not asking about.
+      #
+      # Reaching the compositor means passing the engine, its library and the
+      # page first, so those three are covered here as well as by the `[ -e ]`
+      # loop above. The bridge is not: `run-engine.sh` checks it *after* the
+      # compositor, so nothing here starts it.
       - name: An installed desktop starts and reaches its compositor
         run: |
           set -eu
@@ -149,4 +157,15 @@ jobs:
                 echo "$name: did not get as far as looking for its compositor"
                 exit 1
               }
+            # And that it refuses a word it has nowhere to put. The desktop is
+            # chosen by which app you run, so the wrapper passes its own name
+            # and anything the user typed arrives as a third argument —
+            # dropping it hands somebody manganese while they read `simple` on
+            # their own command line. The refusal replaced a launcher's own
+            # `takes no arguments`, and went uncovered when it did: deleted
+            # whole, every other check in this repository stayed green.
+            "$out/bin/$name" --nope 2>&1 | grep -q "too many arguments" || {
+              echo "$name: took an argument it has nothing to do with"
+              exit 1
+            }
           done

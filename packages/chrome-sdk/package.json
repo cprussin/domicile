@@ -43,10 +43,6 @@
       "types": "./dist/host-stream.d.ts",
       "default": "./dist/host-stream.js"
     },
-    "./host-transport": {
-      "types": "./dist/host-transport.d.ts",
-      "default": "./dist/host-transport.js"
-    },
     "./input": {
       "types": "./dist/input.d.ts",
       "default": "./dist/input.js"

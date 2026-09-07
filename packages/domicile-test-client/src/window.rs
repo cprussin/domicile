@@ -37,14 +37,17 @@ pub enum ClientError {
     NoBuffer(String),
 }
 
-/// The window's size, in the surface's own pixels.
+/// The size a window opens at, in the surface's own pixels.
 ///
-/// Fixed rather than asked for: every check in `scripts/` needs *a* window and
-/// asserts on what the compositor did with it. Small enough to be cheap to
-/// composite and large enough to be a window rather than a dot — and not a
-/// screen size, because a client that filled the desktop would hide whichever
-/// placement bug a check was looking at. A check that comes to care about the
-/// size brings the flag back with it.
+/// Not asked for: every check in `scripts/` needs *a* window and asserts on
+/// what the compositor did with it. Small enough to be cheap to composite and
+/// large enough to be a window rather than a dot — and not a screen size,
+/// because a client that filled the desktop would hide whichever placement bug
+/// a check was looking at.
+///
+/// It is where a window *starts* rather than where it stays only under
+/// `--follow-configure`; without that flag it is the size for the client's
+/// whole life. See [`crate::arguments::Arguments::follow_configure`].
 const SIZE: (u32, u32) = (320, 240);
 
 /// The two colours a frame alternates between.
@@ -117,7 +120,11 @@ const fn shm_format(translucent: bool) -> wl_shm::Format {
 /// Returns only on a failure: a client whose job is to be a window for the
 /// length of a check has nothing to return early *for*, and every caller in
 /// `scripts/` ends it with a signal.
-pub fn run(title: &str, translucent: bool) -> Result<std::convert::Infallible, ClientError> {
+pub fn run(
+    title: &str,
+    translucent: bool,
+    follow_configure: bool,
+) -> Result<std::convert::Infallible, ClientError> {
     let connection =
         Connection::connect_to_env().map_err(|err| ClientError::NoDisplay(err.to_string()))?;
     let mut queue = connection.new_event_queue();
@@ -131,7 +138,7 @@ pub fn run(title: &str, translucent: bool) -> Result<std::convert::Infallible, C
     // Two roundtrips: the first brings the globals, the second brings what
     // binding them produced — the `wl_shm.format` list, and the seat's
     // capabilities, which is what says whether there is a keyboard to bind.
-    let mut client = Client::new(title.to_string(), translucent);
+    let mut client = Client::new(title.to_string(), translucent, follow_configure);
     queue
         .roundtrip(&mut client)
         .map_err(|err| ClientError::Lost(err.to_string()))?;
@@ -156,6 +163,20 @@ struct Client {
     /// passed down because the buffers are remade whenever the window changes
     /// density, and the second set has to be the same kind as the first.
     translucent: bool,
+    /// Whether a configure's size is taken rather than the one this client
+    /// opened at — see [`crate::arguments::Arguments::follow_configure`].
+    follow_configure: bool,
+    /// A size the compositor configured and this client has not drawn at yet.
+    ///
+    /// Held between the two halves of one configure. `xdg_toplevel.configure`
+    /// carries the size and `xdg_surface.configure` carries the serial that
+    /// makes it current, in that order and on the same queue — so the size
+    /// arrives with nothing to acknowledge it and the acknowledgement arrives
+    /// with no size in it. Applying the size when it lands would redraw at a
+    /// geometry the compositor has not yet said is in force.
+    ///
+    /// Always `None` without `--follow-configure`: nothing records one.
+    configured_size: Option<(u32, u32)>,
     globals: Globals,
     /// Made by [`Client::open`], which `run` calls before dispatching anything
     /// that could draw. An event arriving with this still unset would be the
@@ -205,9 +226,17 @@ struct Client {
 struct Window {
     surface: wl_surface::WlSurface,
     pixels: Pixels,
+    /// The surface's size, in surface-local pixels.
+    ///
+    /// [`SIZE`] unless a configure has changed it, which only happens under
+    /// `--follow-configure`. Held on the window rather than read from a
+    /// constant because the buffers behind it are made for exactly this many
+    /// pixels: the two have to change together or a frame is drawn at one size
+    /// and damaged at another.
+    size: (u32, u32),
     /// The buffer scale these pixels were made for.
     ///
-    /// The surface stays [`SIZE`] however dense the screen is; what changes is
+    /// The surface stays `size` however dense the screen is; what changes is
     /// how many buffer pixels cover it. That is what `set_buffer_scale` means
     /// and what a check about density reads.
     scale: i32,
@@ -253,10 +282,12 @@ struct Globals {
 }
 
 impl Client {
-    fn new(title: String, translucent: bool) -> Client {
+    fn new(title: String, translucent: bool, follow_configure: bool) -> Client {
         Client {
             title,
             translucent,
+            follow_configure,
+            configured_size: None,
             globals: Globals::default(),
             window: None,
             configured: false,
@@ -358,6 +389,7 @@ impl Client {
         self.window = Some(Window {
             surface,
             pixels,
+            size: SIZE,
             scale: 1,
         });
         Ok(())
@@ -424,22 +456,70 @@ impl Client {
         window.pixels = Pixels::new(
             shm,
             handle,
-            SIZE.0 * wanted as u32,
-            SIZE.1 * wanted as u32,
+            window.size.0 * wanted as u32,
+            window.size.1 * wanted as u32,
             self.translucent,
         )?;
         window.scale = wanted;
         Ok(())
     }
 
+    /// Take the size the compositor configured, if it sent one and it is new.
+    ///
+    /// The other half of being a chrome. A chrome does not choose its size:
+    /// the compositor sizes it to the desktop, `present` draws it at the size
+    /// it *committed* rather than stretched to fit, and a chrome that answered
+    /// a configure and went on drawing at its old size is a page in the corner
+    /// of a black screen. So this remakes the buffers at what was configured
+    /// and lets the next `draw` commit them.
+    ///
+    /// Answers `false` when there is nothing to do, which is every configure
+    /// without `--follow-configure`, every one repeating a size already taken,
+    /// and every one whose width or height is zero — a compositor saying "you
+    /// choose", which for this client means keeping what it has.
+    fn resize(&mut self, handle: &QueueHandle<Client>) -> Result<bool, ClientError> {
+        let Some(wanted) = self.configured_size.take() else {
+            return Ok(false);
+        };
+        let Some(window) = self.window.as_mut() else {
+            return Ok(false);
+        };
+        if window.size == wanted {
+            return Ok(false);
+        }
+        let shm = self
+            .globals
+            .shm
+            .as_ref()
+            .expect("open() proved there is a wl_shm before there was a window");
+
+        // Destroyed rather than dropped, for the reason `follow` gives at
+        // length: dropping a proxy sends no destructor, so the old buffers
+        // would go on delivering `release` into a handler keyed on an index
+        // into the new pool, and they are the only thing holding the old
+        // pool's mapping.
+        for buffer in &window.pixels.buffers {
+            buffer.destroy();
+        }
+        window.pixels = Pixels::new(
+            shm,
+            handle,
+            wanted.0 * window.scale as u32,
+            wanted.1 * window.scale as u32,
+            self.translucent,
+        )?;
+        window.size = wanted;
+        Ok(true)
+    }
+
     /// Draw one frame and ask to be woken for the next.
     fn draw(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
-        let (width, height) = SIZE;
         let colour = (self.frame % 2) as usize;
         let window = self
             .window
             .as_mut()
             .expect("open() runs before anything that could draw");
+        let (width, height) = window.size;
 
         // The callback first, and unconditionally: it is what gets this
         // client woken again. Skipping it on a frame with nothing to draw
@@ -595,6 +675,24 @@ fn follow_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     }
 }
 
+/// Take a configured size, or end the process saying why.
+///
+/// The same shape as [`follow_or_stop`], and the same reason: the caller is an
+/// event handler that cannot return a `Result`, and a client whose buffers
+/// could not be remade has nothing left to draw into.
+///
+/// Answers whether the size actually changed, which is what tells its caller
+/// there is a frame to draw.
+fn resize_or_stop(client: &mut Client, handle: &QueueHandle<Client>) -> bool {
+    match client.resize(handle) {
+        Ok(resized) => resized,
+        Err(err) => {
+            eprintln!("domicile-test-client: {err}");
+            std::process::exit(1);
+        }
+    }
+}
+
 impl Dispatch<wl_registry::WlRegistry, ()> for Client {
     fn event(
         client: &mut Client,
@@ -692,11 +790,21 @@ impl Dispatch<xdg_surface::XdgSurface, ()> for Client {
     ) {
         if let xdg_surface::Event::Configure { serial } = event {
             xdg.ack_configure(serial);
+            // The size the `xdg_toplevel.configure` just before this carried,
+            // if any — see [`Client::configured_size`] for why it waits for
+            // this event rather than being applied where it arrived.
+            let resized = resize_or_stop(client, handle);
             // The first configure is what makes the surface attachable, and
             // the frame drawn here is what maps the window. Later ones are
-            // answered and left alone: this client keeps the size it asked
-            // for, because a check that stated a size wants that size.
-            if !client.configured {
+            // answered and left alone unless the size changed: without
+            // `--follow-configure` this client keeps the size it asked for,
+            // because a check that stated a size wants that size.
+            //
+            // A resize draws for a second reason: the buffers behind the
+            // surface have just been remade, so nothing is attached and the
+            // frame callback that would have woken this client belonged to a
+            // buffer that no longer exists.
+            if !client.configured || resized {
                 client.configured = true;
                 draw_or_stop(client, handle);
             }
@@ -706,13 +814,29 @@ impl Dispatch<xdg_surface::XdgSurface, ()> for Client {
 
 impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
     fn event(
-        _: &mut Client,
-        _: &xdg_toplevel::XdgToplevel,
+        client: &mut Client,
+        toplevel: &xdg_toplevel::XdgToplevel,
         event: xdg_toplevel::Event,
         (): &(),
         _: &Connection,
         _: &QueueHandle<Client>,
     ) {
+        // The size the compositor wants this window to be. Traced whether or
+        // not it is taken, because a check about sizing wants to tell "the
+        // compositor never asked" apart from "it asked and this client kept
+        // what it had" — and without `--follow-configure` the second is what
+        // always happens.
+        if let xdg_toplevel::Event::Configure { width, height, .. } = event {
+            crate::say!(toplevel.id(), "configure({}, {})", width, height);
+            // Zero is a compositor saying "you choose", so there is nothing
+            // to follow. Negative cannot happen — the protocol's own type is
+            // signed and its values are sizes — but it is a cast to `u32`
+            // either way, and a negative one would arrive as an enormous
+            // window rather than as a refusal.
+            if client.follow_configure && width > 0 && height > 0 {
+                client.configured_size = Some((width as u32, height as u32));
+            }
+        }
         // A compositor that closed the window has ended this client's job, and
         // exiting is how a check sees that it did:
         // `a_close_from_the_chrome_reaches_the_client_and_comes_back`

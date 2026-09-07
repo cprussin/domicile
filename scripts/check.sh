@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
 # Everything that can be checked here, in one command.
 #
-#   nix run 'github:cprussin/domicile#check'
+#   nix run 'github:cprussin/domicile#dev-check'
 #   nix develop .#full -c ./scripts/check.sh
 #   ./scripts/check.sh e2e            # one group: shell, rust, typescript, e2e
 #
 # `DOMICILE_CHECK_STRICT=1` turns a skip into a failure. Locally a missing
-# Electron is a fact about the machine; in CI it is a check that silently
-# stopped running, which is the worst outcome a check can have.
+# Xvfb is a fact about the machine; in CI it is a check that silently stopped
+# running, which is the worst outcome a check can have.
 #
-# There are a dozen checks across two languages and ten e2e scripts, and until
-# this existed each one was something the person working had to remember, set
-# up and run. That went wrong in the ordinary ways: a worktree with no
-# `node_modules` failing three suites that looked like regressions, an Electron
-# nobody could find, a stale X socket with no server behind it reading as a
-# crash in the code. None of those are findings, and all of them cost more than
-# the checks did.
+# There are a dozen checks across two languages and a handful of e2e scripts,
+# and until this existed each one was something the person working had to
+# remember, set up and run. That went wrong in the ordinary ways: a worktree
+# with no `node_modules` failing three suites that looked like regressions, a
+# stale X socket with no server behind it reading as a crash in the code. None
+# of those are findings, and all of them cost more than the checks did.
 #
 # So this owns the environment as well as the running: it installs what is
 # missing, finds what is not on `PATH`, and takes a display of its own. What it
@@ -155,14 +154,6 @@ label() {
   printf '  %-24s ' "$1"
 }
 
-# The store's newest electron `bin` directory, or nothing. Sorted on the
-# version the path carries rather than on the hash it starts with.
-newest_electron() {
-  ls -d /nix/store/*-electron-[0-9]*/bin 2>/dev/null |
-    sed 's|^.*-electron-\([^/]*\)/bin$|\1\t&|' |
-    sort -V | tail -1 | cut -f2
-}
-
 FAILURES="$(mktemp)"
 # Where a failing check's whole log is kept. Deliberately not cleaned up: it is
 # the thing a reader needs after the run ends, and its whole point is to
@@ -192,21 +183,6 @@ if bun install --frozen-lockfile >/dev/null 2>&1; then echo "ok"; else
   echo "FAILED"; echo "dependencies would not install" >&2; exit 1
 fi
 
-# `nix develop .#full` puts Electron on `PATH`; the bare `.#default` shell does
-# not, and neither does a machine that installed one some other way. So this is
-# the fallback rather than the normal path — and it is a rough one: `sort -V`
-# over the store answers with whatever major happens to be there, which is why
-# `.#full` names the version the packages ship rather than leaving it to this.
-if ! command -v electron >/dev/null 2>&1; then
-  # Newest by version. `tail -1` on the bare glob orders by store *hash*, so
-  # with two electrons in the store it picks an arbitrary one.
-  ELECTRON_BIN="$(newest_electron)"
-  if [ -n "$ELECTRON_BIN" ]; then
-    PATH="$ELECTRON_BIN:$PATH"; export PATH
-    echo "  electron                 found in the store"
-  fi
-fi
-
 # Only the e2e scripts want a display, and starting a server the checks will
 # never look at is a minute `check.sh rust` can spend on nothing: the one case
 # that runs the deadline out is a server that came up alive and silent, and
@@ -219,9 +195,8 @@ if wanted e2e; then
 NO_DISPLAY="no Xvfb on PATH"
 
 # How long Xvfb gets to name a display. It was ten seconds, and a CI run spent
-# all ten and failed; `e2e-electron` had the same ten for the same reason and
-# missed it on a machine that had just spent a minute compiling. A deadline a
-# busy machine misses reports a working environment as broken, which is the
+# all ten and failed on a machine that had just spent a minute compiling. A
+# deadline a busy machine misses reports a working environment as broken, which is the
 # failure this harness exists to stop producing — and nothing waits this out
 # that was going to succeed, because a server that dies is noticed when it
 # dies rather than when the clock runs out.
@@ -234,8 +209,8 @@ DISPLAY_DEADLINE="${DOMICILE_CHECK_DISPLAY_DEADLINE:-60}"
 
 # A display of our own, chosen by the X server rather than by us. Picking a
 # number and hoping is how a stale `/tmp/.X11-unix/X97` — a socket file with no
-# server behind it — became an Electron segfault that looked like a bug in the
-# shell.
+# server behind it — became a chrome segfaulting against a dead display, which
+# looked like a bug in the shell.
 #
 # Whatever comes of that, this says so. Printing the line only on success is
 # how a CI job came to fail two checks with `could not run: no display` and no
@@ -320,11 +295,17 @@ echo "== end to end =="
 # written.
 for script in scripts/e2e-*.sh; do
   name="$(basename "$script" .sh)"
+  # The two that draw: `--present` opens a winit window, and a compositor
+  # started without a display presents to nothing however long it runs. Named
+  # here rather than left to each script because the reason is the machine's
+  # and the verdict has to say so — a check that ran without a display and
+  # reported on the draw path would be reporting on a path that never ran.
+  #
+  # `e2e-a-dense-display` unsets `DISPLAY` and makes its own, so what this
+  # asks of it is only that there is an Xvfb to make one with, which is what
+  # `$NO_DISPLAY` says when there is not.
   case "$name" in
-    e2e-electron|e2e-chrome-without-a-host|e2e-shell-launch|e2e-a-dense-display)
-      if ! command -v electron >/dev/null 2>&1; then
-        label "$name"; skip "$name" "no electron"; continue
-      fi
+    e2e-a-dense-display|e2e-chrome-fills-a-window)
       if [ -z "${DISPLAY:-}" ]; then
         label "$name"; skip "$name" "$NO_DISPLAY"; continue
       fi

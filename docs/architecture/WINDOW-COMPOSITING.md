@@ -168,7 +168,7 @@ Phase 1 — prove one window composites at all:
 - [x] scene: `Portal::surface_to_output` and `Scene::draw_order` — the drawing half of `hit_test`, tested against it so the two cannot drift
 - [x] compositor: the CSS matrix as the renderer's — `cgmath::Matrix3::new` takes its arguments column by column, so the six values do not go in in the order they are written
 - [x] **probe first**: does a transparent Electron `BrowserWindow` commit a buffer with real alpha when it is a client of Domicile? Yes — `scripts/probe-transparency.sh`
-- [x] compositor: a `winit` output behind `--present`, one renderer shared with the import path (`scripts/run-native.sh`)
+- [x] compositor: a `winit` output behind `--present`, one renderer shared with the import path
 - [x] compositor: draw `draw_order` through `surface_to_output`, then the page's surface over it
 - [x] compositor: the window's own input, on a seat the chrome owns
 - [x] measure: the two paths against each other, same client, same size

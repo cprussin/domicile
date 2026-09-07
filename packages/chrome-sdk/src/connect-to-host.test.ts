@@ -10,13 +10,7 @@ const openNothing = (): WebSocketLike => ({
   send: () => undefined,
 });
 
-const page = (
-  protocol: string,
-  host: string,
-  domicileHost?: HostWindow["domicileHost"],
-): HostWindow => ({
-  addEventListener: () => undefined,
-  domicileHost,
+const page = (protocol: string, host: string): HostWindow => ({
   location: { host, protocol },
 });
 
@@ -39,27 +33,6 @@ describe("connectToHost", () => {
     });
 
     expect(asked).toEqual(["wss://desktop.example/domicile-session"]);
-  });
-
-  // Electron injects a channel, and a fork-shaped guess would open a socket to
-  // nothing. The injected one wins whatever the page was served over.
-  it("prefers a channel a preload injected", () => {
-    const asked: string[] = [];
-    const sent: string[] = [];
-    const transport = connectToHost(
-      page("http:", "127.0.0.1:7777", {
-        listen: () => undefined,
-        send: (text) => sent.push(text),
-      }),
-      (url) => {
-        asked.push(url);
-        return openNothing();
-      },
-    );
-    transport.send('{"type":"hello"}');
-
-    expect(asked).toEqual([]);
-    expect(sent).toEqual(['{"type":"hello"}']);
   });
 
   // A shell's page opened in an ordinary browser has no host and must still
@@ -91,30 +64,20 @@ describe("connectToHost", () => {
 });
 
 describe("hasHost", () => {
-  it("is true when a preload injected a channel", () => {
-    expect(
-      hasHost(
-        page("file:", "", { listen: () => undefined, send: () => undefined }),
-      ),
-    ).toBeTrue();
-  });
-
   it("is true for a page served over http", () => {
     expect(hasHost(page("http:", "127.0.0.1:7777"))).toBeTrue();
   });
 
-  it("is false for a page opened from a file", () => {
-    expect(hasHost(page("file:", ""))).toBeFalse();
+  it("is true for a page served over https", () => {
+    expect(hasHost(page("https:", "desktop.example"))).toBeTrue();
   });
 
-  // The question it exists to answer. Under the fork there is no injected
-  // channel and there very much is a host, so a shell asking
-  // `window.domicileHost === undefined` would take the viewport's geometry
-  // and lay its windows out on a desktop nobody described.
-  it("does not agree with the old test for a preload", () => {
-    const fork = page("http:", "127.0.0.1:7777");
-
-    expect(fork.domicileHost).toBeUndefined();
-    expect(hasHost(fork)).toBeTrue();
+  // The one case a shell has to get right, and the reason this is not spelled
+  // `window.domicileHost === undefined` any more: under the fork there is no
+  // injected channel and there very much is a host. A shell asking the old
+  // question would take the viewport's geometry and lay its windows out on a
+  // desktop nobody described.
+  it("is false for a page opened from a file, and only then", () => {
+    expect(hasHost(page("file:", ""))).toBeFalse();
   });
 });

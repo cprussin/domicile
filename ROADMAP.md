@@ -51,7 +51,7 @@ nix develop                     # core shell: rust + node
 cargo test                      # core Rust tests
 bun run turbo test              # TypeScript: lint, types, unit tests
 
-nix develop .#full              # adds wayland, mesa, weston, electron, xvfb, kitty
+nix develop .#full              # adds wayland, mesa, weston, xvfb, xdotool, kitty
 cargo build -p domicile-compositor    # the Smithay server (EXCLUDED from default build)
 cargo test -p domicile-compositor      # includes tests/ — a real compositor,
                                        # driven by a stand-in chrome
@@ -60,23 +60,19 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 # `./scripts/check.sh` runs every `e2e-*.sh` and `test-*.sh`, and is the whole
 # answer before a push. `smoke-compositor` is below
 # but not in that loop — run them by hand.
-# Most build the compositor first; `e2e-compose` drives cargo test directly and
-# `e2e-chrome-without-a-host` builds no Rust at all. Every one has a flake app, so
-# `nix run .#dev-<name>` runs any of them against a fresh checkout.
+# Most build the compositor first; `e2e-compose` drives cargo test directly.
+# Every one has a flake app, so `nix run .#dev-<name>` runs any of them against
+# a fresh checkout.
 ./scripts/smoke-compositor.sh    # a real client binds our globals
-./scripts/e2e-electron.sh        # a real Electron renderer under Xvfb; pixels flow
-./scripts/e2e-late-chrome.sh     # a chrome arriving to a client already running (reload)
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised
 ./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel
-./scripts/e2e-chrome-without-a-host.sh   # a chrome whose host socket is dead says so once and stops
-./scripts/e2e-chrome-fills-the-desktop.sh # a real chrome commits at the described desktop's size, and follows it
+./scripts/e2e-chrome-fills-the-desktop.sh # a chrome commits at the described desktop's size, and follows it
 ./scripts/e2e-chrome-fills-a-window.sh # the same where the desktop *is* Domicile's window (--present)
 ./scripts/e2e-window-follows-the-desktop.sh # a described desktop that grows takes its window with it (--present)
-./scripts/e2e-shell-launch.sh    # running the *shell* brings up a compositor and the chrome inside it
+./scripts/e2e-a-dense-display.sh # the desktop on a 1.5x screen: sized by the ratio, not by the rounded scale
 
 # Needs a real display — run on the user's machine.
-nix run 'github:cprussin/domicile#native'      # Domicile: a window, composited
-nix run 'github:cprussin/domicile#measure'     # both paths, with the numbers side by side
+nix run 'github:cprussin/domicile'             # the desktop, on the fork
 ```
 
 `e2e-compose.sh` needs a GL stack (it gets a software rasteriser where there is
@@ -167,9 +163,11 @@ below.
   took it back: the desktop went deaf until restarted. Every focus path falls
   back to the chrome.
 - **A client does not have to bind more than one `wl_seat`.** Giving the chrome a
-  seat of its own, so it and the apps could hold a focus each, broke Electron:
-  `Gdk: gdk_seat_get_keyboard: assertion 'GDK_IS_SEAT (seat)' failed`, then
-  `Fatal Wayland communication error: Broken pipe`. One seat, taken in turns.
+  seat of its own, so it and the apps could hold a focus each, broke the chrome
+  outright — measured against Electron, and it is Chromium's Ozone client
+  either way: `Gdk: gdk_seat_get_keyboard: assertion 'GDK_IS_SEAT (seat)'
+  failed`, then `Fatal Wayland communication error: Broken pipe`. One seat,
+  taken in turns.
 - **Presenting means the compositor is itself a Wayland client**, so it keeps the
   session's `WAYLAND_DISPLAY` and cannot have a runtime directory to itself the
   way the headless path does — its socket lands in the host's `XDG_RUNTIME_DIR`
@@ -224,15 +222,16 @@ below.
 
   | also needs | which scripts |
   |---|---|
-  | `electron` | `e2e-electron`, `e2e-late-chrome`, `e2e-chrome-without-a-host`, both `e2e-chrome-fills-*` |
-  | `xvfb` | `e2e-electron`, `e2e-late-chrome`, `e2e-chrome-without-a-host`, `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` |
+  | `xvfb` | `e2e-a-dense-display`, `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` |
   | a GL/EGL stack | `e2e-compose` (a software rasteriser is enough) |
-  | `libxkbcommon-x11-0`, `xdotool` | `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` — they open a real window, and there is no WM on an Xvfb to resize it or measure it |
+  | `libxkbcommon-x11-0`, `xdotool` | `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop`, `e2e-a-dense-display` — they open a real window, and there is no WM on an Xvfb to resize it or measure it |
 
-  `.github/workflows/e2e.yml` installs a superset: Electron's own runtime libs
-  (`libnss3`, `libatk*`, `libcups2`, …) and the mesa packages are in there too.
-  Read that list rather than this one when a CI-only failure looks like a
-  missing package.
+  No script needs a browser any more. The chrome in every one of them is
+  `domicile-test-client --follow-configure`, which this workspace builds; the
+  checks that need a *real* browser are the engine's, on `crux`.
+
+  `.github/workflows/e2e.yml` installs the mesa packages on top of this list.
+  Read that when a CI-only failure looks like a missing package.
 - Reference material for Smithay: fetch from `github.com/Smithay/smithay` tag
   **`v0.7.0`** (smallvil + anvil examples, `src/input/*`, `src/wayland/*`).
 
@@ -390,16 +389,15 @@ Measured on the copy path, AMD 890M, kitty at ~1500x1000: `rt_ms≈100`,
 `ipc_ms≈19`, `draw_ms≈1`, compositor ≈11ms — and later, on a full-screen window,
 `ipc_ms≈79` with a worst case of 237.
 
-`ipc_ms` was once written down here as *unfixable* in Electron, on the grounds
-that every main→renderer path types its transfer list as `MessagePortMain[]`, so
-the bytes are structured-cloned rather than transferred. That is true of the
-hop and false of the conclusion: the hop is avoidable by not having one. The
-preload runs in the renderer process and, unsandboxed, can hold the compositor
-socket itself, so a frame's bytes are read where they are drawn.
-
-What is left is the context bridge's own clone into the page, which is
-in-process. Probed under Electron 41 on 5.94MB — a 1494x994 frame — on the
-container the checks run in:
+HISTORY, KEPT BECAUSE THE SHAPE OF THE ARGUMENT RECURS. `ipc_ms` was once
+written down here as *unfixable* in Electron, on the grounds that every
+main→renderer path types its transfer list as `MessagePortMain[]`, so the bytes
+are structured-cloned rather than transferred. That was true of the hop and
+false of the conclusion: the hop is avoidable by not having one. The preload
+ran in the renderer process and, unsandboxed, could hold the compositor socket
+itself, so a frame's bytes were read where they were drawn. What was left was
+the context bridge's own clone into the page, in-process — probed under
+Electron 41 on 5.94MB, a 1494x994 frame:
 
 | route | per frame |
 |---|---|
@@ -407,10 +405,11 @@ container the checks run in:
 | preload → page over the context bridge | 13.6ms avg, 22ms worst |
 | preload → page in one world (`contextIsolation: false`) | 0ms |
 
-The third row is available and not taken: it trades the isolated world for the
-copy, and with damage tracking a steady-state frame is a patch rather than a
-window. It is the lever to pull if full frames — a resize, a first frame, a
-hand-over — turn out to matter more than the isolation does.
+None of those routes exists any more: the fork has no main process, no preload
+and no world boundary, and a client's dmabuf reaches the layer tree without
+being copied into a page at all. The lesson that survives is the first one — a
+cost stated as a property of a transport is often a property of *having* that
+transport.
 
 What moved with the socket is the reading of it: the stream reassembly in
 `host-stream` now runs on the renderer's only thread, the one that also handles
@@ -430,14 +429,14 @@ falling.
 | `packages/domicile-bridge` | app → external-image id + latest dmabuf bookkeeping (pure) | core |
 | `packages/domicile-compositor` | **the running compositor**: Smithay server, chrome socket, dmabuf/shm import, compositing, input | `.#full` |
 | `packages/chrome-sdk` | `<domicile-app>`/`<domicile-webview>` elements, `BridgeClient`, matrix/frame/input/protocol helpers | bun |
-| `packages/e2e-harness` | headless chrome stand-ins for the `scripts/e2e-*.sh` checks | bun |
+| `packages/e2e-harness` | the headless chrome stand-in for `scripts/e2e-dmabuf.sh`, and the check on the e2e scripts' own machinery | bun |
+| `packages/domicile-test-client` | the stand-in Wayland client the e2e checks open a window with, and — under `--follow-configure` — the stand-in chrome they size | core |
 | `packages/test-support` | shared bun test setup (happy-dom + jest-dom matchers) | bun |
-| `packages/electron-chrome-host` | the shell's process side: starting the compositor, the launcher, the window, failure reporting | bun |
 | `packages/domicile-launch` | the boundary between a shell and the compositor it runs: the command line, and the session the compositor publishes (pure) | core |
 | `packages/component-library` | the shared React components and Panda preset the shells are built from | bun |
 | `packages/shell-manganese` | the reference chrome: tabs, stage, rail, address bar | bun |
 | `packages/shell-simple` | the minimal chrome: floating windows only | bun |
-| `scripts/` | `check.sh` (runs everything), the e2e + smoke checks, `run-native.sh`, the two `measure` runs, and the `xvfb-*` helpers they share | — |
+| `scripts/` | `check.sh` (runs everything), the e2e + smoke checks, `run-engine.sh`, and the `xvfb-*` helpers they share | — |
 
 Inside `domicile-compositor`: `compose.rs` is the drawing (layers, the CSS matrix
 as the renderer's, desktop↔target mapping, where the chrome lands) and is where
@@ -589,10 +588,13 @@ falloff the shadow uses, is the next candidate to move it.
   background up to an element for that reason — and a portal is in none,
   because fading one would report the window at `opacity: 0`.
 
-  `e2e-bands.sh` is what says the round trip closes: the shell runs as a
-  Wayland client of ours and the compositor reads each band off the frames it
-  commits. Reading the wrong row of the texture, or painting a different
-  sentinel, turns it red — which is the only check there is on any of that.
+  Nothing checks that the round trip closes. `e2e-bands.sh` did — the shell
+  ran as a Wayland client of ours and the compositor read each band off the
+  frames it committed — and went with Electron, because its whole subject was
+  a label read off a frame a real browser painted and no stand-in can stand in
+  for that. The fork is the only real browser left and it does not composite
+  the chrome in bands; its own layer tree does. So reading the wrong row of the
+  texture, or painting a different sentinel, is now uncaught.
 - ~~a **pixel probe for a chrome that paints where a window is**~~ — done, and
   since **deleted with the copy path**: it asserted on copied pixels reaching a
   chrome, which no longer happens. The equivalent for the engine path is
@@ -876,13 +878,9 @@ age, and it needs a screen before anyone should believe it.
   error: the anchoring subtracts an un-zoomed bounding corner from a zoomed
   rect, so the window is mispositioned too — 40px out for `zoom: 2` over a
   `rotate(30deg)`.
-- **Hot-swapping the chrome page** is the shell's to do now — it owns its own
-  Electron process — and no shell does it.
-- **A desktop that follows the shell's config** is wired on the compositor's
-  side (it watches the file it was given) and unreachable on the shell's:
-  `launchShell` writes that file into a private directory and returns no path
-  to it. `RunningCompositor` needs to carry the path, or `launchShell` needs to
-  take one.
+- **Hot-swapping the chrome page** is a page reload on the engine, and the
+  compositor's `announce_open_apps` is what makes one survivable. Nothing
+  triggers it.
 
 ---
 

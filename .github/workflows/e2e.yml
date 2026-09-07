@@ -14,7 +14,7 @@ env:
   RUST_BACKTRACE: "1"
   # A skip here is a check that stopped running, which is the worst outcome a
   # check can have and the one nobody notices. On a developer's machine a
-  # missing Electron is a fact about the machine; here everything is installed,
+  # missing Xvfb is a fact about the machine; here everything is installed,
   # so a skip means the job quietly stopped testing.
   DOMICILE_CHECK_STRICT: "1"
   # Except this one, which is a fact about the runner rather than about the
@@ -28,8 +28,8 @@ env:
 jobs:
   # The behavioural half. `cargo test` and `turbo test` have their own jobs and
   # prove the units; this proves what only exists once the pieces are wired
-  # together — pixels through a real GLES stack, a real Wayland client through
-  # the compositor to the chrome, and the whole Electron path.
+  # together — pixels through a real GLES stack, and a real Wayland client
+  # through the compositor to the chrome.
   #
   # None of it ran in CI before. Every suite was something whoever was working
   # had to remember to run, and the bugs that reached review in the change that
@@ -69,9 +69,7 @@ jobs:
       # `expect` — which does name the library, but out of a panic, so it reads
       # as a compositor crash rather than as a missing dependency. There is no
       # window manager on an Xvfb, so `xdotool` is what resizes the window in
-      # `e2e-chrome-fills-a-window.sh` — and what presses keys and drags the
-      # mouse in `e2e-electron.sh`, which has no other way to drive the real
-      # shell: its keyboard is this display's rather than Domicile's.
+      # `e2e-chrome-fills-a-window.sh`.
       #
       # Retried with a deadline per attempt, for the reason `cargo-test.yml`
       # spells out: a stalled apt mirror fails by hanging, so a plain
@@ -86,9 +84,7 @@ jobs:
               libegl1-mesa-dev libgles2-mesa-dev libgbm-dev mesa-utils \
               libgl1-mesa-dri \
               weston wayland-utils \
-              xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
-              libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
-              libxrandr2 libasound2t64 libpango-1.0-0 libcairo2
+              xvfb libdrm2 libxkbcommon0
           }
           for attempt in 1 2 3; do
             if timeout --kill-after=10 300 bash -c "$(declare -f install); install"; then
@@ -113,21 +109,12 @@ jobs:
       # `smoke-compositor.sh` uses it too and is not in this loop.
       - run: bun install --frozen-lockfile
 
-      # Bun does not run an untrusted dependency's postinstall, and Electron's
-      # postinstall is what fetches the actual binary — so `node_modules/.bin`
-      # holds a shim with nothing behind it, and the first run of this job
-      # reported `no electron` for a package that was installed.
-      - name: Fetch the Electron binary
-        run: |
-          node packages/shell-manganese/node_modules/electron/install.js
-          echo "$PWD/packages/shell-manganese/node_modules/.bin" >> "$GITHUB_PATH"
-
-      # Which clients and libraries actually arrived. When a suite fails on a
+      # Which tools and libraries actually arrived. When a suite fails on a
       # runner nobody can log into, the first question is always whether it
       # failed or whether it never had what it needed.
       - name: What is here
         run: |
-          for tool in electron weston-flower wayland-info Xvfb eglinfo; do
+          for tool in wayland-info Xvfb xdotool eglinfo; do
             printf '%-16s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
           done
 

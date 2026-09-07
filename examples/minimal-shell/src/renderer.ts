@@ -10,20 +10,17 @@ import {
   BridgeClient,
   describeHandshakeFailure,
 } from "@domicile/chrome-sdk/bridge";
+import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
-import { postedTransport } from "@domicile/chrome-sdk/host-transport";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-// What the preload exposed. Absent when the page is opened in an ordinary
-// browser, which is worth keeping possible: the layout can be worked on without
-// a compositor, against apps that will never arrive.
-const host = window.domicileHost;
-const transport =
-  host === undefined
-    ? { onMessage: () => undefined, send: () => undefined }
-    : postedTransport(window, host);
-
-const bridge = new BridgeClient(transport);
+// One call, two places. Under the engine this opens a WebSocket to the bridge
+// serving this page; in an ordinary browser it does nothing at all, which is
+// worth keeping possible — the layout can be worked on without a compositor,
+// against apps that will never arrive.
+const bridge = new BridgeClient(
+  connectToHost(window, (url) => new WebSocket(url)),
+);
 // Defines `<domicile-app>` and `<domicile-webview>`, bound to this bridge.
 // Until this runs the tags are unknown elements and mount nothing.
 registerElements(bridge);

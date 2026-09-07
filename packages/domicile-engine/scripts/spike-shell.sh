@@ -135,9 +135,8 @@ command -v bun >/dev/null || {
 
 # The shell's page, built the way the repository builds a shell: turbo's
 # `build:vite`, filtered to this shell. Twelve scripts in `scripts/` already
-# spell it that way, `run-native.sh` — this guard's direct counterpart — among
-# them, and that is the point: a guard that built the page its own way would be
-# measuring a page nobody ships.
+# spell it that way, and that is the point: a guard that built the page its own
+# way would be measuring a page nobody ships.
 #
 # It matters because two generated things have to exist and neither is in the
 # checkout. `styled-system/` is gitignored and made by a package's own
