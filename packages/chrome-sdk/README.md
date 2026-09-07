@@ -18,10 +18,6 @@ It provides four things:
   chrome→host message. It takes a `Transport` (`send` / `onMessage`), which the
   host injects into the page. A message may carry the moment its bytes reached
   the process, and `bridge.hop` is what that costs to get from there to here.
-- **`hostTransport`** (`./host-transport`) — a `Transport` over a byte stream
-  carrying the host protocol, for a host that has one to hand: it frames what
-  the page sends, reassembles what arrives, stamps each message with when its
-  chunk landed, and holds what arrives before the page is listening.
 - **Custom elements** (`./register-elements`) — `<domicile-app>` and
   `<domicile-webview>`. An `<domicile-app>` reports its on-screen box to the
   host, forwards pointer and keyboard input to the client underneath it, and

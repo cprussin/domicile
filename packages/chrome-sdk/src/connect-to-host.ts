@@ -1,23 +1,25 @@
 // One call that finds the host, whichever way this page was opened.
 //
-// A shell's page runs in three places and the difference is not the shell's
+// A shell's page runs in two places and the difference is not the shell's
 // business:
 //
 //   the fork      what we ship. No preload and no world boundary, so the page
 //                 opens a WebSocket to the bridge that holds the compositor's
 //                 session socket — same origin as the page itself, because the
 //                 one process serves both
-//   Electron      scaffolding, on its way out (see electron-chrome-host's own
-//                 README). The socket is the preload's and `postMessage` is how
-//                 it crosses; `window.domicileHost` is how the page knows
 //   a browser     no host at all. `vite dev` on a shell's page is a real thing
 //                 to do, and it must lay out rather than throw
 //
-// WRITING-A-SHELL.md has every shell branching on `window.domicileHost` by
-// hand, which was one branch when there was one alternative. This is that
-// branch, once, so a shell is `new BridgeClient(connectToHost())` and the
-// requirement that a React developer gets a desktop out of a few lines around
-// `ReactDOM.render` survives the fork arriving.
+// There was a third: an Electron whose preload injected a channel at
+// `window.domicileHost`, which the page took over a `postMessage` boundary.
+// The fork has no preload and no world to cross, and Electron is gone from
+// this repository entirely — so that branch is gone with it rather than kept
+// as a shape nothing produces.
+//
+// WRITING-A-SHELL.md used to have every shell branching on the host by hand.
+// This is that branch, once, so a shell is `new BridgeClient(connectToHost())`
+// and the requirement that a React developer gets a desktop out of a few lines
+// around `ReactDOM.render` survives.
 //
 // The URL is derived rather than configured. The bridge serves the page and
 // the session from the same origin exactly so that there is nothing to pass:
@@ -25,8 +27,6 @@
 // and no way for the two to disagree.
 
 import type { Transport } from "./bridge";
-import type { HostChannel } from "./host-transport";
-import { postedTransport } from "./host-transport";
 import { webSocketTransport } from "./websocket-transport";
 
 /** Where the session is served, on the page's own origin. */
@@ -37,29 +37,18 @@ export const SESSION_PATH = "/domicile-session";
  *
  * A second question from `connectToHost`'s, and one a shell genuinely has to
  * ask: with no host there is no display to lay windows out on, so a shell
- * takes the viewport's geometry instead. It used to be spelled
- * `window.domicileHost === undefined`, which stopped meaning that the moment
- * the fork arrived — under the fork there is no injected channel and there
- * very much is a host.
+ * takes the viewport's geometry instead.
  *
  * `connectToHost` is written in terms of this so the two cannot disagree.
  */
 export const hasHost = (target: HostWindow): boolean => {
-  if (target.domicileHost !== undefined) {
-    return true;
-  }
   const { host, protocol } = target.location;
   return (protocol === "http:" || protocol === "https:") && host !== "";
 };
 
 /** The globals this reads, named so a test can supply them. */
 export type HostWindow = {
-  readonly domicileHost?: HostChannel | undefined;
   readonly location: { readonly protocol: string; readonly host: string };
-  addEventListener: (
-    type: "message",
-    listener: (event: { data: unknown; source: unknown }) => void,
-  ) => void;
 };
 
 /**
@@ -75,13 +64,6 @@ export const connectToHost = (
   target: HostWindow,
   open: (url: string) => Parameters<typeof webSocketTransport>[0],
 ): Transport => {
-  // Electron first: when a preload has injected a channel it is the one to
-  // use, and a fork-shaped guess would open a socket to nothing.
-  const injected = target.domicileHost;
-  if (injected !== undefined) {
-    return postedTransport(target, injected);
-  }
-
   // `http:` and `https:` and nothing else, which is what `hasHost` decides. A
   // page on `file:` has a `location` whose `host` is empty, and `ws://` at an
   // empty host is not a URL — it would throw where this promises not to.

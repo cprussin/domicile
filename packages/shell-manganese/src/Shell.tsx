@@ -23,7 +23,6 @@ import type { AppElements } from "./app-elements";
 import { BrowserWindow } from "./BrowserWindow";
 import { bandDepths, showBand, showEveryBand } from "./bands";
 import { Clock } from "./Clock";
-import type { Chord } from "./chord";
 import { claimedRegions } from "./claim-pointer";
 import { FloatGrab } from "./FloatGrab";
 import { FloatTitleBar } from "./FloatTitleBar";
@@ -32,7 +31,6 @@ import { floatingOf } from "./shell-state";
 import { WindowKind } from "./shell-window";
 import { useModifiers } from "./useModifiers";
 import { useShellWindows } from "./useShellWindows";
-import { useWindowSizedToDesktop } from "./useWindowSizedToDesktop";
 
 /**
  * The band everything that is not a float's own chrome belongs to.
@@ -56,21 +54,6 @@ const ALT_ENTER = {
 
 /** Alt+Tab, the same way. 15 is Tab. */
 const ALT_TAB = { ...ALT_ENTER, key: 15 };
-
-/**
- * The same combination as the page names its keys, which is what the Electron
- * host matches an embedded page's keys against — see `chord`.
- */
-const ALT_ENTER_CHORD: Chord = {
-  alt: true,
-  ctrl: false,
-  key: "Enter",
-  meta: false,
-  shift: false,
-};
-
-/** And Alt+Tab as the page names it. */
-const ALT_TAB_CHORD: Chord = { ...ALT_ENTER_CHORD, key: "Tab" };
 
 type ChromeProps = {
   appElements: AppElements;
@@ -262,40 +245,25 @@ const Desktop = ({ appElements, bridge, measure }: DesktopProps) => {
     });
   }, [bridge, float, launch]);
 
-  // And claimed from the Electron host, which covers the one keyboard neither
-  // of those reaches: a `<webview>` is a browsing context of its own, so a key
-  // pressed in a browser window on the stage goes to the site showing there
-  // and nowhere else. Where Domicile composites this window the compositor
-  // takes the key first and this never fires; where it does not, the host is
-  // the only layer above the embedded page. There is no host at all when the
-  // shell is opened in a plain browser for styling work.
-  useEffect(() => {
-    const host = window.domicileGuestShortcuts;
-    if (host !== undefined) {
-      host.grab(ALT_ENTER_CHORD);
-      host.grab({ ...ALT_ENTER_CHORD, shift: true });
-      host.grab(ALT_TAB_CHORD);
-      host.onPressed((chord) => {
-        if (chord.key === ALT_TAB_CHORD.key) {
-          float();
-        } else {
-          launch(chord.shift);
-        }
-      });
-    }
-  }, [float, launch]);
+  // There used to be a third claim here, on an Electron host, for the one
+  // keyboard neither of the two above reached: a `<webview>` is a browsing
+  // context of its own, so a key pressed in a browser window on the stage went
+  // to the site showing there and nowhere else, and the host was the only
+  // layer above it. Under the fork the compositor takes the combination first
+  // — `grab_shortcut`, the effect above — whichever window has the keyboard,
+  // so there is no layer left for a third claim to be made at.
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       // Every modifier is part of the combination, the way the compositor's
-      // claim and the host's are: Ctrl+Alt+Enter is a chord nobody claimed,
-      // and the page is the only path that would otherwise answer it.
+      // claim is: Ctrl+Alt+Enter is a combination nobody claimed, and the page
+      // is the only path that would otherwise answer it.
       if (event.altKey && !event.ctrlKey && !event.metaKey) {
-        // Taken from the page whether or not it does anything: the chord is
-        // the desktop's for as long as it is held. A held key repeats tens of
-        // times a second and only the first of them acts — the compositor
-        // never sees a repeat at all, and the host takes them out of a guest's
-        // stream, so one press does one thing on every path.
+        // Taken from the page whether or not it does anything: the
+        // combination is the desktop's for as long as it is held. A held key
+        // repeats tens of times a second and only the first of them acts — the
+        // compositor never sees a repeat at all — so one press does one
+        // thing on either path.
         switch (event.key) {
           case "Enter": {
             event.preventDefault();
@@ -322,11 +290,15 @@ const Desktop = ({ appElements, bridge, measure }: DesktopProps) => {
     };
   }, [float, launch]);
 
-  // The window this is drawn in is the main process's and the desktop is the
-  // compositor's, so the size crosses back over the host IPC. Nothing happens
-  // where there is no Electron host, or where Domicile composites this window
-  // itself — see `useWindowSizedToDesktop`.
-  useWindowSizedToDesktop();
+  // Nothing sizes the window this is drawn in, and nothing has to. It used to:
+  // the page is the desktop, and a window narrower than the desktop leaves the
+  // right-hand screens off the end of the viewport, where they still lay out
+  // and still report positions the compositor honours — an invisible chrome
+  // placing visible clients. Under Electron the window belonged to another
+  // process and the ask crossed the host IPC. The engine's window is a Wayland
+  // surface this compositor configures to the desktop's own size, which is
+  // what `e2e-chrome-fills-the-desktop.sh` is about, so the page is handed the
+  // right viewport rather than asking for one.
 
   return (
     <>

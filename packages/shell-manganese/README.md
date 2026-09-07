@@ -50,26 +50,14 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<domicile-webview>`. |
 | `src/Clock.tsx` | The live clock: in the rail's footer, and alone on every display the rail is not on. |
 | `src/window-styles.ts` | What every window on the stage shares. |
-| `src/main.ts` | Electron main process: opens the window, takes the chrome's own key combinations out of the pages it embeds, sizes it to the desktop, and prints and exits on the renderer's behalf. |
-| `src/preload.ts` | Opens the compositor connection, exposes it to the page as `window.domicileHost`, and hands the page what it asks of its Electron host: a line on a terminal, the window's size, a way to say why it stopped, and the keys a `<webview>` would swallow. |
-| `src/handshake-failure.ts` | What a refused handshake costs the shell, seen from the page — the same conclusion a dead socket reaches in the host package. |
-| `src/size-to-desktop.ts` | The main process's half of `useWindowSizedToDesktop`: it resizes on its own page's ask and nobody else's. |
-| `src/guest-shortcuts.ts` | The combinations the page claimed from a `<webview>`, which delivers its keys to nobody else. |
-| `src/chord.ts` | A key combination as a page names its keys — what the shortcut channels carry. |
-| `src/shortcut-channels.ts` | The channel names main and preload agree on for a claimed combination. |
-| `src/diagnostic-channel.ts` | The channel a timing line reaches a terminal on. |
-| `src/desktop-size-channel.ts` | The channel the page asks for its window's size on. |
 | `src/domicile-elements.d.ts` | The SDK's custom elements, as JSX. |
 
-Electron is the prototype's host: it renders the chrome as a visible, testable
-window today. The eventual target embeds CEF directly, at which point `main.ts`
-and `preload.ts` are replaced by the engine integration and everything under
-`src/` that is not Electron-specific carries over unchanged. What those two
-share with every other shell in the tree — the window itself, where the
-compositor socket is, what a dead one costs, the channel a renderer cannot
-serve itself — comes from
-[`@domicile/electron-chrome-host`](../electron-chrome-host/README.md); what is
-here is what only this chrome needs.
+There is no main process and no preload. This shell used to be an Electron
+application — a `main.ts` that opened the window, a `preload.ts` that held the
+compositor socket and posted it across the world boundary, and a launcher that
+started the compositor underneath. The fork replaced all of it: the engine is
+the display compositor, the page opens a WebSocket to the bridge serving it,
+and what is left here is the chrome and nothing else.
 
 React owns this DOM, so the chrome writes `<domicile-app>` in JSX rather than
 letting the SDK's `aliasTag` upgrade a short `<app>` tag — a MutationObserver
@@ -211,10 +199,10 @@ than putting it back on the stage. Alt+Tab is what changes the mode.
 Both combinations are claimed three times over, because three different things
 can be holding the keyboard when the user presses one. The page listens for its
 own `keydown`; the compositor is asked to take the combination before a Wayland
-client is given it (`grab_shortcut`); and the Electron host is asked to take it
-before an embedded page is — a `<webview>` is a browsing context of its own, so
-the keys pressed on a site the shell is showing reach neither the page nor, on
-the copy path, Domicile. Exactly one of the three fires for any press.
+client is given it (`grab_shortcut`); and the engine is asked to take it before
+an embedded page is — a `<domicile-webview>` is a browsing context of its own,
+so the keys pressed on a site the shell is showing would otherwise reach
+neither the page nor Domicile. Exactly one of the three fires for any press.
 
 A tab reorders by drag, or by Alt+Up / Alt+Shift+Up (and their Down
 counterparts) on a focused row. Every tab closes its window — by its X, or by a
@@ -253,23 +241,22 @@ layout, say so: `{ "layout": "us" }`.
 bun run turbo build:vite --filter @domicile/shell-manganese
 ```
 
-emits the Electron main bundle to `.vite/build/main.js`, the preload to
-`.vite/build/preload.cjs`, and the chrome to
-`.vite/renderer/main_window/`. `package.json`'s `main` points at the built
-bundle, so with a compositor running:
+emits the chrome to `.vite/renderer/main_window/`, which is the whole of what a
+shell builds: a page and what it loads.
 
 ```sh
-electron packages/shell-manganese
+nix run 'github:cprussin/domicile'
 ```
 
-opens the chrome against it. `./scripts/run-native.sh` does the whole dance
-(compositor + chrome) from the repo root.
+runs it — the bridge, the engine on that page, and the compositor as a producer
+to it. `./scripts/run-engine.sh <chromium/src>` does the same from a checkout.
 
 `bun run --filter @domicile/shell-manganese start:dev` serves the renderer alone on
-Vite's dev server, for styling work without a compositor: `renderer.tsx` falls
-back to a no-op transport when the host injects none. A browser window's page
-stays blank there — `<webview>` is Electron's tag — but the rail, the tabs, and
-the address bar are all live.
+Vite's dev server, for styling work without a compositor: `connectToHost` falls
+back to a no-op transport on a page with no host, so the layout still lays out
+against apps that will never arrive. A browser window's page stays blank there
+— `<domicile-webview>` needs the engine — but the rail, the tabs, and the
+address bar are all live.
 
 `styled-system/` is Panda's generated output, produced by `bun run prepare`
 (run automatically as a turbo dependency of the build, type check, and tests)

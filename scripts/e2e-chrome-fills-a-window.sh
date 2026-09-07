@@ -6,18 +6,26 @@
 # The other half of `e2e-chrome-fills-the-desktop.sh`. There the desktop is the
 # config's and the window only shows it; here nothing describes one, so the
 # window *is* the desktop — a different path through the compositor
-# (`set_output`, reached from `adopt_window_scale`) and the one `nix run
-# .#native` takes.
+# (`set_output`, reached from `adopt_window_scale`) and the one a compositor
+# started with `--present` and no configured displays takes.
 #
 # It was untestable for a long time and so untested: `--present` needs a window,
 # and without `libxkbcommon-x11.so.0` the compositor dies inside `xkbcommon-dl`
 # — in an `expect` that does name the library, but out of a panic, so it reads
 # as a compositor crash rather than as a missing dependency. With that library
 # and an Xvfb it runs headlessly like anything else.
+#
+# WHAT PLAYS THE CHROME. `domicile-test-client --follow-configure`, which is
+# this workspace's own Wayland client with the one behaviour that makes a
+# client a chrome: it takes the size the compositor configures rather than
+# keeping the one it opened at. `e2e-chrome-fills-the-desktop.sh` says more
+# about why that is the whole of the client's side of this.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib/harness.sh
 . "$ROOT/scripts/lib/harness.sh"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
 # shellcheck source=scripts/xvfb-display.sh
 . "$ROOT/scripts/xvfb-display.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
@@ -26,11 +34,8 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
   exit 1
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
-
-command -v electron >/dev/null 2>&1 || {
-  echo "SKIP: no electron, which is the chrome this drives."
-  exit 77
-}
+# 1, not 77: a client this repo builds and cannot build is a broken tree.
+build_test_client || exit 1
 # The resize below is the second check, and there is no window manager on an
 # Xvfb to do it by hand.
 command -v xdotool >/dev/null 2>&1 || {
@@ -42,22 +47,19 @@ export XDG_RUNTIME_DIR="/tmp/domicile-rt-window"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 SOCK="$XDG_RUNTIME_DIR/c.sock"
-LOG="$(mktemp)"; ELOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.json"
-COMP=""; EL=""
+LOG="$(mktemp)"; CLOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.json"
+COMP=""; CHROME=""
 
 # No displays, so the window is still the desktop and this is still the
-# undescribed path — but a window that is not 1280x800, which is both winit's
-# default *and* Electron's own default window size. At that size a chrome that
-# ignored every configure we sent would commit exactly what this asks for, and
-# the first check below would pass without the compositor having done anything.
+# undescribed path — but a window that is not 1280x800, which is winit's own
+# default. At that size a chrome that ignored every configure we sent could
+# commit exactly what this asks for, and the first check below would pass
+# without the compositor having done anything.
 WIN_W=1440
 WIN_H=920
 cat >"$CONF" <<JSON
 { "compositor": { "nested_size": [$WIN_W, $WIN_H] } }
 JSON
-
-( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell-manganese ) >/dev/null 2>&1 \
-  || { echo "the shell did not build"; exit 1; }
 
 # A display when there is none. The geometry applies only to a server this
 # starts: under `check.sh` there is already one at 1280x800 and `ensure_display`
@@ -76,13 +78,13 @@ ensure_display 1920x1080x24 60 || exit 1
 NO_COLOR=1 RUST_LOG=info WINIT_X11_SCALE_FACTOR=1 \
   "$BIN" --session "$SOCK.session" --present --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
-# `kill`, not `kill -9`, for the chrome and the X server: Electron is a process
-# tree and a SIGKILLed one leaves bash reporting "Killed" on stderr as it reaps
-# it — the last line of a run that passed, reading like a failure. A TERM lets
-# it go down on its own. `wait` after, for the same reason. (A SIGKILLed X
-# server also cannot unlink its socket, and the corpse is indistinguishable
-# from a display that is up — see `e2e-electron.sh`.)
-cleanup() { kill "$COMP" "$EL" ${XVFB:-} 2>/dev/null; wait 2>/dev/null; rm -f "$LOG" "$ELOG" "$CONF"; }
+# `kill`, not `kill -9`, for the chrome and the X server. A TERM lets a process
+# go down on its own, and `wait` after reaps it quietly; a SIGKILLed one leaves
+# bash reporting "Killed" on stderr as it reaps it — the last line of a run that
+# passed, reading like a failure. A SIGKILLed X server also cannot unlink its
+# socket, and the corpse it leaves is indistinguishable from a display that is
+# up, which `scripts/xvfb-display.sh` records the cost of.
+cleanup() { kill "$COMP" ${CHROME:-} ${XVFB:-} 2>/dev/null; wait 2>/dev/null; rm -f "$LOG" "$CLOG" "$CONF"; }
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break; sleep 0.05; done
 
@@ -112,11 +114,11 @@ window_now() {
 WINDOW="$(window_now)"
 
 CHROME_DISPLAY="$(sed -n 's/.*the chrome connects here.*display="\([^"]*\)".*/\1/p' "$LOG" | head -1)"
-# The session the compositor published, which is what a shell's own launcher
-# would have read and passed down. Started by hand here rather than through
-# `bin/manganese`, because this drives one arrangement of the chrome rather
-# than the launcher — `e2e-shell-launch.sh` is the check that covers that.
-# The session file, not the socket. `publish()` is the last statement in the
+# On the chrome's display, which is what makes this client the chrome: the
+# compositor tells a chrome from an app by which socket it arrived on. It does
+# not open the chrome protocol socket, which is where a desktop is described —
+# and there is no desktop to describe here, the window *is* the desktop.
+# The session is waited for even so. `publish()` is the last statement in the
 # compositor's `main()` — after every bind, the GPU probe and the whole event
 # loop's construction — so the socket exists long before the document does, and
 # a `cat` that ran on the socket's appearance would hand the chrome an empty
@@ -127,11 +129,9 @@ if [ ! -s "$SOCK.session" ]; then
   exit 1
 fi
 WAYLAND_DISPLAY="$CHROME_DISPLAY" \
-  DOMICILE_SESSION="$(cat "$SOCK.session")" \
-  electron --no-sandbox --ozone-platform=wayland --disable-gpu \
-  "$ROOT/packages/shell-manganese/.vite/build/main.js" >"$ELOG" 2>&1 &
-EL=$!
-still_running() { kill -0 "$EL" 2>/dev/null; }
+  "$TEST_CLIENT" --title chrome --follow-configure >"$CLOG" 2>&1 &
+CHROME=$!
+still_running() { kill -0 "$CHROME" 2>/dev/null; }
 
 for _ in $(seq 1 400); do grep -q "the chrome committed a frame" "$LOG" && break; sleep 0.1; done
 
@@ -147,11 +147,11 @@ committed() {
 if ! still_running; then
   harness_fault "$COMP" "the chrome could stay up" \
     "ERROR: the chrome exited before committing anything; it said:" \
-    "$(tail -20 "$ELOG")"
+    "$(tail -20 "$CLOG")"
 elif [ -z "$(committed)" ]; then
   harness_fault "$COMP" "the chrome could commit a frame at all" \
     "ERROR: the chrome never committed a frame; it said:" \
-    "$(tail -20 "$ELOG")"
+    "$(tail -20 "$CLOG")"
 elif [ "$(committed)" = "$WINDOW" ]; then
   passed "the chrome covers the window that is the desktop"
 else
@@ -192,7 +192,7 @@ elif [ "$RESIZED" != "0" ] || [ "$(window_now)" != "${GREW_W}x${GREW_H}" ]; then
 elif ! still_running; then
   harness_fault "$COMP" "the chrome could stay up to be resized" \
     "ERROR: the chrome exited before the window changed under it; it said:" \
-    "$(tail -20 "$ELOG")"
+    "$(tail -20 "$CLOG")"
 elif [ "$(committed)" = "${GREW_W}x${GREW_H}" ]; then
   passed "the chrome followed the window when it was resized"
 else

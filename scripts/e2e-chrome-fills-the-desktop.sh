@@ -10,32 +10,41 @@
 # *tell* it the right size, and the chrome has to take it — and when either
 # half slips the desktop is a page in the corner of a black screen.
 #
-# Nothing covered this. `e2e-electron.sh` runs a real chrome, but over the
-# chrome *protocol* socket — the copy path, where the window is the host's and
-# `size-to-desktop` sets it. This is the other path: the chrome is a Wayland
-# client of ours, its size is a configure we send, and no check drove it.
+# WHAT PLAYS THE CHROME HERE. `domicile-test-client --follow-configure`, which
+# is this workspace's own Wayland client with the one behaviour that makes a
+# client a chrome: it takes the size the compositor configures rather than
+# keeping the one it opened at. That is the entirety of the client's side of
+# this claim, and the compositor's side — deciding the size and sending it — is
+# what is under test.
+#
+# It used to be a real Electron on the same socket. Electron is gone from this
+# repository, and a real browser was never what made this check work: what a
+# browser adds is a layout engine, and nothing here reads a pixel. The engine
+# is the chrome now, and the checks that need a *real* one are the ones that
+# read what it painted — `packages/domicile-engine/scripts/`.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib/harness.sh
 . "$ROOT/scripts/lib/harness.sh"
+# shellcheck source=scripts/lib/test-client.sh
+. "$ROOT/scripts/lib/test-client.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
 cargo build -p domicile-compositor >/dev/null 2>&1 || {
   echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
   exit 1
 }
 [ -x "$BIN" ] || { echo "no compositor at $BIN after building"; exit 1; }
-
-command -v electron >/dev/null 2>&1 || {
-  echo "SKIP: no electron, which is the chrome this drives."
-  exit 77
-}
+# 1, not 77: a client this repo builds and cannot build is a broken tree, which
+# is a failure. 77 is for what the *machine* is missing, and this needs nothing
+# of the machine's any more.
+build_test_client || exit 1
 
 export XDG_RUNTIME_DIR="/tmp/domicile-rt-fills"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 SOCK="$XDG_RUNTIME_DIR/c.sock"
-LOG="$(mktemp)"; ELOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.json"
-COMP=""; EL=""
+LOG="$(mktemp)"; CLOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.json"
+COMP=""; CHROME=""
 
 # A desktop that is not any default, so a chrome sized by anything other than
 # this config is visibly not the desktop's size.
@@ -45,19 +54,16 @@ cat >"$CONF" <<JSON
 { "output": { "displays": [{ "name": "only", "size": [$WIDTH, $HEIGHT] }] } }
 JSON
 
-( cd "$ROOT" && bun run turbo build:vite --filter @domicile/shell-manganese ) >/dev/null 2>&1 \
-  || { echo "the shell did not build"; exit 1; }
-
 # NO_COLOR because the fields below are read back out of this log, and
 # tracing writes SGR escapes *between* the field name and its value — a
 # pattern for `display="..."` matches nothing in a coloured one.
 NO_COLOR=1 RUST_LOG=info "$BIN" --session "$SOCK.session" --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
-# `kill`, not `kill -9`, for the chrome: Electron is a process tree and a
-# SIGKILLed one leaves bash reporting "Killed" on stderr as it reaps it — the
-# last line of a run that passed, reading like a failure. A TERM lets it go
-# down on its own, and `wait` after reaps it quietly.
-cleanup() { kill "$COMP" "$EL" 2>/dev/null; wait 2>/dev/null; rm -f "$LOG" "$ELOG" "$CONF"; }
+# `kill`, not `kill -9`: a TERM lets a process go down on its own, and `wait`
+# after reaps it quietly. A SIGKILLed child leaves bash reporting "Killed" on
+# stderr as it reaps it — the last line of a run that passed, reading like a
+# failure.
+cleanup() { kill "$COMP" ${CHROME:-} 2>/dev/null; wait 2>/dev/null; rm -f "$LOG" "$CLOG" "$CONF"; }
 trap cleanup EXIT
 for _ in $(seq 1 200); do [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break; sleep 0.05; done
 
@@ -72,47 +78,30 @@ if [ -z "$CHROME_DISPLAY" ]; then
     "$(head -5 "$LOG")"
 fi
 
-# As a Wayland client of ours, which is what `--ozone-platform=wayland` and
-# that display make it — not over the chrome protocol socket, which is the
-# copy path `e2e-electron.sh` already drives.
-# The published session as well as the display: the chrome is two connections,
-# and they are not the same socket. The Wayland one is what makes it a client
-# of ours; the protocol one is where the desktop is described, and a chrome
-# that cannot open it says so and exits — leaving a compositor that looks like
-# it never sized anything. Both are in the session document, which is what a
-# shell's own launcher would have read and passed down.
-# `composited` overridden to true, which is the one thing the published
-# session cannot say here. The compositor publishes whether *it* got a window
-# (`--present`), and this one deliberately has none — but the chrome below is
-# still a Wayland client of ours whose surface we composite, so it must be
-# transparent and size itself to the desktop rather than paint a background
-# over the apps. That arrangement is this check's whole subject and no
-# launcher produces it, so the script says so itself.
-# The session file, not the socket. `publish()` is the last statement in the
+# On the chrome's display, which is the whole of what makes this client the
+# chrome. The compositor tells them apart by which socket a client arrived on —
+# `is_chrome_surface` — so an ordinary client on that display *is* the chrome
+# as far as every decision under test is concerned.
+#
+# It does not open the chrome protocol socket at all, and does not need to.
+# That connection is where the desktop is *described*, and what this asks is
+# whether the compositor sizes the chrome's surface to the desktop it already
+# has from its config. The description reaches a page; the configure reaches a
+# surface, and only the second is this check's subject.
+#
+# The session is waited for even so. `publish()` is the last statement in the
 # compositor's `main()` — after every bind, the GPU probe and the whole event
-# loop's construction — so the socket exists long before the document does, and
-# a `cat` that ran on the socket's appearance would hand the chrome an empty
-# `DOMICILE_SESSION`.
+# loop's construction — so a chrome started on the socket's appearance can beat
+# the compositor to being ready, and this check would then be about the race
+# rather than about the size.
 for _ in $(seq 1 400); do [ -s "$SOCK.session" ] && break; sleep 0.05; done
 if [ ! -s "$SOCK.session" ]; then
   echo "FAIL: the compositor never published a session; nothing can be started against it."
   exit 1
 fi
-COMPOSITED_SESSION="$(sed 's/"composited": false/"composited": true/' "$SOCK.session")"
-# Asserted rather than assumed: the substitution depends on the exact spelling
-# `serde_json::to_string_pretty` produces, and a serializer change would make
-# it a silent no-op — leaving this checking a chrome drawing the other path.
-case "$COMPOSITED_SESSION" in
-  *'"composited": true'*) ;;
-  *) echo "FAIL: could not mark the session composited; the document reads:"
-     cat "$SOCK.session" | sed 's/^/    /'
-     exit 1 ;;
-esac
 WAYLAND_DISPLAY="$CHROME_DISPLAY" \
-  DOMICILE_SESSION="$COMPOSITED_SESSION" \
-  electron --no-sandbox --ozone-platform=wayland --disable-gpu \
-  "$ROOT/packages/shell-manganese/.vite/build/main.js" >"$ELOG" 2>&1 &
-EL=$!
+  "$TEST_CLIENT" --title chrome --follow-configure >"$CLOG" 2>&1 &
+CHROME=$!
 
 # Alive before anything below is read as a verdict. A chrome that died after
 # one frame commits nothing more, and every check after that reports a
@@ -120,7 +109,7 @@ EL=$!
 # compositor's clothes, and is exactly what this script did before the socket
 # above was passed.
 still_running() {
-  kill -0 "$EL" 2>/dev/null
+  kill -0 "$CHROME" 2>/dev/null
 }
 
 # The line that says what the desktop is actually made of.
@@ -137,12 +126,12 @@ COMMITTED="$(sed -n 's/.*the chrome committed a frame.*width=\([0-9]*\).*height=
 if ! still_running; then
   harness_fault "$COMP" "the chrome could stay up" \
     "ERROR: the chrome exited before it committed anything; it said:" \
-    "$(tail -20 "$ELOG")"
+    "$(tail -20 "$CLOG")"
 elif [ -z "$COMMITTED" ]; then
   harness_fault "$COMP" "the chrome could commit a frame at all" \
     "ERROR: the chrome never committed a frame, so its size was never" \
-    "  established; electron said:" \
-    "$(tail -20 "$ELOG")"
+    "  established; the chrome said:" \
+    "$(tail -20 "$CLOG")"
 elif [ "$COMMITTED" = "${WIDTH}x${HEIGHT}" ]; then
   passed "the chrome committed at the desktop's own size"
 else
@@ -188,7 +177,7 @@ elif ! still_running; then
   harness_fault "$COMP" "the chrome could stay up to be resized" \
     "ERROR: the chrome exited before the desktop changed under it, so" \
     "  nothing here is about whether it would have grown; it said:" \
-    "$(tail -20 "$ELOG")"
+    "$(tail -20 "$CLOG")"
 elif grep -q "width=${GREW_W}\.0 height=${GREW_H}\.0" "$LOG"; then
   passed "the chrome grew to span the desktop's second display"
 else

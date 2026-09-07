@@ -71,13 +71,9 @@
         wayland-utils
         # A terminal to launch via the demo shell's Alt+Enter keybinding.
         kitty
-        # Electron runs the chrome, both as Domicile's own Wayland client and
-        # over the chrome protocol socket (the eventual target embeds CEF;
-        # Electron gets us a testable UI now). The binding above rather than
-        # `pkgs.electron`, so the checks run the major the packages ship.
-        electron
-        # Xvfb lets us exercise the Electron chrome headlessly in tests
-        # (provides the `Xvfb` binary used by scripts/e2e-electron.sh).
+        # Xvfb is what gives the compositor's own window a display to open on
+        # where there is none — `--present`, under `e2e-a-dense-display.sh` and
+        # `e2e-chrome-fills-a-window.sh`.
         xvfb
         # There is no window manager on an Xvfb, so `xdotool` is what resizes
         # Domicile's own window in `e2e-chrome-fills-a-window.sh` — the one
@@ -302,49 +298,6 @@
       # A user picks a desktop; they do not install a compositor and then look
       # for something to point at it.
 
-      # The Electron everything here runs on: the packages below and the dev
-      # shell both, so what is tested and what ships are the same major.
-      #
-      # Named rather than taken from the `electron` alias, which floats with
-      # every `flake.lock` bump — at the pinned revision it is 41, two majors
-      # below what the workspace builds and type-checks against, and it was
-      # what the dev shell had been running all along.
-      #
-      # `wantedElectron` reads the major out of the workspace's own catalog,
-      # and the `pkgs."electron_${…}"` lookup below is what makes a catalog
-      # bump a failure rather than a person remembering: nixpkgs has no
-      # attribute for a major it does not carry, so the flake stops
-      # evaluating. The `assert` after it only fires if `electron_N` were to
-      # carry some other major, which nixpkgs does not do — a belt on a belt,
-      # kept because it costs nothing and states the invariant.
-      #
-      # Only the major: nixpkgs carries 43.2.0 against a catalog `^43.3.0`, so
-      # the minor is already behind and nixpkgs is what there is. A pin that
-      # cannot be met exactly is worth saying out loud rather than asserting
-      # around.
-      #
-      # This binds the dev shell too, so a catalog bump to a major nixpkgs
-      # lacks stops `nix develop` as well as `nix build`. Deliberate: a dev
-      # shell quietly testing a different major from the one the packages ship
-      # is the failure this exists to end, and it is what was happening.
-      wantedElectron =
-        let
-          catalog = (builtins.fromJSON (builtins.readFile ./package.json)).catalog;
-          found = builtins.match "[^0-9]*([0-9]+).*" catalog.electron;
-        in
-        if found == null then
-        # A range with no digits in it — `*`, `latest`. Nothing spells a
-        # catalog that way, but `builtins.head null` names neither the file
-        # nor the value, and this is a failure someone would meet while
-        # editing something else.
-          throw ("no major version in package.json's catalog.electron: "
-            + catalog.electron)
-        else
-          builtins.head found;
-      electron =
-        let named = pkgs."electron_${wantedElectron}";
-        in assert pkgs.lib.versions.major named.version == wantedElectron; named;
-
       # The workspace's Rust crates, by the file that makes one.
       rustCrates = builtins.attrNames (pkgs.lib.filterAttrs
         (name: _: builtins.pathExists (./packages + "/${name}/Cargo.toml"))
@@ -426,8 +379,8 @@
       # Fixed-output because it is the one step that needs the network, and its
       # input is the lockfile rather than the source: only the manifests are in
       # `src`, so editing a `.ts` file does not re-resolve the world. Scripts
-      # are not run — the one that matters is Electron's, which downloads a
-      # binary this build has no use for and no network to fetch.
+      # are not run: nothing in the tree needs one, and a postinstall that
+      # reaches for the network is a build that cannot be reproduced.
       #
       # `outputHash` changes with `bun.lock`, and keeping the two in step is a
       # person's job — the pinned nixpkgs has no `buildBunPackage`, so nothing
@@ -496,16 +449,16 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-4EnU8HGLV+FowAY7k61uhUmVMryVOuPHHL3ctZwUUXc=";
+        outputHash = "sha256-LTPpmKKb3mGrLtkQBpaIRlmGnSeJj1l8WI5xVAq36Nw=";
       };
 
 
       # A shell, built and installed the way a user runs one.
       #
-      # `name` is both the workspace package's suffix and the command: the
-      # `bin/` stub in the source is what ends up on `PATH`, unchanged except
-      # for being told where the compositor and Electron are. It finds its own
-      # bundle relative to itself, so the whole `.vite` tree comes along.
+      # `name` is both the workspace package's suffix and the command, so
+      # `nix profile install .#simple` puts `simple` on `PATH`. What that
+      # command is, is `run-engine.sh` with every input it needs already
+      # named: the built page, the engine, the compositor and the bridge.
       # Everything a workspace build needs before it can run turbo: the
       # installed modules copied in writable, shebangs patched to the store's
       # node, and turbo's own writable directories. Shared by the three
@@ -568,11 +521,8 @@
             #
             # The e2e and smoke scripts expect target/debug/domicile-compositor
             # to exist already, which is what the debug build below is for.
-            # run-native.sh and measure.sh build their own release binaries —
-            # both are interactive or timed, and debug is a 4fps ceiling on any
-            # client that takes the copy path.
             # The script's own arguments reach it in two hops, which is what
-            # lets `nix run .#native -- simple` pick a shell. `\$@` is escaped
+            # lets `nix run .#dev-check -- --only e2e` pass one on. `\$@` is escaped
             # so the *inner* bash expands it from its own positional parameters
             # rather than this one baking the words in; those parameters are the
             # trailing `"$@"`, since `bash -c CMD name args...` is how a `-c`
@@ -615,10 +565,9 @@
         })
         desktops;
 
-      # `nix run .#<attr>` → `scripts/<script>.sh`. `native` is also the default
-      # app, so a bare `nix run github:cprussin/domicile` starts the compositor
-      # — which is the only thing here that is one. The copy path is reached
-      # through it, not instead of it.
+      # `nix run .#dev-<attr>` → `scripts/<script>.sh`. None of these is a
+      # desktop: they are the checks and the smoke tests, for somebody working
+      # on Domicile rather than running it.
       scriptApps = pkgs.lib.mapAttrs
         (name: script: {
           type = "app";
@@ -627,17 +576,9 @@
         })
         {
           check = "check.sh";
-          native = "run-native.sh";
-          measure = "measure.sh";
-          measure-round-trip = "measure-round-trip.sh";
-          e2e-electron = "e2e-electron.sh";
           e2e-a-dense-display = "e2e-a-dense-display.sh";
-          e2e-shell-launch = "e2e-shell-launch.sh";
-          e2e-late-chrome = "e2e-late-chrome.sh";
-          e2e-chrome-without-a-host = "e2e-chrome-without-a-host.sh";
           e2e-dmabuf = "e2e-dmabuf.sh";
           e2e-compose = "e2e-compose.sh";
-          e2e-bands = "e2e-bands.sh";
           e2e-chrome-fills-the-desktop = "e2e-chrome-fills-the-desktop.sh";
           e2e-chrome-fills-a-window = "e2e-chrome-fills-a-window.sh";
           e2e-window-follows-the-desktop = "e2e-window-follows-the-desktop.sh";
@@ -671,9 +612,7 @@
 
       apps.${system} = {
         # A bare `nix run github:cprussin/domicile` is the desktop this
-        # project is for. Not `native` any more: that ran the shells under
-        # Electron with the compositor compositing, which is the architecture
-        # the fork replaced.
+        # project is for.
         default = domicileApps.manganese;
         inherit (domicileApps) manganese simple;
         # No `engine` app. `nix build .#engine` is how you get the engine —
@@ -705,11 +644,6 @@
           RUST_BACKTRACE = "1";
           FORCE_COLOR = 1;
           BIOME_BINARY = pkgs.lib.getExe pkgs.biome;
-          # Use the nix-provided electron rather than downloading one — the
-          # same one `hostLibs` puts on `PATH`, so the `electron` npm package
-          # and the binary the scripts find cannot be different majors.
-          ELECTRON_OVERRIDE_DIST_PATH = "${electron}/bin";
-          ELECTRON_SKIP_BINARY_DOWNLOAD = 1;
           # The compositor `dlopen`s libEGL to import client dmabufs, and
           # `mkShell` only wires build-time linkage — a package in `packages`
           # is not on the runtime loader path. `/run/opengl-driver/lib` comes

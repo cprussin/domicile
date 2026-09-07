@@ -4,11 +4,10 @@
 #   nix develop .#full -c ./scripts/run-engine.sh /build/chromium/src
 #   nix develop .#full -c ./scripts/run-engine.sh /build/chromium/src simple
 #
-# The counterpart of run-native.sh, which runs the same shells under Electron
-# with the compositor compositing. Here the browser is the display compositor:
-# the shell's page embeds each client's surface into its own layer tree, and
-# the compositor is a producer rather than a renderer. That is the whole point
-# of the fork -- see docs/architecture/ENGINE-FORK.md.
+# The browser is the display compositor: the shell's page embeds each client's
+# surface into its own layer tree, and the compositor is a producer rather than
+# a renderer. That is the whole point of the fork -- see
+# docs/architecture/ENGINE-FORK.md.
 #
 # THREE PROCESSES, AND THE ORDER IS FORCED.
 #
@@ -71,11 +70,24 @@ BRIDGE="${DOMICILE_BRIDGE:-}"
 # packages/shell-dist, and it is not a path to a built one either" — the second
 # half of which was false, and the check that would have known it was never
 # run. A directory here is what somebody meant.
+#
+# UNLESS A PAGE WAS HANDED IN, in which case a bare name is a name and nothing
+# else. A packaged desktop sets `DOMICILE_PAGE` to the page it built and passes
+# its own name along for the log — so `nix run github:cprussin/domicile#simple`
+# reaches here as `<engine> simple` with a page already set. Run from a
+# directory that happens to contain a `simple/`, that word became a path, and
+# the refusal below fired about two instructions that disagree — naming a
+# variable the user never set and a directory they were not talking about, from
+# a command with no path in it at all. The user's own `cd` is not an argument.
+#
+# A name with a slash in it is still a path even then: `DOMICILE_PAGE` and
+# `./somewhere/dist` really are two answers to one question, and that is the
+# case the refusal was written for.
 SHELL_NAME="$SHELL_ARG"
 IS_PATH=no
 case "$SHELL_ARG" in
   (*/*|.|..) IS_PATH=yes ;;
-  (*) [ -d "$SHELL_ARG" ] && IS_PATH=yes ;;
+  (*) [ -z "$PAGE_DIR" ] && [ -d "$SHELL_ARG" ] && IS_PATH=yes ;;
 esac
 
 if [ "$IS_PATH" = yes ]; then
@@ -148,9 +160,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # The page, built the way the repository builds a shell — turbo's `build:vite`,
-# filtered to this one, which is how run-native.sh and every other script that
-# builds a workspace shell does it. Nothing here is a second way to build a
-# shell.
+# filtered to this one, which is how every other script that builds a
+# workspace shell does it. Nothing here is a second way to build a shell.
 #
 # `CI=1` because turbo's `//#build:install-modules` runs a non-frozen
 # `bun install` without it. It does not close the other half: that task

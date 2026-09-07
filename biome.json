@@ -239,10 +239,7 @@
           }
         }
       },
-      "includes": [
-        "packages/chrome-sdk/package.json",
-        "packages/electron-chrome-host/package.json"
-      ]
+      "includes": ["packages/chrome-sdk/package.json"]
     },
     {
       "includes": ["packages/domicile-engine/scripts/**"],

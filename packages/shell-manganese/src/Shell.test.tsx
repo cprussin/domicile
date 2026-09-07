@@ -11,7 +11,6 @@ import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
 import { AppElements } from "./app-elements";
-import type { Chord } from "./chord";
 import { CLAIMS_POINTER } from "./claim-pointer";
 import { displaysFrom } from "./display-source";
 import { Shell } from "./Shell";
@@ -142,34 +141,6 @@ const shownWindowIds = (container: HTMLElement): (string | null)[] =>
     .filter((element) => !element.hasAttribute("hidden"))
     .map((element) => element.getAttribute("app-id") ?? element.tagName);
 
-// The Electron host's half of the guest shortcuts, as the preload injects it:
-// what the page claims from the pages it embeds, and how a claimed press
-// arrives when a `<webview>` swallowed the key.
-class FakeGuestShortcuts {
-  readonly claims: Chord[] = [];
-
-  #pressed: ((chord: Chord) => void) | undefined;
-
-  grab(chord: Chord): void {
-    this.claims.push(chord);
-  }
-
-  onPressed(listener: (chord: Chord) => void): void {
-    this.#pressed = listener;
-  }
-
-  press(chord: Chord): void {
-    const pressed = this.#pressed;
-    if (pressed === undefined) {
-      throw new Error("nothing listened for a claimed press");
-    } else {
-      act(() => {
-        pressed(chord);
-      });
-    }
-  }
-}
-
 let bridge: FakeBridge;
 
 /**
@@ -216,19 +187,8 @@ const renderShell = (desktop: readonly Display[] = [LEFT]) =>
  */
 const renderUndescribedShell = () => renderingShell(undefined);
 
-// The shell opened in a plain browser has no Electron host, so nothing
-// installs this; the tests that want one put it back.
-const renderHostedShell = () => {
-  const host = new FakeGuestShortcuts();
-  window.domicileGuestShortcuts = host;
-  renderShell();
-  return host;
-};
-
 beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
-  delete window.domicileGuestShortcuts;
-  delete window.domicileWindow;
 });
 
 describe("Shell", () => {
@@ -321,54 +281,6 @@ describe("Shell", () => {
       expect(screenNamed(container, "right")?.querySelector("main")).toBe(
         stage ?? null,
       );
-    });
-  });
-
-  describe("the window it is drawn in", () => {
-    it("is sized to the whole desktop, not to one display", () => {
-      // The page is the desktop, and the SDK places every portal from a
-      // `getBoundingClientRect`. A window narrower than the desktop leaves the
-      // right-hand screens off the end of the viewport, still laying out and
-      // still reporting positions the compositor honours.
-      const sizes: (readonly number[])[] = [];
-      window.domicileWindow = {
-        sizeToDesktop: (width, height) => {
-          sizes.push([width, height]);
-        },
-      };
-
-      renderShell([LEFT, RIGHT]);
-
-      expect(sizes).toContainEqual([3200, 1080]);
-    });
-
-    it("is left alone for a desktop of no screens", () => {
-      // `0 x 0` is not a window, and it is what the bounding box of nothing
-      // comes to. The chrome renders nothing at all for that same desktop, so
-      // a window resized to nothing would be the one part of the shell acting
-      // on it.
-      const sizes: (readonly number[])[] = [];
-      window.domicileWindow = {
-        sizeToDesktop: (width, height) => {
-          sizes.push([width, height]);
-        },
-      };
-
-      renderShell([]);
-
-      expect(sizes).toStrictEqual([]);
-    });
-
-    it("is left alone where there is no Electron host", () => {
-      // The shell opened in a plain browser has no window of its own to size.
-      // (Where Domicile composites this one the ask is made and not answered —
-      // that is `main.ts`, which is the half that knows.)
-      const { container } = renderUndescribedShell();
-
-      expect(() => {
-        bridge.describes([LEFT, RIGHT]);
-      }).not.toThrow();
-      expect(screenNamed(container, "left")).toBeInTheDocument();
     });
   });
 
@@ -608,55 +520,18 @@ describe("Shell", () => {
       expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
     });
 
-    it("claims every chord it answers from the Electron host", () => {
-      // The compositor's claim covers a Wayland client holding the keyboard,
-      // and not a page the chrome embeds: a `<webview>` is a browsing context
-      // of its own, so its keys never reach this page. Where Domicile is not
-      // the one dispatching them, the Electron host is what can take them.
-      const host = renderHostedShell();
-
-      expect(host.claims).toStrictEqual([
-        { alt: true, ctrl: false, key: "Enter", meta: false, shift: false },
-        { alt: true, ctrl: false, key: "Enter", meta: false, shift: true },
-        { alt: true, ctrl: false, key: "Tab", meta: false, shift: false },
-      ]);
-    });
-
-    it("opens a terminal when the host hands back a chord pressed in an embedded page", () => {
-      const host = renderHostedShell();
-
-      host.press({
-        alt: true,
-        ctrl: false,
-        key: "Enter",
-        meta: false,
-        shift: false,
-      });
-
-      expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
-    });
-
-    it("opens a browser when the host's chord carries Shift", () => {
-      // The shift is read off the chord the host delivered, not off the one
-      // key this page could have heard for itself.
-      const host = renderHostedShell();
-
-      host.press({
-        alt: true,
-        ctrl: false,
-        key: "Enter",
-        meta: false,
-        shift: true,
-      });
-
-      expect(tabNames()).toStrictEqual(["www.google.com"]);
-    });
+    // There were three tests here for a third claim, on an Electron host: a
+    // `<webview>` is a browsing context of its own, so a key pressed in a
+    // browser window on the stage went to the site showing there, and the host
+    // was the only layer above it. Under the fork the compositor takes the
+    // combination first whichever window has the keyboard, so that layer — and
+    // the claim, and its tests — are gone. The two paths left are the two
+    // above.
 
     it("opens one terminal for a held Alt+Enter, not one per repeat", async () => {
-      // A held key repeats tens of times a second. The other two paths deliver
-      // one press — the compositor never sees a repeat, and the host takes
-      // them out of a guest's stream — and a page that opened a window for
-      // each would be the only one that did.
+      // A held key repeats tens of times a second. The compositor never sees a
+      // repeat, so it delivers one press — and a page that opened a window for
+      // each would be the only path that did.
       renderShell();
       await userEvent.keyboard("{Alt>}{Enter}{/Alt}");
       const repeat = new KeyboardEvent("keydown", {

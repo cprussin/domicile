@@ -18,45 +18,45 @@ TypeScript side; the Rust side is in
 
 Every bun workspace in this repo lives in `/packages`, whether it is a library
 (`chrome-sdk`, `component-library`, `test-support`, `e2e-harness`,
-`electron-chrome-host`) or a shell — a runnable chrome package, named `shell-*`
-(`shell-manganese`, `shell-simple`). A shell *is* the thing that runs: it is
-the program a user starts, and it starts the compositor underneath itself.
+`engine-chrome-host`) or a shell — a chrome package, named `shell-*`
+(`shell-manganese`, `shell-simple`). A shell is not a program: it is a built
+web page, and Domicile is what runs it.
 
 The `shell-` prefix is a directory convention, not part of a shell's identity:
 `packages/` is shared with the cargo crates, and the prefix is what keeps the
-shells together in one tree. A shell's own name is what its `bin/` entry is
-called — `simple`, `manganese` — which is what a user types. Out of a checkout
-there is no install step: run `packages/shell-simple/bin/simple`, or
-`scripts/run-native.sh simple`, which builds both halves first and points
-`DOMICILE_COMPOSITOR` at the build. The end-to-end scripts mostly drive the
+shells together in one tree. A shell's own name is what the flake calls its app
+— `simple`, `manganese` — which is what a user types after `nix run`. A shell
+has no `bin/` entry and nothing to install: it is a built web page, and
+`nix run github:cprussin/domicile#simple` is the whole of running one. Out of a
+checkout, `scripts/run-engine.sh <chromium/src> simple` builds the page and
+runs the engine and the compositor against it. The end-to-end scripts drive the
 compositor directly with a stand-in chrome of their own, which is why they name
-a `--chrome-socket` and a `--session` and start no shell at all; the one that
-covers the launcher is `scripts/e2e-shell-launch.sh`.
-See `packages/domicile-launch`, which is both halves of the boundary between a
-shell and the compositor it runs.
+a `--chrome-socket` and a `--session` and start no shell at all.
+See `packages/domicile-launch`, which is both halves of the compositor's own
+command line and the session it publishes.
 
-Neither in-tree shell is privileged. Both start a compositor through exactly
+Neither in-tree shell is privileged. Both are served and loaded through exactly
 the machinery an out-of-tree shell uses, and
 [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) is the contract they
 observe. `examples/minimal-shell` is that document's worked example: it sits
 outside the bun workspace on purpose, and
 `scripts/test-out-of-tree-shell.sh` builds it against the *published* SDK
-tarballs somewhere outside the repo — the only check that can catch an
+tarball somewhere outside the repo — the only check that can catch an
 `exports` entry pointing at a file `files` does not ship, or a `catalog:` that
 survived into a published manifest.
 
-`@domicile/chrome-sdk` and `@domicile/electron-chrome-host` are published to
-npm and are the only two packages here that are not `private`. They are the one place `useSortedKeys` is turned off — for
+`@domicile/chrome-sdk` is published to npm and is the only package here that is
+not `private`. It is the one place `useSortedKeys` is turned off — for
 the whole manifest, in `biome.json`'s `overrides`, since the rule cannot be
 scoped to one key. It is the `exports` map that needs it: export conditions are matched top to bottom, so `"types"` must come
 before `"default"`, and sorting them alphabetically would make a lint rule
 enforce a semantic bug in an artifact that leaves this repo. It works today even
 sorted wrongly — TypeScript falls back to the sibling `.d.ts` — which is exactly
-why it would not have been noticed until the emit layout changed. They emit
-JavaScript and `.d.ts` into `dist/` via a `build` task, and their `exports` map
+why it would not have been noticed until the emit layout changed. It emits
+JavaScript and `.d.ts` into `dist/` via a `build` task, and its `exports` map
 points there rather than at `src/` — a consumer outside this repo has no
 TypeScript toolchain of ours to transpile our source with. Everything that
-depends on them therefore depends on `^build` in `turbo.json`.
+depends on it therefore depends on `^build` in `turbo.json`.
 
 `/packages` is shared with the Rust side: the `domicile-*` crates live there
 too, as members of the cargo workspace declared in the root `Cargo.toml`. One

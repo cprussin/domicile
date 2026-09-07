@@ -328,12 +328,13 @@ describe("every script that can tell a dead compositor apart", () => {
 
   it("scans the scripts", () => {
     // Named because an empty scan must fail rather than report no offenders.
-    // `e2e-electron.sh` rather than one of the mock-chrome checks: those are
-    // being ported to Rust a batch at a time, and this canary named one of
-    // them until the batch that deleted it. A check needing a real Electron
-    // outlives that migration.
-    expect(scripts.map(([name]) => name)).toContain("e2e-electron.sh");
+    // Two of them, and deliberately not one of the checks being ported: this
+    // canary has now been renamed twice by the batch that deleted the script
+    // it named — `e2e-electron.sh` was the last — so it names the two scripts
+    // that are about this repository's own machinery rather than about a
+    // chrome, and so outlive whatever the chrome turns out to be.
     expect(scripts.map(([name]) => name)).toContain("test-xvfb-verdict.sh");
+    expect(scripts.map(([name]) => name)).toContain("test-annotate.sh");
   });
 
   it("routes every harness bail through the liveness check", () => {

@@ -63,9 +63,9 @@ migrated; don't delete the old one the same day.
 
 **Don't version**
 
-- **Same-deploy-unit code** — same-bundle imports, Electron main↔renderer
-  IPC, internal types. Both sides change atomically; a version field is
-  overhead with no payoff.
+- **Same-deploy-unit code** — same-bundle imports, internal types, anything
+  where both sides change atomically. A version field is overhead with no
+  payoff.
 - **Adapters over already-versioned external APIs** — a wrapper around a
   third-party SDK inherits that SDK's own versioning as the contract.
 

@@ -41,8 +41,8 @@ hours; see [docs/architecture/ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
 From a checkout:
 
 ```sh
-nix develop .#full -c ./scripts/run-native.sh          # manganese
-nix develop .#full -c ./scripts/run-native.sh simple
+nix develop .#full -c ./scripts/run-engine.sh <chromium/src>          # manganese
+nix develop .#full -c ./scripts/run-engine.sh <chromium/src> simple
 ```
 
 To install one rather than run it out of the source, build the shell you want.
@@ -57,12 +57,11 @@ nix build github:cprussin/domicile#simple    # ./result/bin/simple
 Configuration is the shell's own, at `$XDG_CONFIG_HOME/domicile/<shell>.json`
 — see its README.
 
-An installed shell runs sandboxed and needs no flags on an ordinary host. Where
-the machine cannot manage that — unprivileged user namespaces disabled, or a
-container running as root — Electron says so and stops, and the machine passes
-what it needs in `DOMICILE_ELECTRON_ARGS` (`--no-sandbox`, and `--disable-gpu`
-where there is no GPU). That is the machine's business rather than the shell's,
-so neither package bakes any in.
+A shell that is run rather than installed builds against your checkout, and
+`scripts/run-engine.sh` takes the four things it needs from the environment —
+`DOMICILE_PAGE`, `DOMICILE_ENGINE`, `DOMICILE_COMPOSITOR`, `DOMICILE_BRIDGE` —
+so an installed desktop names them all and a checkout builds whichever are not
+named. That is what makes `nix run` and a working tree the same command.
 
 Each shell's README has its keys: [simple](packages/shell-simple/README.md),
 [manganese](packages/shell-manganese/README.md). Joining the desktop from
@@ -98,14 +97,14 @@ bundled reference chrome.
 ## Check
 
 ```sh
-nix run github:cprussin/domicile#check    # rust + typescript + every e2e script
+nix run github:cprussin/domicile#dev-check  # rust + typescript + every e2e script
 ```
 
 Individual apps are the `apps` set in `flake.nix`; scripts without one run as
 `nix develop .#full -c ./scripts/<name>.sh`. For a branch:
 
 ```sh
-nix run --refresh 'github:cprussin/domicile?ref=some/branch#check'
+nix run --refresh 'github:cprussin/domicile?ref=some/branch#dev-check'
 ```
 
 ## Develop

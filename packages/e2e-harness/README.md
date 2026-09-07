@@ -1,17 +1,18 @@
 # @domicile/e2e-harness
 
-Headless chrome stand-ins for the scripts in `/scripts` — the `e2e-*.sh`
-checks and the `measure*.sh` benchmarks — plus the
-check on those scripts' own machinery. The real chrome is the Electron app in
-[`packages/shell-manganese`](../shell-manganese/README.md); these speak the same
-protocol over the same socket without needing a display, so the message plane
-can be verified in CI and on a headless box.
+A headless chrome stand-in for the `e2e-*.sh` scripts in `/scripts`, plus the
+check on those scripts' own machinery. The real chrome is the engine loading a
+shell's page ([`packages/domicile-engine`](../domicile-engine/README.md)); this
+speaks the same protocol over the same socket without needing a display, so the
+message plane can be verified in CI and on a headless box.
 
 | Entry | Used by | What it does |
 |---|---|---|
 | `src/mock-chrome.ts` | `e2e-dmabuf.sh` | Connects, handshakes, and prints every frame the host pushes so the calling script can grep for one. |
-| `src/keystroke-driver.ts` | `measure.sh` | Types over the host socket at a steady rate, so the latency numbers are measured against a known count of keystrokes. |
-| `src/chrome-typist.ts` | `measure-round-trip.sh` | Types with real input events into the chrome's own window instead, which is what puts the chrome's own clock back in the measured loop. |
+
+There were three more — a keystroke driver and a typist for the two `measure`
+scripts, and a band declarer for `e2e-bands.sh`. All three drove the copy path
+under Electron, and went with it.
 
 `src/verdicts.ts` is the odd one out: not a harness but a check *on* the
 scripts, run from `verdicts.test.ts` in the `typescript` group. `exit 99` in a
@@ -21,7 +22,7 @@ whether the compositor is still there at the instant it fires:
 `harness_fault` for this suite's own fault, `compositor_verdict` for the
 code's. Both exit, which is the point below.
 
-What actually keeps the blame straight is structural: in the five scripts
+What actually keeps the blame straight is structural: in the scripts
 that use the helpers, a diagnosis is one `if`/`elif`/`else` or one `case`,
 every arm of which ends in a helper that exits or in a pass — so no arm is
 reachable by falling *through* another. A bail that turned into a no-op — the
@@ -91,19 +92,18 @@ looked at.
 desktop assertions moved into `packages/domicile-compositor/tests/desktop.rs`,
 on the expectation that the client-driven probes would grow back; they did not,
 and its last caller went with `reload-displays-probe.ts`. Deleted rather than
-kept for a caller that never arrived. `src/waiting.ts` is `rest`, the sleep a
-probe with nothing to poll takes; it has two callers left.
+kept for a caller that never arrived. `src/waiting.ts` went the same way: it
+was `rest`, the sleep a probe with nothing to poll takes, and its two callers
+were the typist and the band declarer.
 
 `src/chrome-socket.ts` is the shared connection: newline-delimited JSON framing
 from [`@domicile/chrome-sdk/newline-frames`](../chrome-sdk/README.md), the
 handshake, and decoding via the SDK's protocol schemas — so the harnesses drift
 from the wire format only if the SDK does.
 
-All of them but `chrome-typist.ts` read the socket path from
-`DOMICILE_CHROME_SOCK`; that one drives Electron's debugger instead, because
-its whole point is to deliver real input events to the chrome's own window
-rather than to speak the protocol. Each ends on its own — on a timer, or when
-its sequence is done — since the scripts that spawn them run unattended.
+It reads the socket path from `DOMICILE_CHROME_SOCK`, and ends on its own —
+on a timer, or when its sequence is done — since the script that spawns it runs
+unattended.
 
 ## Usage
 

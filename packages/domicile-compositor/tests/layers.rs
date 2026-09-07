@@ -36,8 +36,8 @@
 //! rule `stuck_keys.rs` applies to its own deleted lock check.
 //!
 //! Headless on purpose: what is under test happens before anything is drawn.
-//! Whether the chrome's pixels land over the apps needs a display and lives in
-//! `scripts/run-native.sh`.
+//! Whether the chrome's pixels land over the apps needs a display, and the
+//! only thing that has one is a desktop actually running.
 
 mod running;
 
@@ -312,7 +312,8 @@ fn the_keyboard_comes_back_to_the_chrome_when_a_window_goes_away() {
 ///
 /// This drives another route instead: the desktop's window turning up while an
 /// app holds the keyboard, which is a real chrome starting late — the case
-/// `e2e-late-chrome.sh` is about. `focus_chrome` has three call sites, the
+/// `a_chrome_that_connects_late_is_told_about_a_window_already_open`
+/// (`tests/apps.rs`) is about. `focus_chrome` has three call sites, the
 /// destroy path above is the second, and the third is `WinitEvent::Focus(true)`
 /// — alt-tabbing in, which needs a real winit window. So this is the one route
 /// that can see the line *and* be driven headless. A click on the desktop is

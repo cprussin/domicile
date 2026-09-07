@@ -148,7 +148,7 @@ else
 fi
 # Still ours, and still running: the caller's trap is what ends it, and it can
 # only do that with a pid. By pid rather than by pattern, for the reason
-# `e2e-electron.sh` gives: a `pkill -f` matching `sleep 30` would also take out
+# the e2e scripts give: a `pkill -f` matching `sleep 30` would also take out
 # a bystander, and `test-xvfb-verdict.sh` in this very group runs one.
 if [ -n "${XVFB:-}" ] && kill -0 "$XVFB" 2>/dev/null; then
   ok "and a server that is merely slow is left for the caller to kill"
