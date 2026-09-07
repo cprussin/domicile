@@ -281,7 +281,8 @@ jobs:
         run: |
           set -euo pipefail
           out="$CHROMIUM/out/Domicile"
-          for artefact in chrome libdomicile_engine.so components_unittests; do
+          for artefact in chrome libdomicile_engine.so components_unittests \
+                          domicile_css_parity; do
             [ -e "$out/$artefact" ] || {
               echo "::error::the build produced no $artefact" >&2
               exit 1
@@ -458,6 +459,85 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
             packages/domicile-engine/scripts/spike-shell.sh "$CHROMIUM" manganese
+
+      # REQUIREMENT 2, WHICH NOTHING HAS RUN SINCE IT WAS WRITTEN. An <app> has
+      # to behave like any other replaced element, and `spike-step4.sh` is what
+      # measures that: six CSS properties applied to an <app> and to an
+      # ordinary <div> laid out identically beside it, and then a resize, which
+      # gets a page of its own because it moves the LocalSurfaceId every
+      # element in a document shares. It has only ever been run by hand.
+      #
+      # Inside Chromium's own toolchain shell, not `nix develop .#full`, and
+      # that is what `spike.sh` documents: a component build links against that
+      # shell's glibc. The sentinel is the Build step's, for the reason the
+      # Build step has one — this shell has swallowed an exit status before,
+      # and a step that believed it would report a measurement nobody took.
+      #
+      # Headless and software-composited, which is `spike.sh`'s default and
+      # needs no nested compositor: what it compares is what the display
+      # compositor drew for two elements on one page, and neither needs a GPU
+      # to be laid out. ENGINE-FORK.md's `--disable-gpu` table is the one this
+      # step reproduces — six cells bit-exact, `transform` differing on 285
+      # edge pixels and 0 interior ones, which is two software raster passes
+      # disagreeing in the last bit. The verdict is on interior pixels for
+      # exactly that reason, so those 285 are a pass here and every cell is 0
+      # on the GPU. Which is what makes a failure the seam rather than the
+      # hardware, and the only reading that makes the step worth having.
+      - name: An <app> is a replaced element, and a resize reaches the producer
+        run: |
+          set -euo pipefail
+          done=/tmp/domicile-step4-ran
+          rm -f "$done"
+          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
+          export NIX_PATH="nixpkgs=$nixpkgs"
+
+          cat > /tmp/domicile-step4 <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/packages/domicile-engine/scripts/spike-step4.sh" "$CHROMIUM"
+          touch "$done"
+          EOF
+          chmod +x /tmp/domicile-step4
+
+          if NIX_SHELL_RUN=/tmp/domicile-step4 \
+               nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-step4-shell.log 2>&1; then
+            echo "the shell exited 0"
+          else
+            echo "the shell exited $?"
+          fi
+          # Not 60. A clean run is about that long on its own — a header, one
+          # `embedded` line per canvas, the per-property table, the latency
+          # block, then the whole resize run again — so any chatter from the
+          # shell pushes the table, which is the only place the verdict lives,
+          # off the top of what gets printed.
+          tail -200 /tmp/domicile-step4-shell.log | sed 's/^/  | /'
+
+          [ -e "$done" ] || {
+            # `spike-step4.sh` says which half failed and why, because it
+            # is the thing that knows: it holds the two exit statuses and each
+            # half's own log. Three versions of this step tried to work that
+            # out here instead, from one grep over the pair, and review found
+            # each of them naming the wrong end — including `grep -v … |
+            # grep -q …` losing to SIGPIPE under `pipefail` past about 128 KB
+            # of log and routing a real cell failure to the catch-all. So this
+            # quotes rather than classifies, and the only sentence it owns is
+            # the one for a run that never got as far as saying anything.
+            #
+            # `|| :` because this step runs under `set -euo pipefail` and a
+            # grep that matches nothing exits 1 — which killed the shell here,
+            # on the assignment, before the `if` below could print the one
+            # sentence this step owns. That is the same class of mistake as the
+            # SIGPIPE one above, one line lower down, and it made the fallback
+            # unreachable: a run that said nothing got no annotation at all.
+            said="$( { grep -a '^step 4 failed:' /tmp/domicile-step4-shell.log ||
+                         :; } | tail -1)"
+            if [ -n "$said" ]; then
+              echo "::error::$said" >&2
+            else
+              echo "::error::step 4 never reached its own verdict — the producer did not finish, or the shell around it did not start. Its last words are above" >&2
+            fi
+            exit 1
+          }
 
       # Everything the guard writes down, because none of it is on stdout.
       #

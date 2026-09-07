@@ -87,6 +87,12 @@ fi
 OUT="${OUT:-out/Domicile}"
 SOCKET="${SOCKET:-/tmp/domicile-spike}"
 PROFILE="${PROFILE:-/tmp/domicile-spike-profile}"
+# Overridable for the same reason the two above are, and it was not. A script
+# that runs this twice — `spike-step4.sh` does — gave the second run its own
+# socket and profile and let it truncate the first run's browser log. The half
+# that failed is then diagnosed from the half that did not, and the message
+# above pointing at this file points at the wrong run.
+ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-spike-engine.log}"
 
 ENGINE_FLAGS=()
 PRODUCER_FLAGS=()
@@ -127,7 +133,7 @@ rm -rf "$PROFILE" && mkdir -p "$PROFILE"
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$SOCKET" \
   "${ENGINE_FLAGS[@]}" \
-  "$URL" > /tmp/domicile-spike-engine.log 2>&1 &
+  "$URL" > "$ENGINE_LOG" 2>&1 &
 ENGINE=$!
 
 # The socket appearing is the page having asked to embed, which is the only
@@ -137,7 +143,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 if [ ! -S "$SOCKET" ]; then
-  echo "the page never asked to embed; see /tmp/domicile-spike-engine.log" >&2
+  echo "the page never asked to embed; see $ENGINE_LOG" >&2
   kill $ENGINE 2>/dev/null
   exit 1
 fi
