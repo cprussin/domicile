@@ -18,7 +18,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_UNDER_TEST="$ROOT/scripts/run-engine.sh"
 
 # From the three-things comment to the `esac` that closes the dispatch.
-BLOCK="$(awk '/^PAGE_DIR="\$\{DOMICILE_PAGE:-\}"$/,/^esac$/' "$SCRIPT_UNDER_TEST")"
+BLOCK="$(awk '/^PAGE_DIR="\$\{DOMICILE_PAGE:-\}"$/,/^fi$/' "$SCRIPT_UNDER_TEST")"
 [ -n "$BLOCK" ] || {
   echo "no shell dispatch in $SCRIPT_UNDER_TEST — its markers moved." >&2
   exit 1
@@ -92,6 +92,21 @@ expect "a path to nothing is refused" \
 expect "a handed-in page wins over building a named shell" \
   "name=manganese page=$WORK/built-desktop" \
   "$(dispatch manganese "$WORK/built-desktop")"
+
+# TWO INSTRUCTIONS THAT DISAGREE. Both are somebody saying which page to serve.
+# The first version validated the argument and then discarded it, so a run
+# could fail because of a path it was never going to use — and, worse, succeed
+# while serving a page other than the one typed.
+expect "a handed-in page and a path argument is refused" \
+  "refused" \
+  "$(dispatch "$WORK/built-desktop" "$WORK/built-desktop")"
+
+# A bare name that is also a directory here is a path — `run-engine.sh . dist`
+# from inside a shell's source tree. It used to be refused with a sentence
+# claiming it was not a path to a built one, which was false and unchecked.
+expect "a bare name that is a directory is a path" \
+  "name=built-desktop page=$WORK/built-desktop" \
+  "$(cd "$WORK" && dispatch built-desktop)"
 
 # And it does not have to be a shell this repository has ever heard of.
 expect "a handed-in page needs no workspace shell at all" \

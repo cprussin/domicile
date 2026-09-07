@@ -48,34 +48,65 @@ COMPOSITOR="${DOMICILE_COMPOSITOR:-}"
 BRIDGE="${DOMICILE_BRIDGE:-}"
 
 # A shell is named or it is a path. `simple` is a shell in this workspace;
-# `./my-desktop/dist` is somebody else's, built however they like, and the
-# only thing this needs from it is a directory with an `index.html` in it.
-# A file is taken as one in that directory, so pointing at a built entry point
-# works as well as pointing at what contains it.
+# `./my-desktop/dist` is somebody else's, built however they like, and the only
+# thing this needs from it is a directory with an `index.html` in it. A file is
+# taken as one in that directory, so pointing at a built entry point works as
+# well as pointing at what contains it.
+#
+# A BARE NAME THAT IS ALSO A DIRECTORY IS A PATH. `run-engine.sh . dist` from
+# inside a shell's source tree used to be refused with "there is no
+# packages/shell-dist, and it is not a path to a built one either" — the second
+# half of which was false, and the check that would have known it was never
+# run. A directory here is what somebody meant.
 SHELL_NAME="$SHELL_ARG"
+IS_PATH=no
 case "$SHELL_ARG" in
-  (*/*|.|..)
-    if [ -f "$SHELL_ARG" ]; then
-      PAGE_DIR="${PAGE_DIR:-$(cd "$(dirname "$SHELL_ARG")" && pwd)}"
-    elif [ -d "$SHELL_ARG" ]; then
-      PAGE_DIR="${PAGE_DIR:-$(cd "$SHELL_ARG" && pwd)}"
-    else
-      echo "no shell at '$SHELL_ARG' — it is neither a file nor a directory." >&2
-      exit 1
-    fi
-    SHELL_NAME="$(basename "$PAGE_DIR")"
-    ;;
-  (*)
-    if [ -z "$PAGE_DIR" ]; then
-      SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
-      [ -d "$SHELL_DIR" ] || {
-        echo "no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME," >&2
-        echo "  and it is not a path to a built one either." >&2
-        exit 1
-      }
-    fi
-    ;;
+  (*/*|.|..) IS_PATH=yes ;;
+  (*) [ -d "$SHELL_ARG" ] && IS_PATH=yes ;;
 esac
+
+if [ "$IS_PATH" = yes ]; then
+  # TWO INSTRUCTIONS THAT DISAGREE. A handed-in page and a path argument are
+  # both somebody saying which page to serve, and the first version validated
+  # the argument and then discarded it — so a run could fail because a path it
+  # was never going to use did not exist, and succeed while serving a different
+  # page than the one typed. Neither reading is safe to pick.
+  if [ -n "$PAGE_DIR" ]; then
+    echo "run-engine.sh: given both a page and a path to one, and they are" >&2
+    echo "  not the same instruction:" >&2
+    echo "    DOMICILE_PAGE=$PAGE_DIR" >&2
+    echo "    the argument   $SHELL_ARG" >&2
+    echo "  Pass one." >&2
+    exit 1
+  fi
+  if [ -f "$SHELL_ARG" ]; then
+    WHERE="$(dirname "$SHELL_ARG")"
+  elif [ -d "$SHELL_ARG" ]; then
+    WHERE="$SHELL_ARG"
+  else
+    echo "no shell at '$SHELL_ARG' — it is neither a file nor a directory." >&2
+    exit 1
+  fi
+  # Checked, because `$(cd … && pwd)` swallows a failure into the empty string
+  # and `set -u` then reports an unbound variable three steps later, about a
+  # directory that exists and cannot be read.
+  PAGE_DIR="$(cd "$WHERE" && pwd)" || {
+    echo "cannot read '$WHERE', so there is no page to serve from it." >&2
+    exit 1
+  }
+  [ -n "$PAGE_DIR" ] || {
+    echo "cannot read '$WHERE', so there is no page to serve from it." >&2
+    exit 1
+  }
+  SHELL_NAME="$(basename "$PAGE_DIR")"
+elif [ -z "$PAGE_DIR" ]; then
+  SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
+  [ -d "$SHELL_DIR" ] || {
+    echo "no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME," >&2
+    echo "  and there is no directory of that name here either." >&2
+    exit 1
+  }
+fi
 
 OUT="${OUT:-out/Domicile}"
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp/domicile-engine-rt}"
@@ -142,13 +173,13 @@ if [ -z "$COMPOSITOR" ]; then
   cargo build -p domicile-compositor || exit 1
   COMPOSITOR="$ROOT/target/debug/domicile-compositor"
 fi
-[ -x "$COMPOSITOR" ] || {
+[ -f "$COMPOSITOR" ] && [ -x "$COMPOSITOR" ] || {
   echo "no compositor at $COMPOSITOR" >&2
   exit 1
 }
 
 BRIDGE="${BRIDGE:-$ROOT/packages/engine-chrome-host/src/main.ts}"
-[ -e "$BRIDGE" ] || {
+[ -f "$BRIDGE" ] || {
   echo "no bridge at $BRIDGE" >&2
   exit 1
 }
