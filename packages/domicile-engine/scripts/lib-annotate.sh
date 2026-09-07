@@ -12,14 +12,17 @@
 # `%` first, so the escapes this introduces are not escaped again. GitHub
 # decodes `%0A` inside a workflow command as a newline, which is what lets an
 # annotation carry a log rather than point at one.
+# Newline-separated lines become `%0A`-separated ones, with no trailing
+# separator: the caller joins these, and a stray one is a blank line in every
+# annotation that has a body.
 domicile_escape() {
   printf '%s' "$1" | sed -e 's/%/%25/g' -e "s/$(printf '\r')/%0D/g" |
-    awk '{ printf "%s%%0A", $0 }'
+    awk 'NR > 1 { printf "%%0A" } { printf "%s", $0 }'
 }
 
 # One line, no body.
 annotate() {
-  echo "::error::$(domicile_escape "$1" | sed 's/%0A$//')"
+  echo "::error::$(domicile_escape "$1")"
 }
 
 # A failure that carries the end of the log it read.
@@ -29,7 +32,7 @@ annotate() {
 annotate_from() {
   local title="$1" file="$2" body
   body=$(tail -12 "$file" 2>/dev/null | tac)
-  echo "::error::$(domicile_escape "$title" | sed 's/%0A$//')%0A%0A$(domicile_escape "$body")"
+  echo "::error::$(domicile_escape "$title")%0A%0A$(domicile_escape "$body")"
 }
 
 # A guard that could not run at all. `SKIP:` is the repo's convention and
@@ -37,5 +40,5 @@ annotate_from() {
 # `set -e`, where 77 is a step failure and a silent one.
 skip() {
   echo "SKIP: $1"
-  echo "::error::$1"
+  annotate "$1"
 }

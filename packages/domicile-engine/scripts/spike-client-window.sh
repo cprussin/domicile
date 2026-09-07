@@ -57,6 +57,12 @@ CLIENT_APP_ID="${CLIENT_APP_ID:-app-1}"
 # control is not evidence.
 NEGATIVE="${NEGATIVE:-0}"
 
+# How long the client is given. Longer than everything that can happen before
+# and during the poll, because the probe runs on the submit path: a client
+# reaped mid-poll stops the measurement, and the guard would then report that
+# nothing ever drew.
+CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-300}"
+
 OUT="${OUT:-out/Domicile}"
 BROKER="${BROKER:-/tmp/domicile-client-window-broker}"
 PROFILE="${PROFILE:-/tmp/domicile-client-window-profile}"
@@ -195,7 +201,7 @@ else
   # The dots are foreground pixels and the box is the background
   # colour's extent, so they cost nothing the measurement cares
   # about.
-  NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout 120 \
+  NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
     "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
           -o "background=#$COLOR" \
           -o initial_window_width=640 -o initial_window_height=480 \

@@ -41,7 +41,7 @@ SHELL_NAME="${2:-simple}"
 ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
 SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
 [ -d "$SHELL_DIR" ] || {
-  echo "::error::spike-shell: no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME"
+  annotate "spike-shell: no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME"
   exit 1
 }
 
@@ -59,6 +59,13 @@ OTHER_COLOR="${OTHER_COLOR:-B3196B}"
 
 # NEGATIVE=1 runs the client with OTHER_COLOR. COLOR must never turn up.
 NEGATIVE="${NEGATIVE:-0}"
+
+# How long a client is given. Longer than everything that can happen before and
+# during the poll — two waits for a sink at 60s each, then 90s of polling —
+# because the search runs on the submit path, so a client reaped mid-poll stops
+# the measurement and the guard reports "it never settled", which points at the
+# wrong thing entirely.
+CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-300}"
 
 OUT="${OUT:-out/Domicile}"
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
@@ -94,15 +101,15 @@ cleanup() {
 trap cleanup EXIT
 
 [ -x "$CHROMIUM/$OUT/chrome" ] || {
-  echo "::error::spike-shell: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
+  annotate "spike-shell: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
   exit 1
 }
 [ -f "$CHROMIUM/$OUT/libdomicile_engine.so" ] || {
-  echo "::error::spike-shell: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
+  annotate "spike-shell: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
   exit 1
 }
 [ -x "$COMPOSITOR" ] || {
-  echo "::error::spike-shell: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
+  annotate "spike-shell: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
 if command -v kitty >/dev/null; then
@@ -148,7 +155,7 @@ fi
 rm -f "$BUILD_LOG"
 PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 [ -f "$PAGE_DIR/index.html" ] || {
-  echo "::error::spike-shell: $SHELL_NAME built no index.html in $PAGE_DIR"
+  annotate "spike-shell: $SHELL_NAME built no index.html in $PAGE_DIR"
   exit 1
 }
 
@@ -237,7 +244,7 @@ fi
 # not on screen".
 CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
 [ -n "$CLIENT_DISPLAY" ] || {
-  echo "::error::spike-shell: the compositor never named its Wayland display"
+  annotate "spike-shell: the compositor never named its Wayland display"
   echo "the compositor never named its Wayland display. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -260,7 +267,7 @@ for _ in $(seq 1 90); do
   sleep 1
 done
 [ "$JOINED" = "1" ] || {
-  echo "::error::spike-shell: $SHELL_NAME never joined the compositor, so no window would be announced to it"
+  annotate "spike-shell: $SHELL_NAME never joined the compositor, so no window would be announced to it"
   echo "the shell never joined the compositor. Everything each side said:" >&2
   echo "--- the compositor said:" >&2
   grep -aE "chrome|protocol|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
@@ -287,7 +294,7 @@ echo "driving kitty, drawing #$DRAWN"
 # The dots are foreground pixels and the box is the background
 # colour's extent, so they cost nothing the measurement cares
 # about.
-NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout 180 \
+NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
   "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
         -o "background=#$DRAWN" \
         -o initial_window_width=640 -o initial_window_height=480 \
@@ -306,7 +313,7 @@ done
 echo
 if [ "$NEGATIVE" = "1" ]; then
   if [ -n "$FOUND" ]; then
-    echo "::error::spike-shell negative control: $FOUND, and the client drew" \
+    annotate "spike-shell negative control: $FOUND, and the client drew" \
          "#$OTHER_COLOR — the guard is matching something other than the client's pixels"
     exit 1
   fi
@@ -314,7 +321,7 @@ if [ "$NEGATIVE" = "1" ]; then
   # client has to have got as far as a frame the engine took, and the probe has
   # to have run and answered "not yet".
   if ! grep -aq "first frame" "$COMP_LOG" 2>/dev/null; then
-    echo "::error::spike-shell negative control: the engine never took a frame" \
+    annotate "spike-shell negative control: the engine never took a frame" \
          "from the client, so nothing was measured"
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
@@ -324,7 +331,7 @@ if [ "$NEGATIVE" = "1" ]; then
   # else — see spike_find's three answers — so this cannot go green on a
   # measurement that never happened.
   if ! grep -aq "has not drawn" "$COMP_LOG" 2>/dev/null; then
-    echo "::error::spike-shell negative control: the probe never read the" \
+    annotate "spike-shell negative control: the probe never read the" \
          "window, so nothing was measured"
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
@@ -335,12 +342,12 @@ fi
 
 if [ -z "$FOUND" ]; then
   if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
-    echo "::error::spike-shell: the compositor stopped searching before this" \
+    annotate "spike-shell: the compositor stopped searching before this" \
          "poll ran out, so 'not found' means 'not looked for'. Its budget is" \
          "FIND_FOR in domicile-compositor's main.rs"
     exit 1
   fi
-  echo "::error::spike-shell: the client's window is not on $SHELL_NAME's page"
+  annotate "spike-shell: the client's window is not on $SHELL_NAME's page"
   echo "what each side said:" >&2
   echo "--- the compositor's last words:" >&2
   grep -aE "engine|frame sink|chrome|buffer|ERROR" "$COMP_LOG" | tail -15 | sed 's/^/  /' >&2

@@ -58,6 +58,25 @@ APP_B="${APP_B:-app-2}"
 # from success.
 NEGATIVE="${NEGATIVE:-0}"
 
+# How long a client is given. Longer than everything that can happen before and
+# during the poll — two waits for a sink at 60s each, then 90s of polling —
+# because the search runs on the submit path, so a client reaped mid-poll stops
+# the measurement and the guard reports "it never settled", which points at the
+# wrong thing entirely.
+CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-300}"
+
+# What the compositor is asked to look for. The negative run does not ask for
+# the second colour, and that is what lets it settle: settling means "every
+# colour I was asked for was found and none of them moved", so asking for one
+# nobody is drawing means never settling, and a guard that cannot wait for a
+# settled measurement asserts on whatever it caught mid-paint.
+#
+# Nothing is lost. "The second colour is nowhere" was never the control —
+# nobody draws it either way — and the claim that does the work is how much of
+# the page the one running client covers.
+FIND_COLOURS="$COLOR_A;$COLOR_B"
+[ "$NEGATIVE" = "1" ] && FIND_COLOURS="$COLOR_A"
+
 OUT="${OUT:-out/Domicile}"
 BROKER="${BROKER:-/tmp/domicile-two-windows-broker}"
 PROFILE="${PROFILE:-/tmp/domicile-two-windows-profile}"
@@ -98,20 +117,20 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$CHROMIUM" || {
-  echo "::error::spike-two-windows: $CHROMIUM is not a directory this can enter"
+  annotate "spike-two-windows: $CHROMIUM is not a directory this can enter"
   exit 1
 }
 
 [ -x "$OUT/chrome" ] || {
-  echo "::error::spike-two-windows: no engine at $CHROMIUM/$OUT/chrome; build it with ./scripts/build.sh"
+  annotate "spike-two-windows: no engine at $CHROMIUM/$OUT/chrome; build it with ./scripts/build.sh"
   exit 1
 }
 [ -f "$OUT/libdomicile_engine.so" ] || {
-  echo "::error::spike-two-windows: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
+  annotate "spike-two-windows: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
   exit 1
 }
 [ -x "$COMPOSITOR" ] || {
-  echo "::error::spike-two-windows: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
+  annotate "spike-two-windows: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
 if command -v kitty >/dev/null; then
@@ -138,7 +157,7 @@ STARTED+=($!)
 
 for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done
 [ -S "$BROKER" ] || {
-  echo "::error::spike-two-windows: the page never asked to embed"
+  annotate_from "spike-two-windows: the page never asked to embed" "$ENGINE_LOG"
   echo "the engine said:" >&2
   tail -20 "$ENGINE_LOG" >&2
   exit 1
@@ -154,7 +173,7 @@ COMP_SOCK="$RUNTIME/domicile-two-windows.sock"
 rm -f "$COMP_SOCK" "$COMP_SOCK.session"
 LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
-DOMICILE_SPIKE_FIND="$COLOR_A;$COLOR_B" \
+DOMICILE_SPIKE_FIND="$FIND_COLOURS" \
   "$COMPOSITOR" \
     --chrome-socket "$COMP_SOCK" \
     --session "$COMP_SOCK.session" \
@@ -168,7 +187,7 @@ for _ in $(seq 1 120); do
   sleep 0.5
 done
 if ! kill -0 $COMP 2>/dev/null; then
-  echo "::error::spike-two-windows: the compositor did not start"
+  annotate_from "spike-two-windows: the compositor did not start" "$COMP_LOG"
   echo "the compositor did not start. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -196,7 +215,7 @@ start_client() {
   # The dots are foreground pixels and the box is the background
   # colour's extent, so they cost nothing the measurement cares
   # about.
-  NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout 180 \
+  NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
     "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
           -o "background=#$colour" \
           -o initial_window_width=640 -o initial_window_height=480 \
@@ -217,7 +236,7 @@ await_broker() {
     fi
     sleep 1
   done
-  echo "::error::spike-two-windows: no frame sink was ever brokered for $app"
+  annotate "spike-two-windows: no frame sink was ever brokered for $app"
   grep -aE "brokered|frame sink|app_id" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
   return 1
 }
@@ -280,18 +299,11 @@ numbers_in() {
 #
 # So the compositor says it: `engine settled` is logged when a round finds
 # every colour it was asked for and none of their boxes moved since the round
-# before. That is the two-measurement rule, made where the measurements are.
-#
-# The negative run never settles — the second colour is never found, so no
-# round can have found every colour — and waits out `SETTLE_FOR` instead. Its
-# claim is about the one client's width and the other's absence, and both are
-# statements about a run that has had long enough.
+# before. That is the two-measurement rule, made where the measurements are,
+# and both runs wait for it — which is why the negative run is careful to ask
+# only for a colour that exists.
 POLL_EVERY=3
 LOOKS=30
-# Long enough for the second client of a positive run to have appeared and
-# painted, measured from the start of this poll — which is already after both
-# clients were brokered.
-LEAST_LOOKS=8
 
 SETTLED=0
 LOOKED=0
@@ -299,9 +311,6 @@ for _ in $(seq 1 "$LOOKS"); do
   LOOKED=$((LOOKED + 1))
   if grep -aq "engine settled" "$COMP_LOG" 2>/dev/null; then
     SETTLED=1
-    break
-  fi
-  if [ "$NEGATIVE" = "1" ] && [ "$LOOKED" -ge "$LEAST_LOOKS" ]; then
     break
   fi
   sleep "$POLL_EVERY"
@@ -316,23 +325,23 @@ WINDOW=$(window_size)
 # wrong" and reporting one as another is what sent the last several runs
 # chasing the wrong thing.
 if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
-  echo "::error::spike-two-windows: the compositor stopped searching before" \
+  annotate "spike-two-windows: the compositor stopped searching before" \
        "this poll ran out, so 'not found' here means 'not looked for'"
   exit 1
 fi
 if [ -z "$BOX_A" ]; then
-  echo "::error::spike-two-windows: the first client's colour never appeared" \
+  annotate "spike-two-windows: the first client's colour never appeared" \
        "on the page at all, so nothing here is about two windows"
   grep -aE "engine|frame sink|buffer|dmabuf" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
   exit 1
 fi
 if [ -z "$WINDOW" ]; then
-  echo "::error::spike-two-windows: the probe never reported the window's size," \
+  annotate "spike-two-windows: the probe never reported the window's size," \
        "so there is nothing to measure the boxes against"
   exit 1
 fi
-if [ "$NEGATIVE" != "1" ] && [ "$SETTLED" != "1" ]; then
-  echo "::error::spike-two-windows: the compositor never said it had settled" \
+if [ "$SETTLED" != "1" ]; then
+  annotate "spike-two-windows: the compositor never said it had settled" \
        "after $((LOOKED * POLL_EVERY))s, so the boxes below were still moving." \
        "A client that stops drawing stops the search: it runs on the submit path"
   echo "  #$COLOR_A: ${BOX_A:-nowhere}" >&2
@@ -369,18 +378,14 @@ EOF
   MOST=$((WINDOW_W * 55 / 100))
   echo
   echo "in a $WINDOW window: #$COLOR_A is ${A_W}x${A_H} at $A_X,$A_Y"
-  if [ -n "$BOX_B" ]; then
-    echo "::error::spike-two-windows negative control: #$COLOR_B is on screen and no client drew it"
-    exit 1
-  fi
   if [ "$A_W" -lt "$LEAST" ]; then
-    echo "::error::spike-two-windows negative control: the one client's window is" \
+    annotate "spike-two-windows negative control: the one client's window is" \
          "only ${A_W}px of a ${WINDOW_W}px page, so this measured a sliver rather" \
          "than a window and says nothing about dispatch"
     exit 1
   fi
   if [ "$A_W" -ge "$MOST" ]; then
-    echo "::error::spike-two-windows negative control: the one client's window" \
+    annotate "spike-two-windows negative control: the one client's window" \
          "is ${A_W}px of a ${WINDOW_W}px page, so both canvases are showing it" \
          "and the embed is not dispatched on app id at all"
     exit 1
@@ -391,7 +396,7 @@ EOF
 fi
 
 if [ -z "$BOX_B" ]; then
-  echo "::error::spike-two-windows: only one client's window reached the page; #$COLOR_B is nowhere in it"
+  annotate "spike-two-windows: only one client's window reached the page; #$COLOR_B is nowhere in it"
   exit 1
 fi
 
@@ -438,5 +443,5 @@ if [ -z "$FAILURE" ]; then
   exit 0
 fi
 
-echo "::error::spike-two-windows: $FAILURE"
+annotate "spike-two-windows: $FAILURE"
 exit 1
