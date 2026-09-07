@@ -974,7 +974,7 @@ compositor can submit a frame, because phase 2 deletes what draws today.**
 - [x] `released` → `wl_buffer.release` — **fires**, and it took two frames to
       see it: viz holds whatever is on screen and hands it back when a later
       frame replaces it, which is why a client double-buffers
-- [ ] `domicile-compositor` submits a client's buffer instead of reading it
+- [x] `domicile-compositor` submits a client's buffer instead of reading it
       back — the only item left in phase 1, and the first that touches the
       compositor. The seam is ready: `domicile_engine_fd` is a `Generic`
       calloop source, which is the pattern `main.rs:6037` already uses, and the
@@ -1052,9 +1052,19 @@ copy path before the compositor can submit leaves nothing drawing at all.
 - [ ] bands, the shaders and `compose.rs`'s CSS reimplementation. Still
       standing: they draw the chrome and the desktop, which the engine path
       does not replace
-- [ ] `<domicile-app>` becomes a `<canvas>` and one call. Its old canvas and
-      `drawFrame` are gone; what remains is the canvas that *embeds*, which is
-      engine work rather than deletion
+- [x] `<domicile-app>` becomes a `<canvas>` and one call. The element creates a
+      canvas and calls `canvas.embedExternalSurface(appId)`; nothing copies
+      anything. Absent outside the fork, where the element still lays out,
+      reports its box and routes pointers and says once that it cannot show a
+      window
+
+      **The app id is the change under it.** `FrameSinkBroker::Embed` used to
+      hand every embedder the sink brokered most recently, which is right for
+      exactly one window and silently wrong for two: a shell showing a terminal
+      and an editor would draw the same client in both. The id now crosses the
+      whole seam — `CreateFrameSink`'s `debug_label` became a load-bearing
+      `app_id`, `Embed` takes one, pending embeds are held per app — and two
+      browser unit tests pin it
 
 Phase 3 — be the display server:
 

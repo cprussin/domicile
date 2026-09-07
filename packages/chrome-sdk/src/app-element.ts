@@ -40,7 +40,7 @@ export type DomicileAppElement = HTMLElement & {
   setSurfaceSize(width: number, height: number): void;
   /** Put the keyboard on this client without a click. */
   focusApp(): void;
-  /** Give up the canvas: the compositor is drawing this client itself. */
+  /** Give up the canvas this element was showing a client's window in. */
   dropSurface(): void;
   applyCursor(cursor: CursorShape): void;
   /**
@@ -88,6 +88,7 @@ export const createAppElement = (
     }
 
     connectedCallback(): void {
+      this.#embedSurface();
       this.#place();
       // CSS moves, resizes and restyles the element without any of this code
       // running, so the portal has to follow the box rather than be reported
@@ -226,11 +227,43 @@ export const createAppElement = (
     dropSurface(): void {
       this.#canvas?.remove();
       this.#canvas = undefined;
-      // Added rather than assumed. A window the compositor drew from the start
-      // never sent a copied frame, so nothing has put this on — and the
-      // placeholder a shell hangs off its absence would be painted over a live
-      // window, for as long as that window is open.
+      // Added rather than assumed, so a shell that hangs a placeholder off its
+      // absence does not paint one over a live window.
       this.classList.add(HAS_SURFACE_CLASS);
+    }
+
+    /**
+     * Point this element's canvas at the window `app-id` names.
+     *
+     * **This is the whole of how a client's pixels reach the page.** The
+     * compositor submits the client's own buffer to a frame sink the browser
+     * brokered under this app id; `embedExternalSurface` is what makes this
+     * canvas's layer show that surface. Nothing copies anything.
+     *
+     * Absent outside the forked engine — `embedExternalSurface` is ours, and a
+     * chrome running on stock Chromium or Electron does not have it. There the
+     * element lays out, reports its box and routes pointers exactly as it does
+     * here, and shows nothing: the seam a shell is written against is the same
+     * either way, and only the pixels are missing. Said once per element rather
+     * than silently, because "no window" with no reason given is the failure
+     * this whole path exists to avoid.
+     */
+    #embedSurface(): void {
+      const appId = this.appId;
+      if (appId === undefined || this.#canvas !== undefined) {
+        return;
+      }
+      const canvas = createSurfaceCanvas();
+      if (canvas.embedExternalSurface === undefined) {
+        warnNoExternalSurface();
+        return;
+      }
+      this.#canvas = this.appendChild(canvas);
+      this.classList.remove(HAS_SURFACE_CLASS);
+      // Rejects if the canvas already has a surface, or if the element goes
+      // away while the browser is still holding the reply — both of which are
+      // this element being torn down, and neither is worth reporting.
+      void canvas.embedExternalSurface(appId).catch(() => undefined);
     }
 
     /** Show the cursor a client asked for while the pointer is over this app. */
@@ -396,3 +429,64 @@ export const createAppElement = (
       }
     }
   };
+
+/**
+ * `canvas.embedExternalSurface(appId)`, which exists only on Domicile's forked
+ * engine.
+ *
+ * Declared here rather than in a global `.d.ts` so it is optional at the type
+ * level: every use has to answer what happens without it, which on a stock
+ * browser is every use. See `packages/domicile-engine` for the fork, and
+ * `docs/architecture/ENGINE-FORK.md` for why a canvas is what shows a window.
+ */
+declare global {
+  // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
+  interface HTMLCanvasElement {
+    embedExternalSurface?: (appId: string) => Promise<void>;
+  }
+}
+
+/**
+ * A canvas for a client's window: no rendering context, no backing store of its
+ * own, filled entirely by the surface it embeds.
+ */
+const createSurfaceCanvas = (): HTMLCanvasElement => {
+  const canvas = document.createElement("canvas");
+  canvas.className = "domicile-app-surface";
+  // A replaced element's own content is clipped to its border radius, but a
+  // child is not — so a window given rounded corners by the page would be drawn
+  // square by the canvas inside it. Inherited here rather than set as
+  // `overflow` on the element, whose inline style belongs to whoever wrote the
+  // chrome.
+  canvas.style.borderRadius = "inherit";
+  // A canvas lays out at its backing store's size in CSS pixels, and this one
+  // has no backing store to speak of. Filled to the element, which is what the
+  // page laid out and what the client was configured at.
+  canvas.style.display = "block";
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  return canvas;
+};
+
+let warnedNoExternalSurface = false;
+
+/**
+ * Say once that this chrome cannot show a window, and why.
+ *
+ * A page with `<domicile-app>` elements that draw nothing is indistinguishable
+ * from a compositor with no clients, from a shell with a layout bug, and from
+ * a client that never drew. The reason is knowable here and nowhere else.
+ */
+const warnNoExternalSurface = (): void => {
+  if (warnedNoExternalSurface) {
+    return;
+  }
+  warnedNoExternalSurface = true;
+  // biome-ignore lint/suspicious/noConsole: the only channel to the author
+  console.warn(
+    "domicile: this chrome cannot show a client's window — " +
+      "canvas.embedExternalSurface is missing, so it is not running on the " +
+      "forked engine. Elements will lay out, report their boxes and route " +
+      "pointers as usual, and show nothing.",
+  );
+};

@@ -46,6 +46,9 @@ ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
 # What the client draws and what the page must therefore show. Not the page's
 # background and not a colour any other spike producer submits.
 COLOR="${COLOR:-3366CC}"
+# The app id the client announces, which the page must ask for by name: the
+# broker dispatches embeds on it so that two windows are two surfaces.
+CLIENT_APP_ID="${CLIENT_APP_ID:-app-1}"
 # NEGATIVE=1 runs the same thing with no client at all. Nothing draws, so the
 # page keeps its fallback and the assertion must fail — a green run with no
 # control is not evidence.
@@ -64,7 +67,12 @@ CLI_LOG=$(mktemp)
 # set — a run that fails early, and the negative control, which starts no
 # client — and `kill ""` is an error rather than a no-op.
 STARTED=()
+# Kept rather than discarded: when the page shows its own background instead of
+# the client's colour, the compositor's log is the only place that says which
+# app id it brokered — and that is now the thing an embed is dispatched on.
+LOG_COPY="${LOG_COPY:-/tmp/domicile-client-window-compositor.log}"
 cleanup() {
+  cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
   if [ ${#STARTED[@]} -gt 0 ]; then
     kill "${STARTED[@]}" 2>/dev/null
   fi
@@ -109,7 +117,7 @@ rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
   --enable-blink-features=DomicileExternalSurface \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" \
-  "file://$SCRIPTS/spike-page.html" >"$ENGINE_LOG" 2>&1 &
+  "file://$SCRIPTS/spike-page.html?app=$CLIENT_APP_ID" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
 for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done

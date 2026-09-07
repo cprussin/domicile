@@ -39,6 +39,10 @@ constexpr uint32_t kBrowserClientId = 0u;
 // process id and those start at 1.
 constexpr viz::FrameSinkId kPageFrameSinkId(1u, 1u);
 
+
+// The app the test's sinks are brokered for. `BrokerASink` passes it to
+// CreateFrameSink, and an Embed naming it is what matches.
+constexpr char kTestApp[] = "test-app";
 constexpr gfx::Size kEmbeddedSize(320, 240);
 
 // Stands in for the producer's half: the callback that tells it which surface
@@ -110,7 +114,7 @@ class FrameSinkBrokerTest : public testing::Test {
     base::test::TestFuture<const viz::FrameSinkId&> future;
     remote->CreateFrameSink(
         sink_client.BindInterfaceRemote(), sink.BindNewPipeAndPassReceiver(),
-        std::move(observer), "test-app", future.GetCallback());
+        std::move(observer), kTestApp, future.GetCallback());
     return future.Get();
   }
 
@@ -277,7 +281,7 @@ TEST_F(FrameSinkBrokerTest, EmbedAnswersWithTheBrokeredFrameSinkId) {
   RunUntilIdle();
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
                   embedded.GetCallback());
 
   EXPECT_EQ(frame_sink_id, embedded.Get());
@@ -291,7 +295,7 @@ TEST_F(FrameSinkBrokerTest, EmbedWaitsForAProducer) {
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
                   embedded.GetCallback());
   RunUntilIdle();
   EXPECT_FALSE(embedded.IsReady());
@@ -302,6 +306,85 @@ TEST_F(FrameSinkBrokerTest, EmbedWaitsForAProducer) {
       BrokerASink(remote, sink_client, sink, mojo::NullRemote());
 
   EXPECT_EQ(frame_sink_id, embedded.Get());
+}
+
+// A desktop is several windows, and each <app> element has to get its own.
+//
+// This is the whole reason an app id crosses the seam. The broker used to hand
+// every embedder the sink brokered most recently, which is correct for exactly
+// one window and silently wrong for two: a shell showing a terminal and an
+// editor would draw the same client in both, and nothing anywhere would report
+// an error.
+TEST_F(FrameSinkBrokerTest, EachAppEmbedsItsOwnSurface) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  viz::MockCompositorFrameSinkClient terminal_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> terminal_sink;
+  base::test::TestFuture<const viz::FrameSinkId&> terminal;
+  remote->CreateFrameSink(terminal_client.BindInterfaceRemote(),
+                          terminal_sink.BindNewPipeAndPassReceiver(),
+                          mojo::NullRemote(), "terminal",
+                          terminal.GetCallback());
+
+  viz::MockCompositorFrameSinkClient editor_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> editor_sink;
+  base::test::TestFuture<const viz::FrameSinkId&> editor;
+  remote->CreateFrameSink(editor_client.BindInterfaceRemote(),
+                          editor_sink.BindNewPipeAndPassReceiver(),
+                          mojo::NullRemote(), "editor", editor.GetCallback());
+  RunUntilIdle();
+
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_terminal;
+  broker()->Embed("terminal", kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, for_terminal.GetCallback());
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_editor;
+  broker()->Embed("editor", kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, for_editor.GetCallback());
+
+  EXPECT_EQ(terminal.Get(), for_terminal.Get());
+  EXPECT_EQ(editor.Get(), for_editor.Get());
+  // Said out loud: the two windows are two surfaces. Both assertions above
+  // would pass if every id were the same one.
+  EXPECT_NE(for_terminal.Get(), for_editor.Get());
+}
+
+// An element waiting on one window is not answered with another.
+//
+// The reload case: the shell lays out every window it remembers before any
+// client has reconnected, so several embeds are outstanding at once and the
+// producers arrive one at a time. Answering the first waiter with the first
+// producer would put whichever client connected first into whichever element
+// mounted first.
+TEST_F(FrameSinkBrokerTest, AWaitingEmbedTakesOnlyItsOwnApp) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_editor;
+  broker()->Embed("editor", kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, for_editor.GetCallback());
+  RunUntilIdle();
+
+  // The terminal connects first. The editor's element is still waiting.
+  viz::MockCompositorFrameSinkClient terminal_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> terminal_sink;
+  base::test::TestFuture<const viz::FrameSinkId&> terminal;
+  remote->CreateFrameSink(terminal_client.BindInterfaceRemote(),
+                          terminal_sink.BindNewPipeAndPassReceiver(),
+                          mojo::NullRemote(), "terminal",
+                          terminal.GetCallback());
+  RunUntilIdle();
+  EXPECT_FALSE(for_editor.IsReady())
+      << "the editor's element was handed the terminal's surface";
+
+  viz::MockCompositorFrameSinkClient editor_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> editor_sink;
+  base::test::TestFuture<const viz::FrameSinkId&> editor;
+  remote->CreateFrameSink(editor_client.BindInterfaceRemote(),
+                          editor_sink.BindNewPipeAndPassReceiver(),
+                          mojo::NullRemote(), "editor", editor.GetCallback());
+
+  EXPECT_EQ(editor.Get(), for_editor.Get());
 }
 
 // The other direction of the same exchange: the producer is told which
@@ -319,7 +402,7 @@ TEST_F(FrameSinkBrokerTest, EmbedTellsTheProducerWhichSurfaceToSubmitTo) {
 
   const viz::LocalSurfaceId local_surface_id = AllocateLocalSurfaceId();
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kPageFrameSinkId, local_surface_id, kEmbeddedSize,
+  broker()->Embed(kTestApp, kPageFrameSinkId, local_surface_id, kEmbeddedSize,
                   embedded.GetCallback());
 
   EXPECT_EQ(local_surface_id, observer.embedded_.Get<viz::LocalSurfaceId>());
@@ -341,7 +424,7 @@ TEST_F(FrameSinkBrokerTest, EmbedRegistersTheHierarchyUnderThePage) {
   ASSERT_FALSE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
                   embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();
@@ -360,7 +443,7 @@ TEST_F(FrameSinkBrokerTest, DestroyingTheSinkUnregistersTheHierarchy) {
   const viz::FrameSinkId frame_sink_id =
       BrokerASink(remote, sink_client, sink, mojo::NullRemote());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
                   embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();

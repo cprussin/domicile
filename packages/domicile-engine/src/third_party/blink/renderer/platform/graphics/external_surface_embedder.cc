@@ -38,6 +38,7 @@ ExternalSurfaceEmbedder::ExternalSurfaceEmbedder() = default;
 ExternalSurfaceEmbedder::~ExternalSurfaceEmbedder() = default;
 
 void ExternalSurfaceEmbedder::Embed(
+    const String& app_id,
     const viz::FrameSinkId& parent_frame_sink_id,
     const gfx::Size& size,
     Allocation allocation,
@@ -59,7 +60,7 @@ void ExternalSurfaceEmbedder::Embed(
       allocator.GetCurrentLocalSurfaceId();
 
   provider_->Embed(
-      parent_frame_sink_id, local_surface_id, size,
+      app_id, parent_frame_sink_id, local_surface_id, size,
       base::BindOnce(&ExternalSurfaceEmbedder::OnEmbedded,
                      base::Unretained(this), std::move(callback),
                      local_surface_id));

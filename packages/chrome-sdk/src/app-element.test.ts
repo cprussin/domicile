@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { DomicileAppElement } from "./app-element";
 import type { BridgeClient } from "./bridge";
@@ -97,6 +97,32 @@ const mountApp = (appId?: string): DomicileAppElement => {
   document.body.append(element);
   return element;
 };
+
+/**
+ * Install a fake `canvas.embedExternalSurface`, as the forked engine provides
+ * it, and record what each canvas was asked to embed.
+ *
+ * On the prototype rather than on an instance: the canvas is created inside the
+ * call under test, so there is nothing to reach until afterwards.
+ */
+const recordEmbeds = (): string[] => {
+  const embedded: string[] = [];
+  HTMLCanvasElement.prototype.embedExternalSurface = (appId: string) => {
+    embedded.push(appId);
+    return Promise.resolve();
+  };
+  restoreEmbed = () => {
+    delete HTMLCanvasElement.prototype.embedExternalSurface;
+  };
+  return embedded;
+};
+
+let restoreEmbed: (() => void) | undefined;
+
+afterEach(() => {
+  restoreEmbed?.();
+  restoreEmbed = undefined;
+});
 
 describe("<domicile-app>", () => {
   let bridge: FakeBridge;
@@ -790,5 +816,59 @@ describe("<domicile-app>", () => {
       new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
     );
     expect(bridge.calls).toContainEqual(["focusChrome"]);
+  });
+
+  describe("showing the client's window", () => {
+    it("embeds the surface the app id names", () => {
+      // The whole of how a client's pixels reach the page. The compositor
+      // submits the client's own buffer to a frame sink brokered under this
+      // app id, and this is what points the canvas's layer at it.
+      const embedded = recordEmbeds();
+
+      mountApp("terminal");
+
+      expect(embedded).toStrictEqual(["terminal"]);
+    });
+
+    it("gives each element its own window", () => {
+      // A desktop is several windows. Passing the app id is what stops every
+      // element embedding whichever surface was brokered last — one client
+      // drawn in every window, with nothing anywhere reporting an error.
+      const embedded = recordEmbeds();
+
+      mountApp("terminal");
+      mountApp("editor");
+
+      expect(embedded).toStrictEqual(["terminal", "editor"]);
+    });
+
+    it("embeds nothing for an element with no app id", () => {
+      // An element that names no window is not asking for one. Embedding here
+      // is what would hand it somebody else's.
+      const embedded = recordEmbeds();
+
+      mountApp();
+
+      expect(embedded).toStrictEqual([]);
+    });
+
+    it("takes the canvas away when the element is torn down", () => {
+      const embedded = recordEmbeds();
+      const element = mountApp("terminal");
+      expect(embedded).toHaveLength(1);
+
+      element.dropSurface();
+
+      expect(element.querySelector("canvas")).toBeNull();
+    });
+
+    it("mounts without a canvas where the engine has no such call", () => {
+      // A chrome on stock Chromium or Electron. The element still lays out and
+      // still reports its box — a shell is written against the same seam — and
+      // shows nothing rather than throwing.
+      const element = mountApp("terminal");
+
+      expect(element.querySelector("canvas")).toBeNull();
+    });
   });
 });

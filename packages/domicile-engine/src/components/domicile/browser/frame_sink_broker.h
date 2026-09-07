@@ -80,11 +80,18 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // the LocalSurfaceId because it is the embedder, and the embed_token in it is
   // the capability the producer needs. This is RemoteFrame's split.
   //
-  // `callback` is deferred until some producer has been brokered a sink. An
-  // <app> element exists before the client window behind it does, so a page
-  // that embeds early waits rather than failing, and is answered when a
-  // producer turns up.
-  void Embed(const viz::FrameSinkId& parent_frame_sink_id,
+  // `app_id` names which producer's surface to embed. It is the same string
+  // the producer passed to CreateFrameSink, which is how a page with several
+  // <app> elements gets a different window in each: without it every embedder
+  // would land on whichever sink happened to be brokered last, and a desktop
+  // of windows would show one window several times.
+  //
+  // `callback` is deferred until a producer has been brokered a sink *for that
+  // app*. An <app> element exists before the client window behind it does, so
+  // a page that embeds early waits rather than failing, and is answered when
+  // that app's producer turns up.
+  void Embed(const std::string& app_id,
+             const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
              EmbedCallback callback);
@@ -94,7 +101,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
       mojo::PendingReceiver<viz::mojom::CompositorFrameSink> receiver,
       mojo::PendingRemote<mojom::SurfaceObserver> observer,
-      const std::string& debug_label,
+      const std::string& app_id,
       CreateFrameSinkCallback callback) override;
   void DestroyFrameSink(const viz::FrameSinkId& frame_sink_id) override;
   void ImportBuffer(const viz::FrameSinkId& frame_sink_id,
@@ -111,7 +118,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
  private:
   // A page that asked to embed before any producer had connected.
   struct PendingEmbed {
-    PendingEmbed(const viz::FrameSinkId& parent_frame_sink_id,
+    PendingEmbed(const std::string& app_id,
+                 const viz::FrameSinkId& parent_frame_sink_id,
                  const viz::LocalSurfaceId& local_surface_id,
                  const gfx::Size& size,
                  EmbedCallback callback);
@@ -119,16 +127,19 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
     PendingEmbed& operator=(PendingEmbed&&);
     ~PendingEmbed();
 
+    std::string app_id;
     viz::FrameSinkId parent_frame_sink_id;
     viz::LocalSurfaceId local_surface_id;
     gfx::Size size;
     EmbedCallback callback;
   };
 
-  // The sink an embedder that names none gets. There is one producer in the
-  // spike; keying a surface to the app that owns it is what the chrome protocol
-  // will do, and it is not this layer's business.
-  BrokeredFrameSink* MostRecentlyBrokeredSink();
+  // The sink brokered for `app_id`, or null if that app has no producer yet.
+  //
+  // A linear scan: one desktop holds a handful of windows, and a second map
+  // from app id to FrameSinkId would be a second thing to keep honest when a
+  // producer disconnects.
+  BrokeredFrameSink* SinkForApp(const std::string& app_id);
 
   // Destroys every sink brokered to the connection that just went away. Nothing
   // else is watching the producer, so this is what unregisters its ids.
@@ -145,10 +156,6 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   base::flat_map<viz::FrameSinkId, std::unique_ptr<BrokeredFrameSink>>
       frame_sink_map_;
-
-  // The last id CreateFrameSink handed out. Looked up in `frame_sink_map_`
-  // rather than trusted, so a sink that has since gone away reads as none.
-  viz::FrameSinkId most_recently_brokered_;
 
   std::vector<PendingEmbed> pending_embeds_;
 };
