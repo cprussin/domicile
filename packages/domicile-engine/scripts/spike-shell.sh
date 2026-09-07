@@ -65,7 +65,7 @@ NEGATIVE="${NEGATIVE:-0}"
 # because the search runs on the submit path, so a client reaped mid-poll stops
 # the measurement and the guard reports "it never settled", which points at the
 # wrong thing entirely.
-CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-300}"
+CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-420}"
 
 OUT="${OUT:-out/Domicile}"
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"

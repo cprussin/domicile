@@ -63,7 +63,12 @@ NEGATIVE="${NEGATIVE:-0}"
 # because the search runs on the submit path, so a client reaped mid-poll stops
 # the measurement and the guard reports "it never settled", which points at the
 # wrong thing entirely.
-CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-300}"
+#
+# Longer than the compositor's own search budget (`FIND_FOR`, 300s) rather than
+# equal to it. Those are two different failures — a client that went away and a
+# search that gave up — and this guard has a branch for each, which is no use
+# if they always happen together.
+CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-420}"
 
 # What the compositor is asked to look for. The negative run does not ask for
 # the second colour, and that is what lets it settle: settling means "every
@@ -345,13 +350,19 @@ if [ "$SETTLED" != "1" ]; then
        "after $((LOOKED * POLL_EVERY))s, so the boxes below were still moving." \
        "A client that stops drawing stops the search: it runs on the submit path"
   echo "  #$COLOR_A: ${BOX_A:-nowhere}" >&2
-  echo "  #$COLOR_B: ${BOX_B:-nowhere}" >&2
+  [ "$NEGATIVE" = "1" ] || echo "  #$COLOR_B: ${BOX_B:-nowhere}" >&2
   exit 1
 fi
 
 echo
 echo "#$COLOR_A: ${BOX_A:-nowhere in the window}"
-echo "#$COLOR_B: ${BOX_B:-nowhere in the window}"
+# Not looked for in the negative run, so saying "nowhere" would read as a
+# finding about the page rather than as a fact about what was asked.
+if [ "$NEGATIVE" = "1" ]; then
+  echo "#$COLOR_B: not searched for — no client is drawing it"
+else
+  echo "#$COLOR_B: ${BOX_B:-nowhere in the window}"
+fi
 echo "everything the probe said, in the order it said it — a box appears again"
 echo "each time it moves, and watching one settle is what these lines are for:"
 grep -aoE "engine (found|has not drawn|could not read the window at all looking for|settled).*" \

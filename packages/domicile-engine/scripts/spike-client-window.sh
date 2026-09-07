@@ -61,7 +61,7 @@ NEGATIVE="${NEGATIVE:-0}"
 # and during the poll, because the probe runs on the submit path: a client
 # reaped mid-poll stops the measurement, and the guard would then report that
 # nothing ever drew.
-CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-300}"
+CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-420}"
 
 OUT="${OUT:-out/Domicile}"
 BROKER="${BROKER:-/tmp/domicile-client-window-broker}"

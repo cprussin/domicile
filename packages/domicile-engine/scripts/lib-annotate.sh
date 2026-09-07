@@ -21,8 +21,13 @@ domicile_escape() {
 }
 
 # One line, no body.
+#
+# Every argument, joined with spaces, because a guard's longer messages are
+# written as several quoted words across continued lines and the shell would
+# have joined them. Reading only `$1` truncated ten of them into half-sentences
+# that read as whole ones.
 annotate() {
-  echo "::error::$(domicile_escape "$1")"
+  echo "::error::$(domicile_escape "$*")"
 }
 
 # A failure that carries the end of the log it read.
@@ -31,7 +36,16 @@ annotate() {
 # annotation from the end, and the end of a build log is where the error is.
 annotate_from() {
   local title="$1" file="$2" body
-  body=$(tail -12 "$file" 2>/dev/null | tac)
+  # Reversed in awk rather than by `tac`, which preserves a missing final
+  # newline and so joins the last log line to the one before it.
+  body=$(tail -12 "$file" 2>/dev/null |
+           awk '{ line[NR] = $0 } END { for (i = NR; i > 0; i--) print line[i] }')
+  # No body, no blank line: a log that is empty or absent is a failure with
+  # nothing to show rather than one with something to show and nothing in it.
+  if [ -z "$body" ]; then
+    annotate "$title"
+    return
+  fi
   echo "::error::$(domicile_escape "$title")%0A%0A$(domicile_escape "$body")"
 }
 
