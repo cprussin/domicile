@@ -423,6 +423,42 @@ jobs:
             packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
             packages/domicile-engine/scripts/spike-shell.sh "$CHROMIUM"
 
+      # The other shell, and the reason it is here rather than assumed: nothing
+      # about `simple` passing says `manganese` does. It is the desktop this
+      # project is actually for, and it is built from a different page — a
+      # component library consumed as source, with its own panda codegen — so
+      # `build:vite`'s `^prepare` edge is load-bearing for it in a way it is
+      # not for `simple`. A shell that fails to build is a shell that shows
+      # nothing.
+      #
+      - name: The desktop this is for, on the fork
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-shell.sh "$CHROMIUM" manganese
+
+      # AND ITS OWN CONTROL, which the first version of this argued was not
+      # needed because a control is a property of the guard and `simple`'s
+      # establishes it for both. That is wrong, and it is wrong in the
+      # direction that matters. `engine found` is satisfied by a single pixel
+      # of the colour anywhere in the browser's window, so what a control
+      # actually establishes is a joint fact about the guard AND the page under
+      # it: that this page does not paint the search colour by itself.
+      # `simple`'s page is a bare desktop and cannot; manganese's is a whole
+      # component library with tokens derived by `color-mix`, and a run where
+      # the client's window never lands but one chrome pixel matches is green
+      # with nothing measured. This is the step that says otherwise, and it is
+      # not interchangeable with the other one.
+      - name: The manganese guard is looking at the client's pixels
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-shell.sh "$CHROMIUM" manganese
+
       # Everything the guard writes down, because none of it is on stdout.
       #
       # `spike-wayland.sh` sends sway's output to a file and then says only "no
