@@ -1827,14 +1827,33 @@ impl DomicileCompositor {
                     // submit path.
                     None => {
                         if self.probe_refused.insert((x, y)) {
-                            warn!(
-                                x,
-                                y,
-                                "the probe refused this point, so it is outside the \
-                                 browser's window — a missing symbol says so on its own \
-                                 account and this is not that. Nothing drew is a third \
-                                 thing and would say so"
-                            );
+                            // Two things left, and the centre tells them
+                            // apart. SamplePixel refuses both a point outside
+                            // the window and a window that has not been drawn
+                            // — the second returns an empty bitmap, which is
+                            // "the browser is not compositing at all" and is a
+                            // completely different problem. The centre is
+                            // always inside a window that exists, so an answer
+                            // from it means the bitmap is fine and this point
+                            // is not, and no answer means there is no bitmap.
+                            match session.spike_window_centre() {
+                                Some(centre) => warn!(
+                                    x,
+                                    y,
+                                    centre = format!("#{centre:08X}"),
+                                    "the probe refused this point but answered for the \
+                                     window's centre, so the browser is drawing and this \
+                                     point is outside its window"
+                                ),
+                                None => warn!(
+                                    x,
+                                    y,
+                                    "the probe refused this point AND the window's \
+                                     centre, so the browser has drawn nothing at all — \
+                                     which is not a probe fault and would also stop viz \
+                                     ever releasing a client's buffer"
+                                ),
+                            }
                         }
                     }
                 }
