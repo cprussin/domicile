@@ -398,62 +398,10 @@ jobs:
       # `PrivateTmp=true` both are inside the runner unit's own /tmp, so they
       # are unreachable once the job ends — they have to be printed here or
       # they are lost.
+      # In a script, not inline. GitHub echoes every step's script into the
+      # log before running it, so forty lines of dump here is forty lines
+      # between a failure and the end of the log — which is exactly where a
+      # failure gets read from, and it cost four fetches to notice.
       - name: What the guard wrote down
         if: ${{ failure() }}
-        run: |
-          # Filtered, not tailed. These logs are mostly two 4KB dumps of every
-          # EGL and GL extension the NVIDIA driver has, and a raw tail of 200
-          # lines is all of that and none of the seam. What is left is the
-          # sequence that says where it stopped: a window appeared, a sink was
-          # brokered for it, the page configured it, a frame was drawn.
-          for log in /tmp/domicile-spike-wayland.log \
-                     /tmp/domicile-client-window-compositor.log \
-                     /tmp/domicile-two-windows-compositor.log; do
-            [ -f "$log" ] || continue
-            echo "::group::$log"
-            grep -aE 'app_appeared|brokered a frame sink|configure ->|engine drew|never released|refused|ERROR|WARN|panic' \
-              "$log" | tail -60 || true
-            echo "--- last 15 lines, whatever they are:"
-            tail -15 "$log" 2>&1 | cut -c1-300 || true
-            echo "::endgroup::"
-          done
-          # What the compositor is being asked to run on, for the case where
-          # sway itself never started: a service has no login session, and the
-          # render node is the one piece of the guard that needs a real device.
-          echo "::group::the environment sway got"
-          id
-          ls -l /dev/dri || true
-          echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-unset}"
-          echo "::endgroup::"
-
-          # Dead last on purpose. A failed job's log is read from the end, and
-          # the useful question is almost always "how far down the sequence did
-          # it get" — a sink brokered, the page configuring it, a frame drawn —
-          # which is four numbers rather than four hundred lines. Anything that
-          # has to be read by scrolling up will be read late.
-          echo "counts, per log:"
-          for log in /tmp/domicile-spike-wayland.log \
-                     /tmp/domicile-client-window-compositor.log \
-                     /tmp/domicile-two-windows-compositor.log; do
-            [ -f "$log" ] || continue
-            printf '  %-42s appeared=%s brokered=%s configured=%s drew=%s stuck=%s\n' \
-              "$(basename "$log")" \
-              "$(grep -ac 'app_appeared' "$log" || true)" \
-              "$(grep -ac 'brokered a frame sink' "$log" || true)" \
-              "$(grep -ac 'configure ->' "$log" || true)" \
-              "$(grep -ac 'engine drew' "$log" || true)" \
-              "$(grep -ac 'never released' "$log" || true)"
-          done
-          echo "what was drawn, if anything:"
-          grep -ahoE 'engine drew #[0-9A-F]{8}( at \([0-9]+,[0-9]+\))?' \
-            /tmp/domicile-*-compositor.log 2>/dev/null | sort -u | sed 's/^/  /' || true
-
-          # Every distinct complaint, with how many times it was made. One
-          # message repeated four hundred times is one fact, and a tail long
-          # enough to hold it is a tail too long to read; the message that
-          # appeared once is usually the one that matters. tracing colours its
-          # field names, so the escapes come out first or nothing groups.
-          echo "what was complained about:"
-          sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
-            grep -aoE '(WARN|ERROR) .*' | cut -c1-200 | sort | uniq -c |
-            sort -rn | head -20 | sed 's/^/  /' || true
+        run: .github/scripts/engine-diagnostics.sh
