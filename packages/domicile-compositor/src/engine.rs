@@ -332,23 +332,23 @@ impl Engine {
         // out/ directory, or a build that did not include it — and a refused
         // call means the point is outside the window. They have nothing in
         // common and the first is invisible unless it is said.
-        let f: Symbol<unsafe extern "C" fn(*mut Handle, i32, i32, *mut u32) -> bool> =
-            match self.symbol(
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, i32, i32, *mut u32) -> bool> = match self
+            .symbol(
                 b"domicile_engine_spike_sample_pixel\0",
                 "domicile_engine_spike_sample_pixel",
             ) {
-                Ok(symbol) => symbol,
-                Err(err) => {
-                    tracing::error!(
-                        %err,
-                        "libdomicile_engine.so has no \
-                         domicile_engine_spike_sample_pixel; it was built before the probe \
-                         grew a coordinate. Rebuild it: autoninja -C out/Domicile \
-                         domicile_engine"
-                    );
-                    return None;
-                }
-            };
+            Ok(symbol) => symbol,
+            Err(err) => {
+                tracing::error!(
+                    %err,
+                    "libdomicile_engine.so has no \
+                     domicile_engine_spike_sample_pixel; it was built before the probe \
+                     grew a coordinate. Rebuild it: autoninja -C out/Domicile \
+                     domicile_engine"
+                );
+                return None;
+            }
+        };
         let mut argb = 0u32;
         // SAFETY: as elsewhere — the handle is live, and `argb` outlives the
         // call.
