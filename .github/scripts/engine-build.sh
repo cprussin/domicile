@@ -20,14 +20,35 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # user has them from their shell config; a systemd service has no shell config
 # — the same reason this workflow has to supply NIX_PATH and a git identity.
 #
-# The checkout's own vendored copy first: a gclient checkout puts depot_tools
-# at third_party/depot_tools, and that one matches this tree.
-TOOLS="$CHROMIUM/third_party/depot_tools:/build/depot_tools"
-export PATH="$TOOLS:$PATH"
-command -v autoninja >/dev/null || {
-  echo "no autoninja on PATH; looked in $TOOLS" >&2
+# WHICH depot_tools is not a matter of taste. A checkout has a vendored copy at
+# third_party/depot_tools, and it is a plain git clone: `autoninja` there exits
+# with "python3_bin_reldir.txt not found. need to initialize depot_tools",
+# because the bootstrap that fetches its own python has never run in it. The
+# standalone one is what a person set this machine up with and what the first
+# four-hour build used.
+#
+# So this picks the one that is bootstrapped rather than the one that sounds
+# right — `python3_bin_reldir.txt` is what the bootstrap leaves behind, so it
+# is the question asked directly.
+TOOLS=""
+for candidate in /build/depot_tools "$CHROMIUM/third_party/depot_tools"; do
+  if [ -x "$candidate/autoninja" ] && [ -f "$candidate/python3_bin_reldir.txt" ]; then
+    TOOLS="$candidate"
+    break
+  fi
+done
+[ -n "$TOOLS" ] || {
+  echo "no bootstrapped depot_tools in /build/depot_tools or $CHROMIUM/third_party/depot_tools." >&2
+  echo "One is there but not initialised: run its ensure_bootstrap, or gclient once." >&2
+  for candidate in /build/depot_tools "$CHROMIUM/third_party/depot_tools"; do
+    printf '  %s: autoninja=%s bootstrapped=%s\n' "$candidate" \
+      "$([ -x "$candidate/autoninja" ] && echo yes || echo no)" \
+      "$([ -f "$candidate/python3_bin_reldir.txt" ] && echo yes || echo no)" >&2
+  done
   exit 127
 }
+echo "depot_tools: $TOOLS"
+export PATH="$TOOLS:$PATH"
 
 "$HERE/../../packages/domicile-engine/scripts/build.sh" "$CHROMIUM"
 

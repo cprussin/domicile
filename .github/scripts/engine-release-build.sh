@@ -37,15 +37,21 @@ if [ -z "$CHROMIUM" ]; then
 fi
 
 # `gn` and `autoninja` are depot_tools', not the nix shell's, and a systemd
-# service has no shell config to put them on PATH. The checkout's own vendored
-# copy first, since that is the one matching this tree. See
-# .github/scripts/engine-build.sh, where this cost a round.
-TOOLS="$CHROMIUM/third_party/depot_tools:/build/depot_tools"
-export PATH="$TOOLS:$PATH"
-command -v autoninja >/dev/null || {
-  echo "no autoninja on PATH; looked in $TOOLS" >&2
+# service has no shell config to put them on PATH. The bootstrapped one, not
+# the checkout's vendored clone, which has never run its own bootstrap — see
+# .github/scripts/engine-build.sh, where guessing that cost a round.
+TOOLS=""
+for candidate in /build/depot_tools "$CHROMIUM/third_party/depot_tools"; do
+  if [ -x "$candidate/autoninja" ] && [ -f "$candidate/python3_bin_reldir.txt" ]; then
+    TOOLS="$candidate"
+    break
+  fi
+done
+[ -n "$TOOLS" ] || {
+  echo "no bootstrapped depot_tools found; run its ensure_bootstrap" >&2
   exit 127
 }
+export PATH="$TOOLS:$PATH"
 
 cd "$CHROMIUM" || exit 1
 
