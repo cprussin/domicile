@@ -6,8 +6,6 @@
 {"type":"app_appeared","app_id":"app-2","title":"kitty","size":[800.0,600.0]}
 {"type":"app_titled","app_id":"app-2","title":"~/src"}
 {"type":"app_resized","app_id":"app-2","size":[1024.0,768.0]}
-{"type":"app_frame","app_id":"app-2","width":1024,"height":768,"scale":2,"format":"argb8888","bytes":3145728}
-{"type":"app_frame","app_id":"app-2","width":1024,"height":768,"scale":1,"format":"xrgb8888","bytes":4096,"region":[0,0,32,32]}
 {"type":"app_closed","app_id":"app-1"}
 {"type":"app_composited","app_id":"app-2"}
 {"type":"app_cursor","app_id":"app-2","cursor":"vertical-text"}

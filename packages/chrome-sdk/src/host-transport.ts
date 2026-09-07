@@ -2,21 +2,15 @@
 //
 // They are in the same process but not in the same JavaScript world. The
 // socket is held by the preload, which runs in the renderer's isolated world;
-// the page runs in the main world. Getting a frame across that boundary is the
-// single most expensive thing left in the copy path, because the obvious way
-// to do it copies.
+// the page runs in the main world, and `postMessage` is how a message crosses.
 //
-// Calling a function exposed with `contextBridge` **structured-clones every
-// argument**, which for a window's pixels is megabytes per frame: measured at
-// 9.9ms average and 11.7ms worst for a 1612x982 window. `window.postMessage`
-// with the buffer in the transfer list moves it instead — the same frames
-// measured at **0.11ms**, and the buffer detaches on the sending side, which
-// is what proves nothing was copied.
-//
-// So the pixels are posted and only the small things go over the bridge.
-// `postHostMessages` is the preload's half and `postedTransport` is the
-// page's; they are kept in one file because the shape they agree on is the
-// only thing either of them is about.
+// It used to carry pixels, and the transfer list is why this file exists:
+// `contextBridge` structured-clones every argument, which for a window's
+// pixels was megabytes per frame — 9.9ms average for a 1612x982 window against
+// 0.11ms for a post that moved the buffer instead. No pixels cross here now;
+// a client's buffer goes to the display compositor and the page embeds the
+// surface. What is left is small JSON, and it is posted rather than bridged
+// because the two halves still have to agree on one shape.
 
 import { z } from "zod";
 
@@ -40,7 +34,6 @@ const HOST_MESSAGE = "domicile:host-message";
 export type PostedHostMessage = {
   readonly kind: typeof HOST_MESSAGE;
   readonly text: string;
-  readonly pixels?: Uint8Array<ArrayBuffer>;
   /**
    * When the host's bytes reached this process, on the same clock the page
    * reads. What sits between the socket and the page is priced against it.
@@ -97,13 +90,7 @@ export const postHostMessages = (
 
   const hand = (message: PostedHostMessage): void => {
     if (listening) {
-      // The pixels are *moved*. After this the buffer is detached here, which
-      // is exactly what makes it free — and why `host-stream` gives each frame
-      // a buffer of its own with nothing else in it.
-      post(
-        message,
-        message.pixels === undefined ? [] : [message.pixels.buffer],
-      );
+      post(message, []);
     } else {
       held.push(message);
     }
@@ -153,13 +140,7 @@ export const postedTransport = (
   target: PostTarget,
   channel: HostChannel,
 ): Transport => {
-  let deliver:
-    | ((
-        text: string,
-        pixels?: Uint8Array<ArrayBuffer>,
-        sentAt?: number,
-      ) => void)
-    | undefined;
+  let deliver: ((text: string, sentAt?: number) => void) | undefined;
 
   target.addEventListener("message", (event) => {
     // A page hears every `postMessage` aimed at it, including any an embedded
@@ -187,7 +168,7 @@ export const postedTransport = (
     if (!posted.success) {
       return;
     }
-    deliver?.(posted.data.text, posted.data.pixels, posted.data.at);
+    deliver?.(posted.data.text, posted.data.at);
   });
 
   return {
@@ -208,12 +189,11 @@ export const postedTransport = (
  * `event.source` check above is what says *which window* posted, and a claim
  * that the shape can therefore be trusted is the same claim that would delete
  * that check. A post carrying only `kind` would otherwise reach `deliver`
- * with three `undefined`s and throw inside a `message` listener, where nothing
+ * with two `undefined`s and throw inside a `message` listener, where nothing
  * is watching.
  */
 const postedHostMessage = z.object({
   at: z.number(),
   kind: z.literal(HOST_MESSAGE),
-  pixels: z.instanceof(Uint8Array).optional(),
   text: z.string(),
 });

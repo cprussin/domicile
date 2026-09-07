@@ -53,9 +53,6 @@ bridge.on("app_appeared", ({ app_id, size }) => {
 bridge.on("app_closed", ({ app_id }) => {
   desktop.close(app_id);
 });
-bridge.on("app_frame", (message) => {
-  desktop.drawFrame(message);
-});
 bridge.on("app_resized", (message) => {
   desktop.resizeSurface(message);
 });

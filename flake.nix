@@ -499,14 +499,11 @@
           e2e-late-chrome = "e2e-late-chrome.sh";
           e2e-chrome-without-a-host = "e2e-chrome-without-a-host.sh";
           e2e-dmabuf = "e2e-dmabuf.sh";
-          probe-transparency = "probe-transparency.sh";
           e2e-compose = "e2e-compose.sh";
           e2e-bands = "e2e-bands.sh";
-          e2e-window-shows-through = "e2e-window-shows-through.sh";
           e2e-chrome-fills-the-desktop = "e2e-chrome-fills-the-desktop.sh";
           e2e-chrome-fills-a-window = "e2e-chrome-fills-a-window.sh";
           e2e-window-follows-the-desktop = "e2e-window-follows-the-desktop.sh";
-          e2e-window-alpha = "e2e-window-alpha.sh";
           smoke-compositor = "smoke-compositor.sh";
           test-out-of-tree-shell = "test-out-of-tree-shell.sh";
         };

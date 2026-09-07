@@ -71,7 +71,7 @@ const ticking = () => {
   };
 };
 
-const FRAME = `{"type":"app_frame","app_id":"term","width":1,"height":1,"scale":1,"bytes":4}`;
+const TITLED = `{"type":"app_titled","app_id":"term","title":"a window"}`;
 const COMPOSITED = `{"type":"app_composited","app_id":"term"}`;
 
 /** Both halves, wired to each other the way the shell wires them. */
@@ -80,11 +80,11 @@ const wired = (clock = ticking()) => {
   const world = boundary();
   const channel = postHostMessages(stream.connection, world.post, clock);
   const transport = postedTransport(world.target, channel);
-  const received: [string, Uint8Array | undefined, number | undefined][] = [];
+  const received: [string, number | undefined][] = [];
   return {
     listen: () => {
-      transport.onMessage((text, pixels, sentAt) => {
-        received.push([text, pixels, sentAt]);
+      transport.onMessage((text, sentAt) => {
+        received.push([text, sentAt]);
       });
     },
     received,
@@ -95,23 +95,23 @@ const wired = (clock = ticking()) => {
 };
 
 describe("the host transport", () => {
-  it("moves a frame's pixels rather than copying them", () => {
-    // The whole reason the pixels are posted instead of being handed over the
-    // context bridge. A `contextBridge` call structured-clones its arguments,
-    // which for a 1612x982 window measured 9.9ms average and 11.7ms worst; the
-    // same frames posted with the buffer in the transfer list measured 0.11ms.
-    // Leaving the buffer out of that list is the whole cost back, silently.
+  it("posts every message with an empty transfer list", () => {
+    // This file exists because of the transfer list: pixels used to cross here
+    // and a `contextBridge` call structured-clones its arguments, which for a
+    // 1612x982 window measured 9.9ms average against 0.11ms for a post that
+    // moved the buffer instead.
+    //
+    // No pixels cross now — a client's buffer goes to the display compositor —
+    // so every message is small JSON and nothing is transferred. Asserted
+    // rather than assumed: a message that transferred something would mean a
+    // buffer had found its way back onto this wire, and detaching it here is
+    // the kind of failure that shows up as a message going missing much later.
     const wire = wired();
     wire.listen();
 
-    wire.stream.push(`${FRAME}\n`, new Uint8Array([1, 2, 3, 4]));
+    wire.stream.push(`${TITLED}\n`);
+    expect(wire.world.posted[0]?.transfer).toStrictEqual([]);
 
-    const frame = wire.world.posted[0];
-    const buffer = frame?.message.pixels?.buffer;
-    expect(buffer).toBeInstanceOf(ArrayBuffer);
-    expect(frame?.transfer).toStrictEqual(buffer === undefined ? [] : [buffer]);
-    // And a message with no pixels transfers nothing, rather than an empty
-    // buffer or the last frame's.
     wire.stream.push(`${COMPOSITED}\n`);
     expect(wire.world.posted[1]?.transfer).toStrictEqual([]);
   });
@@ -125,11 +125,11 @@ describe("the host transport", () => {
     const wire = wired();
     wire.listen();
 
-    wire.stream.push(`${COMPOSITED}\n${FRAME}\n`, new Uint8Array([1, 2, 3, 4]));
+    wire.stream.push(`${COMPOSITED}\n${TITLED}\n`);
 
     expect(wire.received).toStrictEqual([
-      [COMPOSITED, undefined, 5],
-      [FRAME, new Uint8Array([1, 2, 3, 4]), 5],
+      [COMPOSITED, 5],
+      [TITLED, 5],
     ]);
   });
 
@@ -149,23 +149,21 @@ describe("the host transport", () => {
     const wire = wired(clock);
 
     wire.stream.push(`${COMPOSITED}\n`);
-    wire.stream.push(`${FRAME}\n`, new Uint8Array([1, 2, 3, 4]));
+    wire.stream.push(`${TITLED}\n`);
     expect(wire.world.posted).toStrictEqual([]);
     clock();
     wire.listen();
     wire.stream.push(`${COMPOSITED}\n`);
 
     expect(wire.received).toStrictEqual([
-      [COMPOSITED, undefined, 5],
-      [FRAME, new Uint8Array([1, 2, 3, 4]), 10],
-      [COMPOSITED, undefined, 20],
+      [COMPOSITED, 5],
+      [TITLED, 10],
+      [COMPOSITED, 20],
     ]);
 
-    // And the hold is *emptied*, not merely read. A second `listen` hands a
-    // held frame again, and the second hand transfers a buffer the first one
-    // already detached — which is `byteLength === 0` rather than a throw, so
-    // it arrives as a blank window with every control message still working.
-    // Nothing structural prevents the second call: `Transport.onMessage`
+    // And the hold is *emptied*, not merely read. A second `listen` that
+    // handed everything again would deliver every held message twice, and
+    // nothing structural prevents the second call: `Transport.onMessage`
     // carries no call-once contract, and emptying the hold is the only reason
     // one would be harmless.
     const handed = wire.world.posted.length;

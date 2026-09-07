@@ -96,7 +96,7 @@ fn asking_to_report_twice_is_refused_like_any_other_repeat() {
 
 #[test]
 fn a_client_can_be_asked_for_a_window_that_is_not_opaque() {
-    // What `e2e-window-shows-through.sh` needs. A headless compositor copies
+    // What `e2e-window-shows-through.sh` needed. A headless compositor copies
     // every window into the page rather than drawing it itself, so the chrome
     // legitimately paints the client's own pixels where the window is — and
     // with an opaque client that is indistinguishable from a background

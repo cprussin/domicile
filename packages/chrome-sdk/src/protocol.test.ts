@@ -129,7 +129,7 @@ describe("parseHostMessage", () => {
 
   it("throws when a known message type has the wrong payload", () => {
     expect(() =>
-      parseHostMessage('{"type":"app_frame","app_id":"term"}'),
+      parseHostMessage('{"type":"app_resized","app_id":"term"}'),
     ).toThrow();
   });
 

@@ -86,9 +86,6 @@ export const useShellWindows = (
       appElements.closed(app_id);
       dispatch(ShellAction.AppClosed(app_id));
     });
-    bridge.on("app_frame", (message) => {
-      appElements.drawFrame(message);
-    });
     bridge.on("app_resized", (message) => {
       appElements.resize(message);
     });

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Prove the zero-copy dmabuf path: a GPU client's buffers are imported by the
-# compositor and its pixels reach the chrome.
+# Prove the compositor advertises `zwp_linux_dmabuf_v1`, which is what a GPU
+# client binds before it can hand over a buffer at all.
 #
 #   nix develop .#full -c ./scripts/e2e-dmabuf.sh
 #
@@ -122,108 +122,13 @@ else
   exit 1
 fi
 
-# 77, not 0. A skip that exits 0 is indistinguishable from a check that ran
-# and passed — `scripts/check.sh` tallies it as `ok`, `DOMICILE_CHECK_STRICT`
-# cannot see it, and a green CI run reported nine suites as ten. 77 is
-# automake's convention for it and is what `check.sh` reads.
-if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
-  echo "SKIP: no DRM render node, so no client can allocate a dmabuf here."
-  echo "      Run this on a machine with a GPU to exercise the import itself."
-  exit 77
-fi
-# Any client that renders through EGL allocates a dmabuf once the global is up.
-# `weston-simple-dmabuf-egl` is the most focused one, but nixpkgs builds weston
-# with `simple-clients` off, so the full shell falls back to kitty — which is
-# the client this whole path exists for anyway.
-if command -v weston-simple-dmabuf-egl >/dev/null 2>&1; then
-  GPU_CLIENT=(weston-simple-dmabuf-egl)
-elif command -v kitty >/dev/null 2>&1; then
-  # Keep it drawing: an idle terminal commits once and stops, and the chrome
-  # attaches only after the window maps, so there would be nothing left to see.
-  # Pin a modest window: left to itself kitty picks one sized to the output, and
-  # a 1753x1753 frame is 12MB per redraw. In the real chrome the `<app>` element
-  # drives the size through `resize_app`, so a fixed one is the honest stand-in.
-  GPU_CLIENT=(kitty --config NONE -o confirm_os_window_close=0
-              -o initial_window_width=640 -o initial_window_height=480
-              sh -c 'while :; do date; sleep 0.2; done')
-else
-  echo "SKIP: no GPU client on PATH (wanted weston-simple-dmabuf-egl or kitty)."
-  exit 77
-fi
-echo "== driving ${GPU_CLIENT[0]} =="
-
-# WAYLAND_DEBUG puts the whole protocol conversation on the client's stderr,
-# which is the only way to see what a mapped-but-blank client is waiting for.
-# NO_COLOR because current libwayland writes SGR escapes between the interface
-# name and the event, and the handshake tally below reads the log as plain text.
-NO_COLOR=1 WAYLAND_DEBUG=1 WAYLAND_DISPLAY=wayland-1 timeout 60 "${GPU_CLIENT[@]}" >"$CLILOG" 2>&1 &
-CLI=$!
-disown "$CLI" 2>/dev/null || true
-
-# Wait for the window before connecting the chrome. The mock chrome listens for
-# only a few seconds, and a cold kitty (font cache, GPU init) can take longer
-# than that to map — connecting after the fact still catches frames, because
-# every commit is broadcast to whoever is attached at the time.
-for _ in $(seq 1 200); do plain | grep -q "toplevel mapped" && break; sleep 0.1; done
-if ! plain | grep -q "toplevel mapped"; then
-  echo "FAIL: ${GPU_CLIENT[0]} never mapped a window, so nothing was ever imported."
-  compositor_trouble
-  client_trouble
-  exit 1
-fi
-# Wait for the compositor to actually import one — reading our own log, not the
-# client's debug output. A cold GPU client (font cache, GPU init, shader
-# compile) can be many seconds from mapping its window to drawing into it.
-echo "== the client mapped; waiting for the compositor to import a frame =="
-for _ in $(seq 1 300); do
-  [ "$(plain | grep -ac 'broadcast app frame')" -ge 1 ] && break
-  sleep 0.1
-done
-imported=$(plain | grep -ac "broadcast app frame")
-echo "frames imported: $imported"
-if [ "$imported" -lt 1 ]; then
-  echo "FAIL: ${GPU_CLIENT[0]} mapped a window but the compositor imported nothing."
-  compositor_trouble
-  client_trouble
-  exit 1
-fi
-
-# The chrome attaches once frames are flowing, and holds the line long enough to
-# catch them. Frames produced before it connects go to nobody: the compositor
-# broadcasts to whoever is attached, and drops rather than queues when behind.
-DOMICILE_CHROME_LISTEN_MS=25000 DOMICILE_CHROME_SOCK="$SOCK" \
-  bun "$ROOT/packages/e2e-harness/src/mock-chrome.ts" >"$CHROME" 2>&1 &
-MOCK=$!
-disown "$MOCK" 2>/dev/null || true
-# A harness that died on startup is indistinguishable from one that saw no
-# frames, so wait for the compositor to say it took the socket. That is one
-# `hello` short of the chrome being written to — the compositor joins its
-# broadcast list at the handshake — but nothing here rests on the difference:
-# what follows waits on frames, and a client that is drawing keeps producing
-# them, so a chrome that joins a moment later still catches two.
-for _ in $(seq 1 200); do
-  plain | grep -aq "chrome client connected" && break
-  sleep 0.05
-done
-if ! plain | grep -aq "chrome client connected"; then
-  echo "FAIL: the mock chrome never connected, so nothing could be delivered."
-  echo "  --- what the harness said:"
-  cut -c1-200 "$CHROME" | tail -6 | sed 's/^/  /'
-  exit 1
-fi
-# Two frames, not one: a client that draws once and freezes is the failure this
-# path is here to rule out, and one frame cannot tell the two apart.
-for _ in $(seq 1 150); do [ "$(grep -c '"app_frame"' "$CHROME")" -ge 2 ] && break; sleep 0.1; done
-
-echo "== frames the chrome received from the GPU client =="
-# The payload is a base64 blob per frame, so report the shape, not the bytes.
-grep -oE '"type":"app_frame","app_id":"[^"]*","width":[0-9]+,"height":[0-9]+' "$CHROME" | head -3
-frames=$(grep -c '"app_frame"' "$CHROME")
-if [ "$frames" -ge 2 ]; then
-  echo "PASS: $frames dmabuf frames imported and delivered to the chrome"
-else
-  echo "FAIL: ${GPU_CLIENT[0]} mapped a window, but only $frames frame(s) reached the chrome."
-  compositor_trouble
-  client_trouble
-  exit 1
-fi
+# The import itself is no longer this script's to prove. It used to read a
+# client's dmabuf back and assert the pixels reached the chrome; that path is
+# deleted, and a client's buffer now goes to the display compositor through the
+# engine. What proves it end to end is
+# `packages/domicile-engine/scripts/spike-client-window.sh`, which needs a
+# Chromium build and a GPU and so cannot live here.
+#
+# What is left is the half that runs anywhere and is worth running: the global
+# is advertised, which is what every dmabuf client binds before it draws.
+exit 0

@@ -24,7 +24,9 @@ pub struct Arguments {
     pub trace: bool,
     /// Whether the window is see-through rather than opaque.
     ///
-    /// Off by default, and only `e2e-window-shows-through.sh` asks for it.
+    /// Off by default. `e2e-window-shows-through.sh` was its only caller and
+    /// went with the copy path; the flag is kept because a translucent client
+    /// is still the one thing that shows what is behind a window.
     /// That check reads what the chrome painted where the window is, and a
     /// headless compositor copies every window into the page rather than
     /// drawing it itself — so what is legitimately there is the client's own

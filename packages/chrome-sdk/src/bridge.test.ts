@@ -14,35 +14,19 @@ import type { DisplayInfo } from "./protocol";
 class FakeTransport implements Transport {
   readonly sent: unknown[] = [];
 
-  #onMessage:
-    | ((
-        text: string,
-        pixels?: Uint8Array<ArrayBuffer>,
-        sentAt?: number,
-      ) => void)
-    | undefined;
+  #onMessage: ((text: string, sentAt?: number) => void) | undefined;
 
   send(text: string): void {
     this.sent.push(JSON.parse(text));
   }
 
-  onMessage(
-    callback: (
-      text: string,
-      pixels?: Uint8Array<ArrayBuffer>,
-      sentAt?: number,
-    ) => void,
-  ): void {
+  onMessage(callback: (text: string, sentAt?: number) => void): void {
     this.#onMessage = callback;
   }
 
   /** Simulate a message arriving from the host. */
-  push(
-    message: unknown,
-    pixels?: Uint8Array<ArrayBuffer>,
-    sentAt?: number,
-  ): void {
-    this.#onMessage?.(JSON.stringify(message), pixels, sentAt);
+  push(message: unknown, sentAt?: number): void {
+    this.#onMessage?.(JSON.stringify(message), sentAt);
   }
 
   lastSent(): unknown {
@@ -266,98 +250,29 @@ describe("BridgeClient", () => {
     }).not.toThrow();
   });
 
-  describe("round-trip timing", () => {
-    // The bridge is the only place that sees both ends of the loop — the
-    // keystroke going out and the pixels that answer it coming back — so it is
-    // where the number a user calls "sluggish" can be taken.
-    const frame = (appId: string): [unknown, Uint8Array<ArrayBuffer>] => [
-      {
-        app_id: appId,
-        bytes: 4,
-        format: "rgba",
-        height: 1,
-        scale: 1,
-        type: "app_frame",
-        width: 1,
-      },
-      new Uint8Array(4),
-    ];
-
-    it("times a keystroke to the frame that answered it", () => {
-      let clock = 0;
-      const timed = new BridgeClient(transport, {
-        now: () => clock,
-        protocolVersion: 1,
-      });
-
-      timed.key("term", 30, true);
-      clock = 120;
-      transport.push(...frame("term"));
-
-      expect(timed.roundTrip.report(120)).toMatchObject({
-        answered: 1,
-        averageMs: 120,
-        sent: 1,
-        worstMs: 120,
-      });
-    });
-
-    it("does not start a round trip on a key release", () => {
-      // Releasing a key changes nothing on screen, so the next frame to arrive
-      // is some unrelated redraw — a terminal's blinking cursor, half a second
-      // later. Timing to that reports the blink interval as input latency, and
-      // since every press is followed by a release it would contaminate half of
-      // every sample.
-      let clock = 0;
-      const timed = new BridgeClient(transport, {
-        now: () => clock,
-        protocolVersion: 1,
-      });
-
-      timed.key("term", 30, false);
-      clock = 500;
-      transport.push(...frame("term"));
-
-      expect(timed.roundTrip.report(500)).toBeUndefined();
-    });
-
-    it("takes the measurement after the frame is drawn, not before", () => {
-      // The handler is what puts the pixels on the canvas, and `putImageData`
-      // for a full-window frame is a real cost. A measurement taken before the
-      // handler runs would leave the most suspect step out of the number.
-      let clock = 0;
-      const timed = new BridgeClient(transport, {
-        now: () => clock,
-        protocolVersion: 1,
-      });
-      timed.on("app_frame", () => {
-        clock += 40;
-      });
-
-      timed.key("term", 30, true);
-      clock = 10;
-      transport.push(...frame("term"));
-
-      expect(timed.roundTrip.report(50)?.worstMs).toBe(50);
-    });
-  });
+  // The keystroke round trip used to be tested here: send a key, push the
+  // frame that answered it, assert the latency. Both ends of that loop passed
+  // through the bridge because the bridge drew the frame.
+  //
+  // It no longer does. A client's buffer goes to the display compositor and
+  // the page embeds the surface, so nothing here ever sees the frame that
+  // answered a key and `BridgeClient.roundTrip` reports nothing at all.
+  //
+  // **The tests are gone and the measurement is a gap.** It is the instrument
+  // for the requirement this fork exists to satisfy — that the compositor add
+  // no latency a user can see — and it has to be rebuilt where both ends are
+  // now visible, in the compositor, which sends the key and holds the engine
+  // connection that knows when viz presented.
 
   describe("the hop from the host's bytes to this page", () => {
-    // Reported separately from the round trip that contains it: an
-    // unattributed total says a desktop is slow without saying which half of
-    // it to fix. This stage used to be Electron's IPC, at 79ms a frame.
-    const frame = (appId: string): [unknown, Uint8Array<ArrayBuffer>] => [
-      {
-        app_id: appId,
-        bytes: 4,
-        format: "rgba",
-        height: 1,
-        scale: 1,
-        type: "app_frame",
-        width: 1,
-      },
-      new Uint8Array(4),
-    ];
+    // Reported on its own: an unattributed total says a desktop is slow
+    // without saying which half of it to fix. This stage used to be Electron's
+    // IPC, at 79ms a frame.
+    const titled = (appId: string): unknown => ({
+      app_id: appId,
+      title: "a window",
+      type: "app_titled",
+    });
 
     it("prices a message against the moment its bytes arrived", () => {
       let clock = 0;
@@ -367,7 +282,7 @@ describe("BridgeClient", () => {
       });
 
       clock = 12;
-      transport.push(...frame("term"), 4);
+      transport.push(titled("term"), 4);
 
       expect(timed.hop.take()).toStrictEqual({
         averageMs: 8,
@@ -382,7 +297,7 @@ describe("BridgeClient", () => {
       // return; what a reporter renders it as is the reporter's business.
       const timed = new BridgeClient(transport, { protocolVersion: 1 });
 
-      transport.push(...frame("term"));
+      transport.push(titled("term"));
 
       expect(timed.hop.take()).toBeUndefined();
     });

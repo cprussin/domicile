@@ -86,7 +86,6 @@ export type Transport = {
   onMessage: (
     callback: (
       text: string,
-      pixels?: Uint8Array<ArrayBuffer>,
       /**
        * When the host's own bytes arrived, on the same clock `now` reads.
        * Optional because a transport that is not a socket — the no-op one the
@@ -112,9 +111,21 @@ export class BridgeClient {
   readonly protocolVersion: number;
 
   /**
-   * How long keystrokes are taking to become pixels. The bridge is the only
-   * place that sees both ends of that loop, so it is where the measurement is
-   * taken; whoever wants to report it reads it from here.
+   * How long keystrokes are taking to become pixels.
+   *
+   * **This no longer measures anything, and that is a gap rather than a
+   * tidy-up.** The bridge used to see both ends of the loop: it sent the key
+   * and it drew the frame that answered. A client's buffer now goes to the
+   * display compositor and the page embeds the surface, so the far end of the
+   * loop does not pass through here at all — `keyed` is still called and
+   * `drew` never is, so every report is empty.
+   *
+   * It is kept, empty, rather than deleted because it is the instrument for
+   * the one requirement this whole fork is answerable to: that the compositor
+   * add no latency a user can see. Deleting it would leave nothing measuring
+   * that and no sign that anything used to. The measurement has to be rebuilt
+   * where both ends are now visible — the compositor, which sends the key and
+   * holds the engine connection that knows when viz presented.
    */
   readonly roundTrip = new RoundTripWindow();
 
@@ -153,8 +164,7 @@ export class BridgeClient {
    *
    * {@link #held} exists for the gap before a page has *ever* listened. An
    * {@link off} says it listened and chose to stop, so holding for it again
-   * would pile up with nothing to drain it — for `app_frame`, a buffer the
-   * size of the screen every frame.
+   * would pile up with nothing to drain it.
    *
    * The cost is that what arrives between an {@link off} and a later
    * {@link on} is gone. Fine for anything the page can read back — `displays`
@@ -180,11 +190,11 @@ export class BridgeClient {
     this.protocolVersion = protocolVersion;
     this.#now = now;
     this.#transport = transport;
-    this.#transport.onMessage((text, pixels, sentAt) => {
+    this.#transport.onMessage((text, sentAt) => {
       if (sentAt !== undefined) {
         this.hop.record(this.#now() - sentAt);
       }
-      this.#handleIncoming(text, pixels);
+      this.#handleIncoming(text);
     });
   }
 
@@ -401,26 +411,12 @@ export class BridgeClient {
   // Unknown message types are dropped rather than raised, so a newer host can
   // add messages an older chrome cannot name. A *known* type with no handler
   // yet is a different thing and is held, not dropped — see `#held`. Malformed
-  // frames are in neither category: `parseHostMessage` throws on those.
-  #handleIncoming(text: string, pixels?: Uint8Array<ArrayBuffer>): void {
+  // messages are in neither category: `parseHostMessage` throws on those.
+  #handleIncoming(text: string): void {
     const message = parseHostMessage(text);
     if (message !== undefined) {
       if (message.type === "welcome") {
         this.#settleWelcome(message.protocol_version);
-      } else if (message.type === "app_frame") {
-        // The pixels never went through JSON, so they are joined to the
-        // message here rather than coming out of the schema. A frame header
-        // without them is a transport that lost the bytes it promised.
-        if (pixels === undefined) {
-          throw new Error(
-            `app_frame for ${message.app_id} arrived without its ${message.bytes} bytes`,
-          );
-        }
-        this.#deliver(message.type, { ...message, pixels });
-        // After the handler, not before: the handler is what puts the pixels
-        // on the canvas, and `putImageData` for a full window is a real cost —
-        // measuring before it would leave the most suspect step out.
-        this.roundTrip.drew(message.app_id, this.#now());
       } else {
         if (message.type === "displays") {
           // Kept before it is delivered, so a handler that reads the accessor

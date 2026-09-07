@@ -113,24 +113,6 @@ const appResizedSchema = z.looseObject({
   type: z.literal("app_resized"),
 });
 
-// The pixels are not in this message; `bytes` counts the raw bytes that follow
-// the header line on the socket. See `host-stream.ts`.
-const appFrameSchema = z.looseObject({
-  app_id: z.string(),
-  bytes: z.number(),
-  format: z.string(),
-  // Device pixels, so the canvas backing store; divide by `scale` for the
-  // logical size the element is laid out at.
-  height: z.number(),
-  // Which part of the buffer the bytes are, as [x, y, width, height] in
-  // buffer pixels. Absent means all of it — a host too old to send it, or a
-  // frame the compositor could not send partially.
-  region: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
-  scale: z.number(),
-  type: z.literal("app_frame"),
-  width: z.number(),
-});
-
 const appClosedSchema = z.looseObject({
   app_id: z.string(),
   type: z.literal("app_closed"),
@@ -261,7 +243,6 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appAppearedSchema,
   appTitledSchema,
   appResizedSchema,
-  appFrameSchema,
   appClosedSchema,
   appCompositedSchema,
   appCursorSchema,
@@ -272,28 +253,21 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   modifiersSchema,
 ]);
 
-/**
- * A decoded host message. `app_frame` is the schema's shape plus the pixels the
- * transport read off the socket after the header — they never went through
- * JSON, so the schema cannot describe them.
- */
-export type HostMessage =
-  | Exclude<z.infer<typeof hostMessageSchema>, { type: "app_frame" }>
-  | AppFrameMessage;
+/** A decoded host message. */
+export type HostMessage = z.infer<typeof hostMessageSchema>;
 
-/** A host message exactly as it decodes from JSON, before pixels are joined. */
+/**
+ * A host message exactly as it decodes from JSON.
+ *
+ * The same type as {@link HostMessage} now that every message is wholly JSON.
+ * It stays a distinct name because the stream still parses before it dispatches
+ * and the two steps read better named apart.
+ */
 export type HostMessageJson = z.infer<typeof hostMessageSchema>;
 export type WelcomeMessage = z.infer<typeof welcomeSchema>;
 export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
 export type AppTitledMessage = z.infer<typeof appTitledSchema>;
 export type AppResizedMessage = z.infer<typeof appResizedSchema>;
-/**
- * The header, plus the pixels that followed it on the socket. `bytes` is what
- * the header promised; `pixels` is what arrived, attached by the transport.
- */
-export type AppFrameMessage = z.infer<typeof appFrameSchema> & {
-  pixels: Uint8Array<ArrayBuffer>;
-};
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCompositedMessage = z.infer<typeof appCompositedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;

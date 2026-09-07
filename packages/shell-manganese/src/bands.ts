@@ -33,7 +33,7 @@
 // transparent }` where Domicile composites this window, and the page's own
 // where it does not. See `electron-chrome-host/src/chrome-window.ts`.
 //
-// `e2e-window-shows-through.sh` is what catches a background added back: it
+// `e2e-window-shows-through.sh` used to catch a background added back; it
 // draws a window, reads a pixel of the chrome over it, and requires that pixel
 // not to be fully opaque, because nothing the chrome is entitled to paint over
 // a window is. This paragraph used to say no such check existed; it does, and
