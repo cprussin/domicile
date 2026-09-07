@@ -548,6 +548,29 @@ jobs:
             exit 1
           }
 
+      # The one requirement nothing measured until now. Last of the guards
+      # because it is the longest: sixty rounds, each a keystroke and a wait
+      # for the browser to draw.
+      - name: What a keystroke costs to reach a pixel
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-latency.sh "$CHROMIUM"
+
+      # Its control: a client that ignores the keyboard. Without it the guard
+      # would pass on any client that merely draws, and the number it reported
+      # would be a number about something else. Short, because what it proves
+      # needs three rounds rather than sixty.
+      - name: The latency guard is timing the client's own answer
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-latency.sh "$CHROMIUM"
+
       # Everything the guard writes down, because none of it is on stdout.
       #
       # `under-wayland.sh` sends sway's output to a file and then says only "no
