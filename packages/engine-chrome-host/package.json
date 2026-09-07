@@ -1,0 +1,26 @@
+{
+  "dependencies": {
+    "@domicile/chrome-sdk": "workspace:*"
+  },
+  "description": "The fork's half of a Domicile shell: the page's origin and its wire to the compositor, which is everything Electron's main process and preload were for.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./serve-shell": "./src/serve-shell.ts",
+    "./static-path": "./src/static-path.ts"
+  },
+  "files": [
+    "src/**/*"
+  ],
+  "name": "@domicile/engine-chrome-host",
+  "private": true,
+  "scripts": {
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}
