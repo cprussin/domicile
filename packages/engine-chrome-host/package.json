@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "@cprussin/option-result": "catalog:",
     "@domicile/chrome-sdk": "workspace:*",
     "zod": "catalog:"
   },
