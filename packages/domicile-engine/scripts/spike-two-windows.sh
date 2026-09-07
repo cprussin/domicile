@@ -31,13 +31,16 @@
 # was working.
 set -u
 
+SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
+. "$SCRIPTS/lib-annotate.sh"
+
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
-  echo "usage: spike-two-windows.sh <path to chromium/src>" >&2
+  annotate "spike-two-windows: no path to chromium/src was given"
   exit 1
 fi
 
-SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
 
 # Two colours, neither of them either canvas's fallback (#3f51b5, #00796b) and
@@ -116,7 +119,7 @@ if command -v kitty >/dev/null; then
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  echo "SKIP: no kitty to draw with, and no nix to fetch one."
+  skip "spike-two-windows: no kitty to draw with, and no nix to fetch one"
   exit 77
 fi
 
@@ -181,22 +184,22 @@ CLIENT_DISPLAY="${CLIENT_DISPLAY:-wayland-1}"
 start_client() {
   local colour="$1"
   echo "driving kitty, drawing #$colour"
+  # Prints, rather than sitting idle. The probe runs on the submit
+  # path — it is called when a client commits a frame the engine
+  # takes — so a client that stops drawing stops the measurement
+  # dead, and a guard waiting for a box to hold still would then be
+  # measuring the client's idleness. kitty redraws for its cursor
+  # blink and gives up on that after about fifteen seconds; a
+  # character every fifth of a second keeps it committing for as
+  # long as the guard is watching.
+  #
+  # The dots are foreground pixels and the box is the background
+  # colour's extent, so they cost nothing the measurement cares
+  # about.
   NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout 180 \
     "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
           -o "background=#$colour" \
           -o initial_window_width=640 -o initial_window_height=480 \
-          # Prints, rather than sitting idle. The probe runs on the submit
-          # path — it is called when a client commits a frame the engine
-          # takes — so a client that stops drawing stops the measurement
-          # dead, and a guard waiting for a box to hold still would then be
-          # measuring the client's idleness. kitty redraws for its cursor
-          # blink and gives up on that after about fifteen seconds; a
-          # character every fifth of a second keeps it committing for as
-          # long as the guard is watching.
-          #
-          # The dots are foreground pixels and the box is the background
-          # colour's extent, so they cost nothing the measurement cares
-          # about.
           sh -c 'while :; do printf .; sleep 0.2; done' >>"$CLI_LOG" 2>&1 &
   STARTED+=($!)
 }
@@ -266,65 +269,72 @@ numbers_in() {
   echo "$1" | grep -oE "[0-9]+" | tr '\n' ' '
 }
 
-# Poll until each box has been the SAME across two separate MEASUREMENTS.
+# Wait for the COMPOSITOR to say it looked again and nothing had moved.
 #
-# Not until it is merely non-empty. The compositor writes a box down when it
-# moves, so the first one it writes is the window mid-paint — narrower than it
-# will be — and the assertions below are about width. Reading that would fail a
-# working seam as "a sliver", and would let the negative control pass a client
-# that covers the whole page by catching it before it had.
+# Not for the log to stop changing, which is what two equal looks measure and
+# is not the same thing. A box is written down only when it *moves*, so a log
+# that is not changing is equally consistent with a settled page and with a
+# search that has stopped — and the search does stop, because it runs on the
+# submit path and a client that quietens down takes it with it. Two readings
+# of a frozen file agree with each other forever.
 #
-# Three seconds between looks, not one, and that is the whole reason the
-# interval is written down: the compositor searches every two seconds
-# (`FIND_EVERY` in main.rs), so two looks a second apart can both land inside
-# one measurement and read the same line twice. Two looks three seconds apart
-# straddle two.
+# So the compositor says it: `engine settled` is logged when a round finds
+# every colour it was asked for and none of their boxes moved since the round
+# before. That is the two-measurement rule, made where the measurements are.
 #
-# The other half is the client, which is why it prints: the search runs on the
-# submit path, so a client that stops drawing freezes the box and "it has not
-# changed" stops being a statement about the page.
+# The negative run never settles — the second colour is never found, so no
+# round can have found every colour — and waits out `SETTLE_FOR` instead. Its
+# claim is about the one client's width and the other's absence, and both are
+# statements about a run that has had long enough.
 POLL_EVERY=3
-# Past the page's own patience for an embed (EMBED_DEADLINE_MS, 20s in
-# spike-two-windows.html), so a mis-dispatched second canvas that embeds late
-# has turned up before the negative control concludes it never will.
+LOOKS=30
+# Long enough for the second client of a positive run to have appeared and
+# painted, measured from the start of this poll — which is already after both
+# clients were brokered.
 LEAST_LOOKS=8
-PREV_A=""
-PREV_B=""
-BOX_A=""
-BOX_B=""
-LOOKS=0
-STEADY=0
-for _ in $(seq 1 30); do
-  PREV_A="$BOX_A"
-  PREV_B="$BOX_B"
-  BOX_A=$(box_of "$COLOR_A")
-  BOX_B=$(box_of "$COLOR_B")
-  LOOKS=$((LOOKS + 1))
-  STEADY_A=0
-  [ -n "$BOX_A" ] && [ "$BOX_A" = "$PREV_A" ] && STEADY_A=1
-  if [ "$NEGATIVE" = "1" ]; then
-    # The one client's box has to hold still, and the other colour has to have
-    # had its chance to turn up: "it is not there" said after one look is not a
-    # measurement.
-    if [ "$STEADY_A" = "1" ] && [ "$LOOKS" -ge "$LEAST_LOOKS" ]; then
-      STEADY=1
-      break
-    fi
-  elif [ "$STEADY_A" = "1" ] && [ -n "$BOX_B" ] && [ "$BOX_B" = "$PREV_B" ]; then
-    STEADY=1
+
+SETTLED=0
+LOOKED=0
+for _ in $(seq 1 "$LOOKS"); do
+  LOOKED=$((LOOKED + 1))
+  if grep -aq "engine settled" "$COMP_LOG" 2>/dev/null; then
+    SETTLED=1
+    break
+  fi
+  if [ "$NEGATIVE" = "1" ] && [ "$LOOKED" -ge "$LEAST_LOOKS" ]; then
     break
   fi
   sleep "$POLL_EVERY"
 done
 
-# Never holding still is its own answer, and it is not "the boxes are wrong".
-# Falling through into the assertions would measure an unsettled reading and
-# report whatever it happened to catch.
-if [ "$STEADY" != "1" ]; then
-  echo "::error::spike-two-windows: no box ever held still across two" \
-       "measurements, so nothing here was measured. The client may have" \
-       "stopped drawing, which stops the probe: it runs on the submit path."
-  echo "the last thing each colour was seen at:" >&2
+BOX_A=$(box_of "$COLOR_A")
+BOX_B=$(box_of "$COLOR_B")
+WINDOW=$(window_size)
+
+# The three ways this can have measured nothing, told apart. Before the
+# assertions, because each of them is a different fact from "the boxes are
+# wrong" and reporting one as another is what sent the last several runs
+# chasing the wrong thing.
+if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
+  echo "::error::spike-two-windows: the compositor stopped searching before" \
+       "this poll ran out, so 'not found' here means 'not looked for'"
+  exit 1
+fi
+if [ -z "$BOX_A" ]; then
+  echo "::error::spike-two-windows: the first client's colour never appeared" \
+       "on the page at all, so nothing here is about two windows"
+  grep -aE "engine|frame sink|buffer|dmabuf" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
+  exit 1
+fi
+if [ -z "$WINDOW" ]; then
+  echo "::error::spike-two-windows: the probe never reported the window's size," \
+       "so there is nothing to measure the boxes against"
+  exit 1
+fi
+if [ "$NEGATIVE" != "1" ] && [ "$SETTLED" != "1" ]; then
+  echo "::error::spike-two-windows: the compositor never said it had settled" \
+       "after $((LOOKED * POLL_EVERY))s, so the boxes below were still moving." \
+       "A client that stops drawing stops the search: it runs on the submit path"
   echo "  #$COLOR_A: ${BOX_A:-nowhere}" >&2
   echo "  #$COLOR_B: ${BOX_B:-nowhere}" >&2
   exit 1
@@ -333,32 +343,10 @@ fi
 echo
 echo "#$COLOR_A: ${BOX_A:-nowhere in the window}"
 echo "#$COLOR_B: ${BOX_B:-nowhere in the window}"
-echo "everything the probe said:"
-# In the order they were written, not sorted: a box appears again each time it
-# moves, and watching one settle is what these lines are for.
-grep -aoE "engine (found|has not drawn|could not read the window at all looking for) #[0-9A-F]{8}.*" \
+echo "everything the probe said, in the order it said it — a box appears again"
+echo "each time it moves, and watching one settle is what these lines are for:"
+grep -aoE "engine (found|has not drawn|could not read the window at all looking for|settled).*" \
   "$COMP_LOG" 2>/dev/null | sed 's/^/  /'
-
-# A search that stopped is not a search that found nothing, and reporting the
-# first as the second is how a slow runner becomes a wrong diagnosis.
-if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
-  echo "::error::spike-two-windows: the compositor stopped searching before" \
-       "this poll ran out, so 'not found' here means 'not looked for'"
-  exit 1
-fi
-
-# `box_of` matches a prefix of the line that `window_size` reads the end of,
-# so a half-flushed line can satisfy one and not the other. Checked rather than
-# reasoned about: an empty WINDOW makes both thresholds zero, which turns the
-# negative control into a lie and the sliver check into a no-op.
-WINDOW=$(window_size)
-if [ -z "$BOX_A" ] || [ -z "$WINDOW" ]; then
-  echo "::error::spike-two-windows: the first client never reached the page" \
-       "at all, so nothing here is about two windows"
-  echo "--- the compositor's last words:" >&2
-  grep -aE "engine|frame sink|buffer|dmabuf" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
-  exit 1
-fi
 
 if [ "$NEGATIVE" = "1" ]; then
   # "The other colour is nowhere" is not the control. Nobody is drawing

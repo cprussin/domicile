@@ -34,13 +34,16 @@
 # throwaway with the rest of the spike.
 set -u
 
+SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
+. "$SCRIPTS/lib-annotate.sh"
+
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
-  echo "usage: spike-client-window.sh <path to chromium/src>" >&2
+  annotate "spike-client-window: no path to chromium/src was given"
   exit 1
 fi
 
-SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
 
 # What the client draws and what the page must therefore show. Not the page's
@@ -94,15 +97,21 @@ trap cleanup EXIT
 
 # Into the checkout before anything is looked for: OUT is relative to it, the
 # way build.sh and spike.sh treat it.
-cd "$CHROMIUM" || exit 1
+cd "$CHROMIUM" || {
+  annotate "spike-client-window: $CHROMIUM is not a directory this can enter"
+  exit 1
+}
 
-[ -x "$OUT/chrome" ] || { echo "build the engine first: ./scripts/build.sh $CHROMIUM" >&2; exit 1; }
+[ -x "$OUT/chrome" ] || {
+  annotate "spike-client-window: no engine at $CHROMIUM/$OUT/chrome; build it with ./scripts/build.sh"
+  exit 1
+}
 [ -f "$OUT/libdomicile_engine.so" ] || {
-  echo "no libdomicile_engine.so in $OUT; build it: autoninja -C $OUT domicile_engine" >&2
+  annotate "spike-client-window: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
   exit 1
 }
 [ -x "$COMPOSITOR" ] || {
-  echo "build the compositor first: nix develop .#full -c cargo build -p domicile-compositor" >&2
+  annotate "spike-client-window: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
 # kitty lives in the Domicile full dev shell, not in Chromium's toolchain shell
@@ -113,7 +122,7 @@ if command -v kitty >/dev/null; then
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  echo "SKIP: no kitty to draw with, and no nix to fetch one."
+  skip "spike-client-window: no kitty to draw with, and no nix to fetch one"
   exit 77
 fi
 
@@ -134,7 +143,8 @@ STARTED+=($!)
 
 for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done
 [ -S "$BROKER" ] || {
-  echo "the page never asked to embed; the engine said:" >&2
+  annotate_from "spike-client-window: the page never asked to embed" "$ENGINE_LOG"
+  echo "the engine said:" >&2
   tail -20 "$ENGINE_LOG" >&2
   exit 1
 }
@@ -159,6 +169,7 @@ for _ in $(seq 1 120); do
   sleep 0.5
 done
 if ! kill -0 $COMP 2>/dev/null; then
+  annotate_from "spike-client-window: the compositor did not start" "$COMP_LOG"
   echo "the compositor did not start. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -172,22 +183,22 @@ if [ "$NEGATIVE" = "1" ]; then
   echo "negative control: no client, so nothing draws"
 else
   echo "driving kitty, drawing #$COLOR"
+  # Prints, rather than sitting idle. The probe runs on the submit
+  # path — it is called when a client commits a frame the engine
+  # takes — so a client that stops drawing stops the measurement
+  # dead, and a guard waiting for a box to hold still would then be
+  # measuring the client's idleness. kitty redraws for its cursor
+  # blink and gives up on that after about fifteen seconds; a
+  # character every fifth of a second keeps it committing for as
+  # long as the guard is watching.
+  #
+  # The dots are foreground pixels and the box is the background
+  # colour's extent, so they cost nothing the measurement cares
+  # about.
   NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout 120 \
     "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
           -o "background=#$COLOR" \
           -o initial_window_width=640 -o initial_window_height=480 \
-          # Prints, rather than sitting idle. The probe runs on the submit
-          # path — it is called when a client commits a frame the engine
-          # takes — so a client that stops drawing stops the measurement
-          # dead, and a guard waiting for a box to hold still would then be
-          # measuring the client's idleness. kitty redraws for its cursor
-          # blink and gives up on that after about fifteen seconds; a
-          # character every fifth of a second keeps it committing for as
-          # long as the guard is watching.
-          #
-          # The dots are foreground pixels and the box is the background
-          # colour's extent, so they cost nothing the measurement cares
-          # about.
           sh -c 'while :; do printf .; sleep 0.2; done' >"$CLI_LOG" 2>&1 &
   STARTED+=($!)
 fi
@@ -206,6 +217,7 @@ if [ -z "$DRAWN" ]; then
   echo "--- the compositor's last words:"
   grep -aE "engine|frame sink|buffer|dmabuf" "$COMP_LOG" | tail -12 | sed 's/^/  /'
   [ "$NEGATIVE" = "1" ] && { echo "negative control: correct, nothing drew"; exit 0; }
+  annotate_from "spike-client-window: the engine never drew a client frame" "$COMP_LOG"
   exit 1
 fi
 
@@ -215,11 +227,11 @@ echo "the engine drew #$DRAWN; the client drew #$COLOR"
 # buffer is not resampled on the way to the page.
 if [ "${DRAWN#FF}" = "$COLOR" ]; then
   if [ "$NEGATIVE" = "1" ]; then
-    echo "NEGATIVE CONTROL FAILED: something drew when nothing should have" >&2
+    annotate "spike-client-window negative control: something drew when nothing should have"
     exit 1
   fi
   echo "PASS: a Wayland client's own window is on the page, in its own colour"
   exit 0
 fi
-echo "FAIL: the page is showing something that is not the client's buffer" >&2
+annotate "spike-client-window: the page is showing #$DRAWN, which is not the client's #$COLOR"
 exit 1

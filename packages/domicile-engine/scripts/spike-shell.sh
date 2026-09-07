@@ -27,14 +27,17 @@
 # `domicile_engine_spike_find_colour`.
 set -u
 
+SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
+. "$SCRIPTS/lib-annotate.sh"
+
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
-  echo "usage: spike-shell.sh <path to chromium/src> [shell]" >&2
+  annotate "spike-shell: no path to chromium/src was given"
   exit 1
 fi
 SHELL_NAME="${2:-simple}"
 
-SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
 SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
 [ -d "$SHELL_DIR" ] || {
@@ -90,22 +93,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# An annotation that carries what it read.
-#
-# GitHub reads `%0A` inside a workflow command as a newline, so a failure can
-# put the last of a log into the annotation itself. That matters because the
-# job log is where this would otherwise go, and the job log is a thousand lines
-# of Chromium's startup noise with a byte budget on top — the failure is in
-# there and unreachable, which is how the shell guard failed three times
-# saying only that it had.
-annotate_from() {
-  local title="$1" file="$2" body
-  body=$(tail -25 "$file" 2>/dev/null |
-           sed -e 's/%/%25/g' -e 's/\r/%0D/g' |
-           awk '{ printf "%s%%0A", $0 }')
-  echo "::error::$title%0A%0A$body"
-}
-
 [ -x "$CHROMIUM/$OUT/chrome" ] || {
   echo "::error::spike-shell: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
   exit 1
@@ -123,11 +110,11 @@ if command -v kitty >/dev/null; then
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  echo "SKIP: no kitty to draw with, and no nix to fetch one."
+  skip "spike-shell: no kitty to draw with, and no nix to fetch one"
   exit 77
 fi
 command -v bun >/dev/null || {
-  echo "SKIP: no bun, and the shell's page is built with its own vite config."
+  skip "spike-shell: no bun, and the shell's page is built with its own vite config"
   exit 77
 }
 
@@ -288,22 +275,22 @@ echo "the shell joined the compositor"
 DRAWN="$COLOR"
 [ "$NEGATIVE" = "1" ] && DRAWN="$OTHER_COLOR"
 echo "driving kitty, drawing #$DRAWN"
+# Prints, rather than sitting idle. The probe runs on the submit
+# path — it is called when a client commits a frame the engine
+# takes — so a client that stops drawing stops the measurement
+# dead, and a guard waiting for a box to hold still would then be
+# measuring the client's idleness. kitty redraws for its cursor
+# blink and gives up on that after about fifteen seconds; a
+# character every fifth of a second keeps it committing for as
+# long as the guard is watching.
+#
+# The dots are foreground pixels and the box is the background
+# colour's extent, so they cost nothing the measurement cares
+# about.
 NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout 180 \
   "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
         -o "background=#$DRAWN" \
         -o initial_window_width=640 -o initial_window_height=480 \
-        # Prints, rather than sitting idle. The probe runs on the submit
-        # path — it is called when a client commits a frame the engine
-        # takes — so a client that stops drawing stops the measurement
-        # dead, and a guard waiting for a box to hold still would then be
-        # measuring the client's idleness. kitty redraws for its cursor
-        # blink and gives up on that after about fifteen seconds; a
-        # character every fifth of a second keeps it committing for as
-        # long as the guard is watching.
-        #
-        # The dots are foreground pixels and the box is the background
-        # colour's extent, so they cost nothing the measurement cares
-        # about.
         sh -c 'while :; do printf .; sleep 0.2; done' >>"$CLI_LOG" 2>&1 &
 STARTED+=($!)
 

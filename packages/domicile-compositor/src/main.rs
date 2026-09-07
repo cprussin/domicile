@@ -1996,7 +1996,20 @@ impl DomicileCompositor {
                         }
                     }
                 }
-                self.find_settled = every_colour_found && nothing_moved;
+                // Said out loud, because the guards need it and cannot
+                // derive it. A box is logged only when it *moves*, so "the
+                // last line has not changed" is true whether the search ran
+                // or not — a script watching the log is watching the log's
+                // quiescence, not the page's. This is the compositor saying
+                // it looked again and nothing had moved, which is the claim
+                // a guard actually wants before it measures a width.
+                if every_colour_found && nothing_moved {
+                    self.find_settled = true;
+                    tracing::info!(
+                        target: "domicile::engine::spike",
+                        "engine settled: every colour it was looking for held still"
+                    );
+                }
             }
             // Stamped after the captures, not before: the interval is meant to
             // be a gap between readbacks, and a capture longer than it would
