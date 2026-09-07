@@ -24,8 +24,8 @@
 #   dcheck_always_on = false    a release should not abort on a DCHECK
 #
 # The ozone arguments are copied from build.sh rather than shared, because they
-# are the same for a reason that could stop being true: phase 3 swaps
-# ozone_platform_drm in, and it will want to do that here first.
+# are the same for a reason that could stop being true: this is the build a
+# person downloads, and it can want a platform the measurement build does not.
 set -u
 
 CHROMIUM="${1:-}"

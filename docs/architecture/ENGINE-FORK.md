@@ -590,8 +590,37 @@ autoninja -C out/Domicile chrome
 ./out/Domicile/chrome --ozone-platform=wayland
 ```
 
-Phase 3 swaps `ozone_platform_wayland` for `ozone_platform_drm`; nothing else
-about the build changes.
+**Phase 3 is not a build argument, and this is measured rather than assumed.**
+Setting `ozone_platform_drm = true` on this pin fails at configure time:
+
+```
+ERROR at //ui/ozone/platform/drm/BUILD.gn:14:1: Assertion failed.
+assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")
+See //ui/ozone/BUILD.gn:45:28: which caused the file to be included.
+  ozone_platform_deps += [ "platform/drm:gbm" ]
+```
+
+(run 34152521286). `//ui/ozone` makes `platform/drm:gbm` a dependency the
+moment the argument is true, so gn loads that file and evaluates the assert
+before anything is compiled. There is no companion argument that satisfies it;
+`is_chromeos` is `current_os == "chromeos"`, which is a different product.
+
+So a tty needs one of two things, and both are their own piece of work: a patch
+in the series that makes the DRM platform build on Linux — which is what a fork
+is for, and the series already carries five — or a `target_os = "chromeos"`
+build, which brings a great deal else with it.
+
+Until then the build is `wayland` and `headless`, and a desktop is a window
+inside an existing session. `--ozone-platform` still chooses at runtime between
+what is built.
+
+**A failed `gn gen` wedges the tree it failed in.** The argument is written to
+`args.gn` before the assert fires, and ninja re-runs gn on every build, so
+every later build in that output directory fails with `rebuild manifest
+failed` — on `crux`, which keeps one warm tree for every branch, that is every
+engine run until the arguments are written again. `scripts/build.sh` passes
+`--args` unconditionally now, which is both what makes an edit to it take
+effect and what repairs a tree somebody else's failure left behind.
 
 `ozone_platform_headless` is not part of the design — it is what the
 measurement machine needs. `crux` has no display server and no Wayland
