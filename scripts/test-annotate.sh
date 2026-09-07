@@ -98,6 +98,38 @@ last
 # A skip is not a failure. CI exits 77 and fails the step on its own; an
 # annotation that says `error` would paint a red mark on a run where a skip
 # was expected and allowed.
+# A build log does not end with its error. turbo prints eight lines of summary
+# after the failing task's output, so a window of a dozen carries the summary
+# and not the reason — which is the whole of what the annotation is for.
+BUILD_LOG="$(file_of 'ERROR: the thing that actually broke
+vite output
+vite output
+vite output
+vite output
+vite output
+vite output
+vite output
+vite output
+vite output
+vite output
+ERROR command finished
+
+Tasks:    1 successful
+Cached:   0 cached
+Time:     2s
+Failed:   one
+
+ERROR  run failed')"
+case "$(annotate_from "build failed" "$BUILD_LOG")" in
+  *"ERROR: the thing that actually broke"*)
+    printf '  ok    %s\n' "a build failure keeps its error, not just the summary" ;;
+  *)
+    printf '  FAIL  %s\n    got: %s\n' \
+      "a build failure keeps its error, not just the summary" \
+      "$(annotate_from "build failed" "$BUILD_LOG")"
+    FAILED=$((FAILED + 1)) ;;
+esac
+
 expect "a skip is a notice, not an error" \
   "SKIP: no kitty
 ::notice::no kitty" \

@@ -65,8 +65,12 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # The page, built the way the repository builds a shell — turbo's `build:vite`,
-# filtered to this one, which is how `flake.nix` builds them too. Nothing here
-# is a second way to build a shell.
+# filtered to this one, which is how run-native.sh and every other script here
+# builds one. Nothing here is a second way to build a shell.
+#
+# `CI=1` because turbo's `//#build:install-modules` runs a non-frozen
+# `bun install` without it, and declares `bun.lock` an output, so it can write
+# a lockfile over the one in the tree.
 #
 # Not just this package's vite: `build:vite` depends on `^prepare` and
 # `^build`, and both are needed on a checkout where nothing has been built.
@@ -76,7 +80,7 @@ trap cleanup EXIT INT TERM
 # without the SDK in it and the shell never joins the compositor.
 echo "building $SHELL_NAME's page"
 (cd "$ROOT" && bun install --frozen-lockfile >/dev/null &&
-   bun run turbo build:vite --filter="@domicile/shell-$SHELL_NAME") || {
+   CI=1 bun run turbo build:vite --filter="@domicile/shell-$SHELL_NAME") || {
   echo "the shell's page did not build" >&2
   exit 1
 }

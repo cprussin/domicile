@@ -33,12 +33,17 @@ annotate() {
 # A failure that carries the end of the log it read.
 #
 # The LAST lines, and reversed so the newest is first: GitHub truncates a long
-# annotation from the end, and the end of a build log is where the error is.
+# annotation from the end, and the end of a log is the part worth keeping.
+#
+# Forty of them, not a dozen. A build log does not end with its error — turbo
+# prints eight lines of summary after the failing task, and vite several more —
+# so a small window carries the epilogue and drops the reason, which is the one
+# thing the annotation exists to carry.
 annotate_from() {
   local title="$1" file="$2" body
   # Reversed in awk rather than by `tac`, which preserves a missing final
   # newline and so joins the last log line to the one before it.
-  body=$(tail -12 "$file" 2>/dev/null |
+  body=$(tail -40 "$file" 2>/dev/null |
            awk '{ line[NR] = $0 } END { for (i = NR; i > 0; i--) print line[i] }')
   # No body, no blank line: a log that is empty, absent or nothing but
   # whitespace is a failure with nothing to show rather than one with

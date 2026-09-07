@@ -125,12 +125,10 @@ command -v bun >/dev/null || {
   exit 77
 }
 
-# The shell's page, built the way the shell builds it. Nothing here is a second
-
-#
 # The shell's page, built the way the repository builds a shell: turbo's
-# `build:vite`, filtered to this shell. `flake.nix` spells it the same way, and
-# that is the point — a guard that built the page its own way would be
+# `build:vite`, filtered to this shell. Ten scripts in `scripts/` already spell
+# it that way, `run-native.sh` — this guard's direct counterpart — among them,
+# and that is the point: a guard that built the page its own way would be
 # measuring a page nobody ships.
 #
 # It matters because two generated things have to exist and neither is in the
@@ -139,6 +137,12 @@ command -v bun >/dev/null || {
 # published from `dist/`: `@domicile/chrome-sdk`'s exports map every entry
 # point to `./dist/*.js`, so on a checkout where nothing has been built,
 # `@domicile/chrome-sdk/bridge` does not resolve.
+#
+# `CI=1` because turbo's `//#build:install-modules` runs a NON-frozen
+# `bun install` when it is unset, one line after the frozen one above asked for
+# the opposite — and that task declares `bun.lock` an output, so even a cache
+# hit writes a lockfile over the working tree's. `flake.nix` sets it for the
+# same reason.
 #
 # `build:vite` has both edges — `^prepare` and `^build` — which is why it is
 # the whole answer and `turbo build` plus a `prepare` here was not: it built
@@ -155,7 +159,7 @@ BUILD_LOG=$(mktemp)
 SHELL_PKG="@domicile/shell-$SHELL_NAME"
 if ! (cd "$ROOT" &&
         bun install --frozen-lockfile &&
-        bun run turbo build:vite --filter="$SHELL_PKG") >"$BUILD_LOG" 2>&1; then
+        CI=1 bun run turbo build:vite --filter="$SHELL_PKG") >"$BUILD_LOG" 2>&1; then
   annotate_from "spike-shell: $SHELL_NAME's page did not build" "$BUILD_LOG"
   echo "the shell's page did not build. It said:" >&2
   tail -40 "$BUILD_LOG" >&2
