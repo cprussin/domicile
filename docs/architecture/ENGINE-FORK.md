@@ -257,12 +257,15 @@ Two new interfaces carry that, both narrow on purpose:
 is unrestricted authority to allocate frame sinks in viz, and no renderer holds
 it.
 
-**The reply waits for a producer, and that removed the startup hook.** An
-`<app>` element exists before the client window behind it does, so a page that
-embeds early is held rather than failed, and is answered when a producer
-connects. Which means nothing has to be started at browser startup: the broker
-and its socket are created when a page first asks. Step 2's one line in
-`browser_main_loop.cc` is gone and nothing replaced it.
+**The reply waits for a producer.** An `<app>` element exists before the client
+window behind it does, so a page that embeds early is held rather than failed,
+and is answered when a producer connects.
+
+**The socket opens at browser startup**, from one line in
+`browser_main_loop.cc`. It cannot wait for a page to ask: a shell's page mounts
+an `<app>` element only once the host announces a window, the host learns of
+windows from the compositor, and the compositor is the producer that connects
+over that socket.
 
 One thing binding it from a free function costs, and it is worth stating rather
 than discovering later: **the browser does not check that the renderer owns the
@@ -453,7 +456,7 @@ known and it is a build-system cost, not a language one.
 | dmabuf → `gpu::SharedImageInterface::CreateSharedImage` → `viz::TransferableResource` | ported from `components/exo/buffer.cc` | new |
 | Submitting `CompositorFrame`s for a sink | new external viz client | **proven** — step 2's throwaway submits from a process the browser never launched and viz aggregates it |
 | Brokering a `FrameSinkId` and sink to a non-renderer process | `components/domicile/`, modelled on `content/browser/renderer_host/embedded_frame_sink_provider_impl.cc` | **done** — new files + 4 lines across two `BUILD.gn`. Not `render_process_host_impl_receiver_bindings.cc` as first guessed: nothing about it hangs off a `RenderProcessHost` |
-| Getting the producer to the broker | `mojo::NamedPlatformChannel` + a real invitation | **done** — see *How the producer reaches the broker*. No edited file: the socket opens when a page first asks to embed, so it hangs off the same lazily-created service |
+| Getting the producer to the broker | `mojo::NamedPlatformChannel` + a real invitation | **done** — see *How the producer reaches the broker*. One edited file: the socket opens at browser startup, because a shell's page cannot embed until a window exists and no window exists until a producer has connected over it |
 | Pushing the `SurfaceId` to the page | `components/domicile/mojom/external_surface.mojom`, modelled on the `RemoteFrame` path | **done** — new files, plus one binder line in `render_process_host_impl_receiver_bindings.cc` |
 | An element that embeds it | `HTMLCanvasElement`, which already owns a `SurfaceLayerBridge` and a `cc::SurfaceLayer` for `transferControlToOffscreen` | **done** — `canvas.embedExternalSurface()`, 2 files + IDL as guessed, plus the flag and one `BUILD.gn` |
 
@@ -490,12 +493,13 @@ its custom element and loses the `AppFrame` plumbing behind it.
   placeholder.
 - **Minimise edited files, not added ones.** A fork's carrying cost is conflicts,
   and new files do not conflict. "Roughly four places" was the estimate before
-  the page half existed; measured, with steps 1–3 landed, it is **eight**, five
+  the page half existed; measured, with steps 1–3 landed, it is **nine**, five
   of them Blink's:
 
   | | |
   |---|---|
   | `components/BUILD.gn`, `content/browser/BUILD.gn` | source lists and deps |
+  | `content/browser/browser_main_loop.cc` | one call, opening the producer's socket at startup |
   | `content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc` | one `AddUIThreadInterface` beside the one for `EmbeddedFrameSinkProvider` |
   | `third_party/blink/renderer/core/html/canvas/html_canvas_element.{h,cc,idl}` | the method |
   | `third_party/blink/renderer/platform/runtime_enabled_features.json5` | the flag |
@@ -944,11 +948,11 @@ it builds a renderer on the render node whether or not anything is on screen.
 
 
 
-Whether the compositor holds one `DomicileEngine` and N surfaces, or one per
-app, is not settled — it follows from the "one surface per document" question
-step 4 raised, which is the chrome protocol's to answer. One engine and N
-surfaces is the assumption here, because one socket to the browser is one
-authority to hold.
+One `DomicileEngine` and N surfaces, not one engine per app: one socket to the
+browser is one authority to hold. The "one surface per document" question that
+used to be attached to this is settled and was never the chrome protocol's —
+the renderer keeps one `LocalSurfaceId` per app id, because viz will not let it
+do otherwise. See *Open questions*.
 
 ## Plan
 
@@ -1136,9 +1140,19 @@ Phase 3 — be the display server:
   `domicile_surface_import` still needs*. **This is a decision, not a detail:**
   the first hands a process the browser did not launch the same GPU authority a
   renderer has.
-- **One surface per document, in the spike only.** The measurement puts eight
-  `<app>` elements on one page against one producer, and it does that by
-  sharing the `LocalSurfaceId` the renderer allocated across the document. A
-  shell has one surface per app and which one an element shows is keyed by
-  which app it names — the chrome protocol's job, which is why the broker does
-  not do it. Phase 1 is where the key stops being "the only one".
+- ~~**One surface per document, in the spike only.**~~ Closed, and it was never
+  a simplification that could have been left standing. viz keys
+  `SurfaceAllocationGroup` on a `LocalSurfaceId`'s `embed_token` alone and
+  refuses a second `FrameSinkId` under a token another sink owns, so one token
+  per document does not give eight elements one producer — it gives the second
+  window no surface at all and shows the first window in its place.
+  `spike-two-windows.sh` measured exactly that. `ExternalSurfaceEmbedder` now
+  keeps one allocator per app id; the reasoning is in `AllocatorForApp`.
+- **Nothing invalidates a renderer's token when a producer goes away.** The map
+  above is keyed on an app id, and app ids are minted from a counter that
+  starts over when the compositor restarts. So a compositor restarting under a
+  running browser gets `app-1` brokered a new `FrameSinkId` while the page
+  still holds `app-1`'s old token, and every embed of it is refused from then
+  on. The browser knows when a producer disconnects — `OnProducerDisconnected`
+  drops its sinks — and does not tell the renderer. Phase 1's, and it is the
+  reload case a shell hits first.

@@ -12,7 +12,7 @@ use smithay::reexports::wayland_server::backend::ObjectId;
 use smithay::reexports::wayland_server::protocol::wl_buffer;
 use smithay::reexports::wayland_server::Resource as _;
 
-use crate::engine::{BufferId, Dmabuf, Engine, EngineError, Event, SurfaceId, LIBRARY};
+use crate::engine::{BufferId, Capture, Dmabuf, Engine, EngineError, Event, SurfaceId, LIBRARY};
 use crate::engine_buffers::{HeldBuffers, Returned};
 
 /// A buffer going back to the client, and why. Every one of these is a
@@ -20,6 +20,11 @@ use crate::engine_buffers::{HeldBuffers, Returned};
 #[derive(Debug)]
 pub struct Release {
     pub buffer: wl_buffer::WlBuffer,
+    /// Which window's it was. Carried rather than looked up by the caller
+    /// because by the time an expiry is reported the only thing that knows is
+    /// the hold it came out of — and "a buffer was never released" says
+    /// nothing useful without saying whose.
+    pub surface: SurfaceId,
     pub why: Returned,
 }
 
@@ -82,7 +87,7 @@ impl EngineSession {
         // buffer viz has only just been handed, which is the tear this whole
         // path exists to avoid. The one release the client is owed arrives when
         // viz is done with the submission it actually has.
-        drop(self.held.hold(id, surface, buffer.clone(), now));
+        drop(self.held.hold(surface, id, buffer.clone(), now));
         true
     }
 
@@ -96,9 +101,10 @@ impl EngineSession {
         let releases = events
             .iter()
             .filter_map(|event| match event {
-                Event::Released { buffer, .. } => {
-                    self.held.release(*buffer).map(|buffer| Release {
+                Event::Released { surface, buffer } => {
+                    self.held.release(*surface, *buffer).map(|buffer| Release {
                         buffer,
+                        surface: *surface,
                         why: Returned::Released,
                     })
                 }
@@ -115,8 +121,9 @@ impl EngineSession {
         self.held
             .expired(now)
             .into_iter()
-            .map(|(_, buffer)| Release {
+            .map(|((surface, _), buffer)| Release {
                 buffer,
+                surface,
                 why: Returned::Expired,
             })
             .collect()
@@ -134,8 +141,9 @@ impl EngineSession {
         self.held
             .abandon(surface)
             .into_iter()
-            .map(|(_, buffer)| Release {
+            .map(|((surface, _), buffer)| Release {
                 buffer,
+                surface,
                 why: Returned::Abandoned,
             })
             .collect()
@@ -147,8 +155,9 @@ impl EngineSession {
     pub fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) -> Option<Release> {
         let (surface, id) = self.imports.remove(&buffer.id())?;
         self.engine.forget(surface, id);
-        self.held.release(id).map(|buffer| Release {
+        self.held.release(surface, id).map(|buffer| Release {
             buffer,
+            surface,
             why: Returned::Abandoned,
         })
     }
@@ -156,6 +165,16 @@ impl EngineSession {
     /// THROWAWAY. See [`crate::engine::Engine::spike_window_centre`].
     pub fn spike_window_centre(&self) -> Option<u32> {
         self.engine.spike_window_centre()
+    }
+
+    /// THROWAWAY. See [`crate::engine::Engine::spike_pixel`].
+    pub fn spike_pixel(&self, x: i32, y: i32) -> Option<u32> {
+        self.engine.spike_pixel(x, y)
+    }
+
+    /// THROWAWAY. See [`crate::engine::Engine::spike_find`].
+    pub fn spike_find(&self, argb: u32) -> Option<Capture> {
+        self.engine.spike_find(argb)
     }
 
     /// Which app a surface belongs to, for an event that names only the

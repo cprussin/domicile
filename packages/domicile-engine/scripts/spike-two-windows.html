@@ -1,0 +1,84 @@
+<!doctype html>
+<!--
+  THROWAWAY. The one claim the broker's unit tests cannot make for themselves:
+  that viz aggregates TWO surfaces from a process outside the browser into one
+  page's layer tree.
+
+  frame_sink_broker_unittest asserts that two apps get two sinks and that a
+  waiting embed takes only its own app's. That is bookkeeping. Whether the
+  display compositor then resolves two SurfaceDrawQuads in one aggregation is a
+  different question, and until this page existed nothing had ever asked it.
+
+  Two canvases side by side, each naming its own app id. The fallback colours
+  differ from each other and from either client's, so a half-failure reads
+  correctly: one window drawn and one not is the interesting outcome, and it
+  would look identical to total failure if both fell back to the same colour.
+-->
+<meta charset="utf-8">
+<title>domicile: two windows on one page</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; }
+  /* Side by side and exactly half each, because the harness computes its probe
+     points from the window size and this layout: the left canvas's centre is
+     at a quarter of the width, the right one's at three quarters. */
+  body { display: flex; }
+  canvas { display: block; width: 50vw; height: 100vh; }
+  /* The negative controls, and they must differ. Indigo is what spike-page
+     uses for one <app>; teal is this page's second. */
+  #a { background: #3f51b5; }
+  #b { background: #00796b; }
+</style>
+<canvas height="480" id="a" width="320"></canvas>
+<canvas height="480" id="b" width="320"></canvas>
+<script>
+  // Two app ids, defaulting to what a compositor with two windows mints: the
+  // synthetic `app-N`, in the order the windows appeared. Not the clients'
+  // xdg_toplevel.app_id — see spike-page.html, which is where that finding is
+  // written down.
+  const params = new URLSearchParams(location.search);
+  const ids = [
+    ['a', params.get('a') ?? 'app-1'],
+    ['b', params.get('b') ?? 'app-2'],
+  ];
+
+  // A wrong app id does not fail — the browser holds an embed until that app
+  // has a producer, so it waits, and a page where one canvas waits forever
+  // looks exactly like a seam that only half works. This says which.
+  const EMBED_DEADLINE_MS = 20_000;
+  // Per canvas, because half-failure is this page's whole subject: one window
+  // embedded and one still waiting is the interesting outcome and a single
+  // flag would hide it.
+  const settled = new Set();
+  setTimeout(() => {
+    for (const [id, appId] of ids) {
+      if (!settled.has(id)) {
+        console.log('domicile: nothing embedded "' + appId + '" in #' + id +
+                    ' within ' + EMBED_DEADLINE_MS + 'ms. The browser holds ' +
+                    'an embed until that app has a producer, so either no ' +
+                    'producer connected or it registered a different app id.');
+      }
+    }
+  }, EMBED_DEADLINE_MS);
+
+  for (const [id, appId] of ids) {
+    const canvas = document.getElementById(id);
+    if (!canvas.embedExternalSurface) {
+      for (const [waiting] of ids) { settled.add(waiting); }
+      console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
+                  'flag is off');
+      break;
+    }
+    // Each resolves independently and neither waits on the other: a producer
+    // may be brokered a sink long after the page loaded, and the second window
+    // of a desktop always is.
+    canvas.embedExternalSurface(appId).then(
+      () => {
+        settled.add(id);
+        console.log('domicile: embedded ' + appId + ' in #' + id);
+      },
+      (error) => {
+        settled.add(id);
+        console.log('domicile: refused ' + appId + ': ' + error.message);
+      });
+  }
+</script>

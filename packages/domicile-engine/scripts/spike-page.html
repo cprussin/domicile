@@ -30,15 +30,39 @@
   const APP_ID =
     new URLSearchParams(location.search).get('app') ?? 'app-1';
 
+  // A wrong app id does not fail — the browser holds an embed until that app
+  // has a producer, so it waits, and a page that waits forever looks exactly
+  // like a seam that is broken. This is the difference.
+  const EMBED_DEADLINE_MS = 20_000;
+  // *Settled*, not embedded: a refusal is an answer and so is the runtime flag
+  // being off, and explaining either as "nothing embedded it" would give the
+  // wrong reason for a failure that already gave its own.
+  let settled = false;
+  setTimeout(() => {
+    if (!settled) {
+      console.log('domicile: nothing embedded "' + APP_ID + '" within ' +
+                  EMBED_DEADLINE_MS + 'ms. The browser holds an embed until ' +
+                  'that app has a producer, so either no producer connected ' +
+                  'or it registered a different app id.');
+    }
+  }, EMBED_DEADLINE_MS);
+
   const canvas = document.getElementById('app');
   if (canvas.embedExternalSurface) {
     // Resolves only once a producer has been brokered a frame sink, which may
     // be well after load: the browser holds the reply until then, because an
     // <app> element exists before the window behind it does.
     canvas.embedExternalSurface(APP_ID).then(
-      () => { console.log('domicile: embedded'); },
-      (error) => { console.log('domicile: refused: ' + error.message); });
+      () => {
+        settled = true;
+        console.log('domicile: embedded');
+      },
+      (error) => {
+        settled = true;
+        console.log('domicile: refused: ' + error.message);
+      });
   } else {
+    settled = true;
     console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
                 'flag is off');
   }

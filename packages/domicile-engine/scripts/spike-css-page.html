@@ -208,16 +208,55 @@
 
   const canvases = CELLS.map(buildCell);
 
+  // The one window this page measures against, and every element here names
+  // it on purpose: the measurement is several <app> elements against ONE
+  // producer, laid out beside ordinary elements, so they have to be the same
+  // window. Elements naming different apps get different surfaces — see
+  // ExternalSurfaceEmbedder's AllocatorForApp.
+  //
+  // `domicile-spike` is what surface_producer.cc registers, which is the
+  // producer every script that drives this page runs. The scripts pass it
+  // explicitly anyway: the default is a convenience for opening the page by
+  // hand, and a page whose app id is wrong does not fail, it waits — the
+  // browser holds an embed until that app has a producer, and an app that
+  // never turns up is an embed that never resolves.
+  const APP_ID =
+    new URLSearchParams(location.search).get('app') ?? 'domicile-spike';
+
+  // Which is why this exists. Without it a wrong app id is a blank page and a
+  // silent log, and that is indistinguishable from the seam being broken.
+  const EMBED_DEADLINE_MS = 20_000;
+  // *Settled*, not embedded. A refusal is an answer and so is the runtime flag
+  // being off; saying "nothing embedded it" after either would be explaining a
+  // failure that already explained itself, with the wrong reason.
+  let settled = false;
+  setTimeout(() => {
+    if (!settled) {
+      console.log('domicile: nothing embedded "' + APP_ID + '" within ' +
+                  EMBED_DEADLINE_MS + 'ms. The browser holds an embed until ' +
+                  'that app has a producer, so either no producer connected ' +
+                  'or it registered a different app id.');
+    }
+  }, EMBED_DEADLINE_MS);
+
   if (canvases[0].embedExternalSurface === undefined) {
+    settled = true;
     console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
                 'flag is off');
   } else {
-    // Every canvas embeds the same surface: there is one producer, so there is
-    // one surface, and the renderer shares the LocalSurfaceId it allocated for
-    // it across the document. Each promise resolves only once a producer has
-    // been brokered a frame sink, which may be well after load.
-    Promise.all(canvases.map((canvas) => canvas.embedExternalSurface())).then(
-      () => { console.log('domicile: embedded ' + canvases.length); },
-      (error) => { console.log('domicile: refused: ' + error.message); });
+    // Every canvas embeds the same surface, because every one of them names
+    // the same app: one window, so one surface, and the renderer keeps one
+    // LocalSurfaceId per app. Each promise resolves only once a producer has
+    // been brokered a frame sink for it, which may be well after load.
+    Promise.all(canvases.map((canvas) => canvas.embedExternalSurface(APP_ID)))
+      .then(
+        () => {
+          settled = true;
+          console.log('domicile: embedded ' + canvases.length);
+        },
+        (error) => {
+          settled = true;
+          console.log('domicile: refused: ' + error.message);
+        });
   }
 </script>

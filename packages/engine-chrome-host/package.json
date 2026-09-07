@@ -1,6 +1,7 @@
 {
   "dependencies": {
-    "@domicile/chrome-sdk": "workspace:*"
+    "@domicile/chrome-sdk": "workspace:*",
+    "zod": "catalog:"
   },
   "description": "The fork's half of a Domicile shell: the page's origin and its wire to the compositor, which is everything Electron's main process and preload were for.",
   "devDependencies": {

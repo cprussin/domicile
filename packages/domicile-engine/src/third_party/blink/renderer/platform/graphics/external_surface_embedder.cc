@@ -4,9 +4,13 @@
 
 #include "third_party/blink/renderer/platform/graphics/external_surface_embedder.h"
 
+#include <map>
+#include <string>
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/logging.h"
+#include "base/no_destructor.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -14,21 +18,50 @@
 namespace blink {
 namespace {
 
-// One external surface per renderer, shared by every element that embeds it.
+// One external surface per app, shared by every element that names that app.
 //
-// The spike has one producer, so it has one surface, and an element that asks
-// to embed is asking for that one. Sharing it is what lets a page put several
-// <app> elements side by side against a single producer, which is how the CSS
-// measurement compares each property against an ordinary element beside it.
+// Sharing within an app is what lets a page put several <app> elements side by
+// side against a single producer, which is how the CSS measurement compares
+// each property against an ordinary element beside it. Not sharing *across*
+// apps is what a desktop is: a shell has many windows and each element shows
+// the one it names.
 //
-// This is the spike's simplification and not the design's. A shell has many
-// apps and so many surfaces, and which one an element shows is keyed by which
-// app it names — the chrome protocol's job, not this layer's. What does not
-// change is who allocates: the embedder, because the embed_token in the id is
-// the capability the producer needs in order to submit at all.
-viz::ParentLocalSurfaceIdAllocator& SharedAllocator() {
-  static viz::ParentLocalSurfaceIdAllocator allocator;
-  return allocator;
+// Keying it is not a nicety. A LocalSurfaceId carries an embed_token, and viz
+// keys SurfaceAllocationGroup on that token alone — SurfaceManager's
+// GetOrCreateAllocationGroupForSurfaceId refuses a second FrameSinkId under a
+// token another sink already owns, "Cannot reuse embed token across frame
+// sinks", and the surface is never created. One allocator for the whole
+// renderer gives every app the same token, so the second window's surface does
+// not exist and the element embedding it resolves through the first window's
+// allocation group instead: two <app> elements, both showing window one. That
+// is what spike-two-windows.sh measured.
+//
+// The second reason is resizing. kReconfigure bumps the parent sequence
+// number, and one allocator would bump it for every app at once — resizing one
+// window would hand every other window's producer a surface id it was never
+// told about.
+//
+// What does not change is who allocates: the embedder, because the embed_token
+// is the capability the producer needs in order to submit at all.
+//
+// NOT INVALIDATED, and that is a live limitation rather than an oversight. A
+// compositor that restarts under a running browser mints `app-1` again from a
+// counter that starts over, and the browser brokers it a *new* FrameSinkId
+// while this map still holds the old app's token — which is the same refusal
+// as above, permanently, for as long as the page lives. Nothing today notices
+// a producer going away on this side of the seam. It wants the browser to say
+// so; see the open questions in docs/architecture/ENGINE-FORK.md.
+//
+// `std::map` rather than the `base::flat_map` the rest of this fork uses, and
+// the difference is load-bearing: this hands back a reference into the
+// container and a flat_map is a sorted vector, so the next app to turn up
+// would move the allocator out from under a caller still holding one. Do not
+// "tidy" it into a flat_map.
+viz::ParentLocalSurfaceIdAllocator& AllocatorForApp(const String& app_id) {
+  static base::NoDestructor<
+      std::map<std::string, viz::ParentLocalSurfaceIdAllocator>>
+      allocators;
+  return (*allocators)[app_id.Utf8()];
 }
 
 }  // namespace
@@ -51,7 +84,7 @@ void ExternalSurfaceEmbedder::Embed(
   // Resolved before the round trip rather than after it: this half of the
   // SurfaceId is ours, and the browser needs it in order to hand it to the
   // producer, which cannot invent one.
-  viz::ParentLocalSurfaceIdAllocator& allocator = SharedAllocator();
+  viz::ParentLocalSurfaceIdAllocator& allocator = AllocatorForApp(app_id);
   if (allocation == Allocation::kReconfigure ||
       !allocator.HasValidLocalSurfaceId()) {
     allocator.GenerateId();
@@ -59,22 +92,36 @@ void ExternalSurfaceEmbedder::Embed(
   const viz::LocalSurfaceId local_surface_id =
       allocator.GetCurrentLocalSurfaceId();
 
+  // THROWAWAY, with the rest of the spike. Which surface each element asked
+  // for and which one it got are the two facts a page showing the wrong
+  // window turns on, and until this line existed neither was written down
+  // anywhere: the browser knows the FrameSinkId and the page knows the
+  // element, and only here are both in one place.
+  LOG(INFO) << "domicile: embedding \"" << app_id.Utf8() << "\" at "
+            << local_surface_id.ToString() << " under "
+            << parent_frame_sink_id.ToString() << ", " << size.ToString();
+
   provider_->Embed(
       app_id, parent_frame_sink_id, local_surface_id, size,
       base::BindOnce(&ExternalSurfaceEmbedder::OnEmbedded,
-                     base::Unretained(this), std::move(callback),
+                     base::Unretained(this), std::move(callback), app_id,
                      local_surface_id));
 }
 
 void ExternalSurfaceEmbedder::OnEmbedded(
     EmbeddedCallback callback,
+    const String& app_id,
     const viz::LocalSurfaceId& local_surface_id,
     const std::optional<viz::FrameSinkId>& frame_sink_id) {
   if (!frame_sink_id) {
+    LOG(INFO) << "domicile: no surface for \"" << app_id.Utf8() << "\"";
     std::move(callback).Run(std::nullopt);
     return;
   }
-  std::move(callback).Run(viz::SurfaceId(*frame_sink_id, local_surface_id));
+  const viz::SurfaceId surface_id(*frame_sink_id, local_surface_id);
+  LOG(INFO) << "domicile: embedded \"" << app_id.Utf8() << "\" as "
+            << surface_id.ToString();
+  std::move(callback).Run(surface_id);
 }
 
 }  // namespace blink

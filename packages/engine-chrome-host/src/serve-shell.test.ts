@@ -181,4 +181,36 @@ describe("serveShell, before the compositor exists", () => {
     expect(await eventually(() => heard.length > 0)).toBeTrue();
     expect(heard.join("")).toBe('{"type":"hello"}\n');
   });
+
+  // The wait is bounded, and how long it is bounded for is the caller's: the
+  // gap it has to cover is the compositor starting, and on a CI runner that is
+  // minutes rather than the seconds a desktop takes. A session that gave up
+  // early leaves the page with a dead transport, which reads as a shell that
+  // never joined rather than as a budget that was too short.
+  it("gives up on a compositor that is never going to exist", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "domicile-bridge-budget-"));
+    const socketPath = path.join(dir, "never.sock");
+    cleanups.push(() => rm(dir, { force: true, recursive: true }));
+
+    const serving = serveShell({ reachForMs: 200, root: dir, socketPath });
+    cleanups.push(() => serving.stop());
+
+    const socket = new WebSocket(
+      `${serving.url.replace("http:", "ws:")}${SESSION_PATH.slice(1)}`,
+    );
+    cleanups.push(() => socket.close());
+    const closed: boolean[] = [];
+    socket.addEventListener("close", () => closed.push(true));
+
+    // Nothing is ever going to listen on that path, so the only thing that
+    // ends this is the budget running out. That it is *this* budget and not
+    // the default is what the short one buys: the default is thirty seconds
+    // and this test does not take thirty seconds.
+    //
+    // The lower bound is not asserted, and the seam to assert it on does not
+    // exist — `reach` takes an injectable clock but `serveShell` does not pass
+    // one through. Worth having when something depends on the wait being at
+    // least as long as it was asked for; nothing does yet.
+    expect(await eventually(() => closed.length > 0)).toBeTrue();
+  });
 });

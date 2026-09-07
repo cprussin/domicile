@@ -4,6 +4,7 @@
 
 #include "components/domicile/engine/domicile_engine.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -402,6 +403,24 @@ struct DomicileEngine {
     return sampled;
   }
 
+  // THROWAWAY. See domicile_engine_spike.h.
+  bool SamplePixel(int32_t x, int32_t y, uint32_t* argb) {
+    bool sampled = false;
+    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::SamplePixelOnThread,
+                                      base::Unretained(this), x, y, &sampled,
+                                      argb));
+    return sampled;
+  }
+
+  // THROWAWAY. See domicile_engine_spike.h.
+  int32_t FindColour(uint32_t argb, DomicileSpikeCapture* out) {
+    int32_t found = -1;
+    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::FindColourOnThread,
+                                      base::Unretained(this), argb, &found,
+                                      out));
+    return found;
+  }
+
   void DestroyBuffer(DomicileSurfaceId surface, DomicileBufferId buffer) {
     thread_.task_runner()->PostTask(
         FROM_HERE,
@@ -540,6 +559,86 @@ struct DomicileEngine {
     loop.Run();
   }
 
+  void SamplePixelOnThread(int32_t x,
+                           int32_t y,
+                           bool* sampled,
+                           uint32_t* argb) {
+    if (!probe_) {
+      return;
+    }
+    base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
+    probe_->SamplePixel(
+        gfx::Point(x, y),
+        base::BindOnce(
+            [](base::RunLoop* loop, bool* sampled, uint32_t* argb, bool ok,
+               uint32_t colour) {
+              *sampled = ok;
+              *argb = colour;
+              loop->Quit();
+            },
+            &loop, sampled, argb));
+    loop.Run();
+  }
+
+  void FindColourOnThread(uint32_t argb,
+                          int32_t* found,
+                          DomicileSpikeCapture* out) {
+    if (!probe_) {
+      return;
+    }
+    base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
+    probe_->CaptureWindow(base::BindOnce(
+        [](base::RunLoop* loop, uint32_t wanted, int32_t* found,
+           DomicileSpikeCapture* out, bool captured, const gfx::Size& size,
+           const std::vector<uint32_t>& pixels) {
+          // `captured` already implies a non-empty bitmap: SpikeProbe answers
+          // false for anything `SkBitmap::drawsNothing()` is true of, and that
+          // is exactly an empty or null one. So there is no zero-sized case to
+          // handle here — a branch for it would be a branch nothing can reach.
+          if (captured) {
+            out->window_width = size.width();
+            out->window_height = size.height();
+            *found = 0;
+
+            // Bounded by the smaller of what arrived and what `size` says: a
+            // short reply must not be read past, and a long one must not
+            // report a row below the bottom of the window.
+            const size_t width = static_cast<size_t>(size.width());
+            const size_t area = width * static_cast<size_t>(size.height());
+            const size_t last = std::min(area, pixels.size());
+
+            // The whole extent, not the first pixel — see the header. Walked
+            // once, row-major, keeping the corners.
+            int32_t left = size.width();
+            int32_t top = size.height();
+            int32_t right = -1;
+            int32_t bottom = -1;
+            for (size_t i = 0; i < last; ++i) {
+              if (pixels[i] != wanted) {
+                continue;
+              }
+              const int32_t x = static_cast<int32_t>(i % width);
+              const int32_t y = static_cast<int32_t>(i / width);
+              left = std::min(left, x);
+              right = std::max(right, x);
+              top = std::min(top, y);
+              bottom = std::max(bottom, y);
+            }
+
+            if (right >= 0) {
+              *found = 1;
+              out->x = left;
+              out->y = top;
+              out->width = right - left + 1;
+              out->height = bottom - top + 1;
+            }
+          }
+          loop->Quit();
+        },
+        &loop, argb, found, out));
+    loop.Run();
+  }
+
   void DestroyBufferOnThread(DomicileSurfaceId surface,
                              DomicileBufferId buffer) {
     auto iter = surfaces_.find(surface);
@@ -664,6 +763,25 @@ bool domicile_engine_spike_sample_window_center(DomicileEngine* engine,
     return false;
   }
   return engine->SampleWindowCenter(argb);
+}
+
+bool domicile_engine_spike_sample_pixel(DomicileEngine* engine,
+                                        int32_t x,
+                                        int32_t y,
+                                        uint32_t* argb) {
+  if (!engine || !argb) {
+    return false;
+  }
+  return engine->SamplePixel(x, y, argb);
+}
+
+int32_t domicile_engine_spike_find_colour(DomicileEngine* engine,
+                                          uint32_t argb,
+                                          DomicileSpikeCapture* out) {
+  if (!engine || !out) {
+    return -1;
+  }
+  return engine->FindColour(argb, out);
 }
 
 }  // extern "C"

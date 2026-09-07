@@ -31,6 +31,15 @@ const monotonicNow = (): number => performance.now();
 export type WebSocketLike = {
   readonly readyState: number;
   /**
+   * Which shape a binary frame arrives in. Set to `"arraybuffer"` below,
+   * because a browser's default is `"blob"` and a Blob is unreadable here.
+   *
+   * Optional so a test's socket need not carry one — `connect-to-host`'s does
+   * not — and typed as a plain string so a real `WebSocket`, whose own type is
+   * the narrow `BinaryType`, stays assignable.
+   */
+  binaryType?: string;
+  /**
    * `data` is optional so that a real `WebSocket` satisfies this. Its
    * `addEventListener` is typed against `Event`, which carries no `data` at
    * all — and a listener that required one would make the browser's own
@@ -74,6 +83,21 @@ export const webSocketTransport = (
   socket: WebSocketLike,
   now: typeof monotonicNow = monotonicNow,
 ): Transport => {
+  // THE PAGE HEARS NOTHING WITHOUT THIS, and hears it silently.
+  //
+  // A browser's `WebSocket` hands a binary frame over as a `Blob` unless it is
+  // told otherwise, and a Blob is only readable asynchronously — `bytes` below
+  // cannot take one without reordering the stream, so it throws. Without this
+  // line every message from the host would reach that throw while the page's
+  // own `hello` still went out: a desktop that never opens a window, and a
+  // console full of the reason.
+  //
+  // Written unconditionally rather than only when it is `"blob"`: it is
+  // settable on every WebSocket this runs on — the DOM's and Bun's — and on a
+  // plain object a test supplies it is an ordinary property, which is what the
+  // test for this reads back.
+  socket.binaryType = "arraybuffer";
+
   const read = createHostStreamReader();
   const held: { text: string; at: number }[] = [];
   const unsent: string[] = [];
@@ -129,13 +153,23 @@ export const webSocketTransport = (
 /**
  * What a message event's `data` is, as bytes.
  *
- * The bridge sends binary frames, which a browser hands over as an
- * `ArrayBuffer` when `binaryType` is set and as a `Blob` when it is not —
- * and a Blob is only readable asynchronously, which would reorder the stream.
- * So a string is accepted too and encoded: it is what a bridge that forwarded
- * text would produce, and the line reader cannot tell the difference.
- * Anything else is not a frame this understands, and an empty chunk is what
- * the reader does nothing with.
+ * Three shapes are the same stream and are all read: an `ArrayBuffer`, which
+ * is what `binaryType` above buys from every WebSocket that honours it; a view
+ * over one; and a string, which is what a bridge forwarding text rather than
+ * binary would produce and which the line reader cannot tell apart.
+ *
+ * **Anything else throws.** A Blob is the case that matters — it means the
+ * `binaryType` assignment did not take — and it cannot be supported anyway,
+ * because it is only readable asynchronously and reading it would reorder the
+ * stream. Returning no bytes instead is a silent fallback of exactly the kind
+ * ERRORS.md forbids, and this function is where that was: every frame the host
+ * sent was dropped, the page's own handshake still went out, and the whole
+ * visible symptom was a desktop with no windows in it and nothing written down
+ * anywhere. It throws once per frame rather than once per connection, which is
+ * the trade the previous shape was avoiding — a host that keeps talking fills
+ * the console — and the console is where it belongs: an unreadable frame means
+ * this page is not going to work. The reader is never entered, because this is
+ * the argument to it, so nothing downstream sees a partial stream.
  */
 const bytes = (data: unknown): Uint8Array => {
   if (data instanceof ArrayBuffer) {
@@ -147,5 +181,18 @@ const bytes = (data: unknown): Uint8Array => {
   if (typeof data === "string") {
     return new TextEncoder().encode(data);
   }
-  return new Uint8Array();
+  throw new Error(
+    `domicile: the host sent a frame this transport cannot read, so nothing it says will arrive. It is a ${nameOf(data)}`,
+  );
+};
+
+/** What to call `data` in the throw above; its constructor, or its typeof. */
+const nameOf = (data: unknown): string => {
+  if (typeof data !== "object" || data === null) {
+    return typeof data;
+  }
+  // `||` rather than `??`: an anonymous class's `name` is the empty string,
+  // which is a worse answer than "object" and which `??` would keep.
+  const named: unknown = Object.getPrototypeOf(data)?.constructor?.name;
+  return typeof named === "string" && named !== "" ? named : "object";
 };

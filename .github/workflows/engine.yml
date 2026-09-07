@@ -62,8 +62,30 @@ jobs:
       # Re-creating 97G is what this job is built to avoid.
       CHROMIUM: /build/chromium/src
 
+      # `apply.sh` ends in `git am`, which writes commits, and git refuses to
+      # write one without an identity. The runner's HOME is the work directory
+      # — deleted and recreated on every start — so there is no ~/.gitconfig
+      # and never will be, and the tree's own config has none either: it was
+      # first patched by hand, by a person who had one.
+      #
+      # These are the env vars git reads before it looks at any config, so
+      # nothing has to be written into a checkout that gets reset every run.
+      GIT_AUTHOR_NAME: domicile CI
+      GIT_AUTHOR_EMAIL: ci@domicile.invalid
+      GIT_COMMITTER_NAME: domicile CI
+      GIT_COMMITTER_EMAIL: ci@domicile.invalid
+
     steps:
       - uses: actions/checkout@v4
+
+      # /tmp is this unit's, not this job's: PrivateTmp is per-service, and the
+      # runner service outlives every job it runs. So a guard's log from the
+      # last run is still there when the next one starts, and the failure dump
+      # below will happily print it — which it did, for three reads of a job
+      # that had failed before any guard ran. Numbers from a previous run are
+      # worse than no numbers.
+      - name: Forget the last run's logs
+        run: rm -f /tmp/domicile-*.log
 
       # TWO SHELLS, AND WHICH ONE A STEP NEEDS IS NOT A DETAIL.
       #
@@ -97,8 +119,22 @@ jobs:
 
       # `apply.sh` is idempotent for `src/` (a copy) and not for `patches/` —
       # `git am` refuses to apply a patch twice — so the tree has to go back to
-      # the pin before every run. `reset --hard` and no `clean`: `out/Domicile`
-      # is gitignored and must survive, because it is the warm tree.
+      # the pin before every run.
+      #
+      # AND THE SERIES' OWN FILES HAVE TO GO WITH IT, which `reset --hard` does
+      # not do: they are untracked in Chromium's repository, and `reset` only
+      # touches what is tracked. `apply.sh` refuses a tree that
+      # `git status --porcelain` calls dirty — deliberately, it is not going to
+      # guess — so from the second run onward it stopped before it began, and
+      # because a command run through NIX_SHELL_RUN does not reliably carry its
+      # exit status out, nothing noticed. Every run after the first used the
+      # first one's sources and the first one's build.
+      #
+      # Removed file by file rather than with `git clean`, which would be the
+      # obvious tool and is the wrong one here: `-fd` would also delete
+      # anything else untracked that gclient's hooks put in this tree, and
+      # rebuilding it is four hours. The series knows exactly which files it
+      # lays down, so it removes exactly those.
       #
       # `am --abort` first, in case a previous run died mid-series and left the
       # rebase-apply state behind. It fails when there is nothing to abort,
@@ -109,12 +145,53 @@ jobs:
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
           git -C "$CHROMIUM" am --abort 2>/dev/null || true
           git -C "$CHROMIUM" reset --hard "$pin"
+          (cd packages/domicile-engine/src && find . -type f -print0) |
+            while IFS= read -r -d '' file; do
+              rm -f "$CHROMIUM/${file#./}"
+            done
+          dirty="$(git -C "$CHROMIUM" status --porcelain | head -5)"
+          [ -z "$dirty" ] || {
+            echo "::error::$CHROMIUM is still dirty after the reset, so apply.sh will refuse it:" >&2
+            echo "$dirty" >&2
+            exit 1
+          }
 
+          # In this checkout's own config, not the environment. `git am` writes
+          # commits and refuses to without an identity; this unit has no
+          # ~/.gitconfig, because its HOME is the work directory the module
+          # deletes on every start. The GIT_* environment variables would do
+          # it too — except apply.sh runs inside upstream's buildFHSEnv, whose
+          # bwrap hands the command a curated environment, and an identity that
+          # may or may not survive that is not one to depend on. The config
+          # lives in .git/config, which `reset --hard` does not touch and which
+          # is the same file from inside the sandbox.
+          git -C "$CHROMIUM" config user.name "domicile CI"
+          git -C "$CHROMIUM" config user.email "ci@domicile.invalid"
+
+      # NOT through Chromium's shell, and that was a mistake worth naming.
+      #
+      # This step used to enter it with NIX_SHELL_RUN, copied from the build
+      # step below without asking whether it needed to. `apply.sh` is `git`,
+      # `grep`, `cp` and `find` — every one of them already on this unit's
+      # PATH, and not one of them a Chromium host tool. What the wrapper bought
+      # was a sandbox that swallowed the script's exit status AND its output:
+      # five runs failed here saying nothing, and three more were spent
+      # building instruments to find out what.
+      #
+      # Run directly, the exit status is this step's and the error is in this
+      # log. The HEAD check stays anyway: `git am` commits each patch, so a
+      # HEAD still at the pin means the series did not go on, and that is worth
+      # asserting rather than inferring from an exit code.
       - name: Apply the series
         run: |
           set -euo pipefail
-          NIX_SHELL_RUN="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/apply.sh $CHROMIUM" \
-            nix develop "path:$CHROMIUM/tools/nix"
+          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+          packages/domicile-engine/scripts/apply.sh "$CHROMIUM"
+          [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
+            echo "::error::apply.sh succeeded but the checkout is still at the pin, so no patch was applied" >&2
+            exit 1
+          }
+          echo "series applied: $(git -C "$CHROMIUM" log --oneline "$pin..HEAD" | wc -l) patches"
 
       # `build.sh` builds `chrome` and the spike's submitter. The guard also
       # needs `libdomicile_engine.so` — the compositor dlopens it by name — and
@@ -127,13 +204,103 @@ jobs:
       # convention for a component's tests; the alternative is a `test()` target
       # of our own, and that is worth doing only if this link turns out to
       # dominate the run.
+      # THE SHELL HAS TO PROVE IT RAN THE COMMAND.
+      #
+      # `NIX_SHELL_RUN` is upstream's documented escape hatch for scripting
+      # this shell, and it was measured working — by a person, at a terminal.
+      # In CI this step returned success in one second, which is not a Chromium
+      # build of any kind, and the artifact check below is what noticed. A
+      # shell that silently runs nothing is the same failure as the apply step
+      # above, one layer along.
+      #
+      # So the command writes a sentinel and the step checks for it. If the
+      # documented mechanism did not run, the commands are piped in on stdin
+      # instead — which is what reaches a `runScript` that turned out to be
+      # a plain bash — and the sentinel is checked again. Whichever worked,
+      # the artifact check after this is still the thing that decides.
       - name: Build
         run: |
           set -euo pipefail
-          NIX_SHELL_RUN="$GITHUB_WORKSPACE/packages/domicile-engine/scripts/build.sh $CHROMIUM" \
-            nix develop "path:$CHROMIUM/tools/nix"
-          NIX_SHELL_RUN="autoninja -C $CHROMIUM/out/Domicile domicile_engine components_unittests" \
-            nix develop "path:$CHROMIUM/tools/nix"
+          done=/tmp/domicile-build-ran
+          rm -f "$done"
+
+          # `<nixpkgs>` has to resolve or the shell builds nothing:
+          # tools/nix/shell.nix imports it, and a systemd service has no
+          # NIX_PATH — that is something NixOS arranges for an interactive
+          # user, and this unit is not one. Without it nix-shell says "uses
+          # bash from your environment" and hands the script an ambient shell
+          # with no toolchain in it.
+          #
+          # From the flake registry rather than written down, because the
+          # registry is what pins nixpkgs on this machine and a second copy of
+          # that pin here would be a second thing to keep true.
+          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
+          echo "nixpkgs is $nixpkgs"
+          export NIX_PATH="nixpkgs=$nixpkgs"
+
+          # `nix-shell` with the shell.nix, which is the form spike-wayland.sh
+          # and spike-client-window.sh use and the only one that has ever run
+          # on this machine. `nix develop path:` wants a flake.nix and this
+          # directory ships a shell.nix; it entered nothing and exited 0, which
+          # was indistinguishable from success until the sentinel existed.
+          #
+          # A path, not a command: everything in NIX_SHELL_RUN is re-quoted
+          # twice on its way in.
+          if NIX_SHELL_RUN="$GITHUB_WORKSPACE/.github/scripts/engine-build.sh $CHROMIUM $done" \
+               nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-shell.log 2>&1; then
+            echo "the shell exited 0"
+          else
+            echo "the shell exited $?"
+          fi
+          tail -25 /tmp/domicile-shell.log | sed 's/^/  | /'
+
+          [ -e "$done" ] || {
+            echo "::error::Chromium's shell did not run the build; its last words are above" >&2
+            exit 1
+          }
+
+      # WHETHER THE BUILD ABOVE ACTUALLY BUILT, asked out here rather than
+      # trusted from in there.
+      #
+      # `nix develop` is entered with NIX_SHELL_RUN because upstream's shell is
+      # a buildFHSEnv whose shellHook execs bwrap — and a command run that way
+      # does not reliably carry its exit status back out. A failed `autoninja`
+      # can therefore leave this step green, and what runs next is then the
+      # previous build: the guards load a `libdomicile_engine.so` that is
+      # older than the source they were changed to test.
+      #
+      # That is not a hypothetical. It is what happened: the two-window guard
+      # spent five runs reporting that nothing drew, because the library it
+      # loaded had been built before the probe grew a coordinate, and the
+      # compositor's `dlsym` for the new entry point returned nothing.
+      #
+      # The symbols are matched as bytes rather than with `nm`, which is not on
+      # this unit's PATH out here. A name absent from the file is certainly not
+      # exported from it, which is the direction that matters.
+      - name: The build produced what the guards load
+        run: |
+          set -euo pipefail
+          out="$CHROMIUM/out/Domicile"
+          for artefact in chrome libdomicile_engine.so components_unittests; do
+            [ -e "$out/$artefact" ] || {
+              echo "::error::the build produced no $artefact" >&2
+              exit 1
+            }
+          done
+          ls -l "$out/chrome" "$out/libdomicile_engine.so"
+
+          missing=""
+          for symbol in domicile_engine_connect \
+                        domicile_engine_spike_sample_window_center \
+                        domicile_engine_spike_sample_pixel \
+                        domicile_engine_spike_find_colour; do
+            grep -qa "$symbol" "$out/libdomicile_engine.so" || missing="$missing $symbol"
+          done
+          [ -z "$missing" ] || {
+            echo "::error::libdomicile_engine.so is missing:$missing — it is older than the source. The build did not fail loudly enough." >&2
+            exit 1
+          }
+          echo "libdomicile_engine.so exports what the compositor looks up"
 
       # The browser's own unit tests. These are the cheapest thing that can
       # fail and the only ones that exercise the broker's bookkeeping directly
@@ -201,6 +368,61 @@ jobs:
             packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
             packages/domicile-engine/scripts/spike-client-window.sh "$CHROMIUM"
 
+      # Two clients, two windows, one page — the claim the broker's unit tests
+      # cannot make for themselves. They assert that two apps get two sinks;
+      # whether viz then resolves two SurfaceDrawQuads in one aggregation is a
+      # different question, and a shell is a desktop of windows.
+      - name: Two clients' windows on one page
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-two-windows.sh "$CHROMIUM"
+
+      # Its control is sharper than the one above, and it is the one that would
+      # have caught the heuristic this replaced: with a single client running,
+      # the second canvas must show its own fallback rather than the first
+      # client's window. A broker that dispatched on nothing would pass the
+      # two-client run and fail this.
+      - name: The second window is not the first
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-two-windows.sh "$CHROMIUM"
+
+      # And the thing all of the above is for. Every guard before it drives a
+      # page written for the guard; this one drives shell-simple, built by its
+      # own vite config, joined to the compositor by the SDK's own
+      # `connectToHost` over a WebSocket rather than an Electron preload, and
+      # mounting a `<domicile-app>` for a window it learned about from the
+      # host. Three things that have each failed on their own, and none of
+      # which any other guard touches.
+      #
+      # It asserts that the client's colour is somewhere in the browser's
+      # window rather than at a point, because the shell decides where its
+      # windows go and a coordinate here would be asserting shell-simple's CSS.
+      - name: A shell on the fork, showing a real client's window
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-shell.sh "$CHROMIUM"
+
+      # Its control: the same run with the client drawing a different colour.
+      # Not "no client", because the probe only runs when a client commits, so
+      # a run with nothing to submit would pass while measuring nothing.
+      - name: The shell guard is looking at the client's pixels
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/spike-shell.sh "$CHROMIUM"
+
       # Everything the guard writes down, because none of it is on stdout.
       #
       # `spike-wayland.sh` sends sway's output to a file and then says only "no
@@ -210,20 +432,10 @@ jobs:
       # `PrivateTmp=true` both are inside the runner unit's own /tmp, so they
       # are unreachable once the job ends — they have to be printed here or
       # they are lost.
+      # In a script, not inline. GitHub echoes every step's script into the
+      # log before running it, so forty lines of dump here is forty lines
+      # between a failure and the end of the log — which is exactly where a
+      # failure gets read from, and it cost four fetches to notice.
       - name: What the guard wrote down
         if: ${{ failure() }}
-        run: |
-          for log in /tmp/domicile-spike-wayland.log \
-                     /tmp/domicile-client-window-compositor.log; do
-            echo "::group::$log"
-            tail -200 "$log" 2>&1 || true
-            echo "::endgroup::"
-          done
-          # What the compositor is being asked to run on, for the case where
-          # sway itself never started: a service has no login session, and the
-          # render node is the one piece of the guard that needs a real device.
-          echo "::group::the environment sway got"
-          id
-          ls -l /dev/dri || true
-          echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-unset}"
-          echo "::endgroup::"
+        run: .github/scripts/engine-diagnostics.sh

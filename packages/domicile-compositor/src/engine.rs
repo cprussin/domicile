@@ -174,6 +174,45 @@ pub struct Engine {
     path: PathBuf,
 }
 
+/// `DomicileSpikeCapture`, exactly as the C header lays it out.
+///
+/// Six `int32_t` in a struct rather than an array, because Chromium builds
+/// with `-Wunsafe-buffer-usage` and indexing a bare pointer is an error there.
+/// Not public: [`Capture`] is what a caller wants, and this shape only exists
+/// to be filled in across the ABI.
+#[derive(Default)]
+#[repr(C)]
+struct RawCapture {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    window_width: i32,
+    window_height: i32,
+}
+
+/// Where a colour is in the browser's window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+/// THROWAWAY, with the rest of the spike. What one look at the browser's
+/// window found.
+///
+/// `window` is the captured bitmap's size, which is not obliged to be the size
+/// the browser was asked for — and a probe that could not say so is what makes
+/// a coordinate bug look like a missing surface. `bounds` is the colour's
+/// whole extent, or `None` if it is not in the window at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Capture {
+    pub window: (i32, i32),
+    pub bounds: Option<Bounds>,
+}
+
 impl Engine {
     /// Loads the library and joins the browser's mojo graph over `socket`.
     /// Surfaces come afterwards, one per window, from [`Engine::create_surface`].
@@ -320,6 +359,92 @@ impl Engine {
         unsafe { f(self.handle, &mut argb) }.then_some(argb)
     }
 
+    /// THROWAWAY, with the rest of the spike. What the display compositor drew
+    /// at `x`, `y` in the browser's window.
+    ///
+    /// The centre stops being enough the moment a page holds two `<app>`
+    /// elements: side by side, no pixel is inside both, and two windows on one
+    /// page is the claim the broker's unit tests cannot make for themselves.
+    pub fn spike_pixel(&self, x: i32, y: i32) -> Option<u32> {
+        // The two failures are told apart rather than merged into one `None`.
+        // A missing symbol means the library was built without this — an old
+        // out/ directory, or a build that did not include it — and a refused
+        // call means the point is outside the window. They have nothing in
+        // common and the first is invisible unless it is said.
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, i32, i32, *mut u32) -> bool> = match self
+            .symbol(
+                b"domicile_engine_spike_sample_pixel\0",
+                "domicile_engine_spike_sample_pixel",
+            ) {
+            Ok(symbol) => symbol,
+            Err(err) => {
+                tracing::error!(
+                    %err,
+                    "libdomicile_engine.so has no \
+                     domicile_engine_spike_sample_pixel; it was built before the probe \
+                     grew a coordinate. Rebuild it: autoninja -C out/Domicile \
+                     domicile_engine"
+                );
+                return None;
+            }
+        };
+        let mut argb = 0u32;
+        // SAFETY: as elsewhere — the handle is live, and `argb` outlives the
+        // call.
+        unsafe { f(self.handle, x, y, &mut argb) }.then_some(argb)
+    }
+
+    /// THROWAWAY, with the rest of the spike. Where `argb` is in the
+    /// browser's window, and how big that window is.
+    ///
+    /// `None` means nothing could be read — no window, nothing drawn, or no
+    /// probe. That is not the same as the colour being absent, and a guard's
+    /// negative control turns on the difference: "the colour is not there" is
+    /// the control passing and "nothing was read" is the control having
+    /// measured nothing while looking identical.
+    pub fn spike_find(&self, argb: u32) -> Option<Capture> {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *mut RawCapture) -> i32> = match self
+            .symbol(
+                b"domicile_engine_spike_find_colour\0",
+                "domicile_engine_spike_find_colour",
+            ) {
+            Ok(symbol) => symbol,
+            Err(err) => {
+                tracing::error!(
+                    %err,
+                    "libdomicile_engine.so has no domicile_engine_spike_find_colour; it was \
+                     built before the shell guard existed. Rebuild it: autoninja -C \
+                     out/Domicile domicile_engine"
+                );
+                return None;
+            }
+        };
+        // Zeroed, so that a field the library does not write is read as 0
+        // rather than as whatever was on the stack — the contract says only
+        // the size is written on 0, and only the box as well on 1.
+        let mut out = RawCapture::default();
+        // SAFETY: as elsewhere — the handle is live, and `out` is the
+        // `DomicileSpikeCapture` the header documents and outlives the call.
+        let status = unsafe { f(self.handle, argb, &mut out) };
+        let window = (out.window_width, out.window_height);
+        match status {
+            0 => Some(Capture {
+                window,
+                bounds: None,
+            }),
+            1 => Some(Capture {
+                window,
+                bounds: Some(Bounds {
+                    height: out.height,
+                    width: out.width,
+                    x: out.x,
+                    y: out.y,
+                }),
+            }),
+            _ => None,
+        }
+    }
+
     fn symbol<T>(&self, name: &[u8], readable: &'static str) -> Result<Symbol<'_, T>, EngineError> {
         symbol(&self.library, &self.path, name, readable)
     }
@@ -395,9 +520,21 @@ fn push(user_data: *mut c_void, event: Event) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use domicile_bridge::DmabufPlane as BridgePlane;
 
-    use super::*;
+    /// What the C header's `static_assert` cannot see: that this side still
+    /// has six fields. It catches a field added or dropped, which is the
+    /// mistake that reads the wrong half of a bounding box. It does not catch
+    /// a reorder or a signedness change — those keep the size and there is
+    /// nothing on this side that could notice them.
+    #[test]
+    fn a_capture_is_the_six_int32_the_c_header_declares() {
+        assert_eq!(
+            std::mem::size_of::<RawCapture>(),
+            6 * std::mem::size_of::<i32>()
+        );
+    }
 
     fn descriptor(planes: usize) -> DmabufDescriptor {
         DmabufDescriptor {

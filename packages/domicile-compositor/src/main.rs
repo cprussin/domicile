@@ -112,6 +112,7 @@ mod stacking;
 mod timing_window;
 mod viewport;
 
+use crate::engine::{Bounds, Capture};
 use crate::engine_buffers::Returned;
 use crate::engine_session::EngineSession;
 
@@ -1203,6 +1204,63 @@ struct DomicileCompositor {
     /// at its frame rate and the refusal does not change, so it is said once
     /// each rather than once a frame.
     shm_refused: HashSet<String>,
+
+    /// Apps whose first frame the engine has taken. A window that maps, is
+    /// brokered a sink and is configured has still shown nothing until it
+    /// commits a buffer the engine accepts, and those are three different
+    /// facts. Said once per app rather than once a frame, so a two-window run
+    /// says which of its windows ever drew.
+    first_frame_logged: HashSet<String>,
+
+    /// THROWAWAY, with the rest of the spike. When the pixel probe last ran.
+    ///
+    /// The probe forces a CopyOutputRequest and blocks this thread until viz
+    /// answers, so running it per submit costs a full readback per client per
+    /// frame. One client absorbed that; two did not — buffers stopped being
+    /// released at all, because this thread was inside the probe instead of
+    /// draining the engine's events. The guards poll for tens of seconds, so
+    /// four times a second is plenty and the cost is bounded whatever the
+    /// clients' frame rate.
+    last_probe: Option<Instant>,
+
+    /// THROWAWAY. Points the probe has already refused, so that saying so
+    /// costs one line rather than one per submit.
+    probe_refused: HashSet<(i32, i32)>,
+
+    /// THROWAWAY. Colours already reported absent, so a guard that polls for
+    /// ninety seconds gets one line rather than three hundred.
+    probe_missing: HashSet<u32>,
+
+    /// THROWAWAY. Colours the probe could not answer for at all. Separate from
+    /// `probe_missing` because "not on screen" and "nothing was read" are the
+    /// two answers the search exists to tell apart, and one set would let
+    /// either silence the other.
+    probe_unreadable: HashSet<u32>,
+
+    /// THROWAWAY. When the colour search last ran. Its own clock, because it
+    /// captures the whole window rather than a pixel and is throttled harder
+    /// than the point probe beside it.
+    last_find: Option<Instant>,
+
+    /// THROWAWAY. When the colour search first ran, which is what its budget
+    /// is measured from. Set on the first search rather than at startup: a
+    /// desktop with no client yet is not searching for anything, and starting
+    /// the clock then would spend the budget waiting.
+    find_since: Option<Instant>,
+
+    /// THROWAWAY. The last box logged for each colour, so a box is written
+    /// down when it moves rather than once when it first appears. A window
+    /// still painting is smaller than it will be, and how much of the page
+    /// each one covers is what the two-window guard asserts — which is also
+    /// why the guard waits for two consecutive readings that agree.
+    ///
+    /// Presence is what "found" means; a colour that goes absent is removed.
+    probe_boxes: HashMap<u32, Bounds>,
+
+    /// THROWAWAY. Whether the search is over — every colour found and none of
+    /// them moving, or the budget spent. A whole-window readback is a blocking
+    /// one, so a finished search stops paying for them.
+    find_settled: bool,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1676,10 +1734,35 @@ impl DomicileCompositor {
         for release in releases.into_iter().chain(overdue) {
             match release.why {
                 Returned::Released => {}
-                Returned::Expired => tracing::error!(
-                    "the engine never released a client buffer; taking it back so the client can \
-                     draw. Something in viz is holding a dmabuf it has finished with"
-                ),
+                // With the app id: "a buffer was never released" is a
+                // different fact about one window of two than about both, and
+                // a surface viz is not drawing at all is exactly the case
+                // where only one window's holds expire.
+                Returned::Expired => {
+                    // Two messages rather than one with a made-up app id in
+                    // it: every other `app_id` field in this binary carries an
+                    // app id, the diagnostics grep these lines, and a sentence
+                    // sitting in that field reads as an app literally called
+                    // that. `window_gone` abandons every hold it had in the
+                    // same call it forgets the app, so an expiry for a surface
+                    // nothing claims really does mean the window went first.
+                    match self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.app_for(release.surface))
+                    {
+                        Some(app_id) => tracing::error!(
+                            app_id,
+                            "the engine never released a client buffer; taking it back so the \
+                             client can draw. Something in viz is holding a dmabuf it has \
+                             finished with"
+                        ),
+                        None => tracing::error!(
+                            "the engine never released a buffer belonging to a window that has \
+                             since gone; taking it back"
+                        ),
+                    }
+                }
                 Returned::Abandoned => {
                     tracing::debug!("a held buffer came back because its window went away")
                 }
@@ -1769,19 +1852,225 @@ impl DomicileCompositor {
         if !session.submit(app_id, buffer, &descriptor, (0, 0, 0, 0), Instant::now()) {
             return false;
         }
+        // Tested before inserting: this is the submit path, at the client's
+        // frame rate, and `insert` would allocate a String for every frame of
+        // every window to answer a question it has already answered.
+        if !self.first_frame_logged.contains(app_id) {
+            self.first_frame_logged.insert(app_id.to_string());
+            info!(app_id, "the engine took this app's first frame");
+        }
         // THROWAWAY. The spike's assertion, and the only place it can be made:
         // the compositor holds the browser's invitation, so nothing else can
         // ask what viz drew. Logged rather than returned because the thing that
         // checks it is a shell script.
-        if let Some(drawn) = self
-            .engine
-            .as_ref()
-            .and_then(EngineSession::spike_window_centre)
-        {
-            tracing::info!(
-                target: "domicile::engine::spike",
-                "engine drew #{drawn:08X} at the centre of the browser's window"
-            );
+        // Throttled, and checked before the session is borrowed so that
+        // updating it does not fight the borrow.
+        const PROBE_EVERY: Duration = Duration::from_millis(250);
+        // `match` rather than `is_none_or`, which is stable later than this
+        // crate's MSRV, or `map_or(true, ..)`, which clippy rewrites into it.
+        let due = match self.last_probe {
+            None => true,
+            Some(at) => at.elapsed() >= PROBE_EVERY,
+        };
+        if !due {
+            return true;
+        }
+        self.last_probe = Some(Instant::now());
+        let Some(session) = self.engine.as_ref() else {
+            return true;
+        };
+        // Colours to find anywhere in the window, for a guard that cannot name
+        // a point because the shell decides where its windows go — and, as it
+        // turned out, because the coordinate space a named point is in is not
+        // the one the browser was asked for.
+        //
+        // Searched until every wanted colour has been found AND none of their
+        // boxes moved between two rounds. A box logged at first sight is a box
+        // measured mid-paint: a window that is still filling in is smaller
+        // than it will be, and the guard's assertion is about how much of the
+        // page each window covers. Settling also means the two boxes agree
+        // about one moment rather than being snapshots of different frames.
+        //
+        // Then it stops. The search captures the whole window and costs ~3 MB
+        // and a blocking readback a time, and `HeldBuffers`' deadline is
+        // 500ms — a search that runs forever is the compositor manufacturing
+        // the "never released" errors the log is being read for.
+        const FIND_EVERY: Duration = Duration::from_secs(2);
+        // A wall clock, not a count of rounds. The guards' poll begins after
+        // waiting for a broker socket, a compositor, a handshake and a client
+        // to map, so no number of rounds here can be matched to it. Five
+        // minutes is longer than any guard's whole run and still finite.
+        const FIND_FOR: Duration = Duration::from_secs(300);
+        let find_due = match self.last_find {
+            None => true,
+            Some(at) => at.elapsed() >= FIND_EVERY,
+        };
+        if find_due && !spike_find_colours().is_empty() && !self.find_settled {
+            // The first search, which is the first frame a client committed
+            // and the engine took: this whole block runs on the submit path.
+            // So a desktop with no client yet is not searching for anything
+            // and is not spending the budget waiting for one.
+            let since = *self.find_since.get_or_insert_with(Instant::now);
+            if since.elapsed() >= FIND_FOR {
+                // Once, on its own flag. Firing it from the loop condition
+                // meant it could only be said on a round that happened to
+                // straddle the budget, which is a few milliseconds out of
+                // every two seconds — so it was never said, and a guard
+                // reading "not found" could not tell that from "not
+                // looked for".
+                self.find_settled = true;
+                warn!(
+                    target: "domicile::engine::spike",
+                    seconds = FIND_FOR.as_secs(),
+                    "giving up looking for the colours that have not turned up; a whole-window \
+                     readback is time this thread is not releasing the client's buffers, and it \
+                     is not worth paying for a colour that was going to appear long ago"
+                );
+            } else {
+                let mut every_colour_found = true;
+                let mut nothing_moved = true;
+                for &argb in spike_find_colours() {
+                    match session.spike_find(argb) {
+                        Some(Capture {
+                            window: (w, h),
+                            bounds: Some(bounds),
+                        }) => {
+                            // Logged when it changes, so a page that has
+                            // settled says its geometry once and a page still
+                            // painting says it as often as it moves.
+                            if self.probe_boxes.insert(argb, bounds) != Some(bounds) {
+                                nothing_moved = false;
+                                let Bounds {
+                                    height,
+                                    width,
+                                    x,
+                                    y,
+                                } = bounds;
+                                tracing::info!(
+                                    target: "domicile::engine::spike",
+                                    "engine found #{argb:08X} over ({x},{y}) {width}x{height} \
+                                     of the browser's {w}x{h} window"
+                                );
+                            }
+                        }
+                        // Once, and only the first time. The guard polls, so
+                        // this is the state for most of a run and saying it
+                        // every tick would bury the line that matters.
+                        Some(Capture {
+                            window: (w, h),
+                            bounds: None,
+                        }) => {
+                            every_colour_found = false;
+                            // Forgotten, not kept. A colour that is found,
+                            // then absent, then found again would otherwise
+                            // settle by matching a box measured two rounds
+                            // earlier — which is not two consecutive readings
+                            // of the same thing, which is the whole point.
+                            self.probe_boxes.remove(&argb);
+                            if self.probe_missing.insert(argb) {
+                                tracing::info!(
+                                    target: "domicile::engine::spike",
+                                    "engine has not drawn #{argb:08X} anywhere in the browser's \
+                                     {w}x{h} window yet"
+                                );
+                            }
+                        }
+                        // Its own set, not `probe_missing`. Sharing one would
+                        // let a single transient unreadable capture silence
+                        // the real "has not drawn" measurement for the rest of
+                        // the run — and that line is what the negative
+                        // controls grep for, so the two answers this split
+                        // exists to separate would be merged again by the
+                        // thing meant to keep them apart.
+                        None => {
+                            every_colour_found = false;
+                            self.probe_boxes.remove(&argb);
+                            if self.probe_unreadable.insert(argb) {
+                                warn!(
+                                    target: "domicile::engine::spike",
+                                    "engine could not read the window at all looking for \
+                                     #{argb:08X}, so nothing was measured about it — which is \
+                                     not the same as the colour being absent"
+                                );
+                            }
+                        }
+                    }
+                }
+                // Said out loud, because the guards need it and cannot
+                // derive it. A box is logged only when it *moves*, so "the
+                // last line has not changed" is true whether the search ran
+                // or not — a script watching the log is watching the log's
+                // quiescence, not the page's. This is the compositor saying
+                // it looked again and nothing had moved, which is the claim
+                // a guard actually wants before it measures a width.
+                if every_colour_found && nothing_moved {
+                    self.find_settled = true;
+                    tracing::info!(
+                        target: "domicile::engine::spike",
+                        "engine settled: every colour it was looking for held still"
+                    );
+                }
+            }
+            // Stamped after the captures, not before: the interval is meant to
+            // be a gap between readbacks, and a capture longer than it would
+            // otherwise run back to back with no gap at all.
+            self.last_find = Some(Instant::now());
+        }
+
+        if spike_probe_points().is_empty() && spike_find_colours().is_empty() {
+            if let Some(drawn) = session.spike_window_centre() {
+                tracing::info!(
+                    target: "domicile::engine::spike",
+                    "engine drew #{drawn:08X} at the centre of the browser's window"
+                );
+            }
+        } else {
+            for &(x, y) in spike_probe_points() {
+                match session.spike_pixel(x, y) {
+                    Some(drawn) => tracing::info!(
+                        target: "domicile::engine::spike",
+                        "engine drew #{drawn:08X} at ({x},{y}) of the browser's window"
+                    ),
+                    // Said, not skipped, and this is the point. A probe that
+                    // answers nothing and logs nothing is indistinguishable
+                    // from a page that drew nothing, and the two have entirely
+                    // different causes: the first is the symbol missing from
+                    // the library or the point outside the window, the second
+                    // is the seam. Once per point, because this is on the
+                    // submit path.
+                    None => {
+                        if self.probe_refused.insert((x, y)) {
+                            // Two things left, and the centre tells them
+                            // apart. SamplePixel refuses both a point outside
+                            // the window and a window that has not been drawn
+                            // — the second returns an empty bitmap, which is
+                            // "the browser is not compositing at all" and is a
+                            // completely different problem. The centre is
+                            // always inside a window that exists, so an answer
+                            // from it means the bitmap is fine and this point
+                            // is not, and no answer means there is no bitmap.
+                            match session.spike_window_centre() {
+                                Some(centre) => warn!(
+                                    x,
+                                    y,
+                                    centre = format!("#{centre:08X}"),
+                                    "the probe refused this point but answered for the \
+                                     window's centre, so the browser is drawing and this \
+                                     point is outside its window"
+                                ),
+                                None => warn!(
+                                    x,
+                                    y,
+                                    "the probe refused this point AND the window's \
+                                     centre, so the browser has drawn nothing at all — \
+                                     which is not a probe fault and would also stop viz \
+                                     ever releasing a client's buffer"
+                                ),
+                            }
+                        }
+                    }
+                }
+            }
         }
         true
     }
@@ -4473,6 +4762,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_is_current: false,
         frames_held: 0,
         shm_refused: HashSet::new(),
+        first_frame_logged: HashSet::new(),
+        last_probe: None,
+        probe_refused: HashSet::new(),
+        probe_missing: HashSet::new(),
+        probe_unreadable: HashSet::new(),
+        last_find: None,
+        find_since: None,
+        probe_boxes: HashMap::new(),
+        find_settled: false,
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
@@ -4723,6 +5021,95 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// THROWAWAY, with the rest of the spike. Where in the browser's window to
+/// ask what viz drew, from `DOMICILE_SPIKE_PROBE` as `x,y;x,y`.
+///
+/// Empty -- the ordinary case -- means the window's centre, which is where a
+/// one-`<app>` page puts its canvas. A page with two of them has no pixel
+/// inside both, so the two-window guard names one point per canvas. Parsed
+/// once: this is called from the submit path, at the client's frame rate.
+///
+/// A malformed entry is dropped with a warning rather than failing the run.
+/// The guard checks for the colours it expects and reports their absence, so
+/// a probe that silently sampled nothing still fails -- loudly, and in the
+/// place that knows what it was looking for.
+fn spike_probe_points() -> &'static [(i32, i32)] {
+    static POINTS: std::sync::OnceLock<Vec<(i32, i32)>> = std::sync::OnceLock::new();
+    POINTS.get_or_init(|| {
+        let Ok(raw) = std::env::var("DOMICILE_SPIKE_PROBE") else {
+            return Vec::new();
+        };
+        raw.split(';')
+            .filter(|entry| !entry.trim().is_empty())
+            .filter_map(|entry| {
+                let (x, y) = entry.split_once(',')?;
+                match (x.trim().parse(), y.trim().parse()) {
+                    (Ok(x), Ok(y)) => Some((x, y)),
+                    _ => {
+                        warn!(entry, "DOMICILE_SPIKE_PROBE: not an `x,y` point; ignored");
+                        None
+                    }
+                }
+            })
+            .collect()
+    })
+}
+
+/// THROWAWAY, with the rest of the spike. Colours to look for anywhere in the
+/// browser's window, from `DOMICILE_SPIKE_FIND` as `RRGGBB;RRGGBB` or
+/// `AARRGGBB;AARRGGBB`.
+///
+/// The shell guard's question rather than the spike pages'. Those pages put
+/// their canvases where the harness can compute a point; a shell puts its
+/// windows where its own layout decides, so a guard that named a pixel would
+/// be asserting the shell's CSS. "This client's window is on the screen
+/// somewhere" is the claim that survives the shell being rewritten.
+///
+/// Six hex digits are taken as fully opaque, because that is what a colour
+/// written down in a guard means and `FF` in front of it is noise.
+fn spike_find_colours() -> &'static [u32] {
+    static COLOURS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
+    COLOURS.get_or_init(|| {
+        let Ok(raw) = std::env::var("DOMICILE_SPIKE_FIND") else {
+            return Vec::new();
+        };
+        parse_find_colours(&raw)
+    })
+}
+
+/// The parse [`spike_find_colours`] does, without the environment around it —
+/// which is what makes it testable at all, since the variable is read once per
+/// process.
+///
+/// A malformed entry is dropped with a warning rather than failing the run, on
+/// the same reasoning as `DOMICILE_SPIKE_PROBE`: the guard checks for the
+/// colour it expects and reports its absence, so a search that quietly looked
+/// for nothing still fails, loudly, where it is known what was wanted.
+fn parse_find_colours(raw: &str) -> Vec<u32> {
+    raw.split(';')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .filter_map(|entry| {
+            let digits = entry.strip_prefix('#').unwrap_or(entry);
+            match (digits.len(), u32::from_str_radix(digits, 16)) {
+                // Six digits are fully opaque, because that is what a colour
+                // written down in a guard means and `FF` in front of it is
+                // noise. The window's pixels are opaque, so a colour with no
+                // alpha would match nothing at all.
+                (6, Ok(rgb)) => Some(0xFF00_0000 | rgb),
+                (8, Ok(argb)) => Some(argb),
+                _ => {
+                    warn!(
+                        entry,
+                        "DOMICILE_SPIKE_FIND: not an `RRGGBB` or `AARRGGBB` colour; ignored"
+                    );
+                    None
+                }
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::{OsStr, OsString};
@@ -4740,8 +5127,9 @@ mod tests {
     use super::{
         announce_open_apps, answers_keystroke, bgra_to_rgba, broadcast_closed,
         broadcast_focus_decision, channel, chrome_connection, client_command, cursor_shape,
-        freshened, record_present, shadow_in_pixels, to_line, unmounts_the_element,
-        write_responses, ChromeHub, ClientRequest, Committer, FrameTimings, Outbound,
+        freshened, parse_find_colours, record_present, shadow_in_pixels, to_line,
+        unmounts_the_element, write_responses, ChromeHub, ClientRequest, Committer, FrameTimings,
+        Outbound,
     };
 
     use std::sync::Arc;
@@ -5562,5 +5950,43 @@ mod tests {
             "the wait belongs to the submit, not to the drawing: {:?}",
             composite.worst
         );
+    }
+
+    /// Six digits mean opaque, because the window's pixels are and a colour
+    /// with no alpha would match none of them.
+    #[test]
+    fn a_colour_with_no_alpha_is_opaque() {
+        assert_eq!(parse_find_colours("19B36B"), vec![0xFF19_B36B]);
+    }
+
+    #[test]
+    fn an_alpha_that_is_written_down_is_kept() {
+        assert_eq!(parse_find_colours("8019B36B"), vec![0x8019_B36B]);
+    }
+
+    /// A guard writes colours the way CSS does, and the harness that passes
+    /// them along should not have to strip anything.
+    #[test]
+    fn a_leading_hash_and_the_spaces_around_an_entry_are_not_part_of_the_colour() {
+        assert_eq!(
+            parse_find_colours(" #19B36B ; CC6633"),
+            vec![0xFF19_B36B, 0xFFCC_6633]
+        );
+    }
+
+    /// The run continues on a malformed entry, so a typo costs the colour that
+    /// was mistyped and not the ones beside it.
+    #[test]
+    fn an_entry_that_is_not_a_colour_is_dropped_and_the_rest_are_kept() {
+        assert_eq!(
+            parse_find_colours("19B36B;nonsense;CC6633"),
+            vec![0xFF19_B36B, 0xFFCC_6633]
+        );
+    }
+
+    #[test]
+    fn nothing_to_look_for_is_nothing_to_look_for() {
+        assert!(parse_find_colours("").is_empty());
+        assert!(parse_find_colours(";  ;").is_empty());
     }
 }

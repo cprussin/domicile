@@ -64,16 +64,31 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# The page. Built with the shell's own renderer config, which is the same build
-# Electron loads — nothing here is a second way to build a shell.
+# The page, built the way the repository builds a shell — turbo's `build:vite`,
+# filtered to this one, which is how run-native.sh and every other script that
+# builds a workspace shell does it. Nothing here is a second way to build a
+# shell.
+#
+# `CI=1` because turbo's `//#build:install-modules` runs a non-frozen
+# `bun install` without it. It does not close the other half: that task
+# declares `bun.lock` an output, so a cache hit restores a lockfile over the
+# tree's regardless. That belongs in `turbo.json`.
+#
+# Not just this package's vite: `build:vite` depends on `^prepare` and
+# `^build`, and both are needed on a checkout where nothing has been built.
+# `styled-system/` is generated and gitignored, and the workspace packages a
+# shell imports are published from `dist/` — `@domicile/chrome-sdk`'s exports
+# map every entry point to `./dist/*.js`, so without it the page builds
+# without the SDK in it and the shell never joins the compositor.
 echo "building $SHELL_NAME's page"
-(cd "$SHELL_DIR" && bun install --frozen-lockfile >/dev/null && bunx vite build --config vite.renderer.config.ts) || {
+(cd "$ROOT" && bun install --frozen-lockfile >/dev/null &&
+   CI=1 bun run turbo build:vite --filter="@domicile/shell-$SHELL_NAME") || {
   echo "the shell's page did not build" >&2
   exit 1
 }
-# Where the shell's own renderer config puts it. `main_window` is
-# electron-forge's name for the one window a shell opens, and it stays that
-# here rather than being special-cased: this runs the shell's build, not a
+# Where the shell's own renderer config puts it. `main_window` is what the
+# shell's `vite.renderer.config.ts` names the one window it opens, and it stays
+# that here rather than being special-cased: this runs the shell's build, not a
 # second one of our own.
 PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 [ -f "$PAGE_DIR/index.html" ] || {

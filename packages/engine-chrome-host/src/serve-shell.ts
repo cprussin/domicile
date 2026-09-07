@@ -33,6 +33,18 @@ export type ServeOptions = {
    * network can reach hands that to the network.
    */
   hostname?: string;
+  /**
+   * How long a page's session waits for a compositor that is not there yet,
+   * in milliseconds. See {@link REACH_FOR_MS} for why waiting at all is the
+   * normal case.
+   *
+   * Configurable for one reason: the budget has to cover the gap between the
+   * page loading and the compositor starting, and on a CI runner building a
+   * debug Chromium that gap is minutes rather than seconds. A guard that ran
+   * out would report "the shell never joined the compositor", which is not
+   * the thing it is guarding.
+   */
+  reachForMs?: number;
 };
 
 export type Serving = {
@@ -45,6 +57,7 @@ export type Serving = {
 export const serveShell = (options: ServeOptions): Serving => {
   const root = options.root;
   const socketPath = options.socketPath;
+  const reachForMs = options.reachForMs ?? REACH_FOR_MS;
 
   const server = Bun.serve<{ pending: (string | Uint8Array)[] }>({
     fetch: async (request, self) => {
@@ -88,7 +101,7 @@ export const serveShell = (options: ServeOptions): Serving => {
         }
       },
       open: (ws) => {
-        void reach(ws, socketPath);
+        void reach(ws, socketPath, reachForMs);
       },
     },
   });
@@ -125,9 +138,10 @@ const RETRY_EVERY_MS = 50;
 const reach = async (
   ws: BridgedSocket,
   socketPath: string,
+  reachForMs: number,
   now: () => number = Date.now,
 ): Promise<void> => {
-  const until = now() + REACH_FOR_MS;
+  const until = now() + reachForMs;
   for (;;) {
     try {
       await connect({
@@ -158,7 +172,7 @@ const reach = async (
         // biome-ignore lint/suspicious/noConsole: its only channel, and silence is the failure it reports
         console.error(
           `domicile: no compositor on ${socketPath} after ${String(
-            REACH_FOR_MS,
+            reachForMs,
           )}ms:`,
           failure,
         );
