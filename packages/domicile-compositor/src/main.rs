@@ -112,7 +112,7 @@ mod stacking;
 mod timing_window;
 mod viewport;
 
-use crate::engine::Capture;
+use crate::engine::{Bounds, Capture};
 use crate::engine_buffers::Returned;
 use crate::engine_session::EngineSession;
 
@@ -1236,6 +1236,12 @@ struct DomicileCompositor {
     /// ninety seconds gets one line rather than three hundred.
     probe_missing: HashSet<u32>,
 
+    /// THROWAWAY. Colours the probe could not answer for at all. Separate from
+    /// `probe_missing` because "not on screen" and "nothing was read" are the
+    /// two answers the search exists to tell apart, and one set would let
+    /// either silence the other.
+    probe_unreadable: HashSet<u32>,
+
     /// THROWAWAY. When the colour search last ran. Its own clock, because it
     /// captures the whole window rather than a pixel and is throttled harder
     /// than the point probe beside it.
@@ -1886,7 +1892,13 @@ impl DomicileCompositor {
         // "never released" errors the log is being read for. A colour that is
         // going to appear appears within a few seconds of the client drawing;
         // twenty tries is forty seconds of a ninety second poll.
-        const FIND_TRIES: u32 = 20;
+        //
+        // Forty-five at two seconds is ninety, which is what
+        // `spike-two-windows.sh` and `spike-shell.sh` poll for. Fewer would
+        // have the compositor stop looking while a guard is still asking, and
+        // a colour that turned up late would then be reported as never having
+        // turned up at all.
+        const FIND_TRIES: u32 = 45;
         let wanted = spike_find_colours()
             .iter()
             .copied()
@@ -1902,7 +1914,13 @@ impl DomicileCompositor {
                 match session.spike_find(argb) {
                     Some(Capture {
                         window: (w, h),
-                        bounds: Some((x, y, width, height)),
+                        bounds:
+                            Some(Bounds {
+                                height,
+                                width,
+                                x,
+                                y,
+                            }),
                     }) => {
                         self.probe_found.insert(argb);
                         // The whole extent and the window it is in, because a
@@ -1930,16 +1948,22 @@ impl DomicileCompositor {
                             );
                         }
                     }
-                    // Not the same thing, and a negative control that could
-                    // not tell them apart would pass having measured nothing.
+                    // Its own set, not `probe_missing`. Sharing one would let
+                    // a single transient unreadable capture silence the real
+                    // "has not drawn" measurement for the rest of the run —
+                    // and that line is what the negative controls grep for, so
+                    // the two answers this split exists to separate would be
+                    // merged again by the thing meant to keep them apart.
+                    //
+                    // Worded to match the shape the summaries grep for, so the
+                    // third answer is not the one that never appears in them.
                     None => {
-                        if self.probe_missing.insert(argb) {
+                        if self.probe_unreadable.insert(argb) {
                             warn!(
                                 target: "domicile::engine::spike",
-                                colour = format!("#{argb:08X}"),
-                                "the probe could not read the browser's window at all, so \
-                                 nothing was measured about this colour — which is not the \
-                                 same as the colour being absent"
+                                "engine could not read the window at all looking for \
+                                 #{argb:08X}, so nothing was measured about it — which is \
+                                 not the same as the colour being absent"
                             );
                         }
                     }
@@ -4710,6 +4734,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         probe_refused: HashSet::new(),
         probe_found: HashSet::new(),
         probe_missing: HashSet::new(),
+        probe_unreadable: HashSet::new(),
         last_find: None,
         find_tries: 0,
         chrome_toplevel: None,

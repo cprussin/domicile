@@ -241,7 +241,8 @@ echo
 echo "at ($PROBE_A_X,$PROBE_Y): #${DREW_A:-nothing}   expected #FF$COLOR_A"
 echo "at ($PROBE_B_X,$PROBE_Y): #${DREW_B:-nothing}   expected #FF$COLOR_B"
 echo "anywhere in the window:"
-grep -aoE "engine (found|has not drawn) #[0-9A-F]{8}.*" "$COMP_LOG" 2>/dev/null |
+grep -aoE "engine (found|has not drawn|could not read the window at all looking for) #[0-9A-F]{8}.*" \
+  "$COMP_LOG" 2>/dev/null |
   sort -u | sed 's/^/  /'
 
 if [ -z "$DREW_A" ] && [ -z "$DREW_B" ]; then

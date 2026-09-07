@@ -187,7 +187,7 @@ describe("serveShell, before the compositor exists", () => {
   // minutes rather than the seconds a desktop takes. A session that gave up
   // early leaves the page with a dead transport, which reads as a shell that
   // never joined rather than as a budget that was too short.
-  it("gives up after the budget it was given, and not before", async () => {
+  it("gives up on a compositor that is never going to exist", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "domicile-bridge-budget-"));
     const socketPath = path.join(dir, "never.sock");
     cleanups.push(() => rm(dir, { force: true, recursive: true }));
@@ -203,7 +203,14 @@ describe("serveShell, before the compositor exists", () => {
     socket.addEventListener("close", () => closed.push(true));
 
     // Nothing is ever going to listen on that path, so the only thing that
-    // ends this is the budget running out.
+    // ends this is the budget running out. That it is *this* budget and not
+    // the default is what the short one buys: the default is thirty seconds
+    // and this test does not take thirty seconds.
+    //
+    // The lower bound is not asserted, and the seam to assert it on does not
+    // exist — `reach` takes an injectable clock but `serveShell` does not pass
+    // one through. Worth having when something depends on the wait being at
+    // least as long as it was asked for; nothing does yet.
     expect(await eventually(() => closed.length > 0)).toBeTrue();
   });
 });

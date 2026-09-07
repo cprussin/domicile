@@ -174,18 +174,43 @@ pub struct Engine {
     path: PathBuf,
 }
 
+/// `DomicileSpikeCapture`, exactly as the C header lays it out.
+///
+/// Six `int32_t` in a struct rather than an array, because Chromium builds
+/// with `-Wunsafe-buffer-usage` and indexing a bare pointer is an error there.
+/// Not public: [`Capture`] is what a caller wants, and this shape only exists
+/// to be filled in across the ABI.
+#[derive(Default)]
+#[repr(C)]
+struct RawCapture {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    window_width: i32,
+    window_height: i32,
+}
+
+/// Where a colour is in the browser's window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
 /// THROWAWAY, with the rest of the spike. What one look at the browser's
 /// window found.
 ///
 /// `window` is the captured bitmap's size, which is not obliged to be the size
 /// the browser was asked for — and a probe that could not say so is what makes
 /// a coordinate bug look like a missing surface. `bounds` is the colour's
-/// whole extent as `(x, y, width, height)`, or `None` if it is not in the
-/// window at all.
+/// whole extent, or `None` if it is not in the window at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Capture {
     pub window: (i32, i32),
-    pub bounds: Option<(i32, i32, i32, i32)>,
+    pub bounds: Option<Bounds>,
 }
 
 impl Engine {
@@ -378,10 +403,11 @@ impl Engine {
     /// the control passing and "nothing was read" is the control having
     /// measured nothing while looking identical.
     pub fn spike_find(&self, argb: u32) -> Option<Capture> {
-        let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *mut i32) -> i32> = match self.symbol(
-            b"domicile_engine_spike_find_colour\0",
-            "domicile_engine_spike_find_colour",
-        ) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *mut RawCapture) -> i32> = match self
+            .symbol(
+                b"domicile_engine_spike_find_colour\0",
+                "domicile_engine_spike_find_colour",
+            ) {
             Ok(symbol) => symbol,
             Err(err) => {
                 tracing::error!(
@@ -393,20 +419,27 @@ impl Engine {
                 return None;
             }
         };
-        // Six, and the layout is the C header's: the colour's box in the first
-        // four and the captured window's size in the last two.
-        let mut out = [0i32; 6];
-        // SAFETY: as elsewhere — the handle is live, and `out` is the six
-        // int32_t the header documents and outlives the call.
-        let status = unsafe { f(self.handle, argb, out.as_mut_ptr()) };
+        // Zeroed, so that a field the library does not write is read as 0
+        // rather than as whatever was on the stack — the contract says only
+        // the size is written on 0, and only the box as well on 1.
+        let mut out = RawCapture::default();
+        // SAFETY: as elsewhere — the handle is live, and `out` is the
+        // `DomicileSpikeCapture` the header documents and outlives the call.
+        let status = unsafe { f(self.handle, argb, &mut out) };
+        let window = (out.window_width, out.window_height);
         match status {
             0 => Some(Capture {
-                window: (out[4], out[5]),
+                window,
                 bounds: None,
             }),
             1 => Some(Capture {
-                window: (out[4], out[5]),
-                bounds: Some((out[0], out[1], out[2], out[3])),
+                window,
+                bounds: Some(Bounds {
+                    height: out.height,
+                    width: out.width,
+                    x: out.x,
+                    y: out.y,
+                }),
             }),
             _ => None,
         }

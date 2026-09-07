@@ -15,7 +15,7 @@ for log in /tmp/domicile-spike-wayland.log \
            /tmp/domicile-*-bridge.log; do
   [ -f "$log" ] || continue
   echo "::group::$log"
-  grep -aE 'app_appeared|brokered a frame sink|configure ->|first frame|engine drew|engine found|has not drawn|agreed the protocol|never released|refused|ERROR|WARN|panic' \
+  grep -aE 'app_appeared|brokered a frame sink|configure ->|first frame|engine drew|engine found|has not drawn|could not read the window|agreed the protocol|never released|refused|ERROR|WARN|panic' \
     "$log" | tail -40 || true
   echo "--- last 10 lines:"
   tail -10 "$log" 2>&1 | cut -c1-300 || true
@@ -75,13 +75,15 @@ sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
   cut -c1-200 | sort -u || true
 
 # Per file, because this is the block that separates "the colour is in the
-# wrong place" from "the colour is not on screen", and a run and its negative
-# control give opposite answers on purpose.
+# wrong place" from "the colour is not on screen" from "nothing could be read",
+# and a run and its negative control give opposite answers on purpose. All
+# three of the probe's answers are matched: a summary that showed two of them
+# would merge the pair the third state was added to keep apart.
 echo "what was looked for and found, if anything:"
 for log in /tmp/domicile-*-compositor.log; do
   [ -f "$log" ] || continue
   sed 's/\x1b\[[0-9;]*m//g' "$log" 2>/dev/null |
-    grep -aoE 'engine (found|has not drawn) #[0-9A-F]{8}.*' | cut -c1-200 |
+    grep -aoE 'engine (found|has not drawn|could not read the window at all looking for) #[0-9A-F]{8}.*' | cut -c1-200 |
     sort -u | sed "s|^|  $(basename "$log"): |" || true
 done
 

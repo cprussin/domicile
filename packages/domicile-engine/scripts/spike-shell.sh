@@ -313,6 +313,11 @@ if [ "$NEGATIVE" = "1" ]; then
 fi
 
 if [ -z "$FOUND" ]; then
+  if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
+    echo "INCONCLUSIVE: the compositor stopped searching before this poll ran" \
+         "out, so 'not found' means 'not looked for'. Raise FIND_TRIES." >&2
+    exit 1
+  fi
   echo "FAIL: the client's window is not on the shell's page" >&2
   echo "--- the compositor's last words:" >&2
   grep -aE "engine|frame sink|chrome|buffer|ERROR" "$COMP_LOG" | tail -15 | sed 's/^/  /' >&2

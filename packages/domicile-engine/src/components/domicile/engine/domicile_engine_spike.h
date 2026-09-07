@@ -60,7 +60,9 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
 //   -1  the window could not be captured — no window yet, nothing drawn, or
 //       no probe pipe. Nothing was measured and nothing follows about the
 //       colour.
-//    0  captured, and the colour is not in it. This is a measurement.
+//    0  captured, and the colour is not in it. This is a measurement, and it
+//       includes a capture that came back with no pixels at all: a 0x0 window
+//       is a fact about the coordinate space, not a failure to read one.
 //    1  captured, and the colour is in it.
 //
 // Three values rather than a bool, because a guard's negative control turns on
@@ -68,10 +70,13 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
 // passing, and "nothing could be read" is the control having measured nothing
 // while looking identical.
 //
-// `out` is six int32_t. On 0 and 1 it carries the captured window's width and
-// height in `out[4]` and `out[5]`; on 1 it also carries the colour's bounding
-// box as x, y, width, height in `out[0]` through `out[3]`. Nothing is written
-// on -1.
+// `out` carries the answer. Its `window_width` and `window_height` are written
+// on 0 and 1; its `x`, `y`, `width` and `height` are written only on 1.
+// Nothing is written on -1.
+//
+// A struct rather than an array of six, because this tree builds with
+// `-Wunsafe-buffer-usage` and indexing a bare `int32_t*` is an error under it.
+// Naming the fields is what the warning is asking for anyway.
 //
 // A BOX AND A SIZE RATHER THAN A POINT, because the first matching pixel
 // answers the wrong question. A guard that samples a named point and gets the
@@ -93,10 +98,22 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
 // Exact match, like every other assertion in the spike: the clients draw one
 // flat colour and a near-match would mean the compositor's own background, an
 // anti-aliased edge, or a blend, none of which is a client's window.
+typedef struct DomicileSpikeCapture {
+  // The colour's bounding box in the captured bitmap.
+  int32_t x;
+  int32_t y;
+  int32_t width;
+  int32_t height;
+  // The captured bitmap's own size, which is not obliged to be the size the
+  // browser's window was asked for.
+  int32_t window_width;
+  int32_t window_height;
+} DomicileSpikeCapture;
+
 DOMICILE_ENGINE_EXPORT int32_t domicile_engine_spike_find_colour(
     DomicileEngine* engine,
     uint32_t argb,
-    int32_t* out);
+    DomicileSpikeCapture* out);
 
 #ifdef __cplusplus
 }  // extern "C"

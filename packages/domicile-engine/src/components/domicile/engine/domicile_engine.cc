@@ -413,7 +413,7 @@ struct DomicileEngine {
   }
 
   // THROWAWAY. See domicile_engine_spike.h.
-  int32_t FindColour(uint32_t argb, int32_t* out) {
+  int32_t FindColour(uint32_t argb, DomicileSpikeCapture* out) {
     int32_t found = -1;
     RunOnThreadAndWait(base::BindOnce(&DomicileEngine::FindColourOnThread,
                                       base::Unretained(this), argb, &found,
@@ -580,15 +580,26 @@ struct DomicileEngine {
     loop.Run();
   }
 
-  void FindColourOnThread(uint32_t argb, int32_t* found, int32_t* out) {
+  void FindColourOnThread(uint32_t argb,
+                          int32_t* found,
+                          DomicileSpikeCapture* out) {
     if (!probe_) {
       return;
     }
     base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
     probe_->CaptureWindow(base::BindOnce(
-        [](base::RunLoop* loop, uint32_t wanted, int32_t* found, int32_t* out,
-           bool captured, const gfx::Size& size,
+        [](base::RunLoop* loop, uint32_t wanted, int32_t* found,
+           DomicileSpikeCapture* out, bool captured, const gfx::Size& size,
            const std::vector<uint32_t>& pixels) {
+          if (captured) {
+            // Written whenever the window could be read at all, a zero-sized
+            // one included: a capture that comes back 0x0 is a fact about the
+            // coordinate space and reporting it as "nothing was measured"
+            // hides exactly the kind of mismatch this call exists to expose.
+            out->window_width = size.width();
+            out->window_height = size.height();
+            *found = 0;
+          }
           if (captured && size.width() > 0 && size.height() > 0) {
             // Bounded by the smaller of what arrived and what `size` says: a
             // short reply must not be read past, and a long one must not
@@ -615,16 +626,12 @@ struct DomicileEngine {
               bottom = std::max(bottom, y);
             }
 
-            out[4] = size.width();
-            out[5] = size.height();
-            if (right < 0) {
-              *found = 0;
-            } else {
+            if (right >= 0) {
               *found = 1;
-              out[0] = left;
-              out[1] = top;
-              out[2] = right - left + 1;
-              out[3] = bottom - top + 1;
+              out->x = left;
+              out->y = top;
+              out->width = right - left + 1;
+              out->height = bottom - top + 1;
             }
           }
           loop->Quit();
@@ -771,7 +778,7 @@ bool domicile_engine_spike_sample_pixel(DomicileEngine* engine,
 
 int32_t domicile_engine_spike_find_colour(DomicileEngine* engine,
                                           uint32_t argb,
-                                          int32_t* out) {
+                                          DomicileSpikeCapture* out) {
   if (!engine || !out) {
     return -1;
   }

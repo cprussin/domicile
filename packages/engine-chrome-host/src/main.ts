@@ -26,19 +26,52 @@ if (socketPath === undefined || root === undefined) {
   process.exit(2);
 }
 
+/**
+ * A whole number of milliseconds, or nothing.
+ *
+ * `Number()` alone is not enough at this boundary and the failure is not
+ * cosmetic: `Number("soon")` is `NaN`, `now() + NaN >= until` is *never* true,
+ * and a reach budget of `NaN` makes the bridge retry until the process dies —
+ * a page with a dead-looking transport and nothing said, which is the failure
+ * `reachForMs` was added to prevent. Set-but-empty is the other trap: it reads
+ * as `0`, which gives up on the first attempt.
+ *
+ * Refused rather than defaulted. A launcher that passed something meaningless
+ * meant something by it, and quietly running with a different number is how a
+ * guard measures a configuration nobody chose.
+ */
+const milliseconds = (
+  name: string,
+  raw: string | undefined,
+): number | undefined => {
+  if (raw === undefined) {
+    return undefined;
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) {
+    process.stderr.write(
+      `domicile: ${name} must be a whole number of milliseconds, not ${JSON.stringify(raw)}\n`,
+    );
+    process.exit(2);
+  }
+  return value;
+};
+
+const port = milliseconds("DOMICILE_PORT", environment.DOMICILE_PORT);
+const reachForMs = milliseconds(
+  "DOMICILE_REACH_MS",
+  environment.DOMICILE_REACH_MS,
+);
+
 const serving = serveShell({
   root,
   socketPath,
-  ...(environment.DOMICILE_PORT === undefined
-    ? {}
-    : { port: Number(environment.DOMICILE_PORT) }),
+  ...(port === undefined ? {} : { port }),
   // How long a page waits for a compositor that has not started yet. The
   // default suits a desktop; a CI runner starting a debug Chromium needs
   // longer, and a page whose session gave up looks exactly like a shell that
   // never joined.
-  ...(environment.DOMICILE_REACH_MS === undefined
-    ? {}
-    : { reachForMs: Number(environment.DOMICILE_REACH_MS) }),
+  ...(reachForMs === undefined ? {} : { reachForMs }),
 });
 
 // The line run-engine.sh reads. Prefixed so that anything else this process
