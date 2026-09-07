@@ -1214,6 +1214,10 @@ struct DomicileCompositor {
     /// four times a second is plenty and the cost is bounded whatever the
     /// clients' frame rate.
     last_probe: Option<Instant>,
+
+    /// THROWAWAY. Points the probe has already refused, so that saying so
+    /// costs one line rather than one per submit.
+    probe_refused: HashSet<(i32, i32)>,
     /// Which kinds of window input have been seen, so each is reported once
     /// rather than on every pointer motion.
     window_input_seen: HashSet<&'static str>,
@@ -1809,11 +1813,31 @@ impl DomicileCompositor {
             }
         } else {
             for &(x, y) in spike_probe_points() {
-                if let Some(drawn) = session.spike_pixel(x, y) {
-                    tracing::info!(
+                match session.spike_pixel(x, y) {
+                    Some(drawn) => tracing::info!(
                         target: "domicile::engine::spike",
                         "engine drew #{drawn:08X} at ({x},{y}) of the browser's window"
-                    );
+                    ),
+                    // Said, not skipped, and this is the point. A probe that
+                    // answers nothing and logs nothing is indistinguishable
+                    // from a page that drew nothing, and the two have entirely
+                    // different causes: the first is the symbol missing from
+                    // the library or the point outside the window, the second
+                    // is the seam. Once per point, because this is on the
+                    // submit path.
+                    None => {
+                        if self.probe_refused.insert((x, y)) {
+                            warn!(
+                                x,
+                                y,
+                                "the probe would not answer for this point: either \
+                                 libdomicile_engine.so has no \
+                                 domicile_engine_spike_sample_pixel, or the point is \
+                                 outside the browser's window. Nothing drew is a \
+                                 different thing and would say so"
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -4508,6 +4532,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         frames_held: 0,
         shm_refused: HashSet::new(),
         last_probe: None,
+        probe_refused: HashSet::new(),
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
