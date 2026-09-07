@@ -141,6 +141,27 @@ expect "a completed run with no floor is not a measurement" \
 expect "nor one with no commit-to-pixel" \
   "1" "$(verdict_code "$(run_log 16.67 '' 0 completed)" 0)"
 
+# A run that never reported at all. Distinct from every case above, which all
+# have an ending: a round only advances on a commit, so a client that answers a
+# key with no redraw leaves the run waiting rather than abandoning rounds. A
+# terminal that does not take OSC 11 for its background lands here, and the
+# message has to name that rather than blaming the seam.
+# Empty, so the title stands alone and can be compared whole: `annotate_from`
+# appends the log's tail, which is the right behaviour and not what is being
+# asserted here.
+NOTHING="$(mktemp "$FIXTURES/XXXXXX")"
+expect "a run that never reported fails" "1" "$(verdict_code "$NOTHING" 0)"
+expect "and names the client's redraw as a cause" \
+  "::error::spike-latency: the run never finished. Either the client never committed a frame after a key — check that it takes OSC 11 for its background — or the compositor stopped before it could report" \
+  "$(verdict "$NOTHING" 0)"
+
+# And with a log behind it, which is the real case: still a failure, and the
+# log's tail comes with the annotation.
+STARTED_ONLY="$(mktemp "$FIXTURES/XXXXXX")"
+say "latency: the display frame is 16.67 ms" >"$STARTED_ONLY"
+expect "a run that priced the probe and then stopped also fails" \
+  "1" "$(verdict_code "$STARTED_ONLY" 0)"
+
 # --- the negative control, which is where a wrong answer hides ---
 
 CONTROL="$(run_log 16.67 '' 3 completed)"

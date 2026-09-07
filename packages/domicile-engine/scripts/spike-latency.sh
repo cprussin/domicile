@@ -208,7 +208,18 @@ done
 ENDED="$(latency_ended "$COMP_LOG")"
 echo
 if [ -z "$ENDED" ]; then
-  annotate_from "spike-latency: the run never finished, so nothing was measured" "$COMP_LOG"
+  # A round is only advanced by a commit, so a client that answers a key with
+  # no redraw at all leaves the run waiting rather than abandoning rounds — the
+  # two failures of "the client did not answer" look different from here, and
+  # this is the quieter one. A terminal that does not take OSC 11 for its
+  # background would land exactly here.
+  # One string, then the log. `annotate_from` takes exactly two arguments —
+  # a title and a file — so a title split across three would have made the
+  # second fragment the filename and thrown the rest away. This branch shipped
+  # that once already, in `annotate`, and it read as a complete sentence.
+  annotate_from "spike-latency: the run never finished. Either the client never \
+committed a frame after a key — check that it takes OSC 11 for its background \
+— or the compositor stopped before it could report" "$COMP_LOG"
   echo "what the compositor said:" >&2
   grep -aE "latency|engine|frame sink|ERROR" "$COMP_LOG" | tail -15 | sed 's/^/  /' >&2
   exit 1
