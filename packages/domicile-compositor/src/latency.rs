@@ -151,22 +151,30 @@ pub struct Report {
     /// this one's min, median and max collapse onto multiples of the floor —
     /// only this one: `key_to_commit` is timed to the real commit callback and
     /// `key_to_pixel` is that added to this, so neither lands on a multiple.
+    ///
     /// That is what makes
     /// "indistinguishable from the floor" the result rather than a hedge — and
     /// it is also the instrument's resolution: a regression in this half
-    /// smaller than one probe round trip does not show up here. `key_to_commit`
-    /// is not quantised, being timed to the real commit callback, so the two
-    /// do not have the same resolution.
+    /// smaller than one probe round trip does not show up here.
     pub commit_to_pixel: Option<Spread>,
     /// The whole of it. Not what a user feels: it has the probe's round trip
     /// in it, and a user waits for no `CopyOutputRequest`.
     pub key_to_pixel: Option<Spread>,
     /// Rounds that ran out of polls rather than seeing the colour change.
     ///
-    /// The client stopped answering, or never answered a key at all — which is
-    /// what a run against a client that ignores the keyboard looks like, and
-    /// is the whole of what the negative control asserts.
+    /// The client was asked and did not answer — which is what a run against a
+    /// client that ignores the keyboard looks like, and is the whole of what a
+    /// negative control asserts.
     pub abandoned: usize,
+    /// Rounds whose key was never delivered, because there was no surface to
+    /// deliver it to.
+    ///
+    /// **Its own count, not `abandoned`.** The client was never asked, so
+    /// counting it against the client would be the wrong-end report this whole
+    /// instrument keeps having to fix. Nothing here is the client's fault and
+    /// nothing here is a measurement; it is this compositor failing to do the
+    /// one thing a round starts with.
+    pub undelivered: usize,
     /// Why the run stopped, when it was not by running out of rounds.
     ///
     /// Separate from `abandoned` because they are different accusations: an
@@ -328,10 +336,37 @@ pub struct Latency {
     commit_to_pixel: Vec<Duration>,
     key_to_pixel: Vec<Duration>,
     abandoned: usize,
+    undelivered: usize,
 }
 
 impl Latency {
+    /// # Panics
+    ///
+    /// On a budget that cannot measure anything, which is a caller's mistake
+    /// rather than a run's outcome and is therefore loud. Every one of these
+    /// silently disabled something: a floor of one sample prices the probe
+    /// against nothing, a floor budget no larger than the floor cannot let one
+    /// complete, and a refusal cap at or above the floor's budget means a probe
+    /// that refuses from the first ask is reported as a screen that would not
+    /// hold still.
     pub fn new(budget: Budget) -> Self {
+        assert!(budget.rounds > 0, "a run of no rounds measures nothing");
+        assert!(
+            budget.floor_samples > 1,
+            "a floor of one sample prices the probe against nothing"
+        );
+        assert!(
+            budget.max_floor_asks > budget.floor_samples,
+            "the floor cannot complete inside its own budget"
+        );
+        assert!(
+            budget.max_refusals_running > 0 && budget.max_refusals_running < budget.max_floor_asks,
+            "the refusal cap has to be reachable, and reachable first"
+        );
+        assert!(
+            budget.max_polls > 0,
+            "a round of no polls cannot see a change"
+        );
         Self {
             budget,
             phase: Phase::Floor {
@@ -348,6 +383,7 @@ impl Latency {
             commit_to_pixel: Vec::new(),
             key_to_pixel: Vec::new(),
             abandoned: 0,
+            undelivered: 0,
         }
     }
 
@@ -406,13 +442,17 @@ impl Latency {
             } => {
                 let asked = asked + 1;
                 // The budget is spent first, before anything can advance past
-                // it. Checked after the still-arm, a run of agreeing answers
-                // could carry `taken` up regardless, and the real bound on how
-                // long the driver blocks became `max_floor_asks +
-                // floor_samples` rather than `max_floor_asks`.
-                self.phase = if asked >= self.budget.max_floor_asks
-                    && taken + 1 < self.budget.floor_samples
-                {
+                // it, and unconditionally. Checked after the still-arm, a run
+                // of agreeing answers could carry `taken` up regardless and the
+                // real bound became `max_floor_asks + floor_samples`. Guarded
+                // by "unless this ask would complete the floor", it was dead
+                // whenever `floor_samples <= 1` — `taken + 1 >= 1` always — and
+                // a moving screen could then ask for ever, which is the hang
+                // these budgets exist to stop. A floor that would have settled
+                // on its very last permitted ask gives up instead; that costs
+                // one run in four hundred asks and buys a bound that is simply
+                // `max_floor_asks`.
+                self.phase = if asked >= self.budget.max_floor_asks {
                     Phase::Done(Ended::NeverSettled)
                 } else {
                     match (holding, since) {
@@ -531,16 +571,25 @@ impl Latency {
                 ..
             } => {
                 // Which budget ran out is which end failed, and the two are
-                // asked separately for exactly that reason. Refusals in a row
-                // are the probe. The floor's own budget running out is the
-                // screen — even when a refusal is the ask that spends the last
-                // of it, because what that budget measures is a floor that
-                // never completed.
-                if refused + 1 >= self.budget.max_refusals_running {
-                    Phase::Done(Ended::ProbeWentDark)
-                } else if asked + 1 >= self.budget.max_floor_asks {
+                // counted separately for exactly that reason. The floor's own
+                // budget is asked first, so a refusal that happens to spend the
+                // last of it is the screen — what that budget measures is a
+                // floor that never completed, whatever the last ask was. Only a
+                // run of refusals with the floor's budget still in hand is the
+                // probe, and `Budget` requires `max_refusals_running` to be the
+                // smaller of the two so that a probe refusing from the start
+                // always reaches its own cap first.
+                if asked + 1 >= self.budget.max_floor_asks {
                     Phase::Done(Ended::NeverSettled)
+                } else if refused + 1 >= self.budget.max_refusals_running {
+                    Phase::Done(Ended::ProbeWentDark)
                 } else {
+                    // Cleared, as the moved-screen restart clears: a refusal is
+                    // not an answer, so what was timed before it is a run of
+                    // answers with a hole in it. Left populated, a run that
+                    // ends in refusals reports a real-looking floor over one or
+                    // two samples, and `lib-latency.sh` reads it as the floor.
+                    self.floor.clear();
                     Phase::Floor {
                         taken: 0,
                         since,
@@ -557,18 +606,19 @@ impl Latency {
     /// A round's key could not be delivered, because the client has no surface
     /// to deliver it to.
     ///
-    /// **Called, rather than left to time out, because nothing would.** The
-    /// press has already moved the run into `Pressed`, and the only way out of
+    /// **Called, rather than left to time out, because nothing would.** `next`
+    /// has already moved the run into `Pressed`, and the only way out of
     /// `Pressed` is a commit — which is what the key was for. A client that
     /// does not redraw on its own would leave the run there for ever and no
     /// report would ever be printed, which is the shape of the bug this whole
-    /// file has been fixing. The round is the client's to answer and it did
-    /// not, so it is abandoned like any other.
+    /// file has been fixing.
+    ///
+    /// Counted as `undelivered` rather than `abandoned`: the client was never
+    /// asked. Only ever called out of the `Press` arm, so the phase is
+    /// `Pressed` and there is nothing to check for.
     pub fn press_went_nowhere(&mut self) {
-        if matches!(self.phase, Phase::Pressed { .. }) {
-            self.abandoned += 1;
-            self.end_round();
-        }
+        self.undelivered += 1;
+        self.end_round();
     }
 
     /// The run's numbers, and how it ended. `None` while it is still running:
@@ -583,6 +633,7 @@ impl Latency {
             commit_to_pixel: Spread::of(&self.commit_to_pixel),
             key_to_pixel: Spread::of(&self.key_to_pixel),
             abandoned: self.abandoned,
+            undelivered: self.undelivered,
             ended,
         })
     }
@@ -690,9 +741,8 @@ mod tests {
         assert_eq!(spread.max, ms(40));
     }
 
-    /// `lib-latency.sh` greps this. It is asserted whole rather than by
-    /// substring for
-    /// the reason `test-annotate.sh` asserts whole lines: a rewording that
+    /// `lib-latency.sh` greps this. Asserted whole rather than by substring,
+    /// for the reason `test-annotate.sh` asserts whole lines: a rewording that
     /// keeps the words but moves them is exactly what breaks a grep.
     #[test]
     fn a_spread_reports_itself_in_the_shape_the_guard_reads() {
@@ -775,8 +825,8 @@ mod tests {
             rounds: 1,
             floor_samples: 3,
             max_floor_asks: 8,
+            max_refusals_running: 4,
             max_polls: 10,
-            ..Budget::default()
         });
         for step in 0..8 {
             assert_eq!(driver.tick(ms(1)), Step::Sample);
@@ -972,23 +1022,86 @@ mod tests {
         assert_eq!(report.ended, Ended::NeverSettled);
     }
 
-    /// And the mirror: a probe refusing over and over is a dark probe, however
-    /// much of the floor's own budget is left.
+    /// The refusal counter is a run of them, so an answer clears it. Without
+    /// that, a screen that moves with the odd refusal in it accumulates
+    /// refusals across the whole floor and is reported as a dark probe — which
+    /// is the wrong-end report this counter was split out to prevent.
     #[test]
-    fn refusals_in_a_row_are_a_dark_probe_not_a_moving_screen() {
+    fn an_answer_clears_the_refusals_before_it() {
         let mut driver = Driver::of(Budget {
             rounds: 1,
             floor_samples: 3,
             max_floor_asks: 400,
+            max_refusals_running: 3,
+            max_polls: 10,
+        });
+        // Two refusals, an answer, two more, an answer — six refusals in all,
+        // twice the cap, and never three running.
+        for _ in 0..4 {
+            for _ in 0..2 {
+                assert_eq!(driver.tick(ms(0)), Step::Sample);
+                driver.latency.unreadable();
+            }
+            assert_eq!(driver.tick(ms(0)), Step::Sample);
+            driver.answer(ms(17));
+            assert_eq!(driver.latency.report(), None, "no run of three refusals");
+        }
+        // The last answer above already primed the floor, so three timed ones
+        // complete it rather than the four `reach_first_press` spends.
+        for _ in 0..3 {
+            assert_eq!(driver.tick(ms(0)), Step::Sample);
+            driver.answer(ms(17));
+        }
+        driver.round(ms(5), ms(16));
+        assert_eq!(driver.latency.report().unwrap().ended, Ended::Completed);
+    }
+
+    /// When both caps land on the same refusal the floor's is the answer, for
+    /// the reason the floor's budget exists: what it measures is a floor that
+    /// never completed, whatever the last ask happened to be.
+    #[test]
+    fn a_refusal_that_spends_the_floors_budget_is_the_screen_not_the_probe() {
+        let mut driver = Driver::of(Budget {
+            rounds: 1,
+            floor_samples: 3,
+            max_floor_asks: 5,
             max_refusals_running: 4,
             max_polls: 10,
         });
+        // Four refusals: the fourth is both the fourth in a row and the fifth
+        // ask of five, since one answer went before them.
+        assert_eq!(driver.tick(ms(0)), Step::Sample);
+        driver.answer(ms(17));
         for _ in 0..4 {
-            assert_eq!(driver.tick(ms(1)), Step::Sample);
+            assert_eq!(driver.tick(ms(0)), Step::Sample);
+            driver.latency.unreadable();
+        }
+        assert_eq!(driver.latency.report().unwrap().ended, Ended::NeverSettled);
+    }
+
+    /// A run that ends in refusals must not report the samples it took before
+    /// them as a floor: nothing completed, and `lib-latency.sh` would read a
+    /// one-sample "floor" as the number every threshold is against.
+    #[test]
+    fn a_run_that_ends_in_refusals_reports_no_floor_at_all() {
+        let mut driver = Driver::of(Budget {
+            rounds: 1,
+            floor_samples: 3,
+            max_floor_asks: 400,
+            max_refusals_running: 3,
+            max_polls: 10,
+        });
+        for _ in 0..3 {
+            assert_eq!(driver.tick(ms(0)), Step::Sample);
+            driver.answer(ms(17));
+        }
+        for _ in 0..3 {
+            assert_eq!(driver.tick(ms(0)), Step::Sample);
             driver.latency.unreadable();
         }
         let report = driver.latency.report().unwrap();
         assert_eq!(report.ended, Ended::ProbeWentDark);
+        assert_eq!(report.floor, None, "two timed samples are not a floor");
     }
 
     /// A refusal is not an answer, so it cannot sit in the middle of the run
@@ -1030,7 +1143,8 @@ mod tests {
 
         let report = driver.latency.report().unwrap();
         assert_eq!(report.ended, Ended::Completed);
-        assert_eq!(report.abandoned, 2, "the client answered neither");
+        assert_eq!(report.undelivered, 2, "we never asked the client");
+        assert_eq!(report.abandoned, 0, "and must not blame it for that");
         assert_eq!(report.commit_to_pixel, None);
     }
 

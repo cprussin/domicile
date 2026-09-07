@@ -1524,10 +1524,10 @@ impl DomicileCompositor {
     ///
     /// One invocation is either a whole floor or at most one round — the
     /// `Press` arm breaks. A settling floor is `Budget::floor_samples` asks
-    /// back to back, about a second at 60Hz. A floor that keeps being
-    /// restarted is up to `Budget::max_floor_asks`, about **six and a half
-    /// seconds**, and a round that the client never answers is up to
-    /// `Budget::max_polls`, about **three and a third**. For every one of
+    /// plus the priming one that is not timed, about **1.0 s** at 60Hz. A
+    /// floor that keeps being restarted is `Budget::max_floor_asks`, about
+    /// **6.7 s**, and a round the client never answers is `Budget::max_polls`,
+    /// about **3.3 s**. For every one of
     /// those there is no client dispatch and no frame callbacks: nothing on
     /// this desktop is served. It is a spike instrument, off unless
     /// `DOMICILE_SPIKE_LATENCY` names a point, and that is the trade.
@@ -1668,6 +1668,15 @@ impl DomicileCompositor {
             target: "domicile::engine::spike",
             "latency: {} round(s) abandoned by the client",
             report.abandoned
+        );
+        // Said always, and separately from the line above. A key we never
+        // delivered is this compositor's failure and not the client's, and
+        // folding the two together is the wrong-end report this instrument has
+        // had to be talked out of three times.
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: {} round(s) whose key was never delivered",
+            report.undelivered
         );
         match report.ended {
             latency::Ended::Completed => tracing::info!(
