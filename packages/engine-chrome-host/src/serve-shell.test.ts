@@ -80,10 +80,10 @@ describe("serveShell", () => {
   // WITH A MANIFEST THERE IS NO index.html TO SERVE, and that is the point: a
   // shell ships JavaScript and CSS, and the document it loads in is written
   // here so that no shell can get it wrong. See `shell-document.ts`.
-  it("writes the document when the shell has a manifest", async () => {
+  it("writes the document when the shell is a module", async () => {
     const host = await compositor();
     const serving = serveShell({
-      manifest: { module: "shell.js", name: "my-desktop", styles: [] },
+      module: "shell.js",
       root: host.dir,
       socketPath: host.socketPath,
     });
@@ -94,16 +94,16 @@ describe("serveShell", () => {
 
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(body).toContain('<script src="shell.js" type="module">');
-    expect(body).toContain("<title>my-desktop</title>");
+    expect(body).toContain("<title>Domicile</title>");
   });
 
   // A reload or a bookmark resolves to `/index.html`, so serving a 404 there
   // would be a desktop that works until somebody presses enter in an address
-  // bar — and with a manifest there is no such file to fall through to.
+  // bar — and a shell that is a module ships no such file to fall back on.
   it("writes the document for /index.html too", async () => {
     const host = await compositor();
     const serving = serveShell({
-      manifest: { module: "shell.js", name: "my-desktop", styles: [] },
+      module: "shell.js",
       root: host.dir,
       socketPath: host.socketPath,
     });
@@ -114,13 +114,13 @@ describe("serveShell", () => {
     expect(await response.text()).toContain('<script src="shell.js"');
   });
 
-  // Everything the document names is still read off disk: a manifest says
-  // where a shell's parts are, it does not change where they are served from.
+  // The module itself is still read off disk, along with whatever it imports:
+  // naming it does not change where it is served from.
   it("still serves the files the document names", async () => {
     const host = await compositor();
     await writeFile(path.join(host.dir, "shell.js"), "export const x = 1;");
     const serving = serveShell({
-      manifest: { module: "shell.js", name: "my-desktop", styles: [] },
+      module: "shell.js",
       root: host.dir,
       socketPath: host.socketPath,
     });
@@ -131,9 +131,9 @@ describe("serveShell", () => {
     expect(await response.text()).toBe("export const x = 1;");
   });
 
-  // A shell that has no manifest is a shell that built an index.html, which is
+  // A shell that is not a module is one built from an HTML entry, which is
   // what the workspace's own two still do. Nothing about them changes yet.
-  it("serves the file when there is no manifest", async () => {
+  it("serves the file when the shell is not a module", async () => {
     const host = await compositor();
     await writeFile(
       path.join(host.dir, "index.html"),

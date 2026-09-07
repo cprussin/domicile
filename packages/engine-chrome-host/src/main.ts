@@ -1,13 +1,14 @@
 // The bridge as a program.
 //
 //   DOMICILE_SOCKET=/run/user/1000/domicile.sock \
-//   DOMICILE_MANIFEST=~/my-desktop/domicile.json \
+//   DOMICILE_MODULE=~/my-desktop/dist/shell.js \
 //     bun packages/engine-chrome-host/src/main.ts
 //
-// `DOMICILE_MANIFEST` is a shell that says where its parts are, and the
-// document it loads in is written here — see `shell-manifest.ts`. A shell that
-// built its own `index.html` is served with `DOMICILE_ROOT` instead, which is
-// what the workspace's own two still do.
+// A shell is one JavaScript module. `DOMICILE_MODULE` points at it, the
+// directory it is in is what gets served, and the document it loads in is
+// written here — see `shell-document.ts`. A shell built from an HTML entry is
+// served with `DOMICILE_ROOT` instead, which is what the workspace's own two
+// still do.
 //
 // Environment rather than flags because the only caller is a launcher, and a
 // launcher that has to quote paths into an argv is a launcher with a bug in it
@@ -19,14 +20,12 @@
 import path from "node:path";
 
 import { serveShell } from "./serve-shell";
-import type { ShellManifestError } from "./shell-manifest";
-import { readShellManifest, ShellManifestProblem } from "./shell-manifest";
 import { wholeNumberFromEnv } from "./whole-number-env";
 
 // biome-ignore lint/style/noProcessEnv: this is the program; it is its own env.
 const environment = process.env;
 
-const manifestPath = environment.DOMICILE_MANIFEST;
+const modulePath = environment.DOMICILE_MODULE;
 
 /** Refusing is exiting: nothing downstream can do anything useful with a
  * setting the launcher meant and got wrong. */
@@ -42,63 +41,35 @@ const socketPath =
   environment.DOMICILE_SOCKET ??
   refuse("domicile: DOMICILE_SOCKET is required");
 
-// One or the other, and the manifest wins. A caller that sets both has said
-// two different things about which shell to serve, and there is no reading
-// that makes it one — the same refusal `run-engine.sh` makes about a page and
-// a path.
-if (manifestPath !== undefined && environment.DOMICILE_ROOT !== undefined) {
+// One or the other. A caller that sets both has said two different things
+// about which shell to serve, and there is no reading that makes it one — the
+// same refusal `run-engine.sh` makes about a page and a path.
+if (modulePath !== undefined && environment.DOMICILE_ROOT !== undefined) {
   refuse(
-    "domicile: DOMICILE_MANIFEST and DOMICILE_ROOT both name a shell, and" +
-      " they are not the same instruction. Pass one.",
+    "domicile: DOMICILE_MODULE and DOMICILE_ROOT both name a shell, and they" +
+      " are not the same instruction. Pass one.",
   );
 }
 
-/** What a manifest could not be, in the words the person who wrote it needs. */
-const whyNot = (error: ShellManifestError): string => {
-  switch (error.kind) {
-    case ShellManifestProblem.NotJson: {
-      return `it is not JSON: ${error.detail}`;
-    }
-    case ShellManifestProblem.NotAnObject: {
-      return `the top level is ${error.found}, and a manifest is an object`;
-    }
-    case ShellManifestProblem.NoModule: {
-      return 'it names no "module", so nothing says what to load';
-    }
-    case ShellManifestProblem.BadField: {
-      return `"${error.field}" is ${error.found}`;
-    }
-    case ShellManifestProblem.EscapesTheShell: {
-      return `"${error.field}" is ${error.path}, which is not inside the shell`;
-    }
-  }
-};
-
+// The module is served from the directory it is in, so a shell's own layout is
+// its own business: whatever it put beside its entry is reachable, and nothing
+// above that is. `static-path.ts` is what holds that line for every request.
 const shell =
-  manifestPath === undefined
+  modulePath === undefined
     ? undefined
     : await (async () => {
-        const file = Bun.file(manifestPath);
-        if (!(await file.exists())) {
-          return refuse(`domicile: there is no manifest at ${manifestPath}`);
+        if (!(await Bun.file(modulePath).exists())) {
+          return refuse(`domicile: there is no module at ${modulePath}`);
         }
-        const directory = path.dirname(path.resolve(manifestPath));
-        return readShellManifest(
-          await file.text(),
-          path.basename(directory),
-        ).match({
-          Err: (error: ShellManifestError) =>
-            refuse(
-              `domicile: ${manifestPath} is not a shell — ${whyNot(error)}`,
-            ),
-          Ok: (manifest) => ({ manifest, root: directory }),
-        });
+        const resolved = path.resolve(modulePath);
+        const directory = path.dirname(resolved);
+        return { module: path.basename(resolved), root: directory };
       })();
 
 const root =
   shell?.root ??
   environment.DOMICILE_ROOT ??
-  refuse("domicile: one of DOMICILE_MANIFEST or DOMICILE_ROOT is required");
+  refuse("domicile: one of DOMICILE_MODULE or DOMICILE_ROOT is required");
 
 const port = wholeNumberFromEnv(
   "DOMICILE_PORT",
@@ -114,7 +85,7 @@ const reachForMs = wholeNumberFromEnv(
 const serving = serveShell({
   root,
   socketPath,
-  ...(shell === undefined ? {} : { manifest: shell.manifest }),
+  ...(shell === undefined ? {} : { module: shell.module }),
   ...(port === undefined ? {} : { port }),
   // How long a page waits for a compositor that has not started yet. The
   // default suits a desktop; a CI runner starting a debug Chromium needs
