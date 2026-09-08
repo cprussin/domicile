@@ -52,7 +52,7 @@ class MODULES_EXPORT DomicileHost final
   ExecutionContext* GetExecutionContext() const override;
 
   // domicile::mojom::blink::ControlChannelClient:
-  void AppTitled(const WTF::String& app_id, const WTF::String& title) override;
+  void AppTitled(const String& app_id, const String& title) override;
 
   void Trace(Visitor*) const override;
 

@@ -61,7 +61,7 @@ void DomicileHost::spawn(ScriptState* script_state,
     return;
   }
 
-  Vector<WTF::String> argv;
+  Vector<String> argv;
   argv.reserve(command.size());
   for (const String& argument : command) {
     argv.push_back(argument);
@@ -69,8 +69,8 @@ void DomicileHost::spawn(ScriptState* script_state,
   channel_->Spawn(argv);
 }
 
-void DomicileHost::AppTitled(const WTF::String& app_id,
-                             const WTF::String& title) {
+void DomicileHost::AppTitled(const String& app_id,
+                             const String& title) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppTitledEvent>(
       event_type_names::kApptitled, app_id, title));
 }
