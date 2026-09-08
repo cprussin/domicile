@@ -917,13 +917,38 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                     ChromeMessage::ResizeApp { app_id, size },
                 )
             }
-            // Focus drives both the seat (keyboard focus) and the brain's model.
+            // THE BRAIN DECIDES AND THE SEAT FOLLOWS, in that order. Both used
+            // to answer this on their own, and they do not know the same
+            // things: the seat looks for a *surface*, the scene for a
+            // *portal*. A window that has mapped but that the page has not
+            // placed yet has the first and not the second — which is every
+            // window between `app_appeared` and its element's first box, so a
+            // shell that focuses a window as it opens asks for it — and the
+            // keyboard went there while `keyboard_target` went on naming the
+            // chrome. The page marks that window inactive and every key typed
+            // into it.
+            //
+            // So the seat is told what the scene settled on rather than what
+            // was asked for. A refusal leaves the keyboard where it was, which
+            // is the answer `ClientRequest::KeyboardFocus` already gives for
+            // the window it can see is missing.
             Ok(ChromeMessage::FocusApp { app_id }) => {
-                hub.send_request(ClientRequest::KeyboardFocus {
-                    app_id: Some(app_id.clone()),
-                });
-                let mut host = hub.host.lock().unwrap();
-                apply_chrome_message(&mut host, &mut ready, ChromeMessage::FocusApp { app_id })
+                let (out, holder) = {
+                    let mut host = hub.host.lock().unwrap();
+                    let out = apply_chrome_message(
+                        &mut host,
+                        &mut ready,
+                        ChromeMessage::FocusApp {
+                            app_id: app_id.clone(),
+                        },
+                    );
+                    (out, host.focus_holder())
+                };
+                if holder.as_deref() != Some(app_id.as_str()) {
+                    info!(app_id = %app_id, "keyboard focus -> a window with no portal; the scene refused it and the keyboard stays where it was");
+                }
+                hub.send_request(ClientRequest::KeyboardFocus { app_id: holder });
+                out
             }
             // Compositor-level, and nothing the brain models: only the
             // client's own toplevel can end it, and the window leaves the

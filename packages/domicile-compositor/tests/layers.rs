@@ -210,17 +210,19 @@ fn a_shortcut_the_chrome_claims_reaches_the_compositor() {
 /// message was overtaken.
 ///
 /// An app id the host has never seen is the same shape as one whose window has
-/// just gone: `FocusApp` is forwarded to the Wayland thread whatever the brain
-/// makes of it, and what the thread finds either way is no surface to focus.
+/// just gone: neither has a portal, so the scene refuses both and the seat is
+/// told what the scene settled on. It is the refusal above reached from the
+/// other end — there the window exists and has not been placed, here it does
+/// not exist at all — and what the two have in common is the only thing that
+/// matters, that the keyboard has to end up somewhere.
 ///
-/// Asserted by typing, not by the log. The compositor's `keyboard focus -> a
-/// window with no surface` line is written *before* the fallback that puts the
-/// keyboard back on the chrome, so deleting the fallback leaves the line
-/// intact — measured, on a first version of this test. What the fallback is
-/// for is that the next key still reaches somebody, and the desktop is the
-/// somebody.
+/// Asserted by typing, not by the log. The refusal is logged *before* the
+/// keyboard is put anywhere, so a version that logs and then hands the seat
+/// over regardless keeps the line — measured, on a first version of this
+/// test. What matters is that the next key still reaches somebody, and the
+/// desktop is the somebody.
 #[test]
-fn focusing_a_window_that_has_no_surface_leaves_the_keyboard_with_the_chrome() {
+fn focusing_a_window_that_never_existed_leaves_the_keyboard_with_the_chrome() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
     let mut desktop = compositor.chrome_side_client("chrome-side");
     compositor.wait_for_log("the chrome mapped its toplevel");
@@ -231,7 +233,7 @@ fn focusing_a_window_that_has_no_surface_leaves_the_keyboard_with_the_chrome() {
             app_id: "app-that-went-away".to_string(),
         })
         .expect("the chrome socket takes a focus");
-    compositor.wait_for_log("keyboard focus -> a window with no surface");
+    compositor.wait_for_log("keyboard focus -> a window with no portal");
 
     key(&mut chrome, KEY_A, true);
 
@@ -239,6 +241,58 @@ fn focusing_a_window_that_has_no_surface_leaves_the_keyboard_with_the_chrome() {
         desktop.wait_for_trace(&format!(", {KEY_A}, 1)"), 1),
         "the chrome was focused on a window with no surface and the next key \
          reached nothing — the desktop has gone deaf. It traced:\n{}",
+        desktop.trace()
+    );
+}
+
+/// Focus is the brain's decision, and the seat follows it.
+///
+/// The scene refuses focus for an app with no portal, and it is right to:
+/// `keyboard_target` re-checks the portal, so a focus taken for an unplaced
+/// app would be reported back as the chrome's anyway. The seat had no such
+/// check — `ClientRequest::KeyboardFocus` looks only for a *surface* — so the
+/// two answered differently. The keyboard went to a window the page has not
+/// laid out and is still marking inactive, and every key after it typed there.
+///
+/// Reachable from an ordinary desktop, not a contrived one: `app_appeared`
+/// arrives before the element that will show the window has reported a box, so
+/// a shell that focuses a window as it opens asks for exactly this.
+///
+/// Two assertions, because the line alone would not catch it: the refusal is
+/// logged before anything moves, so a version that logs and then hands the
+/// seat over anyway keeps the line. The key is what says where the keyboard
+/// actually is.
+#[test]
+fn focusing_a_window_that_was_never_placed_leaves_the_keyboard_with_the_chrome() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desktop = compositor.chrome_side_client("chrome-side");
+    compositor.wait_for_log("the chrome mapped its toplevel");
+    let mut chrome = compositor.chrome();
+
+    let _window = compositor.client("app-side");
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("a client that opened a window is announced to the chrome");
+    let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+
+    // Focused and never placed. `place_and_focus` is the other order on
+    // purpose; this is the half of it a shell can reach on its own.
+    chrome
+        .say(&ChromeMessage::FocusApp {
+            app_id: app_id.clone(),
+        })
+        .expect("the chrome socket takes a focus");
+    compositor.wait_for_log("keyboard focus -> a window with no portal");
+
+    key(&mut chrome, KEY_A, true);
+
+    assert!(
+        desktop.wait_for_trace(&format!(", {KEY_A}, 1)"), 1),
+        "an unplaced window took the keyboard the scene had refused it, so the \
+         key went to a window the page is still marking inactive. The desktop \
+         traced:\n{}",
         desktop.trace()
     );
 }
