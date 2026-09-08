@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_modifiers_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -225,12 +226,8 @@ void DomicileHost::Shortcut(const String& shortcut) {
 
 void DomicileHost::Modifiers(uint32_t depressed, uint32_t latched,
                              uint32_t locked, uint32_t group) {
-  // Carried in width/height would be a lie. Modifiers get their own shape when
-  // a shell needs them; for now the event fires so a shell can resync, which is
-  // what the seat state is actually used for.
-  DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
-      event_type_names::kModifiers, String(), String(), String(),
-      std::make_optional(depressed), std::make_optional(latched)));
+  DispatchEvent(*MakeGarbageCollected<DomicileModifiersEvent>(
+      event_type_names::kModifiers, depressed, latched, locked, group));
 }
 
 void DomicileHost::FocusChanged(const String& app_id) {
