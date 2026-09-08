@@ -259,8 +259,7 @@ const pixels = (length: number): string => `${length.toString()}px`;
 
 const windowStyles = css({
   // Placeholder label until the window has something behind it, hidden the
-  // moment the SDK says it has — a copied frame, or a client the compositor is
-  // drawing itself.
+  // moment the SDK says it has.
   "&:not(.has-surface)::after": {
     color: "muted",
     content: '"⬚  app surface: " attr(app-id)',

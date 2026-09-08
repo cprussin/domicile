@@ -141,17 +141,6 @@ pub struct Portal {
     pub z_index: i32,
     /// How the window is drawn, as opposed to where.
     pub style: Style,
-    /// Whether the compositor draws this window's own buffer.
-    ///
-    /// False for a window the chrome styled in a way the compositor's shaders
-    /// have no answer for — a `filter`, a `clip-path`, a second shadow. Those
-    /// go back down the copy path: the compositor reads the client's frame off
-    /// the GPU and sends the pixels for the engine to draw, which is slow and
-    /// correct, rather than fast and wrong.
-    ///
-    /// Per window, not per compositor. A desktop where one window wears a blur
-    /// pays for that window and nothing else.
-    pub draws_natively: bool,
     /// Whether a pointer over this window belongs to it.
     ///
     /// False for an element the chrome gave `pointer-events: none`. That is
@@ -214,10 +203,6 @@ impl Portal {
     ) -> Self {
         Portal {
             style: Style::default(),
-            // Natively unless the chrome says otherwise: the fast path is the
-            // one to be on, and a chrome too old to have an opinion is a
-            // chrome whose windows the shaders can draw.
-            draws_natively: true,
             // A window is there to be used. A chrome with no opinion is one
             // from before there was anything to paint over a window.
             takes_pointer: true,
@@ -231,14 +216,6 @@ impl Portal {
     /// The same portal, with a style.
     pub fn styled(self, style: Style) -> Self {
         Portal { style, ..self }
-    }
-
-    /// The same portal, drawn by the engine rather than by the compositor.
-    pub fn copied(self) -> Self {
-        Portal {
-            draws_natively: false,
-            ..self
-        }
     }
 
     /// The same portal, drawn but not clickable — `pointer-events: none`.

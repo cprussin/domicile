@@ -101,7 +101,6 @@ fn messages_before_the_handshake_are_ignored() {
         corner_radius: 0.0,
         opacity: 1.0,
         shadow: None,
-        native: true,
         takes_pointer: true,
     }));
     assert_eq!(session.host_mut().scene().len(), 0);
@@ -124,7 +123,6 @@ fn placement_after_handshake_reaches_the_host() {
         corner_radius: 0.0,
         opacity: 1.0,
         shadow: None,
-        native: true,
         takes_pointer: true,
     }));
     assert_eq!(session.host_mut().scene().len(), 1);

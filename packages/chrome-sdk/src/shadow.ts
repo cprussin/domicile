@@ -27,22 +27,6 @@ export type Shadow = {
   color: readonly [r: number, g: number, b: number, a: number];
 };
 
-/**
- * A computed `box-shadow` as its separate shadows, front to back.
- *
- * Empty for an element that casts none. Splitting on every comma would also
- * split `rgba(0, 0, 0, 0.5)`, so the split is on commas outside brackets —
- * which is the one definition of "how many shadows is this" in the SDK.
- * Anything counting them and anything reading them must agree, or a report
- * names a different shadow than the one that was dropped.
- */
-export const splitShadows = (computed: string): string[] => {
-  const trimmed = computed.trim();
-  return trimmed === "" || trimmed === "none"
-    ? []
-    : trimmed.split(/,(?![^(]*\))/).map((shadow) => shadow.trim());
-};
-
 const RGB = /^rgba?\(([^)]*)\)/;
 const OKLAB = /^oklab\(([^)]*)\)/;
 const OKLCH = /^oklch\(([^)]*)\)/;
@@ -115,6 +99,19 @@ export const parseShadow = (computed: string): ShadowReading => {
     return ShadowReading.Unreadable();
   }
   return ShadowReading.Cast({ blur, color, dx, dy, spread });
+};
+
+/**
+ * A computed `box-shadow` as its separate shadows, front to back.
+ *
+ * Empty for an element that casts none. Splitting on every comma would also
+ * split `rgba(0, 0, 0, 0.5)`, so the split is on commas outside brackets.
+ */
+const splitShadows = (computed: string): string[] => {
+  const trimmed = computed.trim();
+  return trimmed === "" || trimmed === "none"
+    ? []
+    : trimmed.split(/,(?![^(]*\))/).map((shadow) => shadow.trim());
 };
 
 const readColor = (shadow: string): Shadow["color"] | undefined => {

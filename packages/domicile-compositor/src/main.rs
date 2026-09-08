@@ -213,8 +213,7 @@ impl Gpu {
 /// takes the portal out of the scene — while the element, and the canvas
 /// holding that window's last frame, stay exactly where they were. Forgetting
 /// the canvas then means never telling the chrome to drop it, so a window
-/// backgrounded on the copy path and brought back native wears a still of
-/// itself for good.
+/// backgrounded and brought back wears a still of itself for good.
 fn unmounts_the_element(message: &ChromeMessage) -> Option<&str> {
     match message {
         ChromeMessage::RemovePortal { app_id } => Some(app_id),
@@ -4402,7 +4401,6 @@ mod tests {
             host.handle_chrome_message(ChromeMessage::PlacePortal {
                 app_id: app_id.clone(),
                 corner_radius: 0.0,
-                native: true,
                 opacity: 1.0,
                 shadow: None,
                 size: [100.0, 100.0],
@@ -4533,8 +4531,7 @@ mod tests {
         // `hidden`, which arrives as this and removes the portal — while the
         // element, and its canvas, stay in the page. Reading it as an unmount
         // means never telling that chrome to drop the canvas, so a window
-        // backgrounded on the copy path and brought back native wears a still
-        // of itself for good.
+        // backgrounded and brought back wears a still of itself for good.
         let hidden = |visible| ChromeMessage::PlacePortal {
             app_id: "term".to_string(),
             transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
@@ -4544,7 +4541,6 @@ mod tests {
             corner_radius: 0.0,
             opacity: 1.0,
             shadow: None,
-            native: true,
             takes_pointer: true,
         };
         assert_eq!(unmounts_the_element(&hidden(false)), None);

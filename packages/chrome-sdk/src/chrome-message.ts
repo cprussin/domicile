@@ -29,14 +29,6 @@ export type Placement = {
    * whatever the engine painted over it.
    */
   takesPointer?: boolean;
-  /**
-   * Whether the compositor should draw this window's own buffer.
-   *
-   * Natively if omitted. False sends this window — and only this window — back
-   * down the copy path, which is what an element styled in a way the shaders
-   * have no answer for needs.
-   */
-  native?: boolean;
 };
 
 export type ChromeMessage =
@@ -73,7 +65,6 @@ export const placePortalMessage = ({
   // one that ignores a style, and it looks identical to not being drawn.
   opacity = 1,
   shadow,
-  native = true,
   // Clickable, never inert: a window nobody can click is a worse failure than
   // one that ignores a style, and a chrome that puts nothing over a window has
   // no reason to say anything here.
@@ -85,7 +76,6 @@ export const placePortalMessage = ({
   return {
     app_id: appId,
     corner_radius: cornerRadius,
-    native,
     opacity,
     // Explicitly null rather than absent: the host's field is an `Option`, and
     // a window that stopped casting a shadow has to say so.

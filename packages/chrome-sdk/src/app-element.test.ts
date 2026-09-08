@@ -54,7 +54,6 @@ class FakeBridge {
 // The test DOM performs no layout, so measurement is injected.
 const stubMeasure: Measure = () => ({
   cornerRadius: 0,
-  native: true,
   opacity: 1,
   shadow: undefined,
   size: [10, 20],
@@ -154,7 +153,6 @@ describe("<domicile-app>", () => {
       {
         appId: "term",
         cornerRadius: 0,
-        native: true,
         opacity: 1,
         size: [10, 20],
         takesPointer: true,
@@ -177,7 +175,6 @@ describe("<domicile-app>", () => {
     registerElements(bridge as unknown as BridgeClient, {
       measure: () => ({
         cornerRadius: 0,
-        native: true,
         opacity: 1,
         shadow: undefined,
         size: [0, 0],
@@ -195,7 +192,6 @@ describe("<domicile-app>", () => {
       {
         appId: "term",
         cornerRadius: 0,
-        native: true,
         opacity: 1,
         shadow: undefined,
         size: [0, 0],
@@ -224,7 +220,6 @@ describe("<domicile-app>", () => {
       {
         appId: "term",
         cornerRadius: 0,
-        native: true,
         opacity: 1,
         shadow: undefined,
         size: [10, 20],
@@ -257,7 +252,6 @@ describe("<domicile-app>", () => {
       {
         appId: "term",
         cornerRadius: 0,
-        native: true,
         opacity: 1,
         size: [10, 20],
         takesPointer: true,
@@ -482,7 +476,6 @@ describe("<domicile-app>", () => {
       {
         appId: "editor",
         cornerRadius: 0,
-        native: true,
         opacity: 1,
         size: [10, 20],
         takesPointer: true,
@@ -542,7 +535,6 @@ describe("<domicile-app>", () => {
       {
         appId: "term",
         cornerRadius: 0,
-        native: true,
         opacity: 1,
         size: [10, 20],
         takesPointer: true,

@@ -83,7 +83,6 @@ fn place_and_focus(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
         .say(&ChromeMessage::PlacePortal {
             app_id: app_id.to_string(),
             corner_radius: 0.0,
-            native: true,
             opacity: 1.0,
             shadow: None,
             size: [500.0, 400.0],

@@ -114,7 +114,6 @@ class FakeBridge {
 // The test DOM performs no layout, so measurement is injected.
 const stubMeasure: Measure = (element) => ({
   cornerRadius: 0,
-  native: true,
   opacity: 1,
   shadow: undefined,
   size: [100, 100],

@@ -230,7 +230,6 @@ fn place(chrome: &mut domicile_test_chrome::Chrome, app_id: &str, at: [f64; 2]) 
         .say(&ChromeMessage::PlacePortal {
             app_id: app_id.to_string(),
             corner_radius: 0.0,
-            native: true,
             opacity: 1.0,
             shadow: None,
             // Small enough to sit inside either display.

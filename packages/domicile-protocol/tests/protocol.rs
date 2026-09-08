@@ -42,7 +42,6 @@ fn chrome_messages_round_trip() {
             spread: 2.0,
             color: [0.0, 0.0, 0.0, 0.5],
         }),
-        native: true,
         takes_pointer: true,
     });
     chrome_round_trip(&ChromeMessage::RemovePortal {
@@ -236,7 +235,6 @@ fn wire_shape_is_pinned() {
         corner_radius: 0.0,
         opacity: 1.0,
         shadow: None,
-        native: true,
         takes_pointer: true,
     })
     .unwrap();
@@ -287,25 +285,6 @@ fn wire_shape_is_pinned() {
     .unwrap();
     assert_eq!(v["type"], "app_composited");
     assert_eq!(v["app_id"], "term");
-}
-
-/// A chrome that says nothing about `native` gets the fast path.
-///
-/// The whole back-compat argument for the field rests on this default, and
-/// nothing else exercises it: every fixture in the workspace fills the field
-/// in, so making it required would turn every such line into a parse error —
-/// a portal that simply never appears — without failing a test.
-#[test]
-fn a_placement_without_native_draws_the_clients_own_buffer() {
-    let parsed: ChromeMessage = serde_json::from_str(
-        r#"{"type":"place_portal","app_id":"term","transform":[1,0,0,1,0,0],
-            "size":[10,20],"z_index":0,"visible":true}"#,
-    )
-    .expect("a placement from a chrome that has no opinion still parses");
-    assert!(
-        matches!(parsed, ChromeMessage::PlacePortal { native, .. } if native),
-        "a chrome that cannot say is one from before there was anything the shaders could not draw"
-    );
 }
 
 #[test]

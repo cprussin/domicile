@@ -91,11 +91,6 @@ pub struct PointerRegion {
     pub z_index: i32,
 }
 
-/// What a window whose chrome expressed no opinion gets: the fast path.
-fn natively() -> bool {
-    true
-}
-
 fn interactive() -> bool {
     true
 }
@@ -130,18 +125,6 @@ pub enum ChromeMessage {
         /// The element's `box-shadow`, if it casts one that can be drawn.
         #[serde(default)]
         shadow: Option<Shadow>,
-        /// Whether the compositor should draw this window's own buffer.
-        ///
-        /// False for an element styled in a way the compositor's shaders have
-        /// no answer for — a `filter`, a `clip-path`, a shadow past the first.
-        /// That window goes back down the copy path, which is slow and correct
-        /// rather than fast and wrong, and only that window does.
-        ///
-        /// Natively by default, so a chrome with no opinion gets the fast
-        /// path: a chrome that cannot say is a chrome from before there was
-        /// anything the shaders could not draw.
-        #[serde(default = "natively")]
-        native: bool,
         /// Whether a pointer over this window belongs to it.
         ///
         /// False for an element with `pointer-events: none`. The compositor
@@ -373,20 +356,13 @@ pub enum HostMessage {
     /// out on, which is the honest answer from a host that never asked for any.
     Displays { displays: Vec<DisplayInfo> },
 
-    /// The compositor has taken this window back and is drawing the client's
-    /// own buffer; the chrome should drop any pixels it holds for it.
+    /// The compositor is drawing this window; the chrome should drop any
+    /// pixels it holds for it.
     ///
-    /// The counterpart to `app_frame`, and the reason it is a message rather
-    /// than something the chrome works out for itself: only the compositor
-    /// knows whether it *managed* to draw the window. A `wl_shm` client is
-    /// never drawn natively however ordinary its element's CSS, and a chrome
-    /// that dropped its canvas on the strength of its own `native: true` would
-    /// blank that window until the client next redrew.
-    ///
-    /// Sent on the frame the compositor first draws itself, so it arrives
-    /// after the last copied frame on the same socket. A chrome that drops the
-    /// canvas any earlier races the frames still in flight, and one of them
-    /// puts a still of the window back over the live one.
+    /// Nothing sends this. It is what told a chrome the window it had been
+    /// copying frame by frame was now drawn from the client's own buffer, and
+    /// there is one path now — but the chrome half is still wired to it, so it
+    /// goes when that does. `ROADMAP.md` tracks it.
     AppComposited { app_id: String },
 
     /// Who holds the keyboard now: an app, or the chrome itself (`None`).

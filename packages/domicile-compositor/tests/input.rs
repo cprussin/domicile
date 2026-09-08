@@ -68,7 +68,6 @@ fn drive(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
         ChromeMessage::PlacePortal {
             app_id: app_id.to_string(),
             corner_radius: 0.0,
-            native: true,
             opacity: 1.0,
             shadow: None,
             size,

@@ -284,7 +284,6 @@ impl Host {
                 corner_radius,
                 opacity,
                 shadow,
-                native,
                 takes_pointer,
             } => {
                 if !self.apps.contains_key(&app_id) {
@@ -308,11 +307,7 @@ impl Host {
                             spread: shadow.spread,
                         }),
                     });
-                    // A window styled in a way the shaders have no answer for
-                    // goes back down the copy path — that window, and only
-                    // that window.
-                    let placed = if native { placed } else { placed.copied() };
-                    // And a window the chrome painted something over takes no
+                    // A window the chrome painted something over takes no
                     // pointer, so the click reaches what covers it.
                     let placed = if takes_pointer {
                         placed
