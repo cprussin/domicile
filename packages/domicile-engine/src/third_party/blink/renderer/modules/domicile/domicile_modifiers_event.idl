@@ -1,0 +1,17 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+    RuntimeEnabled=DomicileControlChannel,
+    Exposed=Window
+] interface DomicileModifiersEvent : Event {
+  constructor(DOMString type,
+              optional DomicileModifiersEventInit eventInitDict = {});
+
+  // xkb's four, meaning what xkb says they mean.
+  readonly attribute unsigned long depressed;
+  readonly attribute unsigned long latched;
+  readonly attribute unsigned long locked;
+  readonly attribute unsigned long group;
+};

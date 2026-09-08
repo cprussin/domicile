@@ -77,7 +77,8 @@
   // A grabbed shortcut fired.
   attribute EventHandler onshortcut;
 
-  // The seat's modifier state. One seat, outliving every window.
+  // The seat's modifier state, as a DomicileModifiersEvent. One seat,
+  // outliving every window.
   attribute EventHandler onmodifiers;
 
   // Focus moved. `appId` is empty when the chrome itself has it.

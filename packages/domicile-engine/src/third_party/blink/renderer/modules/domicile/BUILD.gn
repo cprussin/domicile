@@ -10,6 +10,8 @@ blink_modules_sources("domicile") {
     "domicile_app_event.h",
     "domicile_app_titled_event.cc",
     "domicile_app_titled_event.h",
+    "domicile_modifiers_event.cc",
+    "domicile_modifiers_event.h",
     "domicile_host.cc",
     "domicile_host.h",
     "navigator_domicile.cc",
