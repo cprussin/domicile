@@ -44,8 +44,52 @@ class MODULES_EXPORT DomicileHost final
   // Throws on an empty argv. The browser refuses it too -- this check is a
   // better error message, not the enforcement.
   void spawn(ScriptState*, const Vector<String>& command, ExceptionState&);
+  void focusApp(ScriptState*, const String& app_id, ExceptionState&);
+  void focusChrome(ScriptState*, ExceptionState&);
+  void closeApp(ScriptState*, const String& app_id, ExceptionState&);
+  void resizeApp(ScriptState*,
+                 const String& app_id,
+                 uint32_t width,
+                 uint32_t height,
+                 ExceptionState&);
+  void setDesktopSize(ScriptState*,
+                      uint32_t width,
+                      uint32_t height,
+                      ExceptionState&);
+  void setDevicePixelRatio(ScriptState*, double ratio, ExceptionState&);
+  void grabShortcut(ScriptState*, const String& shortcut, ExceptionState&);
+  void key(ScriptState*,
+           const String& app_id,
+           uint32_t keycode,
+           bool pressed,
+           ExceptionState&);
+  void pointerMotion(ScriptState*,
+                     const String& app_id,
+                     double x,
+                     double y,
+                     ExceptionState&);
+  void pointerLeave(ScriptState*, const String& app_id, ExceptionState&);
+  void pointerButton(ScriptState*,
+                     const String& app_id,
+                     uint32_t button,
+                     bool pressed,
+                     ExceptionState&);
+  void pointerAxis(ScriptState*,
+                   const String& app_id,
+                   double dx,
+                   double dy,
+                   int32_t v120_x,
+                   int32_t v120_y,
+                   ExceptionState&);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(apptitled, kApptitled)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(appappeared, kAppappeared)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(appresized, kAppresized)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(appclosed, kAppclosed)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(appcursor, kAppcursor)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(shortcut, kShortcut)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(modifiers, kModifiers)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
 
   // EventTarget:
   const AtomicString& InterfaceName() const override;
@@ -53,6 +97,22 @@ class MODULES_EXPORT DomicileHost final
 
   // domicile::mojom::blink::ControlChannelClient:
   void AppTitled(const String& app_id, const String& title) override;
+  void AppAppeared(const String& app_id,
+                   const String& title,
+                   bool has_size,
+                   uint32_t width,
+                   uint32_t height) override;
+  void AppResized(const String& app_id,
+                  uint32_t width,
+                  uint32_t height) override;
+  void AppClosed(const String& app_id) override;
+  void AppCursor(const String& app_id, const String& cursor) override;
+  void Shortcut(const String& shortcut) override;
+  void Modifiers(uint32_t depressed,
+                 uint32_t latched,
+                 uint32_t locked,
+                 uint32_t group) override;
+  void FocusChanged(const String& app_id) override;
 
   void Trace(Visitor*) const override;
 
@@ -61,6 +121,8 @@ class MODULES_EXPORT DomicileHost final
   // never touches the channel should not make the browser reach for the
   // compositor's socket, and the browser holds that connection open once asked.
   bool EnsureBound();
+  bool Ready(ExceptionState&);
+  bool ReadyForApp(const String& app_id, ExceptionState&);
 
   Member<LocalDOMWindow> window_;
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;

@@ -12,6 +12,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "base/timer/timer.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -42,6 +43,26 @@ class ControlChannel : public mojom::ControlChannel {
   void SetClient(
       mojo::PendingRemote<mojom::ControlChannelClient> client) override;
   void Spawn(const std::vector<std::string>& command) override;
+  void FocusApp(const std::string& app_id) override;
+  void FocusChrome() override;
+  void CloseApp(const std::string& app_id) override;
+  void ResizeApp(const std::string& app_id,
+                 uint32_t width,
+                 uint32_t height) override;
+  void SetDesktopSize(uint32_t width, uint32_t height) override;
+  void SetDevicePixelRatio(double ratio) override;
+  void GrabShortcut(const std::string& shortcut) override;
+  void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;
+  void PointerMotion(const std::string& app_id, double x, double y) override;
+  void PointerLeave(const std::string& app_id) override;
+  void PointerButton(const std::string& app_id,
+                     uint32_t button,
+                     bool pressed) override;
+  void PointerAxis(const std::string& app_id,
+                   double dx,
+                   double dy,
+                   int32_t v120_x,
+                   int32_t v120_y) override;
 
  private:
   // THE SOCKET IS EXPECTED TO BE MISSING AT FIRST, AND THAT IS THE LAUNCH
@@ -64,6 +85,9 @@ class ControlChannel : public mojom::ControlChannel {
   void OnConnect(int result);
   void OnConnectFailed();
 
+  // Serialise a dict and queue it. Every outbound member funnels through here,
+  // so the framing and the queueing exist once rather than seventeen times.
+  void SendMessage(base::DictValue message);
   void Send(const std::string& json_line);
   void FlushQueue();
   void WriteNext();

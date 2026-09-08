@@ -6,6 +6,8 @@ import("//third_party/blink/renderer/modules/modules.gni")
 
 blink_modules_sources("domicile") {
   sources = [
+    "domicile_app_event.cc",
+    "domicile_app_event.h",
     "domicile_app_titled_event.cc",
     "domicile_app_titled_event.h",
     "domicile_host.cc",
