@@ -31,20 +31,13 @@ use std::time::{Duration, Instant};
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
 use smithay::backend::allocator::Fourcc;
-use smithay::backend::input::{
-    AbsolutePositionEvent as _, Axis, AxisSource, ButtonState, InputEvent, KeyState,
-    KeyboardKeyEvent as _, PointerAxisEvent as _, PointerButtonEvent as _,
-};
-use smithay::backend::winit::{WinitEvent, WinitInput};
+use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState};
 use smithay::input::{
     keyboard::{FilterResult, Keycode, XkbConfig},
     pointer::{AxisFrame, ButtonEvent, CursorIcon, CursorImageStatus, MotionEvent},
     Seat, SeatHandler, SeatState,
 };
 use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Scale, Subpixel};
-use smithay::reexports::winit::dpi::LogicalSize;
-use smithay::reexports::winit::window::Cursor;
-use smithay::reexports::winit::window::Window as WinitWindow;
 use smithay::reexports::{
     calloop::{
         channel::{channel, Event as ChannelEvent, Sender},
@@ -96,8 +89,6 @@ use tracing::{debug, info, warn};
 mod bands;
 mod chrome_frame;
 mod coalesce;
-mod compose;
-mod damage;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod engine;
@@ -107,8 +98,6 @@ mod modifiers;
 mod outbound;
 mod scale;
 mod screens;
-mod shortcut;
-mod stacking;
 mod timing_window;
 mod viewport;
 
@@ -116,23 +105,17 @@ use crate::engine::{Bounds, Capture};
 use crate::engine_buffers::Returned;
 use crate::engine_session::EngineSession;
 
-use crate::bands::{hold_the_frame, Bands, Layered, Next};
+use crate::bands::{Bands, Next};
 use crate::chrome_frame::{what_arrived, Arrival, Buffer};
 use crate::coalesce::last_of_burst;
-use crate::compose::chrome_onto_output;
-use crate::compose::shadow_quad;
-use crate::compose::{draw_layers, logical_to_window, window_to_logical, Layer, Shaders, Shadow};
-use crate::damage::{covered, Look, Painted};
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
-use crate::scale::{desktop_size, logical_size, output_scale};
+use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
-use crate::shortcut::Shortcuts;
 use crate::timing_window::TimingWindow;
-use crate::viewport::{sampling, surface_size, Viewport};
-use cgmath::Matrix3;
+use crate::viewport::{surface_size, Viewport};
 use domicile_bridge::BridgeRegistry;
 use domicile_config::{Config, ConfigError, ConfigStore};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
@@ -141,14 +124,8 @@ use domicile_launch::arguments::arguments;
 use domicile_launch::session::{publish, Session};
 use domicile_protocol::band_label::band_in;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Shortcut};
-use domicile_scene::{
-    Point as ScenePoint, PointerTarget, Style as SceneStyle, Transform as SceneTransform,
-};
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
-use smithay::backend::renderer::{
-    Color32F, ExportMem as _, Frame as _, ImportMem as _, Renderer as _, Texture as _,
-};
-use smithay::backend::winit::WinitGraphicsBackend;
+use smithay::backend::renderer::{ExportMem as _, ImportMem as _, Texture as _};
 
 /// The log messages *this change's* scripts and tests grep for, pinned to them.
 ///
@@ -197,17 +174,17 @@ mod grepped {
     /// the string, since no script greps it.
     pub const SIZE_REFUSED: &str = "a described desktop keeps its own size";
     /// `e2e-chrome-fills-a-window.sh`: the logical size and density an output
-    /// was advertised at, read field by field.
+    /// was advertised at.
     ///
-    /// Two scripts grepped this and `e2e-hidpi.sh` was the one that went. Its
-    /// row moved to the survivor rather than going with it: a first version of
-    /// that change deleted the row and said the constant had no reader left,
-    /// which was false — renaming it then passed the whole workspace.
+    /// **Nothing pins it any more**, which is [`UNPARSEABLE`]'s shape rather
+    /// than [`DENSITY_REFUSED`]'s. The two scripts that grepped it —
+    /// `e2e-chrome-fills-a-window.sh` and `e2e-a-dense-display.sh` — went with
+    /// the presented path they were written for, and the pairing test that
+    /// held them to this constant went with them, having no rows left.
     ///
-    /// The move also closes the hole that was open while both scripts grepped
-    /// it, one row between them. Measured before the port: breaking the
-    /// unrowed script's pattern was green. That is the failure the test below
-    /// is written against, and this constant was living in it.
+    /// Kept because it is the line that says what size and density the desktop
+    /// came up at, which is the first thing to read when a chrome is laid out
+    /// for the wrong screen.
     pub const ADVERTISING: &str = "advertising output scale";
     /// A chrome frame recognised as the band it says it is: the only trace
     /// the label's read-back leaves, and the whole of what says the round trip
@@ -223,71 +200,23 @@ mod grepped {
     pub const BAND_ANSWERED: &str = "a band answered";
 }
 
-/// The renderer client buffers are imported on, and the policy that chose it.
+/// The renderer client buffers are imported on.
 ///
-/// One renderer serves both importing and — once the compositor presents —
-/// drawing, because a texture belongs to the EGL context that created it.
+/// One renderer, and no longer a choice of where it lives: `--present` put it
+/// in a winit window and drew there, and that path went with the flag. What is
+/// left imports client dmabufs and reads shm buffers back so the frames can
+/// reach the chrome — and, under the fork, so the engine can be handed the
+/// client's own buffer.
 struct Gpu {
-    output: GpuOutput,
+    renderer: Box<GlesRenderer>,
     importer: DmabufImporter,
-    /// Compiled against this renderer, because a program belongs to the
-    /// context that built it. `None` where there is no window: the copy path
-    /// draws nothing and would only be paying the compile.
-    shaders: Option<Shaders>,
-}
-
-/// Where the renderer lives, which is whoever is presenting.
-enum GpuOutput {
-    /// No output: the renderer is ours, and frames leave as `AppFrame` pixels.
-    Headless(Box<GlesRenderer>),
-    /// A window: the renderer belongs to it, and client surfaces are drawn
-    /// into it rather than copied out.
-    Window(Box<WinitGraphicsBackend<GlesRenderer>>),
 }
 
 impl Gpu {
     fn renderer(&mut self) -> &mut GlesRenderer {
-        match &mut self.output {
-            GpuOutput::Headless(renderer) => renderer,
-            GpuOutput::Window(backend) => backend.renderer(),
-        }
-    }
-
-    /// The window, when there is one. Compositing needs the backend itself —
-    /// binding and submitting are its job, not the renderer's.
-    fn window(&mut self) -> Option<&mut WinitGraphicsBackend<GlesRenderer>> {
-        match &mut self.output {
-            GpuOutput::Headless(_) => None,
-            GpuOutput::Window(backend) => Some(backend),
-        }
-    }
-
-    fn presenting(&self) -> bool {
-        matches!(self.output, GpuOutput::Window(_))
+        &mut self.renderer
     }
 }
-
-/// One band of the chrome, drawn whole at the depth it was declared at.
-///
-/// Unclipped, unlike a `stacking` band: this raster holds only that depth, so
-/// there is nothing of another depth in it to confine away.
-fn band_layer<'a>(texture: &'a SurfaceTexture, to_window: SceneTransform) -> Layer<'a> {
-    Layer {
-        alpha: 1.0,
-        clip: &[],
-        corner_radius: 0.0,
-        shadow: None,
-        surface_to_output: chrome_onto_output(texture.logical_size, to_window),
-        texture: &texture.texture,
-        sampling: texture.sampling,
-    }
-}
-
-/// One window as the scene placed it: where its surface goes, how it is
-/// styled, whether its chrome asked for it to be drawn natively, and how deep
-/// it sits — the last so the chrome can be interleaved with it rather than
-/// only drawn over it. See `stacking`.
-type Placed = (String, SceneTransform, SceneStyle, bool, i32);
 
 /// The app whose element this message says has stopped showing it, if it does.
 ///
@@ -415,9 +344,6 @@ struct ChromeHub {
     /// The name of *our* Wayland socket, which is what a client we spawn must
     /// connect to.
     wayland_display: OsString,
-    /// Whether Domicile has a window of its own, which decides who is believed
-    /// about the output's density.
-    presenting: bool,
 }
 
 impl ChromeHub {
@@ -425,7 +351,6 @@ impl ChromeHub {
         request_tx: Sender<ClientRequest>,
         max_scale: u32,
         wayland_display: OsString,
-        presenting: bool,
     ) -> (Arc<Self>, OutboundReceiver) {
         let (outbound, outbound_rx) = outbound();
         let hub = Arc::new(ChromeHub {
@@ -436,7 +361,6 @@ impl ChromeHub {
             timings: Mutex::new(FrameTimings::default()),
             max_scale,
             wayland_display,
-            presenting,
         });
         (hub, outbound_rx)
     }
@@ -986,31 +910,25 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
             // scale, which is Wayland state rather than anything the brain
             // models — the scene is described in logical units either way.
             Ok(ChromeMessage::SetDevicePixelRatio { ratio }) => {
-                // Ignored where the window knows better — see
-                // `set_output_scale`. The chrome would only be reporting back
-                // the density we gave it.
-                if !hub.presenting {
-                    hub.send_request(ClientRequest::SetOutputScale {
-                        scale: output_scale(ratio, hub.max_scale),
-                    });
-                }
+                hub.send_request(ClientRequest::SetOutputScale {
+                    scale: output_scale(ratio, hub.max_scale),
+                });
                 Vec::new()
             }
-            // THE DESKTOP IS THE CHROME'S WINDOW, and where the compositor is
-            // not drawing that window it has no other way to learn its size.
-            // `adopt_window_scale` reads it off the winit window, which only
-            // exists when presenting; under the engine the window is the
-            // browser's. Without this the desktop sits at
+            // THE DESKTOP IS THE CHROME'S WINDOW, and the compositor has no
+            // other way to learn its size: the window belongs to the browser
+            // and is never seen from here. Without this the desktop sits at
             // `compositor.nested_size` — a chrome laid out for 1280x800 in the
-            // corner of whatever the user actually opened. Guarded on
-            // `presenting` for the same reason the density is: where the
-            // window is ours, the chrome is reporting back what we told it.
+            // corner of whatever the user actually opened.
+            //
+            // Both this and the density above were guarded on `presenting`,
+            // for the case where the window was the compositor's own and the
+            // chrome would only be reporting back what it had been given.
+            // There is no such window any more.
             Ok(ChromeMessage::SetDesktopSize { size }) => {
-                if !hub.presenting {
-                    hub.send_request(ClientRequest::SetOutputSize {
-                        logical: (size[0].round() as i32, size[1].round() as i32),
-                    });
-                }
+                hub.send_request(ClientRequest::SetOutputSize {
+                    logical: (size[0].round() as i32, size[1].round() as i32),
+                });
                 Vec::new()
             }
             // Compositor-level for the same reason as the density above: what
@@ -1208,11 +1126,6 @@ struct DomicileCompositor {
     /// A counter that wrapped would report a redraw as no change once in
     /// 2^64 commits, which is not a number of frames anything here will see.
     content: HashMap<String, u64>,
-    /// The last frame's layers, and the output they were measured against.
-    ///
-    /// `None` before the first frame, which is the one case that has to report
-    /// everything: there is no previous picture for a difference to be against.
-    painted: Option<damage::Frame>,
     /// Each app's latest surface as a texture, when presenting. Kept rather
     /// than read back and dropped: this *is* the client's buffer, and drawing
     /// it is what costs nothing.
@@ -1318,22 +1231,9 @@ struct DomicileCompositor {
     /// them moving, or the budget spent. A whole-window readback is a blocking
     /// one, so a finished search stops paying for them.
     find_settled: bool,
-    /// Which kinds of window input have been seen, so each is reported once
-    /// rather than on every pointer motion.
-    window_input_seen: HashSet<&'static str>,
     /// What the chrome's last frame looked like, so the line describing it is
     /// printed when it changes rather than sixty times a second.
     chrome_frame_shape: Option<((f64, f64), bool, bool)>,
-    /// The highest output scale to advertise, whatever the window's is.
-    ///
-    /// `adopt_window_scale`'s bound, and only its: the chrome's reported
-    /// density is bounded by [`ChromeHub::max_scale`], which is where the
-    /// chrome connections are. Applies only where nothing described a desktop
-    /// — a configured display states its own scale, and neither number is
-    /// weighed against it.
-    max_scale: u32,
-    /// The key combinations the chrome has claimed for the desktop.
-    shortcuts: Shortcuts,
     /// Which modifiers the chrome was last told are held.
     modifiers: Held,
     /// Whether anything has changed since the last frame was drawn.
@@ -1347,7 +1247,6 @@ struct DomicileCompositor {
     ///
     /// So commits mark the desktop dirty and the event loop draws at most once
     /// per pass, coalescing however many arrived.
-    needs_present: bool,
     /// Set when the window is closed, which is the user closing the desktop.
     /// Read by the event loop, which is the only thing that can act on it.
     stop: Arc<AtomicBool>,
@@ -1530,11 +1429,9 @@ impl DomicileCompositor {
             // arrival that carries a usable frame — but stated so that the
             // one rule about `chrome_texture` is written where it is applied:
             // only a whole page becomes the flattened chrome.
-            // Nothing was read, so nothing is known and nothing changes — not
-            // even a present, which would only redraw the frame already up.
-            Arrival::Nothing => return,
+            // Nothing was read, so nothing is known and nothing changes.
+            Arrival::Nothing => {}
         }
-        self.needs_present = true;
     }
 
     /// Which band this frame's own pixels say it is.
@@ -1618,7 +1515,7 @@ impl DomicileCompositor {
         // Cropping against the destination would read the wrong part of the
         // buffer by exactly the ratio between them.
         let (buffer_width, buffer_height) = logical_size((width, height), buffer_scale);
-        let buffer_logical = (f64::from(buffer_width), f64::from(buffer_height));
+        let _buffer_logical = (f64::from(buffer_width), f64::from(buffer_height));
         let (logical_width, logical_height) =
             surface_size((width, height), buffer_scale, viewport.destination);
         let logical_size = (f64::from(logical_width), f64::from(logical_height));
@@ -1632,7 +1529,6 @@ impl DomicileCompositor {
                 // GL made it, and says so on the buffer.
                 y_inverted: dmabuf.y_inverted(),
                 logical_size,
-                sampling: sampling(dmabuf.y_inverted(), buffer_logical, viewport.source),
             }),
             CommittedBuffer::Pixels { rgba, .. } => {
                 let size = (
@@ -1649,7 +1545,6 @@ impl DomicileCompositor {
                         // Shared memory is described the way it is laid out.
                         y_inverted: false,
                         logical_size,
-                        sampling: sampling(false, buffer_logical, viewport.source),
                     }),
                     Err(err) => {
                         tracing::warn!(%err, "a shm buffer would not upload");
@@ -2132,361 +2027,6 @@ impl DomicileCompositor {
         true
     }
 
-    /// Draw the desktop into the window: every placed app bottom to top, then
-    /// the chrome over all of them.
-    ///
-    /// The apps' geometry is the scene's — `draw_order` gives the stacking the
-    /// chrome asked for, and `surface_to_output` places each surface exactly
-    /// where a click on it would land. `hit_test` resolves the same stacking
-    /// among the windows that take the pointer; every window is drawn,
-    /// including the ones that do not, so a window the chrome made inert is
-    /// painted over the window its clicks now go to. An app with no texture
-    /// yet is skipped rather than drawn empty: it has been announced but has
-    /// not committed.
-    ///
-    /// The chrome covers the output, and blending is what makes that work
-    /// rather than hide everything: it is transparent wherever an `<app>`
-    /// element is *and nothing behind that element painted*, so the app shows
-    /// through the hole, and opaque wherever it has drawn a panel. Which of
-    /// its depths goes where among the windows is [`stacking::steps`]; today
-    /// nothing reports those depths, so it is one draw over the lot as before.
-    ///
-    /// A wallpaper is what that caveat is about, and it is why interleaving is
-    /// only half an answer: a chrome that paints behind its own `<app>`
-    /// element hands over a texel that is already wallpaper-under-panel, and
-    /// no ordering of one raster can put a window between the two.
-    fn present(&mut self) {
-        let started = Instant::now();
-        let placed: Vec<Placed> = {
-            let host = self.hub.host.lock().unwrap();
-            host.scene()
-                .draw_order()
-                .into_iter()
-                .map(|portal| {
-                    (
-                        portal.app_id.clone(),
-                        portal.surface_to_output(),
-                        portal.style,
-                        portal.draws_natively,
-                        portal.z_index,
-                    )
-                })
-                .collect()
-        };
-        let Some(gpu) = self.gpu.as_mut() else {
-            return;
-        };
-        let Some(backend) = gpu.window() else {
-            return;
-        };
-        let size = backend.window_size();
-        // The scene is in the chrome's logical units and the window is in
-        // device pixels, and on a scaled display those are not the same number.
-        let to_window = logical_to_window(self.screens.size(), (size.w, size.h));
-        // A window on the copy path is drawn by the engine, into the canvas in
-        // its own hole. Drawing it here as well would put the compositor's
-        // picture over the engine's — two versions of the same window, the
-        // wrong one on top.
-        let placements: Vec<_> = placed
-            .into_iter()
-            .filter(|(_, _, _, natively, _)| *natively)
-            .map(|(app_id, surface_to_output, style, _, z_index)| {
-                (app_id, surface_to_output, style, z_index)
-            })
-            .collect();
-        // Everything a style measures is in the chrome's logical units and the
-        // shader works in output pixels.
-        let scale = to_window.a;
-        // The depth of each window that made it into `layers`, in that order,
-        // so `stacking` places the chrome against the windows actually drawn
-        // rather than against the ones the scene offered.
-        let depths: Vec<i32> = placements
-            .iter()
-            .filter(|(app_id, _, _, _)| self.textures.contains_key(app_id))
-            .map(|(_, _, _, z_index)| *z_index)
-            .collect();
-        // Nothing reports these yet: the chrome knows its own depths and the
-        // protocol has no message for them, so today every frame is the
-        // all-above case. The interleaving exists first so that message has
-        // somewhere to arrive.
-        let bands: Vec<stacking::Band> = Vec::new();
-        // Where the chrome goes among the windows rather than only over them.
-        // Out here rather than beside its use because the clip rectangles are
-        // borrowed into the layers, so the plan has to outlive them.
-        let plan = stacking::steps(&depths, &bands);
-        // The windows alone, in the order the scene drew them, and never
-        // reassigned. Both plans below name a window by its position in *this*
-        // list; `layers` is what each plan produces, and reading a window back
-        // out of that would be reading a position in a plan.
-        let windows: Vec<_> = placements
-            .iter()
-            .filter_map(|(app_id, surface_to_output, style, _)| {
-                let surface = self.textures.get(app_id)?;
-                Some(Layer {
-                    alpha: style.opacity as f32,
-                    clip: &[],
-                    shadow: style.shadow.map(|shadow| shadow_in_pixels(shadow, scale)),
-                    // The radius is in the chrome's logical units and the
-                    // shader works in output pixels, so it scales with
-                    // everything else — a rounded window on a 2x display has
-                    // twice the radius in pixels and looks the same.
-                    corner_radius: (style.corner_radius * scale) as f32,
-                    surface_to_output: surface_to_output.then(to_window),
-                    texture: &surface.texture,
-                    sampling: surface.sampling,
-                })
-            })
-            .collect();
-        let mut layers = windows.clone();
-        // What each layer covers, from the same transform it is drawn with, so
-        // the reported box and the drawn pixels cannot describe different
-        // rectangles. Built here rather than from the scene, which is in
-        // logical units and would need the same mapping applied a second time.
-        let mut painted: Vec<Painted> = placements
-            .iter()
-            .filter(|(app_id, _, _, _)| self.textures.contains_key(app_id))
-            .map(|(app_id, surface_to_output, style, _)| {
-                let onto_output = surface_to_output.then(to_window);
-                // Where the shadow lands, from the same function that draws it
-                // — so the box and the pixels cannot describe different places.
-                let cast = style
-                    .shadow
-                    .and_then(|shadow| shadow_quad(onto_output, shadow_in_pixels(shadow, scale)))
-                    .map(|(quad, _)| quad);
-                Painted {
-                    app_id: app_id.clone(),
-                    rect: covered(onto_output, cast),
-                    placed: onto_output,
-                    // Present by construction: `textures` is only written
-                    // from inside `commit`, which bumps this first, and the
-                    // two are removed together when a window closes.
-                    content: self.content[app_id],
-                    // In the units the shader is handed, not the scene's:
-                    // both are scaled on the way to `draw_layers`, and the
-                    // logical numbers can stay put while the drawn ones move.
-                    look: Look {
-                        opacity: style.opacity,
-                        corner_radius: style.corner_radius * scale,
-                        shadow: style.shadow.map(|shadow| shadow_in_pixels(shadow, scale)),
-                    },
-                }
-            })
-            .collect();
-        if let Some(chrome) = self.chrome_texture.as_ref() {
-            let chrome_onto_output = chrome_onto_output(chrome.logical_size, to_window);
-            painted.push(Painted {
-                app_id: CHROME_LAYER.to_string(),
-                rect: covered(chrome_onto_output, None),
-                placed: chrome_onto_output,
-                // Not indexed like an app's: the chrome's texture outlives
-                // the page that drew it, so this map can legitimately have no
-                // entry for it after a reload cleared nothing.
-                content: self.content.get(CHROME_LAYER).copied().unwrap_or_default(),
-                // The desktop is never rounded, never translucent and casts
-                // nothing — the same three facts its `Layer` below states.
-                look: Look {
-                    opacity: 1.0,
-                    corner_radius: 0.0,
-                    shadow: None,
-                },
-            });
-            // `bands` is empty until a chrome reports its own depths, and
-            // with none `steps` puts every window down and the whole chrome
-            // over the lot — the frame the compositor has always drawn.
-            let mut drawn = Vec::with_capacity(plan.len());
-            for step in &plan {
-                match step {
-                    // Already in `layers`, in this order, from the loop
-                    // above: `depths` and `layers` are built from the same
-                    // vector under the same filter, so an index `steps`
-                    // produced by enumerating one addresses the other.
-                    stacking::Step::Window(at) => drawn.push(windows[*at].clone()),
-                    stacking::Step::Chrome(rects) => drawn.push(Layer {
-                        alpha: 1.0,
-                        // The whole quad as `&[]` rather than as one instance
-                        // covering it. Both draw the same pixels, but only the
-                        // empty one takes the path every frame took before
-                        // there were bands — and the test that covers the
-                        // other needs a GPU, so on a machine without one the
-                        // difference would go unwatched.
-                        clip: if rects == &[stacking::WHOLE] {
-                            &[]
-                        } else {
-                            rects
-                        },
-                        // The desktop itself is not a window: it is never
-                        // rounded and casts nothing.
-                        corner_radius: 0.0,
-                        shadow: None,
-                        // The same placement the `Painted` above reports, and
-                        // from the same call: drawn in one place and reported
-                        // as damaged in another is a desktop that repaints the
-                        // wrong rectangle.
-                        surface_to_output: chrome_onto_output,
-                        texture: &chrome.texture,
-                        sampling: chrome.sampling,
-                    }),
-                }
-            }
-            layers = drawn;
-        }
-        // Bands, where the chrome declared any and has answered for them.
-        // Each is a full-size raster that is transparent wherever that depth
-        // paints nothing, so they are drawn whole and in depth order rather
-        // than clipped out of one another — nothing in them was flattened
-        // together, which is the entire reason for having asked separately.
-        //
-        // Once every band has a picture, rather than once the cycle collecting
-        // them has finished — see `Bands::all_pictured`, which is where the
-        // difference is written down. A frame drawn from a partial set is the
-        // desktop with a layer missing, so the flattened `chrome_texture`
-        // above is what a desktop that has never completed a cycle gets; one
-        // that has keeps drawing from the pictures it holds while the next
-        // set is collected, because the alternative is the flattened chrome —
-        // the whole page over every window — on every frame the chrome
-        // repaints for its own reasons.
-        let bands_drawable = self
-            .bands
-            .all_pictured(|band| self.band_textures.contains_key(&band));
-        // Neither picture of the chrome can be trusted yet, so the one already
-        // on screen is left alone rather than replaced by one that is wrong.
-        // See `bands::hold_the_frame`: this is the flash at every transition
-        // that changes the declared depths — a window floating, a window going
-        // back to the rail, a drag beginning.
-        if hold_the_frame(bands_drawable, self.chrome_is_current, self.frames_held) {
-            self.frames_held += 1;
-            return;
-        }
-        self.frames_held = 0;
-        if bands_drawable {
-            // The order is `bands`' to decide — see `Bands::drawn_with`, which
-            // is where it can be tested. What is left here is turning that
-            // order into layers, which needs the textures this owns.
-            //
-            // Indexing rather than `get`, on both arms. `drawn_with`
-            // enumerates the depths handed to it, and `depths` and `windows`
-            // are built from one vector under one filter, so a window it names
-            // is a window there. A band it names was declared, and a declared
-            // band that answered has a texture: every place that forgets one
-            // forgets the other in the same breath, and `Arrival::AskAgain` is
-            // what stops a band being counted answered without.
-            layers = self
-                .bands
-                .drawn_with(&depths)
-                .into_iter()
-                .map(|drawn| match drawn {
-                    Layered::Window(at) => windows[at].clone(),
-                    Layered::Band(band) => band_layer(&self.band_textures[&band], to_window),
-                })
-                .collect();
-        }
-
-        let Some(gpu) = self.gpu.as_mut() else {
-            return;
-        };
-        // Taken out for the borrow: binding hands back the renderer, and the
-        // shaders live beside it.
-        let Some(shaders) = gpu.shaders.take() else {
-            return;
-        };
-        let Some(backend) = gpu.window() else {
-            return;
-        };
-        let Ok((renderer, mut framebuffer)) = backend.bind() else {
-            tracing::warn!("could not bind the window for drawing");
-            return;
-        };
-        let drawn = (|| {
-            let mut frame = renderer.render(&mut framebuffer, size, output_transform())?;
-            frame.clear(
-                Color32F::new(0.0, 0.0, 0.0, 1.0),
-                &[Rectangle::from_size(size)],
-            )?;
-            draw_layers(&mut frame, &shaders, &layers)?;
-            frame.finish()
-        })();
-        drop(framebuffer);
-        if let Some(gpu) = self.gpu.as_mut() {
-            gpu.shaders = Some(shaders);
-        }
-        match drawn {
-            Ok(sync) => {
-                let _ = sync;
-                // Only on `Ok`: a frame that failed to draw is not a frame,
-                // and reporting it as one would say the desktop was keeping up
-                // while it was blank.
-                let backend = self
-                    .gpu
-                    .as_mut()
-                    .and_then(Gpu::window)
-                    .expect("present returned early without a window to draw into");
-                // What actually changed, rather than `None` — which is
-                // always correct and always the most expensive thing to say:
-                // a nested host re-reads the whole surface for it, and a
-                // display controller can skip nothing.
-                // `damage::reported` is the rule for when `None` is still
-                // the honest answer.
-                let changed = damage::reported(self.painted.as_ref(), &painted, (size.w, size.h))
-                    .map(|rects| {
-                        rects
-                            .into_iter()
-                            .map(|rect| {
-                                Rectangle::new(
-                                    (rect.x, rect.y).into(),
-                                    (rect.width, rect.height).into(),
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                    });
-                let mut reached_the_screen = true;
-                record_present(&self.hub.timings, started, || {
-                    if let Err(err) = backend.submit(changed.as_deref()) {
-                        tracing::warn!(%err, "could not submit the frame");
-                        reached_the_screen = false;
-                    }
-                });
-                // Only what was actually presented becomes the next frame's
-                // baseline. A submit that failed leaves the screen showing the
-                // frame before this one, so recording this one would take the
-                // next difference against a picture nobody ever saw — and
-                // everything this frame changed would be silently dropped.
-                self.painted = reached_the_screen.then_some(damage::Frame {
-                    into: (size.w, size.h),
-                    layers: painted,
-                });
-            }
-            Err(err) => tracing::warn!(%err, "could not draw the scene"),
-        }
-    }
-
-    /// Take the density of the display Domicile's window is on as the output's.
-    ///
-    /// Without this the chrome renders at whatever scale it was first told —
-    /// one — and the host compositor stretches the result over a denser screen.
-    /// It does not look like the wrong scale, it looks like a blurry desktop.
-    fn adopt_window_scale(&mut self, scale_factor: f64) {
-        // Only where nothing described the desktop. With displays configured
-        // it is a fact about the user's screens, so dragging Domicile's window
-        // shows more or less of it rather than resizing it.
-        if !self.screens.follows_the_window() {
-            return;
-        }
-        let physical = self.window_size();
-        let scale = output_scale(scale_factor, self.max_scale);
-        // The desktop is the window: a client asking how big the screen is
-        // should be told what the user dragged the window to, not the size it
-        // started at. Without this the scene is mapped through a fixed
-        // 1280x800 whatever the window's shape, so a window that is not that
-        // shape shows the desktop stretched to fit it.
-        //
-        // Sized by the display's own ratio rather than by `scale` — the two
-        // differ on every fractional display and `desktop_size` says why.
-        // Dividing by `scale` here is what made a 1.5x screen a desktop two
-        // thirds its size with the whole chrome drawn a third too large.
-        let logical = desktop_size(physical, scale_factor);
-        self.set_output(logical, scale);
-    }
-
     /// Advertise a new output scale, so clients redraw at the resolution the
     /// screen actually has.
     ///
@@ -2633,50 +2173,6 @@ impl DomicileCompositor {
         self.hub.broadcast(desktop);
     }
 
-    /// Ask the session Domicile's window is in to resize it to the desktop.
-    ///
-    /// The same question `window_showing_it` answers at startup, asked again
-    /// because the desktop is not the same one. Without it a config that
-    /// gained a display left the wider desktop scaled into the window it
-    /// already had — `logical_to_window` stretching to fit rather than the
-    /// window growing to suit, which is a desktop that went blurry and small
-    /// rather than one that grew.
-    ///
-    /// A request rather than a guarantee, exactly as at startup: a window
-    /// manager is free to give us something else, `WinitEvent::Resized` is what
-    /// says what we got, and the desktop is scaled into whatever that is. Some
-    /// return the new size and some answer with a later event, so the answer is
-    /// ignored here and the event is what is believed.
-    ///
-    /// Only where the desktop is described. Where it *follows* the window,
-    /// asking would be the tail wagging the dog: `adopt_window_scale` derives
-    /// the desktop from the window's size, so a resize from here would feed
-    /// its own answer back in.
-    ///
-    /// A real condition rather than a restated guarantee, because
-    /// `adopt_the_desktop` *is* reached with a window-following desktop.
-    /// `reloaded_into` has three arms, not two: a config that **stops**
-    /// describing displays hands the desktop back to the window as
-    /// `compositor.nested_size`, which follows the window and still goes
-    /// through here. Asserting instead of returning aborted the compositor on
-    /// that edit in a debug build, and in a release one — where the assert is
-    /// compiled out — snapped the user's window to `nested_size` for having
-    /// deleted a display from their config.
-    fn ask_for_a_window_showing_the_desktop(&mut self) {
-        if self.screens.follows_the_window() {
-            return;
-        }
-        let within = self.config.current().compositor.nested_size;
-        let (width, height) = self.screens.window_showing_it(within);
-        let Some(backend) = self.gpu.as_mut().and_then(Gpu::window) else {
-            return;
-        };
-        info!(width, height, "asking for a window that shows the desktop");
-        let _ = backend
-            .window()
-            .request_inner_size(LogicalSize::new(f64::from(width), f64::from(height)));
-    }
-
     /// Take up a desktop the config now describes, keeping the displays that
     /// stayed.
     ///
@@ -2787,37 +2283,6 @@ impl DomicileCompositor {
             host.describe_desktop()
         };
         self.hub.broadcast(desktop);
-        // And a window the size of the desktop it now shows. Last, because it
-        // is a request to the session outside rather than part of describing
-        // the desktop within: everything above has to hold whatever the
-        // window manager does with this.
-        self.ask_for_a_window_showing_the_desktop();
-    }
-
-    /// Ask the session Domicile's window is in for the cursor a client wants.
-    ///
-    /// `CursorIcon` is `cursor-icon`'s, which is the type winit takes as well,
-    /// so a named shape passes straight through — the two agree on the names
-    /// because they are the same names.
-    fn apply_window_cursor(&mut self, image: &CursorImageStatus) {
-        let Some(backend) = self.gpu.as_mut().and_then(Gpu::window) else {
-            return;
-        };
-        let window = backend.window();
-        match image {
-            CursorImageStatus::Hidden => window.set_cursor_visible(false),
-            CursorImageStatus::Named(icon) => {
-                window.set_cursor_visible(true);
-                window.set_cursor(Cursor::Icon(*icon));
-            }
-            // A client that drew its own pointer into a surface. Compositing
-            // that surface is the eventual answer; an arrow is the honest
-            // stand-in until then, and hiding it instead would lose the pointer.
-            CursorImageStatus::Surface(_) => {
-                window.set_cursor_visible(true);
-                window.set_cursor(Cursor::Icon(CursorIcon::Default));
-            }
-        }
     }
 
     /// Give the chrome the keyboard.
@@ -2860,185 +2325,6 @@ impl DomicileCompositor {
         broadcast_focus_decision(&self.hub, ChromeMessage::FocusChrome);
     }
 
-    /// Hand the window's own input to the chrome.
-    ///
-    /// Everything the user does to Domicile's window is the chrome's to
-    /// interpret: it is the desktop, it knows where its `<app>` elements are,
-    /// and it already forwards what belongs to a client back to us over the
-    /// socket. So this delivers to the chrome's surface and stops there — the
-    /// compositor does no hit-testing of its own, exactly as when the chrome
-    /// was a window in someone else's session.
-    fn handle_window_input(&mut self, event: InputEvent<WinitInput>) {
-        let Some(surface) = self
-            .chrome_toplevel
-            .as_ref()
-            .map(|toplevel| toplevel.wl_surface().clone())
-        else {
-            // Input before the chrome has mapped. Dropped rather than queued:
-            // a click on a desktop that is not up yet has nothing to land on.
-            return;
-        };
-        // Once per kind, so the log distinguishes the three ways this fails:
-        // nothing arrives at all (the window's events are not wired up),
-        // something arrives but the chrome has no focus to receive it, or it
-        // arrives and is delivered and the chrome does nothing with it.
-        let kind = match &event {
-            InputEvent::PointerMotionAbsolute { .. } => Some("pointer motion"),
-            InputEvent::PointerButton { .. } => Some("pointer button"),
-            InputEvent::PointerAxis { .. } => Some("scroll"),
-            InputEvent::Keyboard { .. } => Some("key"),
-            _ => None,
-        };
-        if let Some(kind) = kind {
-            if self.window_input_seen.insert(kind) {
-                let focused = self
-                    .seat
-                    .get_keyboard()
-                    .and_then(|keyboard| keyboard.current_focus())
-                    .is_some();
-                info!(
-                    kind,
-                    chrome_has_keyboard = focused,
-                    "the window's input reached the compositor"
-                );
-            }
-        }
-
-        let time = self.now_ms();
-        match event {
-            InputEvent::PointerMotionAbsolute { event } => {
-                let window = self.window_size();
-                let position = event.position_transformed(window.into());
-                let logical = window_to_logical(self.screens.size(), (window.0, window.1))
-                    .apply(ScenePoint::new(position.x, position.y));
-                let (focus, location) = self.pointer_target(logical, &surface);
-                let pointer = self.seat.get_pointer().unwrap();
-                let serial = SERIAL_COUNTER.next_serial();
-                pointer.motion(
-                    self,
-                    // Anchored at the origin, so the location is already
-                    // surface-local: for the chrome that is the desktop's own
-                    // coordinate, and for an app the scene has converted it.
-                    Some((focus, (0.0, 0.0).into())),
-                    &MotionEvent {
-                        location: (location.x, location.y).into(),
-                        serial,
-                        time,
-                    },
-                );
-                pointer.frame(self);
-            }
-            InputEvent::PointerButton { event } => {
-                // Pressing on a window is what focuses it. The pointer's own
-                // focus was settled by the motion that got here, so the surface
-                // under the pointer is the one the seat is already pointing at.
-                if event.state() == ButtonState::Pressed {
-                    self.focus_pointed_at();
-                }
-                let pointer = self.seat.get_pointer().unwrap();
-                let serial = SERIAL_COUNTER.next_serial();
-                pointer.button(
-                    self,
-                    &ButtonEvent {
-                        button: event.button_code(),
-                        state: event.state(),
-                        serial,
-                        time,
-                    },
-                );
-                pointer.frame(self);
-            }
-            InputEvent::PointerAxis { event } => {
-                let mut frame = AxisFrame::new(time).source(AxisSource::Wheel);
-                for axis in [Axis::Horizontal, Axis::Vertical] {
-                    if let Some(delta) = event.amount(axis) {
-                        frame = frame.value(axis, delta);
-                    }
-                    if let Some(steps) = event.amount_v120(axis) {
-                        frame = frame.v120(axis, steps as i32);
-                    }
-                }
-                let pointer = self.seat.get_pointer().unwrap();
-                pointer.axis(self, frame);
-                pointer.frame(self);
-            }
-            InputEvent::Keyboard { event } => {
-                let keyboard = self.seat.get_keyboard().unwrap();
-                let serial = SERIAL_COUNTER.next_serial();
-                // Already an X keycode: the winit backend applies the evdev +8
-                // itself, unlike the chrome, which sends evdev and has it added
-                // where its keys are injected.
-                let key = event.key_code();
-                let pressed = event.state() == KeyState::Pressed;
-                // The filter runs with the modifier state this key produced, so
-                // a claimed combination is taken out of the stream here — before
-                // the focused client is given it, which is the only place it can
-                // be taken from a window that has the keyboard.
-                let grabbed = keyboard.input(
-                    self,
-                    key,
-                    event.state(),
-                    serial,
-                    time,
-                    |state, modifiers, _| {
-                        let held = Modifiers {
-                            alt: modifiers.alt,
-                            ctrl: modifiers.ctrl,
-                            shift: modifiers.shift,
-                            logo: modifiers.logo,
-                        };
-                        // Releases are swallowed too, so a client never sees
-                        // half of a chord it was not given the start of — but
-                        // on the record of what was taken rather than on the
-                        // chord the release would match now. The modifiers
-                        // move in between: an Enter forwarded on its own, let
-                        // go of while alt happens to be down, matches
-                        // Alt+Enter and would have had its release swallowed,
-                        // leaving that client a key it can never lift.
-                        if pressed {
-                            match state.shortcuts.press(key.raw(), held) {
-                                Some(shortcut) => FilterResult::Intercept(Some(shortcut)),
-                                None => FilterResult::Forward,
-                            }
-                        } else if state.shortcuts.release(key.raw()) {
-                            FilterResult::Intercept(None)
-                        } else {
-                            FilterResult::Forward
-                        }
-                    },
-                );
-                if let Some(Some(shortcut)) = grabbed {
-                    info!(key = shortcut.key, "a claimed shortcut -> the chrome");
-                    self.hub.broadcast(HostMessage::Shortcut { shortcut });
-                }
-                self.tell_the_chromes_the_modifiers();
-            }
-            _ => {}
-        }
-    }
-
-    /// Where a pointer at `logical` on the desktop belongs, and the coordinate
-    /// to deliver it in.
-    ///
-    /// The compositor does this itself rather than handing every motion to the
-    /// chrome and taking its word for where it landed. One seat has one pointer
-    /// focus, and two things driving it means the one that moved it last gets
-    /// the next click — which is how a window could stop being clickable while
-    /// still tracking the mouse. The scene already knows where the windows are;
-    /// `route_pointer` is the same lookup the chrome would have done.
-    fn pointer_target(&self, logical: ScenePoint, chrome: &WlSurface) -> (WlSurface, ScenePoint) {
-        let target = self.hub.host.lock().unwrap().scene().route_pointer(logical);
-        match target {
-            PointerTarget::App { app_id, local } => match self.surface_for(&app_id) {
-                Some(surface) => (surface, local),
-                // Placed but not mapped: the chrome laid out an element for a
-                // window that has not shown itself yet.
-                None => (chrome.clone(), logical),
-            },
-            PointerTarget::Chrome { screen } => (chrome.clone(), screen),
-        }
-    }
-
     /// Tell every chrome which modifiers are held, when that has changed.
     ///
     /// The seat is asked rather than the filter answering, because a key
@@ -3064,83 +2350,8 @@ impl DomicileCompositor {
         }
     }
 
-    /// Give the keyboard to whatever the pointer is over.
-    fn focus_pointed_at(&mut self) {
-        let Some(surface) = self
-            .seat
-            .get_pointer()
-            .and_then(|pointer| pointer.current_focus())
-        else {
-            return;
-        };
-        let keyboard = self.seat.get_keyboard().unwrap();
-        if keyboard.current_focus().as_ref() == Some(&surface) {
-            return;
-        }
-        let app_id = self
-            .toplevels
-            .iter()
-            .find(|(_, toplevel)| toplevel.wl_surface() == &surface)
-            .map(|(app_id, _)| app_id.clone());
-        match &app_id {
-            Some(app_id) => {
-                info!(%app_id, "clicked -> the window has the keyboard");
-                // Through the brain rather than around it, so the click also
-                // raises the window — the same thing the chrome's own focus
-                // message does, because it is the same message. And out to
-                // every chrome: this is a focus move the chrome did not ask
-                // for, so it is the one it cannot work out for itself.
-                broadcast_focus_decision(
-                    &self.hub,
-                    ChromeMessage::FocusApp {
-                        app_id: app_id.clone(),
-                    },
-                );
-            }
-            None => {
-                info!("clicked -> the chrome has the keyboard");
-                // The same for a click that landed on the desktop. The seat
-                // moves below either way; without this the brain still names
-                // the last window and the chrome still marks it active, one
-                // click after the marker was right.
-                broadcast_focus_decision(&self.hub, ChromeMessage::FocusChrome);
-            }
-        }
-        let serial = SERIAL_COUNTER.next_serial();
-        keyboard.set_focus(self, Some(surface), serial);
-    }
-
-    /// The window's size in device pixels, or the output's logical size where
-    /// there is no window — which only happens headless, where nothing asks.
-    fn window_size(&mut self) -> (i32, i32) {
-        self.gpu
-            .as_mut()
-            .and_then(Gpu::window)
-            .map(|backend| {
-                let size = backend.window_size();
-                (size.w, size.h)
-            })
-            .unwrap_or(self.screens.size())
-    }
-
     /// Inject a forwarded input event into the appropriate client via the seat.
     fn handle_client_request(&mut self, event: ClientRequest) {
-        // Where Domicile presents, it routes the pointer itself from the
-        // window's own events — see `pointer_target`. The chrome's forwarded
-        // pointer is the copy path's mechanism, and a second thing driving one
-        // focus is how a window ends up tracking the mouse but never receiving
-        // the click: whichever moved the focus last got it.
-        if self.gpu.as_ref().is_some_and(Gpu::presenting)
-            && matches!(
-                event,
-                ClientRequest::PointerMotion { .. }
-                    | ClientRequest::PointerLeave
-                    | ClientRequest::PointerButton { .. }
-                    | ClientRequest::PointerAxis { .. }
-            )
-        {
-            return;
-        }
         match event {
             ClientRequest::PointerMotion { app_id, x, y } => {
                 let Some(surface) = self.surface_for(&app_id) else {
@@ -3272,15 +2483,23 @@ impl DomicileCompositor {
                 let serial = SERIAL_COUNTER.next_serial();
                 keyboard.set_focus(self, surface, serial);
             }
+            // LOGGED AND NOTHING ELSE, DELIBERATELY. The compositor used to
+            // keep the claim and take the chord's keys out of the stream; it
+            // could, because `--present` gave it a window and the window gave
+            // it the keyboard. Now the chrome holds the keyboard and forwards
+            // every key here, so it has already matched its own chords before
+            // the compositor sees anything — the claim has nothing left to do.
+            //
+            // The message stays because the chrome still sends it and the line
+            // is what says a shortcut was claimed at all, which is worth
+            // having when a chord does not fire.
             ClientRequest::GrabShortcut { shortcut } => {
                 info!(key = shortcut.key, "the chrome claimed a shortcut");
-                self.shortcuts.grab(shortcut);
             }
             ClientRequest::ScenePlaced => {
                 // A placement is also a window possibly having moved to
                 // another screen, and nothing else tells the client that.
                 self.enter_the_displays_each_window_is_on();
-                self.needs_present = true;
             }
             ClientRequest::ChromeHello => {
                 // A page has started, and whatever the page before it was
@@ -3297,8 +2516,6 @@ impl DomicileCompositor {
                 self.release_pressed_keys();
                 // Nothing is held and nothing is owed. The windows a chrome
                 // needs are re-supplied by the hand-over pass in `present`,
-                // which is what an empty `held` asks for.
-                self.needs_present = true;
                 announce_open_apps(&self.hub);
             }
             ClientRequest::PortalRemoved => {
@@ -3313,7 +2530,6 @@ impl DomicileCompositor {
                 // `place_portal` and so as `ScenePlaced`. `unmounts_the_element`
                 // is what tells the two apart.
                 self.enter_the_displays_each_window_is_on();
-                self.needs_present = true;
             }
             ClientRequest::DeclareBands { depths } => {
                 self.bands.declared(depths);
@@ -3401,26 +2617,14 @@ impl DomicileCompositor {
                 KeyState::Released,
                 serial,
                 time,
-                |state, _, _| {
-                    // Taken here if its press was taken. `pressed_keys` includes
-                    // the keys a claimed chord kept from the client — smithay
-                    // records a press before it runs the filter, and keeps the set
-                    // that would tell them apart to itself — and a client that was
-                    // never given a key going down must not be given it coming up.
-                    // The seat's own state is updated either way, which is the
-                    // half of this that clears a stuck lock.
-                    //
-                    // The other direction is not worth a record: once this
-                    // pass has let a key go, the physical release that arrives
-                    // afterwards is forwarded to a client that no longer holds
-                    // it. A release for a press a client is not holding is
-                    // what `wl_keyboard.leave` already tells it to expect.
-                    if state.shortcuts.release(key.raw()) {
-                        FilterResult::Intercept(())
-                    } else {
-                        FilterResult::Forward
-                    }
-                },
+                // Always forwarded. The compositor used to take a claimed
+                // chord's keys out of the stream, which it could do because it
+                // owned the input: `--present` gave it a window and the window
+                // gave it the keyboard. It has neither now — the chrome holds
+                // the keyboard and forwards each key here — so it sees every
+                // key *after* the chrome has already had the chance to match
+                // its own chords, and there is nothing left to intercept.
+                |_, _, _| FilterResult::<()>::Forward,
             );
         }
         self.tell_the_chromes_the_modifiers();
@@ -3449,10 +2653,6 @@ struct SurfaceTexture {
     /// A `wp_viewport`'s destination is this, when it set one: a destination
     /// *is* the logical size, which is the whole point of sending it.
     logical_size: (f64, f64),
-    /// See [`Layer::sampling`]. Composed here because this is where the
-    /// buffer's own size is known, which is what turns a viewport's source
-    /// rectangle into texture coordinates.
-    sampling: Matrix3<f32>,
 }
 
 /// What a surface is called in [`DomicileCompositor::content`] and in the
@@ -3478,63 +2678,6 @@ enum Committer {
     App(String),
     /// The engine drawing the desktop itself.
     Chrome,
-}
-
-/// A shadow the way the shader wants it: lengths in output pixels, colour
-/// channels counted to one.
-///
-/// Everything a style measures is in the chrome's logical units, so a window on
-/// a 2x display casts a shadow twice as far in pixels and looks the same. The
-/// colour is the exception — CSS counts channels to 255 and a shader counts
-/// everything to one, and alpha is already 0-1 on both sides.
-fn shadow_in_pixels(shadow: domicile_scene::Shadow, scale: f64) -> Shadow {
-    Shadow {
-        blur: (shadow.blur * scale) as f32,
-        color: [
-            (shadow.color[0] / 255.0) as f32,
-            (shadow.color[1] / 255.0) as f32,
-            (shadow.color[2] / 255.0) as f32,
-            shadow.color[3] as f32,
-        ],
-        dx: (shadow.dx * scale) as f32,
-        dy: (shadow.dy * scale) as f32,
-        spread: (shadow.spread * scale) as f32,
-    }
-}
-
-/// Record what one present cost, with the submit's time kept out of the
-/// drawing's.
-///
-/// The submit is `eglSwapBuffers`, and on a window nested in another
-/// compositor it blocks until that compositor hands back a frame callback.
-/// Counting that wait as drawing made `composite_ms` say the compositor could
-/// not keep up precisely when nothing was being asked of it.
-///
-/// This owns the recording rather than handing two durations back, because the
-/// defect was never in the arithmetic — it was a caller assigning the wrong
-/// span to the right field, and a caller with no durations in its hands has
-/// nothing to misassign. It is not sealed: submitting *outside* the closure
-/// and passing an empty one puts the wait back in `composite_ms`. Sealing it
-/// would take a `&mut impl Submits` whose exclusive borrow makes that a
-/// visible double submit, which is machinery against a mutation that reads as
-/// wrong on sight — passing `|| {}` to a parameter called `submit`.
-///
-/// `composited` counts here too: a present that drew is a present that
-/// submitted, and the count and the two timings have to describe the same
-/// frames or the self-check over them means nothing.
-///
-/// Neither span is the whole cost. GLES hands work to the driver rather than
-/// doing it, so `composite_ms` under-reports the GPU's share and `submit_ms`
-/// carries it along with the wait.
-fn record_present(timings: &Mutex<FrameTimings>, started: Instant, submit: impl FnOnce()) {
-    let composing = started.elapsed();
-    let submitting = Instant::now();
-    submit();
-    let submitted = submitting.elapsed();
-    let mut timings = timings.lock().unwrap();
-    timings.composited += 1;
-    timings.composite.record(composing);
-    timings.submit.record(submitted);
 }
 
 /// A rectangle of a client's buffer, in buffer pixels.
@@ -4002,14 +3145,9 @@ impl SeatHandler for DomicileCompositor {
     // pointer the user sees belongs to the web engine, so the request is
     // forwarded as a CSS cursor for the element the pointer is over.
     fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
-        // Where Domicile has a window it is a client of the session it is
-        // running in, and the pointer the user sees is that session's. Asking
-        // for it is the only way the cursor ever changes: a client of ours
-        // setting one is a request we have to pass on, not something the user
-        // can see by itself.
-        self.apply_window_cursor(&image);
-
-        // And the chrome, which draws the pointer itself on the copy path.
+        // The chrome draws the pointer itself: a client of ours asking for a
+        // cursor is really asking the *chrome* for one, because the pointer the
+        // user sees belongs to the web engine.
         if let Some(app_id) = self.pointer_app.clone() {
             let cursor = match image {
                 CursorImageStatus::Hidden => CursorShape::None,
@@ -4225,7 +3363,6 @@ impl XdgShellHandler for DomicileCompositor {
             // count is what runs the hold out; see `bands::hold_the_frame`.
             self.chrome_is_current = false;
             self.frames_held = u32::MAX;
-            self.needs_present = true;
             // The bands with it. They are that page's rasters, and the
             // question outstanding is that page's to answer — left standing,
             // the next page's first commit would be taken for the dead one's
@@ -4362,22 +3499,6 @@ impl DataDeviceHandler for DomicileCompositor {
 delegate_data_device!(DomicileCompositor);
 
 // ---- boot -----------------------------------------------------------------
-
-/// Which way up the window is drawn.
-///
-/// Over. Smithay's projection sends output-y=0 to NDC -1, which is GL's
-/// *bottom*, and on a window that is the bottom of what the user sees — so
-/// drawn as-is the whole desktop is upside down. Settled on a display, because
-/// nothing without one can: reading a buffer back is consistent either way, and
-/// the offscreen tests pass under both.
-///
-/// `Flipped180` is a reflection in the horizontal axis, not a rotation, so the
-/// left of the desktop stays on the left. Pointer coordinates need no matching
-/// change: winit's y grows downward and so does the output's, which is what
-/// makes the two agree once the picture is the right way up.
-fn output_transform() -> Transform {
-    Transform::Flipped180
-}
 
 /// The display name the chrome connects on, given ours.
 ///
@@ -4688,12 +3809,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (request_tx, request_rx) = channel::<ClientRequest>();
 
     // Shared brain, driven by both the Wayland side and chrome connections.
-    let (hub, outbound_rx) = ChromeHub::new(
-        request_tx,
-        config.output.max_scale,
-        socket_name.clone(),
-        arguments.present,
-    );
+    let (hub, outbound_rx) =
+        ChromeHub::new(request_tx, config.output.max_scale, socket_name.clone());
     // Before any chrome can connect: the desktop rides with the handshake, so
     // a page that arrives in the same millisecond as the socket still gets it.
     hub.host
@@ -4719,68 +3836,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // nothing to render on — a container, a machine with no DRM device — the
     // global is simply not advertised, and clients fall back to wl_shm rather
     // than allocating buffers we would then have to reject.
-    // Presenting is opt-in. Headless is what every e2e script drives and what
-    // a machine with no display can run, so a window is something you ask for
-    // rather than something that happens to you.
-    let mut window_events = None;
-    let mut gpu = if arguments.present {
-        // Sized to show the desktop rather than to winit's default. `init()`
-        // is called with no attributes and opens a 1280x800 window titled
-        // "Smithay", so a two-display desktop was shown in a window the size
-        // of neither of them — and since a configured desktop does not follow
-        // the window, what that cost was the rest of it, scaled down.
-        //
-        // Bounded by `compositor.nested_size`, so a desktop that fits is shown
-        // at its own size and one that does not is scaled to fit, shape
-        // intact. Unbounded, four 4K displays would ask a host for a
-        // 15360-wide window — off the screen, or past what GL will allocate,
-        // and worse than the fixed size this replaced.
-        //
-        // A request rather than a guarantee: a window manager is free to give
-        // us something else, `WinitEvent::Resized` is what says what we got,
-        // and `logical_to_window` scales the desktop into whatever that is.
-        let window = screens.window_showing_it(config.compositor.nested_size);
-        let attributes = WinitWindow::default_attributes()
-            .with_inner_size(LogicalSize::new(f64::from(window.0), f64::from(window.1)))
-            .with_title("Domicile")
-            .with_visible(true);
-        match smithay::backend::winit::init_from_attributes::<GlesRenderer>(attributes) {
-            Ok((backend, events)) => {
-                info!(size = ?backend.window_size(), "presenting to a window");
-                window_events = Some(events);
-                let mut backend = backend;
-                let shaders = match Shaders::compile(backend.renderer()) {
-                    Ok(shaders) => Some(shaders),
-                    Err(err) => {
-                        // A driver that will not compile it leaves nothing to
-                        // draw with, and drawing squares instead would be a
-                        // desktop quietly missing the thing this is for.
-                        tracing::error!(%err, "the compositor's shader would not compile");
-                        return Err(err.into());
-                    }
-                };
-                Some(Gpu {
-                    importer: DmabufImporter::for_existing_renderer(),
-                    output: GpuOutput::Window(Box::new(backend)),
-                    shaders,
-                })
-            }
-            Err(err) => {
-                tracing::error!(%err, "--present was asked for but no window could be opened");
-                return Err(err.into());
-            }
-        }
-    } else {
-        match headless_renderer() {
-            Ok((renderer, importer)) => Some(Gpu {
-                importer,
-                output: GpuOutput::Headless(Box::new(renderer)),
-                shaders: None,
-            }),
-            Err(err) => {
-                tracing::warn!(%err, "no EGL renderer: serving wl_shm clients only");
-                None
-            }
+    // HEADLESS, ALWAYS. `--present` opened a winit window and composited into
+    // it with Smithay's GL renderer; it went because nothing ran it. It was
+    // never reachable from `run-engine.sh` or the flake — only from three e2e
+    // scripts, whose whole subject was that path — so what it had was tests
+    // and no users.
+    //
+    // The renderer that stays is what imports client dmabufs and reads shm
+    // buffers back for the chrome, which is how a client's frames reach the
+    // engine at all.
+    let mut gpu = match headless_renderer() {
+        Ok((renderer, importer)) => Some(Gpu {
+            importer,
+            renderer: Box::new(renderer),
+        }),
+        Err(err) => {
+            tracing::warn!(%err, "no EGL renderer: serving wl_shm clients only");
+            None
         }
     };
 
@@ -4838,7 +3910,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         hub,
         bridge: BridgeRegistry::new(),
         content: HashMap::new(),
-        painted: None,
         textures: HashMap::new(),
         toplevels: Vec::new(),
         pointer_app: None,
@@ -4863,12 +3934,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_toplevel: None,
         chrome_texture: None,
         chrome_frame_shape: None,
-        max_scale: config.output.max_scale,
         screens,
-        shortcuts: Shortcuts::default(),
         modifiers: Held::default(),
-        needs_present: false,
-        window_input_seen: HashSet::new(),
         stop: Arc::new(AtomicBool::new(false)),
         engine,
     };
@@ -5034,37 +4101,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // has frozen.
     // The window's density before anything is drawn, so the chrome is told the
     // truth on its very first frame rather than after the first resize.
-    if let Some(scale_factor) = data
-        .state
-        .gpu
-        .as_mut()
-        .and_then(Gpu::window)
-        .map(|backend| backend.scale_factor())
-    {
-        data.state.adopt_window_scale(scale_factor);
-    }
-
-    if let Some(events) = window_events {
-        handle.insert_source(events, |event, _, data: &mut CalloopData| match event {
-            WinitEvent::Input(input) => data.state.handle_window_input(input),
-            // The window changed size or density, so everything drawn in it
-            // is wrong until the next frame — and nothing else is going to ask
-            // for one, because a resize is not a client commit.
-            WinitEvent::Resized { scale_factor, .. } => {
-                data.state.adopt_window_scale(scale_factor);
-                data.state.needs_present = true;
-            }
-            WinitEvent::Redraw => data.state.needs_present = true,
-            WinitEvent::CloseRequested => data.state.stop.store(true, Ordering::SeqCst),
-            // A window that has just been given the keyboard: assert the
-            // chrome's focus, in case it bound its keyboard after mapping.
-            WinitEvent::Focus(true) => data.state.focus_chrome(),
-            // The window stops receiving keys the moment it loses focus, so
-            // the releases for whatever is held now are never coming.
-            WinitEvent::Focus(false) => data.state.release_pressed_keys(),
-        })?;
-    }
-
     // Last of all, and that placement is the whole point.
     //
     // The shell that started us is blocked on this file appearing, and takes
@@ -5085,11 +4121,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             chrome_socket: arguments.chrome_socket.clone(),
             wayland_display: socket_name.to_string_lossy().into_owned(),
             chrome_wayland_display: chrome_socket_name.clone(),
-            // What actually happened, not what was asked for. `--present` on a
-            // machine with no display leaves the compositor headless, and a
-            // shell told otherwise would open a transparent window over
-            // nothing rather than one it draws a desktop into.
-            composited: data.state.gpu.as_ref().is_some_and(Gpu::presenting),
         },
         &arguments.session,
     )?;
@@ -5099,9 +4130,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stop = data.state.stop.clone();
     let signal = event_loop.get_signal();
     event_loop.run(None, &mut data, move |data| {
-        if std::mem::take(&mut data.state.needs_present) {
-            data.state.present();
-        }
         let _ = data.display.flush_clients();
         if stop.load(Ordering::SeqCst) {
             signal.stop();
@@ -5216,87 +4244,13 @@ mod tests {
     use super::{
         announce_open_apps, answers_keystroke, bgra_to_rgba, broadcast_closed,
         broadcast_focus_decision, channel, chrome_connection, client_command, cursor_shape,
-        freshened, parse_find_colours, record_present, shadow_in_pixels, to_line,
-        unmounts_the_element, write_responses, ChromeHub, ClientRequest, Committer, FrameTimings,
-        Outbound,
+        freshened, parse_find_colours, to_line, unmounts_the_element, write_responses, ChromeHub,
+        ClientRequest, Committer, Outbound,
     };
 
     use std::sync::Arc;
 
     use domicile_protocol::{ChromeMessage, HostMessage};
-
-    /// Each grepped message, against the exact pattern its script greps for.
-    ///
-    /// The scripts are the other half of the contract, so they are what this
-    /// reads. A test that spelled the strings out again would live in the same
-    /// file as the constants and rename along with them, which is the whole
-    /// failure it exists to catch.
-    ///
-    /// A row per *pair*, not per constant: `UNPARSEABLE` was grepped by two
-    /// scripts, and a table keyed on the constant alone left the second pair
-    /// unpinned — renaming it in one of them stayed green. Both of that pair
-    /// have since been ported and deleted, which is why the shape now looks
-    /// like more machinery than the rows need.
-    ///
-    /// It stays because the same hole was open again, for `ADVERTISING`, and
-    /// stayed open until the port that deleted the second of *its* two
-    /// scripts. Measured on the commit before that port: two scripts grepped
-    /// it, one row between them, and breaking the unrowed script's pattern was
-    /// green. That is this paragraph's failure, live in the tree, and the row
-    /// moving to the survivor is what closed it.
-    ///
-    /// The near-miss on the way out was a different shape and worth keeping
-    /// apart: that port first deleted the row outright, which left a rename of
-    /// the constant green. A table keyed per constant would have caught that
-    /// one; only a row per pair catches the one above.
-    ///
-    /// The pattern is *built from* the constant rather than searched for in
-    /// the file, because both weaker forms let a rename through. Spelling the
-    /// strings again missed a one-file `sed`; `script.contains(message)` missed
-    /// a constant *shortened* to a prefix, which changes what is logged while
-    /// the script goes on grepping for the whole of the old text. Building the
-    /// pattern means any edit to the constant that the script does not match
-    /// leaves nothing for this to find.
-    #[test]
-    fn the_grepped_log_messages_are_what_the_scripts_expect() {
-        for (pattern, script, name) in [
-            (
-                // The one whose script reads fields off the line as well, so
-                // the tail is part of what has to agree.
-                format!(
-                    "{} width=[0-9]+ height=[0-9]+ scale=[0-9]+",
-                    crate::grepped::ADVERTISING
-                ),
-                include_str!("../../../scripts/e2e-chrome-fills-a-window.sh"),
-                "e2e-chrome-fills-a-window.sh",
-            ),
-            (
-                // The second script grepping the same constant, and the reason
-                // the rows are per *pair*: it waits on the bare line and then
-                // reads the fields off it separately, so a row built from the
-                // other script's regex says nothing about this one. This is
-                // exactly the hole the doc above describes — `ADVERTISING` had
-                // two scripts and one row — reopened by a port and closed
-                // again rather than left to be rediscovered.
-                crate::grepped::ADVERTISING.to_string(),
-                include_str!("../../../scripts/e2e-a-dense-display.sh"),
-                "e2e-a-dense-display.sh",
-            ),
-            // And the colour, which is what the alpha cannot do on its own: a
-            // background behind the element whose own alpha happens to be the
-            // client's reads as `alpha=128 opaque=false` and is the background
-            // rather than the window. Measured — a `rgb(18 52 86 / 50%)`
-            // behind the stage reads `rgb="#091a2b"` where the window reads
-            // `rgb="#101828"`. Premultiplied, which is what the chrome
-            // commits, so these are the low three bytes of the colours the
-            // client draws.
-        ] {
-            assert!(
-                script.contains(&format!("\"{pattern}\"")),
-                "{name} greps for no such pattern as {pattern:?}; renaming the constant here left the script asserting on the old spelling"
-            );
-        }
-    }
 
     #[test]
     fn a_chrome_that_goes_away_is_forgotten() {
@@ -5309,7 +4263,7 @@ mod tests {
         // connection thread is waiting on: nothing short of the peer going
         // away ends the loop this asserts the far side of.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
@@ -5340,7 +4294,7 @@ mod tests {
         // both ends gives the read loop EOF on the next pass regardless, so
         // only a half-close makes it observable.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
@@ -5372,7 +4326,7 @@ mod tests {
         // behaviour is one sentence about this function, and the integration
         // failure needs a socket to fill up under parallel load to say it.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
         let (_page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
@@ -5417,7 +4371,7 @@ mod tests {
         // lock, so handing in answers built against an older desktop is the
         // interleaving — without having to win a race to produce it.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
@@ -5483,7 +4437,7 @@ mod tests {
         // the answer's own copy lands last on the socket, and latest-wins
         // leaves the chrome on the desktop that is gone.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
         let described = vec![domicile_protocol::DisplayInfo {
             name: "domicile-0".to_string(),
             position: [0, 0],
@@ -5519,7 +4473,7 @@ mod tests {
         // what this chrome asked, and a version re-derived at write time would
         // be a different chrome's answer on this chrome's socket.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
         let welcome = HostMessage::Welcome {
             protocol_version: domicile_protocol::PROTOCOL_VERSION,
         };
@@ -5537,7 +4491,7 @@ mod tests {
         // is only ever built up by live ones, so a page that reloads comes back
         // to a compositor full of running clients and an empty screen.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (hub, outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
         let (first, _) = hub
             .host
             .lock()
@@ -5669,7 +4623,7 @@ mod tests {
         // client — only its own toplevel can — so the message has to leave the
         // chrome thread for the Wayland one, where the toplevel is.
         let (request_tx, requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
@@ -5738,7 +4692,7 @@ mod tests {
     /// A hub with one placed app, ready to be focused.
     fn hub_with_an_app() -> (Arc<ChromeHub>, crate::outbound::OutboundReceiver, String) {
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"), false);
+        let (hub, outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
         let app_id = {
             let mut host = hub.host.lock().unwrap();
             let (app_id, _) = host.app_appeared(None, Some((100.0, 100.0)));
@@ -5836,49 +4790,6 @@ mod tests {
             .find(|(key, _)| *key == OsStr::new(name))
             .map(|(_, value)| value.map(OsStr::to_os_string))
             .expect("the variable is one this sets or clears")
-    }
-
-    #[test]
-    fn a_shadows_colour_is_counted_to_one_for_the_shader() {
-        // CSS counts channels to 255 and a shader counts everything to one, so
-        // a scene shadow cannot be handed to the shader as it stands. Alpha is
-        // already 0-1 on both sides and must not be divided again — doing so
-        // would make every shadow invisible rather than merely wrong.
-        let white = domicile_scene::Shadow {
-            blur: 0.0,
-            color: [255.0, 128.0, 0.0, 0.5],
-            dx: 0.0,
-            dy: 0.0,
-            spread: 0.0,
-        };
-
-        let converted = shadow_in_pixels(white, 1.0);
-
-        assert_eq!(converted.color[0], 1.0);
-        assert!((converted.color[1] - 128.0 / 255.0).abs() < f32::EPSILON);
-        assert_eq!(converted.color[2], 0.0);
-        assert_eq!(converted.color[3], 0.5, "alpha is already counted to one");
-    }
-
-    #[test]
-    fn a_shadow_scales_with_the_display_it_is_drawn_on() {
-        // Every length in a style is in the chrome's logical units. A window on
-        // a 2x display casts a shadow twice as far in pixels and looks the
-        // same; a shadow that did not scale would drift as the density changed.
-        let shadow = domicile_scene::Shadow {
-            blur: 12.0,
-            color: [0.0, 0.0, 0.0, 1.0],
-            dx: 3.0,
-            dy: -4.0,
-            spread: 2.0,
-        };
-
-        let converted = shadow_in_pixels(shadow, 2.0);
-
-        assert_eq!(
-            (converted.blur, converted.dx, converted.dy, converted.spread),
-            (24.0, 6.0, -8.0, 4.0)
-        );
     }
 
     fn kitty() -> Vec<String> {
@@ -6008,40 +4919,6 @@ mod tests {
     #[test]
     fn rejects_undersized_buffers() {
         assert!(bgra_to_rgba(&[0, 0, 0], 2, 2, 8, 0, true).is_none());
-    }
-
-    #[test]
-    fn the_submit_is_not_recorded_as_compositing() {
-        // The defect this exists to prevent, seen in the wild: an idle nested
-        // window reported `composite_ms=1434` over a five-second interval with
-        // seven composites in it — ten seconds of work inside five seconds of
-        // wall clock, which is not a number a stopwatch can produce. It was
-        // timing `eglSwapBuffers` blocking until the compositor we are a client
-        // of handed back a frame callback nobody was waiting for.
-        //
-        // Asserted on the recorded windows rather than on returned durations,
-        // because those windows are what the log line prints and the original
-        // bug was a caller putting the wrong span in the right one.
-        let timings = Mutex::new(FrameTimings::default());
-
-        record_present(&timings, Instant::now(), || {
-            sleep(Duration::from_millis(50));
-        });
-
-        let mut timings = timings.lock().unwrap();
-        assert_eq!(timings.composited, 1, "the frame is counted once");
-        let composite = timings.composite.take().expect("a drawing was recorded");
-        let submit = timings.submit.take().expect("a submit was recorded");
-        assert!(
-            submit.worst >= Duration::from_millis(50),
-            "the submit's own time is the submit's: {:?}",
-            submit.worst
-        );
-        assert!(
-            composite.worst < Duration::from_millis(50),
-            "the wait belongs to the submit, not to the drawing: {:?}",
-            composite.worst
-        );
     }
 
     /// Six digits mean opaque, because the window's pixels are and a colour

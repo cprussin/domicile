@@ -29,15 +29,14 @@ fn the_two_paths_the_shell_names_are_read_back() {
 /// Nothing else is defaulted from the environment, so a run with only the two
 /// required paths is a complete description of what the compositor will do.
 #[test]
-fn without_the_rest_there_is_no_config_and_no_window() {
+fn without_the_rest_there_is_no_config() {
     let parsed = parse(the_required_two()).expect("both are there");
 
     assert_eq!(parsed.config, None);
-    assert!(!parsed.present);
 }
 
 #[test]
-fn a_config_and_a_window_are_read_when_given() {
+fn a_config_is_read_when_given() {
     let parsed = parse([
         "--chrome-socket",
         "/run/chrome.sock",
@@ -45,12 +44,10 @@ fn a_config_and_a_window_are_read_when_given() {
         "/run/session.json",
         "--config",
         "/run/config.json",
-        "--present",
     ])
     .expect("all of them are there");
 
     assert_eq!(parsed.config, Some(PathBuf::from("/run/config.json")));
-    assert!(parsed.present);
 }
 
 /// `--flag=value` as well as `--flag value`: a wrapper writing the command line
@@ -137,27 +134,6 @@ fn an_argument_nothing_reads_is_refused() {
     );
 }
 
-/// A flag that takes no value must not be handed one: the value goes nowhere,
-/// and the compositor comes up in a state the shell did not ask for.
-#[test]
-fn a_value_attached_to_present_is_refused() {
-    let err = parse([
-        "--chrome-socket",
-        "/run/chrome.sock",
-        "--session",
-        "/run/session.json",
-        "--present=false",
-    ])
-    .expect_err("--present takes no value");
-
-    assert_eq!(
-        err,
-        ArgumentError::UnwantedValue {
-            flag: "--present".into()
-        }
-    );
-}
-
 /// The same rule from the other side: a program that wrote a flag twice meant
 /// one of them, and nothing here can tell which.
 #[test]
@@ -178,28 +154,6 @@ fn a_flag_given_twice_is_refused() {
         err,
         ArgumentError::Repeated {
             flag: "--config".into()
-        }
-    );
-}
-
-#[test]
-fn present_may_still_be_given_twice_over() {
-    // Not a special case for `--present`: it lands in the same table as the
-    // rest, so saying it twice is the same mistake.
-    let err = parse([
-        "--chrome-socket",
-        "/run/chrome.sock",
-        "--session",
-        "/run/session.json",
-        "--present",
-        "--present",
-    ])
-    .expect_err("said twice");
-
-    assert_eq!(
-        err,
-        ArgumentError::Repeated {
-            flag: "--present".into()
         }
     );
 }

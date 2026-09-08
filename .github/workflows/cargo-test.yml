@@ -36,9 +36,10 @@ jobs:
 
   # domicile-compositor is excluded from `default-members` because it pulls
   # Smithay; it gets its own job so a failure here is distinguishable from a
-  # core-logic failure. Only libxkbcommon is needed to link — Domicile
-  # deliberately does not build Smithay's GL/DRM/winit backends, since the web
-  # engine is the renderer.
+  # core-logic failure. Only libxkbcommon and libwayland are needed to link —
+  # Domicile does not build Smithay's GL/DRM/winit backends, since the web
+  # engine is the renderer. That was written before it was true: the crate
+  # carried `backend_winit` for the presented path until that path was deleted.
   compositor:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -48,10 +49,11 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      # libxkbcommon links the seat; the wayland and X11 client libraries are
-      # for Smithay's winit backend, which is how the compositor presents.
+      # libxkbcommon links the seat and libwayland is the frontend. The X11
+      # client libraries went with Smithay's winit backend, which was only ever
+      # there for `--present` — the compositor has no window of its own now.
       # No GL stack here on purpose — the tests needing one are `#[ignore]`d
-      # and run from `scripts/e2e-compose.sh`.
+      # and run from the `e2e` job, which has a graphics stack.
       #
       # Retried, with a deadline on each attempt. A stalled apt mirror is the
       # commonest way this job fails and it fails by *hanging*, so a plain
@@ -77,8 +79,7 @@ jobs:
           install() {
             sudo apt-get update \
               && sudo apt-get install -y \
-                libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev \
-                libxrandr-dev libxi-dev
+                libxkbcommon-dev libwayland-dev
           }
           for attempt in 1 2 3; do
             if timeout --kill-after=10 300 bash -c "$(declare -f install); install"; then

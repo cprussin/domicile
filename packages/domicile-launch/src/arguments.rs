@@ -21,10 +21,6 @@ pub struct Arguments {
     /// The compositor's own configuration, written by the shell. `None` runs
     /// the defaults.
     pub config: Option<PathBuf>,
-    /// Open a window and draw client surfaces into it, rather than sending
-    /// their pixels to the chrome.
-    pub present: bool,
-
     /// Submit client buffers to the forked engine over this socket, instead of
     /// reading them back and sending pixels to the chrome.
     ///
@@ -48,9 +44,6 @@ pub enum ArgumentError {
     #[error("{flag} was given an empty value")]
     EmptyValue { flag: String },
 
-    #[error("{flag} takes no value")]
-    UnwantedValue { flag: String },
-
     #[error("{flag} was given more than once")]
     Repeated { flag: String },
 
@@ -63,7 +56,6 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut chrome_socket = None;
     let mut session = None;
     let mut config = None;
-    let mut present = false;
     let mut engine_socket = None;
 
     let mut args = args.into_iter();
@@ -78,17 +70,11 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             return Err(ArgumentError::Repeated { flag });
         }
         seen.push(flag.clone());
+        // EVERY FLAG TAKES A VALUE. `--present` was the one that did not, and
+        // it went with the window it opened — so there is no longer a way to
+        // write a flag that must *not* be given one, and no `UnwantedValue` to
+        // refuse it with.
         let slot = match flag.as_str() {
-            PRESENT => {
-                // `--present=false` used to turn presenting *on*: the value
-                // went nowhere and the flag's presence was the whole answer.
-                // A shell with a boolean in hand writes exactly that.
-                if joined.is_some() {
-                    return Err(ArgumentError::UnwantedValue { flag });
-                }
-                present = true;
-                continue;
-            }
             CHROME_SOCKET => &mut chrome_socket,
             SESSION => &mut session,
             CONFIG => &mut config,
@@ -113,7 +99,6 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         })?,
         session: session.ok_or(ArgumentError::Missing { flag: SESSION })?,
         config,
-        present,
         engine_socket,
     })
 }
@@ -121,7 +106,6 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
 const CHROME_SOCKET: &str = "--chrome-socket";
 const SESSION: &str = "--session";
 const CONFIG: &str = "--config";
-const PRESENT: &str = "--present";
 const ENGINE_SOCKET: &str = "--engine-socket";
 
 /// One argument, split at the first `=` if it has one.

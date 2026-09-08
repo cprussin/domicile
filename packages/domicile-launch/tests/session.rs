@@ -12,7 +12,6 @@ fn a_session() -> Session {
         chrome_socket: "/run/user/1000/domicile/chrome.sock".into(),
         wayland_display: "wayland-3".into(),
         chrome_wayland_display: "wayland-3-chrome".into(),
-        composited: true,
     }
 }
 
@@ -63,7 +62,6 @@ fn the_keys_are_the_ones_the_shell_reads() {
         BTreeSet::from([
             "chrome_socket",
             "chrome_wayland_display",
-            "composited",
             "protocol",
             "wayland_display",
         ])

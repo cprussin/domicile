@@ -43,7 +43,7 @@ them.
 |---|---|---|
 | Native path — client dmabuf imported and composited on the GPU, hole punched in the page | `compositor/src/main.rs`, `disposition()` | `Draw` when `from_gpu && presenting && draws_natively`. Zero copies. **Not reproducible in the dev container** — no DRM render node |
 | Copy path — readback, socket, `putImageData` | same | ~11ms compositor + ~16ms chrome at ~1500x1000, ~80MB/s for one window, scaling as pixels². The fallback for `wl_shm` clients and for CSS the compositor cannot reproduce |
-| Fractional scale | `compositor/src/scale.rs::desktop_size`, `compositor/src/viewport.rs` | `wp_viewporter` is honoured, not merely advertised: destination sizes the surface, source crops where the compositor draws. Held by `scripts/e2e-a-dense-display.sh` at 1.5x |
+| Fractional scale | `compositor/src/viewport.rs` | `wp_viewporter` is honoured, not merely advertised: the destination sizes the surface. **Unguarded** — `scripts/e2e-a-dense-display.sh` held it at 1.5x and went with the `--present` path it was written against |
 | Chrome ordered below a window | `compositor/src/stacking.rs`, `Layer::clip` | Correct only where the chrome *above* the window is opaque — a translucent panel shows what is behind it through the window's hole |
 | Bands — a raster per z-depth | `compositor/src/bands.rs`, `shell-manganese/src/bands.ts`, `domicile-protocol/src/band_label.rs` | `declare_bands` out, `render_band` back, the band number painted into the top-left pixel so a commit is attributable. Works. See "What does not work" |
 | Several outputs | `Screens::entered_by` | Regions of Domicile's own window until the DRM/KMS backend exists. Config is watched and reloaded live |
@@ -96,7 +96,6 @@ question.
 ## Reproducing the measurements
 
 ```sh
-nix run .#dev-e2e-a-dense-display            # the fractional-scale regression
 nix run .#dev-smoke-compositor               # asserts the advertised globals
 ```
 

@@ -6,7 +6,7 @@
 #   ./scripts/check.sh e2e            # one group: shell, rust, typescript, e2e
 #
 # `DOMICILE_CHECK_STRICT=1` turns a skip into a failure. Locally a missing
-# Xvfb is a fact about the machine; in CI it is a check that silently stopped
+# tool is a fact about the machine; in CI it is a check that silently stopped
 # running, which is the worst outcome a check can have.
 #
 # There are a dozen checks across two languages and a handful of e2e scripts,
@@ -27,25 +27,6 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-
-# The sentence this gives when a display does not arrive is the thing a red CI
-# run is read for, so it lives in its own file with its own test rather than
-# inside a script that runs every check in the repo the moment it is sourced.
-# shellcheck source=scripts/xvfb-verdict.sh
-. "$ROOT/scripts/xvfb-verdict.sh"
-# On the function rather than on the `.`, because the two ways this wire breaks
-# fail differently and only one of them is loud. A missing file makes `.`
-# return 1 — and `set -e` is not on, so the script carries on to
-# `xvfb_verdict: command not found` and reports `could not run: ` with an empty
-# reason, which is worse than the `no display` this exists to delete. A file
-# that is present but empty or truncated is quieter still: `.` succeeds,
-# defines nothing, and says nothing. Asking whether the function is here
-# answers both. Nothing else covers it — the test covers `xvfb_verdict` and not
-# the loading of it, and a green CI run never reaches the call at all.
-declare -F xvfb_verdict >/dev/null || {
-  echo "check: no xvfb_verdict — scripts/xvfb-verdict.sh would not load" >&2
-  exit 1
-}
 
 PASSED=(); FAILED=(); SKIPPED=()
 
@@ -183,79 +164,9 @@ if bun install --frozen-lockfile >/dev/null 2>&1; then echo "ok"; else
   echo "FAILED"; echo "dependencies would not install" >&2; exit 1
 fi
 
-# Only the e2e scripts want a display, and starting a server the checks will
-# never look at is a minute `check.sh rust` can spend on nothing: the one case
-# that runs the deadline out is a server that came up alive and silent, and
-# that server would hold a group that does not need it for the whole sixty.
-if wanted e2e; then
-
-# Why there is no display, for the checks that need one to say instead of
-# saying `no display` — which is a restatement of the question. Overwritten the
-# moment anything more specific is known.
-NO_DISPLAY="no Xvfb on PATH"
-
-# How long Xvfb gets to name a display. It was ten seconds, and a CI run spent
-# all ten and failed on a machine that had just spent a minute compiling. A
-# deadline a busy machine misses reports a working environment as broken, which is the
-# failure this harness exists to stop producing — and nothing waits this out
-# that was going to succeed, because a server that dies is noticed when it
-# dies rather than when the clock runs out.
-#
-# Overridable because sealing it seals the only knob that makes the wait
-# observable: walking the outcomes of a server that never answers means not
-# waiting a minute for each, and a constant would make that an edit to this
-# line rather than a run of the script.
-DISPLAY_DEADLINE="${DOMICILE_CHECK_DISPLAY_DEADLINE:-60}"
-
-# A display of our own, chosen by the X server rather than by us. Picking a
-# number and hoping is how a stale `/tmp/.X11-unix/X97` — a socket file with no
-# server behind it — became a chrome segfaulting against a dead display, which
-# looked like a bug in the shell.
-#
-# Whatever comes of that, this says so. Printing the line only on success is
-# how a CI job came to fail two checks with `could not run: no display` and no
-# account of why: Xvfb's output went to `/dev/null`, the environment section
-# said nothing at all, and the re-run that passed took the evidence with it. An
-# absent line is not a message, and "this machine has no Xvfb" and "the Xvfb it
-# has would not start" are not the same fact.
-if [ -n "${DISPLAY:-}" ]; then
-  echo "  display                  $DISPLAY (the caller's)"
-elif ! command -v Xvfb >/dev/null 2>&1; then
-  echo "  display                  none — $NO_DISPLAY"
-else
-  DISPLAY_FILE="$(mktemp)"; XVFB_LOG="$(mktemp)"
-  Xvfb -displayfd 3 -screen 0 1280x800x24 3>"$DISPLAY_FILE" >"$XVFB_LOG" 2>&1 &
-  XVFB=$!
-  # Until it names a display, or dies, or the deadline passes — whichever comes
-  # first. The old loop watched only the file, so a server that was already
-  # dead cost the full wait and then read exactly like one that was merely slow.
-  for _ in $(seq 1 $((DISPLAY_DEADLINE * 10))); do
-    [ -s "$DISPLAY_FILE" ] && break
-    kill -0 "$XVFB" 2>/dev/null || break
-    sleep 0.1
-  done
-  if [ -s "$DISPLAY_FILE" ]; then
-    DISPLAY=":$(tr -d '[:space:]' <"$DISPLAY_FILE")"; export DISPLAY
-    echo "  display                  $DISPLAY (ours)"
-  else
-    # Reported, not retried. The one failure on record threw Xvfb's output
-    # away, so nothing here knows what a second attempt would be retrying past;
-    # a retry added now would swallow the message that would say. `-displayfd`
-    # already rules out the obvious guess — the server picks the number, so
-    # this is not a collision with a corpse. Once this line has named a cause,
-    # a retry can be aimed at that cause and justified by it.
-    NO_DISPLAY="$(xvfb_verdict "$XVFB" "$XVFB_LOG" "$DISPLAY_DEADLINE")"
-    echo "  display                  none — $NO_DISPLAY"
-  fi
-fi
-
-fi  # wanted e2e
-
 # ---- the checks -----------------------------------------------------------
 
-# The harness's own logic, which nothing else covers: `xvfb_verdict` decides
-# what a red CI run says about a display that never arrived, and a wrong answer
-# there is a wrong answer about every other check. Every `test-*.sh`, for the
+# Every `test-*.sh`, for the
 # reason the e2e loop takes every `e2e-*.sh` — a check added and not run is the
 # same as one that was never written.
 if wanted shell; then
@@ -295,22 +206,9 @@ echo "== end to end =="
 # written.
 for script in scripts/e2e-*.sh; do
   name="$(basename "$script" .sh)"
-  # The two that draw: `--present` opens a winit window, and a compositor
-  # started without a display presents to nothing however long it runs. Named
-  # here rather than left to each script because the reason is the machine's
-  # and the verdict has to say so — a check that ran without a display and
-  # reported on the draw path would be reporting on a path that never ran.
-  #
-  # `e2e-a-dense-display` unsets `DISPLAY` and makes its own, so what this
-  # asks of it is only that there is an Xvfb to make one with, which is what
-  # `$NO_DISPLAY` says when there is not.
-  case "$name" in
-    e2e-a-dense-display|e2e-chrome-fills-a-window)
-      if [ -z "${DISPLAY:-}" ]; then
-        label "$name"; skip "$name" "$NO_DISPLAY"; continue
-      fi
-      ;;
-  esac
+  # No display case any more: the two checks that needed one were the two that
+  # drove `--present`, and both went with it. What is left runs headless, which
+  # is what the compositor now is.
   run "$name" "$script"
 done
 fi

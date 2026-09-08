@@ -89,8 +89,8 @@ const appScripts = (flake: string): Set<string> =>
 /**
  * Every end-to-end script `nix run` cannot reach.
  *
- * `e2e-*.sh` only. The `test-xvfb-*` checks run in `check.sh`'s shell group
- * and have never had apps, and `lib/` is not a check — naming the ones that
+ * `e2e-*.sh` only. The `test-*.sh` checks run in `check.sh`'s shell group and
+ * have never had apps, and `lib/` is not a check — naming the ones that
  * *should* have one is the roster this rule exists to replace, so the glob is
  * the roster.
  */

@@ -41,7 +41,7 @@ but C/C++ and no advantage over CEF for our purposes).
 ### Wayland host: Rust + Smithay
 - Memory-safe, modern, and its core (scene, input routing, portal geometry,
   config) is **pure logic that unit-tests cleanly** — essential for TDD.
-- `winit` backend runs the whole compositor *nested inside a window* for dev
+- ~~`winit` backend runs the whole compositor *nested inside a window* for dev~~ — built and removed; nothing ran it but its own checks
   and tests, so we don't need DRM/KMS hardware to iterate.
 
 ### One chrome page spanning every display, not one window per display
@@ -81,7 +81,7 @@ revisited — so the decision is reversible without touching shell code.
 │ Rust host  (Smithay)                                           │
 │  • Wayland server: accepts app clients, exports their surfaces  │
 │    as GPU textures (dmabuf)                                     │
-│  • libinput input; DRM/KMS presentation (or nested winit)      │
+│  • libinput input; the forked engine presents                  │
 │  • config load + hot-reload; resolves the active chrome package │
 │                          │ app dmabuf                          │
 │                          ▼                                      │

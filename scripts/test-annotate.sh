@@ -81,9 +81,8 @@ expect "a failure whose log is not there" \
   "::error::it broke" \
   "$(annotate_from "it broke" /nonexistent/log)"
 
-# A log of nothing but whitespace counts as silence, the same way
-# test-xvfb-verdict.sh treats one. Otherwise the annotation ends in the blank
-# block that having a body at all is supposed to earn.
+# A log of nothing but whitespace counts as silence. Otherwise the annotation
+# ends in the blank block that having a body at all is supposed to earn.
 expect "a failure whose log is only whitespace" \
   "::error::it broke" \
   "$(annotate_from "it broke" "$(file_of '   ')")"

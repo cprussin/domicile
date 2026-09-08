@@ -14,29 +14,34 @@ Built test-first, from the pure-logic core outward to the hardware glue.
 
 ### Current state
 
-There are **two paths**, and both work. Which one a *window* takes is
-`disposition` (`main.rs`), and it is three things rather than one: the
-compositor was given a window (`--present`), **and** that client committed a
-dmabuf, **and** its CSS is something the shaders can draw. Anything else is the
-copy path, one window at a time.
+There are **two paths**, and both work. Which one a *window* takes is whether
+the compositor was given an engine to submit to (`--engine-socket`) and that
+client committed a dmabuf. Anything else is the copy path, one window at a time.
 
-**The native path** — what the architecture is for. The compositor opens a
-`winit` window, the chrome connects as an ordinary Wayland client on a socket of
-its own, and the compositor draws the desktop itself: each app's dmabuf through
-the CSS matrix the chrome reported for its `<app>` element, then the chrome's own
-surface over the top. The chrome's page is transparent where an `<app>` is, so
-the client shows through the hole. No pixel is copied by the CPU. Verified on
-real hardware (AMD Radeon 890M): the desktop renders, a terminal opens into it,
-and input reaches both.
+**The engine path** — what the architecture is for. The compositor runs as a
+*producer*: the chrome connects as an ordinary Wayland client on a socket of its
+own, and each app's dmabuf is submitted to the forked browser's compositor,
+which draws it through the CSS transform the chrome reported for its `<app>`
+element. The chrome's page is transparent where an `<app>` is, so the client
+shows through the hole. No pixel is copied by the CPU. Verified on real hardware
+(AMD Radeon 890M): the desktop renders, a terminal opens into it, and input
+reaches both.
 
 **The copy path** — the original prototype, still the fallback for any window
-the shaders cannot draw, still what every `wl_shm` client gets however ordinary
-its CSS, and still what most of the headless checks drive. The compositor reads
-the client's frame back off the GPU and sends the pixels to the chrome over a
-Unix socket to be drawn into a `<canvas>`. Correct everywhere. Four full-frame
-copies per frame was its cost before damage tracking; a steady-state frame now
-reads and sends only what changed, and full-frame is what a first frame, a
-resize or a hand-over still costs.
+the engine will not take, still what every `wl_shm` client gets, and still what
+most of the headless checks drive. The compositor reads the client's frame back
+off the GPU and sends the pixels to the chrome over a Unix socket to be drawn
+into a `<canvas>`. Correct everywhere. Four full-frame copies per frame was its
+cost before damage tracking; a steady-state frame now reads and sends only what
+changed, and full-frame is what a first frame, a resize or a hand-over still
+costs.
+
+There was a third — the compositor opening a `winit` window under `--present`
+and drawing the desktop itself with Smithay's GL renderer. It is gone. Nothing
+ran it: `run-engine.sh` never passed the flag and neither did the flake, so its
+only callers were three e2e scripts written for it. This section described it
+first and at length, and described the choice between the paths as a
+`disposition` function that had already ceased to exist.
 
 The wire protocol is at `PROTOCOL_VERSION = 1`.
 
@@ -51,7 +56,7 @@ nix develop                     # core shell: rust + node
 cargo test                      # core Rust tests
 bun run turbo test              # TypeScript: lint, types, unit tests
 
-nix develop .#full              # adds wayland, mesa, weston, xvfb, xdotool, kitty
+nix develop .#full              # adds wayland, mesa, weston, kitty
 cargo build -p domicile-compositor    # the Smithay server (EXCLUDED from default build)
 cargo test -p domicile-compositor      # includes tests/ — a real compositor,
                                        # driven by a stand-in chrome
@@ -60,29 +65,21 @@ cargo test -p domicile-compositor      # includes tests/ — a real compositor,
 # `./scripts/check.sh` runs every `e2e-*.sh` and `test-*.sh`, and is the whole
 # answer before a push. `smoke-compositor` is below
 # but not in that loop — run them by hand.
-# Most build the compositor first; `e2e-compose` drives cargo test directly.
-# Every one has a flake app, so `nix run .#dev-<name>` runs any of them against
-# a fresh checkout.
+# They build the compositor first. Every one has a flake app, so
+# `nix run .#dev-<name>` runs any of them against a fresh checkout.
 ./scripts/smoke-compositor.sh    # a real client binds our globals
 ./scripts/e2e-dmabuf.sh          # the dmabuf global is advertised
-./scripts/e2e-compose.sh         # the scene composites into a buffer, checked pixel by pixel
 ./scripts/e2e-chrome-fills-the-desktop.sh # a chrome commits at the described desktop's size, and follows it
-./scripts/e2e-chrome-fills-a-window.sh # the same where the desktop *is* Domicile's window (--present)
-./scripts/e2e-window-follows-the-desktop.sh # a described desktop that grows takes its window with it (--present)
-./scripts/e2e-a-dense-display.sh # the desktop on a 1.5x screen: sized by the ratio, not by the rounded scale
 
 # Needs a real display — run on the user's machine.
 nix run 'github:cprussin/domicile#manganese'   # the desktop, on the fork
 nix run 'github:cprussin/domicile' -- ./dist   # or a shell of your own
 ```
 
-`e2e-compose.sh` needs a GL stack (it gets a software rasteriser where there is
-no GPU) but no display: it composites into an offscreen buffer and reads the
-pixels back. `e2e-chrome-fills-a-window.sh` and
-`e2e-window-follows-the-desktop.sh` are the ones that open a real window, on an
-Xvfb, and the only two that pass `--present`. What neither covers
-is which way *up* the result is, which needs a screen: see the transform gotcha
-below.
+`e2e-dmabuf.sh` needs a GL stack (it gets a software rasteriser where there is
+no GPU). None of them needs a display any more: the three that opened a real
+window on an Xvfb were the three that passed `--present`, and they went with
+it. Nothing in the suite is skipped for want of a screen.
 
 ### Environment gotchas (these will bite you — read them)
 
@@ -178,22 +175,6 @@ below.
   `a_spawned_program_is_pointed_at_this_compositor`
   (`domicile-compositor/tests/apps.rs`) guards this, and the fixture gives the
   compositor a decoy `WAYLAND_DISPLAY` so an inherited one cannot look right.
-- **The cursor the user sees belongs to the session Domicile's window is in.** A
-  client asking for a shape is a request to pass on to winit; nothing about it is
-  visible otherwise.
-- **winit `dlopen`s the Wayland and X11 client libraries**, exactly as libEGL is,
-  so `.#full` names them in `LD_LIBRARY_PATH` rather than merely installing them.
-  Without them `--present` reports `NoWaylandLib` and opens no window while
-  everything headless keeps working — it looks like a compositing bug and is a
-  packaging one. `NoCompositor` is the different failure: the library loaded and
-  there was no session to nest in.
-- **On X11 the missing library is a panic, not a report.** `--present` on an
-  X server also needs `libxkbcommon-x11.so.0` — its own library, which
-  `libxkbcommon0` never contained, and `xkbcommon-dl` tries the versioned soname
-  first, so the package is `libxkbcommon-x11-0` rather than `-dev`. Without it
-  the compositor dies in an `expect` that *does* name the library, but out of a
-  panic with a raw backtrace, so it reads as a compositor crash rather than a
-  missing dependency. Open: it should report the way `NoWaylandLib` does.
 - **libEGL is `dlopen`ed, not linked.** `mkShell` only wires *build-time* linkage,
   so `.#full` sets `LD_LIBRARY_PATH` (`/run/opengl-driver/lib` first, so NixOS's
   EGL vendor matches the running kernel driver). Without it the compositor logs
@@ -223,9 +204,11 @@ below.
 
   | also needs | which scripts |
   |---|---|
-  | `xvfb` | `e2e-a-dense-display`, `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop` |
-  | a GL/EGL stack | `e2e-compose` (a software rasteriser is enough) |
-  | `libxkbcommon-x11-0`, `xdotool` | `e2e-chrome-fills-a-window`, `e2e-window-follows-the-desktop`, `e2e-a-dense-display` — they open a real window, and there is no WM on an Xvfb to resize it or measure it |
+  | a GL/EGL stack | `e2e-dmabuf` (a software rasteriser is enough) |
+
+  Nothing needs a display. The three scripts that did were the three that
+  opened a real window under `--present`, on an Xvfb with `xdotool` to resize
+  it, and all three went with that path.
 
   No script needs a browser any more. The chrome in every one of them is
   `domicile-test-client --follow-configure`, which this workspace builds; the
@@ -437,17 +420,16 @@ falling.
 | `packages/component-library` | the shared React components and Panda preset the shells are built from | bun |
 | `packages/shell-manganese` | the reference chrome: tabs, stage, rail, address bar | bun |
 | `packages/shell-simple` | the minimal chrome: floating windows only | bun |
-| `scripts/` | `check.sh` (runs everything), the e2e + smoke checks, `run-engine.sh`, and the `xvfb-*` helpers they share | — |
+| `scripts/` | `check.sh` (runs everything), the e2e + smoke checks, `run-engine.sh` | — |
 
-Inside `domicile-compositor`: `compose.rs` is the drawing (layers, the CSS matrix
-as the renderer's, desktop↔target mapping, where the chrome lands) and is where
-the offscreen pixel tests live; `screens.rs` is what the desktop is made of and
-how a reloaded display list is matched against the running one; `damage.rs` is
-which rectangles changed between two frames; `dmabuf_import.rs` is the import;
-`scale.rs` is the output scale arithmetic; `outbound.rs` is the queue to the
-chrome; `coalesce.rs` is the config watcher's settling; `shortcut.rs`,
-`timing_window.rs` and `dmabuf_descriptor.rs` are each one small thing named
-after it. `engine.rs`, `engine_session.rs` and `engine_buffers.rs` are the seam
+Inside `domicile-compositor`: `screens.rs` is what the desktop is made of and
+how a reloaded display list is matched against the running one;
+`dmabuf_import.rs` is the import; `scale.rs` is the output scale arithmetic;
+`outbound.rs` is the queue to the chrome; `coalesce.rs` is the config watcher's
+settling; `timing_window.rs` and `dmabuf_descriptor.rs` are each one small
+thing named after it. `compose.rs` (the drawing), `damage.rs` (which rectangles
+changed between two frames), `stacking.rs` and `shortcut.rs` went with
+`--present`: each existed only for a compositor that drew the desktop itself. `engine.rs`, `engine_session.rs` and `engine_buffers.rs` are the seam
 to the forked engine and what it is holding.
 
 ### How input & pixels actually flow
@@ -546,10 +528,12 @@ falloff the shadow uses, is the next candidate to move it.
   `box-shadow`; the shader rounds and fades the client's own buffer, and a
   second quad under it casts the shadow.
 - ~~the rotated + rounded + shadowed window that was the original success
-  criterion, drawn correctly~~ — done. `compose.rs` has pixel tests for a window
-  turned 45 degrees covering the diamond it should, rounded by a length on the
-  screen rather than a fraction of itself, and casting its shadow the way it
-  faces.
+  criterion, drawn correctly~~ — **done, then deleted.** `compose.rs` had pixel
+  tests for a window turned 45 degrees covering the diamond it should, rounded
+  by a length on the screen rather than a fraction of itself, and casting its
+  shadow the way it faces. All of it drew through the compositor's own shaders,
+  which only ran under `--present`, so it went with that path. The engine draws
+  these now, from the CSS the chrome reports.
 - ~~the same window **at native cost**~~ — done, and the blur is free.
   `composite_ms` reads 0-1ms after shadows landed, worst case 1-2ms against the
   2-3ms measured before they existed. The full table is under Phase 1 above.
@@ -560,11 +544,12 @@ falloff the shadow uses, is the next candidate to move it.
   non-square `turned` fixture rather than another assertion on the one there.
 - interleave chrome and windows by CSS `z-index` — the shell writes `z-index`
   and the compositor honours it, in the stacking space the portals are already
-  reported in. **Half done.** `compositor/src/stacking.rs` decides where the
-  chrome goes among the windows, and `Layer::clip` confines each of its depths
-  to the region that depth occupies. What is missing is the depths themselves:
-  `declare_bands` carries them and no chrome sends one, so every frame is
-  still the all-above case.
+  reported in. **Was half done; the half that existed is gone.**
+  `compositor/src/stacking.rs` decided where the chrome went among the windows
+  and `Layer::clip` confined each depth to its own region — both only for a
+  compositor drawing the desktop itself, so both went with `--present`.
+  `declare_bands` still carries the depths and manganese does send them; what
+  acts on them now is the engine.
 
   Ordering is not the whole answer and cannot be. Where chrome above a window
   and chrome below it cover one pixel, the page flattened that texel before we
@@ -617,11 +602,10 @@ falloff the shadow uses, is the next candidate to move it.
   falsified and was deleted rather than shipped.
 
   What it reads is *not* a hole, so it says this for *copied* windows only.
-  The element is a hole where the compositor draws the client's buffer itself,
-  which `disposition` does for a **dmabuf** on a presenting desktop —
-  `domicile-test-client` commits `wl_shm`, so this window is on the copy path
-  even with `--present`, and the check's compositor being headless is the
-  smaller half of the reason. There the shell draws the client's own pixels
+  The element is a hole where the client's own buffer is drawn — which is the
+  engine path, for a **dmabuf**. `domicile-test-client` commits `wl_shm`, so
+  this window is on the copy path regardless. There the shell draws the
+  client's own pixels
   into a `<canvas>` inside the element. So the client is run `--translucent`:
   what the page may paint over the window is then half-opaque, and the check
   asserts the client's own alpha *and colour*. Both, because a reading can be
@@ -740,12 +724,11 @@ age, and it needs a screen before anyone should believe it.
 - **A frame in which the chrome repainted reports the whole output as
   damaged.** The chrome is one layer covering the desktop, so its commit
   counter moving damages all of it — and it repaints for a clock, a caret, a
-  hover. Per-surface damage rectangles are already taken from every commit
-  (`take_damage`) and dropped for the chrome — but using them needs more than
-  plumbing at that call site: `Painted` holds one rectangle per layer, so
-  partial-layer damage is a shape `damage.rs` does not have, along with the
-  buffer-to-output mapping and the accumulation across frames `present` did not
-  run for.
+  hover. Per-surface damage rectangles are still taken from every commit
+  (`take_damage`) and dropped for the chrome. The frame-to-frame comparison
+  that would have used them — `damage.rs`, `Painted`, one rectangle per layer —
+  went with `--present`, which was the only thing that redrew a whole desktop
+  and so the only thing with a previous frame to compare against.
 - **An empty damage list saves nothing on the nested path.** Smithay's winit
   `submit` treats `Some(empty)` the same as `None` and swaps the whole buffer,
   so an idle desktop costs what a busy one does. The distinction is real at the
@@ -834,9 +817,9 @@ age, and it needs a screen before anyone should believe it.
   asked again because the desktop is not the same one. Still bounded by
   `compositor.nested_size`, so a desktop past that ceiling is shown scaled
   rather than asked for at a size no screen holds.
-  `e2e-window-follows-the-desktop.sh` drives it: `--present` under an Xvfb, and
-  `xdotool` reads the window's size back off X rather than believing a log
-  line the compositor writes once at startup.
+  This was driven by `e2e-window-follows-the-desktop.sh`, which went with
+  `--present`: it asked for a window and read its size back off X, and there is
+  no window to ask for now.
 
   The *unconfigured* case is left alone, and now deliberately rather than
   incidentally: with no `output.displays` the window is the desktop, and

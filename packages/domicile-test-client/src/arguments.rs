@@ -32,11 +32,9 @@ pub struct Arguments {
     ///
     /// On, this client is the chrome. A chrome is the one Wayland client of
     /// Domicile's whose size is not its own to choose — the compositor sizes
-    /// it to the desktop and `present` draws it at the size it committed, so a
-    /// chrome that ignored a configure is a page in the corner of a black
-    /// screen. `e2e-chrome-fills-the-desktop.sh` and
-    /// `e2e-chrome-fills-a-window.sh` are that claim, and this is what they
-    /// put on the chrome's end of it.
+    /// it to the desktop, so a chrome that ignored a configure is a page in the
+    /// corner of the screen. `e2e-chrome-fills-the-desktop.sh` is that claim,
+    /// and this is what it puts on the chrome's end of it.
     pub follow_configure: bool,
 
     /// Whether the window is see-through rather than opaque.

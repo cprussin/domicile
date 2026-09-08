@@ -42,16 +42,6 @@ pub struct Bands {
     answered: HashSet<usize>,
 }
 
-/// One thing to draw, in the order it is drawn.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Layered {
-    /// The window at this index of the depths handed to
-    /// [`drawn_with`](Bands::drawn_with).
-    Window(usize),
-    /// The band at this index of the declared depths, drawn whole.
-    Band(usize),
-}
-
 /// What the compositor should do next about the chrome's bands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Next {
@@ -149,105 +139,15 @@ impl Bands {
         self.asked = None;
     }
 
-    /// The order to draw one frame's windows and bands in.
-    ///
-    /// `windows` is each drawn window's depth, in the order the scene draws
-    /// them. The result is every window once and every band once, interleaved
-    /// — the whole of what putting a window between two layers of chrome
-    /// means, and the reason it is here rather than inline in `present`: the
-    /// method that draws cannot be tested, and this can.
-    ///
-    /// A band moves only for a window strictly above it, matching `stacking`:
-    /// at equal depth the page has already decided, in its own raster, whether
-    /// that chrome covers the `<app>` element's hole.
-    ///
-    /// Bands are drawn *whole*, unlike `stacking`'s: each raster holds only
-    /// its own depth, so there is nothing of another depth in it to confine
-    /// away. That is what closes the case ordering cannot — a translucent
-    /// panel over a window with a wallpaper behind it.
-    pub fn drawn_with(&self, windows: &[i32]) -> Vec<Layered> {
-        let mut ordered: Vec<(i32, usize)> = self
-            .depths
-            .iter()
-            .enumerate()
-            .map(|(band, depth)| (*depth, band))
-            .collect();
-        ordered.sort_unstable();
-
-        let mut order = Vec::with_capacity(windows.len() + ordered.len());
-        let mut next = 0;
-        for (index, depth) in windows.iter().enumerate() {
-            let below = ordered[next..].partition_point(|(at, _)| at < depth);
-            order.extend(
-                ordered[next..next + below]
-                    .iter()
-                    .map(|(_, b)| Layered::Band(*b)),
-            );
-            next += below;
-            order.push(Layered::Window(index));
-        }
-        order.extend(ordered[next..].iter().map(|(_, b)| Layered::Band(*b)));
-        order
-    }
-
     /// The depth of each band, in the order they were declared.
     pub fn depths(&self) -> &[i32] {
         &self.depths
     }
-
-    /// Whether a banded frame can be drawn at all: every declared band has a
-    /// picture, whether or not the cycle collecting them has finished.
-    ///
-    /// The draw condition, and deliberately not [`Next::Complete`]. A chrome
-    /// that repaints for its own reasons — a window being dragged, a caret, a
-    /// clock — makes every commit a stale one, and a cycle restarted on each
-    /// of them never reaches the end. Drawn on completeness such a desktop
-    /// falls back to the flattened chrome between one frame and the next, and
-    /// the flattened chrome is the whole page over every window: the windows
-    /// go missing and come back at the page's own repaint rate, which is the
-    /// desktop flashing. A band whose picture is a cycle old is that band's
-    /// previous frame, which is what a compositor draws in any case.
-    ///
-    /// `pictured` says whether a band has a texture, which is the caller's to
-    /// know: the pictures are the renderer's and the bookkeeping is this.
-    pub fn all_pictured(&self, pictured: impl Fn(usize) -> bool) -> bool {
-        !self.depths.is_empty() && (0..self.depths.len()).all(pictured)
-    }
-}
-
-/// How many frames the desktop will hold rather than draw a chrome picture it
-/// cannot trust.
-///
-/// Bounded, because holding is only ever better than drawing the wrong thing
-/// while something right is on its way. A chrome that stops answering
-/// altogether must not freeze the desktop with it.
-const PATIENCE: u32 = 8;
-
-/// Whether to leave the frame already on screen alone this time.
-///
-/// The desktop has two pictures of the chrome: the set of bands, and the
-/// flattened whole page. Every time the declared depths change — a window
-/// floats, a window goes back to the rail, a drag begins and the chrome stops
-/// declaring anything — the band set is dropped and has to be collected again,
-/// and the flattened page is whatever arrived *last*. Once a chrome has begun
-/// answering bands, every frame it commits is one band with the rest at
-/// `opacity: 0`, so the flattened page it holds is from before any of that
-/// began: on this desktop, from before the window was floated at all.
-///
-/// Drawing it is the flash the user sees at every one of those transitions.
-/// The frame already on screen is the last picture that was *right*, so
-/// keeping it costs a few frames of a desktop that is not moving — a
-/// transition is not a drag — and costs nothing at all once the chrome has
-/// answered, which is the very next frame when nothing is declared.
-///
-/// `held` counts the frames already held since the depths last changed.
-pub fn hold_the_frame(bands_drawable: bool, chrome_is_current: bool, held: u32) -> bool {
-    !bands_drawable && !chrome_is_current && held < PATIENCE
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{hold_the_frame, Bands, Layered, Next, PATIENCE};
+    use super::{Bands, Next};
 
     #[test]
     fn a_chrome_that_declared_nothing_is_already_complete() {
@@ -374,196 +274,11 @@ mod tests {
     }
 
     #[test]
-    fn a_chrome_with_no_bands_is_just_its_windows() {
-        // Every desktop today. The chrome's own single texture is drawn over
-        // the lot by `present`, as it always was.
-        let bands = Bands::default();
-        assert_eq!(
-            bands.drawn_with(&[1, 2]),
-            vec![Layered::Window(0), Layered::Window(1)],
-        );
-    }
-
-    #[test]
-    fn a_band_below_a_window_is_drawn_before_it() {
-        // The whole point: a window between two layers of chrome.
-        let mut bands = Bands::default();
-        bands.declared(vec![0, 9]);
-        assert_eq!(
-            bands.drawn_with(&[5]),
-            vec![Layered::Band(0), Layered::Window(0), Layered::Band(1)],
-        );
-    }
-
-    #[test]
-    fn a_band_at_a_windows_own_depth_stays_above_it() {
-        // Strictly below, matching `stacking`: at equal depth the page has
-        // already decided, in its own raster, whether that chrome covers the
-        // `<app>` element's hole.
-        let mut bands = Bands::default();
-        bands.declared(vec![5]);
-        assert_eq!(
-            bands.drawn_with(&[5]),
-            vec![Layered::Window(0), Layered::Band(0)],
-        );
-    }
-
-    #[test]
-    fn bands_are_drawn_by_depth_rather_than_by_the_order_declared() {
-        // A shell names its layers in whatever order suits it; what orders the
-        // drawing is the `z-index` each one carries.
-        let mut bands = Bands::default();
-        bands.declared(vec![9, 0]);
-        assert_eq!(
-            bands.drawn_with(&[5]),
-            vec![Layered::Band(1), Layered::Window(0), Layered::Band(0)],
-        );
-    }
-
-    #[test]
-    fn bands_under_one_window_keep_their_own_order() {
-        // Two bands falling either side of nothing — both below the same
-        // window, so both land in one group. A group emitted in the wrong
-        // order is a wallpaper over the panel that belongs above it, and the
-        // membership test below cannot see it: it sorts before comparing.
-        let mut bands = Bands::default();
-        bands.declared(vec![0, -1]);
-
-        assert_eq!(
-            bands.drawn_with(&[5]),
-            vec![Layered::Band(1), Layered::Band(0), Layered::Window(0)],
-        );
-    }
-
-    #[test]
-    fn every_window_and_every_band_is_drawn_exactly_once() {
-        // The loop this replaced walked two sorted lists with an index into
-        // each, and indexed `layers` by the window's position — correct only
-        // while nothing else had rewritten that list. Losing or repeating one
-        // is a window that vanished or a layer drawn twice.
-        let mut bands = Bands::default();
-        bands.declared(vec![3, 3, 8, -1]);
-        let order = bands.drawn_with(&[0, 3, 7, 7]);
-
-        let mut windows: Vec<usize> = order
-            .iter()
-            .filter_map(|drawn| match drawn {
-                Layered::Window(at) => Some(*at),
-                Layered::Band(_) => None,
-            })
-            .collect();
-        let mut drawn: Vec<usize> = order
-            .iter()
-            .filter_map(|item| match item {
-                Layered::Band(band) => Some(*band),
-                Layered::Window(_) => None,
-            })
-            .collect();
-        windows.sort_unstable();
-        drawn.sort_unstable();
-
-        assert_eq!(windows, vec![0, 1, 2, 3], "every window, once");
-        assert_eq!(drawn, vec![0, 1, 2, 3], "every band, once");
-    }
-
-    #[test]
-    fn windows_keep_the_order_the_scene_drew_them_in() {
-        // `draw_order` has already sorted them by `(z_index, index)`, so their
-        // relative order is the scene's answer and not this function's to
-        // revisit.
-        let mut bands = Bands::default();
-        bands.declared(vec![4]);
-        let order = bands.drawn_with(&[1, 2, 9]);
-        let windows: Vec<_> = order
-            .iter()
-            .filter(|drawn| matches!(drawn, Layered::Window(_)))
-            .collect();
-
-        assert_eq!(
-            windows,
-            vec![
-                &Layered::Window(0),
-                &Layered::Window(1),
-                &Layered::Window(2)
-            ],
-        );
-    }
-
-    #[test]
     #[should_panic(expected = "a second band asked for while one is outstanding")]
     fn two_bands_in_flight_at_once_is_the_bug_this_prevents() {
         let mut bands = Bands::default();
         bands.declared(vec![0, 5]);
         bands.asked(0);
         bands.asked(1);
-    }
-
-    #[test]
-    fn a_chrome_that_declared_nothing_draws_no_bands() {
-        assert!(!Bands::default().all_pictured(|_| true));
-    }
-
-    #[test]
-    fn every_declared_band_has_to_have_a_picture() {
-        let mut bands = Bands::default();
-        bands.declared(vec![0, 1, 2]);
-        assert!(bands.all_pictured(|_| true));
-        assert!(!bands.all_pictured(|band| band != 1));
-    }
-
-    #[test]
-    fn a_repaint_mid_cycle_leaves_the_bands_drawable() {
-        // The flash this exists to stop. The chrome answered for every band,
-        // then repainted for a reason of its own — a window being dragged over
-        // it — which makes what is held a picture of the page before. Those
-        // pictures are still every band, and drawing them is the desktop one
-        // frame behind; not drawing them is the whole chrome over every
-        // window, which is every window gone until the round trip finishes.
-        let mut bands = Bands::default();
-        bands.declared(vec![0, 1]);
-        bands.asked(0);
-        bands.answered();
-        bands.asked(1);
-        bands.answered();
-        assert_eq!(bands.next(), Next::Complete);
-
-        bands.went_stale();
-
-        assert_ne!(bands.next(), Next::Complete);
-        assert!(bands.all_pictured(|_| true));
-    }
-
-    #[test]
-    fn newly_declared_depths_are_drawable_only_once_they_have_pictures() {
-        // Unlike a repaint, a re-declaration drops the pictures with the
-        // depths: they describe a page that has just laid out, so a texture
-        // from the previous set is a picture of a different desktop.
-        let mut bands = Bands::default();
-        bands.declared(vec![0, 1]);
-        assert!(!bands.all_pictured(|band| band == 0));
-    }
-
-    #[test]
-    fn a_desktop_with_a_picture_it_trusts_draws_it() {
-        assert!(!hold_the_frame(true, false, 0));
-        assert!(!hold_the_frame(false, true, 0));
-        assert!(!hold_the_frame(true, true, 0));
-    }
-
-    #[test]
-    fn a_desktop_with_neither_keeps_what_is_already_on_screen() {
-        // The flash: the depths just changed, the band set is being collected
-        // again, and the flattened page on hand is from before the chrome ever
-        // started answering bands — so it shows a desktop that no longer
-        // exists. What is already on screen is the last picture that was right.
-        assert!(hold_the_frame(false, false, 0));
-    }
-
-    #[test]
-    fn a_chrome_that_stops_answering_does_not_freeze_the_desktop() {
-        // Holding is only better than drawing the wrong thing while something
-        // right is coming. Past that, the wrong thing at least moves.
-        assert!(hold_the_frame(false, false, PATIENCE - 1));
-        assert!(!hold_the_frame(false, false, PATIENCE));
     }
 }
