@@ -1,0 +1,18 @@
+# Copyright 2026 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/blink/renderer/modules/modules.gni")
+
+blink_modules_sources("domicile") {
+  sources = [
+    "domicile_app_titled_event.cc",
+    "domicile_app_titled_event.h",
+    "domicile_host.cc",
+    "domicile_host.h",
+    "navigator_domicile.cc",
+    "navigator_domicile.h",
+  ]
+
+  deps = [ "//components/domicile/mojom:mojom_blink" ]
+}

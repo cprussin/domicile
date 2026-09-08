@@ -10,6 +10,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/cpp/self_deleting_url_loader_factory.h"
+#include "url/gurl.h"
 
 namespace domicile {
 
@@ -40,8 +41,8 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
 
   ShellURLLoaderFactory(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver,
-      base::SelfDeletingPassKey key,
-      const base::FilePath& shell_root);
+      const base::FilePath& shell_root,
+      base::SelfDeletingPassKey key);
 
   ShellURLLoaderFactory(const ShellURLLoaderFactory&) = delete;
   ShellURLLoaderFactory& operator=(const ShellURLLoaderFactory&) = delete;
