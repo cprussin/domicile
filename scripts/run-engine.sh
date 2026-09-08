@@ -319,13 +319,26 @@ echo "the engine is taking the $PLATFORM platform"
 # a given machine needs is its business, and a list it can extend is smaller
 # than a flag per problem. Word-split deliberately, which is what an argument
 # list in an environment variable is for.
+#
+# AND NO `--enable-blink-features`, for the same reason and with the same
+# shape. It used to carry `=DomicileExternalSurface`, which patch 0006 made
+# unnecessary by taking the feature to `status: "stable"` — enabled in every
+# Blink configuration. What the flag still did was draw a second yellow bar
+# across the top of the desktop: `switches::kEnableBlinkFeatures` is in
+# `bad_flags_prompt.cc`, so *any* value of it says "You are using an
+# unsupported command-line flag", and the sandbox paragraph above is the same
+# story with a different flag.
+#
+# This is safe only because `engine-release.nix` pins an engine that contains
+# 0006. Against an older one the flag is what turns `embedExternalSurface()`
+# on, and without it every window on the desktop is blank — which is why this
+# could not be deleted at the same time as the patch that made it redundant.
 # shellcheck disable=SC2086
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform="$PLATFORM" \
   --app="$URL" \
   --password-store=basic --no-first-run \
   --user-data-dir="$PROFILE" \
-  --enable-blink-features=DomicileExternalSurface \
   --domicile-broker-socket="$BROKER" \
   ${DOMICILE_ENGINE_ARGS:-} &
 STARTED+=($!)
