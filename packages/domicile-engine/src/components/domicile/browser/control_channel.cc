@@ -57,7 +57,7 @@ void ControlChannel::OnConnect(int result) {
   // The handshake, which the page used to send and the browser now owns. A
   // compositor that disagrees about the version says so in `welcome`, and that
   // is the check this exists for.
-  base::Value::Dict hello;
+  base::DictValue hello;
   hello.Set("type", "hello");
   hello.Set("protocol_version", kProtocolVersion);
   std::string line;
@@ -95,11 +95,11 @@ void ControlChannel::Spawn(const std::vector<std::string>& command) {
     return;
   }
 
-  base::Value::List argv;
+  base::ListValue argv;
   for (const std::string& argument : command) {
     argv.Append(argument);
   }
-  base::Value::Dict message;
+  base::DictValue message;
   message.Set("type", "spawn");
   message.Set("command", std::move(argv));
 
@@ -196,13 +196,14 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
-  std::optional<base::Value> parsed = base::JSONReader::Read(line);
-  if (!parsed || !parsed->is_dict()) {
+  std::optional<base::DictValue> parsed =
+      base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
+  if (!parsed) {
     LOG(WARNING) << "domicile: control channel sent a line that is not a JSON "
                     "object; dropped.";
     return;
   }
-  const base::Value::Dict& message = parsed->GetDict();
+  const base::DictValue& message = *parsed;
   const std::string* type = message.FindString("type");
   if (!type) {
     return;
