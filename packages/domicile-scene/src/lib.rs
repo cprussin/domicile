@@ -431,7 +431,7 @@ impl Scene {
 
     /// Replace every region where the chrome takes the pointer.
     ///
-    /// The whole set each time, like the bands: the chrome re-sends it as its
+    /// The whole set each time: the chrome re-sends it as its
     /// own layout moves, and a bar that has moved must not go on taking the
     /// pointer where it used to be.
     pub fn claim_pointer(&mut self, claims: Vec<Claim>) {
@@ -542,7 +542,7 @@ impl Scene {
     /// Route a pointer at `screen` to an app (with local coords) or the chrome.
     ///
     /// A window wins only where nothing the chrome claimed is over it. At equal
-    /// depth the chrome wins, matching how the bands are drawn: chrome at a
+    /// depth the chrome wins: chrome at a
     /// window's depth is the chrome *of* that window and is drawn over it, so
     /// a title bar that ties with the window it names is on top of it — and a
     /// bar that lost the tie would be unclickable everywhere it overlapped its

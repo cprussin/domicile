@@ -92,7 +92,6 @@ describe("BrowserWindow", () => {
   it("points its view at the address it opened with", () => {
     const { container } = render(
       <BrowserWindow
-        band={0}
         clickThrough={false}
         dragging={false}
         floating={undefined}
@@ -110,7 +109,6 @@ describe("BrowserWindow", () => {
     it("loads what was typed, filling in a missing scheme", async () => {
       const { container } = render(
         <BrowserWindow
-          band={0}
           clickThrough={false}
           dragging={false}
           floating={undefined}
@@ -130,7 +128,6 @@ describe("BrowserWindow", () => {
     it("follows the page wherever it goes", () => {
       const { container } = render(
         <BrowserWindow
-          band={0}
           clickThrough={false}
           dragging={false}
           floating={undefined}
@@ -148,7 +145,6 @@ describe("BrowserWindow", () => {
       const seen: string[] = [];
       const { container } = render(
         <BrowserWindow
-          band={0}
           clickThrough={false}
           dragging={false}
           floating={undefined}
@@ -169,7 +165,6 @@ describe("BrowserWindow", () => {
     it("takes the whole stage under the address bar", () => {
       const { container } = render(
         <BrowserWindow
-          band={0}
           clickThrough={false}
           dragging={false}
           floating={undefined}
@@ -196,7 +191,6 @@ describe("BrowserWindow", () => {
   it("hides the window when it is not on the stage", () => {
     render(
       <BrowserWindow
-        band={0}
         clickThrough={false}
         dragging={false}
         floating={undefined}

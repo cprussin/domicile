@@ -112,7 +112,7 @@ fn what_the_host_says_next_is_read_back_in_order() {
         [
             welcome(PROTOCOL_VERSION),
             "{\"type\":\"focus_changed\",\"app_id\":null}\n".to_string(),
-            "{\"type\":\"render_band\",\"band\":2}\n".to_string(),
+            "{\"type\":\"app_composited\",\"app_id\":\"app-2\"}\n".to_string(),
         ]
         .concat()
         .into_bytes(),
@@ -127,7 +127,7 @@ fn what_the_host_says_next_is_read_back_in_order() {
         "got {first:?}"
     );
     assert!(
-        matches!(second, Some(HostMessage::RenderBand { band: 2 })),
+        matches!(second, Some(HostMessage::AppComposited { ref app_id }) if app_id == "app-2"),
         "got {second:?}"
     );
     assert_eq!(

@@ -75,44 +75,6 @@ Custom element tag names must contain a hyphen, so the SDK registers
 `domicile-app` and `domicile-webview`. The engine integration layer aliases the
 bare `<app>` / `<webview>` names the compositor exposes.
 
-### Putting a window between two layers of chrome
-
-By default the chrome is one texture drawn over every window, so a window can
-never be in front of any part of it. Where the page can resolve that itself it
-already does — an `<domicile-app>` element paints nothing, so a panel above a
-window arrives as chrome pixels over transparent and blends correctly.
-
-Where it cannot, `render-bands` is the answer: the shell names the depths it
-draws at, and the compositor asks for one at a time and draws each between the
-windows it belongs between.
-
-```ts
-import { renderBands } from "@domicile/chrome-sdk/render-bands";
-
-const stop = renderBands(bridge, [0, 10], (band) => {
-  // Leave *only* this band painting. What the page commits next is the raster
-  // the compositor draws at that depth.
-  wallpaper.hidden = band !== 0;
-  panels.hidden = band !== 1;
-});
-```
-
-**How the compositor knows which band a frame is:** `renderBands` paints it
-into the frame's top-left pixel. The page cannot label the stream its commit
-rides on — that connection belongs to Chromium rather than to the page — but it
-can decide what the frame *looks like*, so the label rides in the picture where
-nothing can reorder it. A repaint the shell makes for its own reasons — a
-clock, a caret, a video — carries the label of whatever band was painted last
-and is not mistaken for an answer; it costs the compositor a round trip, which
-it takes by dropping the bands it holds and asking again from the first.
-
-**What that leaves a shell to do:** answer in the frame the request is handled
-in. Anything deferred — a `requestAnimationFrame`, a timeout, an await — paints
-the label for a band the page is no longer being asked for.
-
-A shell that never calls this declares nothing and is drawn as one layer over
-every window.
-
 ### Knowing which modifiers are held
 
 `wl_keyboard.modifiers` goes to whatever holds the keyboard, so the moment a

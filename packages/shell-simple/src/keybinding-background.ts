@@ -63,10 +63,8 @@ const backgroundStyles = center({
   // because no order on this page reaches the compositor: where it draws a
   // client's own buffer the window is a transparent hole, and the chrome is
   // one texture drawn over every client, so anything painted across that hole
-  // — this legend included — lands on top of the live window. The compositor
-  // can band the chrome by depth (`stacking.rs`), but no message tells it
-  // where the chrome's own depths are, so every frame is still the all-above
-  // case. The tag is `APP_TAG_NAME`, spelled out because a selector is a
+  // — this legend included — lands on top of the live window. The tag is
+  // `APP_TAG_NAME`, spelled out because a selector is a
   // literal Panda extracts at build time, and the windows are the siblings
   // appended after this.
   "&:has(~ domicile-app)": {

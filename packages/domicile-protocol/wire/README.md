@@ -31,21 +31,3 @@ the `welcome` line is pinned to `PROTOCOL_VERSION` too, so a bump cannot leave
 a stale number sitting in a file that claims to be the wire.
 
 That is the whole mechanism: neither language can move alone.
-
-## `band-labels.jsonl`
-
-One line per band, saying the colour a chrome paints to tell the compositor
-which band the frame it is committing is. The page cannot label the stream its
-commit rides on — that connection belongs to Chromium rather than to the page —
-so it labels the *picture*, in the top-left pixel, and the compositor reads it
-back. See `src/band_label.rs`.
-
-- `tests/band_labels.rs` asserts Rust reads those colours as those bands.
-- `packages/chrome-sdk/src/band-label.test.ts` asserts the SDK paints them.
-
-Here the failure the file exists to catch is quieter than a dropped message: a
-compositor that does not recognise an answer asks for band 0 for ever, the
-chrome renders band 0 for ever, and the desktop shows one layer of its chrome
-and no more — which looks exactly like a shell that declared bands it does not
-draw. `the_fixture_covers_every_band_that_fits` is the other half, so a band
-the label can carry cannot be left out of the file.

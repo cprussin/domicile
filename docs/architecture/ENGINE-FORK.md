@@ -517,7 +517,7 @@ form, that is acceptable" is taken up, but the bill is smaller than that:
 
 | Gone | Why |
 |---|---|
-| Bands — `compositor/src/bands.rs`, `shell-manganese/src/bands.ts`, `protocol/src/band_label.rs`, `declare_bands`/`render_band` | Stacking is the layer tree's job. **Not done**: the shell still declares bands, the compositor still asks for them one at a time, and the textures it collects are never drawn — a page re-rendered per band for nothing |
+| Bands — `compositor/src/bands.rs`, `shell-manganese/src/bands.ts`, `protocol/src/band_label.rs`, `declare_bands`/`render_band` | Stacking is the layer tree's job |
 | The copy path — readback, `AppFrame`, `putImageData` | There is one path and it is zero-copy |
 | `place_portal`'s matrix, and the per-frame `requestAnimationFrame` measure loop | Layout positions the layer. The page stops reporting where its own boxes are |
 | `compositor/src/compose.rs`'s CSS reimplementation — rounded corners, shadows, blend | cc does it, correctly, for every property rather than the ones we shimmed |
@@ -1082,9 +1082,10 @@ copy path before the compositor can submit leaves nothing drawing at all.
       presented
 - [ ] **rebuild the latency measurement** in the compositor — see above. Until
       it exists nothing measures the requirement the fork is for
-- [ ] bands, the shaders and `compose.rs`'s CSS reimplementation. Still
-      standing: they draw the chrome and the desktop, which the engine path
-      does not replace
+- [x] bands, and with them the readback that labelled them: the chrome's
+      depths, `declare_bands`/`render_band`, `band_label`, and the texture
+      every client's buffer was uploaded into so a label could be read out of
+      one pixel. The layer tree does the stacking
 - [x] `<domicile-app>` becomes a `<canvas>` and one call. The element creates a
       canvas and calls `canvas.embedExternalSurface(appId)`; nothing copies
       anything. Absent outside the fork, where the element still lays out,

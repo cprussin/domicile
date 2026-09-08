@@ -91,12 +91,6 @@ class FakeBridge {
   grabShortcut(shortcut: unknown): void {
     this.calls.push(["grabShortcut", shortcut]);
   }
-  // The depths the chrome draws at, so the compositor can put a window between
-  // two of them. Declared on every mount, whether or not anything is floating.
-  declareBands(depths: readonly number[]): void {
-    this.calls.push(["declareBands", [...depths]]);
-  }
-
   claimPointer(regions: readonly unknown[]): void {
     this.calls.push(["claimPointer", [...regions]]);
   }
@@ -675,9 +669,8 @@ describe("Shell", () => {
 
     it("sits above the window, which starts below it", async () => {
       // The bar comes out of the window's box rather than being added to it,
-      // and it is chrome at the window's own depth — which is the case
-      // `declare_bands` exists for, and the reason this is a bar and not a
-      // border.
+      // and it is chrome at the window's own depth, which is the reason
+      // this is a bar and not a border.
       const { container } = await floated();
       const bar = barIn(container);
       const portal = container.querySelector<HTMLElement>(APP_TAG_NAME);
@@ -713,88 +706,6 @@ describe("Shell", () => {
         container.querySelector<HTMLElement>(APP_TAG_NAME)?.style
           .insetInlineStart,
       ).toBe("118px");
-    });
-  });
-
-  describe("the depths the chrome draws at", () => {
-    const banded = (container: HTMLElement, band: number) => [
-      ...container.querySelectorAll(`[data-band="${String(band)}"]`),
-    ];
-
-    const hidden = (element: Element) =>
-      element.hasAttribute("data-band-hidden");
-
-    const declared = () =>
-      bridge.calls.filter(([kind]) => kind === "declareBands").at(-1);
-
-    const floated = async () => {
-      const rendered = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
-      return rendered;
-    };
-
-    it("declares no depths while nothing is floating", () => {
-      // A desktop with nothing to interleave has nothing to gain from the
-      // round trip, and one band would cost one per repaint for a picture the
-      // compositor already has.
-      renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
-
-      expect(declared()).toStrictEqual(["declareBands", []]);
-    });
-
-    it("declares one band under every float, and one per float above it", async () => {
-      await floated();
-
-      expect(declared()).toStrictEqual(["declareBands", [0, 1]]);
-    });
-
-    it("leaves only the band it was asked for painting", async () => {
-      const { container } = await floated();
-
-      act(() => {
-        bridge.emit("render_band", { band: 1 });
-      });
-      expect(banded(container, 0).every(hidden)).toBe(true);
-      expect(banded(container, 1).some(hidden)).toBe(false);
-
-      act(() => {
-        bridge.emit("render_band", { band: 0 });
-      });
-      expect(banded(container, 0).some(hidden)).toBe(false);
-      expect(banded(container, 1).every(hidden)).toBe(true);
-    });
-
-    it("never fades a window's own portal", async () => {
-      // A portal is a hole in the page and paints nothing, so it belongs to no
-      // band — and fading one would report it to the compositor at
-      // `opacity: 0`, which takes the window off the screen entirely.
-      const { container } = await floated();
-
-      act(() => {
-        bridge.emit("render_band", { band: 0 });
-      });
-
-      const portal = container.querySelector(APP_TAG_NAME);
-      expect(portal?.hasAttribute("data-band")).toBe(false);
-      expect(portal?.hasAttribute("data-band-hidden")).toBe(false);
-    });
-
-    it("puts the whole chrome back when nothing is floating any more", async () => {
-      // Nothing puts the page back on its own: it stays showing whichever band
-      // was asked for last, so a chrome that stops declaring depths would
-      // leave the desktop with everything but that band missing.
-      const { container } = await floated();
-      act(() => {
-        bridge.emit("render_band", { band: 1 });
-      });
-      expect(banded(container, 0).every(hidden)).toBe(true);
-
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
-
-      expect(container.querySelectorAll("[data-band-hidden]")).toHaveLength(0);
-      expect(declared()).toStrictEqual(["declareBands", []]);
     });
   });
 
@@ -993,10 +904,6 @@ describe("Shell", () => {
         | { zIndex: number }[]
         | undefined;
 
-    /** The last depths this chrome told the host it draws at. */
-    const declared = () =>
-      bridge.calls.filter(([kind]) => kind === "declareBands").at(-1);
-
     const press = (sheet: HTMLElement, x: number, y: number): void => {
       // The test DOM does not implement pointer capture, and a drag that threw
       // there would never reach the assertions below.
@@ -1194,34 +1101,6 @@ describe("Shell", () => {
       expect(portalFor(container, "stage")?.className).not.toContain(
         css({ pointerEvents: "none" }),
       );
-    });
-
-    it("stops banding while a window is being dragged", async () => {
-      // A band is a round trip, and the page answers one at a time by leaving
-      // only that band painting. A chrome that repaints every frame — which is
-      // what a window being dragged over it is — can never hold still long
-      // enough for the set to describe one moment: band 0 is captured a frame
-      // before band 1, which is captured a frame before band 2, and the
-      // desktop composited from them is three moments at once. Declaring
-      // nothing puts the whole page back and draws it flattened, which is what
-      // every chrome did before bands existed: a bar can land over the window
-      // in front, and nothing flashes.
-      const { container } = await twoFloats();
-      expect(declared()).toStrictEqual(["declareBands", [0, 1, 2]]);
-
-      press(sheetOver(container, "one"), 0, 0);
-
-      expect(declared()).toStrictEqual(["declareBands", []]);
-    });
-
-    it("bands again once the window is let go of", async () => {
-      const { container } = await twoFloats();
-      const sheet = sheetOver(container, "one");
-      press(sheet, 0, 0);
-
-      fireEvent.pointerUp(sheet, { pointerId: 1 });
-
-      expect(declared()).toStrictEqual(["declareBands", [0, 1, 2]]);
     });
 
     it("keeps every float click-through after Alt is let go of mid-drag", async () => {

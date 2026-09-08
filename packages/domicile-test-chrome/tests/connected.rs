@@ -30,15 +30,15 @@ fn waiting_finds_a_message_the_host_sends_later() {
         std::thread::sleep(Duration::from_millis(50));
         let mut host = host;
         writeln!(host, "{{\"type\":\"focus_changed\",\"app_id\":null}}").expect("write");
-        writeln!(host, "{{\"type\":\"render_band\",\"band\":7}}").expect("write");
+        writeln!(host, "{{\"type\":\"app_composited\",\"app_id\":\"app-7\"}}").expect("write");
         host
     });
 
     let found = chrome
-        .wait_for(|message| matches!(message, HostMessage::RenderBand { band: 7 }))
+        .wait_for(|message| matches!(message, HostMessage::AppComposited { ref app_id } if app_id == "app-7"))
         .expect("it arrives");
 
-    assert!(matches!(found, HostMessage::RenderBand { band: 7 }));
+    assert!(matches!(found, HostMessage::AppComposited { ref app_id } if app_id == "app-7"));
     drop(sender.join().expect("the sender finishes"));
 }
 
@@ -55,7 +55,7 @@ fn waiting_for_something_that_never_comes_says_what_did() {
     writeln!(host, "{{\"type\":\"focus_changed\",\"app_id\":null}}").expect("write");
 
     let err = chrome
-        .wait_for(|message| matches!(message, HostMessage::RenderBand { .. }))
+        .wait_for(|message| matches!(message, HostMessage::AppComposited { .. }))
         .expect_err("nothing like that is coming");
 
     match err {
@@ -79,7 +79,7 @@ fn a_host_that_leaves_mid_wait_says_so() {
     drop(host);
 
     let err = chrome
-        .wait_for(|message| matches!(message, HostMessage::RenderBand { .. }))
+        .wait_for(|message| matches!(message, HostMessage::AppComposited { .. }))
         .expect_err("the host is gone");
 
     assert!(matches!(err, ChromeError::Closed), "got {err:?}");
@@ -121,24 +121,24 @@ fn waiting_twice_for_one_shape_waits_for_a_second_message() {
     welcome(&host);
     let mut chrome = Chrome::on(ours, Duration::from_secs(2)).expect("the handshake works");
     let mut host = host;
-    writeln!(host, "{{\"type\":\"render_band\",\"band\":1}}").expect("write");
+    writeln!(host, "{{\"type\":\"app_composited\",\"app_id\":\"app-1\"}}").expect("write");
 
     let first = chrome
-        .wait_for(|message| matches!(message, HostMessage::RenderBand { .. }))
+        .wait_for(|message| matches!(message, HostMessage::AppComposited { .. }))
         .expect("the first one");
     // Sent only after the first wait has been answered, so nothing but a
     // cursor can tell the two apart.
-    writeln!(host, "{{\"type\":\"render_band\",\"band\":2}}").expect("write");
+    writeln!(host, "{{\"type\":\"app_composited\",\"app_id\":\"app-2\"}}").expect("write");
     let second = chrome
-        .wait_for(|message| matches!(message, HostMessage::RenderBand { .. }))
+        .wait_for(|message| matches!(message, HostMessage::AppComposited { .. }))
         .expect("the second one");
 
     assert!(
-        matches!(first, HostMessage::RenderBand { band: 1 }),
+        matches!(first, HostMessage::AppComposited { ref app_id } if app_id == "app-1"),
         "{first:?}"
     );
     assert!(
-        matches!(second, HostMessage::RenderBand { band: 2 }),
+        matches!(second, HostMessage::AppComposited { ref app_id } if app_id == "app-2"),
         "the second wait was answered by the first message: {second:?}"
     );
 }
@@ -153,16 +153,20 @@ fn waiting_twice_for_one_shape_waits_for_a_second_message() {
 fn a_message_that_beat_the_handshake_still_answers_the_first_wait() {
     let (host, ours) = a_host();
     let mut writing = &host;
-    writeln!(writing, "{{\"type\":\"render_band\",\"band\":9}}").expect("write");
+    writeln!(
+        writing,
+        "{{\"type\":\"app_composited\",\"app_id\":\"app-9\"}}"
+    )
+    .expect("write");
     welcome(&host);
     let mut chrome = Chrome::on(ours, Duration::from_secs(2)).expect("the handshake works");
 
     let found = chrome
-        .wait_for(|message| matches!(message, HostMessage::RenderBand { .. }))
+        .wait_for(|message| matches!(message, HostMessage::AppComposited { .. }))
         .expect("what came before the welcome is still waitable");
 
     assert!(
-        matches!(found, HostMessage::RenderBand { band: 9 }),
+        matches!(found, HostMessage::AppComposited { ref app_id } if app_id == "app-9"),
         "{found:?}"
     );
 }
@@ -183,11 +187,11 @@ fn a_message_passed_over_by_one_wait_is_still_there_for_the_next() {
     let mut chrome = Chrome::on(ours, Duration::from_millis(200)).expect("the handshake works");
     let mut host = host;
     writeln!(host, "{{\"type\":\"focus_changed\",\"app_id\":null}}").expect("write");
-    writeln!(host, "{{\"type\":\"render_band\",\"band\":1}}").expect("write");
+    writeln!(host, "{{\"type\":\"app_composited\",\"app_id\":\"app-1\"}}").expect("write");
 
     chrome
-        .wait_for(|message| matches!(message, HostMessage::RenderBand { .. }))
-        .expect("the band, found behind the focus change");
+        .wait_for(|message| matches!(message, HostMessage::AppComposited { .. }))
+        .expect("the message, found behind the focus change");
     let passed_over =
         chrome.wait_for(|message| matches!(message, HostMessage::FocusChanged { .. }));
 
@@ -211,7 +215,7 @@ fn a_line_that_is_not_a_message_is_reported_with_the_line() {
     let mut host = host;
     writeln!(host, "not json at all").expect("write");
 
-    let refused = chrome.wait_for(|message| matches!(message, HostMessage::RenderBand { .. }));
+    let refused = chrome.wait_for(|message| matches!(message, HostMessage::AppComposited { .. }));
 
     let Err(ChromeError::Unreadable { line, .. }) = refused else {
         panic!("got {refused:?}");

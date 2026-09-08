@@ -4,9 +4,9 @@ A Wayland compositor whose renderer is a web engine. All user chrome is web
 content; app windows are real Wayland clients composited *inside* the engine as
 DOM elements, so `<app>` takes the same CSS as a `<div>`.
 
-A GPU client's buffer is composited directly, with no copy; a `wl_shm` client's
-frames are still read back and sent to the engine
-([why](docs/architecture/WINDOW-COMPOSITING.md)).
+A GPU client's buffer is composited directly, with no copy. A `wl_shm` client
+has no buffer the engine can take, so its window stays blank until the upload
+exists ([why](docs/architecture/WINDOW-COMPOSITING.md)).
 [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) ·
 [ROADMAP.md](ROADMAP.md)
 
