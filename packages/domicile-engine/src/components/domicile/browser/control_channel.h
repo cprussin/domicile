@@ -99,6 +99,16 @@ class ControlChannel : public mojom::ControlChannel {
   base::WeakPtrFactory<ControlChannel> weak_factory_{this};
 };
 
+// Bind a control channel for a frame, reading the compositor's socket path off
+// the command line. Self-owned: it lives as long as the pipe does.
+//
+// THIS IS NOT THE ACCESS CONTROL. The caller decides who may reach it, and
+// that decision -- registering the interface only for a document whose origin
+// is domicile:// -- is the whole of the security property. See
+// PopulateChromeFrameBinders.
+void BindControlChannel(
+    mojo::PendingReceiver<mojom::ControlChannel> receiver);
+
 }  // namespace domicile
 
 #endif  // COMPONENTS_DOMICILE_BROWSER_CONTROL_CHANNEL_H_
