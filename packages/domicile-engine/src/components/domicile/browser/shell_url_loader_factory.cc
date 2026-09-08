@@ -39,9 +39,14 @@ bool ShellURLLoaderFactory::ResolveShellPath(const base::FilePath& shell_root,
   // Percent-decoding happens here rather than in the path arithmetic below,
   // because "%2e%2e%2f" has to be ".." *before* ReferencesParent() is asked
   // about it, or the check reads an escape and sees nothing wrong.
+  // NORMAL is the only rule this function takes besides plus-for-space, and it
+  // is the right one anyway: UnescapeBinaryURLComponent "leaves nothing
+  // unescaped, including nulls", so %2e%2e%2f really is ".." by the time
+  // ReferencesParent() below is asked about it, and %00 really is a NUL by the
+  // time it is refused. Anything that decodes less would make both checks read
+  // an escape and see nothing wrong.
   std::string path = base::UnescapeBinaryURLComponent(
-      url.path(), base::UnescapeRule::PATH_SEPARATORS |
-                            base::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
+      url.path(), base::UnescapeRule::NORMAL);
 
   // A NUL in the decoded path would truncate the name the filesystem is asked
   // for, so a request for "index.html%00.png" could reach a different file than

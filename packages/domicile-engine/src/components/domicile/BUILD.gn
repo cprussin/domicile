@@ -88,11 +88,13 @@ source_set("unit_tests") {
 
   sources = [
     "browser/frame_sink_broker_unittest.cc",
+    "browser/shell_url_loader_factory_unittest.cc",
     "spike/window_diff_unittest.cc",
   ]
 
   deps = [
     ":browser",
+    ":shell_scheme",
     "//components/domicile/engine:event_queue_unit_tests",
     "//base",
     "//base/test:test_support",
