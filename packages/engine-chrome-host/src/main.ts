@@ -58,9 +58,17 @@ const reachForMs = wholeNumberFromEnv(
   refuse,
 );
 
+// DEV MODE, AND NOTHING ELSE TURNS IT ON. `scripts/dev-shell.sh` sets this;
+// the flake's desktops do not, so an installed desktop serves no reload token
+// and has no poller in its page. Any value at all means yes — the launcher is
+// a shell script, and "it is set" is the only thing a shell script says
+// clearly about a variable.
+const reload = environment.DOMICILE_DEV_RELOAD !== undefined;
+
 const serving = serveShell({
   root: shell.root,
   socketPath,
+  ...(reload ? { reload } : {}),
   ...(shell.module === undefined ? {} : { module: shell.module }),
   ...(port === undefined ? {} : { port }),
   // How long a page waits for a compositor that has not started yet. The
