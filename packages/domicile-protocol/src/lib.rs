@@ -356,15 +356,6 @@ pub enum HostMessage {
     /// out on, which is the honest answer from a host that never asked for any.
     Displays { displays: Vec<DisplayInfo> },
 
-    /// The compositor is drawing this window; the chrome should drop any
-    /// pixels it holds for it.
-    ///
-    /// Nothing sends this. It is what told a chrome the window it had been
-    /// copying frame by frame was now drawn from the client's own buffer, and
-    /// there is one path now — but the chrome half is still wired to it, so it
-    /// goes when that does. `ROADMAP.md` tracks it.
-    AppComposited { app_id: String },
-
     /// Who holds the keyboard now: an app, or the chrome itself (`None`).
     ///
     /// The chrome asks for focus with `focus_app`, but it is not the only

@@ -147,15 +147,6 @@ const modifiersSchema = z.looseObject({
   type: z.literal("modifiers"),
 });
 
-// The counterpart to `app_frame`: the compositor is drawing this window's own
-// buffer now, so whatever pixels the chrome holds for it are stale. It arrives
-// after the last frame on the same socket, which is what makes it safe to act
-// on — see `HostMessage::AppComposited`.
-const appCompositedSchema = z.looseObject({
-  app_id: z.string(),
-  type: z.literal("app_composited"),
-});
-
 // Who holds the keyboard now. The chrome asks for focus with `focus_app`, but
 // it is not the only thing that moves it — a click on a window focuses it in
 // the compositor, and a focused client going away hands the keyboard back — so
@@ -234,7 +225,6 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appTitledSchema,
   appResizedSchema,
   appClosedSchema,
-  appCompositedSchema,
   appCursorSchema,
   displaysSchema,
   focusChangedSchema,
@@ -258,7 +248,6 @@ export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
 export type AppTitledMessage = z.infer<typeof appTitledSchema>;
 export type AppResizedMessage = z.infer<typeof appResizedSchema>;
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
-export type AppCompositedMessage = z.infer<typeof appCompositedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;

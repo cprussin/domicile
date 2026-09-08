@@ -9,7 +9,6 @@
 
 import type { DomicileAppElement } from "@domicile/chrome-sdk/app-element";
 import type {
-  AppCompositedMessage,
   AppCursorMessage,
   AppResizedMessage,
 } from "@domicile/chrome-sdk/protocol";
@@ -227,13 +226,6 @@ export class Desktop {
     cursor,
   }: Pick<AppCursorMessage, "app_id" | "cursor">): void {
     this.#windows.get(app_id)?.element.applyCursor(cursor);
-  }
-
-  // The compositor has taken this window back and is drawing the client's own
-  // buffer. Whatever pixels this element holds are a still of the window, and
-  // the chrome is composited over the client — so they would hide the live one.
-  dropSurface({ app_id }: Pick<AppCompositedMessage, "app_id">): void {
-    this.#windows.get(app_id)?.element.dropSurface();
   }
 
   #windowFor(appId: string): OpenWindow {

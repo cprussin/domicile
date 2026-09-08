@@ -6,7 +6,6 @@
 {"type":"app_titled","app_id":"app-2","title":"~/src"}
 {"type":"app_resized","app_id":"app-2","size":[1024.0,768.0]}
 {"type":"app_closed","app_id":"app-1"}
-{"type":"app_composited","app_id":"app-2"}
 {"type":"app_cursor","app_id":"app-2","cursor":"vertical-text"}
 {"type":"displays","displays":[{"name":"left","position":[0,0],"size":[1920,1080],"scale":1},{"name":"right","position":[1920,0],"size":[2560,1440],"scale":2}]}
 {"type":"displays","displays":[{"name":"domicile-0","position":[0,0],"size":[1280,800],"scale":1}]}

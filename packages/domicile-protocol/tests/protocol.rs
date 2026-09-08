@@ -137,9 +137,6 @@ fn host_messages_round_trip() {
         app_id: "term".into(),
         cursor: CursorShape::Text,
     });
-    host_round_trip(&HostMessage::AppComposited {
-        app_id: "term".into(),
-    });
 }
 
 /// The chrome assigns the cursor straight to CSS `cursor`, so every shape must
@@ -278,13 +275,6 @@ fn wire_shape_is_pinned() {
     .unwrap();
     assert_eq!(v["type"], "app_cursor");
     assert_eq!(v["cursor"], "pointer");
-
-    let v = serde_json::to_value(HostMessage::AppComposited {
-        app_id: "term".into(),
-    })
-    .unwrap();
-    assert_eq!(v["type"], "app_composited");
-    assert_eq!(v["app_id"], "term");
 }
 
 #[test]
