@@ -1103,8 +1103,10 @@ struct DomicileCompositor {
 
     /// Shared brain + connected chrome clients.
     hub: Arc<ChromeHub>,
-    /// Each app's engine texture and the dmabuf behind its latest frame — what
-    /// the CEF external-texture path binds instead of copying pixels.
+    /// Per-app bookkeeping from the external-texture era, and **nothing reads
+    /// what it holds**: an app is registered when it maps and removed when it
+    /// goes, and the id it mints is never asked for again. The engine keys on
+    /// the app id itself now. ROADMAP tracks the deletion.
     bridge: BridgeRegistry,
     /// How many times each surface has committed, keyed as [`painted_key`].
     ///
@@ -1133,12 +1135,10 @@ struct DomicileCompositor {
     /// burst answered by one frame is felt as how long its first key waited.
     pending_key: Option<Instant>,
     /// The chrome's own toplevel, when it is a client of ours. Kept apart from
-    /// `toplevels` because it is not an app: it is never announced, never
-    /// placed by a portal, and is drawn over everything rather than in
-    /// `draw_order`.
+    /// `toplevels` because it is not an app: it is never announced and never
+    /// placed by a portal. It is the window the desktop is, and the keyboard
+    /// falls back to it.
     chrome_toplevel: Option<ToplevelSurface>,
-    /// The chrome's latest surface as a texture. Transparent wherever an
-    /// `<app>` element is, which is what lets the app below show through.
     /// Clients already told their shm buffer cannot be shown. A client commits
     /// at its frame rate and the refusal does not change, so it is said once
     /// each rather than once a frame.

@@ -458,7 +458,7 @@ known and it is a build-system cost, not a language one.
 | Brokering a `FrameSinkId` and sink to a non-renderer process | `components/domicile/`, modelled on `content/browser/renderer_host/embedded_frame_sink_provider_impl.cc` | **done** — new files + 4 lines across two `BUILD.gn`. Not `render_process_host_impl_receiver_bindings.cc` as first guessed: nothing about it hangs off a `RenderProcessHost` |
 | Getting the producer to the broker | `mojo::NamedPlatformChannel` + a real invitation | **done** — see *How the producer reaches the broker*. One edited file: the socket opens at browser startup, because a shell's page cannot embed until a window exists and no window exists until a producer has connected over it |
 | Pushing the `SurfaceId` to the page | `components/domicile/mojom/external_surface.mojom`, modelled on the `RemoteFrame` path | **done** — new files, plus one binder line in `render_process_host_impl_receiver_bindings.cc` |
-| An element that embeds it | `HTMLCanvasElement`, which already owns a `SurfaceLayerBridge` and a `cc::SurfaceLayer` for `transferControlToOffscreen` | **done** — `canvas.embedExternalSurface()`, 2 files + IDL as guessed, plus the flag and one `BUILD.gn` |
+| An element that embeds it | `HTMLCanvasElement`, which already owns a `SurfaceLayerBridge` and a `cc::SurfaceLayer` for `transferControlToOffscreen` | **done** — `canvas.embedExternalSurface()`, 2 files + IDL as guessed, plus the feature entry and one `BUILD.gn` |
 
 ## Why this meets the requirements
 
@@ -468,8 +468,8 @@ known and it is a build-system cost, not a language one.
 | **CSS parity** | The window is a `cc::Layer`. Whatever CSS works on a hardware-composited `<video>` works, because it is the same layer type through the same property trees. This is the requirement's own wording — "just like a `<webview>` or `<iframe>` or `<video>`" — met by using literally that mechanism. **Measured on a GPU: seven properties, every one bit-exact against an ordinary element**, and an `<app>` is closer to a `<div>` than an out-of-process `<iframe>` is. See *What CSS does to an `<app>`* and *Whether an `<app>` is an out-of-process `<iframe>`* |
 | **Shell simplicity** | `<app>` stays a custom element wrapping a `<canvas>`, which is what `<domicile-app>` already is. What changes is what fills the canvas, not what a shell author writes |
 
-The third row is the surprise: the shell-side API barely moves. The SDK keeps
-its custom element and loses the `AppFrame` plumbing behind it.
+The third row is the surprise: the shell-side API barely moved. The SDK kept
+its custom element; what went was the frame plumbing behind it.
 
 ## Key decisions
 
@@ -488,9 +488,8 @@ its custom element and loses the `AppFrame` plumbing behind it.
   costs edits to `html_tag_names.json5`, `runtime_enabled_features.json5` and
   the element factory — generated lists that rebase noisily every release.
   `HTMLCanvasElement` already creates a `cc::SurfaceLayer` and already handles
-  its sizing, opacity and attachment; one method behind a runtime flag points
-  it at a browser-brokered `SurfaceId` instead of an OffscreenCanvas
-  placeholder.
+  its sizing, opacity and attachment; one method points it at a
+  browser-brokered `SurfaceId` instead of an OffscreenCanvas placeholder.
 - **Minimise edited files, not added ones.** A fork's carrying cost is conflicts,
   and new files do not conflict. "Roughly four places" was the estimate before
   the page half existed; measured, with steps 1–3 landed, it is **nine**, five
@@ -502,31 +501,13 @@ its custom element and loses the `AppFrame` plumbing behind it.
   | `content/browser/browser_main_loop.cc` | one call, opening the producer's socket at startup |
   | `content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc` | one `AddUIThreadInterface` beside the one for `EmbeddedFrameSinkProvider` |
   | `third_party/blink/renderer/core/html/canvas/html_canvas_element.{h,cc,idl}` | the method |
-  | `third_party/blink/renderer/platform/runtime_enabled_features.json5` | the flag |
+  | `third_party/blink/renderer/platform/runtime_enabled_features.json5` | the feature entry — `status: "stable"`, so nothing has to pass a flag |
   | `third_party/blink/renderer/platform/BUILD.gn` | the new file and its mojom dep |
 
   Everything else is additive, and the two that rebase noisily are the
   generated lists — `runtime_enabled_features.json5` and the two `BUILD.gn`
   source lists. Avoiding a new HTML element bought exactly what it was supposed
   to: one entry in one generated list instead of three.
-
-## What gets scrapped
-
-The user's "if this means we need to completely scrap domicile in its current
-form, that is acceptable" is taken up, but the bill is smaller than that:
-
-| Gone | Why |
-|---|---|
-| Bands — `compositor/src/bands.rs`, `shell-manganese/src/bands.ts`, `protocol/src/band_label.rs`, `declare_bands`/`render_band` | Stacking is the layer tree's job |
-| The copy path — readback, `AppFrame`, `putImageData` | There is one path and it is zero-copy |
-| `place_portal`'s matrix, and the per-frame `requestAnimationFrame` measure loop | Layout positions the layer. The page stops reporting where its own boxes are |
-| `compositor/src/compose.rs`'s CSS reimplementation — rounded corners, shadows, blend | cc does it, correctly, for every property rather than the ones we shimmed |
-| `compositor/src/stacking.rs`, `Layer::clip` region-clipping | Same |
-| ~~The vendored exo protocols and `--experiment-augmenter`~~ | **Gone.** The engine is no longer a Wayland client of ours, so the protocols it asked for have no one to ask. `src/exo.rs`, `protocols/`, the flag, `scripts/probe-delegated-compositing.sh` and the `wayland-scanner` build dependency went with them |
-| Electron | We ship the fork |
-
-Kept: the Wayland server itself, input and seat handling, the output/config
-model, the session, and the host brain. That is most of what is hard.
 
 ## Getting started
 
@@ -645,8 +626,8 @@ window.
       hierarchy registration does (BeginFrames) from what embedding does
       (aggregation). `components/domicile/spike/` in the series, run with
       `scripts/spike.sh`
-- [x] `canvas.embedExternalSurface()` behind a runtime flag, calling
-      `SurfaceLayer::SetSurfaceId` with the brokered id — **not killed**. The
+- [x] `canvas.embedExternalSurface()`, calling `SurfaceLayer::SetSurfaceId`
+      with the brokered id — **not killed**. The
       canvas does not refuse a surface it did not allocate, and neither does
       `cc::SurfaceLayer` under it. See *Whether the page will embed a surface it
       did not allocate*, which also has the control: move the canvas with CSS
@@ -654,12 +635,11 @@ window.
       and `third_party/blink/` in the series
 - [x] **the measurement**: `z-index` against ordinary DOM, `transform`,
       `border-radius`, `opacity`, `filter: blur()`, `mix-blend-mode`, resize,
-      and the latency — **passed**. Six of the seven are bit-exact against an
-      ordinary element laid out beside them and `transform` differs on a
-      one-pixel outline; a submitted frame reaches the display compositor's
-      output in one display frame. See *What CSS does to an `<app>`* and *What
-      it costs*. `components/domicile/spike/css_parity.cc` in the series, run
-      with `scripts/spike-step4.sh`
+      and the latency — **passed**, every property bit-exact on the GPU, and a
+      submitted frame reaching the display compositor's output in one display
+      frame. See *What CSS does to an `<app>`* and *What it costs*.
+      `components/domicile/spike/css_parity.cc` in the series, run with
+      `scripts/spike-step4.sh`
 
 The last one was the whole point. The three before it were plumbing that either
 worked or named its own blocker. **Nothing was deleted from Domicile until the
@@ -835,9 +815,10 @@ and submit its own frames: the per-buffer hop stays, the per-frame hop goes, and
 no GPU authority moves.
 
 That is worth an experiment rather than an assumption, because requirement 1 is
-the one that cannot be traded and this hop is on its path. **Test it before
-phase 2**, which deletes the copy path this would otherwise be compared
-against.
+the one that cannot be traded and this hop is on its path. The copy path it
+would once have been compared against is gone, so the comparison is now against
+the latency guard's own floor — which is what makes that guard a prerequisite
+for answering this rather than a separate errand.
 
 ### A client's window on the page
 
@@ -985,120 +966,49 @@ do otherwise. See *Open questions*.
 
 ## Plan
 
-Phase 1 — real pixels. **Ordered: nothing in phase 2 can start until the
-compositor can submit a frame, because phase 2 deletes what draws today.**
+Phase 1 — real pixels. **Done.** `libdomicile_engine.so` behind the C ABI
+above, the brokered frame sink, the dmabuf import ported from `exo::Buffer`,
+`released` → `wl_buffer.release`, and the compositor submitting a client's
+buffer. `components/domicile/` in the series is the engine half and the
+`scripts/spike-*.sh` are its assertions; *A client's window on the page* is
+what it does at run time.
 
-- [x] `libdomicile_engine.so` behind the C ABI above — invitation, broker pipe,
-      pollable fd. `components/domicile/engine/` in the series, asserted by
-      `scripts/spike-engine.sh`: a **C** process that is not Chromium joins the
-      browser's mojo graph, is brokered a frame sink, and takes a configure and
-      a frame off `domicile_engine_fd` through `domicile_engine_dispatch`
-- [x] `frame` → `wl_surface.frame`. Arrives once an embedder exists, which is
-      also when `SetNeedsBeginFrame` is worth asking for
-- [x] the embedder's `LocalSurfaceId` drives `xdg_toplevel.configure` — the
-      C ABI's `configure` callback carries the page's layout box
-- [x] **a platform that can import a dmabuf** — `scripts/spike-wayland.sh`,
-      and the NVIDIA driver satisfies every gate. See *What
-      `domicile_surface_import` still needs*
-- [x] port `exo::Buffer`'s dmabuf → `SharedImage` → `TransferableResource`
-      behind `domicile_surface_import` — done, under the brokered import.
-      `components/domicile/browser/brokered_frame_sink.cc` is the port;
-      `scripts/spike-dmabuf.sh` is the assertion
-- [x] `released` → `wl_buffer.release` — **fires**, and it took two frames to
-      see it: viz holds whatever is on screen and hands it back when a later
-      frame replaces it, which is why a client double-buffers
-- [x] `domicile-compositor` submits a client's buffer instead of reading it
-      back — the only item left in phase 1, and the first that touches the
-      compositor. The seam is ready: `domicile_engine_fd` is a `Generic`
-      calloop source, which is the pattern `main.rs:6037` already uses, and the
-      three callbacks map onto requests the compositor implements. **What is
-      not decided is how the Rust reaches the library.** `libdomicile_engine.so`
-      is a GN artifact that exists only where Chromium is built, so linking it
-      from `cargo` makes `cargo build` need a Chromium checkout — which this
-      repo's CI does not have and cannot get. `dlopen` at runtime, behind the
-      same `disposition` the compositor already branches on, keeps `cargo
-      build` working everywhere and keeps the fork out of the default build.
-      **Settled: `dlopen`** — but for build hygiene only. `cargo build` must
-      not require a Chromium checkout; that is the whole reason. It is *not* a
-      licence to fall back silently when the library is absent. Until phase 2
-      the copy path is still there and a missing engine can degrade to it; once
-      phase 2 deletes the copy path, a missing `libdomicile_engine.so` is a
-      startup failure that says so, because a compositor that silently shows
-      nothing is the defect ERRORS.md exists to prevent.
-      **Done.** The compositor loads the engine or refuses to start, polls
-      `domicile_engine_fd` in its own calloop, imports a client's dmabuf once
-      per `wl_buffer`, submits it, and holds `wl_buffer.release` until viz says
-      it is done — with a deadline, so a release that never arrives takes the
-      buffer back loudly rather than stopping the client. See *A client's
-      window on the page*
-- [x] ~~**on a machine with a GPU**~~ — `crux` is one. See *The GPU was there
-      all along*
+The compositor **`dlopen`s** that library rather than linking it, so `cargo
+build` does not need a Chromium checkout — CI has none and cannot get one. It
+is not a licence to degrade: the compositor loads the engine or refuses to
+start, because a desktop that silently shows nothing is the defect ERRORS.md
+exists to prevent.
 
 Phase 2 — collect the winnings. **After phase 1, not beside it:** deleting the
 copy path before the compositor can submit leaves nothing drawing at all.
 
-- [x] delete the vendored exo protocols and `--experiment-augmenter` — the
-      self-contained one, and the only one that touches nothing else
-- [x] ~~**`--engine-socket` becomes required.**~~ **Reversed by the attempt.**
-      It cannot be required: CI has no Chromium build, so requiring it fails
-      every `scripts/e2e-*.sh` and the integration tests — the suite that
-      guards the deletion. What ships instead is a compositor that announces
-      the no-engine configuration at startup, because without the flag there
-      is now no path to a window at all and a desktop showing none has to give
-      the reason whether the reason is a failure or a choice
-- [ ] **an shm→dmabuf upload, *after* the copy path goes.** `publish_frame`
-      submits only `CommittedBuffer::Gpu`; an shm client rides the copy path
-      today, so deleting that path takes the window away from every toolkit
-      that does not render with GL — which is most of them.
+- [x] the vendored exo protocols and `--experiment-augmenter`
+- [x] the copy path, `AppFrame`, the hand-over pass, the over-window pass and
+      the measure loop's frame half — 5,238 lines
+- [x] bands, and the readback that labelled them
+- [x] `<domicile-app>` embeds a surface: the element creates a canvas and calls
+      `canvas.embedExternalSurface(appId)`. **The app id is the change under
+      it** — a broker that hands every embedder the sink it made most recently
+      is right for one window and silently wrong for two
+- [ ] **an shm→dmabuf upload.** `publish_frame` submits only
+      `CommittedBuffer::Gpu`, so a client that draws into shared memory — most
+      toolkits that do not render with GL — has no window.
 
-      **Settled by the project owner, and settled the other way from the
-      recommendation.** The upload is not a prerequisite: the copy path goes
-      first and shm clients break in the interim. Nothing is released and
-      nobody is using it, so the regression costs nothing real, and the
-      shortest route to the end state is worth more than keeping an interim
-      tree usable. The upload lands afterwards, on the engine path, once
-      there is one path to write it against instead of two.
+      **Settled by the project owner, against the recommendation:** the upload
+      is not a prerequisite, the copy path went first, and shm clients are
+      broken in the interim. Nothing is released, so the regression costs
+      nothing real, and one path to write the upload against is worth more than
+      an interim tree that works.
 
-      This is a deliberate, time-boxed regression rather than a change of
-      mind about the principle: a shipped desktop that silently shows no
-      window is still the defect ERRORS.md is about. Whoever closes this box
-      should make an shm client's failure *say* so rather than draw nothing,
-      and the box is not closed until the upload exists.
-
-      **The saying-so is done**: `publish_frame` refuses a non-dmabuf buffer
-      once per client, naming the client and pointing here. The upload is not
-- [x] delete the copy path, `AppFrame`, the hand-over pass, the over-window
-      pass and the measure loop's frame half — 5,238 lines out over two
-      commits. `straight_alpha.rs`, `over_window.rs`, most of
-      `dmabuf_import.rs`, the outbound frame queue, `host-stream.ts`'s byte
-      framing and both shells' frame handlers went with them
-
-      Two instruments were **kept and emptied rather than deleted**, with the
-      reason in a doc comment on each: `BridgeClient.roundTrip` and
-      `AppElements.drawTiming` measured keystroke-to-pixel latency, and could
-      only do it because the bridge drew the frame. That is the measurement
-      this fork answers to, so it has to be rebuilt in the compositor, which
-      sends the key and holds the engine connection that knows when viz
-      presented
-- [ ] **rebuild the latency measurement** in the compositor — see above. Until
-      it exists nothing measures the requirement the fork is for
-- [x] bands, and with them the readback that labelled them: the chrome's
-      depths, `declare_bands`/`render_band`, `band_label`, and the texture
-      every client's buffer was uploaded into so a label could be read out of
-      one pixel. The layer tree does the stacking
-- [x] `<domicile-app>` becomes a `<canvas>` and one call. The element creates a
-      canvas and calls `canvas.embedExternalSurface(appId)`; nothing copies
-      anything. Absent outside the fork, where the element still lays out,
-      reports its box and routes pointers and says once that it cannot show a
-      window
-
-      **The app id is the change under it.** `FrameSinkBroker::Embed` used to
-      hand every embedder the sink brokered most recently, which is right for
-      exactly one window and silently wrong for two: a shell showing a terminal
-      and an editor would draw the same client in both. The id now crosses the
-      whole seam — `CreateFrameSink`'s `debug_label` became a load-bearing
-      `app_id`, `Embed` takes one, pending embeds are held per app — and two
-      browser unit tests pin it
+      Deliberate and time-boxed rather than a change of mind: a shipped desktop
+      that silently shows no window is still the defect ERRORS.md is about.
+      `publish_frame` refuses a non-dmabuf buffer once per client and says so.
+      The box closes when the upload exists, not when the message does.
+- [ ] **rebuild the latency measurement** in the compositor. It is the one
+      process that both puts the key into the client's seat and holds the
+      engine connection that knows when viz presented; a page can see the
+      first and a producer the second. Until it exists nothing measures the
+      requirement the fork is for.
 
 Phase 3 — be the display server:
 
@@ -1226,13 +1136,6 @@ than recalled.
   side of it the mojo code sits on is now an ordinary engineering choice rather
   than a blocker. Phase 1 is where it gets made, because that is where the
   producer stops being throwaway.
-- ~~**Who may reach the broker.**~~ Settled, and by the transport rather than
-  by a policy. Holding a `FrameSinkBroker` pipe is unrestricted authority to
-  allocate frame sinks in viz, so the socket the invitation is sent over is the
-  whole of the access control: a `NamedPlatformChannel` at a path only the
-  compositor can open, one connection at startup, no capability a renderer can
-  pass on. What remains is filesystem permissions on that path, which is step
-  2's to get right and is not an open design question.
 - **Build and CI cost.** A from-scratch build is 4h 16m and 97 GB on one
   16-core machine — an afternoon rather than a build farm. What the series
   itself costs, measured on `crux` against a tree already built at the pin:
@@ -1256,17 +1159,6 @@ than recalled.
   upstream's number rather than the fork's: whatever a six-week upstream diff
   costs to rebuild, carrying this adds seconds to it. This repo's CI still will
   not carry either.
-- ~~**Not verified by measurement.**~~ Closed twice over. All seven properties
-  are observed rather than read off the mechanism, and on a GPU every one is
-  bit-exact; the last argued claim — that an OOPIF differs from a `<div>` the
-  same way an `<app>` does — was measured and turned out to be false in the
-  direction that helps. See *Whether an `<app>` is an out-of-process
-  `<iframe>`*. What remains unmeasured is **presentation**: `crux` has a GPU
-  but no display and no compositor to compare against, so the latency number is
-  "one display frame into the display compositor's output" and not "commit to
-  scanout". That needs the machine phase 3 needs.
-- ~~**Whether NVIDIA can satisfy `CreateNativePixmapFromHandle`.**~~ Closed: it
-  can, under a wlroots headless compositor. The GBM path does not assume Mesa.
 - **How the producer gets to make a `SharedImage`.** It cannot today, and this
   is the last thing between phase 1 and real pixels. Broker a GPU channel to an
   external process, or have the browser do the import and hand back a mailbox?
@@ -1274,14 +1166,6 @@ than recalled.
   `domicile_surface_import` still needs*. **This is a decision, not a detail:**
   the first hands a process the browser did not launch the same GPU authority a
   renderer has.
-- ~~**One surface per document, in the spike only.**~~ Closed, and it was never
-  a simplification that could have been left standing. viz keys
-  `SurfaceAllocationGroup` on a `LocalSurfaceId`'s `embed_token` alone and
-  refuses a second `FrameSinkId` under a token another sink owns, so one token
-  per document does not give eight elements one producer — it gives the second
-  window no surface at all and shows the first window in its place.
-  `spike-two-windows.sh` measured exactly that. `ExternalSurfaceEmbedder` now
-  keeps one allocator per app id; the reasoning is in `AllocatorForApp`.
 - **Nothing invalidates a renderer's token when a producer goes away.** The map
   above is keyed on an app id, and app ids are minted from a counter that
   starts over when the compositor restarts. So a compositor restarting under a

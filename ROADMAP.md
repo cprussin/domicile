@@ -35,7 +35,7 @@ The wire protocol is at `PROTOCOL_VERSION = 1`.
 | Claim | Evidence |
 |---|---|
 | A window composites at native cost | A submitted frame reaches the display compositor's output in one display frame, indistinguishable from the probe's own floor. `ENGINE-FORK.md`, *What it costs* |
-| CSS is structural, not reimplemented | Seven properties measured on a GPU — `z-index` against ordinary DOM, `transform`, `border-radius`, `opacity`, `filter: blur()`, `mix-blend-mode`, resize. Six bit-exact against an ordinary element beside them; `transform` differs on a one-pixel outline |
+| CSS is structural, not reimplemented | Seven properties measured on a GPU — `z-index` against ordinary DOM, `transform`, `border-radius`, `opacity`, `filter: blur()`, `mix-blend-mode`, resize — every one bit-exact against an ordinary element beside it. `ENGINE-FORK.md`, *What CSS does to an `<app>`* |
 | `<app>` and `<webview>` are elements the fork defines | Patch 0007. `document.createElement("app").constructor.name` is `HTMLAppElement`; `app-id` reflects both ways |
 | A client's dmabuf imports on AMD | Patch 0005, confirmed on a Radeon 890M on 2026-09-08: kitty survives being floated and resized, on the DCC modifier that used to be refused, with no `gbm_bo_import` failure in the run |
 | The desktop a user runs contains all of it | `packages/domicile-engine/engine-release.nix` pins the published engine; `nix run github:cprussin/domicile#manganese` runs it |
@@ -62,6 +62,20 @@ decides whether an item is waiting or workable.
 3. **Keystroke-to-pixel latency** (#206). The one requirement nothing has
    measured: a client's window must cost the user nothing a plain Wayland
    compositor would not. Guard written, unit-tested, never run on hardware.
+4. **Delete `DOMICILE_ROOT`.** A shell is a module and Domicile writes the
+   document — "there is no way to supply one", in the commit that decided it.
+   The bridge still accepts a directory with an `index.html` of its own, and
+   `run-engine.sh` still falls back to one. It survived the migration because
+   both shells were still HTML entries at the time; neither is now, and nothing
+   outside the repo can be, because the guide says the path does not exist.
+5. **Delete `domicile-bridge`.** It maps each app to an external-image id for
+   an engine that would bind one per `<app>`; the fork keys on the app id and
+   imports the dmabuf itself. The compositor registers and removes apps and
+   reads nothing back, so the id, the frame record and `DmabufDescriptor` are
+   all unreachable. Goes with the `Style` the compositor never applies —
+   `corner_radius`, `opacity`, `shadow` — and `Scene::draw_order`, which
+   nothing calls either. Small, and it wants doing in one pass rather than
+   four.
 
 ### In the engine fork — the agent on `crux`
 

@@ -183,12 +183,15 @@ mix-blend-mode        53200        0          0        1       yes  pass
 negative control      53200    10800       9976      255        no  pass (differs, as it must)
 ```
 
-`z-index` is the property bands failed at and the reason the fork exists; it is
-exact. `transform` differs on a one-pixel outline, which is a surface being
-resampled where a `<div>` is rasterised, and is what a composited `<video>`
-does too. `in effect` is the check that stops a property that never reached the
-page from passing as parity, and the last row is the check that stops a diff
-that cannot see a difference from passing at all.
+**That run is `--disable-gpu`, and `transform`'s 285 pixels are the software
+rasteriser rather than the mechanism.** `GPU=1 scripts/spike-step4.sh` on this
+machine's card puts every cell at 0, `transform` included — which is the number
+that describes what a user has. `z-index` is exact either way, and it is the
+property bands failed at and the reason the fork exists.
+
+`in effect` is the check that stops a property that never reached the page from
+passing as parity, and the last row is the check that stops a diff that cannot
+see a difference from passing at all.
 
 Steps 2 and 3 are still `spike.sh`, and still a single pixel:
 

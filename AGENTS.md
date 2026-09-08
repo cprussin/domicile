@@ -111,10 +111,10 @@ working in its area; it is context, not compliance.
 
 | Doc | Covers |
 |---|---|
-| [/docs/architecture/ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md) | Why Domicile is a compositor whose renderer is a web engine: the portal model, the host brain, the chrome protocol, and how a Wayland client becomes a styleable `<app>` element. |
-| [/docs/architecture/WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) | How native windows reach parity with an ordinary Wayland compositor: composite client dmabufs in the compositor and punch a transparent hole in the page, rather than pushing pixels through the engine. |
-| [/docs/architecture/STACKING-PARITY.md](/docs/architecture/STACKING-PARITY.md) | What it takes for an `<app>` element to stack like any other element: what is built, what does not work, and every route that has been closed with the evidence that closed it. Context for the fork question, not a design. |
-| [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The proposal that comes out of it: fork Chromium and back `<app>` with a `cc::SurfaceLayer` embedding a viz surface the compositor submits, so CSS applies structurally rather than being reimplemented. |
+| [/docs/architecture/ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md) | Why Domicile is a compositor whose renderer is a web engine, the decisions that follow from it, and what each crate and package is for. Start here. |
+| [/docs/architecture/WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) | How a window reaches the screen: the compositor submits the client's dmabuf into a viz surface and the page's `<app>` embeds it, so what CSS does to a window is what CSS does to a layer. What is still open is at the bottom. |
+| [/docs/architecture/STACKING-PARITY.md](/docs/architecture/STACKING-PARITY.md) | Why an unforked engine cannot do this, measured: every route to stacking parity that was tried and the evidence that closed it. The record behind the fork decision, not a design. |
+| [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The fork itself: the design, the C ABI between the compositor and the engine, the measurements, and the plan — phase 1 shipped, phases 2 and 3 have items left. |
 
 [`/ROADMAP.md`](/ROADMAP.md) carries the current state and the ordered plan;
 read it before starting anything substantial.

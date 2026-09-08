@@ -40,11 +40,8 @@ export type DomicileAppElement = HTMLElement & {
   setSurfaceSize(width: number, height: number): void;
   /** Put the keyboard on this client without a click. */
   focusApp(): void;
+  /** Show the cursor the client under this element asked for. */
   applyCursor(cursor: CursorShape): void;
-  /**
-   * Draw a frame the host pushed. `region`, when given, is the part of the
-   * surface `pixels` covers; without it they are the whole surface.
-   */
 };
 
 /**

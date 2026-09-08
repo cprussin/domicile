@@ -39,7 +39,8 @@ every painting element, and so fails the CSS-parity and shell-simplicity
 requirements the project exists for.
 
 A fork costs rebases and a four-hour build. What makes it affordable is that it
-is mostly new files behind a runtime flag, against a pinned revision:
+is mostly new files against a pinned revision — nine edited, five of them
+Blink's:
 `docs/architecture/ENGINE-FORK.md` is the design, the series and the
 measurements.
 
@@ -113,6 +114,9 @@ a GPU, an engine or Smithay:
   is told. No Wayland.
 - `domicile-bridge` — app-to-surface bookkeeping and dmabuf descriptors.
 - `domicile-launch` — the boundary between a shell and the compositor it runs.
+- `domicile-test-chrome`, `domicile-test-client` — a chrome and a Wayland
+  client the integration tests drive, as libraries so their own behaviour is
+  testable without Smithay.
 
 Outside the default set, because it pulls Smithay and the native Wayland
 libraries — build it in `nix develop .#full`:
@@ -129,6 +133,8 @@ Web side:
 - `packages/shell-simple` — a desktop with nothing in it but windows.
   `examples/minimal-shell` is smaller still and is the worked example in
   `docs/WRITING-A-SHELL.md`.
+- `packages/e2e-harness`, `packages/test-support` — the fixtures the end-to-end
+  scripts and the DOM suites run against.
 
 ## Testing
 

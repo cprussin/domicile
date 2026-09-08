@@ -1,15 +1,10 @@
-//! The AppTextureBridge — bookkeeping that connects a Wayland client's GPU
-//! surface to a web-engine external-image texture.
+//! Per-app bookkeeping for an external-image texture the engine binds.
 //!
-//! This is the load-bearing idea of Domicile made concrete on the data side: each
-//! app gets a stable [`ExternalImageId`] that the engine binds to its `<app>`
-//! element (exactly as it binds a `<video>` frame), and each new client frame
-//! is a [`DmabufDescriptor`] handed to that texture. This crate holds only the
-//! pure bookkeeping; the actual CEF/Chromium binding (importing the dmabuf and
-//! feeding it to the compositor) lives behind the `cef` feature and is spelled
-//! out in `docs/architecture/WINDOW-COMPOSITING.md` — it needs a GPU and a display.
-//!
-//! Keeping the bookkeeping here, testable, is what keeps that GPU glue thin.
+//! **Nothing consumes this any more.** It was the data side of the plan where
+//! the engine bound a texture per `<app>`; the fork keys on the app id and
+//! imports the client's dmabuf itself, so the id minted here is never asked
+//! for and no frame is ever recorded. The compositor still registers and
+//! removes apps, and that is all. `ROADMAP.md` tracks the deletion.
 
 use std::collections::HashMap;
 

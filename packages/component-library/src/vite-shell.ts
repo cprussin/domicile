@@ -1,9 +1,8 @@
 // What a shell's vite build has to be for Domicile to serve it as a module.
 //
-// A shell used to be a directory with an `index.html` in it. It is a *module*
-// now — Domicile writes the document — and that changes the build in three
-// ways, none of which is vite's default and all three of which fail quietly if
-// you get them wrong:
+// Domicile writes the document, so a shell is built from its entry module
+// rather than from an HTML file. Three things follow, none of them vite's
+// default and all three of which fail quietly if you get them wrong:
 //
 //   the entry     a `.ts` file rather than an HTML file, so nothing emits a
 //                 document for Domicile to have to ignore

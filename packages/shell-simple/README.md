@@ -53,9 +53,9 @@ twelve hundred lines of it. Two neighbours mark the ends it sits between:
   chrome with an address bar wants; this one has no address bar.
 
 Everything it *does* do is what the model requires of any chrome: place a
-portal, draw the frames the host pushes, forward the pointer and the keyboard,
-and keep the host told what density the display is (which changes when the
-window moves to another screen, or the page is zoomed).
+portal, forward the pointer and the keyboard, and keep the host told what
+density the display is (which changes when the window moves to another screen,
+or the page is zoomed).
 
 ## Run it
 

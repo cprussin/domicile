@@ -126,6 +126,18 @@ bun run turbo test
 nix develop .#full  # adds Wayland/DRM/GL for the compositor
 ```
 
+To work on a shell, run it as a desktop and let it rebuild as you save:
+
+```sh
+./scripts/dev-shell.sh manganese
+bun run --filter @domicile/shell-manganese start:dev   # the same thing
+```
+
+That is the engine, the compositor and the bridge as `nix run .#manganese`
+assembles them, on the published engine the flake pins, with the page rebuilt
+and reloaded on each save. The compositor and the bridge come out of the
+checkout, so a change to either is one restart away.
+
 Before a PR also run `cargo fmt --all --check` and
 `cargo clippy --all-targets -- -D warnings`; `bun run turbo fix` handles the
 auto-fixable half. [AGENTS.md](AGENTS.md) has the guidelines every change is

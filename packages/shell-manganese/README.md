@@ -36,16 +36,16 @@ client's keyboard goes to the host, a browser window's to its page.
 
 | Path | What |
 |---|---|
-| `src/renderer.tsx` | Renderer entry: applies the theme, builds the `BridgeClient`, registers the SDK's custom elements, mounts `<Shell>`, reports the frame timing. |
+| `src/renderer.tsx` | Renderer entry: applies the theme, builds the `BridgeClient`, registers the SDK's custom elements, mounts `<Shell>`, prints the diagnostics line. |
 | `src/Shell.tsx` | The chrome: the rail, the launchers, the stage, the keybindings, and which screen each of them is on. |
 | `src/display-source.ts` | The `BridgeClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
 | `src/viewport-display.ts` | The same, for a shell with no host: the window is the only display there is. |
 | `src/desktop-size.ts` | How big the desktop the displays make up is: the bounding box, gaps included. |
 | `src/useWindowSizedToDesktop.ts` | Keeping the window that size, which is the main process's to do. |
-| `src/useShellWindows.ts` | Wires host events and user actions into the reducer, and the host's frames into the portal elements. |
+| `src/useShellWindows.ts` | Wires host events and user actions into the reducer, and the host's window events into the portal elements. |
 | `src/shell-state.ts` | Every change the window list can undergo, as one pure reduction. |
 | `src/shell-window.ts` | The window model: a client's portal or a browser window. |
-| `src/app-elements.ts` | The live `<domicile-app>` elements by app id — where frames, resizes and cursors are applied. |
+| `src/app-elements.ts` | The live `<domicile-app>` elements by app id — where resizes and cursors are applied. |
 | `src/AppWindow.tsx` | A Wayland client's window: one `<domicile-app>` portal. |
 | `src/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<domicile-webview>`. |
 | `src/Clock.tsx` | The live clock: in the rail's footer, and alone on every display the rail is not on. |
@@ -81,9 +81,9 @@ back. Each float opens cascaded past the ones already out, and comes to the
 front when you click it or pick its tab.
 
 The float order is the stacking order, and the shell writes it as the
-`z-index` of the window's *own* element — which is what the SDK reports with
-the placement and what the compositor stacks the client's surface by, so the
-page and the desktop agree about which window is in front. A floating window
+`z-index` of the window's *own* element — which is what stacks the window,
+because the window is a layer in this page's own layer tree, and what the SDK
+reports with the placement so the compositor hit-tests in the same order. A floating window
 is drawn over the stage rather than on it, so the stage falls back to the last
 window still in the rail rather than going blank.
 

@@ -8,7 +8,7 @@ message plane can be verified in CI and on a headless box.
 
 | Entry | Used by | What it does |
 |---|---|---|
-| `src/mock-chrome.ts` | `e2e-dmabuf.sh` | Connects, handshakes, and prints every frame the host pushes so the calling script can grep for one. |
+| `src/mock-chrome.ts` | `e2e-dmabuf.sh` | Connects, handshakes, and prints every message the host sends so the calling script can grep for one. |
 
 `src/verdicts.ts` is the odd one out: not a harness but a check *on* the
 scripts, run from `verdicts.test.ts` in the `typescript` group. `exit 99` in a
