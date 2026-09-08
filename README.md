@@ -29,8 +29,8 @@ not privileged:
 nix run github:cprussin/domicile -- ./my-desktop/dist
 ```
 
-Everything runs on the forked engine — the browser is the display compositor,
-the compositor is a producer, and there is no Electron anywhere.
+Everything runs on the forked engine: the browser is the display compositor,
+and the compositor is a producer to it.
 
 A Wayland session gets a window, the way starting sway inside sway does. A tty
 is refused for now: the whole screen needs an ozone platform Chromium will not

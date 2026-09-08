@@ -139,8 +139,7 @@ generated from that file. A first run with no file takes the defaults.
 `bun run --filter @domicile/shell-simple start:dev` runs this shell in a real
 desktop and rebuilds it as you edit — the engine the flake pins, the compositor
 and the bridge out of this checkout, and the page reloading itself when a build
-finishes. It used to be Vite's dev server, where no window ever appeared
-because there was no compositor behind the page.
+finishes.
 
 `styled-system/` is Panda's generated output, produced by `bun run prepare` (run
 automatically as a turbo dependency of the build, type check, and tests) and not

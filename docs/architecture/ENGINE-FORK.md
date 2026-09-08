@@ -517,7 +517,7 @@ form, that is acceptable" is taken up, but the bill is smaller than that:
 
 | Gone | Why |
 |---|---|
-| Bands — `compositor/src/bands.rs`, `shell-manganese/src/bands.ts`, `protocol/src/band_label.rs`, `declare_bands`/`render_band`, `e2e-bands.sh` | Stacking is the layer tree's job |
+| Bands — `compositor/src/bands.rs`, `shell-manganese/src/bands.ts`, `protocol/src/band_label.rs`, `declare_bands`/`render_band` | Stacking is the layer tree's job. **Not done**: the shell still declares bands, the compositor still asks for them one at a time, and the textures it collects are never drawn — a page re-rendered per band for nothing |
 | The copy path — readback, `AppFrame`, `putImageData` | There is one path and it is zero-copy |
 | `place_portal`'s matrix, and the per-frame `requestAnimationFrame` measure loop | Layout positions the layer. The page stops reporting where its own boxes are |
 | `compositor/src/compose.rs`'s CSS reimplementation — rounded corners, shadows, blend | cc does it, correctly, for every property rather than the ones we shimmed |

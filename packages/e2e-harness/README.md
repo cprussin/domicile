@@ -10,10 +10,6 @@ message plane can be verified in CI and on a headless box.
 |---|---|---|
 | `src/mock-chrome.ts` | `e2e-dmabuf.sh` | Connects, handshakes, and prints every frame the host pushes so the calling script can grep for one. |
 
-There were three more — a keystroke driver and a typist for the two `measure`
-scripts, and a band declarer for `e2e-bands.sh`. All three drove the copy path
-under Electron, and went with it.
-
 `src/verdicts.ts` is the odd one out: not a harness but a check *on* the
 scripts, run from `verdicts.test.ts` in the `typescript` group. `exit 99` in a
 script means "my own machinery failed", and a compositor that crashed is the
