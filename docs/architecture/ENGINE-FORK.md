@@ -1144,10 +1144,23 @@ while the page still opens a WebSocket to a TCP port improves nothing.
 1. **`domicile://` serves the shell.** Registered as a *standard* scheme so it
    has a real origin, and deliberately **not** web-safe and **not**
    CORS-enabled, so ordinary web content can neither navigate to it nor fetch
-   it. The seams are `ContentClient::AddAdditionalSchemes` for the registry and
-   `ContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories` plus
-   its subresource twin for the loader. The engine already takes the shell's
-   location on its command line in spirit — `--domicile-shell-root` and
+   it. The seams are `ContentClient::AddAdditionalSchemes` for the registry
+   and, for the loader, two `ContentBrowserClient` hooks that **no longer have
+   the same shape as each other**:
+
+   - navigation: `CreateNonNetworkNavigationURLLoaderFactory(const std::string&
+     scheme, FrameTreeNodeId)`, which is asked about *one* scheme and returns a
+     single `PendingRemote`.
+   - subresources: `RegisterNonNetworkSubresourceURLLoaderFactories`, which
+     still takes a map and fills it.
+
+   So the two halves are written differently: one answers a question about a
+   named scheme, the other contributes to a collection. Read at the pinned
+   revision on `crux` — an earlier version of this section named
+   `RegisterNonNetworkNavigationURLLoaderFactories` for the navigation half,
+   which does not exist there.
+
+   The engine already takes the shell's location on its command line in spirit — `--domicile-shell-root` and
    `--domicile-shell-module` are the same shape as
    `--domicile-broker-socket`.
 
@@ -1182,6 +1195,12 @@ it turns on — the scheme registry and the non-network loader factories — hav
 both churned across versions and are used nowhere in this series, so there is
 no local example to follow. Writing it without the Chromium source to hand
 means writing it from memory and finding out four hours later on `crux`.
+
+**Which is what happened to this section.** It named the navigation seam from
+memory, got a function that does not exist at the pin, and said in this very
+paragraph that this was the risk. The signature above is now the one read off
+the tree; treat every other name here as recalled until someone with the
+checkout has confirmed it.
 
 So the prerequisite is not a decision, it is a checkout: either a session on a
 machine with the tree, or network access to `chromium.googlesource.com` at the
