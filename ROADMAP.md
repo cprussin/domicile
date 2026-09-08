@@ -108,12 +108,6 @@ guessing between two.
 True, understood, and not scheduled. Each is here so that finding it again
 costs nothing.
 
-- **Focusing a window that was never placed moves the seat and not the brain.**
-  `ClientRequest::KeyboardFocus` gives the keyboard to the surface before
-  `Scene::focus_app` is consulted, and that refuses an app with no portal — so
-  the seat says one window has focus and the brain says the chrome does. The
-  tests place before they focus and say why; a check that asserted on the seat
-  alone passed for a long time without noticing.
 - **A frame in which the chrome repainted reports the whole output damaged.**
   The chrome is one layer covering the desktop, so its commit counter moving
   damages all of it — and it repaints for a clock, a caret, a hover.
@@ -127,7 +121,8 @@ costs nothing.
   things about one window, and an ancestor's `zoom` mispositions it as well.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
 - **Hot-swapping the chrome page** is a page reload on the engine, and
-  `announce_open_apps` is what makes one survivable. Nothing triggers it.
+  `announce_open_apps` is what makes one survivable. `scripts/dev-shell.sh` is
+  the only thing that asks for one, on every rebuild; nothing a user runs does.
 
 ---
 

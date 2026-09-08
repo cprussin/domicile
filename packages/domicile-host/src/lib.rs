@@ -172,7 +172,12 @@ impl Host {
     }
 
     /// Who holds the keyboard, in the shape the chrome is told it.
-    fn focus_holder(&self) -> Option<AppId> {
+    ///
+    /// `None` is the chrome. Public because the seat needs the same answer:
+    /// the compositor sets keyboard focus from what this says rather than from
+    /// what the chrome asked for, so that the two cannot disagree about which
+    /// window is being typed into.
+    pub fn focus_holder(&self) -> Option<AppId> {
         match self.scene.keyboard_target() {
             KeyboardTarget::App(app_id) => Some(app_id),
             KeyboardTarget::Chrome => None,
