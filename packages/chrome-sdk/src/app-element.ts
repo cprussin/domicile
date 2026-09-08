@@ -40,8 +40,6 @@ export type DomicileAppElement = HTMLElement & {
   setSurfaceSize(width: number, height: number): void;
   /** Put the keyboard on this client without a click. */
   focusApp(): void;
-  /** Give up the canvas this element was showing a client's window in. */
-  dropSurface(): void;
   applyCursor(cursor: CursorShape): void;
   /**
    * Draw a frame the host pushed. `region`, when given, is the part of the
@@ -112,20 +110,15 @@ export const createAppElement = (
         // drawing at the right resolution and there is nothing to say.
         this.#placed = undefined;
         // Told the host this element no longer shows that window, so it must
-        // stop being true. A disconnect is not always a teardown — moving an
+        // stop showing one. A disconnect is not always a teardown — moving an
         // element between two containers is a disconnect *and* a reconnect, and
-        // children survive the move — so an element that keeps its pixels here
-        // keeps them for a window the host has been told it does not hold, and
-        // the host will never send the message that clears them.
+        // children survive the move — so an element that kept its canvas here
+        // would go on showing a window the host has been told it does not hold.
         //
-        // Safe to drop them because the host can put them back: it keeps
-        // whatever each app last drew — the buffer for a GPU client and the
-        // pixels themselves for a software one — and hands them over on its next
-        // pass, whether or not it has a display of its own to draw on. So the
-        // window is blank until that pass rather than until its client next
-        // happens to draw, which for an app that redraws on input is until the
-        // user does something.
-        this.dropSurface();
+        // Safe because the reconnect embeds again: the surface belongs to the
+        // compositor and outlives any canvas pointed at it, so what comes back
+        // is the live window rather than the last thing drawn in it.
+        this.#dropSurface();
         if (focusedApp() === appId) {
           setFocusedApp(undefined);
           // The window that had the keyboard has gone, so say who has it now.
@@ -146,12 +139,12 @@ export const createAppElement = (
       if (name === "app-id" && this.isConnected && oldValue !== newValue) {
         if (oldValue !== null) {
           context.bridge.removePortal(oldValue);
-          // Those pixels — and the resolution they were drawn at — are the *old*
-          // app's, and the size is what pointer coordinates are scaled through.
-          // Keeping either shows one client's last frame in the element that now
-          // stands for another, and maps clicks on the new app through the old
-          // one's surface.
-          this.dropSurface();
+          // That canvas shows the *old* app's window, and the recorded size is
+          // the old client's resolution — which is what pointer coordinates are
+          // scaled through. Keeping either shows one client in the element that
+          // now stands for another, and maps clicks on the new app through the
+          // old one's surface.
+          this.#dropSurface();
           this.#surfaceWidth = 0;
           this.#surfaceHeight = 0;
           // Whatever the host has been told to forget, this element has to be
@@ -166,6 +159,11 @@ export const createAppElement = (
           // app id too.
           this.#placed = undefined;
         }
+        // A window of its own for whatever this element now stands for. The
+        // embed runs from `connectedCallback`, which a swap does not re-run —
+        // so without this the element that swapped keeps the hole where the
+        // old app's canvas was and shows nothing until it is remounted.
+        this.#embedSurface();
         this.#place();
       }
     }
@@ -199,37 +197,24 @@ export const createAppElement = (
     }
 
     /**
-     * Drop the pixels this element holds, because the compositor is drawing the
-     * client's own buffer now.
+     * Give up the canvas this element was showing a window in.
      *
-     * The chrome is composited *over* the client, so a canvas still holding the
-     * last copied frame is opaque exactly where the page has to be a hole: the
-     * live window would sit behind a still of itself, indefinitely.
+     * The canvas *is* the window — it embeds the surface the compositor submits
+     * to — so this is only ever right when the element has stopped standing for
+     * the app whose window that is: a disconnect, or a swap to another app id.
+     * Both re-embed rather than leave the element empty.
      *
-     * Only the host can say when this is safe. The element knows what it *asked*
-     * for, which is not the same thing — a `wl_shm` client is never drawn
-     * natively however ordinary its CSS — and the message arrives after the last
-     * copied frame on the same socket, where a guess would race the frames still
-     * in flight and one of them would put the canvas straight back.
-     *
-     * `has-surface` is *set* here, not merely left alone: it says this element
-     * has a window behind it, which is as true when the compositor draws it as
-     * when a canvas does. A window drawn natively from its first frame never
-     * sent a copied one, so nothing else would ever put it on — and a shell
-     * that hangs a placeholder off its absence draws "app surface: …" over a
-     * live window for as long as that window is open.
-     *
-     * So does the recorded surface size, which is what pointer coordinates are
-     * scaled through and is still the client's resolution when the compositor
-     * takes the window over. The one caller that must forget it is the one where
-     * the element changes *which app* it shows.
+     * `has-surface` goes with it. The class says this element has something
+     * behind it, and the honest source for that is the client's own reported
+     * size — `setSurfaceSize` — which arrives whether or not any pixel ever
+     * reaches the page. An element with no canvas and no size has nothing
+     * behind it, and a shell hanging its placeholder off the class's absence
+     * should be showing that placeholder.
      */
-    dropSurface(): void {
+    #dropSurface(): void {
       this.#canvas?.remove();
       this.#canvas = undefined;
-      // Added rather than assumed, so a shell that hangs a placeholder off its
-      // absence does not paint one over a live window.
-      this.classList.add(HAS_SURFACE_CLASS);
+      this.classList.remove(HAS_SURFACE_CLASS);
     }
 
     /**
@@ -259,7 +244,6 @@ export const createAppElement = (
         return;
       }
       this.#canvas = this.appendChild(canvas);
-      this.classList.remove(HAS_SURFACE_CLASS);
       // A REFUSAL IS ONLY UNINTERESTING IF THIS ELEMENT IS GONE. It rejects
       // when the element goes away while the browser is still holding the
       // reply, which is a teardown and says nothing; and it rejects when the

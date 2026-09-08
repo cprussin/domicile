@@ -59,12 +59,7 @@ decides whether an item is waiting or workable.
    `<app>`'s layout box *is* the `xdg_toplevel.configure`. **Parked**: the
    `domicile://` work may delete the SDK's runtime entirely, and splitting it
    before then would be a seam drawn twice.
-3. **Copy-path debris.** `app_composited` is the last of it: nothing sends
-   the message, and the chrome half — `dropSurface`, and the `has-surface`
-   class it sets — is still wired to it. Untangling it is a question about
-   what marks a window as having something behind it, which is why it did not
-   go with the rest.
-4. **Keystroke-to-pixel latency** (#206). The one requirement nothing has
+3. **Keystroke-to-pixel latency** (#206). The one requirement nothing has
    measured: a client's window must cost the user nothing a plain Wayland
    compositor would not. Guard written, unit-tested, never run on hardware.
 

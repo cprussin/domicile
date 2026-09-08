@@ -58,9 +58,6 @@ bridge.on("app_resized", (message) => {
 bridge.on("app_cursor", (message) => {
   desktop.applyCursor(message);
 });
-bridge.on("app_composited", (message) => {
-  desktop.dropSurface(message);
-});
 // And when the host has finished describing what was already running, which is
 // what makes the next window to appear one someone opened.
 endCatchUpOnFocusChange(bridge, desktop);

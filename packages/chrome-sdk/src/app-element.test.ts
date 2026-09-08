@@ -492,18 +492,18 @@ describe("<domicile-app>", () => {
     expect(element.appId).toBe("term");
   });
 
-  it("says it has a window behind it once the compositor has taken one", () => {
-    // A window the compositor drew from the start never sends a copied frame,
-    // so nothing ever put `has-surface` on: the shell's placeholder — "app
-    // surface: <id>" — is still painted, over a live window. The class says
-    // this element has a window behind it, which is as true when the
-    // compositor draws it as when a canvas does.
+  it("stops claiming a window behind it when the element swaps app-id", () => {
+    // `has-surface` says this element has something behind it, and after a swap
+    // it does not: the previous app's canvas is gone and the new client has not
+    // reported a size yet. A shell hangs its "app surface: <id>" placeholder off
+    // the class's absence, so leaving it on hides the placeholder over nothing.
     const element = mountApp("term");
-    expect(element.classList.contains("has-surface")).toBe(false);
-
-    element.dropSurface();
-
+    element.setSurfaceSize(800, 600);
     expect(element.classList.contains("has-surface")).toBe(true);
+
+    element.setAttribute("app-id", "editor");
+
+    expect(element.classList.contains("has-surface")).toBe(false);
   });
 
   it("sends a placement again when the host never received the last one", () => {
@@ -601,6 +601,20 @@ describe("<domicile-app>", () => {
     element.setAttribute("app-id", "term");
 
     expect(bridge.calls.some(([kind]) => kind === "place")).toBe(true);
+  });
+
+  it("embeds the new app's surface when the element swaps app-id", () => {
+    // The canvas is torn down on a swap because it holds the *previous* app's
+    // window, and nothing but this puts one back: the embed runs from
+    // `connectedCallback`, which a swap does not re-run. Without it the
+    // element that swapped shows nothing for as long as it is open.
+    const embedded = recordEmbeds();
+    const element = mountApp("term");
+    expect(embedded).toStrictEqual(["term"]);
+
+    element.setAttribute("app-id", "editor");
+
+    expect(embedded).toStrictEqual(["term", "editor"]);
   });
 
   it("tells a newly shown app what size to render at", () => {
@@ -854,11 +868,15 @@ describe("<domicile-app>", () => {
     });
 
     it("takes the canvas away when the element is torn down", () => {
+      // The element has told the host it no longer holds that window, so it
+      // must stop showing one. A disconnect is not always a teardown — moving
+      // an element between two containers is a disconnect and a reconnect —
+      // and the reconnect embeds again.
       const embedded = recordEmbeds();
       const element = mountApp("terminal");
       expect(embedded).toHaveLength(1);
 
-      element.dropSurface();
+      element.remove();
 
       expect(element.querySelector("canvas")).toBeNull();
     });
