@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 7 Sep 2026 21:10:32 -0700
+Subject: [PATCH] domicile: import a client's dmabuf that display cannot scan
+ out
+
+Kitty's window went permanently blank on AMD (Radeon 890M, Mesa 26.1.8) the
+first time it was floated. A resize made the client reallocate onto a second
+modifier, gbm_bo_import refused it, and nothing ever moved it back:
+
+  gbm_wrapper.cc:465] nullptr returned from gbm_bo_import
+  gbm_pixmap_wayland.cc:132] Cannot create bo with format=BGRA_8888
+
+Both modifiers are AMD_FMT_MOD, GFX11, 64K_R_X, DCC=1, and they differ only in
+the DCC layout:
+
+  144115188348713732  RETILE=1 PIPE_ALIGN=0 INDEP_64B=1 MAX_COMP_BLK=64B
+  144115188349188868  RETILE=0 PIPE_ALIGN=1 INDEP_64B=0 MAX_COMP_BLK=256B
+
+DCC_RETILE is drm_fourcc.h's "include two DCC surfaces, one which is rb & pipe
+aligned, and one which is not-aligned" -- the not-aligned one being the copy
+display hardware can read. The second modifier has one pipe-aligned DCC surface
+and so is render-only, which is why it imports under GBM_BO_USE_RENDERING and
+never under GBM_BO_USE_SCANOUT.
+
+That the import asks for SCANOUT at all is the bug, and it is ours rather than
+the compositor's. GetSupportedGbmFlags() asks what flags a *format* supports,
+and gbm has no equivalent question about a modifier; in the system-libgbm
+branch it can answer only GBM_BO_USE_SCANOUT or nothing, because the
+GBM_BO_USE_TEXTURING fallback beside it is minigbm-only and gbm_defines.h
+defines that flag to 0 everywhere else. So every import demands scanout.
+
+Nothing in this path wants it. brokered_frame_sink.cc already asks for
+SHARED_IMAGE_USAGE_DISPLAY_READ and says in a comment why it is not SCANOUT:
+an imported window is sampled by the display compositor and nothing more. The
+two layers disagreed and the lower one refused. This makes the import agree
+with the usage its caller asked for.
+
+Strictly additive: the retry runs only where the current code returns nullptr.
+Nothing on the Wayland path reads GbmBuffer::GetFlags() -- its only two callers
+are in ui/ozone/platform/drm, which this configuration does not build.
+
+Not reproduced on crux, which is NVIDIA. The decode and the code path are the
+evidence; the hardware check belongs on the reporter's machine.
+---
+ ui/gfx/linux/gbm_wrapper.cc | 43 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 43 insertions(+)
+
+diff --git a/ui/gfx/linux/gbm_wrapper.cc b/ui/gfx/linux/gbm_wrapper.cc
+index 6020a6081e961..2aea5aca7ae22 100644
+--- a/ui/gfx/linux/gbm_wrapper.cc
++++ b/ui/gfx/linux/gbm_wrapper.cc
+@@ -461,6 +461,49 @@ class Device final : public ui::GbmDevice {
+     // kept open for the lifetime of the buffer.
+     struct gbm_bo* bo = gbm_bo_import(device_.get(), GBM_BO_IMPORT_FD_MODIFIER,
+                                       &fd_data, gbm_flags);
++
++    // Retry without GBM_BO_USE_SCANOUT.
++    //
++    // GetSupportedGbmFlags() asks the device which flags a *format* supports,
++    // and gbm has no equivalent question to ask about a modifier -- so a
++    // format that is scanout-capable still fails to import when the buffer's
++    // modifier is not. With system libgbm that is every import, because there
++    // GetSupportedGbmFlags() returns GBM_BO_USE_SCANOUT or nothing at all: the
++    // GBM_BO_USE_TEXTURING fallback beside it is minigbm-only, and
++    // gbm_defines.h defines that flag to 0 everywhere else.
++    //
++    // AMD's DCC modifiers are the case that found this, and the two of them a
++    // Mesa client picks between differ by exactly this (AMD_FMT_MOD, GFX11,
++    // 64K_R_X, DCC=1 both):
++    //
++    //   144115188348713732  RETILE=1 PIPE_ALIGN=0 INDEP_64B=1 MAX_COMP_BLK=64B
++    //   144115188349188868  RETILE=0 PIPE_ALIGN=1 INDEP_64B=0 MAX_COMP_BLK=256B
++    //
++    // DCC_RETILE means the buffer carries a second, non-pipe-aligned copy of
++    // the DCC surface, which is the one display hardware can read; without it
++    // the single DCC surface is pipe-aligned and display cannot read it at
++    // all. So the first imports under SCANOUT and the second never does, and a
++    // client reallocating across a resize moves between them on its own --
++    // permanently, since nothing moves it back.
++    //
++    // Sampling is all that is needed of an imported client buffer here: it
++    // becomes a SharedImage in a texture quad. Losing SCANOUT for it costs the
++    // chance of an overlay promotion, which is worth strictly more than the
++    // blank surface the refused import produces. Nothing on the Wayland path
++    // reads GetFlags(); its only two callers are in the DRM platform.
++    if (!bo && (gbm_flags & GBM_BO_USE_SCANOUT)) {
++      const int sampled_flags =
++          (gbm_flags & ~GBM_BO_USE_SCANOUT) | GBM_BO_USE_RENDERING;
++      bo = gbm_bo_import(device_.get(), GBM_BO_IMPORT_FD_MODIFIER, &fd_data,
++                         sampled_flags);
++      if (bo) {
++        VLOG(1) << "gbm_bo_import: modifier " << handle.modifier << " of "
++                << DrmFormatToString(format)
++                << " is not scanout-capable; imported it for sampling only";
++        gbm_flags = sampled_flags;
++      }
++    }
++
+     if (!bo) {
+       LOG(ERROR) << "nullptr returned from gbm_bo_import";
+       return nullptr;

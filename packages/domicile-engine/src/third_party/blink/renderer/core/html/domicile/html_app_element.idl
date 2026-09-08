@@ -1,0 +1,22 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// <app> — a Wayland client's window, laid out by the page.
+// See docs/architecture/ENGINE-FORK.md in the Domicile repository.
+//
+// This interface is not a web standard and is not proposed as one. It exists in
+// Domicile's engine fork only, and a shell written against it does not run in
+// stock Chrome -- which is the accepted cost of the tag being <app> rather than
+// a hyphenated custom element.
+
+[
+    RuntimeEnabled=DomicileExternalSurface,
+    Exposed=Window
+] interface HTMLAppElement : HTMLElement {
+  [HTMLConstructor] constructor();
+
+  // Which window. Reflected, so the attribute and the property are one value,
+  // the way <img src> is.
+  [CEReactions, Reflect=app_id] attribute DOMString appId;
+};
