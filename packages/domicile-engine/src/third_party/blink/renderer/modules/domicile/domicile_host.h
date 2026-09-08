@@ -11,7 +11,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
-#include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_receiver.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -64,8 +64,7 @@ class MODULES_EXPORT DomicileHost final
 
   Member<LocalDOMWindow> window_;
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;
-  HeapMojoAssociatedReceiver<domicile::mojom::blink::ControlChannelClient,
-                             DomicileHost>
+  HeapMojoReceiver<domicile::mojom::blink::ControlChannelClient, DomicileHost>
       client_receiver_;
 };
 

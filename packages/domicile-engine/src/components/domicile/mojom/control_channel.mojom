@@ -33,6 +33,14 @@ module domicile.mojom;
 
 // Page -> browser -> compositor.
 interface ControlChannel {
+  // Hand the browser the page's end of the other direction.
+  //
+  // A method here rather than a second interface the page brokers for itself:
+  // the client end means nothing to anyone who does not already hold this
+  // channel, so brokering it separately would be a second place to get the
+  // access control right, for no gain.
+  SetClient(pending_remote<ControlChannelClient> client);
+
   // Run a command on the machine running the desktop.
   //
   // The argv form rather than a string, and not because it is tidier: a string
