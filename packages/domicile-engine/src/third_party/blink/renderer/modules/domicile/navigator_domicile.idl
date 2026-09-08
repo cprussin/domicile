@@ -1,0 +1,15 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+    ImplementedAs=NavigatorDomicile,
+    RuntimeEnabled=DomicileControlChannel,
+    SecureContext
+] partial interface Navigator {
+  // Null outside a Domicile shell. A shell opened in an ordinary browser -- a
+  // `vite dev` on its page, which is how shells get styled -- has no desktop
+  // behind it, and finding that out by reading a property is better than
+  // finding out when a call throws.
+  [SameObject] readonly attribute DomicileHost? domicile;
+};
