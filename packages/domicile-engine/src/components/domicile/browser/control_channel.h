@@ -31,8 +31,7 @@ class ControlChannel : public mojom::ControlChannel {
  public:
   // `socket_path` is the compositor's --chrome-socket. `client` is how
   // messages coming the other way reach the page.
-  ControlChannel(const std::string& socket_path,
-                 mojo::PendingRemote<mojom::ControlChannelClient> client);
+  explicit ControlChannel(const std::string& socket_path);
 
   ControlChannel(const ControlChannel&) = delete;
   ControlChannel& operator=(const ControlChannel&) = delete;
@@ -40,6 +39,8 @@ class ControlChannel : public mojom::ControlChannel {
   ~ControlChannel() override;
 
   // mojom::ControlChannel:
+  void SetClient(
+      mojo::PendingRemote<mojom::ControlChannelClient> client) override;
   void Spawn(const std::vector<std::string>& command) override;
 
  private:

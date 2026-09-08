@@ -23,11 +23,8 @@ constexpr int kReadBufferSize = 16 * 1024;
 
 }  // namespace
 
-ControlChannel::ControlChannel(
-    const std::string& socket_path,
-    mojo::PendingRemote<mojom::ControlChannelClient> client)
+ControlChannel::ControlChannel(const std::string& socket_path)
     : socket_path_(socket_path),
-      client_(std::move(client)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
           kReadBufferSize)) {
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
@@ -85,6 +82,11 @@ void ControlChannel::OnConnectFailed() {
   retry_timer_.Start(FROM_HERE, kRetryEvery,
                      base::BindOnce(&ControlChannel::Connect,
                                     weak_factory_.GetWeakPtr()));
+}
+
+void ControlChannel::SetClient(
+    mojo::PendingRemote<mojom::ControlChannelClient> client) {
+  client_.Bind(std::move(client));
 }
 
 void ControlChannel::Spawn(const std::vector<std::string>& command) {

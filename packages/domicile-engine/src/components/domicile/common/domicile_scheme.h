@@ -35,6 +35,12 @@ inline constexpr char kDomicileShellIndex[] = "index.html";
 // command line.
 inline constexpr char kDomicileShellRootSwitch[] = "domicile-shell-root";
 
+// The compositor's control socket -- its --chrome-socket. A unix stream
+// carrying newline-delimited JSON, which is the protocol the deleted WebSocket
+// bridge carried byte for byte.
+inline constexpr char kDomicileControlSocketSwitch[] =
+    "domicile-control-socket";
+
 }  // namespace domicile
 
 #endif  // COMPONENTS_DOMICILE_COMMON_DOMICILE_SCHEME_H_

@@ -27,10 +27,19 @@ bool DomicileHost::EnsureBound() {
   if (!window_ || !window_->GetFrame()) {
     return false;
   }
+  auto task_runner = window_->GetTaskRunner(TaskType::kInternalDefault);
   window_->GetBrowserInterfaceBroker().GetInterface(
-      channel_.BindNewPipeAndPassReceiver(
-          window_->GetTaskRunner(TaskType::kInternalDefault)));
-  return channel_.is_bound();
+      channel_.BindNewPipeAndPassReceiver(task_runner));
+  if (!channel_.is_bound()) {
+    return false;
+  }
+
+  // Hand back the other direction in the same breath. A channel bound without
+  // a client is one the compositor can be heard on by nobody, and every
+  // inbound message would be dropped in the browser with no way to tell.
+  channel_->SetClient(
+      client_receiver_.BindNewPipeAndPassRemote(task_runner));
+  return true;
 }
 
 void DomicileHost::spawn(ScriptState* script_state,
