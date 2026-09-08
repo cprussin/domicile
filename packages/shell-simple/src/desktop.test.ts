@@ -24,7 +24,6 @@ const silentBridge = {
 // is raised relative to its own placement is what one of these suites is about.
 const stubMeasure: Measure = (element) => ({
   cornerRadius: 0,
-  native: true,
   opacity: 1,
   shadow: undefined,
   size: [100, 100],

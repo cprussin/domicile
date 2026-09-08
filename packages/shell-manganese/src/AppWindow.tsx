@@ -125,8 +125,8 @@ const appStyles = css({
   // the page and has no pixels of its own to clip. The SDK reports the radius
   // with the placement and the compositor's shader applies it to the client's
   // own buffer, which is why a window can be round at all without a copy. A
-  // length rather than a percentage on purpose — a `%` radius is one the shader
-  // cannot draw, and it would send every window down the copy path.
+  // length rather than a percentage on purpose: the computed value keeps the
+  // `%`, and the number in front of it would be read as pixels.
   borderRadius: "lg",
 });
 

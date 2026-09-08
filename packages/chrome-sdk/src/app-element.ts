@@ -321,7 +321,6 @@ export const createAppElement = (
           zIndex,
           visible,
           cornerRadius,
-          native,
           opacity,
           shadow,
           takesPointer,
@@ -329,7 +328,6 @@ export const createAppElement = (
         const placement = {
           appId,
           cornerRadius,
-          native,
           opacity,
           shadow,
           size,
