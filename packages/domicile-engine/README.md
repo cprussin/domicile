@@ -76,6 +76,28 @@ here as spell-check, never as proof.
 ./scripts/extract.sh /build/chromium/src     # write it back here
 ```
 
+### The checkout is scratch, and you are not alone in it
+
+The loop above is right when one person is on the box. It is a trap when two
+are, and both of these have already happened rather than been imagined:
+
+- **CI resets that tree.** `engine.yml` and `engine-release.yml` reset
+  `/build/chromium/src` to the pin and lay the series over it, and they trigger
+  on any push touching `packages/domicile-engine/**` — which is every push
+  either agent makes to the fork. Uncommitted work in the checkout is taken
+  without warning. Take the lock around builds:
+  `.github/scripts/engine-tree-lock.sh take /build/chromium/src "<who>"`, and
+  drop it with the same owner string when you are done.
+- **A file in the checkout with no counterpart in `src/` wedges the next run.**
+  The reset removes the series' own files by walking `src/`, so anything not
+  mirrored there survives, and `apply.sh` then refuses the dirty tree. The
+  failure lands on somebody else's unrelated PR.
+
+So: **write in this repo, compile in the checkout.** New files go into `src/`
+at their mirrored path in the same change that creates them; edits to files
+Chromium owns become patches via `extract.sh`. Then a reset costs you a re-run
+of `apply.sh` and nothing else, which is the whole reason the series exists.
+
 `build.sh`, `spike.sh` and `guard-css-and-resize.sh` all have to run inside
 Chromium's own toolchain shell — a component build links against that shell's glibc and
 will not start without it:
