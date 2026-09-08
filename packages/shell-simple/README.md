@@ -136,9 +136,11 @@ Configuration is this shell's own, at `$XDG_CONFIG_HOME/domicile/simple.json`.
 Nothing of Domicile's is configured directly — what the compositor reads is
 generated from that file. A first run with no file takes the defaults.
 
-`bun run --filter @domicile/shell-simple start:dev` serves the renderer alone on
-Vite's dev server: with no host to inject a transport, no window ever appears —
-useful only for looking at what the empty desktop is.
+`bun run --filter @domicile/shell-simple start:dev` runs this shell in a real
+desktop and rebuilds it as you edit — the engine the flake pins, the compositor
+and the bridge out of this checkout, and the page reloading itself when a build
+finishes. It used to be Vite's dev server, where no window ever appeared
+because there was no compositor behind the page.
 
 `styled-system/` is Panda's generated output, produced by `bun run prepare` (run
 automatically as a turbo dependency of the build, type check, and tests) and not

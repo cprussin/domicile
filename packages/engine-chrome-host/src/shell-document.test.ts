@@ -90,3 +90,36 @@ describe("shellDocument", () => {
     },
   );
 });
+
+// Dev mode's one addition to the page, and the reason it is here rather than
+// on the session websocket: that socket is a byte pipe to the compositor
+// carrying `spawn`, and a second meaning on it makes the bridge a participant
+// in a protocol it is careful not to parse.
+describe("the dev reloader", () => {
+  it("is absent unless a path is given", () => {
+    expect(document()).not.toContain("location.reload");
+    expect(document()).not.toContain("setInterval");
+  });
+
+  it("polls the path it was given", () => {
+    const page = shellDocument("shell.js", "/domicile-dev-reload");
+
+    expect(page).toContain('fetch("/domicile-dev-reload"');
+    expect(page).toContain("location.reload()");
+  });
+
+  // The first answer is recorded rather than compared, or starting the desktop
+  // would immediately reload it — and a page that reloads on every poll never
+  // finishes loading the shell at all.
+  it("does not reload on the first answer", () => {
+    const page = shellDocument("shell.js", "/domicile-dev-reload");
+
+    expect(page).toContain("seen === undefined");
+  });
+
+  it("leaves the shell's own script alone", () => {
+    const page = shellDocument("shell.js", "/domicile-dev-reload");
+
+    expect(page).toContain('<script src="shell.js" type="module">');
+  });
+});

@@ -29,7 +29,7 @@
   "scripts": {
     "build:vite": "vite build -c vite.renderer.config.ts",
     "prepare": "panda codegen --silent && panda cssgen --silent",
-    "start:dev": "vite -c vite.renderer.config.ts",
+    "start:dev": "../../scripts/dev-shell.sh manganese",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

@@ -74,10 +74,15 @@ is nothing to configure and nothing to pass: the bridge serves the page and the
 session from one port exactly so that no query string carries a socket path and
 no two things can disagree about where the compositor is.
 
-A page with no host — `vite dev` on your shell, which is a real thing to do —
-gets a transport that does nothing, so the layout still lays out and
-`<domicile-app>` says once that it cannot show a window. Ask `hasHost(window)`
-if you need the question answered; do not reconstruct it.
+A page with no host gets a transport that does nothing, so the layout still
+lays out and `<domicile-app>` says once that it cannot show a window. Ask
+`hasHost(window)` if you need the question answered; do not reconstruct it.
+
+Do not develop against that, though: it is the chrome with every window in it
+missing, and a desktop's interesting behaviour is all on the other side of the
+transport. `bun run --filter @domicile/shell-<name> start:dev` runs your shell
+in a real desktop and rebuilds it as you save — which is what `vite dev` used
+to be here, and what it could not be.
 
 ## The handshake
 

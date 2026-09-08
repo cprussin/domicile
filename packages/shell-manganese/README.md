@@ -251,12 +251,12 @@ nix run 'github:cprussin/domicile#manganese'
 runs it — the bridge, the engine on that page, and the compositor as a producer
 to it. `./scripts/run-engine.sh <chromium/src>` does the same from a checkout.
 
-`bun run --filter @domicile/shell-manganese start:dev` serves the renderer alone on
-Vite's dev server, for styling work without a compositor: `connectToHost` falls
-back to a no-op transport on a page with no host, so the layout still lays out
-against apps that will never arrive. A browser window's page stays blank there
-— `<domicile-webview>` needs the engine — but the rail, the tabs, and the
-address bar are all live.
+`bun run --filter @domicile/shell-manganese start:dev` runs this shell in a real
+desktop and rebuilds it as you edit: the engine the flake pins, the compositor
+and the bridge built out of this checkout, and the page reloading itself when
+vite finishes a build. It used to be Vite's dev server in whatever browser you
+had, which is a page with no compositor and therefore no windows — the chrome
+with everything in it missing, which is a misleading thing to look at.
 
 `styled-system/` is Panda's generated output, produced by `bun run prepare`
 (run automatically as a turbo dependency of the build, type check, and tests)

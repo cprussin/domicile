@@ -4,7 +4,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { SESSION_PATH, serveShell } from "./serve-shell";
+import { DEV_RELOAD_PATH, SESSION_PATH, serveShell } from "./serve-shell";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
@@ -118,6 +118,101 @@ describe("serveShell", () => {
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(body).toContain('<script src="shell.js" type="module">');
     expect(body).toContain("<title>Domicile</title>");
+  });
+
+  // ---- dev mode ----------------------------------------------------------
+  //
+  // A desktop runs under `--app`, which drops the browser's keyboard
+  // shortcuts, so there is no reload in it. Without this a one-character
+  // change to a shell means killing the desktop and starting it again.
+
+  it("serves no reload token unless it was asked to", async () => {
+    const host = await compositor();
+    await writeFile(path.join(host.dir, "shell.js"), "export const x = 1;");
+    const serving = serveShell({
+      module: "shell.js",
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
+    cleanups.push(() => serving.stop());
+
+    const response = await fetch(
+      `${serving.url.slice(0, -1)}${DEV_RELOAD_PATH}`,
+    );
+
+    // 404 rather than a token: an installed desktop is not a dev server, and
+    // the poller is not in its page either.
+    expect(response.status).toBe(404);
+    expect(await (await fetch(serving.url)).text()).not.toContain(
+      DEV_RELOAD_PATH,
+    );
+  });
+
+  it("puts the poller in the document when asked", async () => {
+    const host = await compositor();
+    await writeFile(path.join(host.dir, "shell.js"), "export const x = 1;");
+    const serving = serveShell({
+      module: "shell.js",
+      reload: true,
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
+    cleanups.push(() => serving.stop());
+
+    const body = await (await fetch(serving.url)).text();
+
+    expect(body).toContain(DEV_RELOAD_PATH);
+    // Still the shell's own document in every other respect.
+    expect(body).toContain('<script src="shell.js" type="module">');
+  });
+
+  // THE ASSERTION THE WHOLE THING RESTS ON. A token that does not move when
+  // the shell is rebuilt is a dev mode that never reloads, and it would look
+  // exactly like a working one until somebody edited a file.
+  it("changes the token when the shell is rebuilt", async () => {
+    const host = await compositor();
+    const module = path.join(host.dir, "shell.js");
+    await writeFile(module, "export const x = 1;");
+    const serving = serveShell({
+      module: "shell.js",
+      reload: true,
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
+    cleanups.push(() => serving.stop());
+    const token = `${serving.url.slice(0, -1)}${DEV_RELOAD_PATH}`;
+
+    const before = await (await fetch(token)).text();
+    // Longer, so the answer moves even where the filesystem's timestamps are
+    // coarse. A rebuild that happens to produce the same size within the same
+    // millisecond is the one case this cannot see, and a bundler writing the
+    // same bytes is a rebuild with nothing to reload for.
+    await writeFile(module, "export const x = 2; // rebuilt\n");
+    const after = await (await fetch(token)).text();
+
+    expect(before).not.toBe(after);
+    expect(await (await fetch(token)).text()).toBe(after);
+  });
+
+  // A `--watch` build rewrites its output, so a poll can land while the file
+  // is not there. That must not take the page down: it answers, and the next
+  // poll is the reload.
+  it("answers when the module is momentarily gone", async () => {
+    const host = await compositor();
+    const serving = serveShell({
+      module: "shell.js",
+      reload: true,
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
+    cleanups.push(() => serving.stop());
+
+    const response = await fetch(
+      `${serving.url.slice(0, -1)}${DEV_RELOAD_PATH}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("gone");
   });
 
   // A reload or a bookmark resolves to `/index.html`, so serving a 404 there

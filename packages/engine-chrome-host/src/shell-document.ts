@@ -53,7 +53,7 @@
  * browser asked for `/a`, and the desktop was a blank screen with nothing in
  * any log.
  */
-export const shellDocument = (module: string): string =>
+export const shellDocument = (module: string, reloadPath?: string): string =>
   `<!doctype html>
 <html lang="en">
   <head>
@@ -72,7 +72,52 @@ export const shellDocument = (module: string): string =>
     </style>
   </head>
   <body>
-    <script src="${encodeURIComponent(module)}" type="module"></script>
+    <script src="${encodeURIComponent(module)}" type="module"></script>${
+      reloadPath === undefined ? "" : reloadScript(reloadPath)
+    }
   </body>
 </html>
 `;
+
+/**
+ * The one thing dev mode adds to the page, and the reason it is a poll.
+ *
+ * A desktop runs under `--app`, which drops the browser's own keyboard
+ * shortcuts — so there is no reload in it. Without something in the page, a
+ * one-character change to a shell means killing the desktop and starting it
+ * again, which is not a dev loop.
+ *
+ * It asks the bridge for a token, and reloads when the token it gets is not
+ * the one it got before. Not a WebSocket, and deliberately: the page already
+ * has one, it is a byte pipe to the compositor carrying `spawn`, and putting
+ * a second meaning on it would make the bridge a participant in a protocol it
+ * is careful not to parse. A GET every 400ms against a local server costs
+ * nothing worth measuring.
+ *
+ * The first answer is recorded rather than compared, so starting the desktop
+ * does not immediately reload it. Failures are ignored on purpose: the bridge
+ * going away is the desktop going away, and a page reloading itself against a
+ * server that is gone would replace a dev message with a browser error page.
+ *
+ * Injected only when the bridge was asked for it — `main.ts` reads
+ * `DOMICILE_DEV_RELOAD` — so a desktop somebody installs has no poller in it.
+ */
+const reloadScript = (reloadPath: string): string => `
+    <script>
+      // Domicile dev mode: reload when the shell is rebuilt.
+      (() => {
+        let seen;
+        setInterval(() => {
+          fetch("${encodeURI(reloadPath)}", { cache: "no-store" })
+            .then((answer) => answer.text())
+            .then((token) => {
+              if (seen === undefined) {
+                seen = token;
+              } else if (token !== seen) {
+                location.reload();
+              }
+            })
+            .catch(() => {});
+        }, 400);
+      })();
+    </script>`;
