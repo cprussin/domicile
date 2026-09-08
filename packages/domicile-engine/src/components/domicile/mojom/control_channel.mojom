@@ -1,0 +1,49 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module domicile.mojom;
+
+// The shell's control channel to the compositor, as a renderer-to-browser
+// interface rather than a socket the page opens.
+//
+// This replaces a WebSocket to a loopback TCP port. The port was not a page
+// server with a socket beside it -- it was the desktop's control plane, and
+// `Spawn` on it is arbitrary commands on the machine running the desktop. A
+// loopback port is reachable by every process on the box and no header can fix
+// that; what fixes it is not having a port. See docs/architecture/
+// ENGINE-FORK.md, "The page is served over a TCP port, and it should not be".
+//
+// The browser already holds a unix socket to the compositor. This interface is
+// how the page reaches it without opening one of its own.
+//
+// WHAT MAKES THIS SAFE IS NOT THIS FILE. A renderer that is compromised can
+// call anything here, `Spawn` included. What changed is *which* renderers can:
+// the browser binds this only for a document whose origin is the shell's, so
+// the capability follows the origin instead of following whoever can open a
+// TCP connection. domicile:// is not web-safe and not CORS-enabled, so no
+// ordinary web content has that origin.
+
+// VERTICAL SLICE. Two members, one in each direction, chosen because they are
+// the two hardest shapes in the protocol: Spawn is the dangerous one, and
+// AppTitled is an unsolicited event from the compositor. The other 27 members
+// are mechanical once these compile and run, and are deliberately not written
+// yet -- twenty-nine members written blind is twenty-nine mistakes instead of
+// one.
+
+// Page -> browser -> compositor.
+interface ControlChannel {
+  // Run a command on the machine running the desktop.
+  //
+  // The argv form rather than a string, and not because it is tidier: a string
+  // would have to be split by somebody, and the somebody would be a shell.
+  // There is no shell in this path and there should not be one.
+  Spawn(array<string> command);
+};
+
+// Compositor -> browser -> page. One method, not a callback on Spawn: these
+// arrive because a client did something, not because the page asked.
+interface ControlChannelClient {
+  // A window's title changed. `app_id` is the same id an <app> element names.
+  AppTitled(string app_id, string title);
+};

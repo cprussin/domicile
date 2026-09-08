@@ -1,0 +1,34 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// navigator.domicile — the shell's control channel to the compositor.
+//
+// Not a web standard and not proposed as one. It exists in Domicile's engine
+// fork, on documents served over domicile://, and nowhere else.
+//
+// This is the typed surface rather than a message pipe: the page calls methods
+// and listens for events, and the wire protocol lives in the browser process.
+// The reason is that the protocol carries Spawn, and a page that cannot
+// construct a message cannot construct a malformed one. The cost, which is
+// real, is that adding a message means an engine release rather than editing a
+// TypeScript file.
+//
+// VERTICAL SLICE: spawn() and the apptitled event. The remaining 27 members of
+// the protocol are mechanical once these two work end to end.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel,
+    SecureContext
+] interface DomicileHost : EventTarget {
+  // Run a command on the machine running the desktop.
+  //
+  // Sequence<DOMString> rather than a single string: splitting a command line
+  // is a shell's job and there is no shell in this path.
+  [CallWith=ScriptState, RaisesException] undefined spawn(sequence<DOMString> command);
+
+  // A window's title changed. `event.appId` is the id an <app> element names,
+  // so a shell can put a title on the frame it already drew.
+  attribute EventHandler onapptitled;
+};
