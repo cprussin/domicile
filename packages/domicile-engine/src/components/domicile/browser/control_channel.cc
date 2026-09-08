@@ -6,11 +6,14 @@
 
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/values.h"
+#include "components/domicile/common/domicile_scheme.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/net_errors.h"
 
 namespace domicile {
@@ -234,6 +237,24 @@ void ControlChannel::DispatchLine(const std::string& line) {
   // Every other message type is one this slice has not implemented yet. Dropped
   // rather than fatal: the other 27 members land here, and until they do a
   // compositor sending them is ahead of this build rather than wrong.
+}
+
+void BindControlChannel(
+    mojo::PendingReceiver<mojom::ControlChannel> receiver) {
+  const std::string socket_path =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          kDomicileControlSocketSwitch);
+  if (socket_path.empty()) {
+    // No socket means the engine was started without --domicile-control-socket.
+    // Dropping the receiver closes the page's end, so a shell finds out rather
+    // than talking into a channel that goes nowhere.
+    LOG(ERROR) << "domicile: a page asked for the control channel but the "
+                  "engine was started without --domicile-control-socket. The "
+                  "shell will load and no window will respond.";
+    return;
+  }
+  mojo::MakeSelfOwnedReceiver(std::make_unique<ControlChannel>(socket_path),
+                              std::move(receiver));
 }
 
 }  // namespace domicile

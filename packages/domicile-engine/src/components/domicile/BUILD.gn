@@ -75,6 +75,7 @@ source_set("control_channel") {
   ]
 
   public_deps = [
+    ":common",
     "//base",
     "//components/domicile/mojom",
     "//mojo/public/cpp/bindings",
