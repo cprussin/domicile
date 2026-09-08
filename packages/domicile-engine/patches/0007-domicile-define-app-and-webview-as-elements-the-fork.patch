@@ -39,8 +39,10 @@ what shells write.
 
 New files are untracked and live in the series' src/.
 ---
+ extensions/renderer/dispatcher.cc             | 11 +++++++++-
  .../renderer/bindings/generated_in_core.gni   |  4 ++++
  .../blink/renderer/bindings/idl_in_core.gni   |  2 ++
+ .../core/css/resolver/style_adjuster.cc       |  9 +++++++++
  .../blink/renderer/core/html/build.gni        |  6 ++++++
  .../core/html/html_attribute_names.json5      |  1 +
  .../core/html/html_frame_element_base.h       |  4 +++-
@@ -48,8 +50,30 @@ New files are untracked and live in the series' src/.
  .../renderer/core/html/resources/html.css     | 13 +++++++++++-
  .../platform/graphics/paint/display_item.cc   |  1 +
  .../platform/graphics/paint/display_item.h    |  4 +++-
- 9 files changed, 52 insertions(+), 3 deletions(-)
+ 11 files changed, 71 insertions(+), 4 deletions(-)
 
+diff --git a/extensions/renderer/dispatcher.cc b/extensions/renderer/dispatcher.cc
+index 09fd79e20ed13..9f4a3f1576770 100644
+--- a/extensions/renderer/dispatcher.cc
++++ b/extensions/renderer/dispatcher.cc
+@@ -1444,7 +1444,16 @@ void Dispatcher::EnableCustomElementAllowlist() {
+   blink::WebCustomElement::AddEmbedderCustomElementName("appview");
+ #endif
+   blink::WebCustomElement::AddEmbedderCustomElementName("extensionoptions");
+-  blink::WebCustomElement::AddEmbedderCustomElementName("webview");
++  // Domicile's engine fork defines <webview> as a builtin HTML tag, so it
++  // cannot also be an embedder custom element name: the two are mutually
++  // exclusive by construction, and AddEmbedderCustomElementName() DCHECKs
++  // !IsKnownBuiltinTagName() to say so. Registering it here killed every
++  // renderer at startup.
++  //
++  // The name being taken is worth stating plainly: <webview> was already
++  // Chromium's, for guest views in Chrome Apps. This engine runs no
++  // extensions and no Chrome Apps, so the fork takes the tag; a build that
++  // wanted both would have to rename one of them.
+   for (const auto& api_provider : api_providers_) {
+     api_provider->EnableCustomElementAllowlist();
+   }
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
 index cf25f0e883224..a8e904d69329b 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
@@ -78,6 +102,31 @@ index 8c1bee5cfc853..66279ba6e6fd9 100644
    "//third_party/blink/renderer/core/html/html_geolocation_element.idl",
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
+diff --git a/third_party/blink/renderer/core/css/resolver/style_adjuster.cc b/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
+index ab1d14067c863..f9d8ac88a8918 100644
+--- a/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
++++ b/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
+@@ -1603,11 +1603,20 @@ StyleAdjuster::ElementTypeForCache StyleAdjuster::GetElementTypeCacheKey(
+     case ElementType::kHTMLFrameElement:
+     case ElementType::kHTMLIFrameElement:
+     case ElementType::kHTMLFencedFrameElement:
++    // Domicile's engine fork: <webview> is an HTMLFrameOwnerElement too.
++    case ElementType::kHTMLWebViewElement:
+       // HTMLFrameOwnerElement descendants have special touch-action behavior.
+       // There is also special handling of position and zoom, but this is moot,
+       // as we exclude them anyway.
+       return {ElementType::kIsNotElement};
+ 
++    case ElementType::kHTMLAppElement:
++      // Domicile's engine fork. Excluded for the same reason <canvas> is: an
++      // <app> is backed by a cc::SurfaceLayer recorded as a foreign layer, so
++      // its compositing and stacking do not follow from its computed style the
++      // way a sharable element's do.
++      return {ElementType::kIsNotElement};
++
+     case ElementType::kHTMLFrameSetElement:
+       // Special handling of position.
+       return {element.GetElementType()};
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
 index a04e9ca287e58..58598fd2fa2a8 100644
 --- a/third_party/blink/renderer/core/html/build.gni

@@ -30,6 +30,7 @@ class CORE_EXPORT LayoutAppSurface final : public LayoutReplaced {
 
  private:
   void UpdateAfterLayout() override;
+  PhysicalNaturalSizingInfo GetNaturalDimensions() const override;
   void PaintReplaced(const PaintInfo&,
                      const PhysicalOffset& paint_offset) const override;
 };

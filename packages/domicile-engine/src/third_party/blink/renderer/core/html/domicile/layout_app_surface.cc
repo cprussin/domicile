@@ -29,6 +29,16 @@ void LayoutAppSurface::UpdateAfterLayout() {
   }
 }
 
+PhysicalNaturalSizingInfo LayoutAppSurface::GetNaturalDimensions() const {
+  NOT_DESTROYED();
+  // A window has no size of its own to offer. The page's box is what sizes it
+  // -- that is the direction the whole design runs in, the layout box being the
+  // xdg_toplevel.configure -- so an <app> the page gives no size to falls to
+  // the replaced element default rather than to whatever the client happens to
+  // have rendered last.
+  return PhysicalNaturalSizingInfo::None();
+}
+
 void LayoutAppSurface::PaintReplaced(const PaintInfo& paint_info,
                                      const PhysicalOffset& paint_offset) const {
   NOT_DESTROYED();
