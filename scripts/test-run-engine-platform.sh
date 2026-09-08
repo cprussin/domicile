@@ -122,6 +122,18 @@ expect "the engine is given the page as an app, not as a tab" "yes" \
 expect "the page is not opened twice" "yes" \
   "$(printf '%s\n' "$LAUNCH" | grep -qE '^\s*"\$URL"' && echo no || echo yes)"
 
+# NO `--enable-blink-features`, and this is a flag whose absence is the
+# feature. Patch 0006 took `DomicileExternalSurface` to `status: "stable"`, so
+# passing it enables nothing — but `switches::kEnableBlinkFeatures` is in
+# `bad_flags_prompt.cc`, so any value of it puts "You are using an unsupported
+# command-line flag" across the top of the desktop, next to the one the sandbox
+# used to draw. Nothing else in this repository would notice it coming back:
+# the pixel guards find the client's window whether or not there is a yellow
+# bar above it, which is exactly how it survived being unnecessary.
+expect "the engine is not given a flag that banners the desktop" "yes" \
+  "$(printf '%s\n' "$LAUNCH" | grep -qE '^\s*--enable-blink-features' &&
+       echo no || echo yes)"
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1
