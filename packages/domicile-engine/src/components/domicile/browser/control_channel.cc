@@ -115,6 +115,118 @@ void ControlChannel::Spawn(const std::vector<std::string>& command) {
   Send(line);
 }
 
+void ControlChannel::SendMessage(base::DictValue message) {
+  std::string line;
+  if (!base::JSONWriter::Write(message, &line)) {
+    return;
+  }
+  Send(line);
+}
+
+namespace {
+
+base::DictValue Typed(const char* type) {
+  base::DictValue message;
+  message.Set("type", type);
+  return message;
+}
+
+base::DictValue ForApp(const char* type, const std::string& app_id) {
+  base::DictValue message = Typed(type);
+  message.Set("app_id", app_id);
+  return message;
+}
+
+}  // namespace
+
+void ControlChannel::FocusApp(const std::string& app_id) {
+  SendMessage(ForApp("focus_app", app_id));
+}
+
+void ControlChannel::FocusChrome() {
+  SendMessage(Typed("focus_chrome"));
+}
+
+void ControlChannel::CloseApp(const std::string& app_id) {
+  SendMessage(ForApp("close_app", app_id));
+}
+
+void ControlChannel::ResizeApp(const std::string& app_id,
+                               uint32_t width,
+                               uint32_t height) {
+  base::DictValue message = ForApp("resize_app", app_id);
+  base::ListValue size;
+  size.Append(static_cast<int>(width));
+  size.Append(static_cast<int>(height));
+  message.Set("size", std::move(size));
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::SetDesktopSize(uint32_t width, uint32_t height) {
+  base::DictValue message = Typed("set_desktop_size");
+  base::ListValue size;
+  size.Append(static_cast<int>(width));
+  size.Append(static_cast<int>(height));
+  message.Set("size", std::move(size));
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::SetDevicePixelRatio(double ratio) {
+  base::DictValue message = Typed("set_device_pixel_ratio");
+  message.Set("ratio", ratio);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::GrabShortcut(const std::string& shortcut) {
+  base::DictValue message = Typed("grab_shortcut");
+  message.Set("shortcut", shortcut);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::Key(const std::string& app_id,
+                         uint32_t keycode,
+                         bool pressed) {
+  base::DictValue message = ForApp("key", app_id);
+  message.Set("keycode", static_cast<int>(keycode));
+  message.Set("pressed", pressed);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::PointerMotion(const std::string& app_id,
+                                   double x,
+                                   double y) {
+  base::DictValue message = ForApp("pointer_motion", app_id);
+  message.Set("x", x);
+  message.Set("y", y);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::PointerLeave(const std::string& app_id) {
+  SendMessage(ForApp("pointer_leave", app_id));
+}
+
+void ControlChannel::PointerButton(const std::string& app_id,
+                                   uint32_t button,
+                                   bool pressed) {
+  base::DictValue message = ForApp("pointer_button", app_id);
+  message.Set("button", static_cast<int>(button));
+  message.Set("pressed", pressed);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::PointerAxis(const std::string& app_id,
+                                 double dx,
+                                 double dy,
+                                 int32_t v120_x,
+                                 int32_t v120_y) {
+  base::DictValue message = ForApp("pointer_axis", app_id);
+  message.Set("dx", dx);
+  message.Set("dy", dy);
+  message.Set("v120_x", v120_x);
+  message.Set("v120_y", v120_y);
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::Send(const std::string& json_line) {
   pending_.push_back(json_line);
   if (connected_) {
@@ -234,9 +346,81 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
-  // Every other message type is one this slice has not implemented yet. Dropped
-  // rather than fatal: the other 27 members land here, and until they do a
-  // compositor sending them is ahead of this build rather than wrong.
+  if (*type == "app_appeared") {
+    const std::string* app_id = message.FindString("app_id");
+    if (!app_id) {
+      return;
+    }
+    const std::string* title = message.FindString("title");
+    // Size is absent until the client has committed a buffer. Passing a zero
+    // as though it were a size is what opened windows at nothing at all, so
+    // absence is carried rather than flattened.
+    const base::ListValue* size = message.FindList("size");
+    const bool has_size = size && size->size() == 2u;
+    client_->AppAppeared(
+        *app_id, title ? *title : std::string(), has_size,
+        has_size ? static_cast<uint32_t>((*size)[0].GetIfInt().value_or(0)) : 0u,
+        has_size ? static_cast<uint32_t>((*size)[1].GetIfInt().value_or(0)) : 0u);
+    return;
+  }
+
+  if (*type == "app_resized") {
+    const std::string* app_id = message.FindString("app_id");
+    const base::ListValue* size = message.FindList("size");
+    if (app_id && size && size->size() == 2u) {
+      client_->AppResized(
+          *app_id, static_cast<uint32_t>((*size)[0].GetIfInt().value_or(0)),
+          static_cast<uint32_t>((*size)[1].GetIfInt().value_or(0)));
+    }
+    return;
+  }
+
+  if (*type == "app_closed") {
+    if (const std::string* app_id = message.FindString("app_id")) {
+      client_->AppClosed(*app_id);
+    }
+    return;
+  }
+
+  if (*type == "app_cursor") {
+    const std::string* app_id = message.FindString("app_id");
+    const std::string* cursor = message.FindString("cursor");
+    if (app_id && cursor) {
+      client_->AppCursor(*app_id, *cursor);
+    }
+    return;
+  }
+
+  if (*type == "shortcut") {
+    if (const std::string* shortcut = message.FindString("shortcut")) {
+      client_->Shortcut(*shortcut);
+    }
+    return;
+  }
+
+  if (*type == "modifiers") {
+    client_->Modifiers(
+        static_cast<uint32_t>(message.FindInt("depressed").value_or(0)),
+        static_cast<uint32_t>(message.FindInt("latched").value_or(0)),
+        static_cast<uint32_t>(message.FindInt("locked").value_or(0)),
+        static_cast<uint32_t>(message.FindInt("group").value_or(0)));
+    return;
+  }
+
+  if (*type == "focus_changed") {
+    // Empty app_id means the chrome itself has focus, which is a state rather
+    // than a missing field.
+    const std::string* app_id = message.FindString("app_id");
+    client_->FocusChanged(app_id ? *app_id : std::string());
+    return;
+  }
+
+  // What is left is the bands and copy-path protocol -- place_portal,
+  // render_band, app_composited and their kin. Deliberately not implemented:
+  // docs/architecture/ENGINE-FORK.md lists them under what the fork scraps,
+  // because layout positions the layer now and the page has stopped reporting
+  // where its own boxes are. Cementing them here would make a dying protocol
+  // cost an engine release to remove.
 }
 
 void BindControlChannel(

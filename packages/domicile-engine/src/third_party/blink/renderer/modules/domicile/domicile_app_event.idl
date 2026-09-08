@@ -1,0 +1,20 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+    RuntimeEnabled=DomicileControlChannel,
+    Exposed=Window
+] interface DomicileAppEvent : Event {
+  constructor(DOMString type, optional DomicileAppEventInit eventInitDict = {});
+
+  readonly attribute DOMString appId;
+  readonly attribute DOMString title;
+  readonly attribute DOMString cursor;
+
+  // False until the client has committed a buffer. A shell that treats width
+  // and height as meaningful while this is false opens the window at nothing.
+  readonly attribute boolean hasSize;
+  readonly attribute unsigned long width;
+  readonly attribute unsigned long height;
+};

@@ -47,6 +47,34 @@ interface ControlChannel {
   // would have to be split by somebody, and the somebody would be a shell.
   // There is no shell in this path and there should not be one.
   Spawn(array<string> command);
+
+  // Which window has the keyboard. FocusChrome takes it back to the page.
+  FocusApp(string app_id);
+  FocusChrome();
+
+  // Ask a client to close. Not a kill: the client decides, which is why a
+  // window can refuse and show a save dialog instead.
+  CloseApp(string app_id);
+
+  // The layout box, as a resize. For an <app> element the box IS the
+  // xdg_toplevel.configure, which is why this exists at all.
+  ResizeApp(string app_id, uint32 width, uint32 height);
+
+  // The desktop's own geometry, and the scale the page is drawn at.
+  SetDesktopSize(uint32 width, uint32 height);
+  SetDevicePixelRatio(double ratio);
+
+  // A key combination the compositor should route to the page rather than to
+  // whichever client has focus.
+  GrabShortcut(string shortcut);
+
+  // Input forwarding. Coordinates are surface-local and keycodes are evdev,
+  // because that is what a Wayland client expects to be handed.
+  Key(string app_id, uint32 keycode, bool pressed);
+  PointerMotion(string app_id, double x, double y);
+  PointerLeave(string app_id);
+  PointerButton(string app_id, uint32 button, bool pressed);
+  PointerAxis(string app_id, double dx, double dy, int32 v120_x, int32 v120_y);
 };
 
 // Compositor -> browser -> page. One method, not a callback on Spawn: these
@@ -54,4 +82,27 @@ interface ControlChannel {
 interface ControlChannelClient {
   // A window's title changed. `app_id` is the same id an <app> element names.
   AppTitled(string app_id, string title);
+
+  // A window exists. Size is absent until the client has committed a buffer --
+  // a toplevel maps before it draws, and how big a Wayland client wants to be
+  // is something it says by drawing. Believing a zero here is what opened
+  // windows at nothing at all.
+  AppAppeared(string app_id, string title, bool has_size,
+              uint32 width, uint32 height);
+
+  AppResized(string app_id, uint32 width, uint32 height);
+  AppClosed(string app_id);
+
+  // The cursor a client asked for over its own surface.
+  AppCursor(string app_id, string cursor);
+
+  // A grabbed shortcut fired.
+  Shortcut(string shortcut);
+
+  // The seat's modifier state. One seat, outliving every window, which is why
+  // a dropped key release latches modifiers into clients that never saw it.
+  Modifiers(uint32 depressed, uint32 latched, uint32 locked, uint32 group);
+
+  // Focus moved, including to the chrome itself, in which case app_id is empty.
+  FocusChanged(string app_id);
 };
