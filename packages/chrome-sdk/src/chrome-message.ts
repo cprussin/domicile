@@ -45,6 +45,7 @@ export type ChromeMessage =
   | ReturnType<typeof removePortalMessage>
   | ReturnType<typeof resizeAppMessage>
   | ReturnType<typeof setDevicePixelRatioMessage>
+  | ReturnType<typeof setDesktopSizeMessage>
   | ReturnType<typeof declareBandsMessage>
   | ReturnType<typeof claimPointerMessage>
   | ReturnType<typeof focusAppMessage>
@@ -123,6 +124,15 @@ export const resizeAppMessage = (
  */
 export const setDevicePixelRatioMessage = (ratio: number) =>
   ({ ratio, type: "set_device_pixel_ratio" }) as const;
+
+/**
+ * Report the chrome's own viewport in CSS pixels, which is how big the desktop
+ * is. The compositor advertises it as the output's logical size — the only way
+ * it can learn that under an engine whose window it does not own.
+ */
+export const setDesktopSizeMessage = (
+  size: readonly [width: number, height: number],
+) => ({ size, type: "set_desktop_size" }) as const;
 
 /**
  * Declare the depths this chrome draws at, so the compositor can put windows

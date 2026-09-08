@@ -297,3 +297,109 @@ fn a_described_desktop_refuses_a_chromes_density() {
         "the config's own scales, not the one the chrome reported"
     );
 }
+
+/// And the same for the size, which is the other half of the same mode.
+///
+/// A described desktop is the config's statement about the user's real
+/// screens. The chrome's window is one view onto it — dragging that window
+/// shows more or less of the desktop rather than resizing it — so a chrome
+/// reporting its viewport must not redefine what the config described.
+///
+/// Written the same way as the density above and for the same reasons: two
+/// assertions because the refusal is one arm of an `if` and the log is the
+/// other, and the desktop read off a chrome that connects *after* the report,
+/// because a refusal sends no message and waiting for one not to arrive is a
+/// sleep.
+#[test]
+fn a_described_desktop_refuses_a_chromes_size() {
+    let compositor = Compositor::started_with(SIDE_BY_SIDE);
+    let mut chrome = compositor.chrome();
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Displays { .. }))
+        .expect("the desktop rides with the handshake");
+
+    chrome
+        .say(&ChromeMessage::SetDesktopSize {
+            size: [640.0, 480.0],
+        })
+        .expect("the chrome reports its viewport");
+
+    compositor.wait_for_log("a described desktop keeps its own size");
+
+    let mut latecomer = compositor.chrome();
+    let described = latecomer
+        .wait_for(|message| matches!(message, HostMessage::Displays { .. }))
+        .expect("the desktop is still described");
+    let HostMessage::Displays { displays } = described else {
+        unreachable!("the wait matched on this");
+    };
+    let described: Vec<_> = displays
+        .iter()
+        .map(|display| (display.name.as_str(), display.size, display.scale))
+        .collect();
+    assert_eq!(
+        described,
+        vec![("left", [1920, 1080], 1), ("right", [2560, 1440], 2)],
+        "the config's own sizes, not the 640x480 the chrome reported"
+    );
+}
+
+/// **THE DESKTOP IS THE CHROME'S WINDOW.** A size the chrome reports replaces
+/// the one the run started at, and every chrome is told.
+///
+/// This is the whole of how a desktop learns how big it is under the forked
+/// engine. Where the compositor presents, it owns a winit window and
+/// `adopt_window_scale` reads the size off it; under the engine that window is
+/// the browser's and the compositor never sees it. Before this message the
+/// desktop stayed at `compositor.nested_size` however big the window was —
+/// observed on a real machine as a chrome laid out for 1280x800 sitting in the
+/// corner of a much larger one, with `advertising output scale width=1280
+/// height=800` in the log next to a chrome reporting `devicePixelRatio` 1.5.
+///
+/// `nested_size` is stated and deliberately not the default, so a compositor
+/// that ignored the message and kept its own would fail here rather than
+/// coincide with it.
+///
+/// The scale is asserted to hold across the resize for the same reason the
+/// size is asserted to hold across a density change above: a mode is both, and
+/// restating one must not silently reset the other.
+#[test]
+fn a_size_one_chrome_reports_becomes_the_desktop() {
+    let compositor = Compositor::started_with(r#"{ "compositor": { "nested_size": [900, 600] } }"#);
+    let mut watching = compositor.chrome();
+    let mut reporting = compositor.chrome();
+    watching
+        .wait_for(|message| matches!(message, HostMessage::Displays { .. }))
+        .expect("the desktop rides with the handshake");
+
+    reporting
+        .say(&ChromeMessage::SetDevicePixelRatio { ratio: 2.0 })
+        .expect("the chrome reports its density");
+    reporting
+        .say(&ChromeMessage::SetDesktopSize {
+            size: [1600.0, 1200.0],
+        })
+        .expect("the chrome reports its viewport");
+
+    let described = watching
+        .wait_for(|message| match message {
+            HostMessage::Displays { displays } => {
+                displays.iter().any(|display| display.size == [1600, 1200])
+            }
+            _ => false,
+        })
+        .expect("the new size reaches the chrome that did not report it");
+
+    let HostMessage::Displays { displays } = described else {
+        unreachable!("the wait matched on this");
+    };
+    let described: Vec<_> = displays
+        .iter()
+        .map(|display| (display.name.as_str(), display.size, display.scale))
+        .collect();
+    assert_eq!(
+        described,
+        vec![("domicile-0", [1600, 1200], 2)],
+        "the reported size, at the density reported before it"
+    );
+}

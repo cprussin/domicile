@@ -191,6 +191,11 @@ mod grepped {
     /// the wait is still a wait on a string, and a string with a name is
     /// easier to find than one written twice.
     pub const DENSITY_REFUSED: &str = "a described desktop keeps its own scale";
+    /// `tests/desktop.rs::a_described_desktop_refuses_a_chromes_size`: the
+    /// guarded return in `set_output_size`, and the same arrangement as
+    /// [`DENSITY_REFUSED`] above for the same reason — a Rust test spelling
+    /// the string, since no script greps it.
+    pub const SIZE_REFUSED: &str = "a described desktop keeps its own size";
     /// `e2e-chrome-fills-a-window.sh`: the logical size and density an output
     /// was advertised at, read field by field.
     ///
@@ -355,6 +360,11 @@ enum ClientRequest {
     },
     SetOutputScale {
         scale: i32,
+    },
+    /// The chrome's viewport changed; re-advertise the output at that size so
+    /// a client asking how big the screen is gets the window the user has.
+    SetOutputSize {
+        logical: (i32, i32),
     },
     /// The chrome asked a client to close the window `app_id`.
     ///
@@ -982,6 +992,23 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                 if !hub.presenting {
                     hub.send_request(ClientRequest::SetOutputScale {
                         scale: output_scale(ratio, hub.max_scale),
+                    });
+                }
+                Vec::new()
+            }
+            // THE DESKTOP IS THE CHROME'S WINDOW, and where the compositor is
+            // not drawing that window it has no other way to learn its size.
+            // `adopt_window_scale` reads it off the winit window, which only
+            // exists when presenting; under the engine the window is the
+            // browser's. Without this the desktop sits at
+            // `compositor.nested_size` — a chrome laid out for 1280x800 in the
+            // corner of whatever the user actually opened. Guarded on
+            // `presenting` for the same reason the density is: where the
+            // window is ours, the chrome is reporting back what we told it.
+            Ok(ChromeMessage::SetDesktopSize { size }) => {
+                if !hub.presenting {
+                    hub.send_request(ClientRequest::SetOutputSize {
+                        logical: (size[0].round() as i32, size[1].round() as i32),
                     });
                 }
                 Vec::new()
@@ -2485,6 +2512,37 @@ impl DomicileCompositor {
         self.set_output(logical, scale);
     }
 
+    /// Advertise a new desktop size, because the chrome's window is the
+    /// desktop and the chrome is the only thing that can see it.
+    ///
+    /// The mirror of `set_output_scale` above, and guarded the same way: a
+    /// described desktop is the config's statement about the user's real
+    /// screens, so dragging Domicile's window shows more or less of it rather
+    /// than resizing it. Logged when refused for the reason that one is —
+    /// otherwise "the desktop did not resize" and "the message never arrived"
+    /// look identical from outside.
+    ///
+    /// The scale is carried through rather than recomputed: a mode is a size
+    /// and a density together, and this half is not the one that moved.
+    fn set_output_size(&mut self, logical: (i32, i32)) {
+        if !self.screens.follows_the_window() {
+            debug!(
+                width = logical.0,
+                height = logical.1,
+                "{}",
+                grepped::SIZE_REFUSED
+            );
+            return;
+        }
+        let scale = self
+            .screens
+            .outputs()
+            .next()
+            .expect("a window-following desktop advertises its one output")
+            .scale;
+        self.set_output(logical, scale);
+    }
+
     /// Advertise the desktop's size and density together, because a mode is
     /// both and neither can be changed without restating the other.
     ///
@@ -3270,6 +3328,7 @@ impl DomicileCompositor {
                 self.ask_for_the_next_band();
             }
             ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
+            ClientRequest::SetOutputSize { logical } => self.set_output_size(logical),
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
                     info!(%app_id, "close -> client");

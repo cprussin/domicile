@@ -8,6 +8,7 @@ import {
   describeHandshakeFailure,
 } from "@domicile/chrome-sdk/bridge";
 import { connectToHost, hasHost } from "@domicile/chrome-sdk/connect-to-host";
+import { reportDesktopSize } from "@domicile/chrome-sdk/desktop-size";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
 import { placementTiming } from "@domicile/chrome-sdk/placement-timing";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
@@ -135,7 +136,14 @@ bridge
       },
       Ok: () => {
         // After the handshake: the host ignores everything sent before it.
+        //
+        // Both halves of the desktop's mode. The density is what a client
+        // renders at; the size is how big the desktop *is*, and under the
+        // forked engine the compositor cannot see the window this page is in
+        // — without the second call the desktop stays at the compositor's
+        // configured `nested_size` however large the window really is.
         reportDevicePixelRatio(bridge, window);
+        reportDesktopSize(bridge, window);
       },
     });
   })

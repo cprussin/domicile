@@ -202,6 +202,25 @@ pub enum ChromeMessage {
     /// displays, or a browser zoom).
     SetDevicePixelRatio { ratio: f64 },
 
+    /// The chrome's own viewport, in CSS pixels: how big the desktop is.
+    ///
+    /// **The desktop is the chrome's window, and this is the only way the
+    /// compositor can learn its size when it is not drawing that window
+    /// itself.** Where the compositor presents, it owns a winit window and
+    /// reads the size off it (`adopt_window_scale`); under the forked engine
+    /// the window is the browser's, the compositor never sees it, and without
+    /// this the desktop stays at `compositor.nested_size` however big the
+    /// window is — a chrome laid out for 1280x800 in the corner of whatever
+    /// the user actually opened.
+    ///
+    /// Its own message rather than a field on the density above, so each
+    /// carries one fact: they change independently (a resize is not a
+    /// density change) and the compositor restates the mode from whichever
+    /// half moved, exactly as it already does for the scale.
+    ///
+    /// Sent on connect and on every resize.
+    SetDesktopSize { size: [f64; 2] },
+
     /// Request keyboard focus for an app.
     FocusApp { app_id: String },
 
@@ -503,5 +522,30 @@ pub fn negotiate(chrome_version: u32) -> Result<u32, VersionMismatch> {
             host: PROTOCOL_VERSION,
             chrome: chrome_version,
         })
+    }
+}
+
+#[cfg(test)]
+mod wire_names {
+    use super::*;
+
+    /// The exact JSON `@domicile/chrome-sdk` puts on the wire for the desktop
+    /// size, spelled out.
+    ///
+    /// A second spelling, deliberately. Nothing checks that the TypeScript
+    /// message strings and this enum agree — `chrome-message.ts` writes
+    /// `"set_desktop_size"` as a literal and serde derives it from the variant
+    /// name, and the two only meet at runtime, where a disagreement is one
+    /// `unparseable chrome message` line and a desktop that never resizes.
+    /// This is the cheapest thing that fails in CI instead.
+    #[test]
+    fn the_desktop_size_the_sdk_sends_parses() {
+        let sent = r#"{"type":"set_desktop_size","size":[1600,1200]}"#;
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
+            ChromeMessage::SetDesktopSize {
+                size: [1600.0, 1200.0]
+            }
+        );
     }
 }

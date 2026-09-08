@@ -30,6 +30,7 @@ import {
   pointerMotionMessage,
   removePortalMessage,
   resizeAppMessage,
+  setDesktopSizeMessage,
   setDevicePixelRatioMessage,
   spawnMessage,
 } from "./chrome-message";
@@ -316,6 +317,16 @@ export class BridgeClient {
   /** Tell the host the display density it should advertise to clients. */
   setDevicePixelRatio(ratio: number): void {
     this.send(setDevicePixelRatioMessage(ratio));
+  }
+
+  /**
+   * Tell the host how big the desktop is, in CSS pixels.
+   *
+   * The chrome's window *is* the desktop, and under an engine whose window the
+   * compositor does not own this is the only way it can learn the size.
+   */
+  setDesktopSize(size: readonly [width: number, height: number]): void {
+    this.send(setDesktopSizeMessage(size));
   }
 
   /**
