@@ -31,6 +31,10 @@
       "types": "./dist/connect-to-host.d.ts",
       "default": "./dist/connect-to-host.js"
     },
+    "./desktop-size": {
+      "types": "./dist/desktop-size.d.ts",
+      "default": "./dist/desktop-size.js"
+    },
     "./device-pixel-ratio": {
       "types": "./dist/device-pixel-ratio.d.ts",
       "default": "./dist/device-pixel-ratio.js"

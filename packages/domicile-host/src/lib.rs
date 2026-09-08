@@ -257,6 +257,13 @@ impl Host {
                 // compositor's business — it becomes the `wl_output` scale —
                 // and it is intercepted there before reaching the brain.
             }
+            ChromeMessage::SetDesktopSize { .. } => {
+                // The other half of the same mode, and the brain's business
+                // just as little: how big the desktop is is `wl_output` state,
+                // and the scene places windows in it at coordinates the chrome
+                // already sends absolute. Intercepted in the compositor beside
+                // the density above.
+            }
             ChromeMessage::ClaimPointer { regions } => {
                 // Where the chrome takes the pointer over the windows, which
                 // is routing and so the scene's — unlike the depths above,
