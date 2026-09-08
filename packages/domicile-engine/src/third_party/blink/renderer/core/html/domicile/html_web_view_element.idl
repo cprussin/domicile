@@ -1,0 +1,26 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// <webview> — web content in a browsing context of its own.
+// See docs/architecture/ENGINE-FORK.md in the Domicile repository.
+//
+// Not a web standard and not proposed as one; it exists in Domicile's engine
+// fork only. The shape is Electron's, because that is what Domicile's shells
+// were written against.
+
+[
+    RuntimeEnabled=DomicileExternalSurface,
+    Exposed=Window
+] interface HTMLWebViewElement : HTMLElement {
+  [HTMLConstructor] constructor();
+
+  // The address showing. Reflected, so a shell's address bar has one value to
+  // read and to write.
+  [CEReactions, Reflect, URL] attribute USVString src;
+
+  [CallWith=ScriptState, RaisesException] undefined goBack();
+  [CallWith=ScriptState, RaisesException] undefined goForward();
+  [CEReactions] undefined stop();
+  [CEReactions] undefined reload();
+};
