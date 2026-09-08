@@ -81,20 +81,6 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
 }
 
 impl DmabufImporter {
-    /// What to report for a renderer somebody else created — the window's.
-    ///
-    /// The node is looked up the same way, from the device EGL would have
-    /// chosen; it is the client-facing half of the story and does not depend
-    /// on who owns the context.
-    pub fn for_existing_renderer() -> Self {
-        let main_device = EGLDevice::enumerate()
-            .ok()
-            .and_then(|devices| preferred_device(devices, EGLDevice::is_software))
-            .and_then(|device| drm_node(&device));
-        tracing::info!(main_device, "dmabuf import device (presenting)");
-        DmabufImporter { main_device }
-    }
-
     /// The DRM node clients should allocate on, if this renderer has one.
     ///
     /// `zwp_linux_dmabuf_v1` feedback carries this, and it is the only way a

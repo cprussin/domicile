@@ -124,7 +124,7 @@ describe("a check nix run can reach", () => {
   });
 
   it("holds only the e2e scripts to it", () => {
-    // The `test-xvfb-*` checks run in `check.sh`'s shell group and have never
+    // The `test-*.sh` checks run in `check.sh`'s shell group and have never
     // had apps; holding them to this would be inventing a rule rather than
     // recording one.
     expect(

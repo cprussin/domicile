@@ -14,7 +14,7 @@ env:
   RUST_BACKTRACE: "1"
   # A skip here is a check that stopped running, which is the worst outcome a
   # check can have and the one nobody notices. On a developer's machine a
-  # missing Xvfb is a fact about the machine; here everything is installed,
+  # missing tool is a fact about the machine; here everything is installed,
   # so a skip means the job quietly stopped testing.
   DOMICILE_CHECK_STRICT: "1"
   # Except this one, which is a fact about the runner rather than about the
@@ -46,9 +46,9 @@ jobs:
       # The runner's own graphics stack rather than the flake's, which is not
       # the obvious choice and was not the first one. `nix develop .#full` says
       # what these scripts need in one place and would be the tidier answer.
-      # Measured both ways on this runner: `e2e-compose` passes under apt, and
+      # Measured both ways on this runner: the pixel checks pass under apt, and
       # under the flake shell the compositor comes up `no EGL renderer:
-      # serving wl_shm clients only` and every pixel test fails.
+      # serving wl_shm clients only` and every one of them fails.
       #
       # Not for want of `LD_LIBRARY_PATH` — `devShells.full` already sets it,
       # mesa included. libglvnd finds its vendor through
@@ -59,17 +59,11 @@ jobs:
       # that already exists rather than anything about the host — worth doing,
       # untested from here, and not on the way to this.
       #
-      # `libxkbcommon-x11-0` and `xdotool` are what make the *presented* path
-      # testable at all, and it was untested for exactly as long as they were
-      # missing. `--present` opens a winit window and winit `dlopen`s
-      # `libxkbcommon-x11.so.0` (xkbcommon-dl tries the versioned soname first,
-      # so the runtime package is the one needed and not `-dev`). It is its own
-      # library: `libxkbcommon0`, which the list already pulls in, never
-      # contained it. Without it the compositor dies in `xkbcommon-dl`'s
-      # `expect` — which does name the library, but out of a panic, so it reads
-      # as a compositor crash rather than as a missing dependency. There is no
-      # window manager on an Xvfb, so `xdotool` is what resizes the window in
-      # `e2e-chrome-fills-a-window.sh`.
+      # NO X HERE ANY MORE. `libxkbcommon-x11-0`, `xdotool` and `xvfb` were what
+      # made the *presented* path testable — a winit window on an Xvfb, resized
+      # by `xdotool` because an Xvfb has no window manager. That path is gone
+      # and nothing left in this job opens a window: the compositor is headless
+      # and the checks read pixels out of an offscreen buffer.
       #
       # Retried with a deadline per attempt, for the reason `cargo-test.yml`
       # spells out: a stalled apt mirror fails by hanging, so a plain
@@ -78,13 +72,11 @@ jobs:
         run: |
           install() {
             sudo apt-get update && sudo apt-get install -y \
-              libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev \
-              libxrandr-dev libxi-dev \
-              libxkbcommon-x11-0 xdotool \
+              libxkbcommon-dev libwayland-dev \
               libegl1-mesa-dev libgles2-mesa-dev libgbm-dev mesa-utils \
               libgl1-mesa-dri \
               weston wayland-utils \
-              xvfb libdrm2 libxkbcommon0
+              libdrm2 libxkbcommon0
           }
           for attempt in 1 2 3; do
             if timeout --kill-after=10 300 bash -c "$(declare -f install); install"; then
@@ -114,13 +106,12 @@ jobs:
       # failed or whether it never had what it needed.
       - name: What is here
         run: |
-          for tool in wayland-info Xvfb xdotool eglinfo; do
+          for tool in wayland-info eglinfo; do
             printf '%-16s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
           done
 
       # `shell` alongside `e2e` because it is the group holding the tests of
-      # the harness itself — `xvfb_verdict`, which decides what this job says
-      # when a display never arrives. It needs no graphics stack and takes
-      # under a second, and this is the only job that invokes `check.sh` at
-      # all, so anywhere else it would be a check that never runs.
+      # the harness itself. It needs no graphics stack and takes under a
+      # second, and this is the only job that invokes `check.sh` at all, so
+      # anywhere else it would be a check that never runs.
       - run: ./scripts/check.sh shell e2e

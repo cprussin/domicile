@@ -679,12 +679,8 @@
         })
         {
           check = "check.sh";
-          e2e-a-dense-display = "e2e-a-dense-display.sh";
           e2e-dmabuf = "e2e-dmabuf.sh";
-          e2e-compose = "e2e-compose.sh";
           e2e-chrome-fills-the-desktop = "e2e-chrome-fills-the-desktop.sh";
-          e2e-chrome-fills-a-window = "e2e-chrome-fills-a-window.sh";
-          e2e-window-follows-the-desktop = "e2e-window-follows-the-desktop.sh";
           smoke-compositor = "smoke-compositor.sh";
           test-out-of-tree-shell = "test-out-of-tree-shell.sh";
         };

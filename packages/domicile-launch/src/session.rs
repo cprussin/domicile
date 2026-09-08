@@ -27,9 +27,6 @@ pub struct Session {
     /// socket: which one a client arrived on is how the compositor tells the
     /// desktop from the things running on it.
     pub chrome_wayland_display: String,
-    /// Whether the compositor draws client windows itself. When it does, the
-    /// chrome's window must be transparent where an app shows through.
-    pub composited: bool,
 }
 
 /// Could not write the session document.

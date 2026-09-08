@@ -74,9 +74,7 @@ Every `.sh` rather than every `e2e-*.sh`, because `check.sh` runs the
 same harnesses. `scripts/lib/harness.sh` is out of that sweep because reading
 `scripts/` without recursing leaves it out — it is what the rules are about
 rather than something they apply to. `test-client.sh` is down there with it,
-sourced-only for the same reason; `xvfb-verdict.sh` and `xvfb-display.sh` are
-sourced-only too but sit in `scripts/` proper, where they are scanned like
-everything else.
+sourced-only for the same reason.
 
 Note that `exit 99` is not a verdict class the rest of the repo knows about:
 `check.sh` counts every non-zero, non-77 status as failed, so 99 and 1 reach it

@@ -328,13 +328,18 @@ describe("every script that can tell a dead compositor apart", () => {
 
   it("scans the scripts", () => {
     // Named because an empty scan must fail rather than report no offenders.
-    // Two of them, and deliberately not one of the checks being ported: this
-    // canary has now been renamed twice by the batch that deleted the script
-    // it named — `e2e-electron.sh` was the last — so it names the two scripts
-    // that are about this repository's own machinery rather than about a
-    // chrome, and so outlive whatever the chrome turns out to be.
-    expect(scripts.map(([name]) => name)).toContain("test-xvfb-verdict.sh");
+    //
+    // This canary has now been renamed three times by the batch that deleted
+    // the script it named: `e2e-electron.sh`, then `test-xvfb-verdict.sh`,
+    // which went with the presented path. The last rename claimed the scripts
+    // it moved to were "about this repository's own machinery rather than
+    // about a chrome, and so outlive whatever the chrome turns out to be" —
+    // and one of them did not, because the machinery in question was the
+    // machinery *of* that path. So no claim of durability this time: these are
+    // two scripts that exist today, and the next deletion that takes one will
+    // fail here and pick two more.
     expect(scripts.map(([name]) => name)).toContain("test-annotate.sh");
+    expect(scripts.map(([name]) => name)).toContain("test-step4-verdict.sh");
   });
 
   it("routes every harness bail through the liveness check", () => {

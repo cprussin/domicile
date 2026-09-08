@@ -61,11 +61,6 @@ features = [
     "wayland_frontend",
     "backend_egl",
     "renderer_gl",
-    # Presentation: the compositor draws client surfaces itself, so it needs
-    # somewhere to put them. `winit` is the nested output; DRM/KMS follows.
-    # This is what pulls in libwayland and the X11 client libraries, which is
-    # why CI installs them.
-    "backend_winit",
 ]
 
 [dev-dependencies]

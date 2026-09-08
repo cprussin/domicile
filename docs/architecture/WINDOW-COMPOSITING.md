@@ -122,7 +122,7 @@ that:
 |---|---|---|
 | Electron's `WAYLAND_DISPLAY` | the host's | Domicile's |
 | Electron's window | a surface the host composites | a `wl_surface` Domicile owns |
-| Domicile's output | none (headless) | a `winit` window, later DRM/KMS |
+| Domicile's output | none (headless) | a `winit` window, later DRM/KMS — **neither happened; the compositor is headless and the engine presents** |
 | Chrome pixels | never leave Electron | a texture Domicile composites |
 
 Both halves of that were verified — `scripts/probe-transparency.sh` ran a
@@ -158,8 +158,9 @@ Three consequences, all good:
   wallpaper, say — means drawing the chrome texture a second time.
 
 This is why `renderer_gl`/`backend_egl` were already the only Smithay backends
-enabled: `winit` now has to join them, which the crate deliberately excluded
-while the engine was the only thing presenting.
+enabled: `winit` had to join them for this. It has since been removed again —
+nothing ran the path it was for — so the crate is back to excluding it, which
+is what the `Cargo.toml` comment beside the feature list always claimed.
 
 ## Plan
 
@@ -168,7 +169,7 @@ Phase 1 — prove one window composites at all:
 - [x] scene: `Portal::surface_to_output` and `Scene::draw_order` — the drawing half of `hit_test`, tested against it so the two cannot drift
 - [x] compositor: the CSS matrix as the renderer's — `cgmath::Matrix3::new` takes its arguments column by column, so the six values do not go in in the order they are written
 - [x] **probe first**: does a transparent Electron `BrowserWindow` commit a buffer with real alpha when it is a client of Domicile? Yes — `scripts/probe-transparency.sh`
-- [x] compositor: a `winit` output behind `--present`, one renderer shared with the import path
+- [x] ~~compositor: a `winit` output behind `--present`, one renderer shared with the import path~~ — built, then deleted: nothing outside its own three checks ever ran it
 - [x] compositor: draw `draw_order` through `surface_to_output`, then the page's surface over it
 - [x] compositor: the window's own input, on a seat the chrome owns
 - [x] measure: the two paths against each other, same client, same size
@@ -299,10 +300,10 @@ Phase 3 — own the display:
       nothing here depends on what the previous buffer still holds, which is
       the thing a swapchain does not promise.
 
-      Two things it does not yet buy. Smithay's winit backend treats an empty
-      damage list as "all of it", so an idle desktop costs the same there
-      today; the saving is in partial-rect frames, and in the DRM backend that
-      will act on the empty case. And the chrome is one layer covering the
+      Two things it does not yet buy. Smithay's winit backend treated an empty
+      damage list as "all of it", so an idle desktop cost the same there; that
+      backend is gone, and the saving would be in partial-rect frames and in a
+      DRM backend that acted on the empty case. And the chrome is one layer covering the
       whole output, so any frame in which the page repainted — a clock, a
       caret — reports everything. Per-surface damage is already taken in
       `commit` and dropped for the chrome.
@@ -432,10 +433,14 @@ is why nothing headless saw it until `e2e-a-dense-display.sh` was written to
 run at a fractional scale.
 
 It is honoured now, in `src/viewport.rs`: the destination sizes the surface
-wherever a size is taken, and the source crops it where the compositor draws.
-`e2e-a-dense-display.sh` is what holds it — with the destination ignored the
-chrome's surface reads 2560x1600 against a desktop of 1280x800 and that check
-goes red, measured.
+wherever a size is taken.
+
+**Nothing holds it any more.** `e2e-a-dense-display.sh` was what did — with the
+destination ignored the chrome's surface read 2560x1600 against a desktop of
+1280x800 and the check went red, measured — and it went with `--present`, the
+path it was written against. The code stayed; its only guard did not. Said
+plainly rather than left for someone to discover: a regression here would be
+silent today.
 
 One half is honoured on one path only, and it is said out loud rather than
 left to be discovered: a *source* rectangle is applied where the compositor
