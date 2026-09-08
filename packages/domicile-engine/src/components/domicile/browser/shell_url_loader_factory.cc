@@ -32,7 +32,7 @@ bool ShellURLLoaderFactory::ResolveShellPath(const base::FilePath& shell_root,
   }
   // One host. A URL naming any other is refused rather than mapped, so the
   // scheme cannot grow a second meaning by accident.
-  if (url.host_piece() != kDomicileShellHost) {
+  if (url.host() != kDomicileShellHost) {
     return false;
   }
 
@@ -40,7 +40,7 @@ bool ShellURLLoaderFactory::ResolveShellPath(const base::FilePath& shell_root,
   // because "%2e%2e%2f" has to be ".." *before* ReferencesParent() is asked
   // about it, or the check reads an escape and sees nothing wrong.
   std::string path = base::UnescapeBinaryURLComponent(
-      url.path_piece(), base::UnescapeRule::PATH_SEPARATORS |
+      url.path(), base::UnescapeRule::PATH_SEPARATORS |
                             base::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
 
   // A NUL in the decoded path would truncate the name the filesystem is asked
@@ -79,8 +79,8 @@ bool ShellURLLoaderFactory::ResolveShellPath(const base::FilePath& shell_root,
 
 ShellURLLoaderFactory::ShellURLLoaderFactory(
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver,
-    base::SelfDeletingPassKey key,
-    const base::FilePath& shell_root)
+    const base::FilePath& shell_root,
+    base::SelfDeletingPassKey key)
     : network::SelfDeletingURLLoaderFactory(std::move(factory_receiver), key),
       shell_root_(shell_root) {}
 
