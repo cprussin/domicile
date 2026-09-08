@@ -343,9 +343,9 @@ fn output_scaling_is_on_by_default_up_to_a_retina_display() {
 
 #[test]
 fn max_scale_one_turns_hidpi_off() {
-    // The escape hatch: every pixel costs the readback, the socket and the IPC
-    // hop squared, so a user who would rather have the latency than the
-    // sharpness needs a way to say so without a rebuild.
+    // The escape hatch: a client asked for scale N renders N² times the
+    // pixels, so a user who would rather have the speed than the sharpness
+    // needs a way to say so without a rebuild.
     assert_eq!(
         Config::parse(
             r#"{

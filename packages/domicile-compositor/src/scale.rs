@@ -17,9 +17,9 @@
 /// blurriness this exists to remove. (Matching a fractional ratio properly is
 /// `wp_fractional_scale_v1`, which is a separate protocol.)
 ///
-/// `max` is the escape hatch: every pixel here costs the readback, the socket
-/// and the IPC hop *squared*, so a display can ask for more than the copy path
-/// can afford.
+/// `max` is the escape hatch: a client asked for scale N renders N² times the
+/// pixels, so a display can ask for more than the machine under it can
+/// comfortably draw.
 pub fn output_scale(ratio: f64, max: u32) -> i32 {
     // A ratio below 1 is a display with fewer pixels than CSS ones, which
     // Wayland cannot express and which needs no help staying sharp.

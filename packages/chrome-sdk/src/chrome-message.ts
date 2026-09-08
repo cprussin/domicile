@@ -46,7 +46,6 @@ export type ChromeMessage =
   | ReturnType<typeof resizeAppMessage>
   | ReturnType<typeof setDevicePixelRatioMessage>
   | ReturnType<typeof setDesktopSizeMessage>
-  | ReturnType<typeof declareBandsMessage>
   | ReturnType<typeof claimPointerMessage>
   | ReturnType<typeof focusAppMessage>
   | ReturnType<typeof focusChromeMessage>
@@ -133,18 +132,6 @@ export const setDevicePixelRatioMessage = (ratio: number) =>
 export const setDesktopSizeMessage = (
   size: readonly [width: number, height: number],
 ) => ({ size, type: "set_desktop_size" }) as const;
-
-/**
- * Declare the depths this chrome draws at, so the compositor can put windows
- * between them.
- *
- * The values are `z-index`, in the space `place_portal` reports a window's in.
- * A chrome that never sends this is drawn as one layer over every window,
- * which is what every chrome did before bands existed — so sending nothing is
- * a working chrome rather than a broken one.
- */
-export const declareBandsMessage = (depths: readonly number[]) =>
-  ({ depths: [...depths], type: "declare_bands" }) as const;
 
 /**
  * A rectangle of the page that takes the pointer, at a depth.

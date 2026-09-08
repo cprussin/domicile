@@ -3,7 +3,6 @@ import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 
 import { css, cx } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
-import { BAND } from "./bands";
 import { CLAIMS_POINTER } from "./claim-pointer";
 import { barBox } from "./float";
 import type { Floating } from "./shell-state";
@@ -11,14 +10,6 @@ import { useFloatDrag } from "./useFloatDrag";
 import { floatEdgeStyles, floatPlacement } from "./window-styles";
 
 type Props = {
-  /**
-   * Which band this bar paints in.
-   *
-   * Its own, at the depth of the window it names, which is the whole reason a
-   * bar is worth having beyond looking like a window: a window in front of
-   * that one has to be drawn over it. See `bands`.
-   */
-  band: number;
   floating: Floating;
   /** Whether the user is working in this window, so its bar looks like it. */
   focused: boolean;
@@ -37,7 +28,7 @@ type Props = {
  * window. A bar is page pixels at the depth of the window it names, so a window
  * in front of that one has to be drawn *over* it — which is the one thing a
  * compositor that composites the whole page above every window cannot do.
- * Until the shell declares its depths (`declare_bands`), the bar of a window
+ * The bar of a window
  * behind another is drawn on top of the one in front, and this is what makes
  * that visible rather than theoretical.
  *
@@ -48,7 +39,6 @@ type Props = {
  * is the opposite one.
  */
 export const FloatTitleBar = ({
-  band,
   floating,
   focused,
   onClose,
@@ -67,7 +57,7 @@ export const FloatTitleBar = ({
       // The bar lies across whatever the window it names cascades over, and a
       // press on it must reach the page rather than that window. See
       // `claim-pointer`.
-      {...{ [BAND]: band, [CLAIMS_POINTER]: "" }}
+      {...{ [CLAIMS_POINTER]: "" }}
       style={floatPlacement(barBox(floating.float), floating.depth)}
       {...handlers}
     >

@@ -296,10 +296,9 @@ pub struct OutputConfig {
     /// display actually is.
     ///
     /// This is a cost dial, not a preference. A client asked to draw at scale
-    /// N produces N² times the pixels, and every one of them is read back off
-    /// the GPU, written down a socket and copied across the Electron process
-    /// boundary — so sharpness is bought with latency, in the square. `1`
-    /// turns scaling off entirely and restores the old behaviour.
+    /// N renders N² times the pixels — its own work, and the engine's to
+    /// composite — so sharpness is bought in the square. `1` turns scaling off
+    /// entirely.
     ///
     /// Governs the single output that follows Domicile's own window, and so
     /// applies only while [`displays`](OutputConfig::displays) is empty: a

@@ -180,9 +180,9 @@ fn a_pointer_over_only_inert_portals_belongs_to_the_chrome() {
 
 #[test]
 fn a_portal_is_drawn_from_the_clients_own_buffer_by_default() {
-    // The fast path is what a portal is for. A window that had to opt into it
-    // would leave every chrome that has not heard of the choice paying a
-    // readback per frame for nothing.
+    // The fast path is what a portal is for, so it is the default: a window
+    // that had to opt into it would leave every chrome that has not heard of
+    // the choice paying for something it did not ask for.
     assert!(portal("term", 100.0, 50.0, Transform::identity(), 0).draws_natively);
 }
 
@@ -661,7 +661,7 @@ fn a_window_in_front_of_a_claim_still_takes_the_pointer() {
 
 #[test]
 fn a_claim_at_a_windows_own_depth_is_over_it() {
-    // The same rule the bands draw by: chrome at a window's depth is the
+    // Chrome at a window's depth is the
     // chrome *of* that window, and it is drawn over it. A bar ties with the
     // window it names and has to win, or it is unclickable along every edge
     // that overlaps its own surface.
@@ -698,7 +698,7 @@ fn a_claim_nowhere_near_the_pointer_changes_nothing() {
 
 #[test]
 fn claiming_again_replaces_what_was_claimed_before() {
-    // The whole set every time, like the bands: the chrome re-sends it as its
+    // The whole set every time: the chrome re-sends it as its
     // own layout changes, and a bar that moved must not go on taking the
     // pointer where it used to be.
     let mut scene = Scene::new();

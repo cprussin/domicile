@@ -7,8 +7,6 @@
 
 use serde::{Deserialize, Serialize};
 
-pub mod band_label;
-
 /// The protocol version this build speaks.
 ///
 /// Pinned at 1, and there is no version history above it any more. The host
@@ -168,24 +166,9 @@ pub enum ChromeMessage {
     /// rather than having its old buffer stretched into the new box.
     ResizeApp { app_id: String, size: [f64; 2] },
 
-    /// The depths the chrome draws at, so the compositor can put windows
-    /// between them.
-    ///
-    /// One entry per depth, in the order the chrome will be asked to render
-    /// them; the *values* are `z-index`, in the space `place_portal` reports a
-    /// window's in, and are what order the drawing. A chrome that sends
-    /// nothing here is drawn as one layer over every window, which is what
-    /// every chrome did before this existed.
-    ///
-    /// Sent whenever the set changes, and a re-send of the same depths still
-    /// means "start over": what is *at* a depth can move without the depth
-    /// doing so.
-    DeclareBands { depths: Vec<i32> },
-
     /// Where the chrome takes the pointer over the windows.
     ///
-    /// The whole set each time, like [`DeclareBands`](Self::DeclareBands), and
-    /// re-sent whenever the page's own layout moves: a bar that has moved must
+    /// The whole set each time, re-sent whenever the page's own layout moves: a bar that has moved must
     /// not go on taking the pointer where it used to be. A chrome that sends
     /// nothing here claims nothing, which is what every chrome did before this
     /// existed — and what leaves a press on a floating window's title bar
@@ -289,17 +272,6 @@ pub enum ChromeMessage {
 pub enum HostMessage {
     /// Response to `Hello`; declares the version the host agreed to speak.
     Welcome { protocol_version: u32 },
-
-    /// Render only the band at this index of the last `declare_bands`, and
-    /// commit it.
-    ///
-    /// The compositor asks for one at a time and takes the chrome's next
-    /// commit as the answer, because the page cannot label its own frames: the
-    /// Wayland connection belongs to Chromium rather than to the page, and a
-    /// label sent back over this socket would not be ordered against the
-    /// commit it describes. One question outstanding is what makes the next
-    /// commit unambiguous. See `docs/architecture/WINDOW-COMPOSITING.md`.
-    RenderBand { band: u32 },
 
     /// A combination claimed with `GrabShortcut` was pressed.
     ///

@@ -8,15 +8,13 @@
 //! tested [`domicile_host::Host`] brain: when a client maps a toplevel we call
 //! [`Host::app_appeared`]; when it goes away we call [`Host::app_closed`].
 //!
-//! GPU clients get a `zwp_linux_dmabuf_v1` global: their buffer is imported
-//! into an offscreen GLES context (`dmabuf_import`) and recorded in the
-//! [`BridgeRegistry`], which is what the engine will bind as an external
-//! texture once the CEF path lands. Until then the imported frame is read back
-//! and broadcast down the same `AppFrame` route as `wl_shm` — a copy, but the
-//! copy is the only part the engine swap removes.
+//! GPU clients get a `zwp_linux_dmabuf_v1` global. Their buffer is submitted
+//! to the engine as a viz surface, which the page embeds in its `<app>`
+//! element — see `engine_session`. A `wl_shm` client has no dmabuf to submit
+//! and its window stays blank, which `publish_frame` says once per client.
 //!
-//! What's intentionally missing (needs a GPU/display): presenting the engine's
-//! composited frame.
+//! What is intentionally missing here (it needs a GPU and a display): anything
+//! about what the engine draws.
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
@@ -30,7 +28,6 @@ use std::time::{Duration, Instant};
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
-use smithay::backend::allocator::Fourcc;
 use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState};
 use smithay::input::{
     keyboard::{FilterResult, Keycode, XkbConfig},
@@ -47,11 +44,11 @@ use smithay::reexports::{
     wayland_protocols::xdg::shell::server::xdg_toplevel,
     wayland_server::{
         backend::{ClientData, ClientId, DisconnectReason},
-        protocol::{wl_buffer, wl_seat, wl_shm, wl_surface::WlSurface},
+        protocol::{wl_buffer, wl_seat, wl_surface::WlSurface},
         Client, Display, DisplayHandle, Resource as _,
     },
 };
-use smithay::utils::{Rectangle, Serial, Transform, SERIAL_COUNTER};
+use smithay::utils::{Serial, Transform, SERIAL_COUNTER};
 use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
 use smithay::wayland::{
     buffer::BufferHandler,
@@ -86,8 +83,6 @@ use smithay::{
 };
 use tracing::{debug, info, warn};
 
-mod bands;
-mod chrome_frame;
 mod coalesce;
 mod dmabuf_descriptor;
 mod dmabuf_import;
@@ -105,8 +100,6 @@ use crate::engine::{Bounds, Capture};
 use crate::engine_buffers::Returned;
 use crate::engine_session::EngineSession;
 
-use crate::bands::{Bands, Next};
-use crate::chrome_frame::{what_arrived, Arrival, Buffer};
 use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
@@ -122,10 +115,8 @@ use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::session::{publish, Session};
-use domicile_protocol::band_label::band_in;
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Shortcut};
-use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
-use smithay::backend::renderer::{ExportMem as _, ImportMem as _, Texture as _};
+use smithay::backend::renderer::gles::GlesRenderer;
 
 /// The log messages *this change's* scripts and tests grep for, pinned to them.
 ///
@@ -186,18 +177,6 @@ mod grepped {
     /// came up at, which is the first thing to read when a chrome is laid out
     /// for the wrong screen.
     pub const ADVERTISING: &str = "advertising output scale";
-    /// A chrome frame recognised as the band it says it is: the only trace
-    /// the label's read-back leaves, and the whole of what says the round trip
-    /// closed rather than stalled.
-    ///
-    /// Nothing greps it any more. `e2e-bands.sh` did, and went with Electron:
-    /// its whole subject was a label read off a frame a *real browser*
-    /// painted, and no stand-in can stand in for that — a client painting the
-    /// bytes the reader expects asserts this repository against itself. The
-    /// only real browser left is the fork, and the fork does not composite the
-    /// chrome in bands; its own layer tree does. So this is a line to read
-    /// rather than a line a check turns on.
-    pub const BAND_ANSWERED: &str = "a band answered";
 }
 
 /// The renderer client buffers are imported on.
@@ -281,11 +260,6 @@ enum ClientRequest {
     /// The chrome claimed a key combination for the desktop.
     GrabShortcut {
         shortcut: Shortcut,
-    },
-    /// The chrome's display density changed; re-advertise the output scale so
-    /// clients redraw at the resolution the screen actually has.
-    DeclareBands {
-        depths: Vec<i32>,
     },
     SetOutputScale {
         scale: i32,
@@ -596,12 +570,11 @@ fn report(window: &mut FrameWindow, hub: &Arc<ChromeHub>) {
 ///
 /// The writer thread already knows its own half — how many frames it sent and
 /// how long the socket took — and that half alone cannot say why the rate is
-/// what it is. A compositor spending every millisecond in the GPU readback and
+/// what it is. A compositor spending every millisecond handling commits and
 /// one sitting idle between a client's commits look identical from there.
 #[derive(Default)]
 struct FrameTimings {
-    /// Time handling one commit end to end — the readback plus everything the
-    /// Wayland thread does around it.
+    /// Time handling one commit end to end, on the Wayland thread.
     commit: TimingWindow,
     /// Time between one commit finishing and the next arriving: the client's
     /// half, and the throttle's. Large here means we are waiting, not working.
@@ -931,13 +904,6 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                 });
                 Vec::new()
             }
-            // Compositor-level for the same reason as the density above: what
-            // depths the chrome draws at is what the compositor interleaves
-            // windows with, and the brain models neither.
-            Ok(ChromeMessage::DeclareBands { depths }) => {
-                hub.send_request(ClientRequest::DeclareBands { depths });
-                Vec::new()
-            }
             // A resize drives both the client's configure and the brain's model.
             Ok(ChromeMessage::ResizeApp { app_id, size }) => {
                 hub.send_request(ClientRequest::ConfigureApp {
@@ -1126,10 +1092,6 @@ struct DomicileCompositor {
     /// A counter that wrapped would report a redraw as no change once in
     /// 2^64 commits, which is not a number of frames anything here will see.
     content: HashMap<String, u64>,
-    /// Each app's latest surface as a texture, when presenting. Kept rather
-    /// than read back and dropped: this *is* the client's buffer, and drawing
-    /// it is what costs nothing.
-    textures: HashMap<String, SurfaceTexture>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
     /// The app the pointer is currently over, so a `set_cursor` request can be
@@ -1153,23 +1115,6 @@ struct DomicileCompositor {
     chrome_toplevel: Option<ToplevelSurface>,
     /// The chrome's latest surface as a texture. Transparent wherever an
     /// `<app>` element is, which is what lets the app below show through.
-    chrome_texture: Option<SurfaceTexture>,
-    /// Which band the chrome is being asked for, and which have answered.
-    bands: Bands,
-    /// The texture each answered band committed, by its index in `bands`.
-    ///
-    /// A band is a full-size raster that is transparent wherever that depth
-    /// paints nothing, so these are drawn whole and in depth order rather than
-    /// clipped: nothing in them was flattened together, which is the entire
-    /// reason for asking separately. Kept between frames because asking is a
-    /// round trip — a desktop that has not repainted redraws from these.
-    band_textures: HashMap<usize, SurfaceTexture>,
-    /// Whether `chrome_texture` arrived under the depths declared now. False
-    /// from the moment they change until the chrome commits a whole page
-    /// again — which, while it is being asked for bands, it never does.
-    chrome_is_current: bool,
-    /// Frames held since the depths last changed. See `bands::hold_the_frame`.
-    frames_held: u32,
     /// Clients already told their shm buffer cannot be shown. A client commits
     /// at its frame rate and the refusal does not change, so it is said once
     /// each rather than once a frame.
@@ -1252,9 +1197,9 @@ struct DomicileCompositor {
     stop: Arc<AtomicBool>,
     /// The forked engine, when `--engine-socket` asked for one.
     ///
-    /// `None` is the compositor as it has always been: a client's pixels are
-    /// read back and sent to the chrome. `Some` submits the client's own dmabuf
-    /// to viz instead, and with it takes on holding `wl_buffer.release` until
+    /// `None` is a compositor with no path to a window at all — said at
+    /// startup rather than left to be discovered. `Some` submits the client's
+    /// own dmabuf to viz, and with it takes on holding `wl_buffer.release` until
     /// viz is done sampling — see [`engine_session::EngineSession`].
     engine: Option<EngineSession>,
 }
@@ -1328,28 +1273,20 @@ impl DomicileCompositor {
             .map(|(app_id, toplevel)| (Committer::App(app_id.clone()), toplevel.clone()))
     }
 
-    /// Keep the chrome's latest frame as the texture drawn over the apps.
+    /// Say what shape the chrome's frame is, when it changes.
     ///
-    /// Unthrottled, unlike an app's: this is the desktop, and a frame of it
-    /// dropped is the whole picture going stale rather than one window's.
+    /// The compositor does not draw it — the engine does — so nothing is kept.
+    /// What this is for is the one line that says what the desktop is made of:
+    /// which kind of buffer, at what size, and which way up.
+    /// `e2e-chrome-fills-the-desktop.sh` reads the size out of it.
     fn publish_chrome_frame(
         &mut self,
         buffer: &wl_buffer::WlBuffer,
         buffer_scale: i32,
         viewport: Viewport,
     ) {
-        // A buffer this cannot read is still a *commit*, and the chrome
-        // believes it answered — so it is sorted like any other frame rather
-        // than returned on. Returning early here left the question standing
-        // with nothing to answer it, and the chrome stopped updating for the
-        // rest of the run.
-        let (came, texture) = match committed_buffer(buffer) {
-            Some(committed) => match self.texture_from(committed, buffer_scale, viewport) {
-                Some(texture) => (Buffer::Textured, Some(texture)),
-                None => (Buffer::Readable, None),
-            },
-            None => (Buffer::Unreadable, None),
-        };
+        let texture = committed_buffer(buffer)
+            .and_then(|committed| self.texture_from(committed, buffer_scale, viewport));
         // Once, and again whenever what arrives changes shape. This is the one
         // line that says what the desktop is actually made of — which kind of
         // buffer, at what size, and which way up — and a picture that is the
@@ -1376,126 +1313,6 @@ impl DomicileCompositor {
                 None => info!("the chrome's frame could not be made into a texture"),
             }
         }
-        // What this frame *is* — see `chrome_frame`, which is where that is
-        // decided and where it can be tested. Everything below is applying the
-        // answer to state this method owns.
-        let asked = self.bands.outstanding();
-        // Read only while a question is outstanding, which is both halves of
-        // the bargain: the chrome may leave its last label up between cycles,
-        // and the compositor pays for a pixel of read-back only while it is
-        // waiting for a band.
-        let said = match (asked, &texture) {
-            (Some(_), Some(surface)) => self.band_labelled_on(surface),
-            _ => None,
-        };
-        let arrived = what_arrived(asked, said, came, !self.bands.depths().is_empty());
-        match arrived {
-            Arrival::Banded(band) => {
-                info!(band, "{}", grepped::BAND_ANSWERED);
-                self.bands.answered();
-                self.band_textures
-                    .insert(band, texture.expect("a banded frame made a texture"));
-                self.ask_for_the_next_band();
-            }
-            Arrival::AskAgain(_) => {
-                self.bands.unusable();
-                self.ask_for_the_next_band();
-            }
-            Arrival::StaleBands => {
-                // The frame is *not* kept as the flattened chrome, though it
-                // is the page's latest: a page being asked for bands answers
-                // by leaving only one of them painting, so this is a picture
-                // of one band and everything else at `opacity: 0`. See
-                // `is_the_whole_page`.
-                self.bands.went_stale();
-                // The pictures are *kept*. They are a frame of the page before
-                // this repaint, which is one frame behind rather than wrong,
-                // and each is replaced as its band answers again. Cleared, a
-                // chrome that repaints every frame would have no complete set
-                // ever again, and the desktop would fall back to the flattened
-                // chrome between one frame and the next.
-                self.ask_for_the_next_band();
-            }
-            Arrival::Chrome => {
-                self.chrome_texture = texture;
-                self.chrome_is_current = true;
-                // A whole page just arrived, so it is the one to read over
-                // each window. Only a whole page: a band is one depth of the
-                // chrome and says nothing about what the others painted, and
-                // the flattened frame is what would hide a window if anything
-                // does.
-            }
-            // Unreachable by construction — the arms above cover every
-            // arrival that carries a usable frame — but stated so that the
-            // one rule about `chrome_texture` is written where it is applied:
-            // only a whole page becomes the flattened chrome.
-            // Nothing was read, so nothing is known and nothing changes.
-            Arrival::Nothing => {}
-        }
-    }
-
-    /// Which band this frame's own pixels say it is.
-    ///
-    /// The label is one pixel at the top-left of the picture — see
-    /// `domicile_protocol::band_label` for why it is in the picture at all —
-    /// and this is the read-back that gets it. A texture rather than the
-    /// buffer, because the buffer is a dmabuf in every case that matters: the
-    /// chrome is a GPU-accelerated browser and its frame never touches the CPU
-    /// on the way in.
-    ///
-    /// `None` for anything that could not be read. A label nobody could read
-    /// is a frame the compositor cannot attribute, which is the same answer as
-    /// a frame with no label: it is not the band that was asked for.
-    fn band_labelled_on(&mut self, surface: &SurfaceTexture) -> Option<usize> {
-        // The top-left of the *picture*. `copy_texture` reads in GL's own
-        // coordinates, whose origin is the first row of the texture — and a
-        // client that rendered with GL hands its buffer over bottom row first,
-        // which is what `y_inverted` says. So the picture's top row is the
-        // texture's last one exactly when the buffer is inverted.
-        let top = if surface.y_inverted {
-            surface.texture.height().saturating_sub(1)
-        } else {
-            0
-        };
-        let corner = Rectangle::new((0, i32::try_from(top).unwrap_or(0)).into(), (1, 1).into());
-        let gpu = self.gpu.as_mut()?;
-        let mapping = match gpu
-            .renderer()
-            .copy_texture(&surface.texture, corner, Fourcc::Abgr8888)
-        {
-            Ok(mapping) => mapping,
-            Err(err) => {
-                tracing::warn!(%err, "a chrome frame's label would not copy");
-                return None;
-            }
-        };
-        let read = match gpu.renderer().map_texture(&mapping) {
-            Ok(read) => read,
-            Err(err) => {
-                tracing::warn!(%err, "a chrome frame's label would not map");
-                return None;
-            }
-        };
-        // The same byte order the shm path uploads in: `Abgr8888` is R, G, B, A
-        // in memory.
-        let pixel = <[u8; 4]>::try_from(read.get(..4)?).ok()?;
-        band_in(pixel)
-    }
-
-    /// Ask the chrome for the next band that has not answered, if any.
-    ///
-    /// One at a time. The frame that answers says which band it is in its own
-    /// pixels — see `domicile_protocol::band_label` — so this is no longer
-    /// what attributes a commit; it is what keeps the answer unambiguous,
-    /// because a label then only has to be told from the band actually asked
-    /// for rather than from every band declared.
-    fn ask_for_the_next_band(&mut self) {
-        let Next::Ask(band) = self.bands.next() else {
-            return;
-        };
-        self.bands.asked(band);
-        let asked = u32::try_from(band).expect("a band index fits a u32");
-        self.hub.broadcast(HostMessage::RenderBand { band: asked });
     }
 
     /// A committed buffer as a texture to draw, whichever kind it is.
@@ -1519,39 +1336,20 @@ impl DomicileCompositor {
         let (logical_width, logical_height) =
             surface_size((width, height), buffer_scale, viewport.destination);
         let logical_size = (f64::from(logical_width), f64::from(logical_height));
-        let gpu = self.gpu.as_mut()?;
         match committed {
             CommittedBuffer::Gpu(dmabuf) => Some(SurfaceTexture {
                 from_dmabuf: true,
-                texture: DmabufImporter::import(gpu.renderer(), &dmabuf)
-                    .expect("a dmabuf the importer accepted imports"),
                 // A client that renders with GL hands the buffer over the way
                 // GL made it, and says so on the buffer.
                 y_inverted: dmabuf.y_inverted(),
                 logical_size,
             }),
-            CommittedBuffer::Pixels { rgba, .. } => {
-                let size = (
-                    i32::try_from(width).unwrap_or(i32::MAX),
-                    i32::try_from(height).unwrap_or(i32::MAX),
-                );
-                match gpu
-                    .renderer()
-                    .import_memory(&rgba, Fourcc::Abgr8888, size.into(), false)
-                {
-                    Ok(texture) => Some(SurfaceTexture {
-                        from_dmabuf: false,
-                        texture,
-                        // Shared memory is described the way it is laid out.
-                        y_inverted: false,
-                        logical_size,
-                    }),
-                    Err(err) => {
-                        tracing::warn!(%err, "a shm buffer would not upload");
-                        None
-                    }
-                }
-            }
+            CommittedBuffer::Pixels { .. } => Some(SurfaceTexture {
+                from_dmabuf: false,
+                // Shared memory is described the way it is laid out.
+                y_inverted: false,
+                logical_size,
+            }),
         }
     }
 
@@ -1766,10 +1564,7 @@ impl DomicileCompositor {
     /// `true` means viz is sampling the client's dmabuf and the caller must not
     /// release it — see the commit path, which is the only caller.
     ///
-    /// There is one path now. The copy path that used to run underneath this —
-    /// read the client's pixels back, send them to the chrome, and let the page
-    /// draw them into a canvas — is gone, and with it the throttle, the damage
-    /// accounting that fed the readback, and the hand-over bookkeeping.
+    /// One path: the buffer goes to the engine or the window does not draw.
     fn publish_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer) -> bool {
         let Some(committed) = committed_buffer(buffer) else {
             return false;
@@ -2531,18 +2326,6 @@ impl DomicileCompositor {
                 // is what tells the two apart.
                 self.enter_the_displays_each_window_is_on();
             }
-            ClientRequest::DeclareBands { depths } => {
-                self.bands.declared(depths);
-                self.band_textures.clear();
-                // The flattened page on hand was committed under the depths
-                // that have just gone. Once a chrome has begun answering
-                // bands, every frame it commits is one band with the rest at
-                // `opacity: 0`, so what is held is from before any of that
-                // began — a picture of a desktop that no longer exists.
-                self.chrome_is_current = false;
-                self.frames_held = 0;
-                self.ask_for_the_next_band();
-            }
             ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
             ClientRequest::SetOutputSize { logical } => self.set_output_size(logical),
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
@@ -2635,18 +2418,18 @@ impl DomicileCompositor {
 
 /// What a client just attached: pixels we can already read (`wl_shm`), or a
 /// GPU buffer that has to go through the renderer first (`zwp_linux_dmabuf`).
-/// A client's latest surface, as something to draw.
+/// What a client's latest commit *is*, as far as the compositor needs to know:
+/// where it came from, which way up, and how big. Not its pixels — those go to
+/// the engine untouched.
 struct SurfaceTexture {
-    texture: GlesTexture,
     /// Whether the client handed over a GPU buffer or shared memory. Recorded
     /// for the log: it is the difference between a frame that cost nothing and
     /// one that cost an upload, and it is not visible in the picture.
     from_dmabuf: bool,
-    /// See [`Layer::y_inverted`]. Smithay records this on the texture but does
-    /// not expose it, so it is kept from where the buffer said so.
+    /// A client that renders with GL hands the buffer over the way GL made it
+    /// and says so on the buffer. Kept from where it said so.
     y_inverted: bool,
-    /// The surface's own size in logical units, which is the box it is drawn
-    /// into. Not the output's: a client that has not answered a configure yet
+    /// The surface's own size in logical units. Not the output's: a client that has not answered a configure yet
     /// is still its old size, and stretching it to the output would hide that
     /// rather than show it.
     ///
@@ -2911,11 +2694,7 @@ fn answers_keystroke(committer: &Committer) -> bool {
 }
 
 enum CommittedBuffer {
-    Pixels {
-        width: u32,
-        height: u32,
-        rgba: Vec<u8>,
-    },
+    Pixels { width: u32, height: u32 },
     Gpu(Dmabuf),
 }
 
@@ -3356,21 +3135,6 @@ impl XdgShellHandler for DomicileCompositor {
         {
             info!("the chrome's toplevel went away");
             self.chrome_toplevel = None;
-            self.chrome_texture = None;
-            // There is no picture of the chrome now and none is coming, so
-            // holding the frame already on screen would hold a dead page's
-            // chrome over live windows for as long as the desktop ran. The
-            // count is what runs the hold out; see `bands::hold_the_frame`.
-            self.chrome_is_current = false;
-            self.frames_held = u32::MAX;
-            // The bands with it. They are that page's rasters, and the
-            // question outstanding is that page's to answer — left standing,
-            // the next page's first commit would be taken for the dead one's
-            // answer, and because a question being outstanding is what routes
-            // a commit away from `chrome_texture`, nothing would ever refill
-            // it: a desktop with no chrome at all until something re-declared.
-            self.bands = Bands::default();
-            self.band_textures.clear();
             let keyboard = self.seat.get_keyboard().unwrap();
             let serial = SERIAL_COUNTER.next_serial();
             keyboard.set_focus(self, None, serial);
@@ -3401,7 +3165,6 @@ impl XdgShellHandler for DomicileCompositor {
             // there for the life of the process.
             self.content.remove(&app_id);
             // And nothing is owed to a canvas that no longer exists.
-            self.textures.remove(&app_id);
             // An app id can come back — a client that reconnects, a portal
             // re-created — and the window it names then is a different one.
             if self.pointer_app.as_deref() == Some(app_id.as_str()) {
@@ -3585,74 +3348,23 @@ fn advertise_dmabuf(
 fn committed_buffer(buffer: &wl_buffer::WlBuffer) -> Option<CommittedBuffer> {
     match get_dmabuf(buffer) {
         Ok(dmabuf) => Some(CommittedBuffer::Gpu(dmabuf.clone())),
-        Err(_) => shm_buffer_to_rgba(buffer).map(|(width, height, rgba)| CommittedBuffer::Pixels {
-            width,
-            height,
-            rgba,
-        }),
+        Err(_) => {
+            shm_buffer_size(buffer).map(|(width, height)| CommittedBuffer::Pixels { width, height })
+        }
     }
 }
 
-/// Copy a wl_shm buffer into row-major RGBA bytes.
+/// How big a `wl_shm` buffer says it is.
 ///
-/// wl_shm ARGB/XRGB8888 are stored little-endian, so a pixel is `[B, G, R, A]`
-/// in memory; we swap to `[R, G, B, A]` for a browser canvas. Only these two
-/// formats are handled (what typical toolkits use); others are skipped.
-fn shm_buffer_to_rgba(buffer: &wl_buffer::WlBuffer) -> Option<(u32, u32, Vec<u8>)> {
-    with_buffer_contents(buffer, |ptr, len, data| {
-        let has_alpha = match data.format {
-            wl_shm::Format::Argb8888 => true,
-            wl_shm::Format::Xrgb8888 => false,
-            _ => return None,
-        };
-        let (w, h) = (data.width.max(0) as usize, data.height.max(0) as usize);
-        let stride = data.stride.max(0) as usize;
-        let offset = data.offset.max(0) as usize;
-        // Safety: valid for the duration of this callback (per with_buffer_contents).
-        let src = unsafe { std::slice::from_raw_parts(ptr, len) };
-        bgra_to_rgba(src, w, h, stride, offset, has_alpha).map(|rgba| (w as u32, h as u32, rgba))
+/// The size and nothing else: the engine takes a dmabuf, and an shm client's
+/// window is refused rather than drawn — see `publish_frame`. What this
+/// answers is which kind of buffer arrived, so that the refusal can say so.
+fn shm_buffer_size(buffer: &wl_buffer::WlBuffer) -> Option<(u32, u32)> {
+    with_buffer_contents(buffer, |_ptr, _len, data| {
+        Some((data.width.max(0) as u32, data.height.max(0) as u32))
     })
     .ok()
     .flatten()
-}
-
-/// Convert an ARGB/XRGB8888 buffer (`[B, G, R, A]` per pixel in memory) into
-/// tightly-packed RGBA, honouring `stride` padding. Returns `None` if the source
-/// is too small for the described geometry.
-///
-/// The alpha stays **premultiplied**, which is what a client committed and what
-/// the compositor's own shaders expect. Undoing it is the page's business and
-/// happens where the bytes are handed to the page — see `publish_frame`. Doing
-/// it here would reach both consumers of a decoded buffer, and the other one
-/// draws it.
-fn bgra_to_rgba(
-    src: &[u8],
-    width: usize,
-    height: usize,
-    stride: usize,
-    offset: usize,
-    has_alpha: bool,
-) -> Option<Vec<u8>> {
-    if width == 0
-        || height == 0
-        || stride < width * 4
-        || offset + (height - 1) * stride + width * 4 > src.len()
-    {
-        return None;
-    }
-    let mut out = vec![0u8; width * height * 4];
-    for y in 0..height {
-        let row = offset + y * stride;
-        for x in 0..width {
-            let i = row + x * 4;
-            let o = (y * width + x) * 4;
-            out[o] = src[i + 2]; // R
-            out[o + 1] = src[i + 1]; // G
-            out[o + 2] = src[i]; // B
-            out[o + 3] = if has_alpha { src[i + 3] } else { 255 };
-        }
-    }
-    Some(out)
 }
 
 /// Translate a client's requested cursor into the CSS keyword the chrome
@@ -3874,8 +3586,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //
     // **Without the flag there is no path to a window at all**, now that the
     // copy path is gone. That is a running configuration rather than a
-    // mistake — every check in `scripts/` drives the chrome, input, displays
-    // and bands, none of which need a client's pixels, and none of them has a
+    // mistake — every check in `scripts/` drives the chrome, input and
+    // displays, none of which need a client's pixels, and none of them has a
     // Chromium build to point at. So it is allowed and it is *said*: a
     // compositor that shows no window has to give the reason, whether the
     // reason is a failure or a choice.
@@ -3910,17 +3622,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         hub,
         bridge: BridgeRegistry::new(),
         content: HashMap::new(),
-        textures: HashMap::new(),
         toplevels: Vec::new(),
         pointer_app: None,
         start: Instant::now(),
         last_frame: HashMap::new(),
         last_commit: None,
         pending_key: None,
-        bands: Bands::default(),
-        band_textures: HashMap::new(),
-        chrome_is_current: false,
-        frames_held: 0,
         shm_refused: HashSet::new(),
         first_frame_logged: HashSet::new(),
         last_probe: None,
@@ -3932,7 +3639,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         probe_boxes: HashMap::new(),
         find_settled: false,
         chrome_toplevel: None,
-        chrome_texture: None,
         chrome_frame_shape: None,
         screens,
         modifiers: Held::default(),
@@ -4242,10 +3948,9 @@ mod tests {
     use domicile_protocol::CursorShape;
 
     use super::{
-        announce_open_apps, answers_keystroke, bgra_to_rgba, broadcast_closed,
-        broadcast_focus_decision, channel, chrome_connection, client_command, cursor_shape,
-        freshened, parse_find_colours, to_line, unmounts_the_element, write_responses, ChromeHub,
-        ClientRequest, Committer, Outbound,
+        announce_open_apps, answers_keystroke, broadcast_closed, broadcast_focus_decision, channel,
+        chrome_connection, client_command, cursor_shape, freshened, parse_find_colours, to_line,
+        unmounts_the_element, write_responses, ChromeHub, ClientRequest, Committer, Outbound,
     };
 
     use std::sync::Arc;
@@ -4567,12 +4272,10 @@ mod tests {
         // `a_focus_the_chrome_asked_for_comes_back_over_the_socket` does
         // assert a compositor's `focus_changed` reaching a real socket, with
         // one chrome — it took that over from `e2e-input.sh`, which is gone.
-        // `e2e-bands.sh` used to run two at once — the shell and
-        // `band-declarer.ts` — and has gone with Electron; it would not have
-        // helped here regardless, since the shell connected first and so was
-        // the chrome a first-chrome-only fan-out still writes to. Measured:
-        // every check that turns on a message reaching a chrome *other than
-        // the first* is a `Displays` check.
+        // No check runs two chromes at once, so a first-chrome-only
+        // fan-out would still write to the one that connected first.
+        // Measured: every check that turns on a message reaching a chrome
+        // *other than the first* is a `Displays` check.
         //
         // And a fan-out made type-aware — every message to everyone,
         // `FocusChanged` to the first chrome only — passes the Rust suite
@@ -4886,39 +4589,6 @@ mod tests {
         // must still resolve to something the chrome can assign.
         assert_eq!(cursor_shape(CursorIcon::DndAsk), CursorShape::Default);
         assert_eq!(cursor_shape(CursorIcon::AllResize), CursorShape::Move);
-    }
-
-    #[test]
-    fn swaps_b_and_r_and_keeps_alpha() {
-        // two pixels: [B,G,R,A] = [10,20,30,255], [50,60,70,255].
-        //
-        // Opaque, so this reads the channel order and nothing else: at alpha
-        // 255 undoing the premultiply is the identity. What it does to a
-        // translucent pixel is `premultiplied_colour_is_divided_back_out`.
-        let src = [10, 20, 30, 255, 50, 60, 70, 255];
-        let out = bgra_to_rgba(&src, 2, 1, 8, 0, true).unwrap();
-        assert_eq!(out, vec![30, 20, 10, 255, 70, 60, 50, 255]);
-    }
-
-    #[test]
-    fn xrgb_forces_opaque_alpha() {
-        let src = [10, 20, 30, 0];
-        let out = bgra_to_rgba(&src, 1, 1, 4, 0, false).unwrap();
-        assert_eq!(out, vec![30, 20, 10, 255]);
-    }
-
-    #[test]
-    fn honours_stride_padding() {
-        // 1px wide, 2 rows, stride 8 (4 bytes pixel + 4 bytes padding).
-        // Opaque, for the same reason as `swaps_b_and_r_and_keeps_alpha`.
-        let src = [1, 2, 3, 255, 0, 0, 0, 0, 5, 6, 7, 255, 0, 0, 0, 0];
-        let out = bgra_to_rgba(&src, 1, 2, 8, 0, true).unwrap();
-        assert_eq!(out, vec![3, 2, 1, 255, 7, 6, 5, 255]);
-    }
-
-    #[test]
-    fn rejects_undersized_buffers() {
-        assert!(bgra_to_rgba(&[0, 0, 0], 2, 2, 8, 0, true).is_none());
     }
 
     /// Six digits mean opaque, because the window's pixels are and a colour

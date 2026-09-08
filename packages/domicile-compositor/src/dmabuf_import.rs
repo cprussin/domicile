@@ -1,14 +1,11 @@
-//! The GPU half of the dmabuf path: importing a client's buffer and reading it
-//! back as pixels the chrome can draw.
+//! Which device a client may allocate on, and whether a buffer it sent can be
+//! imported at all.
 //!
-//! Domicile's renderer is a web engine, so this is deliberately *not* a scene
-//! renderer — it draws exactly one texture into an offscreen buffer and copies
-//! it out. That copy is the stopgap the roadmap calls out: the dmabuf reaches
-//! the engine as `AppFrame` pixels today, and stops being copied at all once
-//! the compositor composites it directly
-//! (`docs/architecture/WINDOW-COMPOSITING.md`). What matters now is that a GPU
-//! client's frames arrive at all — `wl_shm` is the only path a modern toolkit
-//! will not take.
+//! The compositor draws nothing: a client's dmabuf goes to the engine, which
+//! composites it. What is needed here is the part that has to happen before
+//! that — advertising `zwp_linux_dmabuf_v1` against a real render node, so a
+//! client knows which GPU to allocate on, and answering whether a buffer it
+//! committed is one EGL can take.
 //!
 //! Everything but the device policy is glue over EGL/GLES that cannot run
 //! without a GPU, so it is deliberately thin: the buffer bookkeeping lives in
@@ -17,7 +14,7 @@
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::egl::{EGLContext, EGLDevice, EGLDisplay};
-use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
+use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportDma as _;
 
 use std::os::unix::fs::MetadataExt as _;
@@ -102,18 +99,6 @@ impl DmabufImporter {
     /// import notifier before the client can commit it.
     pub fn accepts(renderer: &mut GlesRenderer, dmabuf: &Dmabuf) -> bool {
         renderer.import_dmabuf(dmabuf, None).is_ok()
-    }
-
-    /// Import `dmabuf` as a texture to be *drawn*, not copied out.
-    ///
-    /// This is the path that makes a window cost nothing: the client's own
-    /// buffer becomes the texture the compositor samples, with no readback and
-    /// no trip through the chrome.
-    pub fn import(
-        renderer: &mut GlesRenderer,
-        dmabuf: &Dmabuf,
-    ) -> Result<GlesTexture, ImportError> {
-        Ok(renderer.import_dmabuf(dmabuf, None)?)
     }
 }
 

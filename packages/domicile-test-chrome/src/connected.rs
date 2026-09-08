@@ -111,7 +111,7 @@ impl Chrome {
     /// because nothing promises the order two kinds of message arrive in.
     ///
     /// Everything read on the way is kept, and the failure carries it: "the
-    /// compositor never sent a `render_band`" is half an answer, and the other
+    /// compositor never sent that message" is half an answer, and the other
     /// half is what it sent instead.
     pub fn wait_for(
         &mut self,

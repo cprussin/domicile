@@ -273,7 +273,7 @@ Clients, for testing:
 Inside `domicile-compositor`: `screens.rs` is what the desktop is made of;
 `dmabuf_import.rs` the import; `engine.rs`, `engine_session.rs` and
 `engine_buffers.rs` the seam to the fork and what it holds; `outbound.rs` the
-queue to the chrome; `scale.rs`, `viewport.rs`, `bands.rs`, `coalesce.rs`,
+queue to the chrome; `scale.rs`, `viewport.rs`, `coalesce.rs`,
 `timing_window.rs`, `modifiers.rs`, `latency.rs` are each one small thing named
 after itself.
 

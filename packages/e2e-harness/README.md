@@ -87,8 +87,8 @@ desktop assertions moved into `packages/domicile-compositor/tests/desktop.rs`,
 on the expectation that the client-driven probes would grow back; they did not,
 and its last caller went with `reload-displays-probe.ts`. Deleted rather than
 kept for a caller that never arrived. `src/waiting.ts` went the same way: it
-was `rest`, the sleep a probe with nothing to poll takes, and its two callers
-were the typist and the band declarer.
+was `rest`, the sleep a probe with nothing to poll takes, and its callers
+went with the scripts they served.
 
 `src/chrome-socket.ts` is the shared connection: newline-delimited JSON framing
 from [`@domicile/chrome-sdk/newline-frames`](../chrome-sdk/README.md), the

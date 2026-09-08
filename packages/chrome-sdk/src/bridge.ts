@@ -17,7 +17,6 @@ import type {
 import {
   claimPointerMessage,
   closeAppMessage,
-  declareBandsMessage,
   focusAppMessage,
   focusChromeMessage,
   grabShortcutMessage,
@@ -327,24 +326,6 @@ export class BridgeClient {
    */
   setDesktopSize(size: readonly [width: number, height: number]): void {
     this.send(setDesktopSizeMessage(size));
-  }
-
-  /**
-   * Declare the depths this chrome draws at, so windows can go between them.
-   *
-   * The compositor answers by asking for one band at a time over
-   * `render_band`, and takes the chrome's **next commit** as that band. So a
-   * chrome that declares depths takes on an obligation: while a band is
-   * outstanding, do not paint anything else. A repaint of its own — a clock, a
-   * caret, a hover — is a commit the compositor cannot tell from the answer,
-   * and taking it as one files every later band under the wrong depth.
-   *
-   * The page cannot label its own frames, which is why the obligation sits
-   * here rather than in a field on the wire: the Wayland connection belongs to
-   * Chromium, not to the page. See `docs/architecture/WINDOW-COMPOSITING.md`.
-   */
-  declareBands(depths: readonly number[]): void {
-    this.send(declareBandsMessage(depths));
   }
 
   /**
