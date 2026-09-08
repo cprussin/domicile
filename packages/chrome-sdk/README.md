@@ -111,7 +111,7 @@ in. Anything deferred — a `requestAnimationFrame`, a timeout, an await — pai
 the label for a band the page is no longer being asked for.
 
 A shell that never calls this declares nothing and is drawn as one layer over
-every window, which is what every chrome did before bands existed.
+every window.
 
 ### Knowing which modifiers are held
 

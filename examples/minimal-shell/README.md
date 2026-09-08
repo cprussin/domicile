@@ -37,11 +37,8 @@ emit to `.d.ts`, or a `catalog:` that survived into a published manifest.
 |---|---|
 | `src/renderer.ts` | The page: mount a `<domicile-app>` per announced app. The whole of this shell's behaviour — and the whole shell. |
 
-One file, and that is the point. A shell used to be four bundles and a
-launcher — an Electron main process, a preload holding the compositor socket, a
-launcher starting the compositor underneath, and the page. Then it was a page
-and a document. Under the fork the engine is the display compositor, Domicile
-starts it *and* writes the document, so all a shell is now is a module.
+One file, and that is the point. The engine is the display compositor,
+Domicile starts it and writes the document, so a shell is a module.
 
 ## Building and running it
 

@@ -31,16 +31,8 @@ That is the entire interface between a shell and Domicile: a directory with a
 built module in it, called `shell.js`. **Domicile writes the document** — you
 do not ship one, and there is no way to supply your own.
 
-**A shell used to be a program, and this is the change worth knowing about if
-you read an older version of this page.** It was three: a launcher on the
-user's `PATH` that started the compositor, an Electron main process that opened
-a window, and a preload holding the compositor's socket and posting frames
-across the world boundary into the page. Domicile now ships its own Chromium
-fork, in which the browser *is* the display compositor — a client's buffer goes
-into the engine's layer tree rather than being copied into a canvas — so the
-window, the socket and the process are Domicile's, and what is left for a shell
-to be is the page. See
-[ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
+Domicile owns the window, the socket and the process. What is left for a
+shell to be is the page.
 
 So there is no launcher to write, no `bin/` stub, no session to read out of the
 environment, and nothing to install. There are three processes at run time and
@@ -107,10 +99,8 @@ an older SDK connects, is told the two numbers, and says so.
 
 ## Reporting a failure
 
-Say it on the console. Under Electron a page could neither write to a terminal
-nor end the process, so both went over an IPC channel a preload injected; the
-engine has no world boundary, and what a page logs reaches the terminal
-Domicile was started from.
+Say it on the console: what a page logs reaches the terminal Domicile was
+started from.
 
 There is no way for a page to stop the desktop, and it does not need one: a
 refused handshake leaves a page that draws nothing, which is visible, and the
@@ -130,8 +120,7 @@ single output that follows its own window, and a shell has no way to describe a
 two-screen desktop. The compositor's side is built and the shell's side is not
 wired; that is a gap rather than a decision.
 
-`@domicile/chrome-sdk` does not parse that file. `parseDesktop` lived in the
-Electron host package, which is gone; the schema it enforced is the
+`@domicile/chrome-sdk` does not parse that file. Its schema is the
 `domicile-config` crate's, and there is no published TypeScript parser for it
 today.
 

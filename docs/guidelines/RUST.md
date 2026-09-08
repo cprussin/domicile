@@ -28,7 +28,7 @@ nix develop .#full -c cargo build -p domicile-compositor
 nix develop .#full -c cargo test -p domicile-compositor
 ```
 
-Keep that split intact. A new crate that needs GPU, Wayland, or CEF belongs
+Keep that split intact. A new crate that needs a GPU, Wayland or the engine belongs
 outside `default-members` with a comment saying why.
 
 ### A test that needs another crate's binary owns the target

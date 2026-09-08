@@ -22,15 +22,11 @@ Built test-first, from the pure-logic core outward to the hardware glue.
 
 ## Where it stands
 
-**One path.** The compositor is a *producer*: it imports a client's dmabuf and
-submits it to the engine as a viz surface, and the page embeds that surface in
-its `<app>` element. Nothing is copied by the CPU.
-
-Two older paths are gone, and nothing should be written as though they exist:
-the **copy path** (read the client's pixels back, send them over a socket, draw
-them into a `<canvas>`) and **`--present`** (the compositor opening a window and
-drawing the desktop itself). Their machinery — `damage.rs`, `stacking.rs`,
-`compose.rs`, `shortcut.rs`, the readback counters, `AppFrame` — went with them.
+`domicile-compositor` is the Wayland server — Smithay, the globals, the seat,
+the surfaces, the dmabuf import — and it does not draw. Each client's buffer is
+submitted to the engine as a viz surface, and the page embeds that surface in
+its `<app>` element, so nothing is copied by the CPU and the browser's own
+display compositor is what reaches the screen.
 
 The wire protocol is at `PROTOCOL_VERSION = 1`.
 
@@ -161,8 +157,7 @@ new check runs by existing. `smoke-compositor.sh` is outside that loop and is
 run by hand. Every check has a flake app: `nix run .#dev-check`,
 `.#dev-e2e-dmabuf`, and so on, against a fresh checkout with no `node_modules`.
 
-Nothing in the suite needs a display. The three checks that did were the three
-that drove `--present`.
+Nothing in the suite needs a display.
 
 ```sh
 # A desktop, on a machine that has a screen.

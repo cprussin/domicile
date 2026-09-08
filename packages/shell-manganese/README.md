@@ -52,12 +52,9 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/window-styles.ts` | What every window on the stage shares. |
 | `src/domicile-elements.d.ts` | The SDK's custom elements, as JSX. |
 
-There is no main process and no preload. This shell used to be an Electron
-application — a `main.ts` that opened the window, a `preload.ts` that held the
-compositor socket and posted it across the world boundary, and a launcher that
-started the compositor underneath. The fork replaced all of it: the engine is
-the display compositor, the page opens a WebSocket to the bridge serving it,
-and what is left here is the chrome and nothing else.
+There is no main process and no preload. The engine is the display compositor
+and the page opens a WebSocket to the bridge serving it, so what is here is the
+chrome and nothing else.
 
 React owns this DOM, so the chrome writes `<domicile-app>` in JSX rather than
 letting the SDK's `aliasTag` upgrade a short `<app>` tag — a MutationObserver
@@ -254,9 +251,7 @@ to it. `./scripts/run-engine.sh <chromium/src>` does the same from a checkout.
 `bun run --filter @domicile/shell-manganese start:dev` runs this shell in a real
 desktop and rebuilds it as you edit: the engine the flake pins, the compositor
 and the bridge built out of this checkout, and the page reloading itself when
-vite finishes a build. It used to be Vite's dev server in whatever browser you
-had, which is a page with no compositor and therefore no windows — the chrome
-with everything in it missing, which is a misleading thing to look at.
+vite finishes a build.
 
 `styled-system/` is Panda's generated output, produced by `bun run prepare`
 (run automatically as a turbo dependency of the build, type check, and tests)
