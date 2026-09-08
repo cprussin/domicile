@@ -180,10 +180,31 @@ if ! (cd "$ROOT" &&
 fi
 rm -f "$BUILD_LOG"
 PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
-[ -f "$PAGE_DIR/index.html" ] || {
-  annotate "spike-shell: $SHELL_NAME built no index.html in $PAGE_DIR"
+
+# WHAT A SHELL IS, AND WHAT IT STOPPED BEING. A shell in this workspace builds
+# to one JavaScript module — `shellBuild` emits `shell.js` and no document,
+# because Domicile writes the document — so requiring an `index.html` here
+# refused a build that had succeeded, in fourteen seconds, with all three of
+# this guard's logs empty.
+#
+# It had been wrong since the shells stopped emitting one. `run-engine.sh` and
+# `test-out-of-tree-shell.sh` were both updated in that change and this, the
+# third caller, was not — and nothing said so, because `engine.yml` runs only
+# on `packages/domicile-engine/**` and that change touched none of it. The
+# first thing to run this guard afterwards was an unrelated pull request.
+#
+# Both shapes are taken, in `run-engine.sh`'s order and for its reasons: a
+# module by the name `shellBuild` pins for it, or a document for a shell that
+# predates the module. Which one was found is what the bridge is told —
+# `DOMICILE_MODULE` or `DOMICILE_ROOT`, never both, because the bridge refuses
+# a shell named twice.
+MODULE=""
+if [ -f "$PAGE_DIR/shell.js" ]; then
+  MODULE="$PAGE_DIR/shell.js"
+elif [ ! -f "$PAGE_DIR/index.html" ]; then
+  annotate "spike-shell: $SHELL_NAME built neither a shell.js nor an index.html in $PAGE_DIR"
   exit 1
-}
+fi
 
 export XDG_RUNTIME_DIR="$RUNTIME"
 COMP_SOCK="$RUNTIME/domicile-shell.sock"
@@ -200,9 +221,15 @@ rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 # on a debug build on a loaded runner is minutes. A session that gave up in
 # between would leave the page with a dead transport and the guard would report
 # that the shell never joined, which is not the thing it guards.
-DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_ROOT="$PAGE_DIR" \
-DOMICILE_REACH_MS="${DOMICILE_REACH_MS:-600000}" \
-  bun "$ROOT/packages/engine-chrome-host/src/main.ts" >"$BRIDGE_LOG" 2>&1 &
+if [ -n "$MODULE" ]; then
+  DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_MODULE="$MODULE" \
+  DOMICILE_REACH_MS="${DOMICILE_REACH_MS:-600000}" \
+    bun "$ROOT/packages/engine-chrome-host/src/main.ts" >"$BRIDGE_LOG" 2>&1 &
+else
+  DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_ROOT="$PAGE_DIR" \
+  DOMICILE_REACH_MS="${DOMICILE_REACH_MS:-600000}" \
+    bun "$ROOT/packages/engine-chrome-host/src/main.ts" >"$BRIDGE_LOG" 2>&1 &
+fi
 STARTED+=($!)
 
 URL=""
