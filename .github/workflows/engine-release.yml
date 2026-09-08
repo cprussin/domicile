@@ -32,6 +32,10 @@ jobs:
     env:
       CHROMIUM: /build/chromium/src
 
+      # Who holds the tree lock, in words a person reading a held-lock message
+      # can act on. See engine.yml.
+      LOCK_OWNER: engine-release.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+
       # `git am` refuses to write a commit without an identity, and this unit
       # has no ~/.gitconfig: its HOME is the work directory, which is deleted
       # on every start. See engine.yml, where this failed the apply step in
@@ -67,6 +71,15 @@ jobs:
             exit 1
           }
 
+      # ONE WRITER AT A TIME IN THAT CHECKOUT. The concurrency group above
+      # keeps these two workflows apart from each other; it says nothing about
+      # the person or the agent building in the same tree by hand, and a reset
+      # landing inside their build links a binary compiled from two trees
+      # without failing. Held until the last step that reads the tree.
+      # See .github/scripts/engine-tree-lock.sh.
+      - name: Take the tree
+        run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
+
       - name: Check the tree is at the pin this series expects
         run: |
           set -euo pipefail
@@ -77,25 +90,14 @@ jobs:
             exit 1
           }
 
-      # The series' own files are untracked in Chromium's repository, so
-      # `reset --hard` leaves them and `apply.sh` then refuses the tree as
-      # dirty. See engine.yml, which had this hole and used five runs' worth of
-      # stale sources before anything noticed — a command run through
-      # NIX_SHELL_RUN does not reliably carry its exit status out here either.
+      # The same script engine.yml resets with, because it is the same tree
+      # and the same reset. This one used to be a second copy of it, already
+      # drifted in the order of its steps.
       - name: Reset the checkout to the pin and apply the series
         run: |
           set -euo pipefail
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-          git -C "$CHROMIUM" am --abort 2>/dev/null || true
-          git -C "$CHROMIUM" reset --hard "$pin"
-          # See engine.yml: in the checkout's config rather than the
-          # environment, because apply.sh runs inside a bwrap FHS shell.
-          git -C "$CHROMIUM" config user.name "domicile CI"
-          git -C "$CHROMIUM" config user.email "ci@domicile.invalid"
-          (cd packages/domicile-engine/src && find . -type f -print0) |
-            while IFS= read -r -d '' file; do
-              rm -f "$CHROMIUM/${file#./}"
-            done
+          .github/scripts/engine-reset.sh "$CHROMIUM"
           # Directly, not through Chromium's shell: apply.sh needs no host
           # tool, and the sandbox swallowed both its exit status and its
           # output. See engine.yml.
@@ -188,3 +190,8 @@ jobs:
             echo "::endgroup::"
           done
           df -h /build || true
+
+      # Only if it is still ours — see engine.yml.
+      - name: Drop the tree
+        if: ${{ always() }}
+        run: .github/scripts/engine-tree-lock.sh drop "$CHROMIUM" "$LOCK_OWNER"

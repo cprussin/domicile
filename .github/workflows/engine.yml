@@ -14,9 +14,20 @@ name: Engine
 on:
   push:
     branches: [main]
-    paths: [packages/domicile-engine/**, .github/workflows/engine.yml]
+    # `.github/scripts/engine-*.sh` because the steps below are those scripts.
+    # Without them a change to the reset, the lock or the diagnostics is a
+    # change to this job that this job does not run on, and the first thing to
+    # find out would be a release. Written out twice rather than anchored:
+    # GitHub's workflow parser does not resolve YAML anchors.
+    paths:
+      - packages/domicile-engine/**
+      - .github/workflows/engine.yml
+      - .github/scripts/engine-*.sh
   pull_request:
-    paths: [packages/domicile-engine/**, .github/workflows/engine.yml]
+    paths:
+      - packages/domicile-engine/**
+      - .github/workflows/engine.yml
+      - .github/scripts/engine-*.sh
   workflow_dispatch:
 
 # Serialised, and never cancelled mid-flight.
@@ -62,6 +73,12 @@ jobs:
       # Re-creating 97G is what this job is built to avoid.
       CHROMIUM: /build/chromium/src
 
+      # Who holds the tree lock, in words a person reading a held-lock message
+      # can act on: it names the workflow to look at and the run to open. The
+      # attempt is in it because a re-run is a different holder — the first
+      # attempt's `drop` and the second's `take` must not be able to agree.
+      LOCK_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+
       # `apply.sh` ends in `git am`, which writes commits, and git refuses to
       # write one without an identity. The runner's HOME is the work directory
       # — deleted and recreated on every start — so there is no ~/.gitconfig
@@ -106,6 +123,19 @@ jobs:
       # Domicile's shell is an ordinary mkShell, so `--command` is fine there.
       # See cprussin/dotfiles chromium-build.nix, which measured all of this.
 
+      # ONE WRITER AT A TIME IN THAT CHECKOUT, and the reason is not the
+      # obvious one. A reset that clobbers somebody's uncommitted work is loud,
+      # and the reset step's diagnostic explains it. A reset that lands *during
+      # their build* is silent: siso carries on and links a binary compiled
+      # from two different trees. Taken here rather than around the reset,
+      # because the tree stays ours until the last step that reads it.
+      #
+      # Nothing enforces this. It works because both writers take it. See
+      # .github/scripts/engine-tree-lock.sh, which is also what a person on
+      # `crux` runs before building in that tree by hand.
+      - name: Take the tree
+        run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
+
       - name: Check the tree is at the pin this series expects
         run: |
           set -euo pipefail
@@ -117,56 +147,13 @@ jobs:
             exit 1
           }
 
-      # `apply.sh` is idempotent for `src/` (a copy) and not for `patches/` —
-      # `git am` refuses to apply a patch twice — so the tree has to go back to
-      # the pin before every run.
-      #
-      # AND THE SERIES' OWN FILES HAVE TO GO WITH IT, which `reset --hard` does
-      # not do: they are untracked in Chromium's repository, and `reset` only
-      # touches what is tracked. `apply.sh` refuses a tree that
-      # `git status --porcelain` calls dirty — deliberately, it is not going to
-      # guess — so from the second run onward it stopped before it began, and
-      # because a command run through NIX_SHELL_RUN does not reliably carry its
-      # exit status out, nothing noticed. Every run after the first used the
-      # first one's sources and the first one's build.
-      #
-      # Removed file by file rather than with `git clean`, which would be the
-      # obvious tool and is the wrong one here: `-fd` would also delete
-      # anything else untracked that gclient's hooks put in this tree, and
-      # rebuilding it is four hours. The series knows exactly which files it
-      # lays down, so it removes exactly those.
-      #
-      # `am --abort` first, in case a previous run died mid-series and left the
-      # rebase-apply state behind. It fails when there is nothing to abort,
-      # which is the ordinary case.
+      # In a script, and shared with engine-release.yml, which resets the same
+      # tree for the same reason. The two copies of this had already drifted in
+      # the order of their steps; a third copy is what the script prevents. It
+      # also carries the diagnostic for a tree that is still dirty afterwards,
+      # which is long because the cause is not visible from the symptom.
       - name: Reset the checkout to the pin
-        run: |
-          set -euo pipefail
-          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-          git -C "$CHROMIUM" am --abort 2>/dev/null || true
-          git -C "$CHROMIUM" reset --hard "$pin"
-          (cd packages/domicile-engine/src && find . -type f -print0) |
-            while IFS= read -r -d '' file; do
-              rm -f "$CHROMIUM/${file#./}"
-            done
-          dirty="$(git -C "$CHROMIUM" status --porcelain | head -5)"
-          [ -z "$dirty" ] || {
-            echo "::error::$CHROMIUM is still dirty after the reset, so apply.sh will refuse it:" >&2
-            echo "$dirty" >&2
-            exit 1
-          }
-
-          # In this checkout's own config, not the environment. `git am` writes
-          # commits and refuses to without an identity; this unit has no
-          # ~/.gitconfig, because its HOME is the work directory the module
-          # deletes on every start. The GIT_* environment variables would do
-          # it too — except apply.sh runs inside upstream's buildFHSEnv, whose
-          # bwrap hands the command a curated environment, and an identity that
-          # may or may not survive that is not one to depend on. The config
-          # lives in .git/config, which `reset --hard` does not touch and which
-          # is the same file from inside the sandbox.
-          git -C "$CHROMIUM" config user.name "domicile CI"
-          git -C "$CHROMIUM" config user.email "ci@domicile.invalid"
+        run: .github/scripts/engine-reset.sh "$CHROMIUM"
 
       # NOT through Chromium's shell, and that was a mistake worth naming.
       #
@@ -555,3 +542,11 @@ jobs:
       - name: What the guard wrote down
         if: ${{ failure() }}
         run: .github/scripts/engine-diagnostics.sh
+
+      # Even when something above failed, and *only* if it is still ours: the
+      # step that fails because the lock is held by somebody else reaches here
+      # too, and an unconditional `rm` there would release their tree in the
+      # middle of their build.
+      - name: Drop the tree
+        if: ${{ always() }}
+        run: .github/scripts/engine-tree-lock.sh drop "$CHROMIUM" "$LOCK_OWNER"
