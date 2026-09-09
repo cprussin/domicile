@@ -70,20 +70,20 @@ genuinely spawns, and it stays thin enough to read.
   domicile load-shell ./my-desktop/dist/shell.js
   ```
 
-  which replaces the running shell with that one. A watch script then lives
-  entirely outside the runtime — rebuild, then send the command — and it is a
-  two-line loop rather than a mode.
+  which replaces the running shell with that one — **any** shell, not a fresh
+  copy of the one already running. A watch script is then one use of it and
+  lives entirely outside the runtime, but so is switching from `simple` to
+  `manganese` without stopping the desktop, and the windows survive either way
+  because the compositor never hears about it.
 
-  **This is strictly less machinery than what it replaces.** Dev reload today
-  is a token endpoint on the bridge plus a poller written into every served
-  document, asking twice a second, for the life of the desktop, whether the
-  bundle changed. `DEV_RELOAD_PATH`, `buildToken` and `shellDocument`'s
-  injected script all go: a command that arrives when something happened beats
-  a page asking whether anything has.
+  **It is strictly less machinery than what it replaces**, when it lands.
+  Dev reload today is a token endpoint on the bridge plus a poller written into
+  every served document, asking twice a second, for the life of the desktop,
+  whether the bundle changed. `DEV_RELOAD_PATH`, `buildToken` and
+  `shellDocument`'s injected script all go with it.
 
-  It also gives the hot swap its trigger. `announce_open_apps` already makes a
-  chrome reload survivable — a page that reloads is told the desktop and every
-  window already open — and until now nothing but that poller asked for one.
+  **But it lands after `domicile://`, not before.** See *When the transport
+  exists* below.
 
 - **The three components ship beside the binary and are found there.** Not
   passed, and not wrapped in: `domicile` resolves them from its own location,
@@ -122,22 +122,36 @@ The socket goes at `$XDG_RUNTIME_DIR/domicile.sock`, discovered rather than
 passed, because a client that has to be told where the desktop is has to be
 told by something that already knew.
 
-**The supervisor answers it, and routes.** `load-shell` is the bridge's to
-carry out — it is what serves the page — but the next commands are not: asking
-which windows are open is the compositor's, and the one after that may be the
-engine's. A socket owned by whichever process happens to answer the first
-command is a socket that moves when the second one lands.
-
-Three hops for `load-shell`, and each already exists as a pipe:
+**The supervisor answers it, and routes.** `load-shell` is carried out by
+whatever serves the page, but the next commands are not: asking which windows
+are open is the compositor's. A socket owned by whichever process happens to
+answer the first command is a socket that moves when the second one lands.
 
 ```
-domicile load-shell ─▶ domicile.sock ─▶ the supervisor ─▶ the bridge ─▶ the page
+domicile load-shell ─▶ domicile.sock ─▶ the supervisor ─▶ the engine ─▶ the page
 ```
 
-The last hop is the only new one. The bridge's WebSocket to the page is a byte
-pipe to the compositor and must stay one, so the reload arrives on a second,
-bridge-owned socket that the written document opens — the same place the
-poller is torn out of, doing the same job by being told instead of asking.
+### When the transport exists
+
+**Not until `domicile://` lands**, and the reason is that the obvious way to
+build it now is scheduled for deletion.
+
+Today the page is reached through the bridge, whose WebSocket is a byte pipe to
+the compositor's control socket. Telling the page to load a different shell
+means either a second bridge-owned socket, or making the bridge a *speaker* of
+a protocol it currently only carries. `ENGINE-FORK.md` deletes the choice
+outright: `domicile://` takes "the HTTP server, the WebSocket, the port, and
+the origin check that guards it — not by hardening them but by leaving nothing
+to harden", moves `shellDocument` into the fork as C++, and makes the control
+channel an IDL binding on the unix socket the engine process already holds.
+
+After that there is no bridge to own a socket, and the hop is the one the
+engine already has. Building the bridge-side version first is building
+something with a known deletion date, and it is the *only* part of this plan
+that has one.
+
+So the poller stays until then. It works, it is dev-only, and replacing it
+twice costs more than leaving it once.
 
 ## Plan
 
@@ -149,33 +163,38 @@ poller is torn out of, doing the same job by being told instead of asking.
 - [ ] `flake.nix`: the three components go where the binary looks, and
       `domicileCli` — the `writeShellApplication` — goes
 - [ ] delete `run-engine.sh` and the three `test-run-engine-*.sh`
-- [ ] the control socket, and `domicile load-shell`
-- [ ] delete `DEV_RELOAD_PATH`, `buildToken` and the document's poller;
-      `dev-shell.sh` becomes a rebuild that sends the command
+- [ ] the control socket, and `domicile load-shell` — **after `domicile://`**,
+      when the hop to the page is the engine's rather than a bridge's
 - [ ] `spike-shell.sh` calls the binary rather than repeating the launch
 
 ## Open questions
 
-- **What the bridge's reload hop is.** The page needs telling, and the session
-  WebSocket is a byte pipe to the compositor that must stay one. Recommendation:
-  a second WebSocket the bridge owns and the written document opens — it is
-  where the poller already is, so nothing new appears in the page, and it keeps
-  `domicile-protocol` out of a question that is not the compositor's. The
-  alternative, a `HostMessage` the bridge injects, makes the bridge a speaker
-  of a protocol it currently only carries.
+- **Whether the bridge survives long enough to be worth compiling.**
+  `domicile://` deletes it, and until then a packaged desktop needs `bun` at
+  run time — which today the flake's `writeShellApplication` supplies through
+  `runtimeInputs`. Removing that wrapper without replacing it ships a desktop
+  that works only where a build chain happens to be installed. **Settled:
+  compile it** — `bun build --compile` makes `libexec/domicile/bridge` a thing
+  that runs, which is what a sibling has to be, and it is right on any machine
+  rather than only under nix. Short-lived, and worth it: the alternative is
+  keeping a wrapper for one `PATH` entry after everything else it did is gone.
 
-- **Whether the bridge can ship as an executable.** It is run as `bun <entry>`
-  today, and the flake's wrapper is what puts `bun` on `PATH`. Found by
-  siblings, `libexec/domicile/bridge` should be a thing that runs rather than a
-  script needing an interpreter that may not be installed — which is what
-  `bun build --compile` produces. Recommendation: compile it, because the
-  alternative is keeping a wrapper for one `PATH` entry after everything else
-  it did has gone.
+- **Whether `load-shell` restarts anything.** It switches the shell; the
+  desktop underneath it does not move. `announce_open_apps` already tells a
+  page that has just loaded the desktop and every window open on it, so
+  switching from `simple` to `manganese` keeps the windows. A shell that
+  changed the *compositor's* configuration is a different question and this
+  command does not pretend to answer it.
 
-- **Whether `load-shell` restarts anything.** A new module is a page reload,
-  which the desktop already survives. A shell that changed its *compositor*
-  config is not, and this command does not pretend to be that. Recommendation:
-  `load-shell` reloads the page and nothing else, and says so.
+- **What becomes of the spikes.** Five of the eight are the only end-to-end
+  checks this project has, and `engine.yml` runs them:
+  `spike-client-window`, `spike-two-windows`, `spike-step4`, and
+  `spike-shell` four times over — twice for each shell. Three —
+  `spike-engine`, `spike-dmabuf`, `spike-iframe` — are run by nothing and
+  survive only as references in prose. Recommendation: delete those three with
+  the rest of phase 1's scaffolding, and rename what is left, because a check
+  that gates every engine change is not a spike. Not this doc's work, but it is
+  what the answer to "do we still need the spike" is.
 
 - **Whether `spike-shell.sh` can use the binary at all.** It needs a long
   `DOMICILE_REACH_MS` and its own log capture, and it runs on `crux` where the

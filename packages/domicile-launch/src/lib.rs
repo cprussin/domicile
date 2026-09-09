@@ -13,7 +13,10 @@
 //! string and a temp directory.
 
 pub mod arguments;
+pub mod cli;
 pub mod components;
 pub mod platform;
 pub mod session;
 pub mod shell_path;
+pub mod spawn;
+pub mod supervise;
