@@ -28,8 +28,8 @@ shells together in one tree. A shell's own name is what the flake calls its app
 — `simple`, `manganese` — which is what a user types after `nix run`. A shell
 has no `bin/` entry and nothing to install: it is a built module, and
 `nix run github:cprussin/domicile#simple` is the whole of running one. Out of a
-checkout, `scripts/run-engine.sh <chromium/src> simple` builds the page and
-runs the engine and the compositor against it. The end-to-end scripts drive the
+checkout, `scripts/dev-shell.sh simple` builds the page and runs the engine and
+the compositor against it. The end-to-end scripts drive the
 compositor directly with a stand-in chrome of their own, which is why they name
 a `--chrome-socket` and a `--session` and start no shell at all.
 See `packages/domicile-launch`, which is both halves of the compositor's own

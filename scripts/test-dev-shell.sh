@@ -3,14 +3,15 @@
 #
 # `dev-shell.sh` is four decisions and three processes, and the decisions are
 # the part worth testing: which page directory the desktop is told to serve,
-# that dev mode is switched on, that a published engine is described as its own
-# out directory, and that the compositor and the bridge are left unset so they
-# come out of the checkout. Every one of those is invisible until a desktop
-# starts, and three of the four fail as something else — a blank page, a
-# desktop with no reload in it, a shell that never joins.
+# that dev mode is switched on, and that the compositor and the bridge are the
+# ones out of this checkout rather than whatever sits beside the binary. Every
+# one of those is invisible until a desktop starts, and each fails as something
+# else — a blank page, a desktop with no reload in it, a shell that never
+# joins.
 #
-# The launch is run out of the real script rather than copied, with `nix` and
-# `run-engine.sh` shadowed so nothing is fetched and no browser starts.
+# The launch is run out of the real script rather than copied, with `nix`,
+# `cargo` and `domicile` itself shadowed so nothing is fetched, nothing is
+# built and no browser starts.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,7 +26,7 @@ LAUNCH="$(awk '/^ENGINE="\$\{DOMICILE_ENGINE:-\}"$/,0' "$SCRIPT_UNDER_TEST")"
   exit 1
 }
 case "$LAUNCH" in
-  (*DOMICILE_DEV_RELOAD*run-engine.sh*) ;;
+  (*DOMICILE_DEV_RELOAD*target/debug/domicile*) ;;
   (*) echo "the launch block no longer starts a desktop." >&2; exit 1 ;;
 esac
 
@@ -42,34 +43,45 @@ expect() {
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+CHECKOUT="$WORK/checkout"
+
+# A `bun` that answers, so the bridge shim the launch writes is a thing that
+# actually runs rather than a file that merely exists.
+mkdir -p "$WORK/bin"
+printf '#!/bin/sh\nexit 0\n' >"$WORK/bin/bun"
+chmod +x "$WORK/bin/bun"
 
 # What the desktop was told, in the order a reader cares about it. `env` rather
 # than a fixed list, so a variable that stops being passed shows up as a
 # missing line instead of as nothing at all.
-launch() { # $1 DOMICILE_ENGINE, $2 (optional) OUT
+launch() { # $1 DOMICILE_ENGINE
   (
-    ROOT="$WORK/checkout"
+    PATH="$WORK/bin:$PATH"
+    ROOT="$CHECKOUT"
     SHELL_NAME=simple
     PAGE_DIR="$WORK/page"
     DOMICILE_ENGINE="$1"
-    OUT="${2:-}"
-    [ -n "$OUT" ] || unset OUT
     # `nix` must not be reached for at all when an engine was handed in: a dev
     # loop that fetches something when it was told what to use is a dev loop
     # that needs a network.
     nix() { echo "nix $*" >>"$WORK/nix.log"; echo "$WORK/store-engine"; }
     command() { [ "${2:-}" = "nix" ] && return 0; builtin command "$@"; }
-    mkdir -p "$ROOT/scripts"
-    cat >"$ROOT/scripts/run-engine.sh" <<'STUB'
+    # `cargo` shadowed: the launch builds the two components out of the
+    # checkout now, and this test is about what it hands over rather than
+    # about cargo working.
+    cargo() { echo "cargo $*" >>"$WORK/cargo.log"; }
+    mkdir -p "$ROOT/target/debug"
+    cat >"$ROOT/target/debug/domicile" <<'STUB'
 #!/usr/bin/env bash
-echo "engine=$1"
+echo "shell=$1"
+echo "engine=${DOMICILE_ENGINE:-unset}"
 echo "page=${DOMICILE_PAGE:-}"
 echo "reload=${DOMICILE_DEV_RELOAD:-unset}"
-echo "out=${OUT:-unset}"
 echo "compositor=${DOMICILE_COMPOSITOR:-unset}"
-echo "bridge=${DOMICILE_BRIDGE:-unset}"
+"${DOMICILE_BRIDGE:-/bin/false}" >/dev/null 2>&1 \
+  && echo "bridge-runs=yes" || echo "bridge-runs=no"
 STUB
-    chmod +x "$ROOT/scripts/run-engine.sh"
+    chmod +x "$ROOT/target/debug/domicile"
     eval "$LAUNCH"
   ) 2>&1
 }
@@ -92,19 +104,19 @@ expect "the desktop serves the page the watcher writes" \
   "page=$WORK/page" \
   "$(printf '%s\n' "$handed" | sed -n 's/^page=/page=/p')"
 
-# A published engine *is* its out directory; a Chromium checkout has one under
-# `out/Domicile`. Getting this wrong is "no engine at .../out/Domicile/chrome"
-# against a store path that has a perfectly good chrome in it.
-expect "a published engine is its own out directory" "out=." \
-  "$(printf '%s\n' "$handed" | sed -n 's/^out=/out=/p')"
-
-# Unset is an instruction, not a gap: `run-engine.sh` reads it as "build it out
-# of this checkout", which is the whole reason to develop here rather than
-# against a release.
-expect "the compositor is left for the checkout to build" "compositor=unset" \
+# `domicile` builds nothing, so this script does — and hands over what it
+# built. Unset here would be the desktop looking for components beside a
+# binary in `target/debug`, where nobody installs anything.
+expect "the compositor comes out of this checkout" \
+  "compositor=$CHECKOUT/target/debug/domicile-compositor" \
   "$(printf '%s\n' "$handed" | sed -n 's/^compositor=/compositor=/p')"
-expect "the bridge is left for the checkout to build" "bridge=unset" \
-  "$(printf '%s\n' "$handed" | sed -n 's/^bridge=/bridge=/p')"
+
+# And the bridge is a thing that *runs*: a packaged desktop ships it compiled
+# because an end user has no `bun`, and a checkout gets a shim rather than a
+# hundred megabytes rewritten on every save. Either way `domicile` execs it,
+# so a path to a `.ts` file would be a desktop that starts nothing.
+expect "the bridge is something that can be executed" "bridge-runs=yes" \
+  "$(printf '%s\n' "$handed" | sed -n 's/^bridge-runs=/bridge-runs=/p')"
 
 expect "an engine that was handed in is not fetched again" "" \
   "$(cat "$WORK/nix.log")"
@@ -117,12 +129,6 @@ expect "the pinned engine is fetched when none was given" \
   "$(printf '%s\n' "$fetched" | sed -n 's/^engine=/engine=/p')"
 expect "and it is the flake's own engine that is built" "yes" \
   "$(grep -q '#engine' "$WORK/nix.log" && echo yes || echo no)"
-
-# An override that also says which out directory — a Chromium checkout — keeps
-# its own answer rather than being told it is a published tarball.
-expect "a checkout handed in keeps its own out directory" "out=out/Domicile" \
-  "$(printf '%s\n' "$(launch /build/chromium/src out/Domicile)" |
-       sed -n 's/^out=/out=/p')"
 
 # The refusals, out of the real script, because a message naming a shell that
 # does not exist is the whole of what a typo gets you.

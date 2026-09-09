@@ -50,27 +50,26 @@ hours; see [docs/architecture/ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
 From a checkout:
 
 ```sh
-nix develop .#full -c ./scripts/run-engine.sh <chromium/src>          # manganese
-nix develop .#full -c ./scripts/run-engine.sh <chromium/src> simple
+nix develop .#full -c ./scripts/dev-shell.sh manganese
+nix develop .#full -c ./scripts/dev-shell.sh simple
 ```
 
 To install one rather than run it out of the source, build the shell you want.
-There is no default and nothing called `domicile`: what you install is a
-desktop, and it starts the compositor itself.
 
 ```sh
 nix profile install github:cprussin/domicile#manganese
 nix build github:cprussin/domicile#simple    # ./result/bin/simple
+nix profile install github:cprussin/domicile#domicile   # `domicile` itself
 ```
 
 Configuration is the shell's own, at `$XDG_CONFIG_HOME/domicile/<shell>.json`
 — see its README.
 
-A shell that is run rather than installed builds against your checkout, and
-`scripts/run-engine.sh` takes the four things it needs from the environment —
-`DOMICILE_PAGE`, `DOMICILE_ENGINE`, `DOMICILE_COMPOSITOR`, `DOMICILE_BRIDGE` —
-so an installed desktop names them all and a checkout builds whichever are not
-named. That is what makes `nix run` and a working tree the same command.
+`domicile` is four programs installed together, the way postfix is, and it
+finds the other three from its own path — `bin/domicile-compositor`,
+`libexec/domicile/engine`, `libexec/domicile/bridge`. `DOMICILE_ENGINE`,
+`DOMICILE_COMPOSITOR` and `DOMICILE_BRIDGE` each override one, which is what a
+checkout uses to run against components it just built.
 
 Each shell's README has its keys: [simple](packages/shell-simple/README.md),
 [manganese](packages/shell-manganese/README.md). Joining the desktop from
@@ -80,19 +79,17 @@ the same mechanism under either shell.
 
 ## Write your own shell
 
-The shell is all the user chrome — panels, decorations, launcher — *and* the
-program that starts the compositor. `manganese` and `simple` ship here, but
-neither is privileged: a shell is an ordinary program in its own repository,
-built against `@domicile/chrome-sdk`, installed on your `PATH`, and run by
-name.
+The shell is all the user chrome — panels, decorations, launcher. `manganese`
+and `simple` ship here, but neither is privileged: a shell is a built
+JavaScript module in its own repository, written against
+`@domicile/chrome-sdk`, and handed to `domicile`.
 
 ```sh
-my-shell
+domicile ./my-desktop/dist
 ```
 
-Which is the whole interface. A shell owns its own configuration and starts
-`domicile-compositor` itself, so someone using your desktop never runs anything
-of Domicile's and never configures it directly.
+Which is the whole interface. A shell owns its own configuration, so someone
+using your desktop configures it rather than Domicile.
 
 [docs/WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md) is the guide;
 [examples/minimal-shell](examples/minimal-shell) is a complete one in about two

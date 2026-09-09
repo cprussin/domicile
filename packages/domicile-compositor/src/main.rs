@@ -3564,7 +3564,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // than allocating buffers we would then have to reject.
     // HEADLESS, ALWAYS. `--present` opened a winit window and composited into
     // it with Smithay's GL renderer; it went because nothing ran it. It was
-    // never reachable from `run-engine.sh` or the flake — only from three e2e
+    // never reachable from `domicile` or the flake — only from three e2e
     // scripts, whose whole subject was that path — so what it had was tests
     // and no users.
     //

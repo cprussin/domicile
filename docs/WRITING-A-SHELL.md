@@ -115,9 +115,9 @@ names.
 The compositor takes a `--config` naming a JSON file that describes the
 desktop — the displays, their layout, the keyboard — and watches it for
 changes while it runs. **Nothing passes one under the engine.**
-`scripts/run-engine.sh` starts the compositor without a config, so it runs a
-single output that follows its own window, and a shell has no way to describe a
-two-screen desktop. The compositor's side is built and the shell's side is not
+`domicile` starts the compositor without a config, so it runs a single output
+that follows its own window, and a shell has no way to describe a two-screen
+desktop. The compositor's side is built and the shell's side is not
 wired; that is a gap rather than a decision.
 
 `@domicile/chrome-sdk` does not parse that file. Its schema is the

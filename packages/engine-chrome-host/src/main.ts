@@ -76,7 +76,7 @@ const serving = serveShell({
   ...(reachForMs === undefined ? {} : { reachForMs }),
 });
 
-// The line run-engine.sh reads. Prefixed so that anything else this process
+// The line `domicile` reads. Prefixed so that anything else this process
 // says — the bridge's own complaint about a compositor that never arrived —
 // cannot be mistaken for it.
 process.stdout.write(`domicile: serving ${serving.url}\n`);

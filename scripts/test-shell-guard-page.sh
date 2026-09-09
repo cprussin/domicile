@@ -11,15 +11,15 @@
 #
 # Nothing caught it because `engine.yml` runs only on
 # `packages/domicile-engine/**`, and the change that made the shells emit a
-# module touched `run-engine.sh`, `test-out-of-tree-shell.sh` and both shells —
+# module touched the runner, `test-out-of-tree-shell.sh` and both shells —
 # none of that path. So the two callers that were updated had no way to speak
 # for the third. This test is that: it runs the guard's own resolution, so a
 # shell whose shape changes again fails here, in a check that runs on every
 # push, rather than on whatever engine pull request happens to be next.
 #
 # Both blocks are taken out of the real script rather than copied, as
-# `test-run-engine-inputs.sh` does with `run-engine.sh`: a copy is a thing that
-# passes while the script it stands for does not.
+# `test-dev-shell.sh` does with `dev-shell.sh`: a copy is a thing that passes
+# while the script it stands for does not.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
