@@ -38,17 +38,13 @@ export type ServeOptions = {
   /** The shell's built page. Served as-is; nothing is compiled here. */
   root: string;
   /**
-   * The shell's module, relative to {@link root}, when it has one.
+   * The shell's module, relative to {@link root}.
    *
-   * With it, `/` is a document written to load that module — see
-   * `shell-document.ts` for why Domicile owns that document. Without it, `/`
-   * is `index.html` under {@link root}, which is what a shell built from an
-   * HTML entry still produces.
-   *
-   * Everything else is served from {@link root} either way, this module
-   * included: naming it does not change where it is read from.
+   * `/` is a document written to load it — see `shell-document.ts` for why
+   * Domicile owns that document. Everything else is served from {@link root},
+   * this module included: naming it does not change where it is read from.
    */
-  module?: string;
+  module: string;
   /**
    * Serve the reload token, and put the poller that reads it in the document.
    *
@@ -148,10 +144,9 @@ export const serveShell = (options: ServeOptions): Serving => {
       if (file === undefined) {
         return new Response("not found", { status: 404 });
       }
-      // The document, before anything is read off disk. A shell that is a
-      // module ships no `index.html` — there is nothing on disk to serve here
-      // — and one built from an HTML entry falls through to the file, which is
-      // what the workspace shells still have.
+      // The document, before anything is read off disk. A shell ships no
+      // `index.html` — Domicile writes the document — so there is nothing here
+      // to read.
       //
       // Decided from the *resolved* path rather than from the request's own
       // spelling, and that is the whole of this: `fileForRequest` decodes and
@@ -162,7 +157,7 @@ export const serveShell = (options: ServeOptions): Serving => {
       // defeating, with one character, the property this exists for. Measured
       // over a raw socket, because `fetch` and `URL` normalise `//` away
       // before a server ever sees it.
-      if (module !== undefined && file === documentIn(root)) {
+      if (file === documentIn(root)) {
         return new Response(
           shellDocument(module, reload ? DEV_RELOAD_PATH : undefined),
           {
@@ -339,19 +334,16 @@ const documentIn = (root: string): string =>
  * as long as a desktop is open, and reading a megabyte of bundle to answer it
  * would be the most expensive thing this process does.
  *
- * A module is the thing that changed when a shell is a module; a shell built
- * from an HTML entry has its document rebuilt instead, so that is what is
- * watched there. Either way it is one file, and a build that writes it last —
- * which is what a bundler does, since the entry point names the rest.
+ * One file, and the one a build writes last — which is what a bundler does,
+ * since the entry point names the rest.
  *
  * A file that is missing answers rather than throwing: a `--watch` build
  * rewrites its output, and a poll landing in the middle of that must not take
  * the page down. `gone` is a token like any other, so the reload happens on
  * the next poll, when it is back.
  */
-const buildToken = (root: string, module: string | undefined): string => {
-  const file =
-    module === undefined ? documentIn(root) : path.join(root, module);
+const buildToken = (root: string, module: string): string => {
+  const file = path.join(root, module);
   try {
     const { mtimeMs, size } = statSync(file);
     return `${String(mtimeMs)}:${String(size)}`;

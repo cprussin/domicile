@@ -15,25 +15,23 @@ import path from "node:path";
 
 /** Where a shell is served from, in the shape `serveShell` takes. */
 export type ShellSource = {
-  /** The module the written document loads, if the shell is one. */
-  readonly module?: string;
-  /** The directory served over HTTP. */
+  /** The module the written document loads. */
+  readonly module: string;
+  /** The directory served over HTTP: the one the module is in. */
   readonly root: string;
 };
 
-/** What the launcher said, as the two values rather than the environment.
+/** What the launcher said, as a value rather than the environment.
  *
  * Taken apart by the caller rather than read here, because `ProcessEnv` is an
  * index signature over every variable a machine happens to have and a
- * parameter typed as this one would accept none of it. Naming the two makes
- * the caller say which variables it is passing, which is the thing worth
- * reading at the call site anyway.
+ * parameter typed as this one would accept none of it. Naming it makes the
+ * caller say which variable it is passing, which is the thing worth reading at
+ * the call site anyway.
  */
 export type NamedShell = {
   /** `DOMICILE_MODULE` — a path to the module a shell is. */
   readonly module?: string | undefined;
-  /** `DOMICILE_ROOT` — a directory with a document of its own. */
-  readonly root?: string | undefined;
 };
 
 /**
@@ -48,26 +46,8 @@ export const shellFromEnvironment = async (
   exists: (file: string) => Promise<boolean>,
   refuse: (message: string) => never,
 ): Promise<ShellSource> => {
-  const modulePath = named.module;
-  const root = named.root;
-
-  // One or the other. A caller that sets both has said two different things
-  // about which shell to serve, and there is no reading that makes it one —
-  // the same refusal `run-engine.sh` makes about a page and a path.
-  if (modulePath !== undefined && root !== undefined) {
-    refuse(
-      "domicile: DOMICILE_MODULE and DOMICILE_ROOT both name a shell, and they" +
-        " are not the same instruction. Pass one.",
-    );
-  }
-
-  if (modulePath === undefined) {
-    return {
-      root:
-        root ??
-        refuse("domicile: one of DOMICILE_MODULE or DOMICILE_ROOT is required"),
-    };
-  }
+  const modulePath =
+    named.module ?? refuse("domicile: DOMICILE_MODULE is required");
 
   // Checked before serving rather than 404ing later. A module that is not
   // there produces a document naming a script the browser cannot fetch, which

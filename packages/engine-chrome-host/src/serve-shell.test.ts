@@ -86,20 +86,6 @@ const rawGet = (port: number, pathname: string): Promise<string> =>
   });
 
 describe("serveShell", () => {
-  it("serves the shell's page at the root", async () => {
-    const host = await compositor();
-    await writeFile(
-      path.join(host.dir, "index.html"),
-      "<title>a shell</title>",
-    );
-    const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
-    cleanups.push(() => serving.stop());
-
-    const response = await fetch(serving.url);
-
-    expect(await response.text()).toBe("<title>a shell</title>");
-  });
-
   // WITH A MANIFEST THERE IS NO index.html TO SERVE, and that is the point: a
   // shell ships JavaScript and CSS, and the document it loads in is written
   // here so that no shell can get it wrong. See `shell-document.ts`.
@@ -294,25 +280,13 @@ describe("serveShell", () => {
     expect(await response.text()).toBe("export const x = 1;");
   });
 
-  // A shell that is not a module is one built from an HTML entry, which is
-  // what the workspace's own two still do. Nothing about them changes yet.
-  it("serves the file when the shell is not a module", async () => {
-    const host = await compositor();
-    await writeFile(
-      path.join(host.dir, "index.html"),
-      "<title>on disk</title>",
-    );
-    const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
-    cleanups.push(() => serving.stop());
-
-    expect(await (await fetch(serving.url)).text()).toBe(
-      "<title>on disk</title>",
-    );
-  });
-
   it("answers 404 for a path outside the root", async () => {
     const host = await compositor();
-    const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
+    const serving = serveShell({
+      module: "shell.js",
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
     cleanups.push(() => serving.stop());
 
     const response = await fetch(
@@ -326,7 +300,11 @@ describe("serveShell", () => {
   // talking when the page connects.
   it("carries the compositor's bytes to the page", async () => {
     const host = await compositor();
-    const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
+    const serving = serveShell({
+      module: "shell.js",
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
     cleanups.push(() => serving.stop());
 
     const page = await opened(
@@ -341,7 +319,11 @@ describe("serveShell", () => {
 
   it("carries the page's bytes to the compositor", async () => {
     const host = await compositor();
-    const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
+    const serving = serveShell({
+      module: "shell.js",
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
     cleanups.push(() => serving.stop());
 
     const page = await opened(
@@ -359,7 +341,11 @@ describe("serveShell", () => {
   // never sent.
   it("holds what the page sends before the compositor is connected", async () => {
     const host = await compositor();
-    const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
+    const serving = serveShell({
+      module: "shell.js",
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
     cleanups.push(() => serving.stop());
 
     const socket = new WebSocket(
@@ -395,7 +381,11 @@ describe("serveShell, and who may drive the compositor", () => {
     chosen: (ours: string) => string | undefined,
   ): Promise<boolean> => {
     const host = await compositor();
-    const serving = serveShell({ root: host.dir, socketPath: host.socketPath });
+    const serving = serveShell({
+      module: "shell.js",
+      root: host.dir,
+      socketPath: host.socketPath,
+    });
     cleanups.push(() => serving.stop());
     const where = new URL(serving.url).origin;
     const origin = chosen(where);
@@ -461,7 +451,7 @@ describe("serveShell, before the compositor exists", () => {
     const socketPath = path.join(dir, "chrome.sock");
     cleanups.push(() => rm(dir, { force: true, recursive: true }));
 
-    const serving = serveShell({ root: dir, socketPath });
+    const serving = serveShell({ module: "shell.js", root: dir, socketPath });
     cleanups.push(() => serving.stop());
 
     const socket = new WebSocket(
@@ -501,7 +491,12 @@ describe("serveShell, before the compositor exists", () => {
     const socketPath = path.join(dir, "never.sock");
     cleanups.push(() => rm(dir, { force: true, recursive: true }));
 
-    const serving = serveShell({ reachForMs: 200, root: dir, socketPath });
+    const serving = serveShell({
+      module: "shell.js",
+      reachForMs: 200,
+      root: dir,
+      socketPath,
+    });
     cleanups.push(() => serving.stop());
 
     const socket = new WebSocket(

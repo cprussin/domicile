@@ -72,33 +72,9 @@ describe("shellFromEnvironment", () => {
     ).rejects.toThrow("there is no module at /home/me/gone.js");
   });
 
-  it("serves a root as it is, with no module", async () => {
-    // What a shell built from an HTML entry still is: a directory with its own
-    // document, which `serve-shell` leaves alone.
-    expect(
-      await shellFromEnvironment(
-        { root: "/home/me/older-shell" },
-        notThere,
-        refuse,
-      ),
-    ).toStrictEqual({ root: "/home/me/older-shell" });
-  });
-
-  it("refuses a shell named twice", async () => {
-    // Two different answers to which page to serve, and no reading makes them
-    // one. Obeying either would serve a desktop the caller did not ask for.
-    await expect(
-      shellFromEnvironment(
-        { module: "/a/shell.js", root: "/b" },
-        there,
-        refuse,
-      ),
-    ).rejects.toThrow("both name a shell");
-  });
-
-  it("refuses a shell named neither way", async () => {
+  it("refuses a shell that was not named at all", async () => {
     await expect(shellFromEnvironment({}, there, refuse)).rejects.toThrow(
-      "one of DOMICILE_MODULE or DOMICILE_ROOT is required",
+      "DOMICILE_MODULE is required",
     );
   });
 });

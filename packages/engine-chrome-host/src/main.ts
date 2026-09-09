@@ -8,11 +8,6 @@
 // directory it is in is what gets served, and the document it loads in is
 // written here — see `shell-document.ts`. There is no way to supply one.
 //
-// `DOMICILE_ROOT` serves a directory with its own `index.html` and predates
-// that decision. Nothing uses it: both shells here are modules, and a shell
-// outside this repo is told it cannot ship a document. ROADMAP tracks the
-// deletion.
-//
 // Environment rather than flags because the only caller is a launcher, and a
 // launcher that has to quote paths into an argv is a launcher with a bug in it
 // the first time somebody's checkout has a space in its name.
@@ -45,7 +40,7 @@ const socketPath =
 // the part of this program that is a decision rather than a side effect, and
 // so the part that has tests.
 const shell = await shellFromEnvironment(
-  { module: environment.DOMICILE_MODULE, root: environment.DOMICILE_ROOT },
+  { module: environment.DOMICILE_MODULE },
   (file) => Bun.file(file).exists(),
   refuse,
 );
@@ -69,10 +64,10 @@ const reachForMs = wholeNumberFromEnv(
 const reload = environment.DOMICILE_DEV_RELOAD !== undefined;
 
 const serving = serveShell({
+  module: shell.module,
   root: shell.root,
   socketPath,
   ...(reload ? { reload } : {}),
-  ...(shell.module === undefined ? {} : { module: shell.module }),
   ...(port === undefined ? {} : { port }),
   // How long a page waits for a compositor that has not started yet. The
   // default suits a desktop; a CI runner starting a debug Chromium needs
