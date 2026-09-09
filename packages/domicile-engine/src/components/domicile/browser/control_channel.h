@@ -10,11 +10,13 @@
 #include <vector>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/timer/timer.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/io_buffer.h"
 #include "net/socket/unix_domain_client_socket_posix.h"
@@ -32,7 +34,13 @@ class ControlChannel : public mojom::ControlChannel {
  public:
   // `socket_path` is the compositor's --chrome-socket. `client` is how
   // messages coming the other way reach the page.
-  explicit ControlChannel(const std::string& socket_path);
+  // Owns its own receiver and deletes itself when either end goes away. The
+  // page's end is closed if the compositor never turns up, which is the only
+  // way a shell can tell: resetting just the client remote silences the inbound
+  // direction and leaves the page holding a channel that looks alive and
+  // swallows everything written to it.
+  ControlChannel(const std::string& socket_path,
+                 mojo::PendingReceiver<mojom::ControlChannel> receiver);
 
   ControlChannel(const ControlChannel&) = delete;
   ControlChannel& operator=(const ControlChannel&) = delete;
@@ -101,6 +109,7 @@ class ControlChannel : public mojom::ControlChannel {
   void DispatchLine(const std::string& line);
 
   const std::string socket_path_;
+  mojo::Receiver<mojom::ControlChannel> receiver_;
   mojo::Remote<mojom::ControlChannelClient> client_;
 
   std::unique_ptr<net::UnixDomainClientSocket> socket_;
