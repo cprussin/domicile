@@ -7,13 +7,33 @@
 //! what `wl_buffer.release` means and it is the difference between a window and
 //! a tear.
 //!
-//! Waiting introduces a way to hang that the copy path did not have. A
-//! single-buffered client with one buffer outstanding cannot draw at all, so if
-//! the release never comes it stops forever, and a compositor that quietly
-//! stops a client is the defect `ERRORS.md` exists to prevent. So a hold has a
-//! deadline: past it the buffer is released anyway and the caller is told, loud
-//! enough to debug. A frame that tears once is worse than a frame that does
-//! not; a client that never draws again is worse than both.
+//! Waiting introduces a way to hang that the copy path did not have. A client
+//! whose buffers are all outstanding cannot draw at all, so if a release never
+//! comes it stops forever, and a compositor that quietly stops a client is the
+//! defect `ERRORS.md` exists to prevent. So a hold has a deadline: past it the
+//! buffer is released anyway and the caller is told, loud enough to debug.
+//!
+//! **The deadline applies only to a hold something newer replaced.** Viz hands
+//! a resource back when a later frame supersedes it, which means the newest
+//! hold for a surface is held *because it is the frame on screen* — and stays
+//! held for as long as the client is idle, which is as long as nobody touches
+//! that window. Expiring it takes the buffer the display is reading and gives
+//! it to the client to draw into, then reports viz for holding "a dmabuf it
+//! has finished with", which viz has not.
+//!
+//! That was the behaviour, and the latency guard found it: three of those
+//! errors and two abandoned rounds on each of two runs, identical figures,
+//! because the guard's floor phase holds the screen still for sixty samples on
+//! purpose. Deterministic, so not a race.
+//!
+//! What is left unguarded is a client that renders in place into a single
+//! dmabuf and never submits a second one: its sole hold is its newest, so it
+//! is never taken back. Nothing here has ever seen one — only dmabuf
+//! submissions are held at all (`publish_frame` returns early for anything
+//! else), and a GL client's swapchain is at least double-buffered. A frame
+//! that tears once is worse than a frame that does not; a client that never
+//! draws again is worse than both; a compositor that hands out the buffer
+//! being scanned out is worse still.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -106,13 +126,47 @@ impl<B> HeldBuffers<B> {
         self.held.remove(&(surface, id)).map(|held| held.buffer)
     }
 
-    /// Every buffer that has sat longer than the deadline, taken back so the
-    /// client can draw. The caller is expected to log each one.
+    /// Every *superseded* buffer that has sat longer than the deadline, taken
+    /// back so the client can draw. The caller is expected to log each one.
+    ///
+    /// SUPERSEDED, AND THAT IS THE WHOLE RULE. Viz hands a resource back when
+    /// a newer frame replaces it, so the newest submission for a surface is
+    /// held precisely because it is the one on screen — for as long as the
+    /// client stays idle, which is as long as the user does not touch it.
+    /// Expiring that is not taking back a leaked buffer, it is taking back the
+    /// buffer the display is reading, and handing it to a client to draw into.
+    ///
+    /// It was expiring it, and the latency guard caught it: three of these per
+    /// run and two abandoned rounds, the same figures on two runs, because the
+    /// floor phase holds the screen still for sixty samples by design.
+    ///
+    /// A buffer a *newer* submission replaced is a different thing. Nothing is
+    /// drawing it, nothing will release it, and the client is owed it back.
+    fn latest_for_each_surface(&self) -> HashMap<SurfaceId, Instant> {
+        let mut newest: HashMap<SurfaceId, Instant> = HashMap::new();
+        for ((surface, _), held) in &self.held {
+            newest
+                .entry(*surface)
+                .and_modify(|since| *since = (*since).max(held.since))
+                .or_insert(held.since);
+        }
+        newest
+    }
+
     pub fn expired(&mut self, now: Instant) -> Vec<((SurfaceId, BufferId), B)> {
+        let newest = self.latest_for_each_surface();
         let overdue: Vec<(SurfaceId, BufferId)> = self
             .held
             .iter()
-            .filter(|(_, held)| now.duration_since(held.since) >= self.deadline)
+            .filter(|((surface, _), held)| {
+                // Ties go to the buffer, not to the deadline: two holds
+                // stamped the same instant means neither can be shown to be
+                // the superseded one.
+                newest
+                    .get(surface)
+                    .is_some_and(|latest| held.since < *latest)
+                    && now.duration_since(held.since) >= self.deadline
+            })
             .map(|(key, _)| *key)
             .collect();
         overdue
@@ -165,33 +219,61 @@ mod tests {
         assert_eq!(held.release(SURFACE, 7), None);
     }
 
-    // The hazard this whole module exists for: a client with one buffer cannot
-    // draw until it gets that buffer back, so a release that never arrives is a
-    // client that stops forever. Past the deadline the compositor takes it back
-    // rather than letting that happen.
+    // THE ONE ON SCREEN IS NOT OVERDUE, however long it sits there.
+    //
+    // Measured, twice, on the latency guard: exactly three of these fired on
+    // each run and two rounds were abandoned, which is not what a race looks
+    // like. Viz returns a resource when a *newer* frame supersedes it, so a
+    // client that is idle — which the guard's floor phase deliberately makes
+    // it, for sixty samples of a still screen — has its last buffer held
+    // because that frame is what the display is showing. Taking it back then
+    // hands the client a buffer viz is still sampling and calls it a leak.
     #[test]
-    fn a_buffer_viz_never_releases_is_taken_back_past_the_deadline() {
+    fn the_latest_submission_is_never_overdue() {
         let now = Instant::now();
         let mut held = HeldBuffers::with_deadline(Duration::from_millis(500));
-        held.hold(SURFACE, 7, "buffer", now);
+        held.hold(SURFACE, 7, "on screen", now);
 
         assert!(
-            held.expired(at(now, 499)).is_empty(),
-            "a buffer inside the deadline is viz's to hold"
+            held.expired(at(now, 5_000)).is_empty(),
+            "an idle client's displayed buffer is viz's to hold for as long as \
+             it is displayed"
         );
-        assert_eq!(held.expired(at(now, 500)), vec![((SURFACE, 7), "buffer")]);
-        assert!(held.is_empty(), "and it is not held twice over");
     }
 
+    // And the leak it was written for still is one: viz was handed something
+    // newer, so nothing is drawing the old one and nothing ever will release
+    // it.
     #[test]
-    fn only_the_overdue_buffers_are_taken_back() {
+    fn a_superseded_buffer_viz_never_releases_is_taken_back() {
         let now = Instant::now();
         let mut held = HeldBuffers::with_deadline(Duration::from_millis(500));
         held.hold(SURFACE, 1, "old", now);
         held.hold(SURFACE, 2, "new", at(now, 400));
 
-        assert_eq!(held.expired(at(now, 600)), vec![((SURFACE, 1), "old")]);
-        assert_eq!(held.release(SURFACE, 2), Some("new"));
+        assert!(
+            held.expired(at(now, 499)).is_empty(),
+            "the old one is inside its own deadline, which runs from its own \
+             submission rather than from the one that replaced it"
+        );
+        assert_eq!(held.expired(at(now, 500)), vec![((SURFACE, 1), "old")]);
+        assert_eq!(
+            held.release(SURFACE, 2),
+            Some("new"),
+            "and the one on screen is still there"
+        );
+    }
+
+    // Two surfaces do not supersede each other. Each keeps its own latest.
+    #[test]
+    fn one_windows_new_frame_does_not_strand_anothers() {
+        const OTHER: SurfaceId = 99;
+        let now = Instant::now();
+        let mut held = HeldBuffers::with_deadline(Duration::from_millis(500));
+        held.hold(SURFACE, 1, "mine", now);
+        held.hold(OTHER, 1, "theirs", at(now, 10));
+
+        assert!(held.expired(at(now, 5_000)).is_empty());
     }
 
     // A client that commits the same buffer twice has not given the compositor
@@ -206,10 +288,11 @@ mod tests {
 
         assert_eq!(held.hold(SURFACE, 7, "second", at(now, 400)), Some("first"));
         assert!(
-            held.expired(at(now, 600)).is_empty(),
-            "the deadline runs from the newer submission"
+            held.expired(at(now, 5_000)).is_empty(),
+            "and what is left is the surface's only hold, which is the frame \
+             on screen rather than something viz forgot"
         );
-        assert_eq!(held.expired(at(now, 900)), vec![((SURFACE, 7), "second")]);
+        assert_eq!(held.release(SURFACE, 7), Some("second"));
     }
 
     // A surface that goes away takes its buffers with it: no release will ever
@@ -264,17 +347,21 @@ mod tests {
     // with it, so nothing was ever reported overdue for a client that had in
     // fact stopped.
     #[test]
+    // Each surface is judged on its own submissions, so one window's leak is
+    // taken back while another's displayed buffer is left alone.
     fn each_surfaces_hold_has_its_own_deadline() {
         let now = Instant::now();
         let mut held = HeldBuffers::with_deadline(Duration::from_millis(500));
-        held.hold(SURFACE, 1, "first window", now);
+        held.hold(SURFACE, 1, "leaked", now);
+        held.hold(SURFACE, 2, "on screen", at(now, 10));
         held.hold(SURFACE + 1, 1, "second window", at(now, 400));
 
         assert_eq!(
             held.expired(at(now, 600)),
-            vec![((SURFACE, 1), "first window")],
-            "only the older window's buffer is overdue"
+            vec![((SURFACE, 1), "leaked")],
+            "only the superseded buffer is overdue"
         );
+        assert_eq!(held.release(SURFACE, 2), Some("on screen"));
         assert_eq!(held.release(SURFACE + 1, 1), Some("second window"));
     }
 }
