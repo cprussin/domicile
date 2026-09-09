@@ -98,6 +98,13 @@ echo "building the compositor and the runner"
 cargo build -p domicile-launch --bin domicile \
             -p domicile-compositor --bin domicile-compositor || exit 1
 
+# `DOMICILE_PAGE` names the module, because `domicile`'s argument does and the
+# two are one rule: a directory is refused outright rather than searched for a
+# name the launcher no longer knows. `shell.js` is what the shell's own vite
+# config emits — `@domicile/component-library/vite-shell` pins the entry name
+# so that something other than the shell can say it — so this is the one place
+# in the dev loop that has to know the convention, and it says so.
+#
 # `DOMICILE_DEV_RELOAD` is the only thing that separates this from an installed
 # desktop: the bridge serves the reload token and writes the poller into the
 # page, and nothing else in the repository sets it. It goes when `load-shell`
@@ -105,6 +112,6 @@ cargo build -p domicile-launch --bin domicile \
 echo "starting $SHELL_NAME"
 DOMICILE_ENGINE="$ENGINE" \
 DOMICILE_COMPOSITOR="$ROOT/target/debug/domicile-compositor" \
-DOMICILE_PAGE="$PAGE_DIR" \
+DOMICILE_PAGE="$PAGE_DIR/shell.js" \
 DOMICILE_DEV_RELOAD=1 \
   "$ROOT/target/debug/domicile" "$SHELL_NAME"

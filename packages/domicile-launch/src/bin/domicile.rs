@@ -12,7 +12,7 @@ use std::time::Duration;
 use domicile_launch::cli::{invocation, Invocation};
 use domicile_launch::components::components;
 use domicile_launch::platform::platform;
-use domicile_launch::shell_path::shell_page;
+use domicile_launch::shell_path::shell_module;
 use domicile_launch::spawn::{compositor, engine, Runtime};
 use domicile_launch::supervise::{wait_for_broker, Running};
 
@@ -39,7 +39,11 @@ fn run() -> Result<ExitCode, String> {
     let components =
         components(&binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
 
-    let page = shell_page(&shell, env("DOMICILE_PAGE").as_deref(), &|path| {
+    // `DOMICILE_PAGE` names the module, exactly as the argument does — a
+    // packaged desktop is a wrapper that types the command line so its user
+    // does not have to, and a second spelling of "which shell" would only be
+    // a second thing to get wrong.
+    let page = shell_module(&shell, env("DOMICILE_PAGE").as_deref(), &|path| {
         path.metadata().ok().map(|found| found.is_dir())
     })
     .map_err(|why| why.to_string())?;
@@ -55,8 +59,11 @@ fn run() -> Result<ExitCode, String> {
     };
 
     // What was chosen, before anything is started: a failure below is about
-    // this shell, and naming it after the failure is too late to be read.
-    println!("shell: {}", page.display());
+    // this shell, and naming it after the failure is too late to be read. The
+    // module rather than its directory, because the directory is what this
+    // used to print and it agreed with the wrong file as readily as the right
+    // one — the whole of the bug `shell_path` describes was invisible in it.
+    println!("shell: {}", page.root.join(&page.module).display());
     let mut running = Running::new();
 
     let platform = platform(

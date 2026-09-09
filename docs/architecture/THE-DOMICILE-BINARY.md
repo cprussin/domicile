@@ -36,7 +36,7 @@ it publishes. The supervisor is the third. It needs no GPU and no display, so
 the crate stays in `default-members` and its tests stay cheap.
 
 ```
-domicile <shell>       # a directory, or the shell.js in one
+domicile <shell>       # the built JavaScript module the shell is
 ```
 
 Three modules, and the split is by what each needs to be tested:
@@ -45,7 +45,7 @@ Three modules, and the split is by what each needs to be tested:
 |---|---|---|
 | `cli` | yes | the arguments, and every refusal a bad one earns |
 | `components` | yes | the engine, the compositor and the bridge, from the binary's own path or the environment |
-| `shell_path` | yes | a name or a path → the directory to serve, and the `shell.js` in it |
+| `shell_path` | yes | a name or a path to a module → the module to load, and the directory it is served out of |
 | `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` → the ozone platform, or the refusal that names what to do instead |
 | `supervise` | no | temp dirs, three children in order, the bridge's URL, the broker socket, teardown |
 

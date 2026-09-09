@@ -4,8 +4,8 @@
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CliError {
     #[error(
-        "which shell? Give the directory your shell built, or the entry point \
-         inside it:\n\n    domicile ./my-desktop/dist\n"
+        "which shell? Give the JavaScript module your shell built:\n\n    \
+         domicile ./my-desktop/dist/shell.js\n"
     )]
     NoShell,
     #[error(

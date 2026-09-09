@@ -277,6 +277,14 @@
         # `@domicile/component-library/vite-shell` precisely so that something
         # other than the shell can name it. A build that emitted a hashed entry
         # would satisfy no check anybody could write.
+        #
+        # AND THIS IS NOW THE ONLY PLACE THAT KNOWS THE NAME. `domicile` is
+        # handed a module and loads that module, whatever it is called; the
+        # `shell.js` constant it used to hold is gone, and with it the last
+        # reason a shell outside this repository had to adopt the convention.
+        # So the convention is this workspace's own, asserted here where it is
+        # produced and read one derivation below where the desktop is wrapped
+        # — the two halves of one build, rather than a launcher rule.
         doInstallCheck = true;
         installCheckPhase = ''
           [ -f "$out/shell.js" ] || {
@@ -317,12 +325,18 @@
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
       '';
 
-      # A desktop: Domicile with the page already chosen.
+      # A desktop: Domicile with the module already chosen.
       #
       # A wrapper, and the only one left, because that is all a desktop is —
       # `domicile` with one argument it does not have to be told twice. It
       # `exec`s, so `current_exe` inside is the copied binary above and the
       # siblings are found from there.
+      #
+      # The module rather than the directory holding it, because that is what
+      # `domicile` takes: a directory is refused now, with a message telling
+      # whoever typed it to name the file. `shellPage`'s install check above is
+      # what makes joining `shell.js` on here safe — a build that emitted
+      # anything else never reaches this line.
       desktop = { name, description }:
         pkgs.runCommand name
           {
@@ -334,7 +348,7 @@
             };
           } ''
           makeWrapper ${domicilePackage}/bin/domicile "$out/bin/${name}" \
-            --add-flags ${shellPage name}
+            --add-flags ${shellPage name}/shell.js
         '';
 
       # ── What a user installs ────────────────────────────────────────────

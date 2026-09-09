@@ -24,12 +24,14 @@ the window is. Deciding that — and nothing else — is a shell's whole job. Th
 compositor keeps the clients, the input, the outputs and the pixels.
 
 ```sh
-nix run github:cprussin/domicile -- ./my-desktop/dist
+nix run github:cprussin/domicile -- ./my-desktop/dist/shell.js
 ```
 
-That is the entire interface between a shell and Domicile: a directory with a
-built module in it, called `shell.js`. **Domicile writes the document** — you
-do not ship one, and there is no way to supply your own.
+That is the entire interface between a shell and Domicile: one built
+JavaScript module, named on the command line. Call it what you like — Domicile
+loads the file it was given, and the directory that file is in is what it
+serves. **Domicile writes the document** — you do not ship one, and there is
+no way to supply your own.
 
 Domicile owns the window, the socket and the process. What is left for a
 shell to be is the page.
@@ -73,7 +75,8 @@ lays out and `<domicile-app>` says once that it cannot show a window. Ask
 Do not develop against that, though: it is the chrome with every window in it
 missing, and a desktop's interesting behaviour is all on the other side of the
 transport. Point `domicile` at your build output and let your own bundler watch
-it — `vite build --watch` beside `domicile ./dist` is the whole dev loop, and
+it — `vite build --watch` beside `domicile ./dist/shell.js` is the whole dev
+loop, and
 it is a real desktop rather than a page pretending to be one.
 
 ## The handshake
@@ -276,12 +279,14 @@ Ship that directory however you like — a tarball, a git checkout, a nix
 derivation — and point Domicile at it:
 
 ```sh
-nix run github:cprussin/domicile -- ./my-desktop/dist
 nix run github:cprussin/domicile -- ./my-desktop/dist/shell.js
 ```
 
-Either works. Domicile serves the directory the module is in, so naming the
-module and naming what contains it are the same instruction.
+The module, not the directory holding it. Domicile serves that directory —
+whatever you put beside your entry is reachable and nothing above it is — but
+which file it loads is the one you named, and a directory is refused rather
+than searched. Nothing outside your build knows what your entry is called, so
+nothing outside your build gets to guess.
 
 That is the whole interface. A user of your shell never runs
 `domicile-compositor`, never writes a Domicile config file, and does not need
