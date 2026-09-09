@@ -10,7 +10,7 @@ set -u
 # A glob rather than a list: each guard writes its own file and its negative
 # control writes a `-negative` one beside it, and a list is a thing to forget
 # to update when a guard is added.
-for log in /tmp/domicile-spike-wayland.log \
+for log in /tmp/domicile-under-wayland.log \
            /tmp/domicile-*-compositor.log \
            /tmp/domicile-*-bridge.log; do
   [ -f "$log" ] || continue

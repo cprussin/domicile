@@ -3,8 +3,8 @@
 # colour it drew coming back out of the display compositor.
 #
 #   nix develop .#full --command \
-#     ./packages/domicile-engine/scripts/spike-wayland.sh /build/chromium/src \
-#     ./packages/domicile-engine/scripts/spike-client-window.sh /build/chromium/src
+#     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
+#     ./packages/domicile-engine/scripts/guard-client-window.sh /build/chromium/src
 #
 # From Domicile's full shell, not Chromium's: `engineRuntimeLibs` in flake.nix
 # puts Chromium's runtime libraries beside the GL stack, and this needs both —
@@ -21,7 +21,7 @@
 #
 #   sway        the nested compositor the engine runs under, because
 #               --ozone-platform=headless cannot import a dmabuf. Provided by
-#               spike-wayland.sh, which this runs inside
+#               under-wayland.sh, which this runs inside
 #   chrome      the forked engine, on a page whose <canvas> embeds, listening
 #               on --domicile-broker-socket
 #   compositor  domicile-compositor with --engine-socket pointing at that
@@ -40,7 +40,7 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
-  annotate "spike-client-window: no path to chromium/src was given"
+  annotate "guard-client-window: no path to chromium/src was given"
   exit 1
 fi
 
@@ -104,31 +104,31 @@ trap cleanup EXIT
 # Into the checkout before anything is looked for: OUT is relative to it, the
 # way build.sh and spike.sh treat it.
 cd "$CHROMIUM" || {
-  annotate "spike-client-window: $CHROMIUM is not a directory this can enter"
+  annotate "guard-client-window: $CHROMIUM is not a directory this can enter"
   exit 1
 }
 
 [ -x "$OUT/chrome" ] || {
-  annotate "spike-client-window: no engine at $CHROMIUM/$OUT/chrome; build it with ./scripts/build.sh"
+  annotate "guard-client-window: no engine at $CHROMIUM/$OUT/chrome; build it with ./scripts/build.sh"
   exit 1
 }
 [ -f "$OUT/libdomicile_engine.so" ] || {
-  annotate "spike-client-window: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
+  annotate "guard-client-window: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
   exit 1
 }
 [ -x "$COMPOSITOR" ] || {
-  annotate "spike-client-window: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
+  annotate "guard-client-window: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
 # kitty lives in the Domicile full dev shell, not in Chromium's toolchain shell
-# — and this runs inside the latter. Fetched the way spike-wayland.sh fetches
+# — and this runs inside the latter. Fetched the way under-wayland.sh fetches
 # sway, so the check does not depend on which shell it was started from.
 if command -v kitty >/dev/null; then
   KITTY=(kitty)
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  skip "spike-client-window: no kitty to draw with, and no nix to fetch one"
+  skip "guard-client-window: no kitty to draw with, and no nix to fetch one"
   exit 77
 fi
 
@@ -149,7 +149,7 @@ STARTED+=($!)
 
 for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done
 [ -S "$BROKER" ] || {
-  annotate_from "spike-client-window: the page never asked to embed" "$ENGINE_LOG"
+  annotate_from "guard-client-window: the page never asked to embed" "$ENGINE_LOG"
   echo "the engine said:" >&2
   tail -20 "$ENGINE_LOG" >&2
   exit 1
@@ -175,7 +175,7 @@ for _ in $(seq 1 120); do
   sleep 0.5
 done
 if ! kill -0 $COMP 2>/dev/null; then
-  annotate_from "spike-client-window: the compositor did not start" "$COMP_LOG"
+  annotate_from "guard-client-window: the compositor did not start" "$COMP_LOG"
   echo "the compositor did not start. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -223,7 +223,7 @@ if [ -z "$DRAWN" ]; then
   echo "--- the compositor's last words:"
   grep -aE "engine|frame sink|buffer|dmabuf" "$COMP_LOG" | tail -12 | sed 's/^/  /'
   [ "$NEGATIVE" = "1" ] && { echo "negative control: correct, nothing drew"; exit 0; }
-  annotate_from "spike-client-window: the engine never drew a client frame" "$COMP_LOG"
+  annotate_from "guard-client-window: the engine never drew a client frame" "$COMP_LOG"
   exit 1
 fi
 
@@ -233,11 +233,11 @@ echo "the engine drew #$DRAWN; the client drew #$COLOR"
 # buffer is not resampled on the way to the page.
 if [ "${DRAWN#FF}" = "$COLOR" ]; then
   if [ "$NEGATIVE" = "1" ]; then
-    annotate "spike-client-window negative control: something drew when nothing should have"
+    annotate "guard-client-window negative control: something drew when nothing should have"
     exit 1
   fi
   echo "PASS: a Wayland client's own window is on the page, in its own colour"
   exit 0
 fi
-annotate "spike-client-window: the page is showing #$DRAWN, which is not the client's #$COLOR"
+annotate "guard-client-window: the page is showing #$DRAWN, which is not the client's #$COLOR"
 exit 1

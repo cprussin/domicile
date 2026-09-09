@@ -3,7 +3,7 @@
 # external surface, then run a producer against it and let the producer's exit
 # code be the verdict.
 #
-# Step 3 is the default. Step 4's measurement is spike-step4.sh, which is this
+# Step 3 is the default. Step 4's measurement is guard-css-and-resize.sh, which is this
 # script twice with PRODUCER, PAGE and WINDOW_SIZE set.
 #
 #   NIX_SHELL_RUN=".../scripts/spike.sh /build/chromium/src" \
@@ -27,7 +27,7 @@
 #
 #   --ozone-platform=headless   the default, and the only one that needs no
 #                               compositor. OZONE=wayland runs under a nested
-#                               one instead — see spike-wayland.sh, and note
+#                               one instead — see under-wayland.sh, and note
 #                               that headless CANNOT import a dmabuf
 #   --disable-gpu               software compositing, and only by default. See
 #                               GPU=1 below: crux turns out to have a real GPU,
@@ -68,7 +68,7 @@ URL="${URL:-}"
 # libEGL.so.1, which is glvnd's, and Chromium's own toolchain shell does not
 # carry it. GL_LIBS is that path, and it is the Domicile full dev shell's.
 # Which ozone platform to run on. `headless` needs nothing and is the default.
-# `wayland` needs a compositor on $WAYLAND_DISPLAY — spike-wayland.sh brings one
+# `wayland` needs a compositor on $WAYLAND_DISPLAY — under-wayland.sh brings one
 # up — and is the only way to reach a dmabuf import: HeadlessSurfaceFactory does
 # not implement CreateNativePixmapFromHandle, so under headless there is nothing
 # for an imported buffer to become.
@@ -88,7 +88,7 @@ OUT="${OUT:-out/Domicile}"
 SOCKET="${SOCKET:-/tmp/domicile-spike}"
 PROFILE="${PROFILE:-/tmp/domicile-spike-profile}"
 # Overridable for the same reason the two above are, and it was not. A script
-# that runs this twice — `spike-step4.sh` does — gave the second run its own
+# that runs this twice — `guard-css-and-resize.sh` does — gave the second run its own
 # socket and profile and let it truncate the first run's browser log. The half
 # that failed is then diagnosed from the half that did not, and the message
 # above pointing at this file points at the wrong run.

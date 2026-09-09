@@ -165,7 +165,7 @@ twice costs more than leaving it once.
 - [x] delete `run-engine.sh` and the three `test-run-engine-*.sh`
 - [ ] the control socket, and `domicile load-shell` — **after `domicile://`**,
       when the hop to the page is the engine's rather than a bridge's
-- [ ] `spike-shell.sh` calls the binary rather than repeating the launch
+- [ ] `guard-shell.sh` calls the binary rather than repeating the launch
 
 ## Open questions
 
@@ -186,17 +186,19 @@ twice costs more than leaving it once.
   changed the *compositor's* configuration is a different question and this
   command does not pretend to answer it.
 
-- **What becomes of the spikes.** Five of the eight are the only end-to-end
-  checks this project has, and `engine.yml` runs them:
-  `spike-client-window`, `spike-two-windows`, `spike-step4`, and
-  `spike-shell` four times over — twice for each shell. Three —
-  `spike-engine`, `spike-dmabuf`, `spike-iframe` — are run by nothing and
-  survive only as references in prose. Recommendation: delete those three with
-  the rest of phase 1's scaffolding, and rename what is left, because a check
-  that gates every engine change is not a spike. Not this doc's work, but it is
-  what the answer to "do we still need the spike" is.
+- **What becomes of the spikes.** ~~Settled.~~ Five of the eight are the only
+  end-to-end checks this project has and `engine.yml` runs them, so they are
+  named for what they do: `under-wayland.sh` and the four guards
+  (`guard-client-window`, `guard-two-windows`, `guard-shell` four times over,
+  `guard-css-and-resize`). A check that gates every engine change is not a
+  spike. The other three — `spike-engine`, `spike-dmabuf`, `spike-iframe` —
+  keep their names and stay: they are run by hand rather than by CI, but
+  ENGINE-FORK.md cites their results as evidence, so deleting them would orphan
+  the citations and lose the ability to re-derive the numbers. `spike.sh` and
+  its pages stay too — `guard-css-and-resize.sh` runs the spike driver twice,
+  which is what it is.
 
-- **Whether `spike-shell.sh` can use the binary at all.** It needs a long
+- **Whether `guard-shell.sh` can use the binary at all.** It needs a long
   `DOMICILE_REACH_MS` and its own log capture, and it runs on `crux` where the
   engine job is the only thing that exercises it. Recommendation: convert it
   last, behind the rest, so a mistake there cannot hold up the parts ordinary

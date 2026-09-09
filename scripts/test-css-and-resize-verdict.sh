@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Which end step 4 blames, and which half it blames it on.
 #
-# The unit is `half_verdict` and the summary block in `spike-step4.sh` — what
+# The unit is `half_verdict` and the summary block in `guard-css-and-resize.sh` — what
 # turns two exit statuses and two logs into the one line the workflow prints.
 #
 # It exists because three versions of that sentence lived in the workflow step
@@ -18,7 +18,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-STEP4="$ROOT/packages/domicile-engine/scripts/spike-step4.sh"
+STEP4="$ROOT/packages/domicile-engine/scripts/guard-css-and-resize.sh"
 
 # From `half_verdict() {` to the `}` in column 0 that closes it.
 VERDICT="$(awk '/^half_verdict\(\) \{/,/^\}$/' "$STEP4")"

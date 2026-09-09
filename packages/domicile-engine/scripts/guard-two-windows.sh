@@ -2,11 +2,11 @@
 # Two Wayland clients, two windows, one page — the claim nothing had ever made.
 #
 #   nix develop .#full --command \
-#     ./packages/domicile-engine/scripts/spike-wayland.sh /build/chromium/src \
-#     ./packages/domicile-engine/scripts/spike-two-windows.sh /build/chromium/src
+#     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
+#     ./packages/domicile-engine/scripts/guard-two-windows.sh /build/chromium/src
 #
 # From Domicile's full shell, not Chromium's, for the reason
-# spike-client-window.sh gives: `engineRuntimeLibs` puts Chromium's runtime
+# guard-client-window.sh gives: `engineRuntimeLibs` puts Chromium's runtime
 # libraries beside the GL stack and this needs both.
 #
 # WHY THIS EXISTS. frame_sink_broker_unittest asserts that two apps get two
@@ -37,7 +37,7 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
-  annotate "spike-two-windows: no path to chromium/src was given"
+  annotate "guard-two-windows: no path to chromium/src was given"
   exit 1
 fi
 
@@ -118,20 +118,20 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$CHROMIUM" || {
-  annotate "spike-two-windows: $CHROMIUM is not a directory this can enter"
+  annotate "guard-two-windows: $CHROMIUM is not a directory this can enter"
   exit 1
 }
 
 [ -x "$OUT/chrome" ] || {
-  annotate "spike-two-windows: no engine at $CHROMIUM/$OUT/chrome; build it with ./scripts/build.sh"
+  annotate "guard-two-windows: no engine at $CHROMIUM/$OUT/chrome; build it with ./scripts/build.sh"
   exit 1
 }
 [ -f "$OUT/libdomicile_engine.so" ] || {
-  annotate "spike-two-windows: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
+  annotate "guard-two-windows: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
   exit 1
 }
 [ -x "$COMPOSITOR" ] || {
-  annotate "spike-two-windows: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
+  annotate "guard-two-windows: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
 if command -v kitty >/dev/null; then
@@ -139,7 +139,7 @@ if command -v kitty >/dev/null; then
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  skip "spike-two-windows: no kitty to draw with, and no nix to fetch one"
+  skip "guard-two-windows: no kitty to draw with, and no nix to fetch one"
   exit 77
 fi
 
@@ -153,12 +153,12 @@ rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
   --enable-blink-features=DomicileExternalSurface \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" \
-  "file://$SCRIPTS/spike-two-windows.html?a=$APP_A&b=$APP_B" >"$ENGINE_LOG" 2>&1 &
+  "file://$SCRIPTS/guard-two-windows.html?a=$APP_A&b=$APP_B" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
 for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done
 [ -S "$BROKER" ] || {
-  annotate_from "spike-two-windows: the page never asked to embed" "$ENGINE_LOG"
+  annotate_from "guard-two-windows: the page never asked to embed" "$ENGINE_LOG"
   echo "the engine said:" >&2
   tail -20 "$ENGINE_LOG" >&2
   exit 1
@@ -188,7 +188,7 @@ for _ in $(seq 1 120); do
   sleep 0.5
 done
 if ! kill -0 $COMP 2>/dev/null; then
-  annotate_from "spike-two-windows: the compositor did not start" "$COMP_LOG"
+  annotate_from "guard-two-windows: the compositor did not start" "$COMP_LOG"
   echo "the compositor did not start. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -237,7 +237,7 @@ await_broker() {
     fi
     sleep 1
   done
-  annotate "spike-two-windows: no frame sink was ever brokered for $app"
+  annotate "guard-two-windows: no frame sink was ever brokered for $app"
   grep -aE "brokered|frame sink|app_id" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
   return 1
 }
@@ -331,23 +331,23 @@ WINDOW=$(window_size)
 # and is kept for the day someone lengthens the poll, so that doing so cannot
 # quietly turn "we stopped looking" into "it is not there".
 if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
-  annotate "spike-two-windows: the compositor stopped searching before" \
+  annotate "guard-two-windows: the compositor stopped searching before" \
        "this poll ran out, so 'not found' here means 'not looked for'"
   exit 1
 fi
 if [ -z "$BOX_A" ]; then
-  annotate "spike-two-windows: the first client's colour never appeared" \
+  annotate "guard-two-windows: the first client's colour never appeared" \
        "on the page at all, so nothing here is about two windows"
   grep -aE "engine|frame sink|buffer|dmabuf" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
   exit 1
 fi
 if [ -z "$WINDOW" ]; then
-  annotate "spike-two-windows: the probe never reported the window's size," \
+  annotate "guard-two-windows: the probe never reported the window's size," \
        "so there is nothing to measure the boxes against"
   exit 1
 fi
 if [ "$SETTLED" != "1" ]; then
-  annotate "spike-two-windows: the compositor never said it had settled" \
+  annotate "guard-two-windows: the compositor never said it had settled" \
        "after $((LOOKED * POLL_EVERY))s, so what it had measured was still" \
        "moving. A client that stops drawing stops the search: it runs on the" \
        "submit path"
@@ -396,13 +396,13 @@ EOF
   echo
   echo "in a $WINDOW window: #$COLOR_A is ${A_W}x${A_H} at $A_X,$A_Y"
   if [ "$A_W" -lt "$LEAST" ]; then
-    annotate "spike-two-windows negative control: the one client's window is" \
+    annotate "guard-two-windows negative control: the one client's window is" \
          "only ${A_W}px of a ${WINDOW_W}px page, so this measured a sliver rather" \
          "than a window and says nothing about dispatch"
     exit 1
   fi
   if [ "$A_W" -ge "$MOST" ]; then
-    annotate "spike-two-windows negative control: the one client's window" \
+    annotate "guard-two-windows negative control: the one client's window" \
          "is ${A_W}px of a ${WINDOW_W}px page, so both canvases are showing it" \
          "and the embed is not dispatched on app id at all"
     exit 1
@@ -413,7 +413,7 @@ EOF
 fi
 
 if [ -z "$BOX_B" ]; then
-  annotate "spike-two-windows: only one client's window reached the page; #$COLOR_B is nowhere in it"
+  annotate "guard-two-windows: only one client's window reached the page; #$COLOR_B is nowhere in it"
   exit 1
 fi
 
@@ -460,5 +460,5 @@ if [ -z "$FAILURE" ]; then
   exit 0
 fi
 
-annotate "spike-two-windows: $FAILURE"
+annotate "guard-two-windows: $FAILURE"
 exit 1

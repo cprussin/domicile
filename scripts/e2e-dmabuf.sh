@@ -126,7 +126,7 @@ fi
 # client's dmabuf back and assert the pixels reached the chrome; that path is
 # deleted, and a client's buffer now goes to the display compositor through the
 # engine. What proves it end to end is
-# `packages/domicile-engine/scripts/spike-client-window.sh`, which needs a
+# `packages/domicile-engine/scripts/guard-client-window.sh`, which needs a
 # Chromium build and a GPU and so cannot live here.
 #
 # What is left is the half that runs anywhere and is worth running: the global

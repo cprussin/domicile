@@ -71,7 +71,7 @@
   </div>
 </body>
 <script>
-  // Must match what spike-step4.sh passes as --resize-from and --resize-to.
+  // Must match what guard-css-and-resize.sh passes as --resize-from and --resize-to.
   // The producer is told these sizes so that "the box changed and the producer
   // was reconfigured to match" is checked against what the page actually did,
   // rather than against whatever it happened to be told.
@@ -113,7 +113,7 @@
   // reconfigure is the same surface at a new box, and naming another app would
   // be embedding a different window rather than resizing this one.
   //
-  // Two producers drive this page — `domicile_css_parity` from spike-step4.sh
+  // Two producers drive this page — `domicile_css_parity` from guard-css-and-resize.sh
   // and `domicile_engine_smoke` from spike-engine.sh — and they register
   // different app ids, so each script passes its own. The default here is only
   // for opening the page by hand. A wrong id does not fail: the browser holds

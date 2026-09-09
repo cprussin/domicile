@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Step 4 of the spike in docs/architecture/ENGINE-FORK.md: the measurement.
 #
-#   NIX_SHELL_RUN=".../scripts/spike-step4.sh /build/chromium/src" \
+#   NIX_SHELL_RUN=".../scripts/guard-css-and-resize.sh /build/chromium/src" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
 #
 # Inside the toolchain shell, like everything else here: a component build links
@@ -23,7 +23,7 @@ set -u
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
-  echo "usage: spike-step4.sh <path to chromium/src>" >&2
+  echo "usage: guard-css-and-resize.sh <path to chromium/src>" >&2
   exit 1
 fi
 

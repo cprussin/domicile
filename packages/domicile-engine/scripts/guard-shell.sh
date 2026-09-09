@@ -2,11 +2,11 @@
 # A real shell, on the fork, with a real client's window in it.
 #
 #   nix develop .#full --command \
-#     ./packages/domicile-engine/scripts/spike-wayland.sh /build/chromium/src \
-#     ./packages/domicile-engine/scripts/spike-shell.sh /build/chromium/src
+#     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
+#     ./packages/domicile-engine/scripts/guard-shell.sh /build/chromium/src
 #
 # WHY THIS EXISTS. Every guard before it drives a page written for the guard:
-# spike-page.html and spike-two-windows.html put their canvases where the
+# spike-page.html and guard-two-windows.html put their canvases where the
 # harness can compute a probe point, and name app ids the harness chose. They
 # measure the seam. None of them measures the thing the seam is *for* — a shell
 # nobody wrote for this, built by its own vite config, joined to the compositor
@@ -33,7 +33,7 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
-  annotate "spike-shell: no path to chromium/src was given"
+  annotate "guard-shell: no path to chromium/src was given"
   exit 1
 fi
 SHELL_NAME="${2:-simple}"
@@ -41,7 +41,7 @@ SHELL_NAME="${2:-simple}"
 ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
 SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
 [ -d "$SHELL_DIR" ] || {
-  annotate "spike-shell: no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME"
+  annotate "guard-shell: no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME"
   exit 1
 }
 
@@ -109,15 +109,15 @@ cleanup() {
 trap cleanup EXIT
 
 [ -x "$CHROMIUM/$OUT/chrome" ] || {
-  annotate "spike-shell: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
+  annotate "guard-shell: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
   exit 1
 }
 [ -f "$CHROMIUM/$OUT/libdomicile_engine.so" ] || {
-  annotate "spike-shell: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
+  annotate "guard-shell: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
   exit 1
 }
 [ -x "$COMPOSITOR" ] || {
-  annotate "spike-shell: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
+  annotate "guard-shell: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
 if command -v kitty >/dev/null; then
@@ -125,11 +125,11 @@ if command -v kitty >/dev/null; then
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  skip "spike-shell: no kitty to draw with, and no nix to fetch one"
+  skip "guard-shell: no kitty to draw with, and no nix to fetch one"
   exit 77
 fi
 command -v bun >/dev/null || {
-  skip "spike-shell: no bun, and the shell's page is built with its own vite config"
+  skip "guard-shell: no bun, and the shell's page is built with its own vite config"
   exit 77
 }
 
@@ -172,7 +172,7 @@ SHELL_PKG="@domicile/shell-$SHELL_NAME"
 if ! (cd "$ROOT" &&
         bun install --frozen-lockfile &&
         CI=1 bun run turbo build:vite --filter="$SHELL_PKG") >"$BUILD_LOG" 2>&1; then
-  annotate_from "spike-shell: $SHELL_NAME's page did not build" "$BUILD_LOG"
+  annotate_from "guard-shell: $SHELL_NAME's page did not build" "$BUILD_LOG"
   echo "the shell's page did not build. It said:" >&2
   tail -40 "$BUILD_LOG" >&2
   rm -f "$BUILD_LOG"
@@ -197,7 +197,7 @@ PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 # reasons.
 MODULE="$PAGE_DIR/shell.js"
 if [ ! -f "$MODULE" ]; then
-  annotate "spike-shell: $SHELL_NAME built no shell.js in $PAGE_DIR"
+  annotate "guard-shell: $SHELL_NAME built no shell.js in $PAGE_DIR"
   exit 1
 fi
 
@@ -228,7 +228,7 @@ for _ in $(seq 1 300); do
   sleep 0.1
 done
 [ -n "$URL" ] || {
-  annotate_from "spike-shell: the bridge never said where it was serving" "$BRIDGE_LOG"
+  annotate_from "guard-shell: the bridge never said where it was serving" "$BRIDGE_LOG"
   echo "the bridge never said where it was serving. It said:" >&2
   cat "$BRIDGE_LOG" >&2
   exit 1
@@ -257,7 +257,7 @@ STARTED+=($!)
 
 for _ in $(seq 1 240); do [ -S "$BROKER" ] && break; sleep 0.5; done
 [ -S "$BROKER" ] || {
-  annotate_from "spike-shell: the engine never opened its broker socket at $BROKER" "$ENGINE_LOG"
+  annotate_from "guard-shell: the engine never opened its broker socket at $BROKER" "$ENGINE_LOG"
   echo "the engine never opened its broker socket. It said:" >&2
   tail -20 "$ENGINE_LOG" >&2
   exit 1
@@ -281,7 +281,7 @@ for _ in $(seq 1 120); do
   sleep 0.5
 done
 if ! kill -0 $COMP 2>/dev/null; then
-  annotate_from "spike-shell: the compositor did not start" "$COMP_LOG"
+  annotate_from "guard-shell: the compositor did not start" "$COMP_LOG"
   echo "the compositor did not start. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -292,7 +292,7 @@ fi
 # not on screen".
 CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
 [ -n "$CLIENT_DISPLAY" ] || {
-  annotate "spike-shell: the compositor never named its Wayland display"
+  annotate "guard-shell: the compositor never named its Wayland display"
   echo "the compositor never named its Wayland display. It said:" >&2
   tail -20 "$COMP_LOG" >&2
   exit 1
@@ -315,7 +315,7 @@ for _ in $(seq 1 90); do
   sleep 1
 done
 [ "$JOINED" = "1" ] || {
-  annotate "spike-shell: $SHELL_NAME never joined the compositor, so no window would be announced to it"
+  annotate "guard-shell: $SHELL_NAME never joined the compositor, so no window would be announced to it"
   echo "the shell never joined the compositor. Everything each side said:" >&2
   echo "--- the compositor said:" >&2
   grep -aE "chrome|protocol|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
@@ -398,14 +398,14 @@ grep -aq 'app_appeared' "$COMP_LOG" 2>/dev/null && ANNOUNCED=1
 grep -aqE 'told the chrome about [1-9]' "$COMP_LOG" 2>/dev/null && DESKTOP=1
 if [ "$EMBEDDED" != "1" ]; then
   if [ "$ANNOUNCED" != "1" ]; then
-    annotate "spike-shell: no client ever mapped on $CLIENT_DISPLAY, so the" \
+    annotate "guard-shell: no client ever mapped on $CLIENT_DISPLAY, so the" \
          "shell was told about nothing and there was nothing to embed"
   elif [ "$DESKTOP" != "1" ]; then
-    annotate "spike-shell: $SHELL_NAME was announced a client and its" \
+    annotate "guard-shell: $SHELL_NAME was announced a client and its" \
          "handshake carried no display, so a chrome that lays out on a screen" \
          "had nowhere to put a window. The desktop, not the announcement"
   else
-    annotate "spike-shell: $SHELL_NAME was announced a client and never" \
+    annotate "guard-shell: $SHELL_NAME was announced a client and never" \
          "embedded it, so the page is not hearing the host"
   fi
   echo "the shell embedded nothing. What each side said:" >&2
@@ -435,7 +435,7 @@ done
 echo
 if [ "$NEGATIVE" = "1" ]; then
   if [ -n "$FOUND" ]; then
-    annotate "spike-shell negative control: $FOUND, and the client drew" \
+    annotate "guard-shell negative control: $FOUND, and the client drew" \
          "#$OTHER_COLOR — the guard is matching something other than the client's pixels"
     exit 1
   fi
@@ -443,7 +443,7 @@ if [ "$NEGATIVE" = "1" ]; then
   # client has to have got as far as a frame the engine took, and the probe has
   # to have run and answered "not yet".
   if ! grep -aq "first frame" "$COMP_LOG" 2>/dev/null; then
-    annotate "spike-shell negative control: the engine never took a frame" \
+    annotate "guard-shell negative control: the engine never took a frame" \
          "from the client, so nothing was measured"
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
@@ -453,7 +453,7 @@ if [ "$NEGATIVE" = "1" ]; then
   # else — see spike_find's three answers — so this cannot go green on a
   # measurement that never happened.
   if ! grep -aq "has not drawn" "$COMP_LOG" 2>/dev/null; then
-    annotate "spike-shell negative control: the probe never read the" \
+    annotate "guard-shell negative control: the probe never read the" \
          "window, so nothing was measured"
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
@@ -474,7 +474,7 @@ fi
 # the whole browser window, and a page painting that colour anywhere satisfies
 # it. `NEGATIVE=1` is what closes it, which is why manganese has one too.
 if ! grep -aq "first frame" "$COMP_LOG" 2>/dev/null; then
-  annotate "spike-shell: the engine never took a frame from $SHELL_NAME's" \
+  annotate "guard-shell: the engine never took a frame from $SHELL_NAME's" \
        "client, so whatever is on the page is not the client's window"
   grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
   exit 1
@@ -482,12 +482,12 @@ fi
 
 if [ -z "$FOUND" ]; then
   if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
-    annotate "spike-shell: the compositor stopped searching before this" \
+    annotate "guard-shell: the compositor stopped searching before this" \
          "poll ran out, so 'not found' means 'not looked for'. Its budget is" \
          "FIND_FOR in domicile-compositor's main.rs"
     exit 1
   fi
-  annotate "spike-shell: the client's window is not on $SHELL_NAME's page"
+  annotate "guard-shell: the client's window is not on $SHELL_NAME's page"
   echo "what each side said:" >&2
   echo "--- the compositor's last words:" >&2
   grep -aE "engine|frame sink|chrome|buffer|ERROR" "$COMP_LOG" | tail -15 | sed 's/^/  /' >&2

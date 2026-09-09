@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Which end the shell guard blames when nothing gets embedded.
 #
-# The unit is the embed stage in `spike-shell.sh` — the block that runs after a
+# The unit is the embed stage in `guard-shell.sh` — the block that runs after a
 # client is started and before anything looks at pixels. It decides between two
 # sentences that read alike and mean opposite things: the page was told about a
 # client and did nothing with it, or nothing ever told the page anything.
@@ -20,7 +20,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-GUARD="$ROOT/packages/domicile-engine/scripts/spike-shell.sh"
+GUARD="$ROOT/packages/domicile-engine/scripts/guard-shell.sh"
 # The real one, as test-annotate.sh does: what a guard says is the behaviour,
 # and a stub that spells `::error::` itself would not be it.
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
@@ -125,13 +125,13 @@ $APPEARED" "$NOISE
 $EMBEDDING")"
 
 expect "announced, told about a desktop and not embedded blames the page" \
-  "::error::spike-shell: simple was announced a client and never embedded it, so the page is not hearing the host" \
+  "::error::guard-shell: simple was announced a client and never embedded it, so the page is not hearing the host" \
   "$(verdict "$JOINED
 $DESCRIBED
 $APPEARED" "$NOISE")"
 
 expect "never announced blames the client, not the page" \
-  "::error::spike-shell: no client ever mapped on wayland-2, so the shell was told about nothing and there was nothing to embed" \
+  "::error::guard-shell: no client ever mapped on wayland-2, so the shell was told about nothing and there was nothing to embed" \
   "$(verdict "$JOINED" "$NOISE")"
 
 # The third end, which arrived with manganese. A shell that renders nothing
@@ -139,14 +139,14 @@ expect "never announced blames the client, not the page" \
 # whether it heard the announcement, and the sentence above would send the
 # reader to the announcement path.
 expect "announced but never given a desktop blames the desktop" \
-  "::error::spike-shell: simple was announced a client and its handshake carried no display, so a chrome that lays out on a screen had nowhere to put a window. The desktop, not the announcement" \
+  "::error::guard-shell: simple was announced a client and its handshake carried no display, so a chrome that lays out on a screen had nowhere to put a window. The desktop, not the announcement" \
   "$(verdict "$JOINED
 $APPEARED" "$NOISE")"
 
 # A described desktop with nothing in it is not a desktop. Without the digit in
 # the pattern this reports the page instead, which is the wrong end again.
 expect "a desktop of no displays is not a desktop" \
-  "::error::spike-shell: simple was announced a client and its handshake carried no display, so a chrome that lays out on a screen had nowhere to put a window. The desktop, not the announcement" \
+  "::error::guard-shell: simple was announced a client and its handshake carried no display, so a chrome that lays out on a screen had nowhere to put a window. The desktop, not the announcement" \
   "$(verdict "$JOINED
 $NO_DISPLAYS
 $APPEARED" "$NOISE")"
@@ -155,7 +155,7 @@ $APPEARED" "$NOISE")"
 # mapped nor a desktop was described still blames the client, because a shell
 # told about nothing has nothing to put anywhere either way.
 expect "no client and no desktop still blames the client" \
-  "::error::spike-shell: no client ever mapped on wayland-2, so the shell was told about nothing and there was nothing to embed" \
+  "::error::guard-shell: no client ever mapped on wayland-2, so the shell was told about nothing and there was nothing to embed" \
   "$(verdict "$JOINED" "$NOISE")"
 
 # The announcement is evidence for the blame, not a condition of success: the
@@ -252,7 +252,7 @@ $FIRST_FRAME")"
 # `frame` lines are present and the client's own is not, so a check grepping
 # for anything shorter than `first frame` reads this run as a client that drew.
 expect "the chrome's own frames are not the client's" \
-  "stopped: ::error::spike-shell: the engine never took a frame from simple's client, so whatever is on the page is not the client's window" \
+  "stopped: ::error::guard-shell: the engine never took a frame from simple's client, so whatever is on the page is not the client's window" \
   "$(frame_verdict "$JOINED
 $BROKERED
 $COMMITTED

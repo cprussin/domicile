@@ -490,7 +490,7 @@ fn freshened(hub: &ChromeHub, message: HostMessage) -> HostMessage {
     // about a client and embedded nothing" reads identically whether the page
     // ignored the host or simply had nowhere to put a window. This side is the
     // only one that can tell those apart, and a guard that cannot blames the
-    // wrong end. The count is in the text so a reader — and `spike-shell.sh` —
+    // wrong end. The count is in the text so a reader — and `guard-shell.sh` —
     // can tell an empty desktop from a described one.
     //
     // THE HANDSHAKE, AND IT SAYS SO. `freshened` is on the response path, and
