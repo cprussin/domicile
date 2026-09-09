@@ -95,6 +95,21 @@ members added one at a time cost nineteen. This is the standing cost of the
 protocol living in the browser process, and it is the reason to arrive with a
 list rather than with one message at a time.
 
+### The dev-reload poller does not survive the scheme
+
+`shellDocument` used to inject a poller in dev mode: a `fetch` of a token from
+the bridge every 400ms, reloading when the token changed. It existed because a
+desktop runs under `--app`, which drops the browser's own keyboard shortcuts,
+so there is no reload in it — without something in the page, a one-character
+change to a shell means killing the desktop and starting it again.
+
+It polled the HTTP server that this work deletes, so it is not in the C++ port
+and there is nothing in its place. Whatever replaces it must not be a TCP port,
+which is the whole point; the obvious shape is a control-channel message the
+compositor sends when a shell is rebuilt, since the page already has that
+channel and it is not reachable from outside. `DOMICILE_DEV_RELOAD` is read
+outside this package, so the two halves have to agree before either moves.
+
 ## Working on it
 
 This is built on a machine with a Chromium checkout — `crux`, at

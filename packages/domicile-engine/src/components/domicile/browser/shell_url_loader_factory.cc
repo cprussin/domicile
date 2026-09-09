@@ -7,7 +7,10 @@
 #include <string>
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/strings/escape.h"
+#include "base/strings/strcat.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "content/public/browser/file_url_loader.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -82,6 +85,115 @@ bool ShellURLLoaderFactory::ResolveShellPath(const base::FilePath& shell_root,
   return true;
 }
 
+
+// static
+std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
+  // The same page for every shell, on purpose: nothing here is negotiable and
+  // there is no way to supply a document of your own. What is in it is only
+  // what a desktop cannot do without.
+  //
+  //   - a charset, because a page without one is decoded by guesswork
+  //   - a viewport, because without it the engine lays out for a phone and
+  //     every coordinate the compositor is told about is wrong by a scale
+  //   - a root that fills the window with no margin. A desktop is the whole
+  //     screen; eight pixels of body margin is eight pixels the compositor
+  //     believes it has and does not, and a client's window drawn in the wrong
+  //     place looks like the seam rather than like a stylesheet
+  //
+  // No stylesheet link, and that is the interesting omission: a shell's CSS
+  // arrives through its module, so nothing paints before the module has run and
+  // the themed-flash problem cannot happen.
+  //
+  // The title is not guessed. The directory a module came out of is as likely
+  // to be `dist` as anything a person would recognise, so it says Domicile
+  // until the shell says otherwise with document.title.
+  //
+  // EscapeAllExceptUnreserved on the module name is one escape doing two jobs.
+  // The name came off somebody's disk and lands in the most privileged page in
+  // this system, so it has to be safe inside a double-quoted attribute *and*
+  // still name the file the author meant. The encoding is strictly the stronger
+  // answer: its output is unreserved characters and %XX, so no `"`, `<`, `>` or
+  // `&` survives it to be parsed as markup. An HTML escaper beside it would
+  // never fire -- and would not do the job it looked like it was doing, since
+  // `#`, `?` and `%` are legal in a POSIX filename and none is HTML-special.
+  return base::StrCat({
+      "<!doctype html>\n"
+      "<html lang=\"en\">\n"
+      "  <head>\n"
+      "    <meta charset=\"utf-8\" />\n"
+      "    <meta content=\"width=device-width, initial-scale=1\" "
+      "name=\"viewport\" />\n"
+      "    <title>Domicile</title>\n"
+      "    <style>\n"
+      "      html,\n"
+      "      body {\n"
+      "        block-size: 100%;\n"
+      "        inline-size: 100%;\n"
+      "        margin: 0;\n"
+      "        overflow: hidden;\n"
+      "        padding: 0;\n"
+      "      }\n"
+      "    </style>\n"
+      "  </head>\n"
+      "  <body>\n"
+      "    <script src=\"",
+      base::EscapeAllExceptUnreserved(module),
+      "\" type=\"module\"></script>\n"
+      "  </body>\n"
+      "</html>\n"});
+}
+
+void ShellURLLoaderFactory::ServeDocument(
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client) {
+  mojo::Remote<network::mojom::URLLoaderClient> client_remote(
+      std::move(client));
+
+  const std::string module =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          kDomicileShellModuleSwitch);
+  if (module.empty()) {
+    // No module is no shell. Failing is the honest answer; a document with an
+    // empty src would load, paint nothing, and look like a broken shell rather
+    // than like a missing argument.
+    LOG(ERROR) << "domicile: the engine was started without --"
+               << kDomicileShellModuleSwitch
+               << ", so there is no shell to load.";
+    client_remote->OnComplete(
+        network::URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
+    return;
+  }
+
+  const std::string document = ShellDocument(module);
+
+  auto response = network::mojom::URLResponseHead::New();
+  response->mime_type = "text/html";
+  response->charset = "utf-8";
+
+  mojo::ScopedDataPipeProducerHandle producer;
+  mojo::ScopedDataPipeConsumerHandle consumer;
+  if (mojo::CreateDataPipe(document.size(), producer, consumer) !=
+      MOJO_RESULT_OK) {
+    client_remote->OnComplete(
+        network::URLLoaderCompletionStatus(net::ERR_INSUFFICIENT_RESOURCES));
+    return;
+  }
+
+  size_t written = 0;
+  const MojoResult result =
+      producer->WriteData(base::as_byte_span(document),
+                          MOJO_WRITE_DATA_FLAG_NONE, written);
+  if (result != MOJO_RESULT_OK || written != document.size()) {
+    client_remote->OnComplete(
+        network::URLLoaderCompletionStatus(net::ERR_FAILED));
+    return;
+  }
+  producer.reset();
+
+  client_remote->OnReceiveResponse(std::move(response), std::move(consumer),
+                                   std::nullopt);
+  client_remote->OnComplete(network::URLLoaderCompletionStatus(net::OK));
+}
+
 ShellURLLoaderFactory::ShellURLLoaderFactory(
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver,
     const base::FilePath& shell_root,
@@ -98,6 +210,14 @@ void ShellURLLoaderFactory::CreateLoaderAndStart(
     const network::ResourceRequest& request,
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
+  // The bare root is the document Domicile writes, not a file on disk. A shell
+  // is a module and a page to load it in; only the module and what it imports
+  // come off the filesystem.
+  if (request.url.path() == "/" || request.url.path().empty()) {
+    ServeDocument(std::move(client));
+    return;
+  }
+
   base::FilePath path;
   if (!ResolveShellPath(shell_root_, request.url, &path)) {
     mojo::Remote<network::mojom::URLLoaderClient> client_remote(

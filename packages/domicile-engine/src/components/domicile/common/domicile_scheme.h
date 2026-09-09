@@ -41,6 +41,13 @@ inline constexpr char kDomicileShellRootSwitch[] = "domicile-shell-root";
 inline constexpr char kDomicileControlSocketSwitch[] =
     "domicile-control-socket";
 
+// The shell itself: one JavaScript module, a path and nothing else. There is no
+// manifest and there is not going to be one -- everything a manifest could
+// carry is an export the shell hands over once it is running, and the one
+// category that could not be (something Domicile must know *before* running the
+// code) is empty, because Domicile gates nothing.
+inline constexpr char kDomicileShellModuleSwitch[] = "domicile-shell-module";
+
 }  // namespace domicile
 
 #endif  // COMPONENTS_DOMICILE_COMMON_DOMICILE_SCHEME_H_
