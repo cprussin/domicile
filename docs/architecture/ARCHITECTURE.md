@@ -112,7 +112,6 @@ a GPU, an engine or Smithay:
   version negotiation.
 - `domicile-host` — the orchestrator brain: where input goes and what the chrome
   is told. No Wayland.
-- `domicile-bridge` — app-to-surface bookkeeping and dmabuf descriptors.
 - `domicile-launch` — the boundary between a shell and the compositor it runs.
 - `domicile-test-chrome`, `domicile-test-client` — a chrome and a Wayland
   client the integration tests drive, as libraries so their own behaviour is

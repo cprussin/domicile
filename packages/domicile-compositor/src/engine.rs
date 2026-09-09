@@ -22,7 +22,7 @@ use std::ffi::{c_char, c_int, c_void, CString, NulError};
 use std::os::fd::RawFd;
 use std::path::{Path, PathBuf};
 
-use domicile_bridge::DmabufDescriptor;
+use crate::dmabuf_descriptor::DmabufDescriptor;
 use libloading::{Library, Symbol};
 use thiserror::Error;
 
@@ -521,7 +521,7 @@ fn push(user_data: *mut c_void, event: Event) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domicile_bridge::DmabufPlane as BridgePlane;
+    use crate::dmabuf_descriptor::DmabufPlane as BridgePlane;
 
     /// What the C header's `static_assert` cannot see: that this side still
     /// has six fields. It catches a field added or dropped, which is the

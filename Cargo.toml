@@ -5,7 +5,6 @@ members = [
     "packages/domicile-scene",
     "packages/domicile-protocol",
     "packages/domicile-host",
-    "packages/domicile-bridge",
     "packages/domicile-launch",
     "packages/domicile-test-chrome",
     "packages/domicile-test-client",
@@ -20,7 +19,6 @@ default-members = [
     "packages/domicile-scene",
     "packages/domicile-protocol",
     "packages/domicile-host",
-    "packages/domicile-bridge",
     "packages/domicile-launch",
     "packages/domicile-test-chrome",
     "packages/domicile-test-client",
@@ -28,8 +26,7 @@ default-members = [
 
 # domicile-host's default build (the orchestrator) is pure logic and lives in the
 # core shell. Its Smithay Wayland-server backend sits behind the
-# `smithay-backend` feature; domicile-bridge (CEF FFI) joins once the heavy native
-# toolchain lands via `nix develop .#full`.
+# `smithay-backend` feature.
 
 [workspace.package]
 version = "0.0.0"

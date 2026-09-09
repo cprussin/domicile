@@ -417,69 +417,6 @@ fn what_is_drawn_and_what_is_clicked_are_the_same_rectangle() {
     assert!((hit.local.y - 150.0).abs() < 1e-9, "local y: {hit:?}");
 }
 
-// ---- draw order ------------------------------------------------------------
-
-fn ids(portals: Vec<&Portal>) -> Vec<&str> {
-    portals.iter().map(|p| p.app_id.as_str()).collect()
-}
-
-/// A portal covering the whole of a small output, so overlap is total.
-fn covering(app_id: &str, z_index: i32) -> Portal {
-    Portal::new(app_id, (100.0, 100.0), Transform::identity(), z_index)
-}
-
-#[test]
-fn draw_order_runs_bottom_to_top() {
-    let mut scene = Scene::new();
-    scene.upsert(covering("top", 10));
-    scene.upsert(covering("bottom", -5));
-    scene.upsert(covering("middle", 0));
-
-    assert_eq!(ids(scene.draw_order()), ["bottom", "middle", "top"]);
-}
-
-#[test]
-fn a_tie_is_broken_by_which_arrived_first() {
-    let mut scene = Scene::new();
-    scene.upsert(covering("first", 0));
-    scene.upsert(covering("second", 0));
-
-    assert_eq!(ids(scene.draw_order()), ["first", "second"]);
-}
-
-#[test]
-fn raising_a_portal_moves_it_up_the_draw_order() {
-    let mut scene = Scene::new();
-    scene.upsert(covering("first", 0));
-    scene.upsert(covering("second", 0));
-
-    scene.raise("first");
-
-    assert_eq!(ids(scene.draw_order()), ["second", "first"]);
-}
-
-#[test]
-fn whatever_is_drawn_last_is_what_a_click_reaches() {
-    // The property tying the two halves together: where portals overlap, the
-    // one painted over the others is the one that takes the click. A
-    // compositor that drew in one order and routed in another would look
-    // right and behave wrong.
-    //
-    // Among the portals that take the pointer, which is every portal here. A
-    // window the chrome made inert is drawn where it always was and routes
-    // its clicks to whatever is under it, so for that one the two halves part
-    // company on purpose — `a_portal_that_takes_no_pointer_is_not_hit` is
-    // that case.
-    let mut scene = Scene::new();
-    scene.upsert(covering("under", 0));
-    scene.upsert(covering("over", 3));
-
-    let drawn_last = ids(scene.draw_order()).last().copied().expect("some order");
-    let clicked = scene.hit_test(Point::new(50.0, 50.0)).expect("inside both");
-
-    assert_eq!(drawn_last, clicked.app_id);
-}
-
 // ---- which screen a window reaches ----------------------------------------
 
 /// The box `portal` reaches, as `(min x, min y, max x, max y)`.

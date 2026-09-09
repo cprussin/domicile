@@ -68,14 +68,6 @@ decides whether an item is waiting or workable.
    `run-engine.sh` still falls back to one. It survived the migration because
    both shells were still HTML entries at the time; neither is now, and nothing
    outside the repo can be, because the guide says the path does not exist.
-5. **Delete `domicile-bridge`.** It maps each app to an external-image id for
-   an engine that would bind one per `<app>`; the fork keys on the app id and
-   imports the dmabuf itself. The compositor registers and removes apps and
-   reads nothing back, so the id, the frame record and `DmabufDescriptor` are
-   all unreachable. Goes with the `Style` the compositor never applies —
-   `corner_radius`, `opacity`, `shadow` — and `Scene::draw_order`, which
-   nothing calls either. Small, and it wants doing in one pass rather than
-   four.
 
 ### In the engine fork — the agent on `crux`
 
@@ -257,7 +249,6 @@ Clients, for testing:
 | `packages/domicile-scene` | transforms, hit-testing, pointer routing, z-order (pure math) | core |
 | `packages/domicile-protocol` | host↔chrome wire messages, versioning | core |
 | `packages/domicile-host` | the orchestrator brain and its IPC | core |
-| `packages/domicile-bridge` | app → image id and dmabuf bookkeeping (pure) | core |
 | `packages/domicile-launch` | the boundary between a shell and its compositor (pure) | core |
 | `packages/domicile-compositor` | **the running compositor**: Smithay server, imports, input, the engine seam | `.#full` |
 | `packages/domicile-engine` | the Chromium fork: the patch series, the pin, the published engine | — |

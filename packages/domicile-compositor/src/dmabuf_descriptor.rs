@@ -1,20 +1,37 @@
-//! Turning a client's committed dmabuf into the [`BridgeRegistry`] frame record.
+//! A client's committed dmabuf, in the terms the engine imports it by.
 //!
-//! [`domicile_bridge`] describes a GPU frame in engine terms — a fourcc, a
-//! modifier and one plane per buffer fd — so that the eventual CEF external
-//! texture binds to exactly what the client allocated. Smithay describes the
-//! same buffer in its own types; this is the one place the two meet, kept
-//! separate (and tested) so the GPU glue around it stays free of bookkeeping.
-//!
-//! [`BridgeRegistry`]: domicile_bridge::BridgeRegistry
+//! A fourcc, a modifier and one plane per buffer fd, so the `SharedImage` the
+//! engine makes binds to exactly what the client allocated. Smithay describes
+//! the same buffer in its own types; this is the one place the two meet, kept
+//! separate — and tested — so the GPU glue around it stays free of the
+//! translation.
 
 use std::os::fd::AsRawFd as _;
 
-use domicile_bridge::{DmabufDescriptor, DmabufPlane};
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
 
-/// Describe `dmabuf` in the bridge's terms.
+/// One plane of a dmabuf: a GPU buffer shared by file descriptor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DmabufPlane {
+    pub fd: i32,
+    pub offset: u32,
+    pub stride: u32,
+}
+
+/// A client's current GPU frame, shared zero-copy as a dmabuf.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DmabufDescriptor {
+    pub width: u32,
+    pub height: u32,
+    /// DRM FourCC pixel format (e.g. `AR24`).
+    pub fourcc: u32,
+    /// DRM format modifier (tiling/compression), 0 for linear.
+    pub modifier: u64,
+    pub planes: Vec<DmabufPlane>,
+}
+
+/// Describe `dmabuf` in the terms above.
 ///
 /// The plane fds are borrowed, not owned: they stay valid only as long as the
 /// `Dmabuf` the descriptor was taken from, so a caller that keeps the
@@ -44,11 +61,10 @@ mod tests {
     use std::fs::File;
     use std::os::fd::{AsRawFd as _, OwnedFd};
 
-    use domicile_bridge::DmabufPlane;
     use smithay::backend::allocator::dmabuf::{Dmabuf, DmabufFlags};
     use smithay::backend::allocator::{Fourcc, Modifier};
 
-    use super::descriptor_from;
+    use super::{descriptor_from, DmabufPlane};
 
     /// A dmabuf needs real file descriptors; their contents never matter here,
     /// only that each plane carries the fd it was built with.

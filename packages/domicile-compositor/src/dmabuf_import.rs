@@ -9,7 +9,7 @@
 //!
 //! Everything but the device policy is glue over EGL/GLES that cannot run
 //! without a GPU, so it is deliberately thin: the buffer bookkeeping lives in
-//! `dmabuf_descriptor` and `domicile-bridge`, where it is tested.
+//! `dmabuf_descriptor`, where it is tested.
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::format::FormatSet;
