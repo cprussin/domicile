@@ -34,7 +34,7 @@ namespace {
 // renderer gives every app the same token, so the second window's surface does
 // not exist and the element embedding it resolves through the first window's
 // allocation group instead: two <app> elements, both showing window one. That
-// is what spike-two-windows.sh measured.
+// is what guard-two-windows.sh measured.
 //
 // The second reason is resizing. kReconfigure bumps the parent sequence
 // number, and one allocator would bump it for every app at once — resizing one

@@ -169,8 +169,8 @@ jobs:
             -C "$CHROMIUM/out/Release-staged" --strip-components=1
           nix develop .#full --command cargo build -p domicile-compositor
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-client-window.sh "$CHROMIUM"
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-client-window.sh "$CHROMIUM"
 
       - name: Publish
         env:
@@ -183,7 +183,7 @@ jobs:
       - name: What the guard wrote down
         if: ${{ failure() }}
         run: |
-          for log in /tmp/domicile-spike-wayland.log \
+          for log in /tmp/domicile-under-wayland.log \
                      /tmp/domicile-client-window-compositor.log; do
             echo "::group::$log"
             tail -200 "$log" 2>&1 || true

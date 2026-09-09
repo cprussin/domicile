@@ -29,16 +29,18 @@ same reason.
 | `scripts/apply.sh` | series → checkout |
 | `scripts/extract.sh` | checkout → series. Run before every push |
 | `scripts/build.sh` | `gn gen` + `autoninja` with the args the spike is measured under |
-| `scripts/spike.sh` | run one step of the spike end to end; the producer's exit code is the verdict |
+| `scripts/under-wayland.sh` | runs another script under a nested wlroots compositor on the GPU — the only platform that can import a dmabuf. Every guard below runs under it |
+| `scripts/guard-client-window.sh` | a real Wayland client's window on the page, and the colour it drew coming back out |
+| `scripts/guard-two-windows.sh`, `guard-two-windows.html` | two clients, two windows, one page — two `SurfaceDrawQuad`s in one aggregation |
+| `scripts/guard-shell.sh` | a real shell, built by its own vite config and joined by the SDK, with a client's window in it |
+| `scripts/guard-css-and-resize.sh` | the measurement: seven CSS properties, the resize, and the latency |
+| `scripts/spike.sh` | run one step of the spike end to end; the producer's exit code is the verdict. What `guard-css-and-resize.sh` runs twice |
 | `scripts/spike-page.html` | steps 2 and 3's page: a `<canvas>` that embeds instead of drawing |
-| `scripts/spike-step4.sh` | the measurement: seven CSS properties and the latency |
-| `scripts/spike-iframe.sh` | an `<app>` against an out-of-process `<iframe>`, over HTTP so the iframe can be cross-site |
-| `scripts/spike-engine.sh` | phase 1's library, end to end, from a C process |
-| `scripts/spike-wayland.sh` | runs another check under a nested wlroots compositor on the GPU — the only platform that can import a dmabuf |
-| `scripts/spike-dmabuf.sh` | a real dmabuf, imported, submitted and released. Always under `spike-wayland.sh` |
-| `scripts/spike-css-page.html` | its page — each property on an `<app>` and on a `<div>` beside it |
+| `scripts/spike-css-page.html` | the CSS half's page — each property on an `<app>` and on a `<div>` beside it |
 | `scripts/spike-resize-page.html` | the resize cell, which needs a page to itself |
-| `scripts/spike-iframe-page.html`, `spike-iframe-inner.html` | the iframe cell and the document it frames |
+| `scripts/spike-engine.sh` | phase 1's library, end to end, from a C process. Run by hand, not by CI |
+| `scripts/spike-dmabuf.sh` | a real dmabuf, imported, submitted and released. By hand, always under `under-wayland.sh` |
+| `scripts/spike-iframe.sh`, `spike-iframe-page.html`, `spike-iframe-inner.html` | an `<app>` against an out-of-process `<iframe>`, over HTTP so the iframe can be cross-site. By hand |
 
 ## Working on it
 
@@ -55,12 +57,12 @@ here as spell-check, never as proof.
 ./scripts/extract.sh /build/chromium/src     # write it back here
 ```
 
-`build.sh`, `spike.sh` and `spike-step4.sh` all have to run inside Chromium's
+`build.sh`, `spike.sh` and `guard-css-and-resize.sh` all have to run inside Chromium's
 own toolchain shell — a component build links against that shell's glibc and
 will not start without it:
 
 ```sh
-NIX_SHELL_RUN="$PWD/scripts/spike-step4.sh /build/chromium/src" \
+NIX_SHELL_RUN="$PWD/scripts/guard-css-and-resize.sh /build/chromium/src" \
   nix-shell /build/chromium/src/tools/nix/shell.nix
 ```
 
@@ -125,7 +127,7 @@ Two things that were assumed and are not true:
   rasterisation. An out-of-process `<iframe>` is the thing that is *not*
   pixel-identical to a `<div>`.
 - **A dmabuf can be imported on this machine**, under
-  `scripts/spike-wayland.sh` — `--ozone-platform=wayland` nested in a headless
+  `scripts/under-wayland.sh` — `--ozone-platform=wayland` nested in a headless
   wlroots compositor. NVIDIA ships its own GBM backend and its EGL imports
   dmabufs, so Chromium's GBM path does not assume Mesa. Weston's headless
   backend cannot be used for it: it advertises no `zwp_linux_dmabuf_v1`.
@@ -152,7 +154,7 @@ the pixel is the buffer's own zeroed content rather than the fallback.
 And **it takes two frames to see a release**, because viz holds whatever is on
 screen — which is exactly why a Wayland client double-buffers.
 
-`spike-wayland.sh` suits checks that do not have to find the page by scanning
+`under-wayland.sh` suits checks that do not have to find the page by scanning
 for a full-width row of its background colour, which is how the pixel checks
 locate the viewport: under Wayland the browser window carries client-side
 decorations and a shadow, so no row qualifies. The pixel checks stay on
@@ -165,13 +167,13 @@ process the browser did not launch gets a frame sink from the browser's own
 namespace, a `<canvas>` in an ordinary web page embeds the surface it submits
 to, and CSS treats that canvas the way it treats any other element.
 
-**Step 4 is the one that matters.** `spike-step4.sh` lays each property out
+**Step 4 is the one that matters.** `guard-css-and-resize.sh` lays each property out
 twice — once on an `<app>` and once on an ordinary `<div>` beside it — and
 compares the two halves pixel for pixel out of the display compositor's own
 draw:
 
 ```
-$ ... scripts/spike-step4.sh /build/chromium/src
+$ ... scripts/guard-css-and-resize.sh /build/chromium/src
 property             pixels   differ   interior    worst in effect  verdict
 baseline              53200        0          0        1        no  pass
 z-index               53200        0          0        0       yes  pass
@@ -184,7 +186,7 @@ negative control      53200    10800       9976      255        no  pass (differ
 ```
 
 **That run is `--disable-gpu`, and `transform`'s 285 pixels are the software
-rasteriser rather than the mechanism.** `GPU=1 scripts/spike-step4.sh` on this
+rasteriser rather than the mechanism.** `GPU=1 scripts/guard-css-and-resize.sh` on this
 machine's card puts every cell at 0, `transform` included — which is the number
 that describes what a user has. `z-index` is exact either way, and it is the
 property bands failed at and the reason the fork exists.
@@ -265,5 +267,5 @@ autoninja -C out/Domicile components_unittests
 Neither the Blink half nor the probe has a unit test. Chromium does not unit
 test `SurfaceLayerBridge` either — there is no `surface_layer_bridge_test.cc` —
 and for the same reason: the seam only means anything with a display
-compositor behind it. `spike.sh` and `spike-step4.sh` are what cover them, and
+compositor behind it. `spike.sh` and `guard-css-and-resize.sh` are what cover them, and
 their exit codes are the assertion.

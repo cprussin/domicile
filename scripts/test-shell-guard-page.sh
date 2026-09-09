@@ -23,7 +23,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-GUARD="$ROOT/packages/domicile-engine/scripts/spike-shell.sh"
+GUARD="$ROOT/packages/domicile-engine/scripts/guard-shell.sh"
 # The real refusal, not a stub: what a guard says is the behaviour.
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$ROOT/packages/domicile-engine/scripts/lib-annotate.sh"
@@ -83,11 +83,11 @@ expect "a module is what a shell in this workspace builds" \
 # one and no module is a build that emitted the wrong thing — and it has to be
 # refused rather than served, or the desktop comes up on someone's stray HTML.
 expect "a document alone is refused" \
-  "refused: spike-shell: simple built no shell.js in $WORK/document" \
+  "refused: guard-shell: simple built no shell.js in $WORK/document" \
   "$(resolve "$WORK/document")"
 
 expect "an empty directory is refused, in words that name what is missing" \
-  "refused: spike-shell: simple built no shell.js in $WORK/nothing" \
+  "refused: guard-shell: simple built no shell.js in $WORK/nothing" \
   "$(resolve "$WORK/nothing")"
 
 # WHICH ONE THE BRIDGE IS TOLD, which is the half a resolution alone does not

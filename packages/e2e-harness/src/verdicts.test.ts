@@ -339,7 +339,9 @@ describe("every script that can tell a dead compositor apart", () => {
     // two scripts that exist today, and the next deletion that takes one will
     // fail here and pick two more.
     expect(scripts.map(([name]) => name)).toContain("test-annotate.sh");
-    expect(scripts.map(([name]) => name)).toContain("test-step4-verdict.sh");
+    expect(scripts.map(([name]) => name)).toContain(
+      "test-css-and-resize-verdict.sh",
+    );
   });
 
   it("routes every harness bail through the liveness check", () => {

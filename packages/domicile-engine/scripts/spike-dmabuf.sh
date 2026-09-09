@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Phase 1's last assertion: a real dmabuf reaches the screen through a page.
 #
-#   NIX_SHELL_RUN=".../scripts/spike-wayland.sh /build/chromium/src \
+#   NIX_SHELL_RUN=".../scripts/under-wayland.sh /build/chromium/src \
 #     .../scripts/spike-dmabuf.sh /build/chromium/src" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
 #
-# ALWAYS UNDER spike-wayland.sh. --ozone-platform=headless has no
+# ALWAYS UNDER under-wayland.sh. --ozone-platform=headless has no
 # CreateNativePixmapFromHandle, so the import cannot work there — it is not
 # that this is slower or less convenient headless, it is that there is nothing
 # for the buffer to become. Running it headless fails at the import and says so.

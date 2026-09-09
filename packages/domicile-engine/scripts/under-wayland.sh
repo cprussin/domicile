@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Run another spike script under a nested Wayland compositor, on the GPU.
+# Run another script under a nested Wayland compositor, on the GPU.
 #
-#   NIX_SHELL_RUN=".../scripts/spike-wayland.sh /build/chromium/src \
-#     ./scripts/spike-step4.sh" \
+#   NIX_SHELL_RUN=".../scripts/under-wayland.sh /build/chromium/src \
+#     ./scripts/guard-css-and-resize.sh" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
 #
 # WHY THIS EXISTS. `--ozone-platform=headless` cannot import a dmabuf:
@@ -29,13 +29,13 @@ set -u
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
-  echo "usage: spike-wayland.sh <path to chromium/src> <script> [args...]" >&2
+  echo "usage: under-wayland.sh <path to chromium/src> <script> [args...]" >&2
   exit 1
 fi
 shift
 
 if [ $# -eq 0 ]; then
-  echo "usage: spike-wayland.sh <path to chromium/src> <script> [args...]" >&2
+  echo "usage: under-wayland.sh <path to chromium/src> <script> [args...]" >&2
   exit 1
 fi
 
@@ -53,7 +53,7 @@ command -v nix >/dev/null || {
   exit 1
 }
 
-export XDG_RUNTIME_DIR="${SPIKE_RUNTIME_DIR:-/tmp/domicile-spike-wl-rt}"
+export XDG_RUNTIME_DIR="${UNDER_WAYLAND_RUNTIME_DIR:-/tmp/domicile-under-wayland-rt}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 # A compositor that was killed leaves its socket behind, and the wait below
@@ -93,7 +93,7 @@ nix shell nixpkgs#sway nixpkgs#dbus --command env \
   WLR_BACKENDS=headless \
   WLR_LIBINPUT_NO_DEVICES=1 \
   WLR_RENDER_DRM_DEVICE="${RENDER_NODE:-/dev/dri/renderD128}" \
-  sway -c "$CONFIG" >/tmp/domicile-spike-wayland.log 2>&1 &
+  sway -c "$CONFIG" >/tmp/domicile-under-wayland.log 2>&1 &
 COMPOSITOR=$!
 cleanup() {
   kill "$COMPOSITOR" 2>/dev/null
@@ -119,7 +119,7 @@ for _ in $(seq 1 240); do
 done
 
 if [ -z "${WAYLAND_DISPLAY:-}" ]; then
-  echo "no compositor came up; see /tmp/domicile-spike-wayland.log" >&2
+  echo "no compositor came up; see /tmp/domicile-under-wayland.log" >&2
   exit 1
 fi
 echo "nested compositor on $WAYLAND_DISPLAY"

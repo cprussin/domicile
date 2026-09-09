@@ -19,7 +19,7 @@
 // allocator. The C ABI is still what it calls across.
 //
 // Run it with packages/domicile-engine/scripts/spike-dmabuf.sh, which is
-// spike-wayland.sh underneath: --ozone-platform=headless has no
+// under-wayland.sh underneath: --ozone-platform=headless has no
 // CreateNativePixmapFromHandle, so this cannot pass there and does not pretend
 // it might.
 
@@ -328,7 +328,7 @@ int main(int argc, char** argv) {
       fprintf(stderr,
               "the browser could not import the dmabuf. On an ozone platform "
               "without CreateNativePixmapFromHandle — headless is one — it "
-              "cannot: run this under scripts/spike-wayland.sh\n");
+              "cannot: run this under scripts/under-wayland.sh\n");
       domicile_engine_destroy(engine);
       return 1;
     }

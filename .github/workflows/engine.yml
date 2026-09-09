@@ -123,7 +123,7 @@ jobs:
       # is not a superset: `engineRuntimeLibs` in flake.nix puts Chromium's
       # runtime libraries beside the GL stack, and the guard needs both. The GL
       # stack, or no client can hand the compositor a dmabuf at all; Chromium's,
-      # or libdomicile_engine.so will not load. `spike-client-window.sh` says
+      # or libdomicile_engine.so will not load. `guard-client-window.sh` says
       # so in its own header.
       #
       # `--command` does not work with Chromium's shell: upstream's is a
@@ -235,8 +235,8 @@ jobs:
           echo "nixpkgs is $nixpkgs"
           export NIX_PATH="nixpkgs=$nixpkgs"
 
-          # `nix-shell` with the shell.nix, which is the form spike-wayland.sh
-          # and spike-client-window.sh use and the only one that has ever run
+          # `nix-shell` with the shell.nix, which is the form under-wayland.sh
+          # and guard-client-window.sh use and the only one that has ever run
           # on this machine. `nix develop path:` wants a flake.nix and this
           # directory ships a shell.nix; it entered nothing and exited 0, which
           # was indistinguishable from success until the sentinel existed.
@@ -345,15 +345,15 @@ jobs:
       # its buffer to the engine, and the page's canvas is read back — the one
       # check that says a client's own pixels reach the page.
       #
-      # `spike-wayland.sh` starts a headless wlroots compositor for the engine
+      # `under-wayland.sh` starts a headless wlroots compositor for the engine
       # to be a client of, because `--ozone-platform=headless` cannot import a
       # dmabuf at all.
       - name: A client's window on the page
         run: |
           set -euo pipefail
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-client-window.sh "$CHROMIUM"
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-client-window.sh "$CHROMIUM"
 
       # A guard that cannot fail is not a guard. The same run with no client
       # must report that nothing drew.
@@ -363,8 +363,8 @@ jobs:
         run: |
           set -euo pipefail
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-client-window.sh "$CHROMIUM"
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-client-window.sh "$CHROMIUM"
 
       # Two clients, two windows, one page — the claim the broker's unit tests
       # cannot make for themselves. They assert that two apps get two sinks;
@@ -374,8 +374,8 @@ jobs:
         run: |
           set -euo pipefail
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-two-windows.sh "$CHROMIUM"
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-two-windows.sh "$CHROMIUM"
 
       # Its control is sharper than the one above, and it is the one that would
       # have caught the heuristic this replaced: with a single client running,
@@ -388,8 +388,8 @@ jobs:
         run: |
           set -euo pipefail
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-two-windows.sh "$CHROMIUM"
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-two-windows.sh "$CHROMIUM"
 
       # And the thing all of the above is for. Every guard before it drives a
       # page written for the guard; this one drives shell-simple, built by its
@@ -406,8 +406,8 @@ jobs:
         run: |
           set -euo pipefail
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-shell.sh "$CHROMIUM"
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-shell.sh "$CHROMIUM"
 
       # Its control: the same run with the client drawing a different colour.
       # Not "no client", because the probe only runs when a client commits, so
@@ -418,8 +418,8 @@ jobs:
         run: |
           set -euo pipefail
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-shell.sh "$CHROMIUM"
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-shell.sh "$CHROMIUM"
 
       # The other shell, and the reason it is here rather than assumed: nothing
       # about `simple` passing says `manganese` does. It is the desktop this
@@ -433,8 +433,8 @@ jobs:
         run: |
           set -euo pipefail
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-shell.sh "$CHROMIUM" manganese
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-shell.sh "$CHROMIUM" manganese
 
       # AND ITS OWN CONTROL, which the first version of this argued was not
       # needed because a control is a property of the guard and `simple`'s
@@ -454,11 +454,11 @@ jobs:
         run: |
           set -euo pipefail
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-shell.sh "$CHROMIUM" manganese
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-shell.sh "$CHROMIUM" manganese
 
       # REQUIREMENT 2, WHICH NOTHING HAS RUN SINCE IT WAS WRITTEN. An <app> has
-      # to behave like any other replaced element, and `spike-step4.sh` is what
+      # to behave like any other replaced element, and `guard-css-and-resize.sh` is what
       # measures that: six CSS properties applied to an <app> and to an
       # ordinary <div> laid out identically beside it, and then a resize, which
       # gets a page of its own because it moves the LocalSurfaceId every
@@ -491,7 +491,7 @@ jobs:
           cat > /tmp/domicile-step4 <<EOF
           #!/usr/bin/env bash
           set -euo pipefail
-          "$GITHUB_WORKSPACE/packages/domicile-engine/scripts/spike-step4.sh" "$CHROMIUM"
+          "$GITHUB_WORKSPACE/packages/domicile-engine/scripts/guard-css-and-resize.sh" "$CHROMIUM"
           touch "$done"
           EOF
           chmod +x /tmp/domicile-step4
@@ -510,7 +510,7 @@ jobs:
           tail -200 /tmp/domicile-step4-shell.log | sed 's/^/  | /'
 
           [ -e "$done" ] || {
-            # `spike-step4.sh` says which half failed and why, because it
+            # `guard-css-and-resize.sh` says which half failed and why, because it
             # is the thing that knows: it holds the two exit statuses and each
             # half's own log. Three versions of this step tried to work that
             # out here instead, from one grep over the pair, and review found
@@ -538,8 +538,8 @@ jobs:
 
       # Everything the guard writes down, because none of it is on stdout.
       #
-      # `spike-wayland.sh` sends sway's output to a file and then says only "no
-      # compositor came up"; `spike-client-window.sh` keeps the compositor's
+      # `under-wayland.sh` sends sway's output to a file and then says only "no
+      # compositor came up"; `guard-client-window.sh` keeps the compositor's
       # log because it is the only place that says which app id a surface was
       # brokered under, and a failure there is usually a mismatch. Under
       # `PrivateTmp=true` both are inside the runner unit's own /tmp, so they

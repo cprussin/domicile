@@ -28,7 +28,7 @@
 //                   the CSS claim that was read off the mechanism rather than
 //                   measured
 //
-// packages/domicile-engine/scripts/spike-step4.sh in the Domicile repository
+// packages/domicile-engine/scripts/guard-css-and-resize.sh in the Domicile repository
 // runs both and has the engine flags they need.
 
 #include <algorithm>
@@ -92,7 +92,7 @@ enum class Check {
 // The colour the producer submits, and the colour the page fills every control
 // element with. One value reaches both halves through the harness — there is no
 // channel from the page to the producer, so the harness is what makes them
-// agree, and spike-step4.sh derives one from the other.
+// agree, and guard-css-and-resize.sh derives one from the other.
 constexpr SkColor kDefaultColor = SkColorSetARGB(0xFF, 0x00, 0xC8, 0x53);
 
 constexpr base::TimeDelta kEmbedTimeout = base::Seconds(60);

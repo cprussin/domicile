@@ -280,7 +280,7 @@ function. The cost is one more edited file, and it is not a spike's to pay.
 Nothing it does not do to a `<div>`. Each property is applied to an `<app>` and
 to an ordinary element laid out identically beside it, so the question is
 whether one half of a cell is a pixel-for-pixel copy of the other half —
-a comparison rather than a judgement. `scripts/spike-step4.sh`, 53,200 pixels
+a comparison rather than a judgement. `scripts/guard-css-and-resize.sh`, 53,200 pixels
 per cell, and the same numbers to the pixel on every run:
 
 | | differing | interior | worst Δ | |
@@ -311,7 +311,7 @@ changed, **every cell is 0** — `transform` included, and resize with it:
 
 So an `<app>` is not "a `<div>` up to a one-pixel outline"; it is a `<div>`.
 The outline was two software raster passes disagreeing in the last bit, and it
-is gone on the hardware a user would have. `GPU=1 scripts/spike-step4.sh` is
+is gone on the hardware a user would have. `GPU=1 scripts/guard-css-and-resize.sh` is
 that run.
 
 Two things stop this from passing for the wrong reason. Each property cell is
@@ -639,7 +639,7 @@ window.
       submitted frame reaching the display compositor's output in one display
       frame. See *What CSS does to an `<app>`* and *What it costs*.
       `components/domicile/spike/css_parity.cc` in the series, run with
-      `scripts/spike-step4.sh`
+      `scripts/guard-css-and-resize.sh`
 
 The last one was the whole point. The three before it were plumbing that either
 worked or named its own blocker. **Nothing was deleted from Domicile until the
@@ -830,8 +830,8 @@ display compositor:
 
 ```
 $ nix develop .#full --command \
-    scripts/spike-wayland.sh /build/chromium/src \
-    scripts/spike-client-window.sh /build/chromium/src
+    scripts/under-wayland.sh /build/chromium/src \
+    scripts/guard-client-window.sh /build/chromium/src
 the engine is listening on /tmp/domicile-client-window-broker
 driving kitty, drawing #3366CC
 the engine drew #FF3366CC; the client drew #3366CC
@@ -857,7 +857,7 @@ and refuses a format it cannot name rather than guessing.
 
 ### What the port measures
 
-`scripts/spike-dmabuf.sh`, under `spike-wayland.sh` because nothing else can:
+`scripts/spike-dmabuf.sh`, under `under-wayland.sh` because nothing else can:
 
 ```
 allocated two 992x639 dmabufs as rendering, 1 plane(s), modifier 0x300000000cdb014
@@ -931,7 +931,7 @@ already in phase 3:
   NVIDIA proprietary driver plus dmabuf import is the least travelled of the
   three.
 
-**Measured, and the answer is yes.** `scripts/spike-wayland.sh` nests the
+**Measured, and the answer is yes.** `scripts/under-wayland.sh` nests the
 engine in a headless wlroots compositor and runs any other check under
 `--ozone-platform=wayland` on the GPU. Every gate in
 `WaylandBufferManagerGpu::GetGbmDevice()` is satisfied on `crux`:

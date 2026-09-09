@@ -21,7 +21,7 @@ namespace content {
 // announces a window, the host learns of windows from the compositor, and the
 // compositor is the producer that connects over this socket. So the socket
 // waited for an embed, the embed for a window, and the window for the socket.
-// spike-shell.sh found that deadlock by being the first thing to drive a real
+// guard-shell.sh found that deadlock by being the first thing to drive a real
 // shell.
 //
 // Which makes the socket's existence a statement about the browser having been
