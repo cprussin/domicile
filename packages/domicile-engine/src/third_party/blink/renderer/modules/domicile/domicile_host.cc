@@ -253,6 +253,17 @@ const AtomicString& DomicileHost::InterfaceName() const {
   return event_target_names::kDomicileHost;
 }
 
+void DomicileHost::AddedEventListener(
+    const AtomicString& event_type,
+    RegisteredEventListener& registered_listener) {
+  EventTarget::AddedEventListener(event_type, registered_listener);
+  // Binding is what opens the inbound direction, so a listener registered
+  // before anything has been called has to be what opens it. Ignoring the
+  // failure is deliberate: there is no exception channel here, and a document
+  // with no frame has nothing to hear anyway.
+  EnsureBound();
+}
+
 ExecutionContext* DomicileHost::GetExecutionContext() const {
   return window_.Get();
 }

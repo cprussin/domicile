@@ -111,10 +111,27 @@ class MODULES_EXPORT DomicileHost final
 
   void Trace(Visitor*) const override;
 
+ protected:
+  // EventTarget, and protected there. Listening is using: see `EnsureBound`.
+  void AddedEventListener(const AtomicString& event_type,
+                          RegisteredEventListener&) override;
+
  private:
-  // Bound lazily, on the first call rather than at construction: a shell that
-  // never touches the channel should not make the browser reach for the
-  // compositor's socket, and the browser holds that connection open once asked.
+  // Bound lazily, on first use rather than at construction: a shell that never
+  // touches the channel should not make the browser reach for the compositor's
+  // socket, and the browser holds that connection open once asked.
+  //
+  // USE INCLUDES LISTENING, which is why `AddedEventListener` is overridden.
+  // The inbound direction opens here -- `SetClient` hands the compositor its
+  // way back in the same breath -- so a shell that only reacts, registering
+  // `onappappeared` and calling nothing, would never bind and never hear a
+  // word, with nothing anywhere to say why. That is most of a shell: the
+  // windows a desktop shows are announced, not asked for.
+  //
+  // It also means nothing arrives before the page is ready for it. A socket
+  // the page has not opened cannot deliver, and neither can this, so the
+  // already-running clients the compositor announces on connect are announced
+  // to a page that is listening by construction.
   bool EnsureBound();
   bool Ready(ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
