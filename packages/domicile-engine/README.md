@@ -87,6 +87,14 @@ If you are adding a message, add it in four places — the mojom, the IDL, the
 browser-side serialiser, and the Blink method — and add it to the list above,
 because the list is how the next person knows whether a gap is deliberate.
 
+**Batch them.** A new inbound message means a new event type, and a new event
+type means an entry in `event_type_names.json5`, which invalidates Blink's
+generated bindings and costs most of a full rebuild — tens of minutes, not the
+usual seconds. Nineteen members added together cost one of those. Nineteen
+members added one at a time cost nineteen. This is the standing cost of the
+protocol living in the browser process, and it is the reason to arrive with a
+list rather than with one message at a time.
+
 ## Working on it
 
 This is built on a machine with a Chromium checkout — `crux`, at
