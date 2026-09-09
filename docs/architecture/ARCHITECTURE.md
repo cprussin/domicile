@@ -39,9 +39,10 @@ every painting element, and so fails the CSS-parity and shell-simplicity
 requirements the project exists for.
 
 A fork costs rebases and a four-hour build. What makes it affordable is that it
-is mostly new files against a pinned revision — nine edited, five of them
-Blink's:
-`docs/architecture/ENGINE-FORK.md` is the design, the series and the
+is mostly *new* files against a pinned revision, and new files do not conflict:
+21 of Chromium's own are edited, 15 of them Blink's, and eleven of those went on
+defining `<app>` and `<webview>` as real elements.
+[ENGINE-FORK.md](ENGINE-FORK.md) is the design, the series and the
 measurements.
 
 ### Wayland host: Rust + Smithay
@@ -101,6 +102,12 @@ The page reaches the compositor over a WebSocket that the bridge
 bridge serves the shell's page from the same origin, so nothing has to be told
 where the session is.
 
+`domicile` is what starts the three, in the one order they can start in: the
+bridge first, because the engine needs a URL and a page cannot open a Unix
+socket; then the engine, which creates the broker socket; then the compositor,
+which connects to it as a producer. It builds nothing — the three ship beside
+it and it finds them from its own path.
+
 ## Crate layout
 
 Pure logic, in cargo's default set — `cargo test` builds and runs these without
@@ -112,7 +119,10 @@ a GPU, an engine or Smithay:
   version negotiation.
 - `domicile-host` — the orchestrator brain: where input goes and what the chrome
   is told. No Wayland.
-- `domicile-launch` — the boundary between a shell and the compositor it runs.
+- `domicile-launch` — `domicile` itself: which page to serve, which ozone
+  platform, where the three components are, and what each is started with. The
+  binary that reads the world is ninety lines; everything with a decision in it
+  is a module here.
 - `domicile-test-chrome`, `domicile-test-client` — a chrome and a Wayland
   client the integration tests drive, as libraries so their own behaviour is
   testable without Smithay.

@@ -10,137 +10,101 @@ exists ([why](docs/architecture/WINDOW-COMPOSITING.md)).
 [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) ·
 [ROADMAP.md](ROADMAP.md)
 
-## Run
+## Run one of the two desktops
 
-Needs Nix and a display. Nothing to clone.
-
-```sh
-nix run github:cprussin/domicile#manganese   # manganese: tabs, stage, address bar
-nix run github:cprussin/domicile#simple      # simple: floating windows only
-```
-
-Which desktop is **which app**, not an argument to one of them.
-
-A bare `nix run github:cprussin/domicile` is Domicile itself, and it wants the
-shell to run — because a shell is a page somebody built, and the two here are
-not privileged:
+Needs Nix and a Wayland session. Nothing to clone.
 
 ```sh
-nix run github:cprussin/domicile -- ./my-desktop/dist
+nix run github:cprussin/domicile#manganese   # tabs, stage, address bar
+nix run github:cprussin/domicile#simple      # floating windows only
 ```
 
-Everything runs on the forked engine: the browser is the display compositor,
-and the compositor is a producer to it.
-
-A Wayland session gets a window, the way starting sway inside sway does. A tty
-is refused for now: the whole screen needs an ozone platform Chromium will not
-build outside ChromeOS, which is written up in
-[docs/architecture/ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
-
-The engine is a nix package: `nix build .#engine` fetches the build CI
-published (a few hundred megabytes, once, into the store), checks it against
-the hash in `packages/domicile-engine/engine-release.nix`, and patches it to
-run — which is what makes it work on NixOS, where a generic-linux Chromium
-cannot start at all. `scripts/update-engine-release.sh` moves that file to the
-newest release, so which engine a given revision runs is a commit you can read.
-
-Building the engine yourself instead needs a Chromium checkout and about four
-hours; see [docs/architecture/ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
-
-From a checkout:
-
-```sh
-nix develop .#full -c ./scripts/dev-shell.sh manganese
-nix develop .#full -c ./scripts/dev-shell.sh simple
-```
-
-To install one rather than run it out of the source, build the shell you want.
+Which desktop is **which app**, not an argument to one of them. To install
+rather than run:
 
 ```sh
 nix profile install github:cprussin/domicile#manganese
-nix build github:cprussin/domicile#simple    # ./result/bin/simple
-nix profile install github:cprussin/domicile#domicile   # `domicile` itself
 ```
 
-Configuration is the shell's own, at `$XDG_CONFIG_HOME/domicile/<shell>.json`
-— see its README.
+You get a window, the way starting sway inside sway does. A tty is refused for
+now: the whole screen needs an ozone platform Chromium will not build outside
+ChromeOS ([why](docs/architecture/ENGINE-FORK.md)). The forked engine comes
+down as a prebuilt package the flake pins, so none of this is a Chromium build
+— [how that works](packages/domicile-engine/README.md#getting-one-without-building-it).
 
-`domicile` is four programs installed together, the way postfix is, and it
-finds the other three from its own path — `bin/domicile-compositor`,
-`libexec/domicile/engine`, `libexec/domicile/bridge`. `DOMICILE_ENGINE`,
-`DOMICILE_COMPOSITOR` and `DOMICILE_BRIDGE` each override one, which is what a
-checkout uses to run against components it just built.
+Each desktop's keys are in its own README —
+[simple](packages/shell-simple/README.md),
+[manganese](packages/shell-manganese/README.md) — as is its configuration,
+because a desktop owns whatever a user edits and Domicile has none of its own.
+Pointing a Wayland client at the display is
+[in simple's](packages/shell-simple/README.md#launch-an-app-into-it) and works
+the same under either.
 
-Each shell's README has its keys: [simple](packages/shell-simple/README.md),
-[manganese](packages/shell-manganese/README.md). Joining the desktop from
-outside — a Wayland client pointed at Domicile's display — is
-[in simple's](packages/shell-simple/README.md#launch-an-app-into-it), and is
-the same mechanism under either shell.
+## Write your own desktop
 
-## Write your own shell
+Neither shipped desktop is privileged. A shell is a built JavaScript module in
+its own repository — the panels, the decorations, the launcher — and Domicile
+runs it. Where you put a `<domicile-app>` is where that window is, and deciding
+that is a shell's whole job.
 
-The shell is all the user chrome — panels, decorations, launcher. `manganese`
-and `simple` ship here, but neither is privileged: a shell is a built
-JavaScript module in its own repository, written against
-`@domicile/chrome-sdk`, and handed to `domicile`.
+```js
+// shell.js
+import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
+import { registerElements } from "@domicile/chrome-sdk/register-elements";
+
+const bridge = new BridgeClient(
+  connectToHost(window, (url) => new WebSocket(url)),
+);
+registerElements(bridge);
+
+bridge.on("app_appeared", ({ app_id }) => {
+  const app = document.createElement("domicile-app");
+  app.setAttribute("app-id", app_id);
+  document.body.append(app);
+});
+
+await bridge.connect();
+```
+
+Bundle it under the name Domicile looks for, and run it:
 
 ```sh
-domicile ./my-desktop/dist
+npx esbuild shell.js --bundle --format=esm --outfile=dist/shell.js
+
+nix profile install github:cprussin/domicile#domicile   # `domicile` on PATH
+domicile ./dist/shell.js
 ```
 
-Which is the whole interface. A shell owns its own configuration, so someone
-using your desktop configures it rather than Domicile.
+Or without installing anything:
+`nix run github:cprussin/domicile -- ./dist/shell.js`.
 
-[docs/WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md) is the guide;
-[examples/minimal-shell](examples/minimal-shell) is a complete one in about two
-hundred and fifty lines, built against the published SDK from outside this
-workspace exactly as yours would be. The two shells in `packages/` are built on
-that floor rather than instead of it:
-[`shell-simple`](packages/shell-simple/README.md) is windows, gestures and a
-terminal shortcut, [`shell-manganese`](packages/shell-manganese/README.md) the
-bundled reference chrome.
+That is a desktop: every window full-screen, newest on top. There is no
+document to write — Domicile writes it — no launcher, no `bin/` entry, and
+nothing of yours to install: ship the directory however you like. A real shell
+differs from this only in where it puts the elements and what it draws around
+them.
 
-## Check
+Two things it leaves out, and neither is optional: removing the element on
+`app_closed`, and reporting the `Result` that `connect()` resolves rather than
+discarding it.
+
+**[docs/WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md) is the guide** — the
+handshake, the bundling rules that fail quietly, and what the document Domicile
+writes does and does not contain. [examples/minimal-shell](examples/minimal-shell)
+is the above in full, built against the published SDK from outside this
+workspace exactly as yours would be, and checked on every run of
+`./scripts/check.sh shell`.
+
+## Work on Domicile itself
 
 ```sh
-nix run github:cprussin/domicile#dev-check  # rust + typescript + every e2e script
+nix develop                        # core crates + TypeScript workspace
+nix develop .#full                 # adds Wayland/DRM/GL — needed for the two below
+
+./scripts/check.sh                 # everything; or one group: shell, rust, typescript, e2e
+./scripts/dev-shell.sh manganese   # a shell in a real desktop, rebuilt as you save
 ```
 
-Individual apps are the `apps` set in `flake.nix`; scripts without one run as
-`nix develop .#full -c ./scripts/<name>.sh`. For a branch:
-
-```sh
-nix run --refresh 'github:cprussin/domicile?ref=some/branch#dev-check'
-```
-
-## Develop
-
-```sh
-nix develop         # core crates + TypeScript workspace
-cargo test
-bun run turbo test
-
-nix develop .#full  # adds Wayland/DRM/GL for the compositor
-```
-
-To work on a shell, run it as a desktop and let it rebuild as you save:
-
-```sh
-./scripts/dev-shell.sh manganese
-bun run --filter @domicile/shell-manganese start:dev   # the same thing
-```
-
-That is the engine, the compositor and the bridge as `nix run .#manganese`
-assembles them, on the published engine the flake pins, with the page rebuilt
-and reloaded on each save. The compositor and the bridge come out of the
-checkout, so a change to either is one restart away.
-
-Before a PR also run `cargo fmt --all --check` and
-`cargo clippy --all-targets -- -D warnings`; `bun run turbo fix` handles the
-auto-fixable half. [AGENTS.md](AGENTS.md) has the guidelines every change is
-held to.
-
-Packages live in `packages/` — cargo crate if it has a `Cargo.toml`, bun
-workspace if it has a `package.json`. The bun packages have their own READMEs;
-the crates' roles are in
-[ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md#crate-layout).
+[AGENTS.md](AGENTS.md) is the contributor's index — the guidelines every change
+is held to, and what `check.sh` cannot reach.

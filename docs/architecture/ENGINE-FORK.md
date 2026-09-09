@@ -423,7 +423,8 @@ a cargo build, for three reasons, measured in that order:
    `//services/viz/public/mojom` means turning it on for every mojom it imports,
    transitively: **24 mojom targets across 14 `BUILD.gn` files Chromium owns**,
    plus one `visibility` list to widen. Against a design whose whole carrying
-   argument is "roughly four edited files", that is the number that matters.
+   argument is how few Chromium-owned files it edits — 21 across the series —
+   that is the number that matters.
 2. **The generator does not yet survive the viz graph.** With all 24 enabled,
    GN resolves and 50 crates build, then `media/mojo/mojom:media_types` fails
    to compile: the generator emits `media.mojom.StatusData`, which contains
@@ -492,8 +493,8 @@ its custom element; what went was the frame plumbing behind it.
   browser-brokered `SurfaceId` instead of an OffscreenCanvas placeholder.
 - **Minimise edited files, not added ones.** A fork's carrying cost is conflicts,
   and new files do not conflict. "Roughly four places" was the estimate before
-  the page half existed; measured, with steps 1–3 landed, it is **nine**, five
-  of them Blink's:
+  the page half existed. Measured across the whole series it is **21 files, 15
+  of them Blink's** — and where the other eleven went is the story:
 
   | | |
   |---|---|
@@ -503,11 +504,20 @@ its custom element; what went was the frame plumbing behind it.
   | `third_party/blink/renderer/core/html/canvas/html_canvas_element.{h,cc,idl}` | the method |
   | `third_party/blink/renderer/platform/runtime_enabled_features.json5` | the feature entry — `status: "stable"`, so nothing has to pass a flag |
   | `third_party/blink/renderer/platform/BUILD.gn` | the new file and its mojom dep |
+  | `ui/gfx/linux/gbm_wrapper.cc` | importing a client's dmabuf that the display device cannot scan out |
+  | **patch 0007's eleven** — the two `json5` name lists, `build.gni`, the two `bindings/*.gni`, `html_frame_element_base.h`, `html.css`, `style_adjuster.cc`, `display_item.{h,cc}`, `extensions/renderer/dispatcher.cc` | defining `<app>` and `<webview>` as real elements |
 
-  Everything else is additive, and the two that rebase noisily are the
-  generated lists — `runtime_enabled_features.json5` and the two `BUILD.gn`
-  source lists. Avoiding a new HTML element bought exactly what it was supposed
-  to: one entry in one generated list instead of three.
+  Everything else is additive, and what rebases noisily is the generated lists:
+  `runtime_enabled_features.json5`, the two `json5` name lists, the `.gni`
+  bindings lists and the `BUILD.gn` source lists.
+
+  The last row is a decision reversed, and it should be read as one. Reusing
+  `HTMLCanvasElement` was chosen to keep out of exactly those lists — "one entry
+  in one generated list instead of three" — and defining the elements properly
+  cost eleven more edited files. It bought `<app>` and `<webview>` as tags a
+  shell author writes rather than a canvas with a method on it, plus the
+  `app-id` reflection and the default styling that go with being an element. The
+  carrying cost is real and was paid deliberately.
 
 ## Getting started
 
@@ -1007,8 +1017,10 @@ copy path before the compositor can submit leaves nothing drawing at all.
 - [ ] **rebuild the latency measurement** in the compositor. It is the one
       process that both puts the key into the client's seat and holds the
       engine connection that knows when viz presented; a page can see the
-      first and a producer the second. Until it exists nothing measures the
-      requirement the fork is for.
+      first and a producer the second. **Written and unit-tested (#206);
+      it has never run on hardware** — every engine run so far has been
+      refused at the `crux` tree lock. The box closes on a number, not on
+      the guard existing.
 
 Phase 3 — be the display server:
 
@@ -1125,17 +1137,6 @@ than recalled.
   recommendation is to keep our routing and let the page report the box, which
   is what it does today — but whether viz's hit-test data has to agree with
   ours to avoid the engine swallowing events is not established.
-- **Where the Wayland server runs.** External keeps the fork to a bridge and
-  keeps the Rust. In-tree would get a GPU channel and `HostFrameSinkManager`
-  for free. Recommendation: **still external**, and step 2 is why rather than
-  the earlier hope. An external process was given a frame sink and had its
-  frames aggregated, with no privilege it could not be handed and no
-  `RenderProcessHost` anywhere. What step 2 also found is that the mojom-crate
-  route into cargo is not the bridge — see *Rust: the bindings exist, the crate
-  is not the seam*. The bridge is a GN-built library behind a C ABI, and which
-  side of it the mojo code sits on is now an ordinary engineering choice rather
-  than a blocker. Phase 1 is where it gets made, because that is where the
-  producer stops being throwaway.
 - **Build and CI cost.** A from-scratch build is 4h 16m and 97 GB on one
   16-core machine — an afternoon rather than a build farm. What the series
   itself costs, measured on `crux` against a tree already built at the pin:
@@ -1159,13 +1160,6 @@ than recalled.
   upstream's number rather than the fork's: whatever a six-week upstream diff
   costs to rebuild, carrying this adds seconds to it. This repo's CI still will
   not carry either.
-- **How the producer gets to make a `SharedImage`.** It cannot today, and this
-  is the last thing between phase 1 and real pixels. Broker a GPU channel to an
-  external process, or have the browser do the import and hand back a mailbox?
-  Recommendation is the second, with the reasoning in *What
-  `domicile_surface_import` still needs*. **This is a decision, not a detail:**
-  the first hands a process the browser did not launch the same GPU authority a
-  renderer has.
 - **Nothing invalidates a renderer's token when a producer goes away.** The map
   above is keyed on an app id, and app ids are minted from a counter that
   starts over when the compositor restarts. So a compositor restarting under a

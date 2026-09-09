@@ -40,16 +40,22 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/Shell.tsx` | The chrome: the rail, the launchers, the stage, the keybindings, and which screen each of them is on. |
 | `src/display-source.ts` | The `BridgeClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
 | `src/viewport-display.ts` | The same, for a shell with no host: the window is the only display there is. |
-| `src/desktop-size.ts` | How big the desktop the displays make up is: the bounding box, gaps included. |
-| `src/useWindowSizedToDesktop.ts` | Keeping the window that size, which is the main process's to do. |
+| `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/useShellWindows.ts` | Wires host events and user actions into the reducer, and the host's window events into the portal elements. |
 | `src/shell-state.ts` | Every change the window list can undergo, as one pure reduction. |
 | `src/shell-window.ts` | The window model: a client's portal or a browser window. |
+| `src/float.ts` | A window that has left the rail: where it sits on the stage and how big. Its own module because floating is not a kind of window. |
+| `src/useFloatDrag.ts`, `src/FloatGrab.tsx`, `src/FloatTitleBar.tsx` | Dragging and resizing a floating window, and the furniture that offers it. |
+| `src/claim-pointer.ts` | Where the chrome takes the pointer *over* a window — the compositor hit-tests the window's box and knows nothing about what the page painted on top of it. |
+| `src/useModifiers.ts` | The modifiers the shell reacts to. |
 | `src/app-elements.ts` | The live `<domicile-app>` elements by app id — where resizes and cursors are applied. |
 | `src/AppWindow.tsx` | A Wayland client's window: one `<domicile-app>` portal. |
 | `src/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<domicile-webview>`. |
+| `src/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
 | `src/Clock.tsx` | The live clock: in the rail's footer, and alone on every display the rail is not on. |
+| `src/diagnostic-lines.ts` | What the chrome has to say about its own timings — the keystroke round trip, and placement. |
 | `src/window-styles.ts` | What every window on the stage shares. |
+| `src/global.css`, `src/css.d.ts` | The document-level styling, and the type for importing it. |
 | `src/domicile-elements.d.ts` | The SDK's custom elements, as JSX. |
 
 There is no main process and no preload. The engine is the display compositor

@@ -42,6 +42,25 @@ same reason.
 | `scripts/spike-dmabuf.sh` | a real dmabuf, imported, submitted and released. By hand, always under `under-wayland.sh` |
 | `scripts/spike-iframe.sh`, `spike-iframe-page.html`, `spike-iframe-inner.html` | an `<app>` against an out-of-process `<iframe>`, over HTTP so the iframe can be cross-site. By hand |
 
+## Getting one without building it
+
+Building the fork is a Chromium checkout and about four hours, which is not
+what running a desktop should cost. So CI publishes a build and the flake
+fetches it:
+
+```sh
+nix build .#engine
+```
+
+That pulls a few hundred megabytes into the store once, checks it against the
+hash in `engine-release.nix`, and patches it to run — which is what makes it
+work on NixOS, where a generic-linux Chromium cannot start at all.
+`/scripts/update-engine-release.sh` moves that file to the newest release, so
+**which engine a given revision runs is a commit you can read.**
+
+`DOMICILE_ENGINE` points `domicile` at a different one — a checkout's
+`out/Domicile`, say. It names the directory holding `chrome`.
+
 ## Working on it
 
 This is built on a machine with a Chromium checkout — `crux`, at
@@ -57,8 +76,8 @@ here as spell-check, never as proof.
 ./scripts/extract.sh /build/chromium/src     # write it back here
 ```
 
-`build.sh`, `spike.sh` and `guard-css-and-resize.sh` all have to run inside Chromium's
-own toolchain shell — a component build links against that shell's glibc and
+`build.sh`, `spike.sh` and `guard-css-and-resize.sh` all have to run inside
+Chromium's own toolchain shell — a component build links against that shell's glibc and
 will not start without it:
 
 ```sh

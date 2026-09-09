@@ -28,6 +28,11 @@ submitted to the engine as a viz surface, and the page embeds that surface in
 its `<app>` element, so nothing is copied by the CPU and the browser's own
 display compositor is what reaches the screen.
 
+`domicile` is the entry point: `domicile ./my-desktop/dist` starts the bridge,
+the engine and the compositor, in the one order they can start in. It builds
+nothing and wraps nothing — the three components ship beside it, the way a
+multi-binary program like postfix does, and it finds them from its own path.
+
 The wire protocol is at `PROTOCOL_VERSION = 1`.
 
 ### What is proven, and by what
@@ -61,7 +66,13 @@ decides whether an item is waiting or workable.
    before then would be a seam drawn twice.
 3. **Keystroke-to-pixel latency** (#206). The one requirement nothing has
    measured: a client's window must cost the user nothing a plain Wayland
-   compositor would not. Guard written, unit-tested, never run on hardware.
+   compositor would not. Guard written, unit-tested, never run on hardware —
+   every engine run so far has been refused at the `crux` tree lock.
+4. **A control socket, and `domicile load-shell <path>`.** Switching the
+   running shell without restarting the desktop, so a watcher outside Domicile
+   can trigger a reload and `DOMICILE_DEV_RELOAD` — the poller the bridge
+   writes into the page — can go. **After `domicile://`**, which deletes the
+   hop it would otherwise be built on. `docs/architecture/THE-DOMICILE-BINARY.md`
 
 ### In the engine fork — the agent on `crux`
 
@@ -85,7 +96,7 @@ decides whether an item is waiting or workable.
 Nothing here can see one. Say which question a run would answer rather than
 guessing between two.
 
-- The first real `bun run --filter @domicile/shell-<name> start:dev`.
+- The first real `./scripts/dev-shell.sh <name>`.
 - Anything about orientation, presentation, or what a display does with a
   buffer.
 - Re-measuring latency or CSS parity after a change that could move either.
@@ -143,8 +154,11 @@ nix develop .#full           # adds wayland, mesa, weston, kitty
 
 `check.sh` picks up any `scripts/test-*.sh` and `scripts/e2e-*.sh` by glob, so a
 new check runs by existing. `smoke-compositor.sh` is outside that loop and is
-run by hand. Every check has a flake app: `nix run .#dev-check`,
-`.#dev-e2e-dmabuf`, and so on, against a fresh checkout with no `node_modules`.
+run by hand. Five have a flake app of their own, for running against a fresh
+checkout with no `node_modules` — `dev-check`, `dev-e2e-dmabuf`,
+`dev-e2e-chrome-fills-the-desktop`, `dev-smoke-compositor`,
+`dev-test-out-of-tree-shell`. Anything else is `nix develop .#full -c
+./scripts/<name>.sh`.
 
 Nothing in the suite needs a display.
 
@@ -152,7 +166,7 @@ Nothing in the suite needs a display.
 # A desktop, on a machine that has a screen.
 nix run 'github:cprussin/domicile#manganese'    # the reference shell
 nix run 'github:cprussin/domicile' -- ./dist    # a shell of your own
-bun run --filter @domicile/shell-manganese start:dev   # …and rebuilt as you edit
+./scripts/dev-shell.sh manganese               # …and rebuilt as you edit
 ```
 
 The engine job on `crux` is the only thing that builds the fork and drives the
@@ -243,7 +257,7 @@ Clients, for testing:
 | `packages/domicile-scene` | transforms, hit-testing, pointer routing, z-order (pure math) | core |
 | `packages/domicile-protocol` | host↔chrome wire messages, versioning | core |
 | `packages/domicile-host` | the orchestrator brain and its IPC | core |
-| `packages/domicile-launch` | the boundary between a shell and its compositor (pure) | core |
+| `packages/domicile-launch` | `domicile` itself: which page, which platform, where the components are, and the supervisor that starts them | core |
 | `packages/domicile-compositor` | **the running compositor**: Smithay server, imports, input, the engine seam | `.#full` |
 | `packages/domicile-engine` | the Chromium fork: the patch series, the pin, the published engine | — |
 | `packages/engine-chrome-host` | the bridge: serves the shell's page and pipes its session to the compositor | bun |
