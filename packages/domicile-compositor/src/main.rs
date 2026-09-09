@@ -3995,7 +3995,7 @@ const LATENCY_KEY: u32 = 28;
 /// `centre` — the browser window's middle, which is what a guard wants: a page
 /// with one `<app>` on it has the client's window under the centre, so nothing
 /// has to name a coordinate that would go stale the moment the page's CSS
-/// changed. `spike-client-window.sh` reads the drawn colour the same way and
+/// changed. `guard-client-window.sh` reads the drawn colour the same way and
 /// for the same reason.
 ///
 /// `x,y` — a point, for a page where the centre is not over the client.

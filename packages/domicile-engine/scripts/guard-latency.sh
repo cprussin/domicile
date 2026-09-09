@@ -2,8 +2,8 @@
 # Keystroke to pixel, on the fork, with a real client.
 #
 #   nix develop .#full --command \
-#     ./packages/domicile-engine/scripts/spike-wayland.sh /build/chromium/src \
-#     ./packages/domicile-engine/scripts/spike-latency.sh /build/chromium/src
+#     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
+#     ./packages/domicile-engine/scripts/guard-latency.sh /build/chromium/src
 #
 # WHY THIS EXISTS. Requirement 1 is that a client's window costs the user
 # nothing a plain Wayland compositor would not have cost them, and until this
@@ -32,7 +32,7 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
-  annotate "spike-latency: no path to chromium/src was given"
+  annotate "guard-latency: no path to chromium/src was given"
   exit 1
 fi
 
@@ -45,7 +45,7 @@ APP_ID="${APP_ID:-app-1}"
 
 # NEGATIVE=1 runs a client that ignores the keyboard. Every round must then be
 # abandoned and the guard must fail. Without this the guard would pass on any
-# client that merely draws, which is the failure `spike-two-windows.sh` shipped
+# client that merely draws, which is the failure `guard-two-windows.sh` shipped
 # once already.
 NEGATIVE="${NEGATIVE:-0}"
 
@@ -85,15 +85,15 @@ cleanup() {
 trap cleanup EXIT
 
 [ -x "$CHROMIUM/$OUT/chrome" ] || {
-  annotate "spike-latency: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
+  annotate "guard-latency: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
   exit 1
 }
 [ -f "$CHROMIUM/$OUT/libdomicile_engine.so" ] || {
-  annotate "spike-latency: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
+  annotate "guard-latency: no libdomicile_engine.so in $CHROMIUM/$OUT; build it with autoninja -C $OUT domicile_engine"
   exit 1
 }
 [ -x "$COMPOSITOR" ] || {
-  annotate "spike-latency: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
+  annotate "guard-latency: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
 if command -v kitty >/dev/null; then
@@ -101,7 +101,7 @@ if command -v kitty >/dev/null; then
 elif command -v nix >/dev/null; then
   KITTY=(nix shell nixpkgs#kitty --command kitty)
 else
-  skip "spike-latency: no kitty to draw with, and no nix to fetch one"
+  skip "guard-latency: no kitty to draw with, and no nix to fetch one"
   exit 77
 fi
 
@@ -123,7 +123,7 @@ STARTED+=($!)
 
 for _ in $(seq 1 240); do [ -S "$BROKER" ] && break; sleep 0.5; done
 [ -S "$BROKER" ] || {
-  annotate_from "spike-latency: the engine never opened its broker socket at $BROKER" "$ENGINE_LOG"
+  annotate_from "guard-latency: the engine never opened its broker socket at $BROKER" "$ENGINE_LOG"
   exit 1
 }
 
@@ -147,12 +147,12 @@ for _ in $(seq 1 120); do
   sleep 0.5
 done
 if ! kill -0 $COMP 2>/dev/null; then
-  annotate_from "spike-latency: the compositor did not start" "$COMP_LOG"
+  annotate_from "guard-latency: the compositor did not start" "$COMP_LOG"
   exit 1
 fi
 CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
 [ -n "$CLIENT_DISPLAY" ] || {
-  annotate "spike-latency: the compositor never named its Wayland display"
+  annotate "guard-latency: the compositor never named its Wayland display"
   exit 1
 }
 
@@ -217,7 +217,7 @@ if [ -z "$ENDED" ]; then
   # a title and a file — so a title split across three would have made the
   # second fragment the filename and thrown the rest away. This branch shipped
   # that once already, in `annotate`, and it read as a complete sentence.
-  annotate_from "spike-latency: the run never finished. Either the client never \
+  annotate_from "guard-latency: the run never finished. Either the client never \
 committed a frame after a key — check that it takes OSC 11 for its background \
 — or the compositor stopped before it could report" "$COMP_LOG"
   echo "what the compositor said:" >&2
@@ -240,23 +240,23 @@ if [ "$NEGATIVE" = "1" ]; then
   # run has to have got as far as pricing the probe and pressing keys, and only
   # then found nothing.
   if [ "$ENDED" != "completed" ]; then
-    annotate "spike-latency negative control: the run ended as '$ENDED' rather" \
+    annotate "guard-latency negative control: the run ended as '$ENDED' rather" \
          "than completing, so it never got as far as measuring nothing"
     exit 1
   fi
   if [ -z "$FLOOR" ]; then
-    annotate "spike-latency negative control: no floor, so the probe was never" \
+    annotate "guard-latency negative control: no floor, so the probe was never" \
          "priced and the run measured nothing rather than finding nothing"
     exit 1
   fi
   if [ -n "$OURS" ]; then
-    annotate "spike-latency negative control: a client that answers no keys" \
+    annotate "guard-latency negative control: a client that answers no keys" \
          "still produced a commit-to-pixel figure of $OURS ms — the run is" \
          "measuring something other than its own keystrokes"
     exit 1
   fi
   if [ "${ABANDONED:-0}" -lt 1 ]; then
-    annotate "spike-latency negative control: no round was abandoned, so the" \
+    annotate "guard-latency negative control: no round was abandoned, so the" \
          "guard would not have noticed a client that answers nothing"
     exit 1
   fi
@@ -266,10 +266,10 @@ fi
 
 if [ "$ENDED" != "completed" ]; then
   case "$ENDED" in
-    unsettled) annotate "spike-latency: the screen at the probe point never held" \
+    unsettled) annotate "guard-latency: the screen at the probe point never held" \
          "still, so the probe could not be priced. A client redrawing on its own" \
          "— a blinking cursor — does this; see cursor_blink_interval in this script" ;;
-    dark) annotate "spike-latency: the probe stopped answering, so nothing could" \
+    dark) annotate "guard-latency: the probe stopped answering, so nothing could" \
          "be read. Either the page never embedded or the browser is not compositing" ;;
   esac
   grep -aE "latency|domicile:|ERROR" "$COMP_LOG" | tail -15 | sed 's/^/  /' >&2
@@ -277,7 +277,7 @@ if [ "$ENDED" != "completed" ]; then
 fi
 
 if [ "${ABANDONED:-0}" -gt 0 ]; then
-  annotate "spike-latency: $ABANDONED round(s) went unanswered — the client did" \
+  annotate "guard-latency: $ABANDONED round(s) went unanswered — the client did" \
        "not change colour when a key was pressed, so what was measured is not" \
        "a keystroke reaching a pixel"
   grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
@@ -288,7 +288,7 @@ fi
 # compositor never delivered. The median would be over whatever rounds
 # survived, which is a number about a smaller run than the one reported.
 if [ "${UNDELIVERED:-0}" -gt 0 ]; then
-  annotate "spike-latency: $UNDELIVERED round(s) never had their key delivered," \
+  annotate "guard-latency: $UNDELIVERED round(s) never had their key delivered," \
        "so the run measured fewer rounds than it set out to and the compositor" \
        "is what failed, not the client"
   grep -aE "latency|no surface" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
@@ -296,7 +296,7 @@ if [ "${UNDELIVERED:-0}" -gt 0 ]; then
 fi
 
 if [ -z "$OURS" ] || [ -z "$FLOOR" ]; then
-  annotate "spike-latency: the run completed without both a floor and a" \
+  annotate "guard-latency: the run completed without both a floor and a" \
        "commit-to-pixel figure, so there is nothing to compare"
   exit 1
 fi
@@ -307,7 +307,7 @@ if latency_within "$OURS" "$MOST_FLOORS" "$FLOOR"; then
   echo "floor of ${FLOOR}ms — no stage of its own, which is the claim."
   exit 0
 fi
-annotate "spike-latency: commit to pixel is ${OURS}ms against a floor of" \
+annotate "guard-latency: commit to pixel is ${OURS}ms against a floor of" \
      "${FLOOR}ms, more than ${MOST_FLOORS}x — a client's frame is waiting on a" \
      "stage of its own somewhere between the commit and the page"
 grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2

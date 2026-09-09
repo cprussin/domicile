@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Reading a latency run out of the compositor's log.
 #
-# Its own file, sourced by `spike-latency.sh` and by
+# Its own file, sourced by `guard-latency.sh` and by
 # `scripts/test-latency-report.sh`, for the reason `lib-annotate.sh` is its own
 # file: what a guard concludes from a log is the guard's actual behaviour, and
 # behaviour that can only be exercised by starting a browser is behaviour

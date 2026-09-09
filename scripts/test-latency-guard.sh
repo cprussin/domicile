@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # What the latency guard decides, given a run's log.
 #
-# The unit is the verdict block at the end of `spike-latency.sh` — everything
+# The unit is the verdict block at the end of `guard-latency.sh` — everything
 # after the run has finished and the numbers are in hand. It is run out of the
 # real script rather than copied, through the real `annotate` and the real
 # `lib-latency.sh`, so a rewrite that moves it fails here loudly instead of
@@ -17,7 +17,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-GUARD="$ROOT/packages/domicile-engine/scripts/spike-latency.sh"
+GUARD="$ROOT/packages/domicile-engine/scripts/guard-latency.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$ROOT/packages/domicile-engine/scripts/lib-annotate.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-latency.sh
@@ -109,7 +109,7 @@ expect "and says both numbers" \
 SLOW="$(run_log 16.67 50.10 0 completed)"
 expect "a frame that takes three floors fails" "1" "$(verdict_code "$SLOW" 0)"
 expect "and names the floor it is measured against" \
-  "::error::spike-latency: commit to pixel is 50.10ms against a floor of 16.67ms, more than 2x — a client's frame is waiting on a stage of its own somewhere between the commit and the page" \
+  "::error::guard-latency: commit to pixel is 50.10ms against a floor of 16.67ms, more than 2x — a client's frame is waiting on a stage of its own somewhere between the commit and the page" \
   "$(verdict "$SLOW" 0)"
 
 # Just inside and just outside, because this is a float comparison in a shell.
@@ -124,15 +124,15 @@ ABANDONED="$(run_log 16.67 16.68 4 completed)"
 expect "an unanswered round fails even with a good number" \
   "1" "$(verdict_code "$ABANDONED" 0)"
 expect "and blames the client not changing colour" \
-  "::error::spike-latency: 4 round(s) went unanswered — the client did not change colour when a key was pressed, so what was measured is not a keystroke reaching a pixel" \
+  "::error::guard-latency: 4 round(s) went unanswered — the client did not change colour when a key was pressed, so what was measured is not a keystroke reaching a pixel" \
   "$(verdict "$ABANDONED" 0)"
 
 # The two give-up endings point at different things and must say so.
 expect "a screen that never settled points at a redrawing client" \
-  "::error::spike-latency: the screen at the probe point never held still, so the probe could not be priced. A client redrawing on its own — a blinking cursor — does this; see cursor_blink_interval in this script" \
+  "::error::guard-latency: the screen at the probe point never held still, so the probe could not be priced. A client redrawing on its own — a blinking cursor — does this; see cursor_blink_interval in this script" \
   "$(verdict "$(run_log '' '' 0 unsettled)" 0)"
 expect "a dark probe points at the page or the browser" \
-  "::error::spike-latency: the probe stopped answering, so nothing could be read. Either the page never embedded or the browser is not compositing" \
+  "::error::guard-latency: the probe stopped answering, so nothing could be read. Either the page never embedded or the browser is not compositing" \
   "$(verdict "$(run_log '' '' 0 dark)" 0)"
 
 # A completed run with no numbers in it is not a pass. The message is asserted
@@ -140,10 +140,10 @@ expect "a dark probe points at the page or the browser" \
 # too, so a code-only check passes through that instead of through the branch
 # it names — and the branch could be deleted outright with these still green.
 expect "a completed run with no floor is not a measurement" \
-  "::error::spike-latency: the run completed without both a floor and a commit-to-pixel figure, so there is nothing to compare" \
+  "::error::guard-latency: the run completed without both a floor and a commit-to-pixel figure, so there is nothing to compare" \
   "$(verdict "$(run_log '' 16.68 0 completed)" 0)"
 expect "nor one with no commit-to-pixel" \
-  "::error::spike-latency: the run completed without both a floor and a commit-to-pixel figure, so there is nothing to compare" \
+  "::error::guard-latency: the run completed without both a floor and a commit-to-pixel figure, so there is nothing to compare" \
   "$(verdict "$(run_log 16.67 '' 0 completed)" 0)"
 
 # One unanswered round out of sixty is the signal this guard exists for, and
@@ -154,7 +154,7 @@ expect "even a single unanswered round fails" \
 # A round whose key we never delivered is our failure, not the client's, and it
 # means the median is over a smaller run than the one reported.
 expect "an undelivered key fails, and is not the client's fault" \
-  "::error::spike-latency: 2 round(s) never had their key delivered, so the run measured fewer rounds than it set out to and the compositor is what failed, not the client" \
+  "::error::guard-latency: 2 round(s) never had their key delivered, so the run measured fewer rounds than it set out to and the compositor is what failed, not the client" \
   "$(verdict "$(run_log 16.67 16.68 0 completed 2)" 0)"
 
 # A run that never reported at all. Distinct from every case above, which all
@@ -168,7 +168,7 @@ expect "an undelivered key fails, and is not the client's fault" \
 NOTHING="$(mktemp "$FIXTURES/XXXXXX")"
 expect "a run that never reported fails" "1" "$(verdict_code "$NOTHING" 0)"
 expect "and names the client's redraw as a cause" \
-  "::error::spike-latency: the run never finished. Either the client never committed a frame after a key — check that it takes OSC 11 for its background — or the compositor stopped before it could report" \
+  "::error::guard-latency: the run never finished. Either the client never committed a frame after a key — check that it takes OSC 11 for its background — or the compositor stopped before it could report" \
   "$(verdict "$NOTHING" 0)"
 
 # And with a log behind it, which is the real case: still a failure, and the
@@ -192,7 +192,7 @@ expect "and says so" \
 expect "a control that still measured something fails" \
   "1" "$(verdict_code "$(run_log 16.67 16.68 3 completed)" 1)"
 expect "and says what that means" \
-  "::error::spike-latency negative control: a client that answers no keys still produced a commit-to-pixel figure of 16.68 ms — the run is measuring something other than its own keystrokes" \
+  "::error::guard-latency negative control: a client that answers no keys still produced a commit-to-pixel figure of 16.68 ms — the run is measuring something other than its own keystrokes" \
   "$(verdict "$(run_log 16.67 16.68 3 completed)" 1)"
 
 # A control that passes because the run fell over proves nothing about the

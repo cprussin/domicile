@@ -555,8 +555,8 @@ jobs:
         run: |
           set -euo pipefail
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-latency.sh "$CHROMIUM"
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-latency.sh "$CHROMIUM"
 
       # Its control: a client that ignores the keyboard. Without it the guard
       # would pass on any client that merely draws, and the number it reported
@@ -568,8 +568,8 @@ jobs:
         run: |
           set -euo pipefail
           nix develop .#full --command \
-            packages/domicile-engine/scripts/spike-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/spike-latency.sh "$CHROMIUM"
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-latency.sh "$CHROMIUM"
 
       # Everything the guard writes down, because none of it is on stdout.
       #
