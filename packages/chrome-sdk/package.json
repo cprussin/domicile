@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "@cprussin/option-result": "catalog:",
     "zod": "catalog:"
   },
   "description": "Domicile chrome SDK: <domicile-app>/<domicile-webview> custom elements and the host bridge client",
@@ -31,6 +30,10 @@
       "types": "./dist/connect-to-host.d.ts",
       "default": "./dist/connect-to-host.js"
     },
+    "./cursor-shape": {
+      "types": "./dist/cursor-shape.d.ts",
+      "default": "./dist/cursor-shape.js"
+    },
     "./desktop-size": {
       "types": "./dist/desktop-size.d.ts",
       "default": "./dist/desktop-size.js"
@@ -39,9 +42,17 @@
       "types": "./dist/device-pixel-ratio.d.ts",
       "default": "./dist/device-pixel-ratio.js"
     },
+    "./domicile-host": {
+      "types": "./dist/domicile-host.d.ts",
+      "default": "./dist/domicile-host.js"
+    },
     "./element-transform": {
       "types": "./dist/element-transform.d.ts",
       "default": "./dist/element-transform.js"
+    },
+    "./host-message": {
+      "types": "./dist/host-message.d.ts",
+      "default": "./dist/host-message.js"
     },
     "./host-stream": {
       "types": "./dist/host-stream.d.ts",
@@ -90,10 +101,6 @@
     "./surface-coordinates": {
       "types": "./dist/surface-coordinates.d.ts",
       "default": "./dist/surface-coordinates.js"
-    },
-    "./websocket-transport": {
-      "types": "./dist/websocket-transport.d.ts",
-      "default": "./dist/websocket-transport.js"
     },
     "./webview-element": {
       "types": "./dist/webview-element.d.ts",

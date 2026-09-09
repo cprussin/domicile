@@ -10,7 +10,7 @@ import type { DomicileAppElement } from "@domicile/chrome-sdk/app-element";
 import type {
   AppCursorMessage,
   AppResizedMessage,
-} from "@domicile/chrome-sdk/protocol";
+} from "@domicile/chrome-sdk/host-message";
 import { SampleWindow } from "@domicile/chrome-sdk/sample-window";
 
 export class AppElements {

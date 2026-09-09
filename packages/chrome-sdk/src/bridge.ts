@@ -1,32 +1,77 @@
-// The in-page client that talks to the Domicile host.
+// The in-page client for `navigator.domicile`.
 //
-// The host injects a `transport` — an object with `send(text)` and
-// `onMessage(cb)` — which in the real compositor is backed by a message pipe
-// the engine exposes to the page. The BridgeClient handles the version
-// handshake, dispatches host events to handlers, and offers typed senders.
+// The engine gives a shell's document a typed control channel: a `DomicileHost`
+// that is an `EventTarget` with methods on it. There is no JSON here, no
+// socket, and no handshake — a page calls `host.spawn([...])` and listens for
+// `appappeared`, and the wire protocol lives in the browser process where a
+// page cannot construct a malformed message.
+//
+// So what is this class for, if the host is already typed?
+//
+// # It listens so the page does not have to, and that is the whole point
+//
+// **A DOM event dispatched with no listener registered is gone.** An
+// `EventTarget` has no mailbox: `dispatchEvent` walks the listeners that exist
+// at that moment and returns. A React shell registers its handlers in its
+// first effect flush — tens of milliseconds after the compositor has started
+// talking, and *always* after, because rendering only schedules the effect.
+// What lands in that window is one `appappeared` per client already running,
+// which is to say a live, drawing client with no window on screen and no
+// second announcement coming.
+//
+// So the bridge registers its own listener for every event type in its
+// constructor, and {@link BridgeClient.on} is a registration against *this*
+// class rather than against the host. Anything that arrived before the page
+// asked for it is held (see {@link BridgeClient.#held}) and delivered when it
+// does. That is what `#held` was always for; what changed is that the gap it
+// covers is now between the page's handlers and the bridge's own, inside one
+// process, rather than between a page and a socket.
+//
+// **A page must therefore never call `addEventListener` on
+// `navigator.domicile` itself.** Not because it would fail — it would work,
+// and it would work for everything dispatched after the listener existed,
+// which is the subset that makes the bug invisible on a desktop with no
+// clients open.
+//
+// # Nothing can arrive before the bridge is listening
+//
+// The channel binds on first use, and as of the engine's control-channel
+// change that includes the first `addEventListener` — `DomicileHost::
+// AddedEventListener` calls `EnsureBound`. Binding is what hands the
+// compositor its way back into the page: until the channel is bound there is
+// no client end for the browser process to push on, so there is nothing that
+// could be dispatched and dropped. The constructor below registers before it
+// returns, so by the time anything holds a `BridgeClient` the ordering is
+// already safe. A socket the page has not opened cannot deliver either, and
+// this is the same guarantee one process further in.
+//
+// # It translates, because WebIDL's shapes are not a shell's
+//
+// `hasSize` beside the numbers it guards, a `DOMString` that is empty rather
+// than absent, one event class doing five jobs: those are what the IDL can
+// say. `host-message.ts` is what a shell wants instead, and it owns the
+// translation as well as the names — the listeners below are one call each.
+// The translators live there rather than inline here because a decision made
+// inside a DOM listener cannot be asserted on: a throw in one is reported to
+// the page's error handler rather than raised to whatever dispatched, so the
+// cursor keyword the engine does not check would have no test at all.
 
-import type { Result } from "@cprussin/option-result";
-import { Err, Ok } from "@cprussin/option-result";
-
-import type { ChromeMessage, Shortcut } from "./chrome-message";
+import type {
+  DomicileDisplay,
+  DomicileHost,
+  DomicileShortcut,
+} from "./domicile-host";
+import type { HostMessageOf, HostMessageType } from "./host-message";
 import {
-  closeAppMessage,
-  focusAppMessage,
-  focusChromeMessage,
-  grabShortcutMessage,
-  helloMessage,
-  keyMessage,
-  pointerAxisMessage,
-  pointerButtonMessage,
-  pointerLeaveMessage,
-  pointerMotionMessage,
-  resizeAppMessage,
-  setDesktopSizeMessage,
-  setDevicePixelRatioMessage,
-  spawnMessage,
-} from "./chrome-message";
-import type { DisplayInfo, HostMessageOf, HostMessageType } from "./protocol";
-import { PROTOCOL_VERSION, parseHostMessage } from "./protocol";
+  appAppeared,
+  appClosed,
+  appCursor,
+  appResized,
+  appTitled,
+  focusChanged,
+  modifiers,
+  shortcut,
+} from "./host-message";
 import { RoundTripWindow } from "./round-trip";
 import { SampleWindow } from "./sample-window";
 import type { AxisDelta } from "./wheel-axis";
@@ -34,74 +79,17 @@ import type { AxisDelta } from "./wheel-axis";
 /** The clock the round-trip timing reads; a parameter so tests can hold it. */
 const monotonicNow = (): number => performance.now();
 
-/**
- * Why a handshake did not agree.
- *
- * A value rather than a rejection because the two halves disagreeing is a
- * contract outcome, not a bug: the handshake crosses a process boundary, and
- * what the host answers with is part of what `connect` is for. Rejecting put
- * it in the throw channel, where a caller has to remember it exists. See
- * docs/guidelines/OPTION_RESULT.md.
- *
- * One variant so far. It is a constructor rather than a bare object because a
- * second is already foreseeable — a host that closes the socket without ever
- * answering — and the enum is what makes adding it one edit.
- */
-export enum HandshakeFailureKind {
-  VersionMismatch,
-}
-
-export const HandshakeFailure = {
-  VersionMismatch: ({ chrome, host }: { chrome: number; host: number }) => ({
-    chrome,
-    host,
-    kind: HandshakeFailureKind.VersionMismatch as const,
-  }),
-};
-
-export type HandshakeFailure = ReturnType<
-  (typeof HandshakeFailure)[keyof typeof HandshakeFailure]
->;
-
-/** What a failed handshake reads as on a console. */
-export const describeHandshakeFailure = (failure: HandshakeFailure): string => {
-  switch (failure.kind) {
-    case HandshakeFailureKind.VersionMismatch: {
-      return `protocol version mismatch: chrome speaks ${failure.chrome.toString()}, host speaks ${failure.host.toString()}`;
-    }
-  }
-};
-
-/** The message pipe the host exposes to the page. */
-export type Transport = {
-  send: (text: string) => void;
-  onMessage: (
-    callback: (
-      text: string,
-      /**
-       * When the host's own bytes arrived, on the same clock `now` reads.
-       * Optional because a transport that is not a socket — the no-op one the
-       * shell falls back to in a plain browser — has no such moment.
-       */
-      sentAt?: number,
-    ) => void,
-  ) => void;
-};
-
 export type BridgeOptions = {
-  protocolVersion?: number;
   now?: typeof monotonicNow;
 };
 
 type Handler = (message: never) => void;
 
 /**
- * The chrome's half of the host protocol: one handshake, a handler table for
- * host events, and a typed sender per chrome message.
+ * The chrome's half of the control channel: a handler table for what the
+ * compositor says, and a typed call per thing the chrome asks of it.
  */
 export class BridgeClient {
-  readonly protocolVersion: number;
-
   /**
    * How long keystrokes are taking to become pixels.
    *
@@ -122,33 +110,54 @@ export class BridgeClient {
   readonly roundTrip = new RoundTripWindow();
 
   /**
-   * What the host's bytes cost between arriving in this process and reaching
-   * this page. Zero work of the page's own is inside it: the stamp is taken by
-   * whoever read the socket, and this is the first line of the page to run.
+   * What the compositor's bytes cost between arriving in this process and
+   * reaching this page.
+   *
+   * **Also empty, and for a different reason than {@link roundTrip}: the thing
+   * it measures is still happening, and the instrument is gone.** The hop is
+   * as real as it ever was — the compositor's JSON is read in the browser
+   * process, becomes a mojo message, crosses to the renderer and is dispatched
+   * as a DOM event — and it is the stage that was Electron's IPC at 79ms a
+   * frame, which is why it was ever reported separately from a total that
+   * would have hidden it.
+   *
+   * What is gone is the stamp. The old transport was handed the moment the
+   * host's own bytes arrived, because whoever read the socket ran in this
+   * process and could take it. Nothing on `navigator.domicile` carries an
+   * equivalent: not the events, which have no arrival member, and not
+   * `Event.timeStamp`, which is when the event was *constructed* — in the
+   * renderer, at dispatch — so pricing against it would report a few
+   * microseconds of Blink and call it the IPC. An always-zero number is worse
+   * than an empty one, because a reader believes it.
+   *
+   * **The engine member that would fix this does not exist.** A
+   * `DOMHighResTimeStamp` on the events saying when the browser process took
+   * the message off the compositor's socket is one field on the mojo struct
+   * and one attribute on the event classes; until it is there this stays
+   * empty, and `diagnostic-lines` renders an empty window as no line rather
+   * than as a zero.
    */
   readonly hop = new SampleWindow();
 
-  readonly #transport: Transport;
+  readonly #host: DomicileHost;
   readonly #handlers = new Map<HostMessageType, Handler>();
 
   /**
    * Messages that arrived before the page registered a handler for their type,
    * kept in arrival order and delivered when it does.
    *
-   * The host starts talking the moment the socket opens — the `welcome`, and
-   * one `app_appeared` for every client already running — but a React page
+   * The compositor starts talking the moment the channel binds — one
+   * `app_appeared` for every client already running — but a React page
    * registers its handlers in its first effect flush, tens of milliseconds
    * later. Not a race it usually wins: rendering only *schedules* the effect,
-   * so `hello` precedes every `on` on every startup. Dropping what lands in
-   * between is a live, drawing client with no window on screen, and there is
-   * no second chance this page can count on: the host re-announces the open
-   * desktop only when *some* chrome shakes hands, which may never happen
-   * again.
+   * so the binding precedes every `on` on every startup. Dropping what lands
+   * in between is a live, drawing client with no window on screen, and there
+   * is no second chance this page can count on: a window is announced once.
    *
    * Unbounded on purpose, and bounded in time by {@link #released}: what can
-   * pile up here is only a type the page does register — {@link
-   * parseHostMessage} has already dropped the ones it does not know — and only
-   * before it has registered it, which it does for all of them in one mount.
+   * pile up here is only a type the page does register — the constructor
+   * listens for exactly the types this build knows — and only before it has
+   * registered it, which it does for all of them in one mount.
    */
   readonly #held = new Map<HostMessageType, unknown[]>();
   /**
@@ -159,82 +168,89 @@ export class BridgeClient {
    * would pile up with nothing to drain it.
    *
    * The cost is that what arrives between an {@link off} and a later
-   * {@link on} is gone. Fine for anything the page can read back — `displays`
-   * is retained on {@link displays}, so a provider that unmounts and remounts
-   * still sees the current desktop — and not fine for a lifecycle event, which
-   * arrives once on this page's account: `app_appeared` comes again only if
-   * another chrome connects, so a page that lets go of it and takes it up
-   * again has missed whatever mapped in between. Let go of a type only where
-   * the page can recover the state some other way.
+   * {@link on} is gone. Fine for anything the page can read back — the desktop
+   * is an attribute on the host, so a provider that unmounts and remounts
+   * still reads the current one off {@link displays} — and not fine for a
+   * lifecycle event, which arrives once on this page's account: `app_appeared`
+   * does not come again, so a page that lets go of it and takes it up again
+   * has missed whatever mapped in between. Let go of a type only where the
+   * page can recover the state some other way.
    */
   readonly #released = new Set<HostMessageType>();
   readonly #now: typeof monotonicNow;
-  #welcome: ((agreed: Result<number, HandshakeFailure>) => void) | undefined;
-  #displays: readonly DisplayInfo[] | undefined;
 
-  constructor(
-    transport: Transport,
-    {
-      protocolVersion = PROTOCOL_VERSION,
-      now = monotonicNow,
-    }: BridgeOptions = {},
-  ) {
-    this.protocolVersion = protocolVersion;
+  constructor(host: DomicileHost, { now = monotonicNow }: BridgeOptions = {}) {
     this.#now = now;
-    this.#transport = transport;
-    this.#transport.onMessage((text, sentAt) => {
-      if (sentAt !== undefined) {
-        this.hop.record(this.#now() - sentAt);
-      }
-      this.#handleIncoming(text);
+    this.#host = host;
+
+    // One listener per event type, registered here rather than left to the
+    // page — see this file's head for why that is the whole point of the
+    // class, and why registering them all before the constructor returns is
+    // what makes the ordering safe.
+    host.addEventListener("appappeared", (event) => {
+      this.#deliver("app_appeared", appAppeared(event));
+    });
+    host.addEventListener("apptitled", (event) => {
+      this.#deliver("app_titled", appTitled(event));
+    });
+    host.addEventListener("appresized", (event) => {
+      this.#deliver("app_resized", appResized(event));
+    });
+    host.addEventListener("appclosed", (event) => {
+      this.#deliver("app_closed", appClosed(event));
+    });
+    host.addEventListener("appcursor", (event) => {
+      this.#deliver("app_cursor", appCursor(event));
+    });
+    host.addEventListener("focuschanged", (event) => {
+      this.#deliver("focus_changed", focusChanged(event));
+    });
+    host.addEventListener("shortcut", (event) => {
+      this.#deliver("shortcut", shortcut(event));
+    });
+    host.addEventListener("modifiers", (event) => {
+      this.#deliver("modifiers", modifiers(event));
+    });
+    host.addEventListener("displayschanged", () => {
+      // The event is bare and the desktop is on the attribute, which the
+      // engine writes before it dispatches — so reading it here is reading
+      // *this* description rather than the one before it. Read at dispatch and
+      // not at delivery: a description that waits in the hold is replayed with
+      // the desktop as of when it fired, and since the last one held carries
+      // the latest, a handler processing them in order still ends on the
+      // desktop that is there now.
+      this.#deliver("displays", { displays: this.#host.displays });
     });
   }
 
   /**
-   * The displays the host described, or `undefined` until it has.
+   * The displays the compositor described, or `undefined` until it has.
    *
-   * Retained rather than only delivered, because {@link #held} answers the
-   * *first* handler to register for a type and then forgets — which is right
-   * for a stream and wrong for a fact. `displays` arrives at least once per
-   * connection, so a page whose components each register their own handler
-   * would leave every one after the first with nothing, and silently: a
-   * component with no displays renders the same empty region as one for a
-   * display that is not there.
+   * Read through to the host rather than retained here. The desktop is a fact
+   * and not a stream: it lives on `navigator.domicile.displays`, where a
+   * component that mounts long after the description reads the same answer as
+   * one that was there for it, and where a second reader cannot take it from
+   * the first.
    *
-   * `undefined` is "not told yet" and `[]` is a desktop of no screens. The
-   * compositor does not send `[]` — it describes at least one output, and the
+   * **Empty reads as `undefined`, and that is a translation the IDL forces.**
+   * `displays` is a `FrozenArray` that starts empty, so the engine has one
+   * value for "the compositor has not described the desktop yet" and for "a
+   * desktop of no screens" — and a shell has to tell them apart, because a
+   * `<Screen>` renders nothing for a display nobody mentioned and that is the
+   * right answer for one and the wrong one for the other. What makes the
+   * collapse safe is the compositor's own invariant, stated in the IDL beside
+   * the attribute: it describes at least one output, and the
    * window-following case is a display named `domicile-0` rather than an
-   * absence — but a shell that collapsed the two would render its "no screens"
-   * case for the moment before the answer arrives.
+   * absence. So an empty list is only ever the first of the two.
    *
-   * Latest wins, because the desktop is re-described when it changes: with no
-   * displays configured it is Domicile's own window, so every resize and every
-   * density change produces another `displays`.
-   *
-   * This fixes the replay half of that problem and not the other half:
-   * {@link on} is a single-slot registry, so a second `on("displays")` still
-   * *unregisters* the first for every message after it. Anything wanting to
-   * react to a change — as opposed to reading the current desktop — has to
-   * register once and fan out from there.
+   * Units are the display's own: logical CSS pixels for the geometry, and a
+   * `scale` that is what *clients* on that screen draw at — not this page's
+   * `devicePixelRatio`, which is one number for a shell however many screens
+   * it spans.
    */
-  get displays(): readonly DisplayInfo[] | undefined {
-    return this.#displays;
-  }
-
-  /**
-   * Perform the handshake.
-   *
-   * @returns The agreed protocol version, or why the two halves did not
-   *   agree. A `Result` rather than a rejection: a host speaking another
-   *   version is part of this call's contract rather than a bug in it, so it
-   *   belongs in the type where the caller has to answer for it.
-   */
-  connect(): Promise<Result<number, HandshakeFailure>> {
-    const promise = new Promise<Result<number, HandshakeFailure>>((settle) => {
-      this.#welcome = settle;
-    });
-    this.send(helloMessage(this.protocolVersion));
-    return promise;
+  get displays(): readonly DomicileDisplay[] | undefined {
+    const described = this.#host.displays;
+    return described.length === 0 ? undefined : described;
   }
 
   /**
@@ -249,9 +265,9 @@ export class BridgeClient {
   ): this {
     this.#handlers.set(type, handler as Handler);
     const waiting = this.#held.get(type);
-    // Deleted before the handler runs, not after: a handler that sends
-    // something the host answers with the same type would otherwise find the
-    // hold still full and see its own messages again.
+    // Deleted before the handler runs, not after: a handler that asks the host
+    // for something the compositor answers with the same type would otherwise
+    // find the hold still full and see its own messages again.
     this.#held.delete(type);
     for (const message of waiting ?? []) {
       handler(message as HostMessageOf<T>);
@@ -286,38 +302,42 @@ export class BridgeClient {
     return this;
   }
 
-  send(message: ChromeMessage): void {
-    this.#transport.send(JSON.stringify(message));
-  }
-
+  /**
+   * Tell the compositor what resolution to configure this client at.
+   *
+   * A pair here and two arguments on the host, because a box is one value to a
+   * shell and WebIDL has no tuple. Fractional on purpose: this comes from a
+   * layout box and a CSS pixel is fractional, so the whole path is `double` —
+   * reading it as an integer is what opened every window at zero.
+   */
   resizeApp(
     appId: string,
     size: readonly [width: number, height: number],
   ): void {
-    this.send(resizeAppMessage(appId, size));
+    this.#host.resizeApp(appId, size[0], size[1]);
   }
 
-  /** Tell the host the display density it should advertise to clients. */
+  /** Tell the compositor the display density it should advertise to clients. */
   setDevicePixelRatio(ratio: number): void {
-    this.send(setDevicePixelRatioMessage(ratio));
+    this.#host.setDevicePixelRatio(ratio);
   }
 
   /**
-   * Tell the host how big the desktop is, in CSS pixels.
+   * Tell the compositor how big the desktop is, in CSS pixels.
    *
    * The chrome's window *is* the desktop, and under an engine whose window the
    * compositor does not own this is the only way it can learn the size.
    */
   setDesktopSize(size: readonly [width: number, height: number]): void {
-    this.send(setDesktopSizeMessage(size));
+    this.#host.setDesktopSize(size[0], size[1]);
   }
 
   focusApp(appId: string): void {
-    this.send(focusAppMessage(appId));
+    this.#host.focusApp(appId);
   }
 
   focusChrome(): void {
-    this.send(focusChromeMessage());
+    this.#host.focusChrome();
   }
 
   /**
@@ -327,40 +347,41 @@ export class BridgeClient {
    * a dialog up and stays. The window goes when `app_closed` arrives.
    */
   closeApp(appId: string): void {
-    this.send(closeAppMessage(appId));
+    this.#host.closeApp(appId);
   }
 
   /** Ask the compositor to spawn a client process (argv array). */
   spawn(command: readonly string[]): void {
-    this.send(spawnMessage(command));
+    this.#host.spawn(command);
   }
 
   /**
    * Claim a key combination for the desktop, whatever holds the keyboard.
    *
    * The press arrives back as a `shortcut` message rather than as a DOM event,
-   * because the page is not what received it.
+   * because the page is not what received it — and it carries the same fields
+   * this was given, so a shell compares the two without parsing a string.
    */
-  grabShortcut(shortcut: Shortcut): void {
-    this.send(grabShortcutMessage(shortcut));
+  grabShortcut(shortcut: DomicileShortcut): void {
+    this.#host.grabShortcut(shortcut);
   }
 
   // ---- input forwarding ---------------------------------------------------
 
   pointerMotion(appId: string, x: number, y: number): void {
-    this.send(pointerMotionMessage(appId, x, y));
+    this.#host.pointerMotion(appId, x, y);
   }
 
   pointerLeave(appId: string): void {
-    this.send(pointerLeaveMessage(appId));
+    this.#host.pointerLeave(appId);
   }
 
   pointerButton(appId: string, button: number, pressed: boolean): void {
-    this.send(pointerButtonMessage(appId, button, pressed));
+    this.#host.pointerButton(appId, button, pressed);
   }
 
-  pointerAxis(appId: string, delta: AxisDelta): void {
-    this.send(pointerAxisMessage(appId, delta));
+  pointerAxis(appId: string, { dx, dy, v120X, v120Y }: AxisDelta): void {
+    this.#host.pointerAxis(appId, dx, dy, v120X, v120Y);
   }
 
   key(appId: string, keycode: number, pressed: boolean): void {
@@ -372,27 +393,7 @@ export class BridgeClient {
     if (pressed) {
       this.roundTrip.keyed(appId, this.#now());
     }
-    this.send(keyMessage(appId, keycode, pressed));
-  }
-
-  // Unknown message types are dropped rather than raised, so a newer host can
-  // add messages an older chrome cannot name. A *known* type with no handler
-  // yet is a different thing and is held, not dropped — see `#held`. Malformed
-  // messages are in neither category: `parseHostMessage` throws on those.
-  #handleIncoming(text: string): void {
-    const message = parseHostMessage(text);
-    if (message !== undefined) {
-      if (message.type === "welcome") {
-        this.#settleWelcome(message.protocol_version);
-      } else {
-        if (message.type === "displays") {
-          // Kept before it is delivered, so a handler that reads the accessor
-          // sees this message rather than the one before it.
-          this.#displays = message.displays;
-        }
-        this.#deliver(message.type, message);
-      }
-    }
+    this.#host.key(appId, keycode, pressed);
   }
 
   /**
@@ -402,7 +403,10 @@ export class BridgeClient {
    * deliberate, so it is dropped rather than kept for a handler that may never
    * come.
    */
-  #deliver(type: HostMessageType, message: unknown): void {
+  #deliver<T extends HostMessageType>(
+    type: T,
+    message: HostMessageOf<T>,
+  ): void {
     const handler = this.#handlers.get(type);
     if (handler !== undefined) {
       handler(message as never);
@@ -414,15 +418,5 @@ export class BridgeClient {
         waiting.push(message);
       }
     }
-  }
-
-  #settleWelcome(hostVersion: number): void {
-    const mismatch = HandshakeFailure.VersionMismatch({
-      chrome: this.protocolVersion,
-      host: hostVersion,
-    });
-    this.#welcome?.(
-      hostVersion === this.protocolVersion ? Ok(hostVersion) : Err(mismatch),
-    );
   }
 }

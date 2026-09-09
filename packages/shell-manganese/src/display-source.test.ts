@@ -1,47 +1,108 @@
 import { describe, expect, it } from "bun:test";
-import type { Transport } from "@domicile/chrome-sdk/bridge";
 import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type {
+  DomicileDisplay,
+  DomicileHost,
+  DomicileHostEventMap,
+} from "@domicile/chrome-sdk/domicile-host";
+import type { Display } from "@domicile/component-library/display-source";
 
 import { displaysFrom } from "./display-source";
 
+/** What every call *out* to the compositor does here, which is nothing. */
+const ignored = (): undefined => undefined;
+
 /**
- * A bridge with a host that never speaks, driven by hand.
+ * A compositor that only ever describes a desktop.
  *
- * The adapter reads `displays` and registers on `on`, neither of which needs a
- * socket — so the transport here exists only to hand the bridge messages the
- * test wrote.
+ * The adapter reads `displays` and registers through `on`, and neither of those
+ * is a call *out* — so every method here is a no-op and only the attribute and
+ * the one event do anything. Written out rather than cast from a partial,
+ * because `BridgeClient` registers a listener for every event type in its
+ * constructor and a double missing `addEventListener` would throw there.
  */
-class Host implements Transport {
-  #deliver: ((text: string) => void) | undefined;
+class Host implements DomicileHost {
+  displays: readonly DomicileDisplay[] = [];
 
-  send(): void {
-    // The adapter sends nothing; a chrome's outgoing traffic is not its half.
+  readonly #listeners = new Map<string, (event: never) => void>();
+
+  addEventListener<T extends keyof DomicileHostEventMap>(
+    type: T,
+    listener: (event: DomicileHostEventMap[T]) => void,
+  ): void {
+    this.#listeners.set(type, listener);
   }
 
-  onMessage(callback: (text: string) => void): void {
-    this.#deliver = callback;
+  /** The attribute, and then the bare event — the engine's own order. */
+  describes(displays: readonly DomicileDisplay[]): void {
+    this.displays = displays;
+    this.#listeners.get("displayschanged")?.(
+      new Event("displayschanged") as never,
+    );
   }
 
-  describes(displays: readonly unknown[]): void {
-    this.#deliver?.(JSON.stringify({ displays, type: "displays" }));
-  }
+  // Everything the chrome can ask a compositor for. None of it is this
+  // module's half — the adapter only ever reads and listens — so they are one
+  // shared no-op rather than fourteen empty bodies.
+  readonly closeApp = ignored;
+  readonly focusApp = ignored;
+  readonly focusChrome = ignored;
+  readonly grabShortcut = ignored;
+  readonly key = ignored;
+  readonly pointerAxis = ignored;
+  readonly pointerButton = ignored;
+  readonly pointerLeave = ignored;
+  readonly pointerMotion = ignored;
+  readonly resizeApp = ignored;
+  readonly setDesktopSize = ignored;
+  readonly setDevicePixelRatio = ignored;
+  readonly spawn = ignored;
 }
 
-const LEFT = {
+/** One screen, as the engine describes it. */
+const LEFT: DomicileDisplay = {
+  height: 1080,
   name: "left",
-  position: [0, 0] as const,
   scale: 1,
-  size: [1920, 1080] as const,
+  width: 1920,
+  x: 0,
+  y: 0,
 };
-const RIGHT = { ...LEFT, name: "right", position: [1920, 0] as const };
+const RIGHT: DomicileDisplay = { ...LEFT, name: "right", x: 1920 };
 
-/** A bridge and the host that feeds it. */
+/** The same screen, as `<Screen>` lays out against it. */
+const LEFT_LAID_OUT: Display = {
+  name: "left",
+  position: [0, 0],
+  scale: 1,
+  size: [1920, 1080],
+};
+const RIGHT_LAID_OUT: Display = {
+  ...LEFT_LAID_OUT,
+  name: "right",
+  position: [1920, 0],
+};
+
+/** A bridge and the compositor that describes desktops to it. */
 const connected = (): [BridgeClient, Host] => {
   const host = new Host();
   return [new BridgeClient(host), host];
 };
 
 describe("the desktop a shell lays out against", () => {
+  it("is regrouped into the rectangle the layout wants", () => {
+    // The two shapes are the same logical CSS pixels in the same desktop-wide
+    // space, and nothing is converted — but the engine names the corner and
+    // the extent as four numbers, because WebIDL has no tuple, and `<Screen>`
+    // positions against a pair and a pair. This module is where that happens,
+    // and it is the whole reason it is not a pass-through any more.
+    const [client, host] = connected();
+
+    host.describes([LEFT]);
+
+    expect(displaysFrom(client).displays).toStrictEqual([LEFT_LAID_OUT]);
+  });
+
   it("reads the bridge when asked, not when built", () => {
     // A snapshot taken at construction would hand a provider that mounts later
     // the desktop as of the moment the source was made, which on a desktop
@@ -52,7 +113,7 @@ describe("the desktop a shell lays out against", () => {
 
     host.describes([LEFT]);
 
-    expect(source.displays).toStrictEqual([LEFT]);
+    expect(source.displays).toStrictEqual([LEFT_LAID_OUT]);
   });
 
   it("passes on every desktop after that", () => {
@@ -65,7 +126,10 @@ describe("the desktop a shell lays out against", () => {
     host.describes([LEFT]);
     host.describes([LEFT, RIGHT]);
 
-    expect(seen).toStrictEqual([[LEFT], [LEFT, RIGHT]]);
+    expect(seen).toStrictEqual([
+      [LEFT_LAID_OUT],
+      [LEFT_LAID_OUT, RIGHT_LAID_OUT],
+    ]);
   });
 
   it("stops when the teardown runs", () => {
@@ -100,6 +164,6 @@ describe("the desktop a shell lays out against", () => {
 
     host.describes([LEFT]);
 
-    expect(seen).toStrictEqual([[LEFT]]);
+    expect(seen).toStrictEqual([[LEFT_LAID_OUT]]);
   });
 });

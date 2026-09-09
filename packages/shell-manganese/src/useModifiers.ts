@@ -51,8 +51,11 @@ export const useModifiers = (bridge: BridgeClient): Modifiers => {
     // `on` returns the bridge for chaining, so it is deliberately not returned
     // as a cleanup — there is one handler per message type and re-registering
     // replaces it.
-    bridge.on("modifiers", ({ alt, ctrl, shift }) => {
-      settle({ alt, ctrl, shift });
+    // The compositor's names for these are the web's now, so the two halves
+    // below read the same: `altKey` off a `modifiers` message is the same fact
+    // as `altKey` off a `KeyboardEvent`.
+    bridge.on("modifiers", ({ altKey, ctrlKey, shiftKey }) => {
+      settle({ alt: altKey, ctrl: ctrlKey, shift: shiftKey });
     });
   }, [bridge, settle]);
 

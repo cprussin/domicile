@@ -1,12 +1,9 @@
 // Entry point for the shell's renderer. `connectToHost` finds the compositor
-// whichever way this page was opened — the fork, Electron, or a plain browser
-// with no desktop at all — and this wires the SDK to it and mounts the React
-// chrome on top.
+// whichever way this page was opened — the fork, or a plain browser with no
+// desktop at all — and this wires the SDK to it and mounts the React chrome on
+// top.
 
-import {
-  BridgeClient,
-  describeHandshakeFailure,
-} from "@domicile/chrome-sdk/bridge";
+import { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import { connectToHost, hasHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDesktopSize } from "@domicile/chrome-sdk/desktop-size";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
@@ -38,20 +35,19 @@ const REPORT_EVERY_MS = 5000;
 // an inline copy of this first, and that file is gone.
 applyPreference(loadPreference());
 
-// One call, three places. Under the fork this opens a WebSocket to the bridge
-// serving this page; under Electron it takes the channel the preload injected;
-// in a plain browser it does nothing, so the shell still opens for styling
-// work against a desktop that will never arrive.
-const bridge = new BridgeClient(
-  connectToHost(window, (url) => new WebSocket(url)),
-);
+// One call, two places. Under the fork this is `navigator.domicile`, the
+// control channel the engine puts on a document it served; in a plain browser
+// there is none, and `connectToHost` says so on the console and hands back a
+// stand-in that does nothing — so the shell still opens for styling work
+// against a desktop that will never arrive.
+const bridge = new BridgeClient(connectToHost(navigator));
 
 // And where the desktop comes from, which is the same question one answer
 // later: a host describes one, and with no host nothing ever will, so the
 // window is the only geometry there is. Built here rather than in the chrome
 // because this is where the host's absence is already known, and once rather
 // than per render because a source is the connection.
-const displays = hasHost(window)
+const displays = hasHost(navigator)
   ? displaysFrom(bridge)
   : viewportDisplays(window);
 const appElements = new AppElements();
@@ -107,47 +103,19 @@ setInterval(() => {
   }
 }, REPORT_EVERY_MS);
 
-// The handshake's failure is a value, so it is reported rather than thrown:
-// this used to `.catch` and rethrow, which inside a promise handler is an
-// unhandled rejection — the desktop failed to start and said so nowhere a user
-// would look. A version mismatch is the compositor and the chrome having been
-// built from different commits, which is worth naming precisely.
+// Both halves of the desktop's mode, sent as soon as the shell is mounted.
 //
-// The trailing `.catch` is not for `connect()`, which cannot reject: its only
-// other failure is a `transport.send` that throws, and that happens
-// synchronously inside `connect()` before this chain exists. It is for the
-// handler above — the `Ok` arm sends, and a throw there rejects the promise
-// `.then` returns. Only a `.catch` after it sees that; an `onRejected` passed
-// to the same `.then` is wired to `connect()`'s rejections and never fires.
-bridge
-  .connect()
-  .then((agreed) => {
-    agreed.match({
-      Err: (failure) => {
-        // biome-ignore lint/suspicious/noConsole: the desktop has not started
-        console.error(`domicile: ${describeHandshakeFailure(failure)}`);
-        // There used to be a second half here: the same line on stderr,
-        // followed by ending the process. Both were the Electron main
-        // process's — a page can do neither — and reached over an IPC channel
-        // the preload injected. The engine has no such channel and the page
-        // has no process to end; what it says on the console is what reaches
-        // the terminal, which is the reporting half and all of it that a page
-        // was ever able to do.
-      },
-      Ok: () => {
-        // After the handshake: the host ignores everything sent before it.
-        //
-        // Both halves of the desktop's mode. The density is what a client
-        // renders at; the size is how big the desktop *is*, and under the
-        // forked engine the compositor cannot see the window this page is in
-        // — without the second call the desktop stays at the compositor's
-        // configured `nested_size` however large the window really is.
-        reportDevicePixelRatio(bridge, window);
-        reportDesktopSize(bridge, window);
-      },
-    });
-  })
-  .catch((failure: unknown) => {
-    // biome-ignore lint/suspicious/noConsole: the desktop has not started
-    console.error("domicile: the handshake could not be completed", failure);
-  });
+// This used to wait for a `welcome`, because the host dropped everything a
+// chrome said before the handshake — and the waiting was a promise chain with
+// two error arms, one for the version mismatch and one for a throw inside the
+// handler that reported it. The control channel has no handshake at all: the
+// version check happens in the browser process and only logs, and the first
+// call is what binds the channel. So there is nothing to await and nothing to
+// report, and what is left is the two calls that were always the point.
+//
+// The density is what a client renders at; the size is how big the desktop
+// *is*, and under the forked engine the compositor cannot see the window this
+// page is in — without the second call the desktop stays at the compositor's
+// configured `nested_size` however large the window really is.
+reportDevicePixelRatio(bridge, window);
+reportDesktopSize(bridge, window);

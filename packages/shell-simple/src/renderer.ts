@@ -1,17 +1,14 @@
 // Entry point for the simple shell's renderer, and the whole of its wiring.
 //
 // `connectToHost` finds the compositor whichever way this page was opened —
-// the fork, Electron, or a plain browser with no desktop at all — and this
-// joins the SDK to it, puts a window on the desktop for every client the host
-// announces, and hands the pointer to `installWindowGestures`. There is nothing
-// else — no chrome around the windows, and no state that is not a window's box.
-// The keys go on the background behind them; what a window paints of its own is
+// the fork, or a plain browser with no desktop at all — and this joins the SDK
+// to it, puts a window on the desktop for every client the host announces, and
+// hands the pointer to `installWindowGestures`. There is nothing else — no
+// chrome around the windows, and no state that is not a window's box. The keys
+// go on the background behind them; what a window paints of its own is
 // `desktop.ts`'s.
 
-import {
-  BridgeClient,
-  describeHandshakeFailure,
-} from "@domicile/chrome-sdk/bridge";
+import { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDesktopSize } from "@domicile/chrome-sdk/desktop-size";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
@@ -25,13 +22,12 @@ import { installWindowGestures } from "./window-gestures";
 
 import "./global.css";
 
-// One call, three places. Under the fork this opens a WebSocket to the bridge
-// serving this page; under Electron it takes the channel the preload injected;
-// in a plain browser it does nothing at all, so the desktop still opens and the
-// gestures still work against windows that will never arrive.
-const bridge = new BridgeClient(
-  connectToHost(window, (url) => new WebSocket(url)),
-);
+// One call, two places. Under the fork this is `navigator.domicile`, the
+// control channel the engine puts on a document it served; in a plain browser
+// there is none, and `connectToHost` says so on the console and hands back a
+// stand-in that does nothing — so the desktop still opens and the gestures
+// still work against windows that will never arrive.
+const bridge = new BridgeClient(connectToHost(navigator));
 registerElements(bridge);
 
 // The one thing an empty desktop has to say — this shell is Alt and nothing
@@ -62,32 +58,14 @@ bridge.on("app_cursor", (message) => {
 // what makes the next window to appear one someone opened.
 endCatchUpOnFocusChange(bridge, desktop);
 
-// The handshake's failure is a value, so it is reported rather than thrown: a
-// version mismatch is the compositor and the chrome having been built from
-// different commits, which is worth naming precisely. The trailing `.catch` is
-// for the handler above — `connect()` itself cannot reject.
-bridge
-  .connect()
-  .then((agreed) => {
-    agreed.match({
-      Err: (failure) => {
-        // biome-ignore lint/suspicious/noConsole: the desktop has not started
-        console.error(`domicile: ${describeHandshakeFailure(failure)}`);
-      },
-      Ok: () => {
-        // After the handshake: the host ignores everything sent before it.
-        //
-        // Both halves of the desktop's mode. The density is what a client
-        // renders at; the size is how big the desktop *is*, and under the
-        // forked engine the compositor cannot see the window this page is in
-        // — without the second call the desktop stays at the compositor's
-        // configured `nested_size` however large the window really is.
-        reportDevicePixelRatio(bridge, window);
-        reportDesktopSize(bridge, window);
-      },
-    });
-  })
-  .catch((failure: unknown) => {
-    // biome-ignore lint/suspicious/noConsole: the desktop has not started
-    console.error("domicile: the handshake could not be completed", failure);
-  });
+// Both halves of the desktop's mode, sent as soon as there is anything to send
+// them to. There is no handshake to wait for any more — a shell used to defer
+// these until `welcome` arrived, because the host dropped everything before it,
+// and the control channel has no such moment: the first call binds it.
+//
+// The density is what a client renders at; the size is how big the desktop
+// *is*, and under the forked engine the compositor cannot see the window this
+// page is in — without the second call the desktop stays at the compositor's
+// configured `nested_size` however large the window really is.
+reportDevicePixelRatio(bridge, window);
+reportDesktopSize(bridge, window);

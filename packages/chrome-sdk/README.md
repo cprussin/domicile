@@ -13,11 +13,16 @@ clients as DOM elements.
 
 It provides four things:
 
-- **`BridgeClient`** (`./bridge`) — the client for the host protocol: version
-  handshake, a handler table for host events, and a typed sender per
-  chrome→host message. It takes a `Transport` (`send` / `onMessage`), which the
-  host injects into the page. A message may carry the moment its bytes reached
-  the process, and `bridge.hop` is what that costs to get from there to here.
+- **`BridgeClient`** (`./bridge`) — the client for `navigator.domicile`, the
+  typed control channel the forked engine puts on a document it served. It
+  takes a `DomicileHost` and gives back a handler table for what the compositor
+  says and a typed call per thing the chrome asks of it. There is no handshake
+  and no wire: what it adds over the host itself is that it **registers its own
+  listeners in its constructor and holds what arrives before your `on` does** —
+  a DOM event dispatched with no listener is gone, and a React shell registers
+  tens of milliseconds after the compositor has announced every window already
+  running. For the same reason a page must never call `addEventListener` on
+  `navigator.domicile` itself.
 - **Custom elements** (`./register-elements`) — `<domicile-app>` and
   `<domicile-webview>`. An `<domicile-app>` reports its on-screen box to the
   host, embeds that client's surface, and forwards pointer and keyboard input
@@ -34,36 +39,34 @@ It provides four things:
   the only part of Domicile that can see either; a chrome that reported it once
   would leave every client drawing at the old resolution.
 - **Pure helpers** — affine `./matrix` math mirroring the Rust
-  `domicile-scene::Transform`, `./chrome-message` builders for the wire format,
-  `./protocol` schemas for decoding host frames, `./input` keycode mapping,
-  `./newline-frames` for the delimiter on chrome→host messages, and
-  `./host-stream` for reading the host's direction.
+  `domicile-scene::Transform`, `./domicile-host` mirroring the engine's IDL,
+  `./host-message` for what the bridge delivers and how an event becomes one,
+  `./cursor-shape` for the keyword set a client can ask for, and `./input`
+  keycode mapping. `./protocol`, `./chrome-message`, `./newline-frames` and
+  `./host-stream` are the compositor's own JSON wire, which **a page no longer
+  speaks**: they are there for `@domicile/e2e-harness`, a headless stand-in for
+  a chrome that talks to the compositor's socket directly.
 
 ## Usage
 
 ```ts
-import {
-  BridgeClient,
-  describeHandshakeFailure,
-} from "@domicile/chrome-sdk/bridge";
+import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-const bridge = new BridgeClient(window.domicileTransport);
+const bridge = new BridgeClient(connectToHost(navigator));
 registerElements(bridge);
-(await bridge.connect()).match({
-  Err: (failure) => {
-    console.error(describeHandshakeFailure(failure));
-  },
-  Ok: () => {
-    // The host ignores everything sent before the handshake.
-  },
-});
 ```
 
-`connect` reports a failed handshake rather than rejecting: the two halves
-speaking different protocol versions is part of what the call answers, not a
-bug in it. `Result` has no `unwrap`, so the caller has to say what happens on
-each arm.
+That is the whole of it. There is nothing to await: `connect()` is gone with
+the handshake it performed, the compositor's protocol version is checked in the
+browser process and only logged, and the first call on the channel is what
+binds it. Say what you have to say as soon as you have a bridge.
+
+Opened in an ordinary browser there is no `navigator.domicile` at all —
+`vite dev` on a shell's page is a real thing to do — and `connectToHost` hands
+back a stand-in that does nothing and says so once on the console. Ask
+`hasHost(navigator)` if your own code needs the answer.
 
 Then render `<domicile-app app-id="…">` / `<domicile-webview src="…">` as
 normal DOM and style them with ordinary CSS — rounding, blur, transforms, and
@@ -82,11 +85,11 @@ which is exactly when a shell wants to know, because that is when it would
 begin an alt-drag. The host says instead:
 
 ```ts
-bridge.on("modifiers", ({ alt }) => {
+bridge.on("modifiers", ({ altKey }) => {
   // While Alt is held, let the pointer reach the page rather than the window
   // it is over: `pointer-events: none` is what tells the compositor the
   // window is not taking clicks, and it hit-tests accordingly.
-  portal.style.pointerEvents = alt ? "none" : "";
+  portal.style.pointerEvents = altKey ? "none" : "";
 });
 ```
 
@@ -99,15 +102,17 @@ could ever use.
 
 ## Dependencies
 
-`zod`, used only at the host boundary: incoming frames are parsed against the
-schemas in `./protocol` rather than cast, so a malformed frame fails loudly
-where it enters. An unknown *message type* is not malformed — it is dropped, so
-a newer host can add messages an older chrome ignores.
+`zod`, in two places and both of them boundaries. `./protocol` parses the
+compositor's JSON for the headless harness rather than casting it. And
+`./cursor-shape` parses one field off the typed channel — `DomicileAppEvent`
+declares `cursor` as a `DOMString` rather than a WebIDL enum, so it is the last
+value here that the engine does not check, and an unknown keyword assigned to
+`style.cursor` fails silently.
 
-`@cprussin/option-result`, for the one outcome a caller has to decide about
-rather than recover from: `connect` returns `Result<number, HandshakeFailure>`.
-Everything else here either throws — a bug, per
-[ERRORS.md](/docs/guidelines/ERRORS.md) — or returns `T | undefined` for
+Nothing else. `@cprussin/option-result` was a dependency for exactly one
+outcome — `connect()` returning `Result<number, HandshakeFailure>` — and there
+is no handshake to fail. Everything here either throws (a bug, per
+[ERRORS.md](/docs/guidelines/ERRORS.md)) or returns `T | undefined` for
 ordinary absence.
 
 ## Test

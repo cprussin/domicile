@@ -44,9 +44,7 @@ import { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-const bridge = new BridgeClient(
-  connectToHost(window, (url) => new WebSocket(url)),
-);
+const bridge = new BridgeClient(connectToHost(navigator));
 registerElements(bridge);
 
 bridge.on("app_appeared", ({ app_id }) => {
@@ -54,8 +52,6 @@ bridge.on("app_appeared", ({ app_id }) => {
   app.setAttribute("app-id", app_id);
   document.body.append(app);
 });
-
-await bridge.connect();
 ```
 
 ```sh

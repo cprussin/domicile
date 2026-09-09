@@ -3,14 +3,19 @@
 // A shell's page needs two things the fork cannot give it: the page itself,
 // from an origin (a `file:` page has none, and the session URL is derived from
 // the page's own), and a connection to the compositor's protocol socket, which
-// a page cannot open. This serves both, from one port, so that
-// `connectToHost` has nothing to be told.
+// a page cannot open. This serves both, from one port.
+//
+// **Nothing in a page opens that session any more.** The SDK reads
+// `navigator.domicile` — the control channel the engine puts on a document it
+// served — and its WebSocket transport is deleted. The session route below is
+// still here because the route on the *engine* side that replaces it is the
+// `domicile://` scheme, which is a separate change; until that lands this
+// serves a socket with no client at the far end of it.
 //
 // It is a byte pipe and not a participant. It does not parse the protocol, it
 // does not know a `welcome` from an `app_appeared`, and it holds no state about
-// the desktop. See `@domicile/chrome-sdk/websocket-transport` for why: a bridge
-// that parses is a bridge that can corrupt, and the framing already has a
-// tested implementation at the end that needs it.
+// the desktop: a bridge that parses is a bridge that can corrupt, and the
+// framing already has a tested implementation at the end that needs it.
 
 import { statSync } from "node:fs";
 import path from "node:path";

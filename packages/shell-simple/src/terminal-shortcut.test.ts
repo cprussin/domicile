@@ -51,7 +51,13 @@ describe("openTerminalOnAltEnter", () => {
     const fake = fakeBridge();
     openTerminalOnAltEnter(fake.bridge, document.createElement("div"));
     expect(fake.grabbed).toStrictEqual([
-      { alt: true, ctrl: false, key: 28, logo: false, shift: false },
+      {
+        altKey: true,
+        ctrlKey: false,
+        keycode: 28,
+        metaKey: false,
+        shiftKey: false,
+      },
     ]);
   });
 
@@ -99,7 +105,7 @@ describe("openTerminalOnAltEnter", () => {
 
   it("leaves Alt+Shift+Enter alone, because the claim does", () => {
     // The compositor matches on the exact modifier set, and what is claimed
-    // has `shift: false`. A page that answered the shift variant anyway would
+    // has `shiftKey: false`. A page that answered the shift variant anyway would
     // make one combination do two different things depending on whether a
     // client happened to hold the keyboard.
     const fake = fakeBridge();

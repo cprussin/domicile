@@ -1,4 +1,5 @@
 import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileShortcut } from "@domicile/chrome-sdk/domicile-host";
 import { Button } from "@domicile/component-library/Button";
 import { Card } from "@domicile/component-library/Card";
 import {
@@ -30,17 +31,25 @@ import { useShellWindows } from "./useShellWindows";
 /** A window with no tab selected — the rail's resting state on an empty shell. */
 const NO_WINDOW = "";
 
-/** Alt+Enter, in the evdev keycodes the protocol speaks. 28 is Enter. */
-const ALT_ENTER = {
-  alt: true,
-  ctrl: false,
-  key: 28,
-  logo: false,
-  shift: false,
+/**
+ * Alt+Enter, in the evdev keycodes the control channel speaks. 28 is Enter.
+ *
+ * Every modifier is named rather than left to the dictionary's default. The
+ * compositor matches the set it was given and nothing else, so the three that
+ * must *not* be held are as much of the chord as the one that must — and the
+ * page's own `keydown` branch below has to agree with them or the same keys
+ * would do two different things depending on which half heard them.
+ */
+const ALT_ENTER: DomicileShortcut = {
+  altKey: true,
+  ctrlKey: false,
+  keycode: 28,
+  metaKey: false,
+  shiftKey: false,
 };
 
 /** Alt+Tab, the same way. 15 is Tab. */
-const ALT_TAB = { ...ALT_ENTER, key: 15 };
+const ALT_TAB: DomicileShortcut = { ...ALT_ENTER, keycode: 15 };
 
 type ChromeProps = {
   appElements: AppElements;
@@ -149,16 +158,19 @@ const Desktop = ({ appElements, bridge }: DesktopProps) => {
   // page received it.
   useEffect(() => {
     bridge.grabShortcut(ALT_ENTER);
-    bridge.grabShortcut({ ...ALT_ENTER, shift: true });
+    bridge.grabShortcut({ ...ALT_ENTER, shiftKey: true });
     bridge.grabShortcut(ALT_TAB);
     // `on` returns the bridge for chaining, so it is deliberately not returned
     // as a cleanup — there is one handler per message type and re-registering
     // replaces it.
-    bridge.on("shortcut", ({ shortcut }) => {
-      if (shortcut.key === ALT_TAB.key) {
+    // Flat rather than nested under a `shortcut` key: the press arrives as the
+    // same dictionary that claimed it, so this compares the two field for
+    // field without parsing anything.
+    bridge.on("shortcut", ({ keycode, shiftKey }) => {
+      if (keycode === ALT_TAB.keycode) {
         float();
       } else {
-        launch(shortcut.shift);
+        launch(shiftKey);
       }
     });
   }, [bridge, float, launch]);

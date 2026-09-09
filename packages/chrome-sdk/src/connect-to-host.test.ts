@@ -1,83 +1,91 @@
 import { describe, expect, it } from "bun:test";
-
-import type { HostWindow } from "./connect-to-host";
+import type { HostNavigator } from "./connect-to-host";
 import { connectToHost, hasHost } from "./connect-to-host";
-import type { WebSocketLike } from "./websocket-transport";
+import type { DomicileHost } from "./domicile-host";
 
-const openNothing = (): WebSocketLike => ({
-  addEventListener: () => undefined,
-  readyState: 1,
-  send: () => undefined,
-});
+/**
+ * As much of a `DomicileHost` as identity requires.
+ *
+ * Nothing here calls it: what these tests are about is *which* object comes
+ * back, and what the one the SDK makes up does when there is none.
+ */
+const aHost = (): DomicileHost => ({ displays: [] }) as unknown as DomicileHost;
 
-const page = (protocol: string, host: string): HostWindow => ({
-  location: { host, protocol },
-});
+const navigatorWith = (domicile: DomicileHost | null | undefined) =>
+  ({ domicile }) as HostNavigator;
 
 describe("connectToHost", () => {
-  it("opens the session on the page's own origin", () => {
-    const asked: string[] = [];
-    connectToHost(page("http:", "127.0.0.1:7777"), (url) => {
-      asked.push(url);
-      return openNothing();
-    });
+  it("hands back the compositor when there is one", () => {
+    // Identity, not equality: everything downstream registers listeners on
+    // this object, and a copy would be an object nothing dispatches to.
+    const host = aHost();
 
-    expect(asked).toEqual(["ws://127.0.0.1:7777/domicile-session"]);
+    expect(connectToHost(navigatorWith(host), () => undefined)).toBe(host);
   });
 
-  it("uses wss for a page served over https", () => {
-    const asked: string[] = [];
-    connectToHost(page("https:", "desktop.example"), (url) => {
-      asked.push(url);
-      return openNothing();
+  it("says so, once and in as many words, when there is none", async () => {
+    // A shell's page opened in an ordinary browser has no compositor and must
+    // still render — that is how a shell is styled and laid out without a
+    // desktop running. What it must not do is fail *quietly*: a page whose
+    // windows never appear is indistinguishable from a compositor with no
+    // clients, from a layout bug, and from a client that never drew, and this
+    // is the only layer that knows which.
+    const said = await new Promise<string>((resolve) => {
+      connectToHost(navigatorWith(undefined), resolve);
     });
 
-    expect(asked).toEqual(["wss://desktop.example/domicile-session"]);
+    expect(said).toContain("navigator.domicile");
   });
 
-  // A shell's page opened in an ordinary browser has no host and must still
-  // render: that is how a shell is styled and laid out without a desktop
-  // running. It must not throw, and it must not try to open a socket.
-  it("does nothing, quietly, on a page with no host", () => {
-    const asked: string[] = [];
-    const transport = connectToHost(page("file:", ""), (url) => {
-      asked.push(url);
-      return openNothing();
-    });
+  it("reads a null compositor as no compositor", () => {
+    // Both absences are real and they are not the same shape. The property is
+    // missing outright on a stock browser; the fork's own accessor answers
+    // `null` for a document with no frame. A shell that tested only for
+    // `undefined` would take the second one for a host and call methods on it.
+    const said: string[] = [];
 
-    expect(asked).toEqual([]);
-    expect(() => transport.send('{"type":"hello"}')).not.toThrow();
-    expect(() => transport.onMessage(() => undefined)).not.toThrow();
+    connectToHost(navigatorWith(null), (message) => said.push(message));
+
+    expect(said).toHaveLength(1);
   });
 
-  // `ws://` at an empty host is not a URL. A file: page has exactly that, and
-  // this promises not to throw.
-  it("does not build a socket url with no host", () => {
-    const asked: string[] = [];
-    connectToHost(page("http:", ""), (url) => {
-      asked.push(url);
-      return openNothing();
-    });
+  it("gives back something inert rather than nothing at all", () => {
+    // The stand-in has to satisfy everything a real host does, because the
+    // bridge registers its listeners on whatever it is given and does it in
+    // its constructor. Throwing here — or handing back `undefined` — would
+    // turn "no desktop" into "no page".
+    const host = connectToHost(navigatorWith(undefined), () => undefined);
 
-    expect(asked).toEqual([]);
+    expect(() => {
+      host.addEventListener("appappeared", () => undefined);
+      host.spawn(["kitty"]);
+      host.focusChrome();
+    }).not.toThrow();
+  });
+
+  it("describes no desktop, because nothing ever will", () => {
+    // Empty is what the engine's own attribute starts as, and here it is also
+    // where it ends: a shell reads it as "not described yet" and takes the
+    // viewport's geometry instead — see `hasHost`, which is the question it
+    // asks to know that.
+    expect(
+      connectToHost(navigatorWith(undefined), () => undefined).displays,
+    ).toStrictEqual([]);
   });
 });
 
 describe("hasHost", () => {
-  it("is true for a page served over http", () => {
-    expect(hasHost(page("http:", "127.0.0.1:7777"))).toBeTrue();
+  it("is true when the engine put a compositor on this page", () => {
+    expect(hasHost(navigatorWith(aHost()))).toBeTrue();
   });
 
-  it("is true for a page served over https", () => {
-    expect(hasHost(page("https:", "desktop.example"))).toBeTrue();
-  });
-
-  // The one case a shell has to get right, and the reason this is not spelled
-  // `window.domicileHost === undefined` any more: under the fork there is no
-  // injected channel and there very much is a host. A shell asking the old
-  // question would take the viewport's geometry and lay its windows out on a
-  // desktop nobody described.
-  it("is false for a page opened from a file, and only then", () => {
-    expect(hasHost(page("file:", ""))).toBeFalse();
+  // The one case a shell has to get right: with no compositor there is no
+  // display to lay windows out on, so a shell takes the viewport's geometry
+  // instead. Asked of `navigator` rather than of `location`, which is what it
+  // used to be — the page's scheme said whether a *bridge* was serving it, and
+  // there is no bridge any more.
+  it("is false when there is not, however that is spelled", () => {
+    expect(hasHost(navigatorWith(undefined))).toBeFalse();
+    expect(hasHost(navigatorWith(null))).toBeFalse();
   });
 });

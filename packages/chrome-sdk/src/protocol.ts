@@ -3,11 +3,26 @@
 // they are parsed with zod rather than cast — the schemas below are the only
 // place a raw frame becomes a typed value.
 //
+// **A page no longer reads any of this.** Under the fork the compositor's JSON
+// is decoded in the browser process and reaches the document as typed events on
+// `navigator.domicile`; `host-message.ts` is what a shell sees. What still
+// reads these schemas is `@domicile/e2e-harness`, a headless stand-in for a
+// chrome that connects to the compositor's own socket — because what those
+// scripts assert is what the *compositor* sends, and a harness that went
+// through the browser process would be asserting the browser process too.
+//
+// That makes this and `packages/domicile-protocol` two halves of one contract
+// with no page between them, and they still have to move together: see
+// `wire-fixture.test.ts`, which requires these schemas to accept the bytes
+// Rust is pinned to writing.
+//
 // Each schema is deliberately loose about unknown keys so a newer host can add
-// fields without breaking an older chrome; it is strict about the fields the
-// chrome actually reads.
+// fields without breaking an older reader; it is strict about the fields the
+// harness actually reads.
 
 import { z } from "zod";
+
+import { cursorShapeSchema } from "./cursor-shape";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
 export const PROTOCOL_VERSION = 1;
@@ -32,48 +47,6 @@ const titleSchema = z
   .transform((title) => title ?? undefined)
   // And a client that named its window nothing.
   .transform((title) => (title === "" ? undefined : title));
-
-// The shapes `wp_cursor_shape_v1` defines, named as the CSS `cursor` keyword
-// the chrome assigns, plus `none` for a client that hides the cursor. Mirrors
-// `domicile_protocol::CursorShape`; a value outside this set is a host bug, so
-// the schema rejects it rather than letting an invalid keyword reach CSS.
-const cursorShapeSchema = z.enum([
-  "none",
-  "default",
-  "context-menu",
-  "help",
-  "pointer",
-  "progress",
-  "wait",
-  "cell",
-  "crosshair",
-  "text",
-  "vertical-text",
-  "alias",
-  "copy",
-  "move",
-  "no-drop",
-  "not-allowed",
-  "grab",
-  "grabbing",
-  "e-resize",
-  "n-resize",
-  "ne-resize",
-  "nw-resize",
-  "s-resize",
-  "se-resize",
-  "sw-resize",
-  "w-resize",
-  "ew-resize",
-  "ns-resize",
-  "nesw-resize",
-  "nwse-resize",
-  "col-resize",
-  "row-resize",
-  "all-scroll",
-  "zoom-in",
-  "zoom-out",
-]);
 
 const welcomeSchema = z.looseObject({
   protocol_version: z.number(),
@@ -256,9 +229,6 @@ export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 
 /** One display of the desktop, in the coordinates the shell lays out in. */
 export type DisplayInfo = z.infer<typeof displayInfoSchema>;
-
-/** A CSS `cursor` keyword a client can ask the chrome to show over its app. */
-export type CursorShape = z.infer<typeof cursorShapeSchema>;
 
 /** The `type` tag of every host message this build knows how to decode. */
 export type HostMessageType = HostMessage["type"];
