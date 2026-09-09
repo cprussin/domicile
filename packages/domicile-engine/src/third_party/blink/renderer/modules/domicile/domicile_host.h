@@ -6,7 +6,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_HOST_H_
 
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -17,6 +16,12 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
+
+// Forward-declared rather than included, which is how every other Blink header
+// carrying one does it -- see xr_input_sources_change_event.h. `frozen_array.h`
+// is included by the .cc.
+template <typename IDLType>
+class FrozenArray;
 
 class DomicileDisplay;
 class DomicileShortcut;
@@ -118,7 +123,7 @@ class MODULES_EXPORT DomicileHost final
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void FocusChanged(const String& app_id) override;
   void Displays(
-      WTF::Vector<domicile::mojom::blink::DisplayPtr> displays) override;
+      Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;
 
   void Trace(Visitor*) const override;
 

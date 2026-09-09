@@ -55,7 +55,7 @@ struct Shortcut {
 // names whole ones. Its geometry is logical all the same -- a `wl_output` mode
 // is `width`/`height` times `scale` -- and `scale` is what clients on the
 // screen draw at, not the shell's own density.
-struct Display {
+struct DisplayInfo {
   string name;
   int32 x;
   int32 y;
@@ -153,7 +153,7 @@ interface ControlChannelClient {
   // missing one. An empty list is a desktop with no screens on it, which the
   // compositor does not send -- it describes at least one output -- but which
   // is an answer rather than a silence, and the page must be able to hold it.
-  Displays(array<Display> displays);
+  Displays(array<DisplayInfo> displays);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id);

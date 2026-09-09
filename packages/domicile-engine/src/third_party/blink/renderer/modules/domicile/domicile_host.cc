@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/modules/domicile/domicile_host.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
@@ -245,7 +246,7 @@ void DomicileHost::Modifiers(bool alt, bool ctrl, bool shift, bool meta) {
 }
 
 void DomicileHost::Displays(
-    WTF::Vector<domicile::mojom::blink::DisplayPtr> displays) {
+    Vector<domicile::mojom::blink::DisplayInfoPtr> displays) {
   HeapVector<Member<DomicileDisplay>> described;
   described.reserve(displays.size());
   for (const auto& display : displays) {

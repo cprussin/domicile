@@ -453,7 +453,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
     if (!described) {
       return;
     }
-    std::vector<mojom::DisplayPtr> displays;
+    std::vector<mojom::DisplayInfoPtr> displays;
     displays.reserve(described->size());
     for (const base::Value& entry : *described) {
       const base::DictValue* display = entry.GetIfDict();
@@ -467,7 +467,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
           size->size() != 2u) {
         continue;
       }
-      displays.push_back(mojom::Display::New(
+      displays.push_back(mojom::DisplayInfo::New(
           *name, static_cast<int32_t>(Number((*position)[0])),
           static_cast<int32_t>(Number((*position)[1])),
           static_cast<uint32_t>(Number((*size)[0])),
