@@ -61,6 +61,32 @@ work on NixOS, where a generic-linux Chromium cannot start at all.
 `DOMICILE_ENGINE` points `domicile` at a different one — a checkout's
 `out/Domicile`, say. It names the directory holding `chrome`.
 
+## The control channel's protocol, and what of it is here
+
+`navigator.domicile` is the shell's control channel. The wire protocol lives in
+the browser process rather than in the page, which is what makes a malformed
+message unconstructable — and what makes adding one cost an engine release
+rather than a TypeScript edit. That trade was made deliberately; it is worth
+knowing which side of it you are on before asking for a new message.
+
+**Implemented, 21 of 29.** Outbound: `spawn`, `focus_app`, `focus_chrome`,
+`close_app`, `resize_app`, `set_desktop_size`, `set_device_pixel_ratio`,
+`grab_shortcut`, `key`, `pointer_motion`, `pointer_leave`, `pointer_button`,
+`pointer_axis`. Inbound: `welcome`, `app_appeared`, `app_titled`,
+`app_resized`, `app_closed`, `app_cursor`, `shortcut`, `modifiers`,
+`focus_changed`.
+
+**Deliberately absent:** `place_portal`, `remove_portal`, `declare_bands`,
+`render_band`, `claim_pointer`, `app_composited`. These are the bands and
+copy-path protocol, which `docs/architecture/ENGINE-FORK.md` lists under what
+the fork scraps: layout positions the layer now, and the page has stopped
+reporting where its own boxes are. Implementing them here would make removing
+a dying protocol cost a release build.
+
+If you are adding a message, add it in four places — the mojom, the IDL, the
+browser-side serialiser, and the Blink method — and add it to the list above,
+because the list is how the next person knows whether a gap is deliberate.
+
 ## Working on it
 
 This is built on a machine with a Chromium checkout — `crux`, at
