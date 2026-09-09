@@ -14,23 +14,30 @@
 // `shortcut` message. The two never both fire: either the compositor took the
 // key or the page received it.
 
-import type { Shortcut } from "@domicile/chrome-sdk/chrome-message";
+import type { DomicileShortcut } from "@domicile/chrome-sdk/domicile-host";
 
 /** What Alt+Enter asks the compositor to run. */
 const TERMINAL_COMMAND = ["kitty"] as const;
 
-/** Alt+Enter, in the evdev keycodes the protocol speaks. 28 is Enter. */
-const ALT_ENTER: Shortcut = {
-  alt: true,
-  ctrl: false,
-  key: 28,
-  logo: false,
-  shift: false,
+/**
+ * Alt+Enter, in the evdev keycodes the control channel speaks. 28 is Enter.
+ *
+ * Every modifier is named, none of them left to a default. The compositor
+ * matches the set it was given and nothing else, and writing the three that
+ * must *not* be held is what makes the claim and `isAltEnter` below readably
+ * the same chord.
+ */
+const ALT_ENTER: DomicileShortcut = {
+  altKey: true,
+  ctrlKey: false,
+  keycode: 28,
+  metaKey: false,
+  shiftKey: false,
 };
 
 /** As much of the bridge as opening a terminal needs. */
 export type TerminalBridge = {
-  grabShortcut: (shortcut: Shortcut) => void;
+  grabShortcut: (shortcut: DomicileShortcut) => void;
   on: (type: "shortcut", listener: () => void) => unknown;
   spawn: (command: readonly string[]) => void;
 };

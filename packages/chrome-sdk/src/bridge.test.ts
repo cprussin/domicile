@@ -1,279 +1,310 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { Err, Ok } from "@cprussin/option-result";
-import type { Transport } from "./bridge";
 
-import {
-  BridgeClient,
-  describeHandshakeFailure,
-  HandshakeFailure,
-} from "./bridge";
+import { BridgeClient } from "./bridge";
+import type {
+  DomicileAppEvent,
+  DomicileDisplay,
+  DomicileHost,
+  DomicileHostEventMap,
+  DomicileShortcut,
+} from "./domicile-host";
 import { BTN_LEFT } from "./input";
-import type { DisplayInfo } from "./protocol";
 
-// A fake transport: records outgoing JSON and lets the test push incoming.
-class FakeTransport implements Transport {
-  readonly sent: unknown[] = [];
+type Call = readonly [kind: string, ...args: unknown[]];
 
-  #onMessage: ((text: string, sentAt?: number) => void) | undefined;
+/** The fields a `DomicileAppEvent` carries, all of them optional to a test. */
+type AppEventFields = Partial<Omit<DomicileAppEvent, keyof Event>>;
 
-  send(text: string): void {
-    this.sent.push(JSON.parse(text));
+/**
+ * A `DomicileAppEvent`, with the fields that event does not carry left as the
+ * empty string the engine fills them with.
+ *
+ * `Object.assign` onto an `Event` rather than a subclass per event type: what
+ * the bridge reads is the fields, and five classes saying that would be a test
+ * of the test.
+ */
+const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
+  Object.assign(new Event(type), {
+    appId: "",
+    cursor: "",
+    hasSize: false,
+    height: 0,
+    title: "",
+    width: 0,
+    ...fields,
+  });
+
+/**
+ * A stand-in for `navigator.domicile`: it records what the page asks of it, and
+ * it fires an event only at whatever registered for that event through
+ * `addEventListener`.
+ *
+ * **That last part is the point of the double.** What is under test is that
+ * `BridgeClient` registers listeners *of its own*, in its constructor, rather
+ * than leaving the page to do it — so `dispatch` below reaches nothing unless
+ * it did. A double that called the bridge's handlers directly would be green
+ * with those listeners never registered at all, which is the one failure that
+ * loses a live client's window.
+ *
+ * Its own registry rather than an `EventTarget`, for two reasons. A real one
+ * types `addEventListener`'s callback as `EventListener | EventListenerObject |
+ * null`, which no typed listener is assignable to in either direction, so a
+ * class extending it cannot `implements DomicileHost` without a cast. And a
+ * real one swallows a listener's throw — the DOM reports it to the page's error
+ * handler rather than raising it to whoever dispatched — which is exactly why
+ * the translation lives in `host-message.ts` and is tested there.
+ */
+class FakeHost implements DomicileHost {
+  readonly calls: Call[] = [];
+
+  /** Empty until the compositor has described the desktop, as the fork's is. */
+  displays: readonly DomicileDisplay[] | null = null;
+
+  readonly #listeners = new Map<string, (event: never) => void>();
+
+  addEventListener<T extends keyof DomicileHostEventMap>(
+    type: T,
+    listener: (event: DomicileHostEventMap[T]) => void,
+  ): void {
+    this.#listeners.set(type, listener);
   }
 
-  onMessage(callback: (text: string, sentAt?: number) => void): void {
-    this.#onMessage = callback;
+  /** The compositor saying something, to whoever asked to hear that. */
+  dispatch<T extends keyof DomicileHostEventMap>(
+    type: T,
+    event: DomicileHostEventMap[T],
+  ): void {
+    this.#listeners.get(type)?.(event as never);
   }
 
-  /** Simulate a message arriving from the host. */
-  push(message: unknown, sentAt?: number): void {
-    this.#onMessage?.(JSON.stringify(message), sentAt);
+  spawn(command: readonly string[]): void {
+    this.calls.push(["spawn", command]);
+  }
+  focusApp(appId: string): void {
+    this.calls.push(["focusApp", appId]);
+  }
+  focusChrome(): void {
+    this.calls.push(["focusChrome"]);
+  }
+  closeApp(appId: string): void {
+    this.calls.push(["closeApp", appId]);
+  }
+  resizeApp(appId: string, width: number, height: number): void {
+    this.calls.push(["resizeApp", appId, width, height]);
+  }
+  setDesktopSize(width: number, height: number): void {
+    this.calls.push(["setDesktopSize", width, height]);
+  }
+  setDevicePixelRatio(ratio: number): void {
+    this.calls.push(["setDevicePixelRatio", ratio]);
+  }
+  grabShortcut(shortcut: DomicileShortcut): void {
+    this.calls.push(["grabShortcut", shortcut]);
+  }
+  key(appId: string, keycode: number, pressed: boolean): void {
+    this.calls.push(["key", appId, keycode, pressed]);
+  }
+  pointerMotion(appId: string, x: number, y: number): void {
+    this.calls.push(["pointerMotion", appId, x, y]);
+  }
+  pointerLeave(appId: string): void {
+    this.calls.push(["pointerLeave", appId]);
+  }
+  pointerButton(appId: string, button: number, pressed: boolean): void {
+    this.calls.push(["pointerButton", appId, button, pressed]);
+  }
+  pointerAxis(
+    appId: string,
+    dx: number,
+    dy: number,
+    v120X: number,
+    v120Y: number,
+  ): void {
+    this.calls.push(["pointerAxis", appId, dx, dy, v120X, v120Y]);
   }
 
-  lastSent(): unknown {
-    return this.sent.at(-1);
+  /**
+   * The compositor describing the desktop: the attribute is written and *then*
+   * the bare event fires, which is the engine's order and the reason a handler
+   * can read the accessor and see this desktop.
+   */
+  describes(displays: readonly DomicileDisplay[]): void {
+    this.displays = displays;
+    this.dispatch("displayschanged", new Event("displayschanged"));
+  }
+
+  lastCall(): Call | undefined {
+    return this.calls.at(-1);
   }
 }
 
+const LEFT: DomicileDisplay = {
+  height: 1080,
+  name: "left",
+  scale: 1,
+  width: 1920,
+  x: 0,
+  y: 0,
+};
+
 describe("BridgeClient", () => {
-  let transport: FakeTransport;
+  let host: FakeHost;
   let bridge: BridgeClient;
 
   beforeEach(() => {
-    transport = new FakeTransport();
-    bridge = new BridgeClient(transport, { protocolVersion: 1 });
+    host = new FakeHost();
+    bridge = new BridgeClient(host);
   });
 
-  it("sends hello on connect and agrees on welcome", async () => {
-    const connected = bridge.connect();
-    expect(transport.sent[0]).toEqual({ protocol_version: 1, type: "hello" });
-    transport.push({ protocol_version: 1, type: "welcome" });
-    expect(await connected).toStrictEqual(Ok(1));
-  });
+  describe("delivering what the host says", () => {
+    it("dispatches a host event to the registered handler", () => {
+      const seen: unknown[] = [];
+      bridge.on("app_appeared", (message) => {
+        seen.push(message);
+      });
+      host.dispatch(
+        "appappeared",
+        appEvent("appappeared", {
+          appId: "term",
+          hasSize: true,
+          height: 480,
+          title: "Terminal",
+          width: 640,
+        }),
+      );
 
-  it("reports a version mismatch as a value rather than a rejection", async () => {
-    // The handshake crosses a process boundary, and the two halves
-    // disagreeing is an outcome the caller has to decide about — not a bug to
-    // throw at it. Rejecting made the shell's only recourse a `.catch` that
-    // rethrew inside a promise handler, which is an unhandled rejection rather
-    // than a desktop saying why it will not start.
-    const connected = bridge.connect();
-    transport.push({ protocol_version: 2, type: "welcome" });
-
-    expect(await connected).toStrictEqual(
-      Err(HandshakeFailure.VersionMismatch({ chrome: 1, host: 2 })),
-    );
-  });
-
-  it("names both versions when the halves disagree", () => {
-    // The wording is the whole point of reporting rather than throwing — a
-    // desktop that will not start should say what it disagreed about. Nothing
-    // else pins it, and `describeHandshakeFailure` could be gutted to `""`
-    // with the rest of this file still green.
-    expect(
-      describeHandshakeFailure(
-        HandshakeFailure.VersionMismatch({ chrome: 1, host: 2 }),
-      ),
-    ).toBe("protocol version mismatch: chrome speaks 1, host speaks 2");
-  });
-
-  it("dispatches host messages to registered handlers", () => {
-    const seen: { app_id: string }[] = [];
-    bridge.on("app_appeared", (message) => {
-      seen.push(message);
-    });
-    transport.push({
-      app_id: "term",
-      size: [640, 480],
-      title: "Terminal",
-      type: "app_appeared",
-    });
-    expect(seen).toHaveLength(1);
-    expect(seen[0]?.app_id).toBe("term");
-  });
-
-  it("holds a message that arrives before its handler registers", () => {
-    // The host starts talking the moment the socket opens: `connect()` is
-    // answered with a `welcome` and one `app_appeared` per client already
-    // running. A React page registers its handlers in its first effect flush,
-    // tens of milliseconds later — always after, never before, because
-    // rendering only schedules the effect. Dropping what lands in that window
-    // is a live client with no window on screen, and no second chance: nothing
-    // ever says `app_appeared` again for that client.
-    transport.push({
-      app_id: "term",
-      size: [640, 480],
-      title: "Terminal",
-      type: "app_appeared",
-    });
-    transport.push({
-      app_id: "editor",
-      size: [800, 600],
-      title: "Editor",
-      type: "app_appeared",
+      expect(seen).toStrictEqual([
+        { app_id: "term", size: [640, 480], title: "Terminal" },
+      ]);
     });
 
-    const seen: { app_id: string }[] = [];
-    bridge.on("app_appeared", (message) => {
-      seen.push(message);
-    });
+    it("holds an event that arrives before its handler registers", () => {
+      // THE REASON THE BRIDGE LISTENS ON ITS OWN ACCOUNT, IN ITS CONSTRUCTOR.
+      // A DOM event dispatched with no listener registered is gone — an
+      // EventTarget has no mailbox — and a React shell registers its handlers
+      // in its first effect flush, tens of milliseconds after the compositor
+      // has started talking. Always after, never before: rendering only
+      // *schedules* the effect. What lands in that window is a live, drawing
+      // client, and there is no second announcement for it.
+      host.dispatch(
+        "appappeared",
+        appEvent("appappeared", { appId: "term", title: "Terminal" }),
+      );
+      host.dispatch(
+        "appappeared",
+        appEvent("appappeared", { appId: "editor", title: "Editor" }),
+      );
 
-    expect(seen.map((message) => message.app_id)).toEqual(["term", "editor"]);
-  });
-
-  it("does not replay a held message to a handler that replaces another", () => {
-    // The flush empties the hold. Without that, every later `on` for the same
-    // type would mount the same windows again.
-    transport.push({
-      app_id: "term",
-      size: [640, 480],
-      title: "Terminal",
-      type: "app_appeared",
-    });
-    bridge.on("app_appeared", () => {
-      // The first handler takes the held message; this test is about the
-      // second one.
-    });
-
-    const seen: string[] = [];
-    bridge.on("app_appeared", (message) => {
-      seen.push(message.app_id);
-    });
-
-    expect(seen).toEqual([]);
-  });
-
-  it("holds only the type that has no handler", () => {
-    // One hold per type, not one queue for everything: a page that registers
-    // `app_appeared` must not be handed the `app_closed` it has no handler
-    // for yet.
-    const seen: string[] = [];
-    transport.push({ app_id: "term", type: "app_closed" });
-    transport.push({
-      app_id: "term",
-      size: [640, 480],
-      title: "Terminal",
-      type: "app_appeared",
-    });
-
-    bridge.on("app_appeared", (message) => {
-      seen.push(`appeared:${message.app_id}`);
-    });
-    expect(seen).toEqual(["appeared:term"]);
-
-    bridge.on("app_closed", (message) => {
-      seen.push(`closed:${message.app_id}`);
-    });
-    expect(seen).toEqual(["appeared:term", "closed:term"]);
-  });
-
-  it("send helpers emit correctly-shaped messages", () => {
-    bridge.focusApp("term");
-    expect(transport.lastSent()).toEqual({ app_id: "term", type: "focus_app" });
-
-    bridge.closeApp("term");
-    expect(transport.lastSent()).toEqual({ app_id: "term", type: "close_app" });
-
-    bridge.spawn(["kitty"]);
-    expect(transport.lastSent()).toEqual({ command: ["kitty"], type: "spawn" });
-
-    bridge.pointerMotion("term", 5, 6);
-    expect(transport.lastSent()).toEqual({
-      app_id: "term",
-      type: "pointer_motion",
-      x: 5,
-      y: 6,
-    });
-
-    bridge.pointerButton("term", BTN_LEFT, true);
-    expect(transport.lastSent()).toEqual({
-      app_id: "term",
-      button: BTN_LEFT,
-      pressed: true,
-      type: "pointer_button",
-    });
-
-    bridge.resizeApp("term", [800, 600]);
-    expect(transport.lastSent()).toEqual({
-      app_id: "term",
-      size: [800, 600],
-      type: "resize_app",
-    });
-
-    bridge.pointerAxis("term", { dx: 0, dy: 100, v120X: 0, v120Y: 120 });
-    expect(transport.lastSent()).toEqual({
-      app_id: "term",
-      dx: 0,
-      dy: 100,
-      type: "pointer_axis",
-      v120_x: 0,
-      v120_y: 120,
-    });
-
-    bridge.key("term", 30, true);
-    expect(transport.lastSent()).toEqual({
-      app_id: "term",
-      keycode: 30,
-      pressed: true,
-      type: "key",
-    });
-  });
-
-  it("ignores unknown host message types without throwing", () => {
-    expect(() => {
-      transport.push({ data: 1, type: "who_knows" });
-    }).not.toThrow();
-  });
-
-  // The keystroke round trip used to be tested here: send a key, push the
-  // frame that answered it, assert the latency. Both ends of that loop passed
-  // through the bridge because the bridge drew the frame.
-  //
-  // It no longer does. A client's buffer goes to the display compositor and
-  // the page embeds the surface, so nothing here ever sees the frame that
-  // answered a key and `BridgeClient.roundTrip` reports nothing at all.
-  //
-  // **The tests are gone and the measurement is a gap.** It is the instrument
-  // for the requirement this fork exists to satisfy — that the compositor add
-  // no latency a user can see — and it has to be rebuilt where both ends are
-  // now visible, in the compositor, which sends the key and holds the engine
-  // connection that knows when viz presented.
-
-  describe("the hop from the host's bytes to this page", () => {
-    // Reported on its own: an unattributed total says a desktop is slow
-    // without saying which half of it to fix. This stage used to be Electron's
-    // IPC, at 79ms a frame.
-    const titled = (appId: string): unknown => ({
-      app_id: appId,
-      title: "a window",
-      type: "app_titled",
-    });
-
-    it("prices a message against the moment its bytes arrived", () => {
-      let clock = 0;
-      const timed = new BridgeClient(transport, {
-        now: () => clock,
-        protocolVersion: 1,
+      const seen: string[] = [];
+      bridge.on("app_appeared", (message) => {
+        seen.push(message.app_id);
       });
 
-      clock = 12;
-      transport.push(titled("term"), 4);
-
-      expect(timed.hop.take()).toStrictEqual({
-        averageMs: 8,
-        count: 1,
-        worstMs: 8,
-      });
+      expect(seen).toStrictEqual(["term", "editor"]);
     });
 
-    it("records nothing for a transport that never says", () => {
-      // A transport with no such moment — the no-op the shell falls back to in
-      // a plain browser — must not be charged one. `undefined` is the honest
-      // return; what a reporter renders it as is the reporter's business.
-      const timed = new BridgeClient(transport, { protocolVersion: 1 });
+    it("does not replay a held event to a handler that replaces another", () => {
+      // The flush empties the hold. Without that, every later `on` for the
+      // same type would mount the same windows again.
+      host.dispatch("appappeared", appEvent("appappeared", { appId: "term" }));
+      bridge.on("app_appeared", () => {
+        // The first handler takes the held message; this is about the second.
+      });
 
-      transport.push(titled("term"));
+      const seen: string[] = [];
+      bridge.on("app_appeared", (message) => {
+        seen.push(message.app_id);
+      });
 
-      expect(timed.hop.take()).toBeUndefined();
+      expect(seen).toStrictEqual([]);
+    });
+
+    it("holds only the type that has no handler", () => {
+      // One hold per type, not one queue for everything: a page that registers
+      // `app_appeared` must not be handed the `app_closed` it has no handler
+      // for yet.
+      const seen: string[] = [];
+      host.dispatch("appclosed", appEvent("appclosed", { appId: "term" }));
+      host.dispatch("appappeared", appEvent("appappeared", { appId: "term" }));
+
+      bridge.on("app_appeared", (message) => {
+        seen.push(`appeared:${message.app_id}`);
+      });
+      expect(seen).toStrictEqual(["appeared:term"]);
+
+      bridge.on("app_closed", (message) => {
+        seen.push(`closed:${message.app_id}`);
+      });
+      expect(seen).toStrictEqual(["appeared:term", "closed:term"]);
+    });
+  });
+
+  describe("asking the host for something", () => {
+    it("calls the host's methods rather than building a message", () => {
+      bridge.focusApp("term");
+      expect(host.lastCall()).toStrictEqual(["focusApp", "term"]);
+
+      bridge.focusChrome();
+      expect(host.lastCall()).toStrictEqual(["focusChrome"]);
+
+      bridge.closeApp("term");
+      expect(host.lastCall()).toStrictEqual(["closeApp", "term"]);
+
+      bridge.spawn(["kitty"]);
+      expect(host.lastCall()).toStrictEqual(["spawn", ["kitty"]]);
+
+      bridge.setDevicePixelRatio(2);
+      expect(host.lastCall()).toStrictEqual(["setDevicePixelRatio", 2]);
+
+      bridge.grabShortcut({ altKey: true, keycode: 28 });
+      expect(host.lastCall()).toStrictEqual([
+        "grabShortcut",
+        { altKey: true, keycode: 28 },
+      ]);
+
+      bridge.pointerMotion("term", 5, 6);
+      expect(host.lastCall()).toStrictEqual(["pointerMotion", "term", 5, 6]);
+
+      bridge.pointerLeave("term");
+      expect(host.lastCall()).toStrictEqual(["pointerLeave", "term"]);
+
+      bridge.pointerButton("term", BTN_LEFT, true);
+      expect(host.lastCall()).toStrictEqual([
+        "pointerButton",
+        "term",
+        BTN_LEFT,
+        true,
+      ]);
+
+      bridge.pointerAxis("term", { dx: 0, dy: 100, v120X: 0, v120Y: 120 });
+      expect(host.lastCall()).toStrictEqual([
+        "pointerAxis",
+        "term",
+        0,
+        100,
+        0,
+        120,
+      ]);
+
+      bridge.key("term", 30, true);
+      expect(host.lastCall()).toStrictEqual(["key", "term", 30, true]);
+    });
+
+    it("spreads a size into the two doubles the host takes", () => {
+      // A box is one value to a shell and two arguments to WebIDL, which has
+      // no tuple. Unpacked here rather than at every call site — and the
+      // fractions survive, because a CSS pixel is fractional and the whole
+      // path is `double`.
+      bridge.resizeApp("term", [800.5, 600.25]);
+      expect(host.lastCall()).toStrictEqual([
+        "resizeApp",
+        "term",
+        800.5,
+        600.25,
+      ]);
+
+      bridge.setDesktopSize([1280.5, 800]);
+      expect(host.lastCall()).toStrictEqual(["setDesktopSize", 1280.5, 800]);
     });
   });
 
@@ -283,26 +314,30 @@ describe("BridgeClient", () => {
       // so. Without it the handler outlives its tree and is called into
       // whatever is left of it.
       const seen: unknown[] = [];
-      const handler = (message: { app_id: string }) =>
+      const handler = (message: { app_id: string }) => {
         seen.push(message.app_id);
+      };
       bridge.on("app_closed", handler);
       bridge.off("app_closed", handler);
-      transport.push({ app_id: "gone", type: "app_closed" });
+      host.dispatch("appclosed", appEvent("appclosed", { appId: "gone" }));
+
       expect(seen).toStrictEqual([]);
     });
 
     it("drops what arrives after it rather than piling it up", () => {
       // The hold is for the gap before the page has *ever* listened for a
       // type — see `#held`. An `off` says the page listened and stopped, so
-      // holding again would accumulate forever with nothing to drain it, which
-      // for `app_frame` is a pile of buffers the size of the screen.
+      // holding again would accumulate forever with nothing to drain it.
       const handler = () => undefined;
       bridge.on("app_closed", handler);
       bridge.off("app_closed", handler);
-      transport.push({ app_id: "gone", type: "app_closed" });
+      host.dispatch("appclosed", appEvent("appclosed", { appId: "gone" }));
 
       const seen: unknown[] = [];
-      bridge.on("app_closed", (message) => seen.push(message.app_id));
+      bridge.on("app_closed", (message) => {
+        seen.push(message.app_id);
+      });
+
       expect(seen).toStrictEqual([]);
     });
 
@@ -317,86 +352,88 @@ describe("BridgeClient", () => {
       bridge.on("app_closed", first);
       bridge.on("app_closed", () => seen.push("second"));
       bridge.off("app_closed", first);
-      transport.push({ app_id: "gone", type: "app_closed" });
+      host.dispatch("appclosed", appEvent("appclosed", { appId: "gone" }));
+
       expect(seen).toStrictEqual(["second"]);
     });
   });
 
   describe("the desktop the host described", () => {
-    const LEFT: DisplayInfo = {
-      name: "left",
-      position: [0, 0],
-      scale: 1,
-      size: [1920, 1080],
-    };
-
     it("is nothing until the host says", () => {
-      // Distinct from a desktop of no displays, which is an answer. A shell that
-      // could not tell them apart would lay out against a screen it had not been
-      // told the shape of.
+      // Distinct from a desktop of no displays, which is an answer. A shell
+      // that could not tell them apart would render its "no screens" case for
+      // the moment before the answer arrives.
       expect(bridge.displays).toBeUndefined();
     });
 
-    it("is retained, so everything that asks gets it", () => {
-      // `displays` arrives at least once per connection — and again on every
-      // desktop change — and `on` hands a held message to the *first* handler
-      // and then forgets it. A page with two `<Screen>`s
-      // registering separately would leave the second with nothing — silently,
-      // as an empty region, which is what a `<Screen>` for an absent display is
-      // supposed to look like.
-      transport.push({ displays: [LEFT], type: "displays" });
-      expect(bridge.displays).toStrictEqual([LEFT]);
-      expect(bridge.displays).toStrictEqual([LEFT]);
-    });
+    it("is a desktop of no screens when that is what it was told", () => {
+      // The other half of the rule above, and the one that used to be
+      // unsayable: the attribute was a FrozenArray that started empty, so
+      // "nobody has described a desktop" and "this desktop has none" were the
+      // same value and the SDK guessed between them. `null` is the first and
+      // `[]` is the second, and a `<Screen>` renders nothing for either — which
+      // is right for one and wrong for the other, so a shell needs to know.
+      host.describes([]);
 
-    it("keeps an empty desktop as an empty one", () => {
-      // A desktop of no screens. Not what the compositor sends — it describes
-      // at least one output, and the window-following case is a display named
-      // `domicile-0` rather than an absence — but it is an *answer*, so it has
-      // to displace `undefined` rather than read as "not told yet".
-      transport.push({ displays: [], type: "displays" });
       expect(bridge.displays).toStrictEqual([]);
+      expect(bridge.displays).not.toBeUndefined();
     });
 
-    it("still reaches a handler that registers late", () => {
-      // The retained copy is in addition to the hold, not instead of it: a shell
-      // that wants to re-render when the desktop changes registers a handler,
-      // and it must not have to poll the accessor to learn about the first one.
-      transport.push({ displays: [LEFT], type: "displays" });
+    it("reads through to the host, so everything that asks gets it", () => {
+      // Not retained here any more: the desktop is an attribute on the host,
+      // which every reader can reach whenever it likes. A component that
+      // mounts long after the description gets the same answer as one that was
+      // there for it.
+      host.describes([LEFT]);
+
+      expect(bridge.displays).toStrictEqual([LEFT]);
+      expect(bridge.displays).toStrictEqual([LEFT]);
+    });
+
+    it("is the desktop the host describes now", () => {
+      // Latest wins, and reading through is what makes that free: with no
+      // displays configured the desktop is Domicile's own window, so every
+      // resize and every density change re-describes it.
+      const RIGHT: DomicileDisplay = {
+        height: 1440,
+        name: "right",
+        scale: 2,
+        width: 2560,
+        x: 1920,
+        y: 0,
+      };
+      host.describes([LEFT]);
+      host.describes([LEFT, RIGHT]);
+
+      expect(bridge.displays).toStrictEqual([LEFT, RIGHT]);
+    });
+
+    it("reaches a handler that registers after the description", () => {
+      // `displayschanged` is bare, so a shell that wants to *react* to a
+      // change would otherwise have to go and read the attribute itself. The
+      // bridge reads it and delivers it, and the hold covers a handler that
+      // was not there when it fired.
+      host.describes([LEFT]);
+
       const seen: unknown[] = [];
-      bridge.on("displays", (message) => seen.push(message.displays));
+      bridge.on("displays", (message) => {
+        seen.push(message.displays);
+      });
+
       expect(seen).toStrictEqual([[LEFT]]);
     });
 
     it("is already the new desktop when the handler runs", () => {
-      // The accessor is set before the message is delivered, so a handler that
-      // reads it sees this desktop rather than the one before it. Registering
-      // *first* is what tests that: a handler that registers after the push is
-      // replayed out of the hold, where the assignment has already happened
-      // wherever it sits.
-      let seen: readonly DisplayInfo[] | undefined;
+      // The attribute is written before the event is dispatched — the engine's
+      // ordering, not this class's — so a handler that reads the accessor sees
+      // this desktop rather than the one before it.
+      let seen: readonly DomicileDisplay[] | undefined;
       bridge.on("displays", () => {
         seen = bridge.displays;
       });
-      transport.push({ displays: [LEFT], type: "displays" });
-      expect(seen).toStrictEqual([LEFT]);
-    });
+      host.describes([LEFT]);
 
-    it("is the desktop the host described most recently", () => {
-      // Latest wins, not first. A second `displays` is routine rather than
-      // hypothetical: with no displays configured the desktop is Domicile's
-      // own window, so every resize and every density change re-describes it.
-      // Keeping the first would silently lay the shell out against a desktop
-      // that is gone.
-      const RIGHT: DisplayInfo = {
-        name: "right",
-        position: [1920, 0],
-        scale: 2,
-        size: [2560, 1440],
-      };
-      transport.push({ displays: [LEFT], type: "displays" });
-      transport.push({ displays: [LEFT, RIGHT], type: "displays" });
-      expect(bridge.displays).toStrictEqual([LEFT, RIGHT]);
+      expect(seen).toStrictEqual([LEFT]);
     });
   });
 });

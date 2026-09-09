@@ -59,6 +59,15 @@ export const diagnosticLines = ({
           // Host messages, not frames: `hop` records every message that
           // carries an arrival stamp. Named for what it counts so the average
           // beside it is not read as a per-frame cost.
+          //
+          // **Zero on every line, and that is a gap the SDK names rather than
+          // a desktop with nothing to say.** Nothing on `navigator.domicile`
+          // stamps when the browser process took a message off the
+          // compositor's socket, so `BridgeClient.hop` has nothing to record;
+          // its own doc says what member would fix it. The field stays because
+          // the stage it prices is still there and still crosses a process
+          // boundary — it was 79ms a frame under Electron — and a line that
+          // stopped mentioning it would read as a cost that had gone away.
           `msgs=${(ipc?.count ?? 0).toString()}`,
           `ipc_ms=${round(ipc?.averageMs)} ipc_worst_ms=${round(ipc?.worstMs)}`,
           `draw_ms=${round(draw?.averageMs)} draw_worst_ms=${round(draw?.worstMs)}`,

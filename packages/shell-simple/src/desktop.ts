@@ -11,7 +11,7 @@ import type { DomicileAppElement } from "@domicile/chrome-sdk/app-element";
 import type {
   AppCursorMessage,
   AppResizedMessage,
-} from "@domicile/chrome-sdk/protocol";
+} from "@domicile/chrome-sdk/host-message";
 import { APP_TAG_NAME } from "@domicile/chrome-sdk/register-elements";
 
 import { css } from "../styled-system/css";

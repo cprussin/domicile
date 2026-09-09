@@ -58,56 +58,63 @@ One call, and it is the whole of the wiring:
 import { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 
-const bridge = new BridgeClient(
-  connectToHost(window, (url) => new WebSocket(url)),
-);
+const bridge = new BridgeClient(connectToHost(navigator));
 ```
 
-`connectToHost` opens a WebSocket to the bridge on the page's own origin. There
-is nothing to configure and nothing to pass: the bridge serves the page and the
-session from one port exactly so that no query string carries a socket path and
-no two things can disagree about where the compositor is.
+`connectToHost` reads `navigator.domicile`, which is the control channel the
+engine puts on a document it served. There is nothing to configure and nothing
+to pass: it is a property of the page, so no query string carries a socket path
+and no two things can disagree about where the compositor is.
 
-A page with no host gets a transport that does nothing, so the layout still
-lays out and `<domicile-app>` says once that it cannot show a window. Ask
-`hasHost(window)` if you need the question answered; do not reconstruct it.
+A page with no compositor gets a stand-in that does nothing, so the layout
+still lays out and `<domicile-app>` says once that it cannot show a window —
+and `connectToHost` says once, on the console, that there was no compositor to
+find. Ask `hasHost(navigator)` if you need the question answered in your own
+code; do not reconstruct it.
 
 Do not develop against that, though: it is the chrome with every window in it
 missing, and a desktop's interesting behaviour is all on the other side of the
-transport. Point `domicile` at your build output and let your own bundler watch
+channel. Point `domicile` at your shell's module and let your own bundler watch
 it — `vite build --watch` beside `domicile ./dist/shell.js` is the whole dev
 loop, and
 it is a real desktop rather than a page pretending to be one.
 
-## The handshake
+## There is no handshake
 
-Connect, send `hello` with your protocol version, and wait for `welcome`. The
-host ignores anything sent before the handshake completes, and a version it
-refuses gets a `welcome` too — carrying *both* numbers, so you can say which two
-disagreed rather than "something is wrong".
+There used to be one — `hello` with a version number, `welcome` with the
+host's, and everything a shell said before that on the floor. **A shell does
+nothing about versions now.** The channel is a typed surface rather than a
+message pipe: the compositor's protocol version is checked in the browser
+process, which logs a disagreement and carries on, and a page has no part in it
+and nothing to await. `BridgeClient` has no `connect()` — say what you have to
+say as soon as you have a bridge, and the first call is what binds the channel.
 
-`BridgeClient.connect()` does this and resolves a `Result`. It does not throw:
-a version mismatch is a value you are expected to report, because the two halves
-having been built at different commits is a fact about the installation rather
-than a bug in either.
+What replaces the handshake as a *shell's* concern is registration order, and
+`BridgeClient` is what handles it: it registers its own listeners in its
+constructor and holds anything that arrives before your `on` does. A React
+shell registers in its first effect flush, tens of milliseconds late, and every
+window already running is announced before then.
 
-The desktop — the displays and their layout — arrives *with* the handshake, so
-a page that connects in the same millisecond as the socket still learns the
-geometry it has to lay out against. A page that *reloads* is told again, along
-with every window already open, so a reload comes back to the desktop that was
-there rather than to an empty one.
+**So never call `addEventListener` on `navigator.domicile` yourself.** It
+works, and it works for everything dispatched after your listener existed —
+which on a desktop with no clients open is everything, which is what makes the
+bug invisible until somebody reloads with a terminal running.
 
-Version compatibility is that handshake and nothing else. A shell built against
-an older SDK connects, is told the two numbers, and says so.
+The desktop is not an event at all: `bridge.displays` reads it whenever you
+ask, so a component that mounts long after the compositor described one still
+gets it. `bridge.on("displays", …)` is for reacting to a change, not for
+learning what is there.
 
 ## Reporting a failure
 
 Say it on the console: what a page logs reaches the terminal Domicile was
 started from.
 
-There is no way for a page to stop the desktop, and it does not need one: a
-refused handshake leaves a page that draws nothing, which is visible, and the
-line on the console is what says why.
+There is no way for a page to stop the desktop, and it does not need one. What
+a shell can still get wrong is calling the compositor something it will not
+accept — an empty argv, a keycode of zero, a device pixel ratio that is not
+positive — and those *throw*, from the call, because they are bugs in the page
+rather than outcomes it has to handle.
 
 ## The configuration
 
@@ -133,13 +140,14 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile/chrome-sdk` | `BridgeClient` (the protocol), `connectToHost` (the wire), `registerElements` (the `<domicile-app>` and `<domicile-webview>` custom elements), and the pure helpers around them. |
+| `@domicile/chrome-sdk` | `BridgeClient` (the control channel), `connectToHost` (finding it), `registerElements` (the `<domicile-app>` and `<domicile-webview>` custom elements), and the pure helpers around them. |
 
-It is not required. A shell that wants to speak the protocol itself may — it is
-newline-delimited JSON over a WebSocket, described in
-`@domicile/chrome-sdk/protocol` and, on the other side, in the
-`domicile-protocol` crate. Using the SDK means not reimplementing the frame
-format, the input mapping and the size reporting.
+It is not required. A shell may drive `navigator.domicile` itself — it is a
+typed surface rather than a wire, described in
+`@domicile/chrome-sdk/domicile-host` and, definitively, in the IDL under
+`packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
+Doing so means handling the registration order above yourself, along with the
+input mapping and the size reporting that `registerElements` does.
 
 `@domicile/engine-chrome-host` is Domicile's own bridge — the program that
 serves your page and the socket. You do not depend on it; it runs you.
@@ -161,9 +169,7 @@ import { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-const bridge = new BridgeClient(
-  connectToHost(window, (url) => new WebSocket(url)),
-);
+const bridge = new BridgeClient(connectToHost(navigator));
 registerElements(bridge);
 
 const mounted = new Map<string, HTMLElement>();
@@ -179,19 +185,16 @@ bridge.on("app_closed", ({ app_id }) => {
   mounted.get(app_id)?.remove();
   mounted.delete(app_id);
 });
-
-bridge.connect().then(/* report the Result */);
 ```
 
 That is a working desktop: every window full-screen, newest on top. A real
 shell differs from it only in where it puts the elements.
 
 `app_closed` is in there rather than left out because without it every window
-leaks an element. Two things the snippet does abbreviate, and the example does
-in full: `bridge.connect()` resolves a `Result` that must be reported rather
-than discarded, and the example's `app_closed` *throws* on an app it never
-mounted, because a close for something never announced means the page and the
-compositor disagree about what is on screen.
+leaks an element. One thing the snippet abbreviates, and the example does in
+full: the example's `app_closed` *throws* on an app it never mounted, because a
+close for something never announced means the page and the compositor disagree
+about what is on screen.
 
 There is no document to write. **Domicile writes it**: a charset, a
 viewport, and a `<body>` that fills the window with no margin. That last one is

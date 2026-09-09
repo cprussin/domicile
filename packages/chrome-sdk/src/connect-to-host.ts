@@ -1,80 +1,131 @@
-// One call that finds the host, whichever way this page was opened.
+// One call that finds the compositor, whichever way this page was opened.
 //
 // A shell's page runs in two places and the difference is not the shell's
 // business:
 //
-//   the fork      what we ship. No preload and no world boundary, so the page
-//                 opens a WebSocket to the bridge that holds the compositor's
-//                 session socket — same origin as the page itself, because the
-//                 one process serves both
-//   a browser     no host at all. `vite dev` on a shell's page is a real thing
-//                 to do, and it must lay out rather than throw
+//   the fork     what we ship. A document served over `domicile://` gets
+//                `navigator.domicile`, a typed control channel to the
+//                compositor, and that is the whole of the wiring
+//   a browser     no compositor at all. `vite dev` on a shell's page is a real
+//                thing to do, and it must lay out rather than throw
 //
-// There was a third: an Electron whose preload injected a channel at
-// `window.domicileHost`, which the page took over a `postMessage` boundary.
-// The fork has no preload and no world to cross, and Electron is gone from
-// this repository entirely — so that branch is gone with it rather than kept
-// as a shape nothing produces.
+// There were two others, and both are gone rather than kept as shapes nothing
+// produces: an Electron whose preload injected a channel at
+// `window.domicileHost`, and a WebSocket to a bridge on the page's own origin
+// that held the compositor's session socket. The fork has no preload and no
+// world to cross, and the control channel is not reachable over TCP by
+// anything — which was the point of moving it into the browser process.
 //
 // WRITING-A-SHELL.md used to have every shell branching on the host by hand.
 // This is that branch, once, so a shell is `new BridgeClient(connectToHost())`
 // and the requirement that a React developer gets a desktop out of a few lines
 // around `ReactDOM.render` survives.
-//
-// The URL is derived rather than configured. The bridge serves the page and
-// the session from the same origin exactly so that there is nothing to pass:
-// no query string for a shell to forward, no port for anyone to write down,
-// and no way for the two to disagree.
 
-import type { Transport } from "./bridge";
-import { webSocketTransport } from "./websocket-transport";
+import type { DomicileHost } from "./domicile-host";
 
-/** Where the session is served, on the page's own origin. */
-export const SESSION_PATH = "/domicile-session";
+/** The globals this reads, named so a test can supply them. */
+export type HostNavigator = {
+  readonly domicile?: DomicileHost | null;
+};
+
+/** How the absence of a compositor is reported; a parameter so tests can hold it. */
+const warnOnConsole = (message: string): void => {
+  // biome-ignore lint/suspicious/noConsole: the only channel to the author
+  console.warn(message);
+};
 
 /**
  * Whether anything will ever describe a desktop to this page.
  *
- * A second question from `connectToHost`'s, and one a shell genuinely has to
- * ask: with no host there is no display to lay windows out on, so a shell
- * takes the viewport's geometry instead.
+ * A second question from {@link connectToHost}'s, and one a shell genuinely
+ * has to ask: with no compositor there is no display to lay windows out on, so
+ * a shell takes the viewport's geometry instead.
  *
  * `connectToHost` is written in terms of this so the two cannot disagree.
  */
-export const hasHost = (target: HostWindow): boolean => {
-  const { host, protocol } = target.location;
-  return (protocol === "http:" || protocol === "https:") && host !== "";
-};
+export const hasHost = (navigator: HostNavigator): boolean =>
+  compositorOn(navigator) !== undefined;
 
-/** The globals this reads, named so a test can supply them. */
-export type HostWindow = {
-  readonly location: { readonly protocol: string; readonly host: string };
+/**
+ * The compositor behind this page, or a stand-in that does nothing.
+ *
+ * **The stand-in is not a failure and must not throw.** A shell's page opened
+ * in an ordinary browser has no compositor and should still render: that is
+ * how a shell is styled, and how its layout is worked on, without a desktop
+ * running. It is the same recovery `<domicile-app>` already makes one layer
+ * up, where a canvas with no `embedExternalSurface` lays out, reports its box
+ * and routes pointers exactly as it does under the fork, and shows nothing.
+ *
+ * **It is also not silent, which is the half that used to be missing.** The
+ * old no-op transport said nothing at all, and a page whose windows never
+ * appear is indistinguishable from a compositor with no clients running, from
+ * a shell with a layout bug, and from a client that never drew. This layer is
+ * the only one that knows which, so it says so — once, at startup, naming the
+ * property it looked for and what will and will not work without it.
+ *
+ * @param warn - Where the absence is reported. Injected so a test can read it
+ *   without a console.
+ */
+export const connectToHost = (
+  navigator: HostNavigator,
+  warn: typeof warnOnConsole = warnOnConsole,
+): DomicileHost => {
+  const compositor = compositorOn(navigator);
+  if (compositor === undefined) {
+    warn(
+      "domicile: there is no compositor behind this page —" +
+        " navigator.domicile is absent, so this document was not served by" +
+        " the forked engine. The shell will lay out and style as usual; no" +
+        " window will ever appear in it, nothing it asks the compositor for" +
+        " will happen, and no desktop will be described.",
+    );
+  }
+  return compositor ?? absentHost();
 };
 
 /**
- * A [`Transport`] to the compositor, or one that does nothing.
+ * The compositor, with the fork's `null` and a stock browser's absent property
+ * read as the one thing they mean.
  *
- * **The no-op is not a failure and must not throw.** A shell's page opened in
- * an ordinary browser has no host and should still render: that is how a shell
- * is styled, and how its layout is worked on, without a desktop running. What
- * it will not do is show a window, and `<domicile-app>` says so once on its
- * own account.
+ * Two spellings because there are two absences: the property does not exist at
+ * all outside the fork, and the fork's own accessor answers `null` for a
+ * document with no frame. `null` is not a value this codebase introduces — see
+ * CONTROL_FLOW.md — but it is one WebIDL's `DomicileHost?` produces, and this
+ * is the boundary where it stops.
  */
-export const connectToHost = (
-  target: HostWindow,
-  open: (url: string) => Parameters<typeof webSocketTransport>[0],
-): Transport => {
-  // `http:` and `https:` and nothing else, which is what `hasHost` decides. A
-  // page on `file:` has a `location` whose `host` is empty, and `ws://` at an
-  // empty host is not a URL — it would throw where this promises not to.
-  if (hasHost(target)) {
-    const { host, protocol } = target.location;
-    const scheme = protocol === "https:" ? "wss:" : "ws:";
-    return webSocketTransport(open(`${scheme}//${host}${SESSION_PATH}`));
-  }
+const compositorOn = (navigator: HostNavigator): DomicileHost | undefined =>
+  navigator.domicile ?? undefined;
 
-  return {
-    onMessage: () => undefined,
-    send: () => undefined,
-  };
-};
+/**
+ * A `DomicileHost` that answers every question with nothing.
+ *
+ * Every member, not only the ones a shell is likely to reach for: the bridge
+ * registers a listener for every event type in its constructor, so a stand-in
+ * missing `addEventListener` would throw before the shell had rendered a
+ * single element. It is not an `EventTarget` behind that listener and does not
+ * need to be — nothing will ever dispatch on it, so a listener that is dropped
+ * on the floor and one that is kept and never called are the same thing.
+ *
+ * `displays` is `null`, which is what the engine's own attribute says before a
+ * compositor has described a desktop. Here it is what it says forever, and
+ * {@link hasHost} is how a shell knows the difference and reaches for the
+ * viewport instead. Not `[]`: that would claim a desktop with no screens on
+ * it, which is a description, and nothing here has described anything.
+ */
+const absentHost = (): DomicileHost => ({
+  addEventListener: () => undefined,
+  closeApp: () => undefined,
+  displays: null,
+  focusApp: () => undefined,
+  focusChrome: () => undefined,
+  grabShortcut: () => undefined,
+  key: () => undefined,
+  pointerAxis: () => undefined,
+  pointerButton: () => undefined,
+  pointerLeave: () => undefined,
+  pointerMotion: () => undefined,
+  resizeApp: () => undefined,
+  setDesktopSize: () => undefined,
+  setDevicePixelRatio: () => undefined,
+  spawn: () => undefined,
+});

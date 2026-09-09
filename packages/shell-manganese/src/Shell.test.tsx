@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import {
   APP_TAG_NAME,
   registerElements,
 } from "@domicile/chrome-sdk/register-elements";
-import type { Display } from "@domicile/component-library/display-source";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -13,18 +13,26 @@ import { AppElements } from "./app-elements";
 import { displaysFrom } from "./display-source";
 import { Shell } from "./Shell";
 
-const LEFT: Display = {
+// The desktop as the *engine* describes it: a corner and an extent as four
+// numbers, which `display-source.ts` is what regroups into the rectangle the
+// component library lays out against. The double below holds this shape rather
+// than that one, so the mapping is exercised by every render here.
+const LEFT: DomicileDisplay = {
+  height: 1080,
   name: "left",
-  position: [0, 0],
   scale: 1,
-  size: [1920, 1080],
+  width: 1920,
+  x: 0,
+  y: 0,
 };
 
-const RIGHT: Display = {
+const RIGHT: DomicileDisplay = {
+  height: 1024,
   name: "right",
-  position: [1920, 0],
   scale: 1,
-  size: [1280, 1024],
+  width: 1280,
+  x: 1920,
+  y: 0,
 };
 
 /** The region a `<Screen>` renders for the display of this name. */
@@ -43,7 +51,7 @@ class FakeBridge {
    * a fact rather than an event, and the chrome reads it as often as it is
    * told it.
    */
-  displays: readonly Display[] | undefined;
+  displays: readonly DomicileDisplay[] | undefined;
 
   readonly #handlers = new Map<string, (message: unknown) => void>();
 
@@ -63,7 +71,7 @@ class FakeBridge {
   }
 
   /** The host describing the desktop, which it does at least once. */
-  describes(displays: readonly Display[]): void {
+  describes(displays: readonly DomicileDisplay[]): void {
     this.displays = displays;
     this.emit("displays", { displays });
   }
@@ -118,7 +126,7 @@ let bridge: FakeBridge;
  * desktop to put it on. The tests that care about the gap pass `undefined` and
  * describe one themselves.
  */
-const renderingShell = (desktop: readonly Display[] | undefined) => {
+const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
   bridge = new FakeBridge();
   bridge.displays = desktop;
   const client = bridge as unknown as BridgeClient;
@@ -140,7 +148,7 @@ const renderingShell = (desktop: readonly Display[] | undefined) => {
 };
 
 /** The chrome on a desktop the host has already described. */
-const renderShell = (desktop: readonly Display[] = [LEFT]) =>
+const renderShell = (desktop: readonly DomicileDisplay[] = [LEFT]) =>
   renderingShell(desktop);
 
 /**
@@ -464,11 +472,23 @@ describe("Shell", () => {
 
       expect(bridge.calls).toContainEqual([
         "grabShortcut",
-        { alt: true, ctrl: false, key: 28, logo: false, shift: false },
+        {
+          altKey: true,
+          ctrlKey: false,
+          keycode: 28,
+          metaKey: false,
+          shiftKey: false,
+        },
       ]);
       expect(bridge.calls).toContainEqual([
         "grabShortcut",
-        { alt: true, ctrl: false, key: 28, logo: false, shift: true },
+        {
+          altKey: true,
+          ctrlKey: false,
+          keycode: 28,
+          metaKey: false,
+          shiftKey: true,
+        },
       ]);
     });
 
@@ -476,14 +496,11 @@ describe("Shell", () => {
       renderShell();
 
       bridge.emit("shortcut", {
-        shortcut: {
-          alt: true,
-          ctrl: false,
-          key: 28,
-          logo: false,
-          shift: false,
-        },
-        type: "shortcut",
+        altKey: true,
+        ctrlKey: false,
+        keycode: 28,
+        metaKey: false,
+        shiftKey: false,
       });
 
       expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
@@ -551,7 +568,13 @@ describe("Shell", () => {
 
       expect(bridge.calls).toContainEqual([
         "grabShortcut",
-        { alt: true, ctrl: false, key: 15, logo: false, shift: false },
+        {
+          altKey: true,
+          ctrlKey: false,
+          keycode: 15,
+          metaKey: false,
+          shiftKey: false,
+        },
       ]);
     });
 
@@ -562,13 +585,11 @@ describe("Shell", () => {
       bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
       act(() => {
         bridge.emit("shortcut", {
-          shortcut: {
-            alt: true,
-            ctrl: false,
-            key: 15,
-            logo: false,
-            shift: false,
-          },
+          altKey: true,
+          ctrlKey: false,
+          keycode: 15,
+          metaKey: false,
+          shiftKey: false,
         });
       });
 
@@ -709,7 +730,12 @@ describe("Shell", () => {
       const rendered = renderShell();
       bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
-      bridge.emit("modifiers", { ...held, ctrl: false, logo: false });
+      bridge.emit("modifiers", {
+        altKey: held.alt,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: held.shift,
+      });
       return rendered;
     };
 
@@ -785,10 +811,10 @@ describe("Shell", () => {
       sheet.setPointerCapture = () => undefined;
       fireEvent.pointerDown(sheet, { clientX: 0, clientY: 0, pointerId: 1 });
       bridge.emit("modifiers", {
-        alt: true,
-        ctrl: false,
-        logo: false,
-        shift: false,
+        altKey: true,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
       });
       fireEvent.pointerMove(sheet, { clientX: 100, clientY: 40, pointerId: 1 });
 
@@ -856,7 +882,12 @@ describe("Shell", () => {
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
       bridge.emit("app_appeared", { app_id: "two", title: "Two" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
-      bridge.emit("modifiers", { ...held, ctrl: false, logo: false });
+      bridge.emit("modifiers", {
+        altKey: held.alt,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: held.shift,
+      });
       return rendered;
     };
 
@@ -976,10 +1007,10 @@ describe("Shell", () => {
       const { container } = await twoFloats({ alt: false, shift: false });
       act(() => {
         bridge.emit("modifiers", {
-          alt: false,
-          ctrl: true,
-          logo: false,
-          shift: false,
+          altKey: false,
+          ctrlKey: true,
+          metaKey: false,
+          shiftKey: false,
         });
       });
 
@@ -1002,10 +1033,10 @@ describe("Shell", () => {
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
       act(() => {
         bridge.emit("modifiers", {
-          alt: true,
-          ctrl: false,
-          logo: false,
-          shift: false,
+          altKey: true,
+          ctrlKey: false,
+          metaKey: false,
+          shiftKey: false,
         });
       });
 
@@ -1027,10 +1058,10 @@ describe("Shell", () => {
       // what makes the *stage* window let the pointer through.
       act(() => {
         bridge.emit("modifiers", {
-          alt: true,
-          ctrl: false,
-          logo: false,
-          shift: false,
+          altKey: true,
+          ctrlKey: false,
+          metaKey: false,
+          shiftKey: false,
         });
       });
       const sheet = sheetOver(container, "float");
@@ -1054,10 +1085,10 @@ describe("Shell", () => {
 
       act(() => {
         bridge.emit("modifiers", {
-          alt: false,
-          ctrl: false,
-          logo: false,
-          shift: false,
+          altKey: false,
+          ctrlKey: false,
+          metaKey: false,
+          shiftKey: false,
         });
       });
 
@@ -1072,10 +1103,10 @@ describe("Shell", () => {
       press(dragged, 0, 0);
       act(() => {
         bridge.emit("modifiers", {
-          alt: false,
-          ctrl: false,
-          logo: false,
-          shift: false,
+          altKey: false,
+          ctrlKey: false,
+          metaKey: false,
+          shiftKey: false,
         });
       });
 

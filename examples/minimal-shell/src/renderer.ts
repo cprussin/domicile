@@ -6,21 +6,17 @@
 // still be one. Everything else a desktop has is CSS and event handlers on top
 // of exactly this.
 
-import {
-  BridgeClient,
-  describeHandshakeFailure,
-} from "@domicile/chrome-sdk/bridge";
+import { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-// One call, two places. Under the engine this opens a WebSocket to the bridge
-// serving this page; in an ordinary browser it does nothing at all, which is
-// worth keeping possible — the layout can be worked on without a compositor,
-// against apps that will never arrive.
-const bridge = new BridgeClient(
-  connectToHost(window, (url) => new WebSocket(url)),
-);
+// One call, two places. Under the engine this is `navigator.domicile`, the
+// control channel on a document the fork served; in an ordinary browser there
+// is none, and `connectToHost` says so on the console and hands back a
+// stand-in — which is worth keeping possible, because the layout can be worked
+// on without a compositor, against apps that will never arrive.
+const bridge = new BridgeClient(connectToHost(navigator));
 // Defines `<domicile-app>` and `<domicile-webview>`, bound to this bridge.
 // Until this runs the tags are unknown elements and mount nothing.
 registerElements(bridge);
@@ -52,26 +48,8 @@ bridge.on("app_closed", ({ app_id }) => {
   }
 });
 
-// The handshake's failure is a value rather than a throw: a version mismatch is
-// the compositor and this shell having been built against different protocols,
-// and both numbers are the message.
-bridge
-  .connect()
-  .then((agreed) => {
-    agreed.match({
-      Err: (failure) => {
-        // biome-ignore lint/suspicious/noConsole: the desktop has not started
-        console.error(`domicile: ${describeHandshakeFailure(failure)}`);
-      },
-      Ok: () => {
-        // After the handshake — the host ignores anything sent before it. The
-        // ratio changes when the window moves display or the page zooms, and
-        // the page is the only part of Domicile that can see either.
-        reportDevicePixelRatio(bridge, window);
-      },
-    });
-  })
-  .catch((failure: unknown) => {
-    // biome-ignore lint/suspicious/noConsole: the desktop has not started
-    console.error("domicile: the handshake could not be completed", failure);
-  });
+// The ratio changes when the window moves display or the page zooms, and the
+// page is the only part of Domicile that can see either. Sent straight away:
+// there is no handshake to wait for, and the first call is what binds the
+// channel.
+reportDevicePixelRatio(bridge, window);

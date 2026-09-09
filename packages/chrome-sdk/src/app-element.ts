@@ -9,11 +9,11 @@
 // `domicile-app`. A chrome that prefers the bare `<app>` the compositor exposes
 // gets it from `aliasTag` until the engine makes the short name real.
 
+import type { CursorShape } from "./cursor-shape";
 import type { ElementContext } from "./element-context";
 import { focusedApp, setFocusedApp } from "./element-context";
 import { buttonCodeFromJs } from "./input";
 import { placementTiming } from "./placement-timing";
-import type { CursorShape } from "./protocol";
 import { surfaceLocal } from "./surface-coordinates";
 import { axisFromWheel } from "./wheel-axis";
 
