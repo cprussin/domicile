@@ -4,12 +4,12 @@ Date: Tue, 8 Sep 2026 18:40:54 -0700
 Subject: [PATCH] domicile: the rest of the control protocol that survives the
  fork
 
-Twenty-one of the protocol's twenty-nine members, taking the channel from a
-vertical slice to something a shell could be written against.
+Every member of the protocol the fork keeps, taking the channel from a vertical
+slice to something a shell can be written against.
 
-The other eight are absent on purpose. place_portal, remove_portal,
-declare_bands, render_band, claim_pointer and app_composited are the bands and
-copy-path protocol, which docs/architecture/ENGINE-FORK.md lists under what the
+The rest are absent on purpose. place_portal, remove_portal, declare_bands,
+render_band, claim_pointer and app_composited are the bands and copy-path
+protocol, which docs/architecture/ENGINE-FORK.md lists under what the
 fork scraps: layout positions the layer now and the page has stopped reporting
 where its own boxes are. Freezing them into the browser would make removing a
 dying protocol cost a release build.
@@ -53,10 +53,10 @@ Adding a member costs a near-full Blink rebuild, because a new inbound message
 needs a new event type and that invalidates the generated bindings. These were
 added together for that reason.
 ---
- .../blink/renderer/bindings/generated_in_modules.gni      | 14 ++++++++++++++
- third_party/blink/renderer/bindings/idl_in_modules.gni    |  7 +++++++
- .../blink/renderer/core/events/event_type_names.json5     |  7 +++++++
- 3 files changed, 28 insertions(+)
+ .../blink/renderer/bindings/generated_in_modules.gni      | 16 ++++++++++
+ third_party/blink/renderer/bindings/idl_in_modules.gni    | 8 ++++++++++
+ .../blink/renderer/core/events/event_type_names.json5     | 8 ++++++++
+ 3 files changed, 32 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
 index 838a9c4f8883a..0b9cf29a32d1d 100644
@@ -78,7 +78,7 @@ index 838a9c4f8883a..0b9cf29a32d1d 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
-@@ -2353,7 +2361,13 @@ generated_interface_sources_in_modules = [
+@@ -2353,7 +2361,15 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.h",
@@ -87,6 +87,8 @@ index 838a9c4f8883a..0b9cf29a32d1d 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.cc",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.cc",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.cc",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.h",
@@ -96,7 +98,7 @@ diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_part
 index 06bc263861259..8aa2e839a64f0 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -274,9 +274,16 @@ static_idl_files_in_modules = [
+@@ -274,9 +274,17 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/encryptedmedia/navigator_request_media_key_system_access.idl",
    "//third_party/blink/renderer/modules/eventsource/event_source.idl",
    "//third_party/blink/renderer/modules/eventsource/event_source_init.idl",
@@ -107,6 +109,7 @@ index 06bc263861259..8aa2e839a64f0 100644
    "//third_party/blink/renderer/modules/domicile/domicile_host.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_display.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_shortcut.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",
@@ -117,7 +120,7 @@ diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/thi
 index 37929c05d7a78..932e5ecb4cdec 100644
 --- a/third_party/blink/renderer/core/events/event_type_names.json5
 +++ b/third_party/blink/renderer/core/events/event_type_names.json5
-@@ -25,6 +25,13 @@
+@@ -25,6 +25,14 @@
      "appinstalled",
      // Domicile's engine fork: navigator.domicile.onapptitled.
      "apptitled",
@@ -128,6 +131,7 @@ index 37929c05d7a78..932e5ecb4cdec 100644
 +    "shortcut",
 +    "modifiers",
 +    "focuschanged",
++    "displayschanged",
      "audioend",
      "audioprocess",
      "audiostart",

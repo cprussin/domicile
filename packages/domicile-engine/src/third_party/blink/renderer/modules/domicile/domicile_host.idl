@@ -85,4 +85,26 @@
 
   // Focus moved. `appId` is empty when the chrome itself has it.
   attribute EventHandler onfocuschanged;
+
+  // The screens of the desktop.
+  //
+  // An attribute rather than an event payload, because the desktop is a fact
+  // and not a stream. A shell reads this when it needs it -- including a
+  // component that mounts long after the description arrived, which an event
+  // would have left with nothing.
+  //
+  // Empty until the compositor has described the desktop, and empty again for
+  // a desktop with no screens. The compositor does not send that second one --
+  // it describes at least one output, and the window-following case is a
+  // display named `domicile-0` -- so in practice a shell that waits for the
+  // first `displayschanged` never sees an empty list.
+  // No [SameObject]: the compositor sends the whole desktop each time it
+  // changes and a FrozenArray is frozen, so this is a different array after
+  // every `displayschanged`. That is also the shape a shell wants -- an
+  // identity that survived a desktop it no longer describes would be worse.
+  readonly attribute FrozenArray<DomicileDisplay> displays;
+
+  // The desktop changed: a screen arrived or left, a display was resized, or
+  // its density moved. Read `displays` for what it is now.
+  attribute EventHandler ondisplayschanged;
 };

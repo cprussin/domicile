@@ -48,6 +48,20 @@ struct Shortcut {
   bool meta;
 };
 
+// One screen of the desktop.
+//
+// Integers, unlike the sizes above: a display's geometry comes from the
+// desktop's configuration in device pixels rather than from a layout box, so
+// there is no fraction to lose.
+struct Display {
+  string name;
+  int32 x;
+  int32 y;
+  uint32 width;
+  uint32 height;
+  uint32 scale;
+};
+
 // Page -> browser -> compositor.
 interface ControlChannel {
   // Hand the browser the page's end of the other direction.
@@ -128,6 +142,16 @@ interface ControlChannelClient {
   // resolved depressed/latched/locked against the keymap, and a shell asking
   // "is control down" cannot answer that from a mask without the keymap too.
   Modifiers(bool alt, bool ctrl, bool shift, bool meta);
+
+  // The whole desktop, whenever any of it changes.
+  //
+  // Every screen every time, not a delta: the compositor re-describes the
+  // desktop on a resize, a density change or a config reload, and a page that
+  // had to reconcile deltas could be wrong about a screen forever after
+  // missing one. An empty list is a desktop with no screens on it, which the
+  // compositor does not send -- it describes at least one output -- but which
+  // is an answer rather than a silence, and the page must be able to hold it.
+  Displays(array<Display> displays);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id);

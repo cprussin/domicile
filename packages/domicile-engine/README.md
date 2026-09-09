@@ -69,12 +69,18 @@ message unconstructable — and what makes adding one cost an engine release
 rather than a TypeScript edit. That trade was made deliberately; it is worth
 knowing which side of it you are on before asking for a new message.
 
-**Implemented, 21 of 29.** Outbound: `spawn`, `focus_app`, `focus_chrome`,
-`close_app`, `resize_app`, `set_desktop_size`, `set_device_pixel_ratio`,
-`grab_shortcut`, `key`, `pointer_motion`, `pointer_leave`, `pointer_button`,
-`pointer_axis`. Inbound: `welcome`, `app_appeared`, `app_titled`,
-`app_resized`, `app_closed`, `app_cursor`, `shortcut`, `modifiers`,
-`focus_changed`.
+**Implemented — every member the fork keeps.** Outbound: `spawn`, `focus_app`,
+`focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
+`set_device_pixel_ratio`, `grab_shortcut`, `key`, `pointer_motion`,
+`pointer_leave`, `pointer_button`, `pointer_axis`. Inbound: `welcome`,
+`app_appeared`, `app_titled`, `app_resized`, `app_closed`, `app_cursor`,
+`shortcut`, `modifiers`, `focus_changed`, `displays`.
+
+`displays` reaches the page as an attribute — `navigator.domicile.displays` —
+with a bare `displayschanged` event beside it, rather than as an event carrying
+the desktop. The desktop is a fact and not a stream: a component that mounts
+after the description has to be able to read it, and an event carrying the only
+copy is gone once dispatched.
 
 **Deliberately absent:** `place_portal`, `remove_portal`, `declare_bands`,
 `render_band`, `claim_pointer`, `app_composited`. These are the bands and

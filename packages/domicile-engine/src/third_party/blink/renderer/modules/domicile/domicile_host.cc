@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_modifiers_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_display.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -20,7 +21,11 @@ namespace blink {
 DomicileHost::DomicileHost(LocalDOMWindow& window)
     : window_(&window),
       channel_(&window),
-      client_receiver_(this, &window) {}
+      client_receiver_(this, &window),
+      // Empty rather than null from the start: `displays` is read before the
+      // compositor has said anything, and a shell should get a list with
+      // nothing in it rather than have to test for its absence.
+      displays_(MakeGarbageCollected<FrozenArray<DomicileDisplay>>()) {}
 
 DomicileHost::~DomicileHost() = default;
 
@@ -236,6 +241,23 @@ void DomicileHost::Modifiers(bool alt, bool ctrl, bool shift, bool meta) {
       event_type_names::kModifiers, alt, ctrl, shift, meta));
 }
 
+void DomicileHost::Displays(
+    WTF::Vector<domicile::mojom::blink::DisplayPtr> displays) {
+  HeapVector<Member<DomicileDisplay>> described;
+  described.reserve(displays.size());
+  for (const auto& display : displays) {
+    described.push_back(MakeGarbageCollected<DomicileDisplay>(
+        display->name, display->x, display->y, display->width, display->height,
+        display->scale));
+  }
+  displays_ = MakeGarbageCollected<FrozenArray<DomicileDisplay>>(
+      std::move(described));
+  // The event says the desktop moved; `displays` says what it is. Splitting
+  // them is what lets a component that mounted after the description read the
+  // desktop at all -- an event carrying the only copy is gone once dispatched.
+  DispatchEvent(*Event::Create(event_type_names::kDisplayschanged));
+}
+
 void DomicileHost::FocusChanged(const String& app_id) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       event_type_names::kFocuschanged, app_id, String(), String(),
@@ -269,6 +291,7 @@ ExecutionContext* DomicileHost::GetExecutionContext() const {
 }
 
 void DomicileHost::Trace(Visitor* visitor) const {
+  visitor->Trace(displays_);
   visitor->Trace(window_);
   visitor->Trace(channel_);
   visitor->Trace(client_receiver_);

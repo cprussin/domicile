@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_HOST_H_
 
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -17,6 +18,7 @@
 
 namespace blink {
 
+class DomicileDisplay;
 class DomicileShortcut;
 class LocalDOMWindow;
 
@@ -90,6 +92,12 @@ class MODULES_EXPORT DomicileHost final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(shortcut, kShortcut)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(modifiers, kModifiers)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(displayschanged, kDisplayschanged)
+
+  // The desktop's screens, empty until the compositor has described them.
+  const FrozenArray<DomicileDisplay>& displays() const {
+    return *displays_.Get();
+  }
 
   // EventTarget:
   const AtomicString& InterfaceName() const override;
@@ -108,6 +116,8 @@ class MODULES_EXPORT DomicileHost final
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void FocusChanged(const String& app_id) override;
+  void Displays(
+      WTF::Vector<domicile::mojom::blink::DisplayPtr> displays) override;
 
   void Trace(Visitor*) const override;
 
@@ -137,6 +147,9 @@ class MODULES_EXPORT DomicileHost final
   bool ReadyForApp(const String& app_id, ExceptionState&);
 
   Member<LocalDOMWindow> window_;
+  // Replaced wholesale on every description rather than edited: the compositor
+  // sends the whole desktop each time, and a `FrozenArray` is frozen.
+  Member<FrozenArray<DomicileDisplay>> displays_;
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;
   HeapMojoReceiver<domicile::mojom::blink::ControlChannelClient, DomicileHost>
       client_receiver_;

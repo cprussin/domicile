@@ -442,6 +442,39 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
+  if (*type == "displays") {
+    const base::ListValue* described = message.FindList("displays");
+    if (!described) {
+      return;
+    }
+    std::vector<mojom::DisplayPtr> displays;
+    displays.reserve(described->size());
+    for (const base::Value& entry : *described) {
+      const base::DictValue* display = entry.GetIfDict();
+      if (!display) {
+        continue;
+      }
+      const std::string* name = display->FindString("name");
+      const base::ListValue* position = display->FindList("position");
+      const base::ListValue* size = display->FindList("size");
+      if (!name || !position || position->size() != 2u || !size ||
+          size->size() != 2u) {
+        continue;
+      }
+      displays.push_back(mojom::Display::New(
+          *name, static_cast<int32_t>(Number((*position)[0])),
+          static_cast<int32_t>(Number((*position)[1])),
+          static_cast<uint32_t>(Number((*size)[0])),
+          static_cast<uint32_t>(Number((*size)[1])),
+          static_cast<uint32_t>(display->FindInt("scale").value_or(1))));
+    }
+    // Sent even when every entry was malformed, because an empty desktop is an
+    // answer: a page told nothing and a page told there are no screens are
+    // different states, and only the second can be rendered.
+    client_->Displays(std::move(displays));
+    return;
+  }
+
   if (*type == "focus_changed") {
     // Empty app_id means the chrome itself has focus, which is a state rather
     // than a missing field.
