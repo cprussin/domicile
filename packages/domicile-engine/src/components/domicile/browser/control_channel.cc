@@ -13,7 +13,6 @@
 #include "base/logging.h"
 #include "base/values.h"
 #include "components/domicile/common/domicile_scheme.h"
-#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/net_errors.h"
 
 namespace domicile {
@@ -26,10 +25,17 @@ constexpr int kReadBufferSize = 16 * 1024;
 
 }  // namespace
 
-ControlChannel::ControlChannel(const std::string& socket_path)
+ControlChannel::ControlChannel(
+    const std::string& socket_path,
+    mojo::PendingReceiver<mojom::ControlChannel> receiver)
     : socket_path_(socket_path),
+      receiver_(this, std::move(receiver)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
           kReadBufferSize)) {
+  // The page going away takes this with it; nothing else owns it.
+  receiver_.set_disconnect_handler(
+      base::BindOnce([](ControlChannel* self) { delete self; },
+                     base::Unretained(this)));
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
   Connect();
 }
@@ -80,6 +86,10 @@ void ControlChannel::OnConnectFailed() {
                << "s. The desktop's control channel will not connect; the "
                   "shell will render but no window will work.";
     client_.reset();
+    // Closing the page's end is what makes the failure visible. `this` is
+    // destroyed by the disconnect handler, so nothing may touch it after.
+    receiver_.reset();
+    delete this;
     return;
   }
   retry_timer_.Start(FROM_HERE, kRetryEvery,
@@ -437,8 +447,9 @@ void BindControlChannel(
                   "shell will load and no window will respond.";
     return;
   }
-  mojo::MakeSelfOwnedReceiver(std::make_unique<ControlChannel>(socket_path),
-                              std::move(receiver));
+  // Owns itself: it lives until the page drops the pipe or the compositor is
+  // declared unreachable.
+  new ControlChannel(socket_path, std::move(receiver));
 }
 
 }  // namespace domicile
