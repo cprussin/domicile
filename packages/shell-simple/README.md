@@ -116,12 +116,13 @@ client exits; there is no close button, so quit apps from inside them.
 ## Build & run from a checkout
 
 ```sh
-nix develop .#full -c ./scripts/run-engine.sh <path to chromium/src> simple
+nix develop .#full -c ./scripts/dev-shell.sh simple
 ```
 
-does the same thing against your working tree — see
-[`packages/domicile-engine`](../domicile-engine/README.md) for how that tree is
-built. To build the shell alone:
+does the same thing against your working tree, on the engine the flake pins.
+`DOMICILE_ENGINE=<chromium/src>/out/Domicile` runs it on one you built instead
+— see [`packages/domicile-engine`](../domicile-engine/README.md) for how that
+tree is built. To build the shell alone:
 
 ```sh
 bun run turbo build:vite --filter @domicile/shell-simple

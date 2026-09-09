@@ -187,14 +187,14 @@ PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 # refused a build that had succeeded, in fourteen seconds, with all three of
 # this guard's logs empty.
 #
-# It had been wrong since the shells stopped emitting one. `run-engine.sh` and
+# It had been wrong since the shells stopped emitting one. The runner and
 # `test-out-of-tree-shell.sh` were both updated in that change and this, the
 # third caller, was not — and nothing said so, because `engine.yml` runs only
 # on `packages/domicile-engine/**` and that change touched none of it. The
 # first thing to run this guard afterwards was an unrelated pull request.
 #
-# `shell.js` by the name `shellBuild` pins, as `run-engine.sh` does it and for
-# its reasons.
+# `shell.js` by the name `shellBuild` pins, as `domicile` does it and for its
+# reasons.
 MODULE="$PAGE_DIR/shell.js"
 if [ ! -f "$MODULE" ]; then
   annotate "spike-shell: $SHELL_NAME built no shell.js in $PAGE_DIR"
@@ -239,7 +239,7 @@ echo "the shell is at $URL"
 #    what the guards read: the page's own console lines are the record of
 #    whether the SDK reached the bridge.
 #
-#    `--app` for the reason `run-engine.sh` uses it: a desktop is not a browser
+#    `--app` for the reason `domicile` uses it: a desktop is not a browser
 #    looking at a page, and a tab strip above the shell is the difference
 #    between something a person would use and something they would call broken.
 #    The guard runs the configuration the product runs, or it is guarding

@@ -255,7 +255,7 @@ Clients, for testing:
 | `packages/domicile-test-chrome` | the stand-in chrome the compositor's own tests drive | core |
 | `packages/e2e-harness` | the headless chrome stand-in, and the check on the e2e machinery | bun |
 | `packages/test-support` | shared bun test setup | bun |
-| `scripts/` | `check.sh`, the e2e and smoke checks, `run-engine.sh`, `dev-shell.sh` | — |
+| `scripts/` | `check.sh`, the e2e and smoke checks, `dev-shell.sh` | — |
 | `.github/scripts/` | what the engine job runs: the tree lock, the reset, the build, the release | — |
 
 Inside `domicile-compositor`: `screens.rs` is what the desktop is made of;

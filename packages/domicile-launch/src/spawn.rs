@@ -1,9 +1,9 @@
 //! The three commands a desktop is, as data.
 //!
 //! Built rather than run, so what each process is started with is a value a
-//! test can read. The flag lists are the part of the old shell script that
-//! `test-run-engine-platform.sh` could only check by extracting the block and
-//! eval-ing it; here they are ordinary assertions.
+//! test can read. The flag lists were the part of the old shell script that
+//! its tests could only reach by extracting the block and eval-ing it; here
+//! they are ordinary assertions.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

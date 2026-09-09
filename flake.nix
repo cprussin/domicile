@@ -160,8 +160,9 @@
         buildInputs = engineRuntimeLibs;
         dontStrip = true;
 
-        # The tarball holds one directory; `run-engine.sh` joins `$CHROMIUM` and
-        # `$OUT`, so `OUT=.` and this is that directory.
+        # The tarball holds one directory, and that directory is the engine:
+        # `chrome` sits directly inside it, which is what `DOMICILE_ENGINE`
+        # names and what `libexec/domicile/engine` points at.
         unpackPhase = ''
           runHook preUnpack
           mkdir -p unpacked
@@ -241,8 +242,8 @@
 
       # ── The three things a desktop is made of ───────────────────────────
       #
-      # `run-engine.sh` starts a bridge, an engine and a compositor, and takes
-      # each as a path. A checkout builds them; these are the same three built
+      # `domicile` starts a bridge, an engine and a compositor, and finds each
+      # beside itself. A checkout builds them; these are the same three built
       # once, in the store, so `nix run` starts a desktop instead of a build.
 
       # The page. Only the renderer bundle: `build:vite` also produces the
@@ -286,59 +287,85 @@
         '';
       };
 
-      # The bridge, which is a bun program and stays one: it serves the page
-      # and proxies the compositor's socket, and bundling it would be a second
-      # way to build something that has exactly one entry point.
+      # The bridge, compiled to a binary that carries its own runtime.
+      #
+      # It was `bun packages/.../main.ts` with the whole workspace copied
+      # beside it, and `bun` supplied by the wrapper around `domicile`. That
+      # wrapper is gone, and a component found beside the binary has to be a
+      # thing that *runs* — so this embeds the runtime rather than assuming an
+      # end user has one. `bun build --compile` needs no network, which is what
+      # makes it usable in a sandbox.
       domicileBridge = pkgs.stdenv.mkDerivation {
-        pname = "domicile-bridge-host";
+        pname = "domicile-bridge";
         version = "0.0.0";
         src = self;
         nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
         configurePhase = sharedShellConfigure;
-        dontBuild = true;
+        buildPhase = ''
+          runHook preBuild
+          bun build --compile \
+            --outfile domicile-bridge \
+            packages/engine-chrome-host/src/main.ts
+          runHook postBuild
+        '';
         installPhase = ''
           runHook preInstall
-          mkdir -p "$out"
-          cp -R packages "$out/packages"
-          cp -R node_modules "$out/node_modules"
-          cp package.json "$out/package.json"
+          install -Dm755 domicile-bridge "$out/bin/domicile-bridge"
           runHook postInstall
         '';
-        passthru.entry = "packages/engine-chrome-host/src/main.ts";
       };
 
-      # A desktop: the page, the engine, the compositor and the bridge, handed
-      # to the one script that knows how to start them in the order they have
-      # to start in. Every one is `:-` against what is already set, because
-      # each is something a developer legitimately overrides — a compositor
-      # built from a checkout, a page they are iterating on — and a wrapper
-      # that set them outright would take that away.
-      desktop = { name, description }:
-        pkgs.writeShellApplication {
-          # The desktop's own name, so `nix profile install .#manganese` puts
-          # `manganese` on the PATH rather than something with a prefix nobody
-          # typed. It is also what `mainProgram` says, and what CI checks for.
-          inherit name;
-          runtimeInputs = [ pkgs.bun ];
-          text = ''
-            export DOMICILE_PAGE="''${DOMICILE_PAGE:-${shellPage name}}"
-            export DOMICILE_ENGINE="''${DOMICILE_ENGINE:-${domicileEngine}}"
-            export DOMICILE_COMPOSITOR="''${DOMICILE_COMPOSITOR:-${domicile-compositor}/bin/domicile-compositor}"
-            export DOMICILE_BRIDGE="''${DOMICILE_BRIDGE:-${domicileBridge}/${domicileBridge.passthru.entry}}"
-            # `OUT=.` because a published engine *is* the out directory, where
-            # a Chromium checkout has one under `out/Domicile`. `:-` like the
-            # rest: `DOMICILE_ENGINE=/build/chromium/src` is exactly the
-            # override the four above invite, and it needs `OUT=out/Domicile`
-            # to go with it.
-            export OUT="''${OUT:-.}"
-            exec ${self}/scripts/run-engine.sh "$DOMICILE_ENGINE" ${name} "$@"
-          '';
+      # Domicile, laid out so that `domicile` can find the rest of itself.
+      #
+      #   bin/domicile
+      #   bin/domicile-compositor
+      #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
+      #   libexec/domicile/bridge     the page server
+      #
+      # THE BINARIES ARE COPIED, NOT SYMLINKED, and that is the whole trick.
+      # `domicile` finds its siblings from `current_exe`, which on Linux reads
+      # `/proc/self/exe` and therefore *resolves symlinks*. A `bin/domicile`
+      # symlinked into the Rust derivation would report that derivation's path,
+      # where there is no `libexec` and never will be — so the desktop would
+      # refuse to start, naming a directory nobody wrote. Copied, it reports a
+      # path inside this layout, which is the one that has the other three.
+      #
+      # Only the binary's own path matters, so the two under `libexec` stay
+      # symlinks: nothing asks where *they* really are.
+      domicilePackage = pkgs.runCommand "domicile"
+        {
           meta = {
-            inherit description;
-            mainProgram = name;
+            description = "Run a Domicile desktop from a shell you built yourself";
+            mainProgram = "domicile";
             platforms = [ system ];
           };
-        };
+        } ''
+        mkdir -p "$out/bin" "$out/libexec/domicile"
+        cp ${domicileBinaries}/bin/domicile "$out/bin/domicile"
+        cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
+        ln -s ${domicileEngine} "$out/libexec/domicile/engine"
+        ln -s ${domicileBridge}/bin/domicile-bridge "$out/libexec/domicile/bridge"
+      '';
+
+      # A desktop: Domicile with the page already chosen.
+      #
+      # A wrapper, and the only one left, because that is all a desktop is —
+      # `domicile` with one argument it does not have to be told twice. It
+      # `exec`s, so `current_exe` inside is the copied binary above and the
+      # siblings are found from there.
+      desktop = { name, description }:
+        pkgs.runCommand name
+          {
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            meta = {
+              inherit description;
+              mainProgram = name;
+              platforms = [ system ];
+            };
+          } ''
+          makeWrapper ${domicilePackage}/bin/domicile "$out/bin/${name}" \
+            --add-flags ${shellPage name}
+        '';
 
       # ── What a user installs ────────────────────────────────────────────
       #
@@ -358,14 +385,15 @@
         (name: _: builtins.pathExists (./packages + "/${name}/Cargo.toml"))
         (builtins.readDir ./packages));
 
-      # The compositor, which no output exposes on its own.
+      # The two Rust binaries, which no output exposes on their own.
       #
-      # Not hidden, just not a thing to install: it takes a chrome socket and a
-      # session file on its command line and refuses to start without them, so
-      # a user who ran it would get a usage error. The shells below put it on
-      # their own `PATH` and that is the only way it is meant to be reached.
-      domicile-compositor = pkgs.rustPlatform.buildRustPackage {
-        pname = "domicile-compositor";
+      # `domicile-compositor` is not a thing to install: it takes a chrome
+      # socket and a session file on its command line and refuses to start
+      # without them, so a user who ran it would get a usage error. `domicile`
+      # is the thing to install, and it is installed by the layout below rather
+      # than from here, because finding its siblings depends on where it sits.
+      domicileBinaries = pkgs.rustPlatform.buildRustPackage {
+        pname = "domicile-binaries";
         version = "0.0.0";
         # Whole crate directories rather than the `.rs` files in them, and
         # `scripts/` and `ROADMAP.md` besides.
@@ -396,15 +424,22 @@
         # are `dlopen`ed from at *run* time is the wrapper below.
         buildInputs = with pkgs; [ libxkbcommon wayland libGL libgbm ];
 
-        # `default-members` leaves this crate out — it is the one thing in the
-        # workspace that needs a graphics stack — so it has to be named.
+        # `default-members` leaves `domicile-compositor` out — it is the one
+        # thing in the workspace that needs a graphics stack — so it has to be
+        # named.
+        # Both binaries a desktop is, out of one build: `domicile` supervises
+        # and `domicile-compositor` is supervised, and they land in the same
+        # `bin/` — which is where `domicile` looks for the second.
         #
-        # And the binary too, not just the package: the crate owns a second
-        # `[[bin]]`, `domicile-test-client`, which exists so that cargo builds
-        # a Wayland client whenever it builds the tests that spawn one. It is
-        # test scaffolding, and naming the binary here is what keeps it out of
-        # what this package installs.
-        cargoBuildFlags = [ "-p" "domicile-compositor" "--bin" "domicile-compositor" ];
+        # And the binaries by name, not just the packages: `domicile-compositor`
+        # owns a second `[[bin]]`, `domicile-test-client`, which exists so that
+        # cargo builds a Wayland client whenever it builds the tests that spawn
+        # one. It is test scaffolding, and naming the binaries here is what
+        # keeps it out of what this package installs.
+        cargoBuildFlags = [
+          "-p" "domicile-compositor" "--bin" "domicile-compositor"
+          "-p" "domicile-launch" "--bin" "domicile"
+        ];
 
         # Not because they would fail — the ones needing a GPU are `#[ignore]`d
         # and CI runs the rest with no GL stack at all — but because a package
@@ -508,12 +543,6 @@
       };
 
 
-      # A shell, built and installed the way a user runs one.
-      #
-      # `name` is both the workspace package's suffix and the command, so
-      # `nix profile install .#simple` puts `simple` on `PATH`. What that
-      # command is, is `run-engine.sh` with every input it needs already
-      # named: the built page, the engine, the compositor and the bridge.
       # Everything a workspace build needs before it can run turbo: the
       # installed modules copied in writable, shebangs patched to the store's
       # node, and turbo's own writable directories. Shared by the three
@@ -597,54 +626,6 @@
           '';
         };
 
-      # Domicile itself: the thing you point at a shell.
-      #
-      # `nix run github:cprussin/domicile -- ./my-desktop/dist` is the whole
-      # interface a shell author has. The two desktops below are this with a
-      # page already chosen; this is the same runner with the choice left to
-      # whoever runs it, which is what makes an out-of-tree shell a first-class
-      # thing rather than something the flake has to have heard of.
-      #
-      # It sets three of the four inputs and deliberately not `DOMICILE_PAGE`:
-      # that one is the argument. A desktop that named it *and* passed a shell
-      # name would be handing `run-engine.sh` two answers to one question.
-      domicileCli = pkgs.writeShellApplication {
-        name = "domicile";
-        runtimeInputs = [ pkgs.bun ];
-        text = ''
-          # REFUSED RATHER THAN DEFAULTED. `run-engine.sh`'s own default is
-          # `simple`, which means "build packages/shell-simple out of the
-          # checkout" — and there is no checkout here, only the flake source in
-          # the store. A bare `nix run github:cprussin/domicile` would go
-          # looking for a workspace it cannot build and fail somewhere further
-          # in, about a directory the person never mentioned. The desktops are
-          # their own apps; this one needs to be told.
-          if [ "$#" -eq 0 ]; then
-            echo "domicile: which shell? Give me the directory your shell built," >&2
-            echo "  or the entry point inside it:" >&2
-            echo "" >&2
-            echo "    nix run github:cprussin/domicile -- ./my-desktop/dist" >&2
-            echo "" >&2
-            echo "  The two desktops this repository ships are apps of their own:" >&2
-            echo "    nix run github:cprussin/domicile#manganese" >&2
-            echo "    nix run github:cprussin/domicile#simple" >&2
-            exit 2
-          fi
-          export DOMICILE_ENGINE="''${DOMICILE_ENGINE:-${domicileEngine}}"
-          export DOMICILE_COMPOSITOR="''${DOMICILE_COMPOSITOR:-${domicile-compositor}/bin/domicile-compositor}"
-          export DOMICILE_BRIDGE="''${DOMICILE_BRIDGE:-${domicileBridge}/${domicileBridge.passthru.entry}}"
-          # `OUT=.` because a published engine *is* the out directory, where a
-          # Chromium checkout has one under `out/Domicile`.
-          export OUT="''${OUT:-.}"
-          exec ${self}/scripts/run-engine.sh "$DOMICILE_ENGINE" "$@"
-        '';
-        meta = {
-          description = "Run a Domicile desktop from a shell you built yourself";
-          mainProgram = "domicile";
-          platforms = [ system ];
-        };
-      };
-
       # The two desktops this repository ships. Bound once so that
       # `packages` and `apps` are the same two things rather than two lists
       # that have to be kept saying the same thing.
@@ -692,9 +673,9 @@
       packages.${system} = desktops // {
         # Domicile itself, so `nix profile install .#domicile` puts `domicile`
         # on `PATH` for somebody whose desktop is their own.
-        domicile = domicileCli;
+        domicile = domicilePackage;
         # The engine on its own, for `nix build .#engine` and for anyone who
-        # wants the path to hand to `run-engine.sh` themselves.
+        # wants a path to put in `DOMICILE_ENGINE` themselves.
         engine = domicileEngine;
       };
 
@@ -720,8 +701,8 @@
         # and `#simple` are how you ask for those.
         default = {
           type = "app";
-          program = pkgs.lib.getExe domicileCli;
-          meta.description = domicileCli.meta.description;
+          program = pkgs.lib.getExe domicilePackage;
+          meta.description = domicilePackage.meta.description;
         };
         inherit (domicileApps) manganese simple;
         # No `engine` app. `nix build .#engine` is how you get the engine —

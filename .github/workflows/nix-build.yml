@@ -26,12 +26,10 @@ jobs:
   #    right most of the time — exactly the shape that reaches a user rather
   #    than a reviewer.
   #
-  # It is also the only check that runs an installed desktop at all. A desktop
-  # is a wrapper naming four store paths, and a build that succeeds says the
-  # derivation ran while file existence says what it wrote — neither would
-  # notice a wrapper that names them and still cannot start. The two steps
-  # below are what start one: the first that every path it names is in the
-  # store, the second that it gets far enough to look for its compositor.
+  # It is also the only check that runs an installed desktop at all. A build
+  # that succeeds says the derivation ran, and file existence says what it
+  # wrote — neither would notice a `domicile` that cannot find the three
+  # programs laid out beside it. The steps below are what start one.
   packages:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -67,26 +65,55 @@ jobs:
             "$(nix-store -qR "$drv" | grep 'domicile-node-modules.*\.drv$' | head -1)"
 
       # WHAT AN INSTALLED DESKTOP HAS TO CONTAIN, and this changed shape with
-      # the packages themselves. It used to assert the four Electron bundles
-      # and a launcher that refused arguments, because that is what a desktop
-      # was: an Electron application. It is a runner now — the page, the
-      # engine, the compositor and the bridge, handed to `run-engine.sh` — and
-      # a check still asserting `launch.js` would be asserting the thing that
-      # was removed.
+      # the packages themselves. It used to assert four environment variables
+      # in a generated shell script, because that is what a desktop was: a
+      # wrapper that named the page, the engine, the compositor and the bridge
+      # and handed them to a script. It is `domicile` with a page for an
+      # argument now, and `domicile` finds the other three beside itself — so
+      # what has to be checked is the layout rather than a wrapper's text.
       #
-      # What it asserts instead is that every store path the runner names is
-      # really there. Most of those are near-tautological — a path interpolated
-      # into the wrapper is a build-time input `nix build` has already realised
-      # — and it is worth saying which two are not: `${self}/scripts/`
-      # `run-engine.sh` and `${domicileBridge}/…/main.ts` name *files inside*
-      # store paths, and nix checks the path rather than what is in it. A
-      # rename on either side leaves a wrapper that starts and dies on
-      # whichever it reaches first, which reads as the seam rather than as
-      # wiring.
+      #   bin/domicile
+      #   bin/domicile-compositor
+      #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
+      #   libexec/domicile/bridge     the page server
       #
-      # What it does not catch, despite an earlier version of this comment: a
-      # derivation that stopped being referenced contributes no path, so the
-      # loop cannot see one.
+      # THE ONE THAT IS NOT A TAUTOLOGY: `bin/domicile` must be a *copy*.
+      # `current_exe` reads `/proc/self/exe`, which resolves symlinks, so a
+      # `bin/domicile` symlinked into the Rust derivation would report that
+      # derivation's path — where there is no `libexec` and never will be. It
+      # builds, it installs, and it refuses to start. `ln -s` instead of `cp`
+      # is one character and nothing else here would see it.
+      - name: Domicile is laid out so it can find the rest of itself
+        run: |
+          set -eu
+          out="$(nix build --no-link --print-out-paths .#domicile)"
+          [ -x "$out/bin/domicile" ] || {
+            echo "domicile: no bin/domicile in $out"
+            exit 1
+          }
+          [ ! -L "$out/bin/domicile" ] || {
+            echo "domicile: bin/domicile is a symlink, so \`current_exe\` will"
+            echo "  resolve it into a derivation with no libexec beside it and"
+            echo "  the desktop will refuse to start. Copy it."
+            exit 1
+          }
+          [ -x "$out/bin/domicile-compositor" ] || {
+            echo "domicile: no bin/domicile-compositor beside the binary"
+            exit 1
+          }
+          [ -x "$out/libexec/domicile/engine/chrome" ] || {
+            echo "domicile: libexec/domicile/engine holds no chrome"
+            exit 1
+          }
+          [ -x "$out/libexec/domicile/bridge" ] || {
+            echo "domicile: libexec/domicile/bridge is not something that runs"
+            exit 1
+          }
+
+      # And a desktop is that, with the page already chosen. Every
+      # `/nix/store/...` the wrapper names has to be in the store: the binary
+      # it `exec`s and the page it hands over, and nix checks a path rather
+      # than what is in it.
       - name: Check what was installed
         run: |
           set -eu
@@ -96,13 +123,10 @@ jobs:
               echo "$name: no bin/$name in $out"
               exit 1
             }
-            # Every `/nix/store/...` the wrapper names, which is the four
-            # inputs and whatever they are reached through. The closing brace
-            # and the colon are in the stop set because these sit inside
-            # `${VAR:-/nix/store/...}` and on `PATH`, and without them the
+            # The closing brace and the colon are in the stop set because these
+            # sit inside shell expansions and on `PATH`, and without them the
             # first version of this check read the brace as part of the path
-            # and reported every one of them missing. `sort -u` because the
-            # same path is named more than once.
+            # and reported every one of them missing.
             paths="$(grep -oE '/nix/store/[a-z0-9]{32}-[^"'"'"'}: ]*' \
                        "$out/bin/$name" | sort -u)"
             [ -n "$paths" ] || {
@@ -116,84 +140,45 @@ jobs:
                 exit 1
               }
             done
-            # The four by role, so a missing one says which. That each is the
-            # right *kind* of thing is the business of the derivation that
-            # builds it — `domicileEngine`'s own `installCheckPhase` is what
-            # says its output has a `chrome` in it.
-            for want in DOMICILE_PAGE DOMICILE_ENGINE DOMICILE_COMPOSITOR \
-                        DOMICILE_BRIDGE; do
-              grep -q "$want=" "$out/bin/$name" || {
-                echo "$name: does not set $want, so run-engine.sh would build"
-                echo "  or look for that one itself"
-                exit 1
-              }
-            done
+            printf '%s\n' "$paths" | grep -q "domicile-page-$name" || {
+              echo "$name: names no page of its own, so it is not a desktop"
+              exit 1
+            }
           done
 
-      # THE ASSERTION THAT NEEDS THE WRAPPER TO ACTUALLY RUN.
-      #
-      # Everything above is `[ -e ]` against a path. This starts the desktop
-      # for real and lets it fail on the compositor, which it reaches only by
-      # resolving `run-engine.sh` out of the store — so a wrapper that names
-      # its four inputs correctly and still cannot start says so here rather
-      # than on somebody's machine.
-      #
-      # A path that cannot exist rather than `/bin/false`, which is a real
-      # executable — the runner would start it, watch it exit, and fail further
-      # along for a reason this step is not asking about.
-      #
-      # Reaching the compositor means passing the engine, its library and the
-      # page first, so those three are covered here as well as by the `[ -e ]`
-      # loop above. The bridge is not, and cannot be: `run-engine.sh` checks it
-      # *after* the compositor, so this run has already exited by the time it
-      # would matter — and a second run that got past the compositor would
-      # start a browser. That the wrapper names a bridge that exists is the
-      # `[ -e ]` loop's business; that `run-engine.sh` uses the one it is
-      # handed rather than looking for a checkout is
-      # `scripts/test-run-engine-inputs.sh`, which is where deleting
-      # `DOMICILE_BRIDGE` gets caught.
-      - name: An installed desktop starts and reaches its compositor
+      # THE ASSERTIONS THAT NEED THE BINARY TO ACTUALLY RUN, and neither needs
+      # a display — because `domicile` resolves its three components before it
+      # looks at the page. So a run given a page that cannot exist fails about
+      # *the page*, and that failure is the proof the other three were found:
+      # a symlinked or mislaid component fails first, and says which.
+      - name: An installed Domicile finds its components before its page
         run: |
           set -eu
+          out="$(nix build --no-link --print-out-paths .#domicile)"
+          said="$("$out/bin/domicile" /there-is-no-such-shell 2>&1 || true)"
+          case "$said" in
+            (*"no shell at '/there-is-no-such-shell'"*) ;;
+            (*) echo "domicile: did not get as far as looking at the page:"
+                echo "$said"
+                exit 1 ;;
+          esac
+          # Given nothing at all it says what to type. Asserted because the
+          # binary cannot be run where it is written — the flake's own
+          # `bun install` derivation needs a network the dev container does not
+          # have — so this job is the only place the built thing is started.
+          "$out/bin/domicile" 2>&1 | grep -q "which shell?" || {
+            echo "domicile: given no shell, it did not say so"
+            exit 1
+          }
+
+          # And a desktop refuses a word it has nowhere to put. The page is
+          # already the argument, so anything the user types arrives as a
+          # second one — dropping it hands somebody manganese while they read
+          # `simple` on their own command line.
           for name in manganese simple; do
             out="$(nix build --no-link --print-out-paths ".#$name")"
-            DOMICILE_COMPOSITOR=/nix/store/there-is-no-such-compositor \
-              "$out/bin/$name" 2>&1 |
-              grep -q "no compositor at /nix/store/there-is-no-such-compositor" || {
-                echo "$name: did not get as far as looking for its compositor"
-                exit 1
-              }
-            # And that it refuses a word it has nowhere to put. The desktop is
-            # chosen by which app you run, so the wrapper passes its own name
-            # and anything the user typed arrives as a third argument —
-            # dropping it hands somebody manganese while they read `simple` on
-            # their own command line. The refusal replaced a launcher's own
-            # `takes no arguments`, and went uncovered when it did: deleted
-            # whole, every other check in this repository stayed green.
             "$out/bin/$name" --nope 2>&1 | grep -q "too many arguments" || {
               echo "$name: took an argument it has nothing to do with"
               exit 1
             }
           done
-
-          # And Domicile itself, which is the opposite refusal: the desktops
-          # have their page chosen and take no argument, this one *is* the
-          # argument. Asserted because the wrapper cannot be run where it is
-          # written — the flake's own `bun install` derivation needs a network
-          # the dev container does not have — so this job is the only place the
-          # built thing is ever started.
-          #
-          # `run-engine.sh`'s default shell is `simple`, meaning "build
-          # packages/shell-simple out of the checkout", and there is no
-          # checkout in the store. Without the refusal a bare
-          # `nix run github:cprussin/domicile` fails somewhere further in,
-          # about a workspace directory the person never mentioned.
-          out="$(nix build --no-link --print-out-paths .#domicile)"
-          [ -x "$out/bin/domicile" ] || {
-            echo "domicile: no bin/domicile in $out"
-            exit 1
-          }
-          "$out/bin/domicile" 2>&1 | grep -q "which shell?" || {
-            echo "domicile: given no shell, it did not say so"
-            exit 1
-          }

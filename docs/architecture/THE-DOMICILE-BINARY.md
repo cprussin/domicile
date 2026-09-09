@@ -157,12 +157,12 @@ twice costs more than leaving it once.
 
 - [x] `shell_path` and `platform` in `domicile-launch` — the two with rules, as
       unit tests against a string and an injected filesystem
-- [ ] `cli`, `components`, `supervise`, and the `[[bin]]`. The argument parser
+- [x] `cli`, `components`, `supervise`, and the `[[bin]]`. The argument parser
       lands with the program that reads it rather than ahead of it: on its own
       it is a parser nothing calls
-- [ ] `flake.nix`: the three components go where the binary looks, and
+- [x] `flake.nix`: the three components go where the binary looks, and
       `domicileCli` — the `writeShellApplication` — goes
-- [ ] delete `run-engine.sh` and the three `test-run-engine-*.sh`
+- [x] delete `run-engine.sh` and the three `test-run-engine-*.sh`
 - [ ] the control socket, and `domicile load-shell` — **after `domicile://`**,
       when the hop to the page is the engine's rather than a bridge's
 - [ ] `spike-shell.sh` calls the binary rather than repeating the launch

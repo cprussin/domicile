@@ -36,8 +36,8 @@ SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
   echo "no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME." >&2
   exit 1
 }
-# Where the shell's own renderer config puts it, as `run-engine.sh` says: this
-# runs the shell's build rather than a second one of ours.
+# Where the shell's own renderer config puts it: this runs the shell's own
+# build rather than a second one of ours.
 PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 
 # THE FIRST BUILD IS NOT THE WATCHER'S. `build:vite` depends on `^prepare` and
@@ -53,11 +53,14 @@ echo "building $SHELL_NAME"
   exit 1
 }
 
+# A directory of this run's own, for the one file this has to write.
+WORK="$(mktemp -d)"
 WATCHING=()
 cleanup() {
   if [ ${#WATCHING[@]} -gt 0 ]; then
     kill "${WATCHING[@]}" 2>/dev/null
   fi
+  rm -rf "$WORK"
 }
 trap cleanup EXIT INT TERM
 
@@ -77,7 +80,7 @@ if [ -z "$ENGINE" ]; then
   command -v nix >/dev/null 2>&1 || {
     echo "no nix on PATH, so there is no engine to run this in. Either install" >&2
     echo "  nix, or point DOMICILE_ENGINE at an engine you have already:" >&2
-    echo "    DOMICILE_ENGINE=/build/chromium/src OUT=out/Domicile $0 $SHELL_NAME" >&2
+    echo "    DOMICILE_ENGINE=/build/chromium/src/out/Domicile $0 $SHELL_NAME" >&2
     exit 1
   }
   echo "fetching the pinned engine"
@@ -87,20 +90,33 @@ if [ -z "$ENGINE" ]; then
   }
 fi
 
-# `OUT=.` because a published engine *is* the out directory, where a Chromium
-# checkout has one under `out/Domicile`. Same reason the flake's own CLI sets
-# it; a checkout handed in through DOMICILE_ENGINE sets its own.
-#
+# `domicile` builds nothing — that is the point of it — so the two components
+# that come out of *this checkout* are built here, which is what running a
+# shell from a checkout is for. The engine is the published one either way: a
+# four-hour Chromium build is not a dev loop.
+echo "building the compositor and the runner"
+cargo build -p domicile-launch --bin domicile \
+            -p domicile-compositor --bin domicile-compositor || exit 1
+
+# The bridge as something that runs. A packaged desktop ships it compiled, with
+# the runtime embedded, because an end user has no `bun`. A checkout has one,
+# and a three-line shim starts instantly where `--compile` writes a hundred
+# megabytes on every save.
+BRIDGE="$WORK/domicile-bridge"
+cat >"$BRIDGE" <<SHIM
+#!/bin/sh
+exec bun "$ROOT/packages/engine-chrome-host/src/main.ts" "\$@"
+SHIM
+chmod +x "$BRIDGE"
+
 # `DOMICILE_DEV_RELOAD` is the only thing that separates this from an installed
 # desktop: the bridge serves the reload token and writes the poller into the
-# page, and nothing else in the repository sets it.
-#
-# The compositor and the bridge are left unset on purpose. That is not a
-# fallback — it is the instruction to build them out of this checkout, which is
-# what a developer with this repository open wants and what `run-engine.sh`'s
-# own comment calls the difference between an unset variable and a recovery.
+# page, and nothing else in the repository sets it. It goes when `load-shell`
+# arrives — see docs/architecture/THE-DOMICILE-BINARY.md.
 echo "starting $SHELL_NAME"
-OUT="${OUT:-.}" \
+DOMICILE_ENGINE="$ENGINE" \
+DOMICILE_COMPOSITOR="$ROOT/target/debug/domicile-compositor" \
+DOMICILE_BRIDGE="$BRIDGE" \
 DOMICILE_PAGE="$PAGE_DIR" \
 DOMICILE_DEV_RELOAD=1 \
-  "$ROOT/scripts/run-engine.sh" "$ENGINE"
+  "$ROOT/target/debug/domicile" "$SHELL_NAME"

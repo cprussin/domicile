@@ -207,7 +207,7 @@ nix run 'github:cprussin/domicile#manganese'
 ```
 
 runs it — the bridge, the engine on that page, and the compositor as a producer
-to it. `./scripts/run-engine.sh <chromium/src>` does the same from a checkout.
+to it. `./scripts/dev-shell.sh manganese` does the same from a checkout.
 
 `bun run --filter @domicile/shell-manganese start:dev` runs this shell in a real
 desktop and rebuilds it as you edit: the engine the flake pins, the compositor
