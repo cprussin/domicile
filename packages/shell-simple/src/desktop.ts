@@ -18,7 +18,7 @@ import { css } from "../styled-system/css";
 import type { WindowBox } from "./window-box";
 import { openingBox } from "./window-box";
 
-/** A window on the desktop: the portal, and where this shell has put it. */
+/** A window on the desktop: the element, and where this shell has put it. */
 type OpenWindow = { box: WindowBox; element: DomicileAppElement };
 
 export class Desktop {
@@ -70,9 +70,11 @@ export class Desktop {
    *
    * Opening a second element instead would leave the *first* connected and
    * unreachable — the map holds the newer one, so every message from the host
-   * goes there. The orphan still places a portal for the window, so two
-   * elements place for one app id and the later measurement wins: a dragged
-   * window snapping back to its cascade slot. And it is never taken down,
+   * goes there. The orphan still stands for the window — it embeds the same
+   * surface and reports its own box as the size to configure the client at, so
+   * two elements configure one client and the later one wins: a window that
+   * was dragged wider snapping back to its cascade size. And it is never taken
+   * down,
    * because `close` only knows the element in the map, so it outlives the
    * client.
    *
@@ -82,7 +84,7 @@ export class Desktop {
    * Where the compositor draws the client itself no frame is coming — the
    * hand-over skips a natively-drawn window — but the size the replay carries
    * tells the new element it has a surface anyway, so what is wrong there is
-   * the placement fight above rather than anything painted over the client.
+   * the size fight above rather than anything painted over the client.
    *
    * A window that opens on a desktop past its catch-up takes the keyboard with
    * it, for the same reason it opens in front: it is the one the user just
@@ -103,10 +105,10 @@ export class Desktop {
       element.className = windowStyles;
       applyBox(element, box);
       // The app id, the box and the stacking order all go on before the
-      // element is appended: it places its portal as it connects, reading all
-      // three off itself, and a placement sent without them is a window the
-      // host puts nowhere, at nothing, behind everything — drawn that way for
-      // a frame, until the next measurement corrects it.
+      // element is appended: the browser draws the window where this element
+      // is, and it reads its own box to say what resolution the client should
+      // draw at — so an element appended bare is a window drawn at nothing,
+      // behind everything, for the frame before the styles land.
       element.appId = appId;
       // A size means the client has drawn at least once, which makes this the
       // replay a reloading chrome gets rather than a window that has just
@@ -123,13 +125,11 @@ export class Desktop {
       this.#opened += 1;
       this.raise(appId);
       this.#root.append(element);
-      // After the append, and that order is load-bearing rather than tidy: the
-      // element sends its portal as it connects, and `Scene::focus_app`
-      // refuses an app it has no portal for — silently, while the seat is
-      // moved anyway — so a focus that arrived first would leave the brain and
-      // the compositor disagreeing with nothing to notice. The roadmap records
-      // that exact no-op being found the hard way, in the check that became
-      // `tests/layers.rs`.
+      // After the append, so a window is on the page before it is given the
+      // keyboard. The compositor used to refuse a focus for a window it had
+      // not been told the position of, which made this order load-bearing;
+      // it knows nothing about positions now, and `Host` refuses a focus for
+      // an app it does not know regardless of what this element has sent.
       if (this.#caughtUp) {
         element.focusApp();
       }

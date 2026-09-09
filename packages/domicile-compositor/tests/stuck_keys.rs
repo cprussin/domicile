@@ -85,24 +85,13 @@ fn key(chrome: &mut domicile_test_chrome::Chrome, keycode: u32, pressed: bool) {
         .expect("the chrome socket takes a key");
 }
 
-/// Put the window on screen and give it the keyboard.
+/// Give the window the keyboard.
 ///
-/// Placed before focused: the scene refuses an app with no portal, and a
-/// window that never took the keyboard cannot be holding a key.
-fn place_and_focus(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
-    chrome
-        .say(&ChromeMessage::PlacePortal {
-            app_id: app_id.to_string(),
-            corner_radius: 0.0,
-            opacity: 1.0,
-            shadow: None,
-            size: [500.0, 400.0],
-            takes_pointer: true,
-            transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-            visible: true,
-            z_index: 0,
-        })
-        .expect("the chrome socket takes a placement");
+/// It used to be placed first, because `focus_app` refused an app the chrome
+/// had not placed. The gate is the host's own map of apps now, and appearing
+/// is what puts an app in it -- but the focus itself still matters here, since
+/// a window that never took the keyboard cannot be holding a key.
+fn focus(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
     chrome
         .say(&ChromeMessage::FocusApp {
             app_id: app_id.to_string(),
@@ -123,7 +112,7 @@ fn a_key_held_when_the_page_reloads_is_let_go_of_for_the_client() {
         unreachable!("the wait matched on this variant")
     };
 
-    place_and_focus(&mut chrome, &app_id);
+    focus(&mut chrome, &app_id);
     compositor.wait_for_log("keyboard focus -> client");
 
     // Nothing is read from this chrome again from here on, and it does not

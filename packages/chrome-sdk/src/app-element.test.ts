@@ -11,17 +11,11 @@ import { APP_TAG_NAME, registerElements } from "./register-elements";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
-// A double for the bridge, capturing the portal lifecycle and input calls the
+// A double for the bridge, capturing the size reports and input calls the
 // elements make. Only the surface the elements use is implemented.
 class FakeBridge {
   readonly calls: Call[] = [];
 
-  placePortal(placement: { appId: string; size: readonly number[] }): void {
-    this.calls.push(["place", placement]);
-  }
-  removePortal(appId: string): void {
-    this.calls.push(["remove", appId]);
-  }
   resizeApp(appId: string, size: readonly number[]): void {
     this.calls.push(["resize", appId, size]);
   }
@@ -53,14 +47,9 @@ class FakeBridge {
 
 // The test DOM performs no layout, so measurement is injected.
 const stubMeasure: Measure = () => ({
-  cornerRadius: 0,
-  opacity: 1,
-  shadow: undefined,
   size: [10, 20],
-  takesPointer: true,
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,
-  zIndex: 0,
 });
 
 // happy-dom does animate frames — and as fast as it can, which is not a clock
@@ -69,10 +58,10 @@ const stubMeasure: Measure = () => ({
 class FakeFrames {
   #callbacks: (() => void)[] = [];
 
-  readonly observe: ObservePlacement = (onMoved) => {
-    this.#callbacks.push(onMoved);
+  readonly observe: ObservePlacement = (onFrame) => {
+    this.#callbacks.push(onFrame);
     return () => {
-      this.#callbacks = this.#callbacks.filter((entry) => entry !== onMoved);
+      this.#callbacks = this.#callbacks.filter((entry) => entry !== onFrame);
     };
   };
 
@@ -146,23 +135,6 @@ describe("<domicile-app>", () => {
     });
   });
 
-  it("places a portal when connected with an app-id", () => {
-    mountApp("term");
-    expect(bridge.calls).toContainEqual([
-      "place",
-      {
-        appId: "term",
-        cornerRadius: 0,
-        opacity: 1,
-        size: [10, 20],
-        takesPointer: true,
-        transform: [1, 0, 0, 1, 0, 0],
-        visible: true,
-        zIndex: 0,
-      },
-    ]);
-  });
-
   it("asks the compositor to render the client at the element's size", () => {
     mountApp("term");
     expect(bridge.calls).toContainEqual(["resize", "term", [10, 20]]);
@@ -174,99 +146,22 @@ describe("<domicile-app>", () => {
     // client to 0x0 and make it redraw on every tab switch.
     registerElements(bridge as unknown as BridgeClient, {
       measure: () => ({
-        cornerRadius: 0,
-        opacity: 1,
-        shadow: undefined,
         size: [0, 0],
-        takesPointer: true,
         transform: [1, 0, 0, 1, 0, 0],
         visible: false,
-        zIndex: 0,
       }),
       observePlacement: frames.observe,
     });
     mountApp("term");
 
-    expect(bridge.calls).toContainEqual([
-      "place",
-      {
-        appId: "term",
-        cornerRadius: 0,
-        opacity: 1,
-        shadow: undefined,
-        size: [0, 0],
-        takesPointer: true,
-        transform: [1, 0, 0, 1, 0, 0],
-        visible: false,
-        zIndex: 0,
-      },
-    ]);
     expect(bridge.calls.some(([kind]) => kind === "resize")).toBe(false);
-  });
-
-  it("tells the host when a window takes no pointer", () => {
-    // The whole point of measuring it: the compositor routes the pointer by
-    // hit-testing a rectangle, so a window the chrome painted a menu or a
-    // browser tab over goes on swallowing the clicks meant for them until it
-    // is told. Measured but not sent is the same as not measured.
-    registerElements(bridge as unknown as BridgeClient, {
-      measure: (element) => ({ ...stubMeasure(element), takesPointer: false }),
-      observePlacement: frames.observe,
-    });
-    mountApp("term");
-
-    expect(bridge.calls).toContainEqual([
-      "place",
-      {
-        appId: "term",
-        cornerRadius: 0,
-        opacity: 1,
-        shadow: undefined,
-        size: [10, 20],
-        takesPointer: false,
-        transform: [1, 0, 0, 1, 0, 0],
-        visible: true,
-        zIndex: 0,
-      },
-    ]);
-  });
-
-  it("re-reports geometry when the element moves", () => {
-    // Moving is the case a `ResizeObserver` cannot see and the one a chrome
-    // does most: the box is the same size somewhere else. A portal that
-    // followed only size would sit still while its element slid across the
-    // page, and the window would come apart from the hole it is drawn into.
-    const moved = { transform: [1, 0, 0, 1, 0, 0] as Matrix };
-    registerElements(bridge as unknown as BridgeClient, {
-      measure: (element) => ({ ...stubMeasure(element), ...moved }),
-      observePlacement: frames.observe,
-    });
-    mountApp("term");
-    bridge.calls.length = 0;
-
-    moved.transform = [1, 0, 0, 1, 40, 5];
-    frames.turn();
-
-    expect(bridge.calls).toContainEqual([
-      "place",
-      {
-        appId: "term",
-        cornerRadius: 0,
-        opacity: 1,
-        size: [10, 20],
-        takesPointer: true,
-        transform: [1, 0, 0, 1, 40, 5],
-        visible: true,
-        zIndex: 0,
-      },
-    ]);
   });
 
   it("prices every measurement, not only the ones that send something", () => {
     // What costs is the measuring, and the measuring happens for every window
     // on every frame whether or not anything changed. A timing that only
-    // counted the frames that moved a window would report an idle desktop as
-    // free, which is exactly the claim in doubt.
+    // counted the frames that resized a window would report an idle desktop
+    // as free, which is exactly the claim in doubt.
     placementTiming.take();
     mountApp("term");
     const placing = placementTiming.take();
@@ -285,7 +180,7 @@ describe("<domicile-app>", () => {
     // the desktop a measurement and contribute nothing to the number.
     //
     // This is the cheap case, and the throw is why: `connectedCallback` calls
-    // `#place()` before it subscribes to the animation loop, so a window that
+    // `#reportSize()` before it subscribes to the loop, so a window that
     // throws at mount never joins the loop at all and is measured exactly
     // once. It costs that one measurement, which is what the count below
     // pins. (Re-appending the element runs `connectedCallback` again, and
@@ -342,10 +237,11 @@ describe("<domicile-app>", () => {
     expect(placementTiming.take()?.count).toBe(2);
   });
 
-  it("says nothing about a window that did not move", () => {
-    // Measuring happens on every animation frame now, so a window that is
-    // simply sitting there would otherwise send its placement sixty times a
-    // second down a socket shared with every client's pixels.
+  it("says nothing about a window that did not change size", () => {
+    // Measuring happens on every animation frame, so a window that is simply
+    // sitting there would otherwise configure its client sixty times a second
+    // — down a socket shared with every client's pixels, and a client redraws
+    // every time it is configured.
     mountApp("term");
     bridge.calls.length = 0;
 
@@ -373,7 +269,7 @@ describe("<domicile-app>", () => {
     expect(bridge.calls.some(([kind]) => kind === "resize")).toBe(false);
   });
 
-  it("re-reports geometry when the element's box changes", () => {
+  it("configures the client again when the element's box changes", () => {
     const box = { size: [10, 20] as Point };
     registerElements(bridge as unknown as BridgeClient, {
       measure: (element) => ({ ...stubMeasure(element), ...box }),
@@ -386,21 +282,6 @@ describe("<domicile-app>", () => {
     frames.turn();
 
     expect(bridge.calls).toContainEqual(["resize", "term", [30, 40]]);
-  });
-
-  it("reports a window afresh after telling the host to forget it", () => {
-    // The host no longer knows where this window is, so the placement that
-    // follows a remount has to be sent however little the element moved. A
-    // record kept across the gap would leave the portal unplaced for as long
-    // as nothing about the element changed.
-    const element = mountApp("term");
-    const parent = document.createElement("div");
-    document.body.append(parent);
-    bridge.calls.length = 0;
-
-    parent.append(element);
-
-    expect(bridge.calls.some(([kind]) => kind === "place")).toBe(true);
   });
 
   it("stops watching the box once disconnected", () => {
@@ -429,11 +310,6 @@ describe("<domicile-app>", () => {
       "term",
       { dx: 0, dy: 100, v120X: 0, v120Y: 120 },
     ]);
-  });
-
-  it("removes the portal when disconnected", () => {
-    mountApp("term").remove();
-    expect(bridge.calls).toContainEqual(["remove", "term"]);
   });
 
   it("takes the keyboard back when the focused window goes away", () => {
@@ -465,27 +341,6 @@ describe("<domicile-app>", () => {
     expect(bridge.calls).toHaveLength(0);
   });
 
-  it("re-places when the app-id changes", () => {
-    const element = mountApp("term");
-    bridge.calls.length = 0;
-
-    element.setAttribute("app-id", "editor");
-    expect(bridge.calls).toContainEqual(["remove", "term"]);
-    expect(bridge.calls).toContainEqual([
-      "place",
-      {
-        appId: "editor",
-        cornerRadius: 0,
-        opacity: 1,
-        size: [10, 20],
-        takesPointer: true,
-        transform: [1, 0, 0, 1, 0, 0],
-        visible: true,
-        zIndex: 0,
-      },
-    ]);
-  });
-
   it("exposes appId as a property", () => {
     const element = document.createElement(APP_TAG_NAME) as DomicileAppElement;
     element.setAttribute("app-id", "term");
@@ -506,48 +361,11 @@ describe("<domicile-app>", () => {
     expect(element.classList.contains("has-surface")).toBe(false);
   });
 
-  it("sends a placement again when the host never received the last one", () => {
-    // Recording the key before the send would leave the element sure it had
-    // reported a placement that never arrived — and because the record is what
-    // suppresses the next one, nothing would ever send it again until
-    // something else about the window changed.
-    const moved = { transform: [1, 0, 0, 1, 0, 0] as Matrix };
-    registerElements(bridge as unknown as BridgeClient, {
-      measure: (element) => ({ ...stubMeasure(element), ...moved }),
-      observePlacement: frames.observe,
-    });
-    mountApp("term");
-    const placePortal = bridge.placePortal.bind(bridge);
-    bridge.placePortal = () => {
-      throw new Error("the socket went away");
-    };
-
-    moved.transform = [1, 0, 0, 1, 40, 5];
-    expect(() => {
-      frames.turn();
-    }).toThrow("the socket went away");
-    bridge.placePortal = placePortal;
-    bridge.calls.length = 0;
-    frames.turn();
-
-    expect(bridge.calls).toContainEqual([
-      "place",
-      {
-        appId: "term",
-        cornerRadius: 0,
-        opacity: 1,
-        size: [10, 20],
-        takesPointer: true,
-        transform: [1, 0, 0, 1, 40, 5],
-        visible: true,
-        zIndex: 0,
-      },
-    ]);
-  });
-
   it("configures a client again when the host never received the last size", () => {
-    // The same hazard on the other record, and it is cleared on different
-    // paths from the placement — so one test cannot stand in for both.
+    // Recording the key before the send would leave the element sure it had
+    // reported a size that never arrived — and because the record is what
+    // suppresses the next one, nothing would send it again until the window
+    // changed size.
     const box = { size: [10, 20] as Point };
     registerElements(bridge as unknown as BridgeClient, {
       measure: (element) => ({ ...stubMeasure(element), ...box }),
@@ -588,19 +406,19 @@ describe("<domicile-app>", () => {
     expect(bridge.calls).toContainEqual(["resize", "editor", [10, 20]]);
   });
 
-  it("re-places a window whose app-id was taken away and given back", () => {
-    // Removing the attribute tells the host to forget the portal but places
-    // nothing in its stead — there is no app to place. Putting the same id
-    // back is then a placement the element has already sent once, so a record
-    // that survived the removal would deduplicate it away and the window would
-    // never return to the scene.
+  it("shows again a window whose app-id was taken away and given back", () => {
+    // Removing the attribute drops the canvas, because it is showing a window
+    // this element has stopped standing for. Nothing else puts one back: the
+    // embed runs from `connectedCallback`, which does not run again for an
+    // element that never left the page, so the window would be gone for good.
+    const embedded = recordEmbeds();
     const element = mountApp("term");
     element.removeAttribute("app-id");
-    bridge.calls.length = 0;
+    expect(element.querySelector("canvas")).toBeNull();
 
     element.setAttribute("app-id", "term");
 
-    expect(bridge.calls.some(([kind]) => kind === "place")).toBe(true);
+    expect(embedded).toStrictEqual(["term", "term"]);
   });
 
   it("embeds the new app's surface when the element swaps app-id", () => {
@@ -868,10 +686,10 @@ describe("<domicile-app>", () => {
     });
 
     it("takes the canvas away when the element is torn down", () => {
-      // The element has told the host it no longer holds that window, so it
-      // must stop showing one. A disconnect is not always a teardown — moving
-      // an element between two containers is a disconnect and a reconnect —
-      // and the reconnect embeds again.
+      // The element has stopped standing for that window, so it must stop
+      // showing one. A disconnect is not always a teardown — moving an element
+      // between two containers is a disconnect and a reconnect — and the
+      // reconnect embeds again.
       const embedded = recordEmbeds();
       const element = mountApp("terminal");
       expect(embedded).toHaveLength(1);
@@ -883,8 +701,8 @@ describe("<domicile-app>", () => {
 
     it("mounts without a canvas where the engine has no such call", () => {
       // A chrome on stock Chromium or Electron. The element still lays out and
-      // still reports its box — a shell is written against the same seam — and
-      // shows nothing rather than throwing.
+      // still reports its size — a shell is written against the same seam —
+      // and shows nothing rather than throwing.
       const element = mountApp("terminal");
 
       expect(element.querySelector("canvas")).toBeNull();

@@ -74,12 +74,6 @@ class FakeBridge {
     });
   }
 
-  placePortal(placement: { appId: string }): void {
-    this.calls.push(["place", placement]);
-  }
-  removePortal(appId: string): void {
-    this.calls.push(["remove", appId]);
-  }
   resizeApp(appId: string, size: readonly number[]): void {
     this.calls.push(["resize", appId, size]);
   }
@@ -222,6 +216,11 @@ describe("Shell", () => {
       // chrome built before the desktop and rebuilt after it would take those
       // windows down with it — every portal re-created blank, every embedded
       // page reloaded to the URL its window was opened at.
+      //
+      // What is checked is that the window announced before the desktop is on
+      // screen after it. A portal torn down and made again used to be visible
+      // as a `remove_portal` the host was sent, and there is no such message
+      // any more.
       const { container } = renderUndescribedShell();
       bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
 
@@ -230,7 +229,6 @@ describe("Shell", () => {
       expect(
         screenNamed(container, "left")?.querySelector(APP_TAG_NAME),
       ).toBeInTheDocument();
-      expect(bridge.calls).not.toContainEqual(["remove", "term"]);
     });
 
     it("follows the desktop when it changes", () => {

@@ -3,38 +3,11 @@
 // (snake_case keys, `type` discriminant). Kept as pure functions so they are
 // trivially testable and reusable by the bridge and the custom elements.
 
-import type { Matrix } from "./matrix";
 import { PROTOCOL_VERSION } from "./protocol";
-import type { Shadow } from "./shadow";
 import type { AxisDelta } from "./wheel-axis";
-
-/** The on-screen geometry of an `<domicile-app>`, as the host needs it. */
-export type Placement = {
-  appId: string;
-  size: readonly [width: number, height: number];
-  transform: Matrix;
-  zIndex?: number;
-  visible?: boolean;
-  /** `border-radius` in logical pixels. Square if omitted. */
-  cornerRadius?: number;
-  /** `opacity`, 0 to 1. Opaque if omitted — never invisible. */
-  opacity?: number;
-  /** The shadow the window casts. None if omitted. */
-  shadow?: Shadow | undefined;
-  /**
-   * Whether a pointer over this window belongs to it.
-   *
-   * True if omitted. False is what an element with `pointer-events: none`
-   * reports, and it is what stops a window swallowing the clicks meant for
-   * whatever the engine painted over it.
-   */
-  takesPointer?: boolean;
-};
 
 export type ChromeMessage =
   | ReturnType<typeof helloMessage>
-  | ReturnType<typeof placePortalMessage>
-  | ReturnType<typeof removePortalMessage>
   | ReturnType<typeof resizeAppMessage>
   | ReturnType<typeof setDevicePixelRatioMessage>
   | ReturnType<typeof setDesktopSizeMessage>
@@ -51,45 +24,6 @@ export type ChromeMessage =
 
 export const helloMessage = (protocolVersion: number = PROTOCOL_VERSION) =>
   ({ protocol_version: protocolVersion, type: "hello" }) as const;
-
-/** Report the on-screen placement of an `<domicile-app>` element. */
-export const placePortalMessage = ({
-  appId,
-  size,
-  transform,
-  zIndex = 0,
-  visible = true,
-  cornerRadius = 0,
-  // Opaque, never invisible: a window nobody can see is a worse failure than
-  // one that ignores a style, and it looks identical to not being drawn.
-  opacity = 1,
-  shadow,
-  // Clickable, never inert: a window nobody can click is a worse failure than
-  // one that ignores a style, and a chrome that puts nothing over a window has
-  // no reason to say anything here.
-  takesPointer = true,
-}: Placement) => {
-  if (appId.length === 0) {
-    throw new TypeError("placePortal: appId must be a non-empty string");
-  }
-  return {
-    app_id: appId,
-    corner_radius: cornerRadius,
-    opacity,
-    // Explicitly null rather than absent: the host's field is an `Option`, and
-    // a window that stopped casting a shadow has to say so.
-    shadow: shadow ?? null,
-    size,
-    takes_pointer: takesPointer,
-    transform,
-    type: "place_portal",
-    visible,
-    z_index: zIndex,
-  } as const;
-};
-
-export const removePortalMessage = (appId: string) =>
-  ({ app_id: appId, type: "remove_portal" }) as const;
 
 /**
  * Report an `<domicile-app>` element's new laid-out size, so the compositor can

@@ -58,24 +58,13 @@ const BTN_LEFT: u32 = 0x110;
 /// turns it into an X keycode, which is what a `wl_keyboard` keymap speaks.
 const EVDEV_KEY_A: u32 = 30;
 
-/// Where a chrome would put the window: the whole of a small screen.
-const PLACEMENT: ([f64; 2], [f64; 6]) = ([500.0, 400.0], [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
-
-/// Place the window, take the keyboard to it, then move, click and type.
+/// Take the keyboard to the window, then move, click and type.
+///
+/// No placement first: the chrome no longer reports where its boxes are, and
+/// the coordinates below are surface-local, which is what a client is handed
+/// whatever the page did with the element.
 fn drive(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
-    let (size, transform) = PLACEMENT;
     for message in [
-        ChromeMessage::PlacePortal {
-            app_id: app_id.to_string(),
-            corner_radius: 0.0,
-            opacity: 1.0,
-            shadow: None,
-            size,
-            takes_pointer: true,
-            transform,
-            visible: true,
-            z_index: 0,
-        },
         ChromeMessage::FocusApp {
             app_id: app_id.to_string(),
         },

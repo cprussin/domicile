@@ -136,7 +136,7 @@ It is not required. A shell that wants to speak the protocol itself may — it i
 newline-delimited JSON over a WebSocket, described in
 `@domicile/chrome-sdk/protocol` and, on the other side, in the
 `domicile-protocol` crate. Using the SDK means not reimplementing the frame
-format, the input mapping and the placement reporting.
+format, the input mapping and the size reporting.
 
 `@domicile/engine-chrome-host` is Domicile's own bridge — the program that
 serves your page and the socket. You do not depend on it; it runs you.

@@ -1,9 +1,9 @@
 // The `<domicile-app>` custom element: a placeholder for a real Wayland client.
 //
-// On connect it measures its on-screen box and tells the host to composite the
-// client there; on disconnect it tells the host to stop. The host draws the
-// client's actual surface into that transformed box, so the app inherits full
-// CSS — that is the whole point of Domicile.
+// The element embeds the client's surface, so where the window is drawn is
+// whatever CSS does to this element — nothing here reports a position. What it
+// does report is the box the page laid out, because that is the resolution the
+// client has to be configured at, and only the page knows it.
 //
 // Custom element tag names must contain a hyphen, so the SDK registers
 // `domicile-app`. A chrome that prefers the bare `<app>` the compositor exposes
@@ -33,7 +33,7 @@ const HAS_SURFACE_CLASS = "has-surface";
  * stated rather than being whatever the class happens to leave public.
  */
 export type DomicileAppElement = HTMLElement & {
-  /** The host's name for the client this portal shows. */
+  /** The host's name for the client this element shows. */
   get appId(): string | undefined;
   set appId(value: string);
   /** Tell the host the client should be this many logical pixels. */
@@ -64,9 +64,8 @@ export const createAppElement = (
     #surfaceWidth = 0;
     #surfaceHeight = 0;
     #unobserve: (() => void) | undefined;
-    // The last placement and render size sent, so a measurement that changed
-    // nothing costs nothing. See `#place`.
-    #placed: string | undefined;
+    // The last render size sent, so a measurement that changed nothing costs
+    // nothing. See `#reportSize`.
     #rendered: string | undefined;
 
     constructor() {
@@ -84,13 +83,13 @@ export const createAppElement = (
 
     connectedCallback(): void {
       this.#embedSurface();
-      this.#place();
-      // CSS moves, resizes and restyles the element without any of this code
-      // running, so the portal has to follow the box rather than be reported
-      // once. Everything the compositor draws this window with is read from the
-      // page, so anything the page can change is something this has to see.
+      this.#reportSize();
+      // CSS resizes the element without any of this code running — a layout
+      // change anywhere above it, a transition, a class toggle — so the size
+      // has to follow the box rather than be reported once. A client left at
+      // the old resolution is stretched into the new box.
       this.#unobserve = context.observePlacement(() => {
-        this.#place();
+        this.#reportSize();
       });
     }
 
@@ -99,18 +98,11 @@ export const createAppElement = (
       this.#unobserve = undefined;
       const appId = this.appId;
       if (appId !== undefined) {
-        context.bridge.removePortal(appId);
-        // The host no longer knows where this window is, so the next placement
-        // has to be sent however little the element moved in the meantime. Not
-        // the render size: `remove_portal` takes the portal out of the scene and
-        // leaves the client's requested size alone, so the client is still
-        // drawing at the right resolution and there is nothing to say.
-        this.#placed = undefined;
-        // Told the host this element no longer shows that window, so it must
-        // stop showing one. A disconnect is not always a teardown — moving an
-        // element between two containers is a disconnect *and* a reconnect, and
+        // This element no longer shows that window, so it must stop showing
+        // one. A disconnect is not always a teardown — moving an element
+        // between two containers is a disconnect *and* a reconnect, and
         // children survive the move — so an element that kept its canvas here
-        // would go on showing a window the host has been told it does not hold.
+        // would go on showing a window it no longer stands for.
         //
         // Safe because the reconnect embeds again: the surface belongs to the
         // compositor and outlives any canvas pointed at it, so what comes back
@@ -135,33 +127,24 @@ export const createAppElement = (
     ): void {
       if (name === "app-id" && this.isConnected && oldValue !== newValue) {
         if (oldValue !== null) {
-          context.bridge.removePortal(oldValue);
           // That canvas shows the *old* app's window, and the recorded size is
           // the old client's resolution — which is what pointer coordinates are
           // scaled through. Keeping either shows one client in the element that
           // now stands for another, and maps clicks on the new app through the
           // old one's surface.
+          //
+          // The render size needs no such clearing, because its key carries the
+          // app id: the new client is configured on its own account.
           this.#dropSurface();
           this.#surfaceWidth = 0;
           this.#surfaceHeight = 0;
-          // Whatever the host has been told to forget, this element has to be
-          // willing to say again — the same rule as in `disconnectedCallback`.
-          // It is tempting to argue the placement carries the app id and so
-          // re-places itself: true of a *swap*, and false of a removal, where
-          // the `#place()` below does nothing because there is no app to place,
-          // and setting the same id back is then deduplicated away against a
-          // portal that is no longer in the scene.
-          //
-          // The render size needs no such clearing, because its key carries the
-          // app id too.
-          this.#placed = undefined;
         }
         // A window of its own for whatever this element now stands for. The
         // embed runs from `connectedCallback`, which a swap does not re-run —
         // so without this the element that swapped keeps the hole where the
         // old app's canvas was and shows nothing until it is remounted.
         this.#embedSurface();
-        this.#place();
+        this.#reportSize();
       }
     }
 
@@ -272,86 +255,57 @@ export const createAppElement = (
       this.style.cursor = cursor;
     }
 
-    #place(): void {
-      // Priced whether or not anything is sent, and whether or not it finishes.
-      // What costs is the measuring, and the measuring happens every frame for
-      // every window — see `placement-timing`.
-      //
-      // In a `finally` because a window that cannot be measured has already paid
-      // for the attempt: `readElementTransform` throws on a computed value it
-      // cannot parse, from *after* the layout read, and the loop keeps calling
-      // it every frame for the life of the page. Priced only on success, that
-      // window would cost the desktop sixty measurements a second and contribute
-      // nothing to the number — so the desktop where this matters most is the one
-      // it would under-report hardest. Nothing is caught: the throw still reaches
-      // the loop, which reports it.
+    // Tell the host what resolution to configure this element's client at.
+    //
+    // Priced whether or not anything is sent, and whether or not it finishes.
+    // What costs is the measuring, and the measuring happens every frame for
+    // every window — see `placement-timing`.
+    //
+    // In a `finally` because a window that cannot be measured has already paid
+    // for the attempt: `readElementTransform` throws on a computed value it
+    // cannot parse, from *after* the layout read, and the loop keeps calling
+    // it every frame for the life of the page. Priced only on success, that
+    // window would cost the desktop sixty measurements a second and contribute
+    // nothing to the number — so the desktop where this matters most is the
+    // one it would under-report hardest. Nothing is caught: the throw still
+    // reaches the loop, which reports it.
+    #reportSize(): void {
       const started = performance.now();
       try {
-        this.#placeNow();
+        const appId = this.appId;
+        if (appId !== undefined) {
+          const { size, visible } = context.measure(this);
+          // The client renders at its own resolution: without this it would
+          // keep drawing at the old size and be stretched into the new box. An
+          // element with no box (a hidden tab) has no size to render at, and
+          // configuring the client to nothing would make it redraw on every tab
+          // switch.
+          //
+          // Measuring happens on every animation frame, so most of the time
+          // this is the same window at the same size and there is nothing to
+          // say — which matters here more than anywhere, because a client
+          // redraws whenever it is configured.
+          //
+          // Keyed on the app as well as the size: what identifies this
+          // instruction is what it would say, and the app it is about is half
+          // of that. Keyed on the size alone it would have to be cleared by
+          // hand wherever the app changed — and `attributeChangedCallback`
+          // cannot run while the element is detached, so a chrome that swapped
+          // `app-id` between a remove and a re-append would leave the new
+          // client never configured, drawing at whatever size the previous one
+          // asked for.
+          const rendered = JSON.stringify({ appId, size });
+          if (visible && rendered !== this.#rendered) {
+            // Recorded after the send, not before: a throw on the way out would
+            // otherwise leave the element sure it had reported a size the host
+            // never received, and nothing would send it again until the window
+            // changed size.
+            context.bridge.resizeApp(appId, size);
+            this.#rendered = rendered;
+          }
+        }
       } finally {
         placementTiming.record(performance.now() - started);
-      }
-    }
-
-    #placeNow(): void {
-      const appId = this.appId;
-      if (appId !== undefined) {
-        const {
-          size,
-          transform,
-          zIndex,
-          visible,
-          cornerRadius,
-          opacity,
-          shadow,
-          takesPointer,
-        } = context.measure(this);
-        const placement = {
-          appId,
-          cornerRadius,
-          opacity,
-          shadow,
-          size,
-          takesPointer,
-          transform,
-          visible,
-          zIndex,
-        };
-        // Measuring happens on every animation frame, so most of the time this
-        // is the same window in the same place and there is nothing to say. The
-        // key is the placement itself rather than a hand-written comparison,
-        // because a comparison that forgot a field would drop exactly the change
-        // it forgot — silently, and only for windows that used it.
-        const placed = JSON.stringify(placement);
-        if (placed !== this.#placed) {
-          // Recorded after the send, not before: a throw on the way out would
-          // otherwise leave the element sure it had reported a placement the
-          // host never received, and nothing would send it again until something
-          // else about the window changed.
-          context.bridge.placePortal(placement);
-          this.#placed = placed;
-        }
-        // The client renders at its own resolution: without this it would keep
-        // drawing at the old size and be stretched into the new box. An element
-        // with no box (a hidden tab) has no size to render at, and configuring
-        // the client to nothing would make it redraw on every tab switch.
-        //
-        // Kept apart from the placement because a client redraws when it is
-        // configured: a window merely moving must not cost every client on the
-        // desktop a repaint.
-        // Keyed on the app as well as the size, for the same reason the
-        // placement is keyed on the whole message: what identifies this
-        // instruction is what it would say, and the app it is about is half of
-        // that. Keyed on the size alone it would have to be cleared by hand
-        // wherever the app changed — and `attributeChangedCallback` cannot run
-        // while the element is detached, so a chrome that swapped `app-id`
-        // between a remove and a re-append would leave the new client never
-        // configured, drawing at whatever size the previous one asked for.
-        const rendered = JSON.stringify({ appId, size });
-        if (visible && rendered !== this.#rendered) {
-          context.bridge.resizeApp(appId, size);
-          this.#rendered = rendered;
-        }
       }
     }
 
@@ -404,7 +358,7 @@ export const createAppElement = (
 
     // Motion is the one forward that needs a layout box: without one there is no
     // surface-local coordinate to report, while focus and button state still are
-    // meaningful. The same measurement that placed the portal inverts back to
+    // meaningful. The element's own element->screen affine inverts back to
     // surface coordinates, so any CSS transform on the element is undone here
     // rather than approximated by its axis-aligned box.
     #forwardMotion(appId: string, event: PointerEvent): void {

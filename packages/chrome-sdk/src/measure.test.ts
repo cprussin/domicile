@@ -5,17 +5,11 @@ import { defaultMeasure } from "./measure";
 /** A computed style with nothing set, plus whatever the case cares about. */
 const blankStyle = (style: Partial<CSSStyleDeclaration>): CSSStyleDeclaration =>
   ({
-    borderTopLeftRadius: "",
-    boxShadow: "none",
-    filter: "none",
-    opacity: "",
-    pointerEvents: "auto",
     rotate: "none",
     scale: "none",
     transform: "none",
     translate: "none",
     visibility: "",
-    zIndex: "auto",
     ...style,
   }) as CSSStyleDeclaration;
 
@@ -58,11 +52,10 @@ const measuredWith = (
  * What `defaultMeasure` writes to the console while measuring an element.
  *
  * The record of what has already been said is module state that outlives any
- * one test, so every case here has to reach for something no other case uses:
- * a distinct value where the record is keyed on the value, and a distinct
- * *property* where it is keyed on the property — which is why the two cases
- * about the bound use `mix-blend-mode` and `clip-path` rather than a second
- * `filter` that would find the first already reported.
+ * one test, so every case here has to reach for a value no other case uses:
+ * the record is keyed on the property and the computed value together, so a
+ * case that reused another's `rotate` would find it already reported and see
+ * nothing.
  */
 const warningsFrom = (...styles: Partial<CSSStyleDeclaration>[]): string[] => {
   const warnings: string[] = [];
@@ -140,107 +133,20 @@ const measuredAnswering = (
 };
 
 describe("defaultMeasure", () => {
-  describe("how a window should be drawn", () => {
-    it("reports a border-radius in pixels", () => {
-      expect(measuredWith({ borderTopLeftRadius: "12px" }).cornerRadius).toBe(
-        12,
-      );
-    });
-
-    it("reports no rounding for an element that set none", () => {
-      // An unstyled window is square. Guessing a radius would clip content
-      // nobody asked to have clipped.
-      expect(measuredWith({}).cornerRadius).toBe(0);
-    });
-
-    it("reports an opacity", () => {
-      expect(measuredWith({ opacity: "0.4" }).opacity).toBe(0.4);
-    });
-
-    it("treats an unreadable opacity as fully opaque", () => {
-      // Never as transparent: a window nobody can see is a worse failure than
-      // one that ignores a style, and it is indistinguishable from the
-      // compositor not drawing at all.
-      expect(measuredWith({ opacity: "" }).opacity).toBe(1);
-    });
-
-    it("clamps an opacity outside the range it can mean", () => {
-      expect(measuredWith({ opacity: "3" }).opacity).toBe(1);
-      expect(measuredWith({ opacity: "-1" }).opacity).toBe(0);
-    });
-
-    it("says a window with `pointer-events: none` takes no pointer", () => {
-      // The compositor hit-tests a rectangle and cannot see what the engine
-      // painted over it, so a window under a menu or a browser tab would
-      // swallow the click meant for them. `pointer-events` is how a page
-      // already says this, so it is what gets reported.
-      expect(measuredWith({ pointerEvents: "none" }).takesPointer).toBe(false);
-    });
-
-    it("takes the pointer when the value cannot be read", () => {
-      // A DOM that resolves no style is not one whose windows should all be
-      // unclickable: unusable is a worse failure than ignoring a style, and
-      // the two look identical from outside.
-      expect(measuredWith({ pointerEvents: "" }).takesPointer).toBe(true);
-    });
-
-    it("takes the pointer for the values that only narrow where it lands", () => {
-      // `none` is the only value that means "not this element". Every other
-      // one — the SVG-shaped `fill`, `stroke`, `painted`, `visiblePainted` —
-      // still delivers the pointer to the element, and a window is not an SVG
-      // shape anyway.
-      expect(
-        measuredWith({ pointerEvents: "visiblePainted" }).takesPointer,
-      ).toBe(true);
-    });
-
-    it("reports the box-shadow the compositor should cast", () => {
-      expect(
-        measuredWith({ boxShadow: "rgba(0, 0, 0, 0.5) 4px 8px 12px 2px" })
-          .shadow,
-      ).toEqual({ blur: 12, color: [0, 0, 0, 0.5], dx: 4, dy: 8, spread: 2 });
-    });
-
-    it("reports no shadow for an element that casts none", () => {
-      expect(measuredWith({}).shadow).toBeUndefined();
-    });
-
-    it("says so when it cannot read a shadow the element asked for", () => {
-      // Dropping it in silence is indistinguishable from the compositor not
-      // drawing at all, which is the version of this bug nobody can debug.
-      //
-      const warnings = warningsFrom({
-        boxShadow: "color(display-p3 1 0 0) 0px 0px 4px",
-      });
-      expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain("cannot read");
-      expect(warnings[0]).toContain("display-p3");
-    });
-
-    it("says nothing about a shadow it declined on purpose", () => {
-      // An `inset` shadow is read, understood, and deliberately not drawn.
-      // Reporting it tells the author their CSS is broken when it is not.
-      expect(
-        warningsFrom({ boxShadow: "rgb(0, 0, 0) 0px 0px 8px inset" }),
-      ).toStrictEqual([]);
-      expect(warningsFrom({ boxShadow: "none" })).toStrictEqual([]);
-      expect(
-        warningsFrom({ boxShadow: "rgb(0, 0, 0) 1px 2px 3px" }),
-      ).toStrictEqual([]);
-    });
-
+  describe("what it reads off an element", () => {
     it("says it once, not once per measurement", () => {
-      // Measuring happens on every resize, so a value reported each time would
-      // bury the console the moment a window was dragged.
-      const style = { boxShadow: "color(display-p3 0 1 0) 0px 0px 4px" };
+      // Measuring happens on every frame, so a value reported each time would
+      // bury the console the moment a window was on screen at all.
+      const style = { rotate: "sideways 45deg" };
       expect(warningsFrom(style)).toHaveLength(1);
       expect(warningsFrom(style)).toStrictEqual([]);
     });
 
     it("reads the independent rotate property, not just `transform`", () => {
       // `rotate: 45deg` is not reported in `getComputedStyle(...).transform`,
-      // so an element written that way turns in the page while the compositor
-      // draws the window square — a silent disagreement rather than an error.
+      // so an element written that way turns in the page while a reading that
+      // took only `transform` maps a click as if it had not — a silent
+      // disagreement rather than an error.
       const { transform } = measuredWith({ rotate: "90deg" });
       expect(transform.slice(0, 4).map(Math.round)).toStrictEqual([
         0, 1, -1, 0,
@@ -256,15 +162,15 @@ describe("defaultMeasure", () => {
     it("survives the centring idiom, which resolves to a percentage", () => {
       // `translate` keeps its percentages in the computed value, where
       // `transform` does not — and a matrix cannot be built from a relative
-      // length. Measuring runs on every resize and every pointer move, so a
-      // throw here stops a window being placed at all.
+      // length. Measuring runs on every frame and every pointer move, so a
+      // throw here stops a window being sized at all.
       expect(() => measuredWith({ translate: "-50% -50%" })).not.toThrow();
     });
 
     it("turns a window the way an axis rotation turns it", () => {
       // `rotate` takes an axis as well as an angle, and CSS spells that with a
       // different function than the plain angle form. Emitting the wrong one
-      // leaves the window square while the page turns it.
+      // maps clicks square while the page turns the window.
       const [a, b, c, d] = measuredWith({ rotate: "x 45deg" }).transform;
       expect([a, b, c]).toStrictEqual([1, 0, 0]);
       expect(d).toBeCloseTo(Math.SQRT1_2, 4);
@@ -305,23 +211,21 @@ describe("defaultMeasure", () => {
     });
 
     it("says nothing about a window it can read every style of", () => {
-      expect(
-        warningsFrom({ borderTopLeftRadius: "8px", opacity: "0.5" }),
-      ).toStrictEqual([]);
+      expect(warningsFrom({ rotate: "30deg", scale: "2 3" })).toStrictEqual([]);
     });
 
-    it("takes a hidden window off the stage, not just an empty one", () => {
+    it("reports a hidden window as invisible, not just an empty one", () => {
       // `visibility: hidden` keeps the layout box, so the element still
-      // measures as a size and every other signal says to draw it. Reading
-      // only the size shows a window the page asked to hide — which is worse
-      // than dropping an effect, because the disagreement is total.
+      // measures as a size while the page has said it is not to be seen.
+      // Reading only the size configures — and so redraws — a client nobody
+      // is looking at.
       expect(
         measuredWith({ visibility: "hidden" }, { height: 50, width: 100 })
           .visible,
       ).toBe(false);
     });
 
-    it("takes a collapsed window off the stage too", () => {
+    it("reports a collapsed window as invisible too", () => {
       // `collapse` is the third value and means `hidden` on anything that is
       // not a table row or column, which a window never is. It keeps its box
       // just the same, so it lands in the state the size check cannot see.
@@ -332,29 +236,23 @@ describe("defaultMeasure", () => {
     });
 
     it("keeps a window whose visibility was never resolved", () => {
-      // Absent is not hidden. Treating it as hidden would take every window
-      // off the stage in a DOM implementation that computes nothing.
+      // Absent is not hidden. Treating it as hidden would leave every client
+      // unconfigured in a DOM implementation that computes nothing.
       expect(measuredWith({}, { height: 50, width: 100 }).visible).toBe(true);
-    });
-
-    it("refuses a negative radius rather than passing it to a shader", () => {
-      expect(measuredWith({ borderTopLeftRadius: "-4px" }).cornerRadius).toBe(
-        0,
-      );
     });
   });
 });
 
-describe("how many unreadable shadows it will report", () => {
+describe("how many unreadable transforms it will report", () => {
   // Last in the file on purpose: this fills the module's record of what it has
   // already said, so a test after it would find the reporting exhausted.
   it("stops rather than growing without a bound", () => {
-    // The key is the whole computed string, and a `transition` on `box-shadow`
+    // The key is the whole computed string, and a `transition` on `rotate`
     // produces a new one every frame — so the record has to stop somewhere or
-    // it is a leak on a path that runs per resize.
+    // it is a leak on a path that runs per frame.
     const attempts = 40;
     const warned = Array.from({ length: attempts }, (_, index) =>
-      warningsFrom({ boxShadow: `lab(${index} 0 0) 0px 0px 4px` }),
+      warningsFrom({ rotate: `axis${index.toString()} 45deg` }),
     ).flat();
 
     expect(warned.length).toBeGreaterThan(0);
@@ -366,9 +264,8 @@ describe("transforms above the element", () => {
   it("follows a container that turned, not just its own transform", () => {
     // `getBoundingClientRect` reports an axis-aligned box, so a parent's
     // rotation is invisible in it and the element's own transform cannot
-    // explain it. A window inside a rotated container stayed square while the
-    // page around it turned — the compositor drew it upright over content that
-    // was not.
+    // explain it. A click on a window inside a rotated container reached the
+    // client at the coordinate it would have had if nothing had turned.
     const measured = measuredInside([{ transform: "rotate(90deg)" }]);
 
     const [a, b, c, d] = measured.transform;
@@ -408,8 +305,9 @@ describe("where an element is painted, rather than where it is written", () => {
 
   it("crosses a shadow boundary to the element that holds it", () => {
     // `parentElement` is null at a shadow root, so a walk that used it stopped
-    // there and reported the window unturned. `<domicile-app>` is a custom
-    // element, so a chrome that puts one in a shadow tree is not exotic.
+    // there and mapped the pointer as if nothing above had turned.
+    // `<domicile-app>` is a custom element, so a chrome that puts one in a
+    // shadow tree is not exotic.
     const turned = document.createElement("div");
     const host = document.createElement("div");
     turned.append(host);
@@ -431,8 +329,9 @@ describe("where an element is painted, rather than where it is written", () => {
 
   it("stops at an ancestor painted in the top layer", () => {
     // A modal dialog is painted outside its ancestors, so their transforms do
-    // not apply to it. Walking up as if they did puts the window somewhere the
-    // page never drew it — a case that was right before the walk existed.
+    // not apply to it. Walking up as if they did maps a click through a
+    // transform that never touched the window — a case that was right before
+    // the walk existed.
     const turned = document.createElement("div");
     const modal = document.createElement("div");
     // happy-dom has no top layer, so the selector is what has to be answered.

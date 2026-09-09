@@ -3846,7 +3846,7 @@ mod tests {
     use super::{
         announce_open_apps, answers_keystroke, broadcast_closed, broadcast_focus_decision, channel,
         chrome_connection, client_command, cursor_shape, freshened, parse_find_colours, to_line,
-        unmounts_the_element, write_responses, ChromeHub, ClientRequest, Committer, Outbound,
+        write_responses, ChromeHub, ClientRequest, Committer, Outbound,
     };
 
     use std::sync::Arc;
@@ -4288,25 +4288,18 @@ mod tests {
         seen
     }
 
-    /// A hub with one placed app, ready to be focused.
+    /// A hub with one app on it, ready to be focused.
+    ///
+    /// Appearing is the whole setup now. `focus_app` used to refuse an app the
+    /// chrome had not placed, so this had to place one; the gate is the host's
+    /// own map of apps since placement went, and appearing is what puts an app
+    /// in it.
     fn hub_with_an_app() -> (Arc<ChromeHub>, crate::outbound::OutboundReceiver, String) {
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
         let app_id = {
             let mut host = hub.host.lock().unwrap();
             let (app_id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-            host.handle_chrome_message(ChromeMessage::PlacePortal {
-                app_id: app_id.clone(),
-                corner_radius: 0.0,
-                opacity: 1.0,
-                shadow: None,
-                size: [100.0, 100.0],
-                takes_pointer: true,
-                transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-                visible: true,
-                z_index: 0,
-            })
-            .expect("the portal is placed — without it `focus_app` refuses");
             app_id
         };
         (hub, outbound, app_id)
@@ -4409,41 +4402,6 @@ mod tests {
     #[test]
     fn a_spawned_client_gets_no_x_display() {
         assert_eq!(child_env(&kitty(), "wayland-7", "DISPLAY"), None);
-    }
-
-    #[test]
-    fn unmounting_an_element_is_what_takes_its_canvas() {
-        assert_eq!(
-            unmounts_the_element(&ChromeMessage::RemovePortal {
-                app_id: "term".to_string()
-            }),
-            Some("term")
-        );
-    }
-
-    #[test]
-    fn hiding_a_window_does_not_take_its_canvas() {
-        // The bug this function exists to prevent, and it is not visible from
-        // the scene: the shell keeps every window mounted and toggles
-        // `hidden`, which arrives as this and removes the portal — while the
-        // element, and its canvas, stay in the page. Reading it as an unmount
-        // means never telling that chrome to drop the canvas, so a window
-        // backgrounded and brought back wears a still of itself for good.
-        let hidden = |visible| ChromeMessage::PlacePortal {
-            app_id: "term".to_string(),
-            transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-            size: [0.0, 0.0],
-            z_index: 0,
-            visible,
-            corner_radius: 0.0,
-            opacity: 1.0,
-            shadow: None,
-            takes_pointer: true,
-        };
-        assert_eq!(unmounts_the_element(&hidden(false)), None);
-        // Nor does any other placement: `remove_portal` is the only message
-        // that says the chrome has stopped holding a window's pixels.
-        assert_eq!(unmounts_the_element(&hidden(true)), None);
     }
 
     #[test]

@@ -8,7 +8,7 @@
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 
-import type { ChromeMessage, Placement, Shortcut } from "./chrome-message";
+import type { ChromeMessage, Shortcut } from "./chrome-message";
 import {
   closeAppMessage,
   focusAppMessage,
@@ -16,12 +16,10 @@ import {
   grabShortcutMessage,
   helloMessage,
   keyMessage,
-  placePortalMessage,
   pointerAxisMessage,
   pointerButtonMessage,
   pointerLeaveMessage,
   pointerMotionMessage,
-  removePortalMessage,
   resizeAppMessage,
   setDesktopSizeMessage,
   setDevicePixelRatioMessage,
@@ -290,14 +288,6 @@ export class BridgeClient {
 
   send(message: ChromeMessage): void {
     this.#transport.send(JSON.stringify(message));
-  }
-
-  placePortal(placement: Placement): void {
-    this.send(placePortalMessage(placement));
-  }
-
-  removePortal(appId: string): void {
-    this.send(removePortalMessage(appId));
   }
 
   resizeApp(

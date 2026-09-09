@@ -16,20 +16,13 @@ import { BrowserWindow } from "./BrowserWindow";
 const silentBridge = {
   focusApp: () => undefined,
   focusChrome: () => undefined,
-  placePortal: () => undefined,
-  removePortal: () => undefined,
   resizeApp: () => undefined,
 } as unknown as BridgeClient;
 
 const stubMeasure: Measure = () => ({
-  cornerRadius: 0,
-  opacity: 1,
-  shadow: undefined,
   size: [100, 100],
-  takesPointer: true,
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,
-  zIndex: 0,
 });
 
 const view = (container: HTMLElement): DomicileWebviewElement => {

@@ -3,9 +3,9 @@
 // Two subjects, and they are not the same one. The round trip is about a
 // keystroke — everything between pressing a key and seeing it, including the
 // stages inside it the compositor cannot see. Placement is about a desktop
-// merely existing: every portal is measured on every animation frame so that a
-// window follows a CSS transition, and that is paid per window per frame
-// whether or not anybody is touching the machine.
+// merely existing: every window is measured on every animation frame so that
+// its client stays configured at the box the page gives it, and that is paid
+// per window per frame whether or not anybody is touching the machine.
 //
 // So they are reported separately, and each is silent when its own window is
 // empty. A desktop nobody has typed at should still say what its windows cost
@@ -34,7 +34,7 @@ export type Timings = {
   ipc: SampleReport | undefined;
   /** Putting those pixels on the canvas. */
   draw: SampleReport | undefined;
-  /** Measuring a portal and reporting where it is. */
+  /** Measuring a window and reporting the size it was laid out at. */
   place: SampleReport | undefined;
 };
 

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
-import type { Placement } from "@domicile/chrome-sdk/chrome-message";
 import type { Measure } from "@domicile/chrome-sdk/measure";
 import {
   APP_TAG_NAME,
@@ -9,55 +8,35 @@ import {
 
 import { Desktop } from "./desktop";
 
-// The elements report their box to a bridge as they mount; nothing here reads
+// The elements report their size to a bridge as they mount; nothing here reads
 // what they say, so a recorder that answers every call is enough.
 const silentBridge = {
   focusApp: () => undefined,
   focusChrome: () => undefined,
-  placePortal: () => undefined,
-  removePortal: () => undefined,
   resizeApp: () => undefined,
 } as unknown as BridgeClient;
 
-// The test DOM performs no layout, so measurement is injected. The stacking
-// order is read off the element rather than stubbed flat, because when a window
-// is raised relative to its own placement is what one of these suites is about.
-const stubMeasure: Measure = (element) => ({
-  cornerRadius: 0,
-  opacity: 1,
-  shadow: undefined,
+// The test DOM performs no layout, so measurement is injected.
+const stubMeasure: Measure = () => ({
   size: [100, 100],
-  takesPointer: true,
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,
-  zIndex: Number.parseInt(element.style.zIndex, 10) || 0,
 });
 
-/**
- * A desktop whose elements report to a bridge that keeps what they asked of the
- * host — the placements themselves, and the calls as an ordered log.
- *
- * Ordered as well as kept, because for one of these suites the order *is* the
- * behaviour: a portal has to reach the host before the focus that names it.
- */
+/** A desktop whose elements report to a bridge that keeps who was focused. */
 const recordingDesktop = () => {
-  const placements: Placement[] = [];
   const acted: string[] = [];
   const bridge = {
     ...silentBridge,
     focusApp: (appId: string) => acted.push(`focus:${appId}`),
-    placePortal: (placement: Placement) => {
-      placements.push(placement);
-      acted.push(`place:${placement.appId}`);
-    },
   } as unknown as BridgeClient;
   registerElements(bridge, {
     measure: stubMeasure,
     observePlacement: () => () => {
-      // Never turned: nothing here tests what happens when a window moves.
+      // Never turned: nothing here tests what happens when a window resizes.
     },
   });
-  return { acted, desktop: new Desktop(freshRoot()), placements };
+  return { acted, desktop: new Desktop(freshRoot()) };
 };
 
 const windowFor = (root: HTMLElement, appId: string): HTMLElement => {
@@ -83,7 +62,7 @@ beforeEach(() => {
     // serves as fast as it can: every mounted window re-measured tens of
     // thousands of times a second, for the length of every `await`.
     observePlacement: () => () => {
-      // Never turned: nothing here tests what happens when a window moves.
+      // Never turned: nothing here tests what happens when a window resizes.
     },
   });
 });
@@ -183,19 +162,6 @@ describe("Desktop", () => {
       expect(acted).toContain("focus:term");
     });
 
-    it("places the window before asking for it, because the other order does nothing", () => {
-      // `Scene::focus_app` refuses an app with no portal, silently, while
-      // `ClientRequest::KeyboardFocus` moves the seat regardless — so a focus
-      // that arrives first leaves the brain and the seat disagreeing, with
-      // nothing to notice. The portal is sent as the element connects, which
-      // is the append. See the placed-before-focused entry in the roadmap for
-      // the same no-op found the hard way.
-      const { acted, desktop } = recordingDesktop();
-      desktop.caughtUp();
-      desktop.open("term", [640, 480]);
-      expect(acted).toStrictEqual(["place:term", "focus:term"]);
-    });
-
     it("leaves it alone for a window replayed while catching up", () => {
       // Every chrome that connects is replayed every window already running,
       // as if each had just appeared, and told who holds the keyboard at the
@@ -204,7 +170,7 @@ describe("Desktop", () => {
       // answer the compositor already had, on every reload.
       const { acted, desktop } = recordingDesktop();
       desktop.open("term", [640, 480]);
-      expect(acted).toStrictEqual(["place:term"]);
+      expect(acted).toStrictEqual([]);
     });
   });
 
@@ -230,16 +196,16 @@ describe("Desktop", () => {
     });
 
     it("opens a window at the front of the stack, not behind the others", () => {
-      // The element places its portal as it connects, so a raise that happened
-      // after the append would leave the *first* placement at the bottom of
-      // the stack — and on the composited path the compositor draws a frame of
-      // the new window behind the old ones before the next measurement fixes
-      // it.
-      const { desktop, placements } = recordingDesktop();
+      // A window that opened behind the ones already there is one the user
+      // asked for and cannot see. The stack is `z-index` on the element, which
+      // is what the compositor draws by, so the element is what says so.
+      const root = freshRoot();
+      const desktop = new Desktop(root);
       desktop.open("term", [640, 480]);
       desktop.open("editor", [640, 480]);
-      const opened = placements.filter(({ appId }) => appId === "editor");
-      expect(opened.map(({ zIndex }) => zIndex)).not.toContain(0);
+      expect(Number(windowFor(root, "editor").style.zIndex)).toBeGreaterThan(
+        Number(windowFor(root, "term").style.zIndex),
+      );
     });
 
     it("puts a raised window above the others", () => {

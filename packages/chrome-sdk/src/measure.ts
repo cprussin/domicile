@@ -1,25 +1,19 @@
-// How the chrome reports an `<domicile-app>`'s on-screen box to the host.
+// What the chrome has to read off an `<domicile-app>`'s box.
+//
+// Two things need it, and neither is where the window goes: the size is the
+// resolution the client is configured at, and the element->screen affine is
+// what a pointer position inverts through to reach the client's surface. How
+// the window is drawn is CSS on this element and never travels.
 
 import { elementToScreen } from "./element-transform";
 import type { Matrix } from "./matrix";
 import { accumulate, IDENTITY } from "./matrix";
-import type { Shadow } from "./shadow";
-import { parseShadow, ShadowKind } from "./shadow";
 
-/** An element's geometry in the form `place_portal` needs it. */
 export type Measurement = {
   size: readonly [width: number, height: number];
   transform: Matrix;
-  zIndex: number;
+  /** Whether this element has a box the client can be sized to. */
   visible: boolean;
-  /** `border-radius` in logical pixels; 0 for a square window. */
-  cornerRadius: number;
-  /** `opacity`, 0 to 1. */
-  opacity: number;
-  /** Whether a pointer over this window belongs to it. */
-  takesPointer: boolean;
-  /** The first drawable `box-shadow`, if the element has one. */
-  shadow: Shadow | undefined;
 };
 
 export type Measure = (element: HTMLElement) => Measurement;
@@ -60,18 +54,13 @@ export const defaultMeasure: Measure = (element) => {
     firstNonZero(element.offsetHeight, box.height),
   ] as const;
   return {
-    cornerRadius: readCornerRadius(style),
-    opacity: readOpacity(style),
-    shadow: readShadow(style),
     size,
-    takesPointer: takesThePointer(style),
     transform: elementToScreen({
       box,
       linear: chainToScreen(element, style),
       size,
     }),
     visible: isVisible(style, size),
-    zIndex: readZIndex(style),
   };
 };
 
@@ -81,8 +70,9 @@ export const defaultMeasure: Measure = (element) => {
  *
  * An ancestor that rotates or skews used to be missed entirely, because
  * `getBoundingClientRect` reports only an axis-aligned box and the element's
- * own transform cannot explain a box that a *parent* turned. A window inside a
- * rotated container therefore stayed square while the page around it turned.
+ * own transform cannot explain a box that a *parent* turned. A click on a
+ * window inside a rotated container therefore reached the client at the
+ * coordinate it would have had if nothing had turned.
  *
  * Only the linear part is accumulated, and that is the whole trick. Each
  * transform applies about its own element's `transform-origin`, in its own
@@ -100,10 +90,10 @@ export const defaultMeasure: Measure = (element) => {
  * This is a `getComputedStyle` and a `matches` per ancestor, on a path that
  * runs per window per animation frame — and again per `pointermove`, through
  * the bound `measure`, which `placement-timing` does not count. So the reported
- * placement cost is a floor rather than the whole of it, and a page deep
- * enough for this to matter would show it as pointer latency rather than in
- * that line. The alternative is a window that does not follow the page, which
- * is not a trade.
+ * cost is a floor rather than the whole of it, and a page deep enough for this
+ * to matter would show it as pointer latency rather than in that line. The
+ * alternative is a click that lands somewhere the user did not press, which is
+ * not a trade.
  */
 const chainToScreen = (
   element: HTMLElement,
@@ -172,80 +162,13 @@ const paintedInside = (element: Element): HTMLElement | undefined => {
 const inTopLayer = (element: Element): boolean =>
   element.matches(":modal, :popover-open");
 
-/**
- * `border-radius` as one number of pixels.
- *
- * The compositor applies a single radius to all four corners — that is what its
- * shader can do without knowing which way up a client's buffer is — so an
- * element with four different ones reports the first, which is the one it set if
- * it set one at all.
- *
- * Only an absolute length survives this. A radius in `%` keeps its `%` in the
- * computed value — `getComputedStyle` resolves it against nothing — so `50%`
- * arrives here as the string `"50%"` and leaves as fifty pixels. So does the
- * two-axis `10px / 20px` form, whose vertical radius is simply dropped.
- *
- * Anything unparseable is no rounding rather than a guess: a square window is
- * the honest floor, and a wrong radius clips content.
- */
-const readCornerRadius = (style: CSSStyleDeclaration): number =>
-  finiteOrZero(Number.parseFloat(style.borderTopLeftRadius));
-
-/**
- * `opacity`, clamped to what it can mean.
- *
- * A missing or unparseable value is fully opaque, never transparent: a window
- * nobody can see is a worse failure than one that ignores a style, and it is
- * indistinguishable from the compositor not drawing at all.
- */
-const readOpacity = (style: CSSStyleDeclaration): number => {
-  const opacity = Number.parseFloat(style.opacity);
-  return Number.isFinite(opacity) ? Math.min(Math.max(opacity, 0), 1) : 1;
-};
-
-/**
- * The `box-shadow` the compositor should cast, if it can cast it.
- *
- * Only the outer shadows the shader knows how to draw; an `inset` one is no
- * shadow, which is the same thing the element gets today.
- *
- * The engine paints this shadow too — it is ordinary CSS on an ordinary
- * element, and the placeholder being transparent does not stop a `box-shadow`
- * from being ink. Casting it in the compositor is what puts it in the right
- * place: the chrome is drawn over the apps, so an engine-painted shadow lands
- * on top of any window it overlaps rather than under its own.
- *
- * An element that asked for a shadow in a syntax this cannot read is reported,
- * once per distinct value. Silently dropping it would be indistinguishable from
- * the compositor not drawing at all, and the author has no other way to find
- * out that the syntax they wrote is one this does not read. An `inset` shadow
- * is not that case — it is read, understood, and declined on purpose.
- */
-const readShadow = (style: CSSStyleDeclaration): Shadow | undefined => {
-  const computed = style.boxShadow;
-  const reading = parseShadow(computed);
-  switch (reading.kind) {
-    case ShadowKind.Cast: {
-      return reading.shadow;
-    }
-    case ShadowKind.Unreadable: {
-      reportUnreadable("box-shadow", computed);
-      return undefined;
-    }
-    case ShadowKind.None:
-    case ShadowKind.Inset: {
-      return undefined;
-    }
-  }
-};
-
-// Measurement runs on every resize, so the same unreadable value would
+// Measurement runs on every frame, so the same unreadable value would
 // otherwise be reported many times a second.
 //
 // Bounded, because the key is the whole computed string and a `transition` on
-// `box-shadow` produces a new one every frame. Past the cap the reports stop
+// `rotate` produces a new one every frame. Past the cap the reports stop
 // rather than the memory growing: the first few name the syntax at fault,
-// which is the whole job, and an unbounded set on a path that runs per resize
+// which is the whole job, and an unbounded set on a path that runs per frame
 // is a worse bug than the one it is reporting.
 const REPORT_LIMIT = 32;
 const reported = new Set<string>();
@@ -253,19 +176,19 @@ const reported = new Set<string>();
 /**
  * Say so, once, that an element asked for something this could not read.
  *
- * The console is the only channel the SDK has to whoever wrote the CSS, and a
- * window that silently loses a style is indistinguishable from one the
- * compositor never drew — which is the failure that is impossible to debug.
+ * The console is the only channel the SDK has to whoever wrote the CSS, and
+ * this failure is invisible from outside: the engine turns the window exactly
+ * as the page asked, and only the surface coordinates a click is mapped to
+ * disagree with what the user is looking at.
  *
- * The consequence is the same whichever property it is: the window is drawn
- * without it. Nothing escalates a value it cannot read, because there is
- * nowhere to escalate to.
+ * Nothing escalates a value it cannot read, because there is nowhere to
+ * escalate to.
  */
 const reportUnreadable = (property: string, computed: string): void => {
   report(
     `${property}: ${computed}`,
     `cannot read ${property} ${JSON.stringify(computed)}; ` +
-      `this window is drawn without it`,
+      `a pointer over this window is mapped as if it were not set`,
   );
 };
 
@@ -278,61 +201,19 @@ const report = (key: string, message: string): void => {
 };
 
 /**
- * Whether the compositor should draw this window at all.
+ * Whether this element has a box a client can be configured to.
  *
  * A size of nothing is the tabbed case: a hidden element has no box, and a
- * portal with no box is one the host stops compositing.
+ * client configured to nothing would redraw on every tab switch.
  *
  * `visibility: hidden` — or `collapse` — is the other way to mean it, and it
- * is the dangerous one: it *keeps* the layout box, so the element still measures as a size and
- * every other signal says to draw. Reading only the size shows a window the
- * page asked to hide, which is a worse disagreement than dropping an effect:
- * the window is not merely wrong, it is there at all.
+ * is the dangerous one: it *keeps* the layout box, so the element still
+ * measures as a size while the page has said it is not to be seen. A window
+ * the user cannot see is not one to make redraw.
  *
- * Absent is not hidden. An unresolved `visibility` would otherwise take every
- * window off the stage in a DOM implementation that computes nothing.
+ * Absent is not hidden. An unresolved `visibility` would otherwise leave every
+ * client unconfigured in a DOM implementation that computes nothing.
  */
-/**
- * Whether a pointer over this element belongs to it.
- *
- * The compositor routes the pointer by hit-testing a window's rectangle, and a
- * rectangle cannot see that the engine painted a menu, a dialog or a browser
- * tab over it. Without this such a window swallows every click meant for what
- * covers it — including the click that would have handed the keyboard back to
- * the chrome, which is one the chrome has to receive, so there is no way out
- * of it either.
- *
- * `pointer-events` because its *meaning* already matches and it is vocabulary
- * a chrome author knows — not because a page already carries the signal. It
- * does not: the engine hit-tests its own stacking order correctly and has no
- * reason to mark anything, so a chrome that paints over a window has to write
- * a rule it would otherwise never write, and forgetting it is silent.
- *
- * Inherited, which is the part that surprises people and is usually what you
- * want: a `<domicile-app>` inside a container the chrome made inert computes
- * `none` itself and is reported inert with it.
- *
- * All-or-nothing per window, because `pointer-events` is per element. A menu
- * covering one corner of a window makes the *whole* window unclickable rather
- * than that corner — the right trade for a dropdown with a backdrop over it,
- * the wrong one for a popover the user is meant to keep working around. There
- * is no partial-coverage answer available from this signal.
- *
- * `opacity: 0` is not this. A transparent element still hit-tests in the DOM
- * and still reports as taking the pointer, which matches CSS and is what an
- * invisible-but-live window should do; a chrome that wants a faded-out window
- * to stop taking clicks has to say `pointer-events: none` as well.
- *
- * `none` is its only value that means "not this element": the SVG-shaped ones
- * narrow *where on* an element the pointer lands, and a window is not an SVG
- * shape. An unreadable value takes the pointer, for the same reason an
- * unreadable opacity is opaque — a window nobody can click is a worse failure
- * than one that ignores a style, and the two are indistinguishable from
- * outside.
- */
-const takesThePointer = (style: CSSStyleDeclaration): boolean =>
-  style.pointerEvents !== "none";
-
 const isVisible = (
   style: CSSStyleDeclaration,
   [width, height]: readonly [number, number],
@@ -342,9 +223,6 @@ const isVisible = (
 // column it means `hidden` — which a window never is. It keeps its box too, so
 // it lands in exactly the state this guards against.
 const HIDDEN = new Set(["collapse", "hidden"]);
-
-const finiteOrZero = (value: number): number =>
-  Number.isFinite(value) ? Math.max(value, 0) : 0;
 
 // Layout-dependent measurements read 0 before the element has a box; the
 // caller wants the first source that actually produced one.
@@ -356,9 +234,9 @@ const firstNonZero = (preferred: number, fallback: number): number =>
  *
  * `transform` is not the whole story: `rotate` and `scale` are properties in
  * their own right, and neither appears in the computed `transform`. An element
- * written with them turns or stretches in the page while a compositor reading
- * only `transform` draws the window square — a disagreement with no error
- * anywhere to notice it.
+ * written with them turns or stretches in the page while a reading that took
+ * only `transform` maps a click as if it had not — a disagreement with no
+ * error anywhere to notice it.
  *
  * CSS applies them in a fixed order — translate, then rotate, then scale, then
  * `transform` — all about the same origin, which is why their linear parts can
@@ -486,15 +364,9 @@ const isSet = (value: string | undefined): value is string =>
   value !== undefined && value !== "" && value !== "none";
 
 // A shape none of the above accounts for. Reported rather than dropped, for
-// the same reason an unreadable shadow is: a window that quietly ignores a
-// style it was given is the failure nobody can debug.
+// the same reason an unreadable transform is: a window whose clicks quietly
+// stop matching what the page drew is the failure nobody can debug.
 const unreadable = (property: string, value: string | undefined): undefined => {
   reportUnreadable(property, value ?? "");
   return undefined;
-};
-
-// `z-index: auto` parses to NaN, which the host reads as the default layer.
-const readZIndex = (style: CSSStyleDeclaration): number => {
-  const zIndex = Number.parseInt(style.zIndex, 10);
-  return Number.isFinite(zIndex) ? zIndex : 0;
 };

@@ -10,14 +10,9 @@ import { Desktop } from "./desktop";
 import { installWindowGestures } from "./window-gestures";
 
 const stubMeasure: Measure = () => ({
-  cornerRadius: 0,
-  opacity: 1,
-  shadow: undefined,
   size: [100, 100],
-  takesPointer: true,
   transform: [1, 0, 0, 1, 0, 0],
   visible: true,
-  zIndex: 0,
 });
 
 /** The pointer every gesture here is made with. */
@@ -84,16 +79,14 @@ const desktopWith = (
   return { desktop, forwarded, root };
 };
 
-// The elements report their box, and forward the pointer events the desktop
+// The elements report their size, and forward the pointer events the desktop
 // does *not* take, to a bridge. Only the forwards are read back.
 const recordingBridge = (forwarded: Forwarded): BridgeClient =>
   ({
     focusApp: () => undefined,
     focusChrome: () => undefined,
-    placePortal: () => undefined,
     pointerButton: (...call: unknown[]) => forwarded.buttons.push(call),
     pointerMotion: (...call: unknown[]) => forwarded.motions.push(call),
-    removePortal: () => undefined,
     resizeApp: () => undefined,
   }) as unknown as BridgeClient;
 

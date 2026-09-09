@@ -5,80 +5,10 @@ import {
   focusAppMessage,
   focusChromeMessage,
   helloMessage,
-  placePortalMessage,
   pointerAxisMessage,
-  removePortalMessage,
   resizeAppMessage,
   spawnMessage,
 } from "./chrome-message";
-
-describe("placePortalMessage", () => {
-  it("matches the domicile-protocol wire shape", () => {
-    expect(
-      placePortalMessage({
-        appId: "term",
-        size: [10, 20],
-        transform: [1, 0, 0, 1, 5, 6],
-        visible: true,
-        zIndex: 3,
-      }),
-    ).toEqual({
-      app_id: "term",
-      // Square and opaque unless the element says otherwise — the compositor
-      // draws the window itself now, so these travel with the placement.
-      corner_radius: 0,
-      opacity: 1,
-      shadow: null,
-      size: [10, 20],
-      // And a window takes the pointer unless the element says otherwise:
-      // `pointer-events: none` is the only thing that makes one inert.
-      takes_pointer: true,
-      transform: [1, 0, 0, 1, 5, 6],
-      type: "place_portal",
-      visible: true,
-      z_index: 3,
-    });
-  });
-
-  it("defaults z_index to 0 and visible to true", () => {
-    const message = placePortalMessage({
-      appId: "term",
-      size: [1, 1],
-      transform: [1, 0, 0, 1, 0, 0],
-    });
-    expect(message.z_index).toBe(0);
-    expect(message.visible).toBe(true);
-  });
-
-  it("carries the shadow the element casts", () => {
-    // The compositor draws it, so the numbers have to reach it — an element
-    // that styles a shadow and gets none is the same bug as one that styles a
-    // radius and stays square.
-    const message = placePortalMessage({
-      appId: "term",
-      shadow: { blur: 12, color: [0, 0, 0, 0.5], dx: 4, dy: 8, spread: 2 },
-      size: [1, 1],
-      transform: [1, 0, 0, 1, 0, 0],
-    });
-    expect(message.shadow).toEqual({
-      blur: 12,
-      color: [0, 0, 0, 0.5],
-      dx: 4,
-      dy: 8,
-      spread: 2,
-    });
-  });
-
-  it("rejects an empty app id", () => {
-    expect(() => {
-      placePortalMessage({
-        appId: "",
-        size: [1, 1],
-        transform: [1, 0, 0, 1, 0, 0],
-      });
-    }).toThrow(TypeError);
-  });
-});
 
 describe("spawnMessage", () => {
   it("carries the full argv", () => {
@@ -124,10 +54,6 @@ describe("pointerAxisMessage", () => {
 
 describe("the remaining chrome->host messages", () => {
   it("match the domicile-protocol wire shape", () => {
-    expect(removePortalMessage("term")).toEqual({
-      app_id: "term",
-      type: "remove_portal",
-    });
     expect(focusAppMessage("term")).toEqual({
       app_id: "term",
       type: "focus_app",

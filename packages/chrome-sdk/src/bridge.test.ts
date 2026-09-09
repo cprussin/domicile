@@ -167,31 +167,6 @@ describe("BridgeClient", () => {
   });
 
   it("send helpers emit correctly-shaped messages", () => {
-    bridge.placePortal({
-      appId: "term",
-      size: [10, 20],
-      transform: [1, 0, 0, 1, 0, 0],
-      zIndex: 2,
-    });
-    expect(transport.lastSent()).toEqual({
-      app_id: "term",
-      corner_radius: 0,
-      opacity: 1,
-      shadow: null,
-      size: [10, 20],
-      takes_pointer: true,
-      transform: [1, 0, 0, 1, 0, 0],
-      type: "place_portal",
-      visible: true,
-      z_index: 2,
-    });
-
-    bridge.removePortal("term");
-    expect(transport.lastSent()).toEqual({
-      app_id: "term",
-      type: "remove_portal",
-    });
-
     bridge.focusApp("term");
     expect(transport.lastSent()).toEqual({ app_id: "term", type: "focus_app" });
 
