@@ -6,6 +6,6 @@ dictionary DomicileAppEventInit : EventInit {
   DOMString appId = "";
   DOMString title = "";
   DOMString cursor = "";
-  unsigned long width;
-  unsigned long height;
+  double width;
+  double height;
 };

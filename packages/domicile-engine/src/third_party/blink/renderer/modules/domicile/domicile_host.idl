@@ -14,9 +14,6 @@
 // real, is that adding a message means an engine release rather than editing a
 // TypeScript file.
 //
-// VERTICAL SLICE: spawn() and the apptitled event. The remaining 27 members of
-// the protocol are mechanical once these two work end to end.
-
 [
     Exposed=Window,
     RuntimeEnabled=DomicileControlChannel,
@@ -37,17 +34,22 @@
   [CallWith=ScriptState, RaisesException] undefined closeApp(DOMString appId);
 
   // The layout box, as a resize. For an <app> the box IS the configure.
+  //
+  // Doubles because a CSS pixel is fractional and this comes from a layout box.
   [CallWith=ScriptState, RaisesException] undefined resizeApp(
-      DOMString appId, unsigned long width, unsigned long height);
+      DOMString appId, double width, double height);
 
   [CallWith=ScriptState, RaisesException] undefined setDesktopSize(
-      unsigned long width, unsigned long height);
+      double width, double height);
   [CallWith=ScriptState, RaisesException] undefined setDevicePixelRatio(
       double ratio);
 
   // Route a key combination to the page rather than to the focused client.
+  //
+  // The press comes back as a `shortcut` event carrying the same fields, so a
+  // shell compares what it grabbed against what fired without parsing a string.
   [CallWith=ScriptState, RaisesException] undefined grabShortcut(
-      DOMString shortcut);
+      DomicileShortcut shortcut);
 
   // Input forwarding. Surface-local coordinates and evdev keycodes, because
   // that is what a Wayland client expects to be handed.
@@ -74,10 +76,10 @@
   attribute EventHandler onappclosed;
   attribute EventHandler onappcursor;
 
-  // A grabbed shortcut fired.
+  // A grabbed shortcut fired, as a DomicileShortcutEvent.
   attribute EventHandler onshortcut;
 
-  // The seat's modifier state, as a DomicileModifiersEvent. One seat,
+  // Which modifiers the seat holds, as a DomicileModifiersEvent. One seat,
   // outliving every window.
   attribute EventHandler onmodifiers;
 

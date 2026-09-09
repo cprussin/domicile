@@ -15,6 +15,6 @@
   // False until the client has committed a buffer. A shell that treats width
   // and height as meaningful while this is false opens the window at nothing.
   readonly attribute boolean hasSize;
-  readonly attribute unsigned long width;
-  readonly attribute unsigned long height;
+  readonly attribute double width;
+  readonly attribute double height;
 };

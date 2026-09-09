@@ -4,12 +4,14 @@
 
 #include "third_party/blink/renderer/modules/domicile/domicile_host.h"
 
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_modifiers_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
@@ -114,15 +116,15 @@ void DomicileHost::closeApp(ScriptState*, const String& app_id,
   }
 }
 
-void DomicileHost::resizeApp(ScriptState*, const String& app_id,
-                             uint32_t width, uint32_t height,
+void DomicileHost::resizeApp(ScriptState*, const String& app_id, double width,
+                             double height,
                              ExceptionState& exception_state) {
   if (ReadyForApp(app_id, exception_state)) {
     channel_->ResizeApp(app_id, width, height);
   }
 }
 
-void DomicileHost::setDesktopSize(ScriptState*, uint32_t width, uint32_t height,
+void DomicileHost::setDesktopSize(ScriptState*, double width, double height,
                                   ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     channel_->SetDesktopSize(width, height);
@@ -142,14 +144,19 @@ void DomicileHost::setDevicePixelRatio(ScriptState*, double ratio,
   }
 }
 
-void DomicileHost::grabShortcut(ScriptState*, const String& shortcut,
+void DomicileHost::grabShortcut(ScriptState*, const DomicileShortcut* shortcut,
                                 ExceptionState& exception_state) {
-  if (shortcut.empty()) {
-    exception_state.ThrowTypeError("shortcut must be a non-empty string");
+  // Keycode 0 is not a key. A combination of modifiers alone would fire on
+  // every keystroke that happens to hold them, which is not a shortcut and is
+  // indistinguishable from the page forgetting to say which key it meant.
+  if (!shortcut->keycode()) {
+    exception_state.ThrowTypeError("keycode must be a non-zero evdev code");
     return;
   }
   if (Ready(exception_state)) {
-    channel_->GrabShortcut(shortcut);
+    channel_->GrabShortcut(domicile::mojom::blink::Shortcut::New(
+        shortcut->keycode(), shortcut->altKey(), shortcut->ctrlKey(),
+        shortcut->shiftKey(), shortcut->metaKey()));
   }
 }
 
@@ -191,16 +198,15 @@ void DomicileHost::pointerAxis(ScriptState*, const String& app_id, double dx,
 }
 
 void DomicileHost::AppAppeared(const String& app_id, const String& title,
-                               bool has_size, uint32_t width,
-                               uint32_t height) {
+                               bool has_size, double width, double height) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       event_type_names::kAppappeared, app_id, title, String(),
       has_size ? std::make_optional(width) : std::nullopt,
       has_size ? std::make_optional(height) : std::nullopt));
 }
 
-void DomicileHost::AppResized(const String& app_id, uint32_t width,
-                              uint32_t height) {
+void DomicileHost::AppResized(const String& app_id, double width,
+                              double height) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       event_type_names::kAppresized, app_id, String(), String(), width,
       height));
@@ -218,16 +224,16 @@ void DomicileHost::AppCursor(const String& app_id, const String& cursor) {
       std::nullopt));
 }
 
-void DomicileHost::Shortcut(const String& shortcut) {
-  DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
-      event_type_names::kShortcut, String(), shortcut, String(), std::nullopt,
-      std::nullopt));
+void DomicileHost::ShortcutPressed(
+    domicile::mojom::blink::ShortcutPtr shortcut) {
+  DispatchEvent(*MakeGarbageCollected<DomicileShortcutEvent>(
+      event_type_names::kShortcut, shortcut->keycode, shortcut->alt,
+      shortcut->ctrl, shortcut->shift, shortcut->meta));
 }
 
-void DomicileHost::Modifiers(uint32_t depressed, uint32_t latched,
-                             uint32_t locked, uint32_t group) {
+void DomicileHost::Modifiers(bool alt, bool ctrl, bool shift, bool meta) {
   DispatchEvent(*MakeGarbageCollected<DomicileModifiersEvent>(
-      event_type_names::kModifiers, depressed, latched, locked, group));
+      event_type_names::kModifiers, alt, ctrl, shift, meta));
 }
 
 void DomicileHost::FocusChanged(const String& app_id) {

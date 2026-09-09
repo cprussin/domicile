@@ -31,8 +31,8 @@ DomicileAppEvent::DomicileAppEvent(const AtomicString& type,
                                    const String& app_id,
                                    const String& title,
                                    const String& cursor,
-                                   std::optional<uint32_t> width,
-                                   std::optional<uint32_t> height)
+                                   std::optional<double> width,
+                                   std::optional<double> height)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
       app_id_(app_id),
       title_(title),

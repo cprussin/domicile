@@ -19,21 +19,21 @@ DomicileModifiersEvent::DomicileModifiersEvent(
     const AtomicString& type,
     const DomicileModifiersEventInit* initializer)
     : Event(type, initializer),
-      depressed_(initializer->depressed()),
-      latched_(initializer->latched()),
-      locked_(initializer->locked()),
-      group_(initializer->group()) {}
+      alt_(initializer->altKey()),
+      ctrl_(initializer->ctrlKey()),
+      shift_(initializer->shiftKey()),
+      meta_(initializer->metaKey()) {}
 
 DomicileModifiersEvent::DomicileModifiersEvent(const AtomicString& type,
-                                               uint32_t depressed,
-                                               uint32_t latched,
-                                               uint32_t locked,
-                                               uint32_t group)
+                                               bool alt,
+                                               bool ctrl,
+                                               bool shift,
+                                               bool meta)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
-      depressed_(depressed),
-      latched_(latched),
-      locked_(locked),
-      group_(group) {}
+      alt_(alt),
+      ctrl_(ctrl),
+      shift_(shift),
+      meta_(meta) {}
 
 DomicileModifiersEvent::~DomicileModifiersEvent() = default;
 

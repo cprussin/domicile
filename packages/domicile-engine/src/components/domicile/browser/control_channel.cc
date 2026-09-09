@@ -147,6 +147,27 @@ base::DictValue ForApp(const char* type, const std::string& app_id) {
   return message;
 }
 
+base::ListValue Size(double width, double height) {
+  base::ListValue size;
+  size.Append(width);
+  size.Append(height);
+  return size;
+}
+
+// A number the compositor wrote, whichever way it wrote it.
+//
+// Not GetIfInt: the compositor's sizes are f64, and serde renders 800.0 with
+// the decimal point, which a JSON reader types as a double. Asking for an int
+// gets nothing and the size arrives as zero -- which is exactly the "opened
+// windows at nothing at all" failure the absent-size handling above exists to
+// prevent, arriving through the type instead of through the absence.
+double Number(const base::Value& value) {
+  if (std::optional<double> number = value.GetIfDouble()) {
+    return *number;
+  }
+  return 0.0;
+}
+
 }  // namespace
 
 void ControlChannel::FocusApp(const std::string& app_id) {
@@ -162,22 +183,16 @@ void ControlChannel::CloseApp(const std::string& app_id) {
 }
 
 void ControlChannel::ResizeApp(const std::string& app_id,
-                               uint32_t width,
-                               uint32_t height) {
+                               double width,
+                               double height) {
   base::DictValue message = ForApp("resize_app", app_id);
-  base::ListValue size;
-  size.Append(static_cast<int>(width));
-  size.Append(static_cast<int>(height));
-  message.Set("size", std::move(size));
+  message.Set("size", Size(width, height));
   SendMessage(std::move(message));
 }
 
-void ControlChannel::SetDesktopSize(uint32_t width, uint32_t height) {
+void ControlChannel::SetDesktopSize(double width, double height) {
   base::DictValue message = Typed("set_desktop_size");
-  base::ListValue size;
-  size.Append(static_cast<int>(width));
-  size.Append(static_cast<int>(height));
-  message.Set("size", std::move(size));
+  message.Set("size", Size(width, height));
   SendMessage(std::move(message));
 }
 
@@ -187,9 +202,16 @@ void ControlChannel::SetDevicePixelRatio(double ratio) {
   SendMessage(std::move(message));
 }
 
-void ControlChannel::GrabShortcut(const std::string& shortcut) {
+void ControlChannel::GrabShortcut(mojom::ShortcutPtr shortcut) {
+  base::DictValue combination;
+  combination.Set("key", static_cast<int>(shortcut->keycode));
+  combination.Set("alt", shortcut->alt);
+  combination.Set("ctrl", shortcut->ctrl);
+  combination.Set("shift", shortcut->shift);
+  // `logo` is what Wayland calls the key the web calls Meta.
+  combination.Set("logo", shortcut->meta);
   base::DictValue message = Typed("grab_shortcut");
-  message.Set("shortcut", shortcut);
+  message.Set("shortcut", std::move(combination));
   SendMessage(std::move(message));
 }
 
@@ -367,10 +389,9 @@ void ControlChannel::DispatchLine(const std::string& line) {
     // absence is carried rather than flattened.
     const base::ListValue* size = message.FindList("size");
     const bool has_size = size && size->size() == 2u;
-    client_->AppAppeared(
-        *app_id, title ? *title : std::string(), has_size,
-        has_size ? static_cast<uint32_t>((*size)[0].GetIfInt().value_or(0)) : 0u,
-        has_size ? static_cast<uint32_t>((*size)[1].GetIfInt().value_or(0)) : 0u);
+    client_->AppAppeared(*app_id, title ? *title : std::string(), has_size,
+                         has_size ? Number((*size)[0]) : 0.0,
+                         has_size ? Number((*size)[1]) : 0.0);
     return;
   }
 
@@ -378,9 +399,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
     const std::string* app_id = message.FindString("app_id");
     const base::ListValue* size = message.FindList("size");
     if (app_id && size && size->size() == 2u) {
-      client_->AppResized(
-          *app_id, static_cast<uint32_t>((*size)[0].GetIfInt().value_or(0)),
-          static_cast<uint32_t>((*size)[1].GetIfInt().value_or(0)));
+      client_->AppResized(*app_id, Number((*size)[0]), Number((*size)[1]));
     }
     return;
   }
@@ -402,18 +421,24 @@ void ControlChannel::DispatchLine(const std::string& line) {
   }
 
   if (*type == "shortcut") {
-    if (const std::string* shortcut = message.FindString("shortcut")) {
-      client_->Shortcut(*shortcut);
+    const base::DictValue* combination = message.FindDict("shortcut");
+    if (!combination) {
+      return;
     }
+    client_->ShortcutPressed(mojom::Shortcut::New(
+        static_cast<uint32_t>(combination->FindInt("key").value_or(0)),
+        combination->FindBool("alt").value_or(false),
+        combination->FindBool("ctrl").value_or(false),
+        combination->FindBool("shift").value_or(false),
+        combination->FindBool("logo").value_or(false)));
     return;
   }
 
   if (*type == "modifiers") {
-    client_->Modifiers(
-        static_cast<uint32_t>(message.FindInt("depressed").value_or(0)),
-        static_cast<uint32_t>(message.FindInt("latched").value_or(0)),
-        static_cast<uint32_t>(message.FindInt("locked").value_or(0)),
-        static_cast<uint32_t>(message.FindInt("group").value_or(0)));
+    client_->Modifiers(message.FindBool("alt").value_or(false),
+                       message.FindBool("ctrl").value_or(false),
+                       message.FindBool("shift").value_or(false),
+                       message.FindBool("logo").value_or(false));
     return;
   }
 

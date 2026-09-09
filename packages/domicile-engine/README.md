@@ -83,6 +83,23 @@ the fork scraps: layout positions the layer now, and the page has stopped
 reporting where its own boxes are. Implementing them here would make removing
 a dying protocol cost a release build.
 
+**The typed surface is not the wire, and the difference is deliberate.** The
+compositor speaks JSON; a shell speaks JS values. Three places where the
+translation is a choice rather than a mapping:
+
+- Sizes are `double` the whole way across. The compositor's sizes are `f64`,
+  so `800.0` reaches the browser with a decimal point and a JSON reader types
+  it as a double. Reading it as an integer got nothing, and every window
+  arrived at zero.
+- Modifiers arrive as `altKey`/`ctrlKey`/`shiftKey`/`metaKey`, not as xkb's
+  depressed/latched/locked masks. The compositor has already resolved those
+  against the keymap, and a page holding a mask cannot read it without the
+  keymap too.
+- A shortcut is a `DomicileShortcut` — `{ keycode, altKey, ctrlKey, shiftKey,
+  metaKey }` — in both directions, so `grabShortcut()` takes the same shape the
+  `shortcut` event hands back. `keycode` rather than `key` because it is an
+  evdev code and `KeyboardEvent.key` already means a string.
+
 If you are adding a message, add it in four places — the mojom, the IDL, the
 browser-side serialiser, and the Blink method — and add it to the list above,
 because the list is how the next person knows whether a gap is deliberate.

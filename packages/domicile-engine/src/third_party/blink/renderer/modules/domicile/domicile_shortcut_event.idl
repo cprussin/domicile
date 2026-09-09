@@ -1,0 +1,29 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// A combination claimed with grabShortcut() was pressed.
+//
+// Its own type rather than a DomicileAppEvent with the combination in the
+// `title` slot. A shortcut is not a window's name and does not belong to a
+// window at all: it fires whatever holds the keyboard, which is the point of
+// grabbing it.
+//
+// Only presses. A release changes nothing and would arrive as a second event
+// for one keystroke.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileShortcutEvent : Event {
+  constructor(DOMString type,
+              optional DomicileShortcutEventInit eventInitDict = {});
+
+  // The Linux evdev code, the same numbering key() forwards in.
+  readonly attribute unsigned long keycode;
+
+  readonly attribute boolean altKey;
+  readonly attribute boolean ctrlKey;
+  readonly attribute boolean shiftKey;
+  readonly attribute boolean metaKey;
+};
