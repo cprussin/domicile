@@ -76,8 +76,8 @@ a change that only passes because a lint is allowed locally. Reach for
 The TDD cycle in [/docs/guidelines/TESTING.md](/docs/guidelines/TESTING.md) is
 not TypeScript-specific: write the failing test first, watch it fail for the
 right reason, then write the minimum code to pass. The core crates
-(`domicile-config`, `domicile-scene`, `domicile-protocol`, `domicile-host`,
-`domicile-bridge`) are pure logic precisely so this stays cheap — keep new
+(`domicile-config`, `domicile-scene`, `domicile-protocol`, `domicile-host`)
+are pure logic precisely so this stays cheap — keep new
 logic on that side of the line and out of the Smithay backend wherever the
 choice exists.
 

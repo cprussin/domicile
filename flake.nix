@@ -53,9 +53,9 @@
         cacert
       ];
 
-      # Native libraries the Wayland host (domicile-host, Smithay) and the CEF
-      # bridge (domicile-bridge) will need. Split out so the core shell stays
-      # lean; enter with `nix develop .#full` once we start on those.
+      # Native libraries the compositor needs: Smithay's Wayland stack, and the
+      # GL and DRM the dmabuf import goes through. Split out so the core shell
+      # stays lean; enter with `nix develop .#full` to build against them.
       hostLibs = with pkgs; [
         wayland
         wayland-protocols
@@ -747,7 +747,7 @@
           '';
         };
 
-        # Full shell: adds Wayland/DRM/GPU libraries for domicile-host + domicile-bridge.
+        # Full shell: adds the Wayland/DRM/GPU libraries domicile-compositor needs.
         full = pkgs.mkShell {
           packages = coreTools ++ hostLibs;
           RUST_BACKTRACE = "1";

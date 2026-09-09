@@ -109,7 +109,6 @@ use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
-use domicile_bridge::BridgeRegistry;
 use domicile_config::{Config, ConfigError, ConfigStore};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
@@ -1103,11 +1102,6 @@ struct DomicileCompositor {
 
     /// Shared brain + connected chrome clients.
     hub: Arc<ChromeHub>,
-    /// Per-app bookkeeping from the external-texture era, and **nothing reads
-    /// what it holds**: an app is registered when it maps and removed when it
-    /// goes, and the id it mints is never asked for again. The engine keys on
-    /// the app id itself now. ROADMAP tracks the deletion.
-    bridge: BridgeRegistry,
     /// How many times each surface has committed, keyed as [`painted_key`].
     ///
     /// Not the pixels, and it does not need to be: this is what tells a window
@@ -3106,9 +3100,6 @@ impl XdgShellHandler for DomicileCompositor {
             for live in &self.outputs {
                 live.output.enter(surface.wl_surface());
             }
-            // The engine texture id is stable for the element's whole life, so
-            // it is claimed here rather than on the app's first GPU frame.
-            self.bridge.register(&app_id);
             self.toplevels.push((app_id, surface));
             announce
         };
@@ -3182,7 +3173,6 @@ impl XdgShellHandler for DomicileCompositor {
                 release.buffer.release();
             }
             self.last_frame.remove(&app_id);
-            self.bridge.remove(&app_id);
             // The commit counter too, which was the one sibling map this
             // forgot. A stale entry could never be *read* — host ids are
             // monotonic, so no later window takes this name — but it would sit
@@ -3644,7 +3634,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         dmabuf_global,
         gpu,
         hub,
-        bridge: BridgeRegistry::new(),
         content: HashMap::new(),
         toplevels: Vec::new(),
         pointer_app: None,

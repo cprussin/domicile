@@ -455,34 +455,14 @@ impl Scene {
         self.portals.is_empty()
     }
 
-    /// The portals bottom-to-top, which is the order to paint them in.
-    ///
-    /// Sorted by the same key [`hit_test`](Scene::hit_test) picks a winner
-    /// with — z-index, then arrival — so among the portals that take the
-    /// pointer, the one painted last is exactly the one a click reaches.
-    /// Keeping the two orders in one place is what stops a compositor from
-    /// looking right and behaving wrong.
-    ///
-    /// Every portal is painted, including the ones that take no pointer, so
-    /// that agreement is narrower than it looks: a window drawn *over*
-    /// another while inert hands its clicks to the window underneath, and
-    /// what is on top is then not what you click. That is the deliberate
-    /// exception rather than the failure above — the chrome asked for it by
-    /// giving the element `pointer-events: none`, and it is asking because it
-    /// has painted something over that window itself.
-    pub fn draw_order(&self) -> Vec<&Portal> {
-        let mut ordered: Vec<_> = self.portals.iter().enumerate().collect();
-        ordered.sort_by_key(|(index, portal)| (portal.z_index, *index));
-        ordered.into_iter().map(|(_, portal)| portal).collect()
-    }
-
     /// Find the topmost app portal under `screen` that takes the pointer.
     ///
     /// Not simply the topmost one: a window the chrome made inert is passed
     /// straight over rather than allowed to win and then swallow the event,
     /// so what answers is whatever is under it — another window, or the
-    /// chrome. This is where drawing and routing part company, and
-    /// [`draw_order`](Scene::draw_order) says what that costs.
+    /// chrome. The chrome asked for that by giving the element
+    /// `pointer-events: none`, and it is asking because it has painted
+    /// something over the window itself.
     pub fn hit_test(&self, screen: Point) -> Option<Hit> {
         let mut best: Option<(i32, usize, Hit)> = None;
         // Enumerated before the filter, so an inert portal still spends its

@@ -158,18 +158,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "domicile-bridge"
-version = "0.0.0"
-dependencies = [
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "domicile-compositor"
 version = "0.0.0"
 dependencies = [
  "cgmath",
- "domicile-bridge",
  "domicile-config",
  "domicile-host",
  "domicile-launch",
