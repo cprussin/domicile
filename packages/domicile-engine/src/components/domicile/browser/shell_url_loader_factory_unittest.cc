@@ -55,9 +55,36 @@ TEST(ShellURLLoaderFactoryTest, RefusesAnotherScheme) {
   EXPECT_FALSE(Resolve("https://shell/main.js", &path));
 }
 
-TEST(ShellURLLoaderFactoryTest, RefusesTraversal) {
+TEST(ShellURLLoaderFactoryTest, PlainTraversalCannotEscape) {
+  // Not a refusal, and the difference is worth stating. GURL normalises `..`
+  // out of the path while parsing a standard scheme, so this never arrives as
+  // traversal at all -- it arrives as "/etc/passwd" and resolves under the
+  // shell root. The property that matters is containment, not rejection, so
+  // that is what is asserted.
   base::FilePath path;
-  EXPECT_FALSE(Resolve("domicile://shell/../../etc/passwd", &path));
+  ASSERT_TRUE(Resolve("domicile://shell/../../etc/passwd", &path));
+  EXPECT_TRUE(Root().IsParent(path));
+  EXPECT_EQ(path, Root().Append("etc").Append("passwd"));
+}
+
+TEST(ShellURLLoaderFactoryTest, AnythingResolvedIsInsideTheRoot) {
+  // The one property everything else is in service of. Whatever the path
+  // arithmetic and GURL's normalisation do between them, a path this function
+  // accepts is under the shell root -- so a case nobody thought to write is
+  // still contained.
+  for (const char* url : {
+           "domicile://shell/main.js",
+           "domicile://shell/../../etc/passwd",
+           "domicile://shell/assets/../../../etc/passwd",
+           "domicile://shell/./main.js",
+           "domicile://shell//main.js",
+           "domicile://shell/a/b/c/../../d.js",
+       }) {
+    base::FilePath path;
+    if (Resolve(url, &path)) {
+      EXPECT_TRUE(Root().IsParent(path)) << url << " escaped to " << path;
+    }
+  }
 }
 
 TEST(ShellURLLoaderFactoryTest, RefusesEscapedTraversal) {
@@ -67,9 +94,11 @@ TEST(ShellURLLoaderFactoryTest, RefusesEscapedTraversal) {
   EXPECT_FALSE(Resolve("domicile://shell/%2e%2e%2f%2e%2e%2fetc/passwd", &path));
 }
 
-TEST(ShellURLLoaderFactoryTest, RefusesTraversalInTheMiddle) {
+TEST(ShellURLLoaderFactoryTest, TraversalInTheMiddleCannotEscape) {
+  // Same: GURL collapses it before this is asked. Containment is the invariant.
   base::FilePath path;
-  EXPECT_FALSE(Resolve("domicile://shell/assets/../../../etc/passwd", &path));
+  ASSERT_TRUE(Resolve("domicile://shell/assets/../../../etc/passwd", &path));
+  EXPECT_TRUE(Root().IsParent(path));
 }
 
 TEST(ShellURLLoaderFactoryTest, RefusesAnEmbeddedNul) {
