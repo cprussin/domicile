@@ -13,11 +13,16 @@
 # by the SDK's own `connectToHost`, mounting `<domicile-app>` elements for
 # windows it learns about from the host.
 #
-# That is three things at once and each has failed on its own: the bridge
-# serving the page and the session on one port, the SDK reaching it over a
-# WebSocket rather than an Electron preload, and `<domicile-app>` calling
-# `embedExternalSurface` for an app id the shell was told about rather than one
-# a query string named.
+# That is three things at once and each has failed on its own: the engine
+# serving the shell over `domicile://` and writing the document that loads it,
+# the SDK reaching the compositor through `navigator.domicile` rather than an
+# Electron preload, and `<domicile-app>` calling `embedExternalSurface` for an
+# app id the shell was told about rather than one a query string named.
+#
+# The first two used to be a bridge process serving the page and a session on
+# one TCP port, with the SDK reaching it over a WebSocket. Both are gone -- see
+# `ENGINE-FORK.md`, "The page is served over a TCP port, and it should not be"
+# -- and this guard held the last reference to them.
 #
 # WHAT IT ASSERTS, AND WHY NOT A PIXEL. The shell decides where its windows go.
 # A guard that named a coordinate would be asserting shell-simple's CSS, and
@@ -77,7 +82,6 @@ COMPOSITOR="$ROOT/target/debug/domicile-compositor"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-BRIDGE_LOG=$(mktemp)
 ENGINE_LOG=$(mktemp)
 COMP_LOG=$(mktemp)
 CLI_LOG=$(mktemp)
@@ -96,15 +100,13 @@ WHICH=""
 WHOSE="shell-$SHELL_NAME$WHICH"
 LOG_COPY="${LOG_COPY:-/tmp/domicile-$WHOSE-compositor.log}"
 ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-$WHOSE-engine.log}"
-BRIDGE_LOG_COPY="${BRIDGE_LOG_COPY:-/tmp/domicile-$WHOSE-bridge.log}"
 cleanup() {
   cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
   cp "$ENGINE_LOG" "$ENGINE_LOG_COPY" 2>/dev/null
-  cp "$BRIDGE_LOG" "$BRIDGE_LOG_COPY" 2>/dev/null
   if [ ${#STARTED[@]} -gt 0 ]; then
     kill "${STARTED[@]}" 2>/dev/null
   fi
-  rm -f "$BRIDGE_LOG" "$ENGINE_LOG" "$COMP_LOG" "$CLI_LOG"
+  rm -f "$ENGINE_LOG" "$COMP_LOG" "$CLI_LOG"
 }
 trap cleanup EXIT
 
@@ -206,38 +208,28 @@ COMP_SOCK="$RUNTIME/domicile-shell.sock"
 rm -f "$BROKER" "$COMP_SOCK" "$COMP_SOCK.session"
 rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
-# 1. The bridge, first, because chrome needs a URL and the page has no way to
-#    open a unix socket. It tolerates a compositor that does not exist yet,
-#    which is the whole reason it can go first.
+# 1. THERE IS NO BRIDGE ANY MORE, and this guard used to be the last thing
+#    holding one up. It started `engine-chrome-host`, waited for it to print a
+#    URL, and asserted the SDK reaching it over a WebSocket. The SDK stopped
+#    speaking that protocol when it moved onto `navigator.domicile`, so the
+#    guard was measuring a conversation with nobody at the far end -- it could
+#    not pass, and its zeroes read as a shell that never came up.
 #
-# The reach budget is raised well past its default because the gap this has to
-# cover is the browser starting: the page loads, its session opens, and the
-# compositor does not exist until chrome has created its broker socket, which
-# on a debug build on a loaded runner is minutes. A session that gave up in
-# between would leave the page with a dead transport and the guard would report
-# that the shell never joined, which is not the thing it guards.
-DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_MODULE="$MODULE" \
-DOMICILE_REACH_MS="${DOMICILE_REACH_MS:-600000}" \
-  bun "$ROOT/packages/engine-chrome-host/src/main.ts" >"$BRIDGE_LOG" 2>&1 &
-STARTED+=($!)
+#    The engine serves the shell now. Chrome is handed the directory and the
+#    module and writes the document itself, exactly as `spawn::engine` does it,
+#    so this guard runs the configuration the product runs rather than one
+#    built for the guard.
+#
+# The order below is chrome, then the compositor, and it is the only order
+# available: the compositor connects to the broker socket *chrome* creates. The
+# browser's end of the control channel expects the compositor's socket to be
+# missing when it first tries -- see `ControlChannel`, which retries rather
+# than failing on the first ENOENT, because this launch order is the normal one
+# and not a fault.
 
-URL=""
-for _ in $(seq 1 300); do
-  URL="$(sed -n 's/^domicile: serving //p' "$BRIDGE_LOG" | head -1)"
-  [ -n "$URL" ] && break
-  sleep 0.1
-done
-[ -n "$URL" ] || {
-  annotate_from "guard-shell: the bridge never said where it was serving" "$BRIDGE_LOG"
-  echo "the bridge never said where it was serving. It said:" >&2
-  cat "$BRIDGE_LOG" >&2
-  exit 1
-}
-echo "the shell is at $URL"
-
-# 2. The engine, on that page. No --enable-logging=stderr flood here beyond
+# 2. The engine, on the shell. No --enable-logging=stderr flood here beyond
 #    what the guards read: the page's own console lines are the record of
-#    whether the SDK reached the bridge.
+#    whether the shell found `navigator.domicile`.
 #
 #    `--app` for the reason `domicile` uses it: a desktop is not a browser
 #    looking at a page, and a tab strip above the shell is the difference
@@ -246,7 +238,10 @@ echo "the shell is at $URL"
 #    something else.
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=wayland \
-  --app="$URL" \
+  --app=domicile://shell/ \
+  --domicile-shell-root="$PAGE_DIR" \
+  --domicile-shell-module="$(basename "$MODULE")" \
+  --domicile-control-socket="$COMP_SOCK" \
   --no-sandbox --password-store=basic --no-first-run \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
@@ -303,8 +298,11 @@ CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
 # protocol, so a client started before that is announced to nobody.
 #
 # This is the first of the three new things this guard measures, and the one
-# that fails on its own — it is the SDK reaching the bridge over a WebSocket
-# rather than taking a channel an Electron preload injected.
+# that fails on its own. The handshake is the *browser's* now rather than the
+# page's — `ControlChannel` sends `hello` when the shell first binds
+# `navigator.domicile` — so this line still means what it always did: a chrome
+# the compositor will announce windows to. What changed is who spoke, which is
+# the whole point of the scheme.
 JOINED=0
 for _ in $(seq 1 90); do
   if grep -aq "chrome agreed the protocol" "$COMP_LOG" 2>/dev/null; then
@@ -321,8 +319,8 @@ done
   grep -aE "chrome|protocol|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
   echo "--- the page said:" >&2
   grep -aE "domicile:|CONSOLE" "$ENGINE_LOG" | tail -12 | cut -c1-200 | sed 's/^/  /' >&2
-  echo "--- the bridge said:" >&2
-  tail -12 "$BRIDGE_LOG" | sed 's/^/  /' >&2
+  echo "--- the engine said about the shell:" >&2
+  grep -aE "domicile:|shell|ERROR" "$ENGINE_LOG" | tail -12 | cut -c1-200 | sed 's/^/  /' >&2
   exit 1
 }
 echo "the shell joined the compositor"
@@ -415,8 +413,8 @@ if [ "$EMBEDDED" != "1" ]; then
   echo "--- the page said:" >&2
   grep -aE "domicile:|CONSOLE" "$ENGINE_LOG" | tail -12 | cut -c1-200 |
     sed 's/^/  /' >&2
-  echo "--- the bridge said:" >&2
-  tail -12 "$BRIDGE_LOG" | sed 's/^/  /' >&2
+  echo "--- the engine said about the shell:" >&2
+  grep -aE "domicile:|shell|ERROR" "$ENGINE_LOG" | tail -12 | cut -c1-200 | sed 's/^/  /' >&2
   echo "--- the client said:" >&2
   tail -12 "$CLI_LOG" | sed 's/^/  /' >&2
   exit 1
