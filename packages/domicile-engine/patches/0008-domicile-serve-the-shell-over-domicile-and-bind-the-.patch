@@ -72,7 +72,7 @@ protocol members, and shellDocument still lives in TypeScript.
  .../core/events/event_type_names.json5        |  2 +
  third_party/blink/renderer/modules/BUILD.gn   |  1 +
  .../platform/runtime_enabled_features.json5   |  9 +++
- 13 files changed, 162 insertions(+)
+ 13 files changed, 171 insertions(+)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
 index 2a3958f78ddb6..5380296102cc3 100644
@@ -426,18 +426,27 @@ diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 
 index a000b4980b36a..9daf657d922d3 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2484,6 +2484,15 @@
+@@ -2484,6 +2484,24 @@
        name: "DomicileExternalSurface",
        status: "stable",
      },
 +    // Domicile's engine fork: navigator.domicile, the shell's control channel
-+    // to the compositor. Deliberately statusless while it is a vertical slice
-+    // -- two of the protocol's twenty-nine members are implemented, so a page
-+    // that found it would find a channel that mostly does nothing. It goes to
-+    // stable with the other twenty-seven, and until then it is reachable only
-+    // with --enable-blink-features=DomicileControlChannel.
++    // to the compositor.
++    //
++    // Stable, like DomicileExternalSurface above and for the same reason: the
++    // desktop needs it on every launch, and a statusless feature is reachable
++    // only with --enable-blink-features, which draws a yellow unsupported-flag
++    // bar across the top of the desktop. That bar is the first thing a user
++    // sees and reads as broken, so `spawn::engine` passes no such flag and has
++    // a test saying it never will. A feature this fork's own desktop cannot
++    // start without belongs on by default.
++    //
++    // It was statusless while the channel was a vertical slice of two members,
++    // on the stated condition that it went stable with the other twenty-seven.
++    // Patch 0009 is those twenty-seven.
 +    {
 +      name: "DomicileControlChannel",
++      status: "stable",
 +    },
      {
        name: "DocumentPolicyNegotiation",
