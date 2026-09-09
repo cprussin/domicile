@@ -1,7 +1,7 @@
-// Whether a check that did not run can say so, and can be reached at all.
+// Whether a check that did not run can say so.
 //
-// Two rules about `scripts/`, both about a check being *legible* rather than
-// about what it asserts. Each was a real defect before it was a rule.
+// One rule about `scripts/`, about a check being *legible* rather than about
+// what it asserts, and it was a real defect before it was a rule.
 //
 // **A skip needs a reason, in the one shape that survives.** `check.sh` reads
 // the reason out of the script's own output with `sed -n 's/^ *SKIP: *//p'`,
@@ -10,13 +10,12 @@
 // empty reason in the failures file. `check.sh` says in its own comments what
 // an empty reason cost once; three scripts were spelling it that way.
 //
-// **A check nothing can run is not a check.** `nix run .#<name>` is how a
-// check runs against a revision with no clone and no toolchain, and ten
-// `e2e-*.sh` had no app — not by decision, but because the list in `flake.nix`
-// stopped being updated alongside the directory. A roster goes stale silently;
-// a rule does not.
+// A second rule lived here — that every `e2e-*.sh` had a `nix run .#<name>`
+// app and that no app named a deleted script. Both went with the apps
+// themselves: nothing ran them, and a roster nobody consults does not need
+// policing.
 //
-// Both are spellings, which is the one thing a text scan can honestly police —
+// It is a spelling, which is the one thing a text scan can honestly police —
 // see `verdicts.ts`'s header for why this file does not try to reason about
 // shell control flow. The proximity window below is the approximation: a
 // `SKIP:` five lines above an `exit 77` might belong to a different branch.
@@ -70,60 +69,4 @@ export const skipFaults = (script: string): string[] => {
       ? []
       : [`${index + 1}: exits 77 without a SKIP: line for check.sh to read`];
   });
-};
-
-/**
- * The `scripts/<name>.sh` each `nix run .#<attr>` reaches, from `flake.nix`.
- *
- * Read out of the `scriptApps` attrset rather than by evaluating the flake:
- * `nix eval` needs nix, a network and a store, and this is a rule about what
- * the file says.
- */
-const appScripts = (flake: string): Set<string> =>
-  new Set(
-    [...flake.matchAll(/^\s*[a-z0-9-]+\s*=\s*"([a-z0-9-]+\.sh)";/gm)].map(
-      (match) => match[1] ?? "",
-    ),
-  );
-
-/**
- * Every end-to-end script `nix run` cannot reach.
- *
- * `e2e-*.sh` only. The `test-*.sh` checks run in `check.sh`'s shell group and
- * have never had apps, and `lib/` is not a check — naming the ones that
- * *should* have one is the roster this rule exists to replace, so the glob is
- * the roster.
- */
-export const unreachableChecks = (
-  flake: string,
-  scripts: string[],
-): string[] => {
-  const apps = appScripts(flake);
-  return scripts
-    .filter((name) => name.startsWith("e2e-") && !apps.has(name))
-    .map((name) => `${name} has no flake app, so nix run cannot reach it`);
-};
-
-/**
- * Every flake app naming a script that is not there.
- *
- * The other direction of the same staleness, and the one nothing catches:
- * those values are strings, so a flake with an app for a deleted script
- * evaluates perfectly and fails only when someone runs it. Three had
- * accumulated that way — two from a change that deleted their scripts and one
- * that had been dangling for a while — and each was found by reading rather
- * than by anything failing.
- *
- * Every app, not just `e2e-*`: `test-every-launch-names-a-shell` was the one
- * that sat longest, and it is not an e2e check. The set is what goes stale, so
- * the set is what is checked.
- */
-export const missingCheckScripts = (
-  flake: string,
-  scripts: string[],
-): string[] => {
-  const present = new Set(scripts);
-  return [...appScripts(flake)]
-    .filter((named) => !present.has(named))
-    .map((named) => `a flake app names ${named}, which is not in scripts/`);
 };

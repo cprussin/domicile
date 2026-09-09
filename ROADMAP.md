@@ -154,11 +154,9 @@ nix develop .#full           # adds wayland, mesa, weston, kitty
 
 `check.sh` picks up any `scripts/test-*.sh` and `scripts/e2e-*.sh` by glob, so a
 new check runs by existing. `smoke-compositor.sh` is outside that loop and is
-run by hand. Five have a flake app of their own, for running against a fresh
-checkout with no `node_modules` — `dev-check`, `dev-e2e-dmabuf`,
-`dev-e2e-chrome-fills-the-desktop`, `dev-smoke-compositor`,
-`dev-test-out-of-tree-shell`. Anything else is `nix develop .#full -c
-./scripts/<name>.sh`.
+run by hand. Everything here wants a checkout: the flake offers no app over any
+of it, because `nix run` with no clone meant staging the store's read-only
+source into a cache and building there, and nothing ever ran that.
 
 Nothing in the suite needs a display.
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Everything that can be checked here, in one command.
 #
-#   nix run 'github:cprussin/domicile#dev-check'
 #   nix develop .#full -c ./scripts/check.sh
 #   ./scripts/check.sh e2e            # one group: shell, rust, typescript, e2e
 #

@@ -572,60 +572,6 @@
             runHook postConfigure
           '';
 
-      # The scripts under `scripts/` each drive Domicile out of a checkout:
-      # they build in-tree (cargo's `target/`, bun's `node_modules/`) and run
-      # what they built. `nix run github:cprussin/domicile#<app>` has no
-      # checkout — it hands the scripts the flake source read-only in the
-      # store — so each app below stages that source in the user's cache and
-      # runs the script there, inside the full shell, exactly as the
-      # checkout-based commands in the README do. The staging dir is keyed by
-      # the source's store path, so re-running one revision reuses its build
-      # artifacts and a new revision never inherits stale ones.
-      runInFullShell = name: script:
-        pkgs.writeShellApplication {
-          name = "domicile-${name}";
-          runtimeInputs = [ pkgs.nix ];
-          text = ''
-            work="''${DOMICILE_RUN_DIR:-''${XDG_CACHE_HOME:-$HOME/.cache}/domicile/${builtins.baseNameOf self}}"
-            if [ ! -e "$work/.domicile-staged" ]; then
-              echo "domicile: staging the source in $work" >&2
-              mkdir -p "$work"
-              # Modes are preserved (the scripts must stay executable), so the
-              # copy inherits the store's read-only bits and needs +w.
-              cp -RT "${self}" "$work"
-              chmod -R u+w "$work"
-              touch "$work/.domicile-staged"
-            fi
-            cd "$work"
-            # The staged copy is the *git* source, so it has no node_modules —
-            # and the harnesses the e2e scripts drive are bun programs that
-            # import the workspace packages. Without this they die on their
-            # first import, which from the script's side looks like a chrome
-            # that simply never connected.
-            #
-            # The e2e and smoke scripts expect target/debug/domicile-compositor
-            # to exist already, which is what the debug build below is for.
-            # The script's own arguments reach it in two hops, which is what
-            # lets `nix run .#dev-check -- --only e2e` pass one on. `\$@` is escaped
-            # so the *inner* bash expands it from its own positional parameters
-            # rather than this one baking the words in; those parameters are the
-            # trailing `"$@"`, since `bash -c CMD name args...` is how a `-c`
-            # command is given any.
-            # The features are named again because a CLI flag does not reach a
-            # nested invocation. `nix run --extra-experimental-features
-            # 'nix-command flakes' github:cprussin/domicile#engine` is how a
-            # machine that has not edited nix.conf runs any of this, and until
-            # now it got all the way through staging the source and then died
-            # here saying nix-command was disabled — which reads as the flake
-            # being broken rather than as a flag that needed repeating. On a
-            # machine that has them enabled this changes nothing.
-            exec nix --extra-experimental-features "nix-command flakes" \
-              develop "${self}#full" --command bash -c \
-              "bun install --frozen-lockfile && cargo build -p domicile-compositor && exec ./scripts/${script} \"\$@\"" \
-              domicile-${name} "$@"
-          '';
-        };
-
       # The two desktops this repository ships. Bound once so that
       # `packages` and `apps` are the same two things rather than two lists
       # that have to be kept saying the same thing.
@@ -648,23 +594,6 @@
           meta.description = package.meta.description;
         })
         desktops;
-
-      # `nix run .#dev-<attr>` → `scripts/<script>.sh`. None of these is a
-      # desktop: they are the checks and the smoke tests, for somebody working
-      # on Domicile rather than running it.
-      scriptApps = pkgs.lib.mapAttrs
-        (name: script: {
-          type = "app";
-          program = pkgs.lib.getExe (runInFullShell name script);
-          meta.description = "Run scripts/${script} with no checkout";
-        })
-        {
-          check = "check.sh";
-          e2e-dmabuf = "e2e-dmabuf.sh";
-          e2e-chrome-fills-the-desktop = "e2e-chrome-fills-the-desktop.sh";
-          smoke-compositor = "smoke-compositor.sh";
-          test-out-of-tree-shell = "test-out-of-tree-shell.sh";
-        };
     in
     {
       # No `default`. `nix build` on its own has nothing to build here on
@@ -685,13 +614,18 @@
       # build the engine one runs on. Everything else here drives a checkout —
       # `check.sh`, the e2e scripts, the measurements — and those belong to
       # somebody who has cloned the repository, where `./scripts/<name>.sh` is
-      # a shorter way to say the same thing. They stayed on the top level
-      # because it cost nothing to put them there, and the cost turned out to
-      # be that `nix run github:cprussin/domicile#<tab>` offers twenty things
-      # and buries the two.
+      # a shorter way to say the same thing.
       #
-      # They are still reachable, each prefixed `dev-`, which says who they are
-      # for and keeps them sorted together underneath the three that are not.
+      # There were five `dev-*` apps over those scripts, and they are gone.
+      # They existed to run a check with no checkout, which took staging the
+      # store's read-only source into the user's cache and building there —
+      # seventy lines nothing ran. Not CI, which checks out and runs
+      # `./scripts/check.sh` in `nix develop .#full`; not a person with a
+      # checkout, for whom `./scripts/<name>.sh` is shorter. `nix develop`
+      # alone cannot replace them — it hands over the *environment*, not the
+      # source, and leaves you in your own directory — and the honest answer
+      # to that is `git clone`, not seventy lines of staging that nothing
+      # exercises.
 
       apps.${system} = {
         # A bare `nix run github:cprussin/domicile` is Domicile itself, taking
@@ -710,9 +644,7 @@
         # been `nix run .#engine -- manganese` launching bare Chromium with
         # `manganese` as a URL to open. That command used to work and now
         # means something else, which is worse than it not existing.
-      } // pkgs.lib.mapAttrs'
-        (name: app: pkgs.lib.nameValuePair "dev-${name}" app)
-        scriptApps;
+      };
 
       devShells.${system} = {
         # Default shell: everything needed for the TDD pure-logic core.

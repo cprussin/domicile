@@ -2,13 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { missingCheckScripts, skipFaults, unreachableChecks } from "./skips";
+import { skipFaults } from "./skips";
 
 /** Where the checks live, from this file. */
 const SCRIPTS = join(import.meta.dir, "..", "..", "..", "scripts");
-
-/** The flake the apps are declared in. */
-const FLAKE = join(import.meta.dir, "..", "..", "..", "flake.nix");
 
 /**
  * Every script in `scripts/`, as `[name, contents]`.
@@ -60,75 +57,6 @@ describe("a skip that says why", () => {
   it("ignores an exit 77 that is only described in a comment", () => {
     expect(
       skipFaults("# bails with exit 77 when weston is missing\n"),
-    ).toStrictEqual([]);
-  });
-});
-
-describe("a check nix run can reach", () => {
-  // `nix run .#<name>` is how a check runs against a revision with no clone
-  // and no toolchain. Ten scripts had no app, not by decision but because the
-  // list stopped being updated alongside the directory — so the glob is the
-  // roster now, and the next script added is caught here rather than noticed.
-  it("gives every e2e script a flake app", () => {
-    expect(
-      unreachableChecks(
-        readFileSync(FLAKE, "utf8"),
-        shellScripts().map(([name]) => name),
-      ),
-    ).toStrictEqual([]);
-  });
-
-  // And the other way, which is the direction nothing caught: a flake app for
-  // a script that has been deleted evaluates fine and fails only when someone
-  // runs it. Three had accumulated, each found by reading.
-  it("names no script that is not there", () => {
-    expect(
-      missingCheckScripts(
-        readFileSync(FLAKE, "utf8"),
-        shellScripts().map(([name]) => name),
-      ),
-    ).toStrictEqual([]);
-  });
-
-  // The assertion above passes on a clean tree whether or not the rule works,
-  // which is the same silence it exists to break. This is the half that can
-  // fail: gutting `missingCheckScripts` leaves the one above green and this
-  // one red.
-  it("catches a flake app for a script that is gone", () => {
-    expect(
-      missingCheckScripts('{\n  e2e-ghost = "e2e-ghost.sh";\n}', ["check.sh"]),
-    ).toStrictEqual([
-      "a flake app names e2e-ghost.sh, which is not in scripts/",
-    ]);
-  });
-
-  // And stays quiet on an app whose script is there, so the rule cannot pass
-  // by naming everything.
-  it("says nothing about an app whose script exists", () => {
-    expect(
-      missingCheckScripts('{\n  e2e-chrome = "e2e-chrome.sh";\n}', [
-        "e2e-chrome.sh",
-      ]),
-    ).toStrictEqual([]);
-  });
-
-  it("catches a script the flake never names", () => {
-    expect(
-      unreachableChecks('{ check = "check.sh";\n}', [
-        "e2e-brand-new.sh",
-        "check.sh",
-      ]),
-    ).toStrictEqual([
-      "e2e-brand-new.sh has no flake app, so nix run cannot reach it",
-    ]);
-  });
-
-  it("holds only the e2e scripts to it", () => {
-    // The `test-*.sh` checks run in `check.sh`'s shell group and have never
-    // had apps; holding them to this would be inventing a rule rather than
-    // recording one.
-    expect(
-      unreachableChecks('{ check = "check.sh";\n}', ["test-xvfb-verdict.sh"]),
     ).toStrictEqual([]);
   });
 });
