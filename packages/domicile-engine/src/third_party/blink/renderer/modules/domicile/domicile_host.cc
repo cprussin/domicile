@@ -20,12 +20,16 @@ namespace blink {
 
 DomicileHost::DomicileHost(LocalDOMWindow& window)
     : window_(&window),
-      channel_(&window),
-      client_receiver_(this, &window),
       // Empty rather than null from the start: `displays` is read before the
       // compositor has said anything, and a shell should get a list with
       // nothing in it rather than have to test for its absence.
-      displays_(MakeGarbageCollected<FrozenArray<DomicileDisplay>>()) {}
+      //
+      // Initialised in declaration order, which is not a style point here:
+      // Chromium builds -Wreorder -Werror, so a list out of order is a build
+      // failure rather than a warning.
+      displays_(MakeGarbageCollected<FrozenArray<DomicileDisplay>>()),
+      channel_(&window),
+      client_receiver_(this, &window) {}
 
 DomicileHost::~DomicileHost() = default;
 

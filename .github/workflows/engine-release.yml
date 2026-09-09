@@ -140,7 +140,19 @@ jobs:
           else
             echo "the shell exited $?"
           fi
-          tail -25 /tmp/domicile-shell.log | sed 's/^/  | /'
+          # A compiler error is *above* siso's summary, never in it: the
+          # summary says how many steps failed and not which line of which
+          # file. Twenty-five lines caught the tail of the progress spinner and
+          # the resource table, so a build failure cost a whole cycle on the
+          # shared tree to learn nothing — which is what it just did.
+          #
+          # The diagnostics first, so they are at the top of the group whatever
+          # the tail holds, then the tail for context. `|| true` because grep
+          # finding nothing is not this step's failure; the build already
+          # failed and `set -e` would swallow the tail below.
+          grep -aE 'error:|FAILED:|ninja: build stopped|Error:' /tmp/domicile-shell.log |
+            tail -40 | sed 's/^/  E /' || true
+          tail -120 /tmp/domicile-shell.log | sed 's/^/  | /'
 
           [ -e "$done" ] || {
             echo "::error::Chromium's shell did not run the build; its last words are above" >&2
