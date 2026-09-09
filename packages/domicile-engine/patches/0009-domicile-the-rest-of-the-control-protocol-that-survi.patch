@@ -1,0 +1,113 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 8 Sep 2026 18:40:54 -0700
+Subject: [PATCH] domicile: the rest of the control protocol that survives the
+ fork
+
+Twenty-one of the protocol's twenty-nine members, taking the channel from a
+vertical slice to something a shell could be written against.
+
+The other eight are absent on purpose. place_portal, remove_portal,
+declare_bands, render_band, claim_pointer and app_composited are the bands and
+copy-path protocol, which docs/architecture/ENGINE-FORK.md lists under what the
+fork scraps: layout positions the layer now and the page has stopped reporting
+where its own boxes are. Freezing them into the browser would make removing a
+dying protocol cost a release build.
+
+Two shapes are decisions rather than convenience:
+
+  - DomicileAppEvent carries size as genuinely optional. A toplevel maps before
+    it draws, so an appeared window may not yet have said how big it wants to
+    be; flattening absence to zero is what opens a window at nothing at all.
+    Verified: app_appeared without a size arrives as hasSize:false, and one
+    with a size arrives as 640x480.
+  - modifiers has its own event. Four xkb values smuggled through fields named
+    width and height reads as working and means nothing to whoever uses it.
+
+Also fixes a defect found reviewing this code rather than running it: on giving
+up after 30s of retries only the client remote was reset, which silences the
+inbound direction and leaves the page holding a channel that looks alive and
+swallows everything written to it. The channel now owns its receiver and closes
+the page's end, which is the only signal a shell can observe.
+
+Verified end to end against a stand-in compositor. Outbound, in wire format:
+  hello, spawn, focus_app, focus_chrome, key, pointer_motion,
+  resize_app {size:[800,600]}, set_desktop_size {size:[1920,1080]}
+Inbound, as typed events:
+  app_appeared (with and without a size), app_resized, app_titled, app_cursor,
+  focus_changed, shortcut, app_closed
+And both argument guards throw: focusApp("") and setDevicePixelRatio(0).
+
+Adding a member costs a near-full Blink rebuild, because a new inbound message
+needs a new event type and that invalidates the generated bindings. These
+nineteen were added together for that reason.
+---
+ .../blink/renderer/bindings/generated_in_modules.gni      | 8 ++++++++
+ third_party/blink/renderer/bindings/idl_in_modules.gni    | 4 ++++
+ .../blink/renderer/core/events/event_type_names.json5     | 7 +++++++
+ 3 files changed, 19 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index 838a9c4f8883a..0b9cf29a32d1d 100644
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -312,7 +312,11 @@ generated_dictionary_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_close_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_collected_client_data.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_collected_client_data.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
+@@ -2353,7 +2357,11 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index 06bc263861259..8aa2e839a64f0 100644
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -274,9 +274,13 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/encryptedmedia/navigator_request_media_key_system_access.idl",
+   "//third_party/blink/renderer/modules/eventsource/event_source.idl",
+   "//third_party/blink/renderer/modules/eventsource/event_source_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_app_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_app_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_app_titled_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_app_titled_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_host.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/navigator_domicile.idl",
+   "//third_party/blink/renderer/modules/eyedropper/color_selection_options.idl",
+   "//third_party/blink/renderer/modules/eyedropper/color_selection_result.idl",
+diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/third_party/blink/renderer/core/events/event_type_names.json5
+index 37929c05d7a78..932e5ecb4cdec 100644
+--- a/third_party/blink/renderer/core/events/event_type_names.json5
++++ b/third_party/blink/renderer/core/events/event_type_names.json5
+@@ -25,6 +25,13 @@
+     "appinstalled",
+     // Domicile's engine fork: navigator.domicile.onapptitled.
+     "apptitled",
++    "appappeared",
++    "appresized",
++    "appclosed",
++    "appcursor",
++    "shortcut",
++    "modifiers",
++    "focuschanged",
+     "audioend",
+     "audioprocess",
+     "audiostart",
