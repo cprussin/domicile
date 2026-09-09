@@ -268,17 +268,6 @@ impl Portal {
         }
         Bounds { min, max }
     }
-
-    /// If `screen` falls within this portal, return the app-local coordinate.
-    fn local_hit(&self, screen: Point) -> Option<Point> {
-        let local = self.transform.inverse()?.apply(screen);
-        let (w, h) = self.size;
-        if local.x >= 0.0 && local.x <= w && local.y >= 0.0 && local.y <= h {
-            Some(local)
-        } else {
-            None
-        }
-    }
 }
 
 /// The rectangle a portal reaches on screen, as its two extreme corners.
@@ -310,22 +299,6 @@ impl Bounds {
     }
 }
 
-/// The result of a successful hit-test.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Hit {
-    pub app_id: String,
-    pub local: Point,
-}
-
-/// Where a pointer event should be delivered.
-#[derive(Clone, Debug, PartialEq)]
-pub enum PointerTarget {
-    /// Deliver to an app at the given app-local coordinate.
-    App { app_id: String, local: Point },
-    /// Deliver to the chrome (the web page) at the given screen coordinate.
-    Chrome { screen: Point },
-}
-
 /// Where keyboard input should be delivered.
 #[derive(Clone, Debug, PartialEq)]
 pub enum KeyboardTarget {
@@ -333,58 +306,11 @@ pub enum KeyboardTarget {
     Chrome,
 }
 
-/// A region where the chrome takes the pointer, at a depth.
-///
-/// The other half of [`Portal::takes_pointer`], and the answer to what that
-/// field's own documentation describes as unanswerable: hit-testing is a test
-/// against a rectangle, and a rectangle cannot see that the engine painted
-/// something over it. `takes_pointer` covers the case where the whole window
-/// is underneath — a menu, a dialog — by making that window inert. It cannot
-/// cover chrome that lies over only *part* of a window, or over one window and
-/// not the one beside it, because a window has one flag and the pointer has a
-/// position. A floating window's title bar is exactly that: page pixels lying
-/// across whatever the window it names happens to cascade over.
-///
-/// So the chrome says where it takes the pointer, and at what depth, in the
-/// same `z-index` space [`Portal::z_index`] is in. Then a press lands on
-/// whichever is on top there, chrome or window, which is what the user sees.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Claim {
-    /// Local content size `(width, height)`, as for a portal.
-    pub size: (f64, f64),
-    /// Local-to-screen transform, as for a portal.
-    pub transform: Transform,
-    /// Stacking order; higher is closer to the viewer.
-    pub z_index: i32,
-}
-
-impl Claim {
-    pub fn new(size: (f64, f64), transform: Transform, z_index: i32) -> Self {
-        Claim {
-            size,
-            transform,
-            z_index,
-        }
-    }
-
-    /// Whether `screen` is inside this claim.
-    fn covers(&self, screen: Point) -> bool {
-        let Some(inverse) = self.transform.inverse() else {
-            return false;
-        };
-        let local = inverse.apply(screen);
-        let (w, h) = self.size;
-        local.x >= 0.0 && local.x <= w && local.y >= 0.0 && local.y <= h
-    }
-}
-
 /// The set of placed app portals plus current keyboard focus.
 #[derive(Debug, Default)]
 pub struct Scene {
     /// Insertion-ordered; later entries win z-index ties.
     portals: Vec<Portal>,
-    /// Where the chrome takes the pointer over the windows. See [`Claim`].
-    claims: Vec<Claim>,
     /// `None` means the chrome holds keyboard focus.
     focus: Option<String>,
 }
@@ -403,28 +329,6 @@ impl Scene {
         match self.portals.iter_mut().find(|p| p.app_id == portal.app_id) {
             Some(existing) => *existing = portal,
             None => self.portals.push(portal),
-        }
-    }
-
-    /// Replace every region where the chrome takes the pointer.
-    ///
-    /// The whole set each time: the chrome re-sends it as its
-    /// own layout moves, and a bar that has moved must not go on taking the
-    /// pointer where it used to be.
-    pub fn claim_pointer(&mut self, claims: Vec<Claim>) {
-        self.claims = claims;
-    }
-
-    /// Move a portal to the top of its z-index tier, returning whether one was
-    /// found. This is how a click raises an app above the others it ties with.
-    pub fn raise(&mut self, app_id: &str) -> bool {
-        match self.portals.iter().position(|p| p.app_id == app_id) {
-            Some(index) => {
-                let portal = self.portals.remove(index);
-                self.portals.push(portal);
-                true
-            }
-            None => false,
         }
     }
 
@@ -453,80 +357,6 @@ impl Scene {
 
     pub fn is_empty(&self) -> bool {
         self.portals.is_empty()
-    }
-
-    /// Find the topmost app portal under `screen` that takes the pointer.
-    ///
-    /// Not simply the topmost one: a window the chrome made inert is passed
-    /// straight over rather than allowed to win and then swallow the event,
-    /// so what answers is whatever is under it — another window, or the
-    /// chrome. The chrome asked for that by giving the element
-    /// `pointer-events: none`, and it is asking because it has painted
-    /// something over the window itself.
-    pub fn hit_test(&self, screen: Point) -> Option<Hit> {
-        let mut best: Option<(i32, usize, Hit)> = None;
-        // Enumerated before the filter, so an inert portal still spends its
-        // index: the tie-break is arrival order among *all* the portals, and
-        // renumbering the survivors would reorder two that arrived either
-        // side of one.
-        let takes_pointer = self
-            .portals
-            .iter()
-            .enumerate()
-            .filter(|(_, portal)| portal.takes_pointer);
-        for (index, portal) in takes_pointer {
-            if let Some(local) = portal.local_hit(screen) {
-                let candidate = (portal.z_index, index);
-                let better = match &best {
-                    Some((z, i, _)) => candidate > (*z, *i),
-                    None => true,
-                };
-                if better {
-                    best = Some((
-                        portal.z_index,
-                        index,
-                        Hit {
-                            app_id: portal.app_id.clone(),
-                            local,
-                        },
-                    ));
-                }
-            }
-        }
-        best.map(|(_, _, hit)| hit)
-    }
-
-    /// Route a pointer at `screen` to an app (with local coords) or the chrome.
-    ///
-    /// A window wins only where nothing the chrome claimed is over it. At equal
-    /// depth the chrome wins: chrome at a
-    /// window's depth is the chrome *of* that window and is drawn over it, so
-    /// a title bar that ties with the window it names is on top of it — and a
-    /// bar that lost the tie would be unclickable everywhere it overlapped its
-    /// own window.
-    pub fn route_pointer(&self, screen: Point) -> PointerTarget {
-        match self.hit_test(screen) {
-            Some(hit) => {
-                let over = self
-                    .portals
-                    .iter()
-                    .find(|portal| portal.app_id == hit.app_id)
-                    .is_some_and(|portal| {
-                        self.claims
-                            .iter()
-                            .any(|claim| claim.z_index >= portal.z_index && claim.covers(screen))
-                    });
-                if over {
-                    PointerTarget::Chrome { screen }
-                } else {
-                    PointerTarget::App {
-                        app_id: hit.app_id,
-                        local: hit.local,
-                    }
-                }
-            }
-            None => PointerTarget::Chrome { screen },
-        }
     }
 
     /// Give keyboard focus to an app. Returns `false` (a no-op) if no such

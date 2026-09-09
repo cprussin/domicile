@@ -5,9 +5,8 @@
 //! decides where input goes. The Smithay Wayland-server backend (behind the
 //! `smithay-backend` feature) is thin glue that drives this: it calls
 //! [`Host::app_appeared`] when a client maps a toplevel, feeds
-//! [`Host::handle_chrome_message`] with messages from the in-page bridge, and
-//! asks [`Host::route_pointer`] / [`Host::keyboard_target`] where to deliver
-//! input.
+//! [`Host::handle_chrome_message`] with messages from the page, and asks
+//! [`Host::keyboard_target`] where the keyboard goes.
 //!
 //! This split keeps the interesting logic unit-testable end to end.
 
@@ -16,7 +15,7 @@ use std::collections::HashMap;
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage};
 
 pub mod ipc;
-use domicile_scene::{Claim, KeyboardTarget, PointerTarget, Portal, Scene, Style, Transform};
+use domicile_scene::{KeyboardTarget, Portal, Scene, Style, Transform};
 
 /// Identifier for a connected app (Wayland toplevel), assigned by the host.
 pub type AppId = String;
@@ -45,15 +44,6 @@ pub struct App {
     /// The size the chrome last laid its `<app>` element out at, which the
     /// compositor configures the client to. `None` until the chrome resizes it.
     pub requested_size: Option<(f64, f64)>,
-}
-
-/// Where an input event should be delivered.
-#[derive(Debug, Clone, PartialEq)]
-pub enum InputDelivery {
-    /// Deliver to a Wayland client at an app-local coordinate.
-    App { app_id: AppId, local: (f64, f64) },
-    /// Deliver to the chrome (web page) at a screen coordinate.
-    Chrome { screen: (f64, f64) },
 }
 
 /// The compositor's orchestration state.
@@ -263,23 +253,6 @@ impl Host {
                 // already sends absolute. Intercepted in the compositor beside
                 // the density above.
             }
-            ChromeMessage::ClaimPointer { regions } => {
-                // Where the chrome takes the pointer over the windows, which
-                // is routing and so the scene's — unlike the depths above,
-                // which are only ever about how the desktop is drawn.
-                self.scene.claim_pointer(
-                    regions
-                        .into_iter()
-                        .map(|region| {
-                            Claim::new(
-                                (region.size[0], region.size[1]),
-                                transform_from_wire(region.transform),
-                                region.z_index,
-                            )
-                        })
-                        .collect(),
-                );
-            }
             ChromeMessage::PlacePortal {
                 app_id,
                 transform,
@@ -336,7 +309,6 @@ impl Host {
                 // Focus is what a click means, so it raises the app too:
                 // otherwise a click on the lower of two overlapping apps would
                 // type into it while the other still takes the pointer.
-                self.scene.raise(&app_id);
                 self.scene.focus_app(&app_id);
             }
             ChromeMessage::FocusChrome => {
@@ -359,19 +331,6 @@ impl Host {
             }
         }
         Ok(())
-    }
-
-    /// Decide where a pointer event at screen `(x, y)` should be delivered.
-    pub fn route_pointer(&self, x: f64, y: f64) -> InputDelivery {
-        match self.scene.route_pointer(domicile_scene::Point::new(x, y)) {
-            PointerTarget::App { app_id, local } => InputDelivery::App {
-                app_id,
-                local: (local.x, local.y),
-            },
-            PointerTarget::Chrome { screen } => InputDelivery::Chrome {
-                screen: (screen.x, screen.y),
-            },
-        }
     }
 
     /// The current keyboard delivery target.

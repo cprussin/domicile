@@ -7,7 +7,7 @@
 //! Wayland or GPU dependency.
 
 use domicile_host::ipc::apply_chrome_message;
-use domicile_host::{AppId, Host, HostError, InputDelivery};
+use domicile_host::{AppId, Host, HostError};
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Shadow, PROTOCOL_VERSION};
 use domicile_scene::KeyboardTarget;
 
@@ -292,32 +292,6 @@ fn chrome_resize_records_the_size_to_configure_the_client_to() {
 }
 
 #[test]
-fn focusing_an_app_raises_it_above_the_apps_it_ties_with() {
-    let mut host = Host::new();
-    let (first, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    let (second, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    host.handle_chrome_message(place(&first, IDENTITY, [100.0, 100.0], 0, true))
-        .unwrap();
-    host.handle_chrome_message(place(&second, IDENTITY, [100.0, 100.0], 0, true))
-        .unwrap();
-
-    host.handle_chrome_message(ChromeMessage::FocusApp {
-        app_id: first.clone(),
-    })
-    .unwrap();
-
-    // Clicking an app both focuses it and brings it to the front, so the next
-    // pointer event over the overlap goes to the app the user just picked.
-    assert_eq!(
-        host.route_pointer(50.0, 50.0),
-        InputDelivery::App {
-            app_id: first,
-            local: (50.0, 50.0)
-        }
-    );
-}
-
-#[test]
 fn chrome_resize_of_an_unknown_app_is_an_error() {
     let mut host = Host::new();
     assert_eq!(
@@ -377,91 +351,11 @@ fn resizing_and_closing_report_to_chrome() {
 // ---- placement from the chrome --------------------------------------------
 
 #[test]
-fn placing_a_known_app_creates_a_routable_portal() {
-    let mut host = Host::new();
-    let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-
-    host.handle_chrome_message(place(
-        &id,
-        [1.0, 0.0, 0.0, 1.0, 50.0, 50.0],
-        [100.0, 100.0],
-        0,
-        true,
-    ))
-    .unwrap();
-
-    match host.route_pointer(60.0, 70.0) {
-        InputDelivery::App { app_id, local } => {
-            assert_eq!(app_id, id);
-            assert!(
-                (local.0 - 10.0).abs() < 1e-9 && (local.1 - 20.0).abs() < 1e-9,
-                "local {local:?}"
-            );
-        }
-        other => panic!("expected App delivery, got {other:?}"),
-    }
-}
-
-#[test]
-fn placement_transform_is_honoured_when_routing() {
-    let mut host = Host::new();
-    let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    // Drawn at 2x scale: a 100x100 app covers 200x200 of screen.
-    host.handle_chrome_message(place(
-        &id,
-        [2.0, 0.0, 0.0, 2.0, 0.0, 0.0],
-        [100.0, 100.0],
-        0,
-        true,
-    ))
-    .unwrap();
-
-    match host.route_pointer(150.0, 150.0) {
-        InputDelivery::App { local, .. } => {
-            assert!(
-                (local.0 - 75.0).abs() < 1e-9 && (local.1 - 75.0).abs() < 1e-9,
-                "local {local:?}"
-            );
-        }
-        other => panic!("expected App delivery, got {other:?}"),
-    }
-}
-
-#[test]
 fn placing_an_unknown_app_is_an_error() {
     let mut host = Host::new();
     assert!(host
         .handle_chrome_message(place("ghost", IDENTITY, [10.0, 10.0], 0, true))
         .is_err());
-}
-
-#[test]
-fn invisible_placement_is_not_composited() {
-    let mut host = Host::new();
-    let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    host.handle_chrome_message(place(&id, IDENTITY, [100.0, 100.0], 0, false))
-        .unwrap();
-
-    // A hidden app is not hit-tested — pointer falls through to the chrome.
-    assert!(matches!(
-        host.route_pointer(50.0, 50.0),
-        InputDelivery::Chrome { .. }
-    ));
-}
-
-#[test]
-fn removing_a_portal_stops_routing_to_it() {
-    let mut host = Host::new();
-    let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    host.handle_chrome_message(place(&id, IDENTITY, [100.0, 100.0], 0, true))
-        .unwrap();
-    host.handle_chrome_message(ChromeMessage::RemovePortal { app_id: id.clone() })
-        .unwrap();
-
-    assert!(matches!(
-        host.route_pointer(50.0, 50.0),
-        InputDelivery::Chrome { .. }
-    ));
 }
 
 #[test]
@@ -473,10 +367,6 @@ fn closing_an_app_also_tears_down_its_portal() {
     host.app_closed(&id);
 
     assert_eq!(host.scene().len(), 0);
-    assert!(matches!(
-        host.route_pointer(50.0, 50.0),
-        InputDelivery::Chrome { .. }
-    ));
 }
 
 // ---- focus ----------------------------------------------------------------
@@ -497,15 +387,6 @@ fn focus_routes_keyboard_between_app_and_chrome() {
     host.handle_chrome_message(ChromeMessage::FocusChrome)
         .unwrap();
     assert_eq!(host.keyboard_target(), KeyboardTarget::Chrome);
-}
-
-#[test]
-fn pointer_over_empty_space_goes_to_chrome() {
-    let host = Host::new();
-    assert!(matches!(
-        host.route_pointer(10.0, 10.0),
-        InputDelivery::Chrome { .. }
-    ));
 }
 
 #[test]

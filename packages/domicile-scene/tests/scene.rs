@@ -1,14 +1,15 @@
 //! Behaviour tests for `domicile-scene`, written before the implementation.
 //!
-//! `domicile-scene` is the host-side model of where app windows live on screen and
-//! how pointer/keyboard input is routed between the chrome and the apps.
+//! `domicile-scene` is the host-side model of where app windows live on screen
+//! and which one has the keyboard.
 //!
 //! Because `<app>` is a full CSS element, an app's placement is an affine
 //! transform (translate/scale/rotate) from the app's local pixels to screen
-//! space, plus a stacking order. Hit-testing inverts that transform to recover
-//! the local coordinate to forward to the Wayland client.
+//! space, plus a stacking order. Pointer routing is not here and does not come
+//! back: the page hit-tests in the DOM and forwards coordinates already
+//! resolved to a window.
 
-use domicile_scene::{Claim, KeyboardTarget, Point, PointerTarget, Portal, Scene, Transform};
+use domicile_scene::{KeyboardTarget, Point, Portal, Scene, Transform};
 
 const EPS: f64 = 1e-9;
 
@@ -78,104 +79,6 @@ fn singular_transform_has_no_inverse() {
 
 // ---- hit-testing ----------------------------------------------------------
 
-#[test]
-fn hit_inside_an_untransformed_portal() {
-    let mut scene = Scene::new();
-    scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 0));
-    let hit = scene
-        .hit_test(Point::new(40.0, 60.0))
-        .expect("point is inside");
-    assert_eq!(hit.app_id, "term");
-    assert_point(hit.local, 40.0, 60.0);
-}
-
-#[test]
-fn miss_outside_all_portals() {
-    let mut scene = Scene::new();
-    scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 0));
-    assert!(scene.hit_test(Point::new(200.0, 200.0)).is_none());
-}
-
-#[test]
-fn translated_portal_maps_to_local_coords() {
-    let mut scene = Scene::new();
-    scene.upsert(portal(
-        "term",
-        100.0,
-        100.0,
-        Transform::translate(50.0, 50.0),
-        0,
-    ));
-    let hit = scene.hit_test(Point::new(60.0, 60.0)).expect("inside");
-    assert_point(hit.local, 10.0, 10.0);
-}
-
-#[test]
-fn scaled_portal_maps_to_local_coords() {
-    let mut scene = Scene::new();
-    // A 100x100 app drawn at 2x covers a 200x200 screen region.
-    scene.upsert(portal("term", 100.0, 100.0, Transform::scale(2.0, 2.0), 0));
-    let hit = scene
-        .hit_test(Point::new(150.0, 150.0))
-        .expect("inside scaled region");
-    assert_point(hit.local, 75.0, 75.0);
-    // Beyond the scaled extent is a miss.
-    assert!(scene.hit_test(Point::new(250.0, 250.0)).is_none());
-}
-
-#[test]
-fn topmost_z_index_wins_when_overlapping() {
-    let mut scene = Scene::new();
-    scene.upsert(portal("under", 100.0, 100.0, Transform::identity(), 0));
-    scene.upsert(portal("over", 100.0, 100.0, Transform::identity(), 5));
-    let hit = scene.hit_test(Point::new(50.0, 50.0)).expect("inside both");
-    assert_eq!(hit.app_id, "over");
-}
-
-#[test]
-fn insertion_order_breaks_z_index_ties() {
-    let mut scene = Scene::new();
-    scene.upsert(portal("first", 100.0, 100.0, Transform::identity(), 0));
-    scene.upsert(portal("second", 100.0, 100.0, Transform::identity(), 0));
-    // Same z: the most recently added sits on top.
-    assert_eq!(
-        scene.hit_test(Point::new(50.0, 50.0)).unwrap().app_id,
-        "second"
-    );
-}
-
-#[test]
-fn a_portal_that_takes_no_pointer_is_not_hit() {
-    // `pointer-events: none` is how a page says an element does not take the
-    // pointer, and a window the chrome has painted something over is the case
-    // that needs it: the compositor hit-tests rectangles and cannot see what
-    // the engine drew on top, so a window under a menu would swallow the click
-    // meant for the menu. The chrome says so instead.
-    let mut scene = Scene::new();
-    scene.upsert(portal("under", 100.0, 100.0, Transform::identity(), 0));
-    scene.upsert(portal("over", 100.0, 100.0, Transform::identity(), 5).inert());
-    let hit = scene.hit_test(Point::new(50.0, 50.0)).expect("inside both");
-    assert_eq!(hit.app_id, "under");
-}
-
-#[test]
-fn a_pointer_over_only_inert_portals_belongs_to_the_chrome() {
-    // The case the shell actually hits: every window on the stage is inert
-    // because what is on the stage is a browser tab the engine drew. Falling
-    // through to the topmost window regardless would send the click to a
-    // window nobody can see, and the chrome would never hear the click that
-    // would have handed the keyboard back — so nothing on the stage could be
-    // clicked again.
-    let mut scene = Scene::new();
-    scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 0).inert());
-    assert_eq!(
-        scene.route_pointer(Point::new(50.0, 50.0)),
-        PointerTarget::Chrome {
-            screen: Point::new(50.0, 50.0)
-        }
-    );
-}
-
 // ---- registry management --------------------------------------------------
 
 #[test]
@@ -190,48 +93,11 @@ fn upsert_replaces_an_existing_app_rather_than_duplicating() {
         0,
     ));
     assert_eq!(scene.len(), 1);
-    // Old location is now empty; new location hits.
-    assert!(scene.hit_test(Point::new(50.0, 50.0)).is_none());
-    assert!(scene.hit_test(Point::new(550.0, 50.0)).is_some());
-}
-
-#[test]
-fn re_placing_an_app_keeps_its_place_in_the_stack() {
-    let mut scene = Scene::new();
-    scene.upsert(portal("first", 100.0, 100.0, Transform::identity(), 0));
-    scene.upsert(portal("second", 100.0, 100.0, Transform::identity(), 0));
-    // The chrome re-places an app whenever its element moves or resizes; that
-    // must not reshuffle the stack under the user.
-    scene.upsert(portal("first", 200.0, 200.0, Transform::identity(), 0));
+    // And it is the new placement that is kept, not the first one.
     assert_eq!(
-        scene.hit_test(Point::new(50.0, 50.0)).unwrap().app_id,
-        "second"
+        scene.get("term").unwrap().transform,
+        Transform::translate(500.0, 0.0)
     );
-}
-
-#[test]
-fn raising_an_app_puts_it_above_its_tie_mates() {
-    let mut scene = Scene::new();
-    scene.upsert(portal("first", 100.0, 100.0, Transform::identity(), 0));
-    scene.upsert(portal("second", 100.0, 100.0, Transform::identity(), 0));
-
-    assert!(scene.raise("first"));
-    assert_eq!(
-        scene.hit_test(Point::new(50.0, 50.0)).unwrap().app_id,
-        "first"
-    );
-    // A higher z-index still wins: raising only settles ties.
-    scene.upsert(portal("second", 100.0, 100.0, Transform::identity(), 1));
-    assert_eq!(
-        scene.hit_test(Point::new(50.0, 50.0)).unwrap().app_id,
-        "second"
-    );
-}
-
-#[test]
-fn raising_an_unplaced_app_is_a_no_op() {
-    let mut scene = Scene::new();
-    assert!(!scene.raise("ghost"));
 }
 
 #[test]
@@ -247,34 +113,6 @@ fn remove_deletes_a_portal() {
 }
 
 // ---- input routing --------------------------------------------------------
-
-#[test]
-fn pointer_over_app_routes_to_app_with_local_coords() {
-    let mut scene = Scene::new();
-    scene.upsert(portal(
-        "term",
-        100.0,
-        100.0,
-        Transform::translate(50.0, 50.0),
-        0,
-    ));
-    match scene.route_pointer(Point::new(60.0, 70.0)) {
-        PointerTarget::App { app_id, local } => {
-            assert_eq!(app_id, "term");
-            assert_point(local, 10.0, 20.0);
-        }
-        other => panic!("expected App target, got {other:?}"),
-    }
-}
-
-#[test]
-fn pointer_over_empty_space_routes_to_chrome() {
-    let scene = Scene::new();
-    match scene.route_pointer(Point::new(10.0, 10.0)) {
-        PointerTarget::Chrome { screen } => assert_point(screen, 10.0, 10.0),
-        other => panic!("expected Chrome target, got {other:?}"),
-    }
-}
 
 // ---- keyboard focus -------------------------------------------------------
 
@@ -394,29 +232,6 @@ fn a_rotated_portal_draws_rotated() {
     );
 }
 
-#[test]
-fn what_is_drawn_and_what_is_clicked_are_the_same_rectangle() {
-    // The property that matters: whatever the compositor draws, a click in the
-    // middle of it reaches the same app at its own centre. Drawing and
-    // hit-testing derive from one transform, and this pins them together.
-    let portal = Portal::new(
-        "term",
-        (400.0, 300.0),
-        Transform::translate(200.0, 100.0),
-        0,
-    );
-    let mut scene = Scene::new();
-    scene.upsert(portal.clone());
-
-    // The centre of the drawn quad, in output pixels.
-    let centre = portal.surface_to_output().apply(Point::new(0.5, 0.5));
-
-    let hit = scene.hit_test(centre).expect("the centre is inside");
-    assert_eq!(hit.app_id, "term");
-    assert!((hit.local.x - 200.0).abs() < 1e-9, "local x: {hit:?}");
-    assert!((hit.local.y - 150.0).abs() < 1e-9, "local y: {hit:?}");
-}
-
 // ---- which screen a window reaches ----------------------------------------
 
 /// The box `portal` reaches, as `(min x, min y, max x, max y)`.
@@ -503,132 +318,3 @@ fn two_windows_over_each_other_overlap() {
 }
 
 // ---- The chrome claiming the pointer where it paints -----------------------
-
-#[test]
-fn a_claim_over_a_window_gives_the_pointer_to_the_chrome() {
-    // The shell's own arrangement: a floating window's title bar is page
-    // pixels at that window's depth, and the window it cascades over is
-    // another window's surface. Hit-testing that point against the portals
-    // alone finds the window underneath and hands it the press — so the bar
-    // never sees the click, the compositor focuses the wrong window, and the
-    // chrome raises it. Which is the bug: clicking the title bar of the window
-    // in front raises the one behind.
-    let mut scene = Scene::new();
-    scene.upsert(portal(
-        "under",
-        640.0,
-        390.0,
-        Transform::translate(48.0, 78.0),
-        1,
-    ));
-    scene.upsert(portal(
-        "over",
-        640.0,
-        390.0,
-        Transform::translate(84.0, 114.0),
-        2,
-    ));
-    // `over`'s bar: the 30px above its surface, at its own depth.
-    scene.claim_pointer(vec![Claim::new(
-        (640.0, 30.0),
-        Transform::translate(84.0, 84.0),
-        2,
-    )]);
-
-    assert_eq!(
-        scene.route_pointer(Point::new(300.0, 100.0)),
-        PointerTarget::Chrome {
-            screen: Point::new(300.0, 100.0)
-        },
-    );
-}
-
-#[test]
-fn a_window_in_front_of_a_claim_still_takes_the_pointer() {
-    // A claim only wins where it is actually on top. The bar of a window
-    // behind must not steal the pointer from the window in front of it —
-    // which is the whole reason a claim carries a depth rather than being a
-    // flag that says "the chrome is here somewhere".
-    let mut scene = Scene::new();
-    scene.upsert(portal("front", 100.0, 100.0, Transform::identity(), 9));
-    scene.claim_pointer(vec![Claim::new((100.0, 100.0), Transform::identity(), 1)]);
-
-    assert_eq!(
-        scene.route_pointer(Point::new(50.0, 50.0)),
-        PointerTarget::App {
-            app_id: "front".to_string(),
-            local: Point::new(50.0, 50.0),
-        },
-    );
-}
-
-#[test]
-fn a_claim_at_a_windows_own_depth_is_over_it() {
-    // Chrome at a window's depth is the
-    // chrome *of* that window, and it is drawn over it. A bar ties with the
-    // window it names and has to win, or it is unclickable along every edge
-    // that overlaps its own surface.
-    let mut scene = Scene::new();
-    scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 3));
-    scene.claim_pointer(vec![Claim::new((100.0, 100.0), Transform::identity(), 3)]);
-
-    assert_eq!(
-        scene.route_pointer(Point::new(50.0, 50.0)),
-        PointerTarget::Chrome {
-            screen: Point::new(50.0, 50.0)
-        },
-    );
-}
-
-#[test]
-fn a_claim_nowhere_near_the_pointer_changes_nothing() {
-    let mut scene = Scene::new();
-    scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 1));
-    scene.claim_pointer(vec![Claim::new(
-        (50.0, 50.0),
-        Transform::translate(500.0, 500.0),
-        9,
-    )]);
-
-    assert_eq!(
-        scene.route_pointer(Point::new(50.0, 50.0)),
-        PointerTarget::App {
-            app_id: "term".to_string(),
-            local: Point::new(50.0, 50.0),
-        },
-    );
-}
-
-#[test]
-fn claiming_again_replaces_what_was_claimed_before() {
-    // The whole set every time: the chrome re-sends it as its
-    // own layout changes, and a bar that moved must not go on taking the
-    // pointer where it used to be.
-    let mut scene = Scene::new();
-    scene.upsert(portal("term", 100.0, 100.0, Transform::identity(), 1));
-    scene.claim_pointer(vec![Claim::new((100.0, 100.0), Transform::identity(), 5)]);
-    scene.claim_pointer(vec![]);
-
-    assert_eq!(
-        scene.route_pointer(Point::new(50.0, 50.0)),
-        PointerTarget::App {
-            app_id: "term".to_string(),
-            local: Point::new(50.0, 50.0),
-        },
-    );
-}
-
-#[test]
-fn a_claim_over_nothing_at_all_is_still_the_chrome() {
-    // The chrome is what answers where no window does, with or without a
-    // claim; this is only here to say a claim never turns that into a miss.
-    let mut scene = Scene::new();
-    scene.claim_pointer(vec![Claim::new((100.0, 100.0), Transform::identity(), 0)]);
-
-    assert_eq!(
-        scene.route_pointer(Point::new(50.0, 50.0)),
-        PointerTarget::Chrome {
-            screen: Point::new(50.0, 50.0)
-        },
-    );
-}
