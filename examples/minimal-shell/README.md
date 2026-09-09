@@ -51,9 +51,9 @@ emits `.vite/renderer/main_window/shell.js`, which is the whole build. Point
 Domicile at it:
 
 ```sh
-nix run github:cprussin/domicile -- ./.vite/renderer/main_window
+nix run github:cprussin/domicile -- ./.vite/renderer/main_window/shell.js
 ```
 
-which serves that directory, starts the engine on it and the compositor
-underneath. There is nothing to install and no `bin/` entry: which desktop you
+which serves the directory that module is in, starts the engine on it and the
+compositor underneath. There is nothing to install and no `bin/` entry: which desktop you
 get is which page Domicile was pointed at.

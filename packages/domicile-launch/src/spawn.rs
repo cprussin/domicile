@@ -8,7 +8,7 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::shell_path::MODULE;
+use crate::shell_path::Shell;
 
 /// The document the fork generates, and what a desktop is started on. One
 /// host and one path: `domicile_scheme.h` says there is no second host, and
@@ -35,7 +35,7 @@ pub struct Runtime {
     pub profile: PathBuf,
 }
 
-/// The engine, on the shell's page.
+/// The engine, on the shell's module.
 ///
 /// THREE FLAGS REPLACED A PORT. The page used to be served by a bridge over
 /// HTTP on a loopback port, and it reached the compositor through a WebSocket
@@ -59,7 +59,7 @@ pub struct Runtime {
 /// the command every machine runs.
 pub fn engine(
     engine: &Path,
-    page: &Path,
+    shell: &Shell,
     platform: &str,
     runtime: &Runtime,
     extra: Option<&str>,
@@ -67,11 +67,18 @@ pub fn engine(
     let mut args: Vec<OsString> = vec![
         format!("--ozone-platform={platform}").into(),
         format!("--app={SHELL_DOCUMENT}").into(),
-        format!("--domicile-shell-root={}", page.display()).into(),
+        format!("--domicile-shell-root={}", shell.root.display()).into(),
         // Relative, not a path from this machine's root: the fork puts it in
         // the document it generates as `<script src>`, resolved against
         // `domicile://shell/`.
-        format!("--domicile-shell-module={MODULE}").into(),
+        //
+        // And whatever the shell called it. This was a `shell.js` constant the
+        // launcher held, which meant a shell whose build emitted any other
+        // name could not be run: the engine was sent for a file nobody had
+        // named. The name belongs to the build now — `flake.nix` is where this
+        // repository's own shells are held to `shell.js` — and by the time a
+        // command line has been read there is nothing left to know about it.
+        format!("--domicile-shell-module={}", shell.module.display()).into(),
         format!(
             "--domicile-control-socket={}",
             runtime.chrome_socket.display()

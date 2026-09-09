@@ -92,8 +92,13 @@ expect "the engine handed in is the one that is run" \
 expect "dev mode is switched on" "reload=1" \
   "$(printf '%s\n' "$handed" | sed -n 's/^reload=/reload=/p')"
 
-expect "the desktop serves the page the watcher writes" \
-  "page=$WORK/page" \
+# THE MODULE, NOT THE DIRECTORY HOLDING IT. `domicile` takes the file now, and
+# it refuses a directory rather than looking inside one for a name it no longer
+# knows — so a dev loop that handed over `$PAGE_DIR` would not start at all,
+# and would say so about a path the script never printed. `shell.js` is the
+# name the shell's own vite config pins, which is why this can join it on.
+expect "the desktop is handed the module the watcher writes" \
+  "page=$WORK/page/shell.js" \
   "$(printf '%s\n' "$handed" | sed -n 's/^page=/page=/p')"
 
 # `domicile` builds nothing, so this script does — and hands over what it

@@ -2,7 +2,19 @@
 
 use std::path::{Path, PathBuf};
 
+use domicile_launch::shell_path::Shell;
 use domicile_launch::spawn::{compositor, engine, Runtime};
+
+/// A built shell, split the way `shell_path` hands it over: the directory the
+/// engine serves and the module in it the generated document loads. The module
+/// is deliberately not called `shell.js` — that name is a build convention
+/// `flake.nix` asserts, and nothing from here down is allowed to know it.
+fn shell() -> Shell {
+    Shell {
+        root: PathBuf::from("/d/dist"),
+        module: PathBuf::from("main.js"),
+    }
+}
 
 fn runtime() -> Runtime {
     Runtime {
@@ -36,7 +48,7 @@ fn the_engine_is_a_desktop_rather_than_a_browser() {
     // bound where a shell wants to bind them.
     let spawned = engine(
         Path::new("/l/engine"),
-        Path::new("/d/dist"),
+        &shell(),
         "wayland",
         &runtime(),
         None,
@@ -70,7 +82,7 @@ fn the_engine_is_told_where_the_shell_is_and_where_the_compositor_is() {
     // shows nothing, so each is asserted by name.
     let args = args_of(&engine(
         Path::new("/l/engine"),
-        Path::new("/d/dist"),
+        &shell(),
         "wayland",
         &runtime(),
         None,
@@ -82,8 +94,12 @@ fn the_engine_is_told_where_the_shell_is_and_where_the_compositor_is() {
     // Relative, not absolute: it goes into the generated document as
     // `<script src>`, resolved against `domicile://shell/`. An absolute path
     // there would be a URL path off the shell root and would not resolve.
+    //
+    // And whatever the user called the file: the launcher held a `shell.js`
+    // constant and put *that* here, so a desktop started on `main.js` asked
+    // the engine for a `shell.js` it had never been shown.
     assert!(
-        args.contains(&"--domicile-shell-module=shell.js".to_string()),
+        args.contains(&"--domicile-shell-module=main.js".to_string()),
         "{args:?}"
     );
     assert!(
@@ -99,7 +115,7 @@ fn no_page_is_served_over_a_port() {
     // process on the machine.
     let args = args_of(&engine(
         Path::new("/l/engine"),
-        Path::new("/d/dist"),
+        &shell(),
         "wayland",
         &runtime(),
         None,
@@ -120,7 +136,7 @@ fn the_sandbox_stays_on() {
     // reasonably reads as broken. A container that needs it says so itself.
     let args = args_of(&engine(
         Path::new("/l/engine"),
-        Path::new("/d/dist"),
+        &shell(),
         "wayland",
         &runtime(),
         None,
@@ -142,7 +158,7 @@ fn a_machine_that_needs_more_flags_adds_its_own() {
     // can extend is smaller than a flag per problem.
     let args = args_of(&engine(
         Path::new("/l/engine"),
-        Path::new("/d/dist"),
+        &shell(),
         "wayland",
         &runtime(),
         Some("--no-sandbox  --disable-gpu"),

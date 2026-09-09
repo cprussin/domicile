@@ -28,7 +28,7 @@ fn a_second_argument_is_refused_and_named() {
     // Quietly dropping a word somebody typed is how a run serves one page
     // while they read another on their own command line.
     assert_eq!(
-        run(&["./dist", "simple"]),
+        run(&["./dist/shell.js", "simple"]),
         Err(CliError::TooMany {
             extra: "simple".to_string()
         })
