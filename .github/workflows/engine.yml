@@ -19,13 +19,23 @@ on:
     # change to this job that this job does not run on, and the first thing to
     # find out would be a release. Written out twice rather than anchored:
     # GitHub's workflow parser does not resolve YAML anchors.
+    #
+    # AND MARKDOWN UNDER THAT PACKAGE IS EXCLUDED, because prose cannot affect
+    # a build and this job is the most expensive thing in the repository: it
+    # takes the tree on `crux`, waits behind whatever else holds it, and can
+    # queue for hours. A README fix should never be in that queue. The
+    # exclusion is written after the include it narrows — a later pattern wins
+    # for a file both match — so a change touching a patch *and* a README still
+    # runs.
     paths:
       - packages/domicile-engine/**
+      - "!packages/domicile-engine/**/*.md"
       - .github/workflows/engine.yml
       - .github/scripts/engine-*.sh
   pull_request:
     paths:
       - packages/domicile-engine/**
+      - "!packages/domicile-engine/**/*.md"
       - .github/workflows/engine.yml
       - .github/scripts/engine-*.sh
   workflow_dispatch:

@@ -9,8 +9,8 @@ rust-version.workspace = true
 [dependencies]
 thiserror.workspace = true
 
-# The actual CEF/Chromium embedding lives behind a `cef` feature (not built by
-# default: it needs the prebuilt CEF distribution + a GPU). See docs/CEF-SPIKE.md.
+# A leftover of the embedding plan this crate was written for. Nothing enables
+# it and nothing is behind it; it goes when the crate does.
 [features]
 default = []
 cef = []

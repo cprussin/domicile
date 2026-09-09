@@ -6,9 +6,12 @@
 //
 // A shell is one JavaScript module. `DOMICILE_MODULE` points at it, the
 // directory it is in is what gets served, and the document it loads in is
-// written here — see `shell-document.ts`. A shell built from an HTML entry is
-// served with `DOMICILE_ROOT` instead, which is what the workspace's own two
-// still do.
+// written here — see `shell-document.ts`. There is no way to supply one.
+//
+// `DOMICILE_ROOT` serves a directory with its own `index.html` and predates
+// that decision. Nothing uses it: both shells here are modules, and a shell
+// outside this repo is told it cannot ship a document. ROADMAP tracks the
+// deletion.
 //
 // Environment rather than flags because the only caller is a launcher, and a
 // launcher that has to quote paths into an argv is a launcher with a bug in it

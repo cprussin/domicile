@@ -40,9 +40,10 @@ They meet at a `viz::SurfaceId` and nowhere else.
 
 Whatever works on a hardware-composited `<video>`, because it is the same layer
 type through the same property trees. Measured on a GPU against an ordinary
-element laid out beside it: `z-index`, `transform`, `border-radius`, `opacity`,
-`filter: blur()`, `mix-blend-mode` and a resize — six bit-exact, `transform`
-differing on a one-pixel outline. `ENGINE-FORK.md` has the table.
+element laid out beside it — `z-index`, `transform`, `border-radius`,
+`opacity`, `filter: blur()`, `mix-blend-mode` and a resize — **every one is
+bit-exact**. An `<app>` is not a `<div>` up to an outline; it is a `<div>`.
+`ENGINE-FORK.md` has the table.
 
 Nothing here is reimplemented, and that is the point of the fork rather than a
 detail of it: an effect works because the page's compositor applies it to a

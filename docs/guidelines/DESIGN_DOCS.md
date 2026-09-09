@@ -65,7 +65,7 @@ Bloated → tight.
 A design doc is scaffolding, not a permanent record. Each implementation PR
 checks off (`- [x]`) the plan items it completes, so the doc tracks the work
 left. Once every item is checked — the entire plan shipped, all phases — delete
-the doc, and remove its row from AGENTS.md's "Architecture & design docs" index
-(and the README `architecture/` listing). Durable documentation
+the doc and remove its row from AGENTS.md's "Architecture & design docs" index.
+Durable documentation
 lives in the code and package READMEs, not a stale `/docs/architecture/` doc
 that drifts from reality.

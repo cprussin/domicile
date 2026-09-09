@@ -12,9 +12,6 @@ const fakeElement = (calls: Call[]): DomicileAppElement =>
     applyCursor: (cursor: string) => {
       calls.push(["cursor", cursor]);
     },
-    drawFrame: (width: number, height: number, scale: number) => {
-      calls.push(["draw", width, height, scale]);
-    },
     focusApp: () => {
       calls.push(["focus"]);
     },

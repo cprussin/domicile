@@ -1,18 +1,17 @@
 # The wire
 
-Two golden files, for the two things the compositor and the chrome SDK have to
-agree about without either being able to check the other at build time.
+One golden file, for the thing the compositor and the chrome SDK have to agree
+about without either being able to check the other at build time.
 
-## `host-messages.jsonl`
-
-One JSON line per message, exactly as the compositor writes it, and it is read
-from both languages:
+`host-messages.jsonl` is one JSON line per message, exactly as the compositor
+writes it, and it is read from both languages:
 
 - `packages/domicile-protocol/tests/wire.rs` asserts Rust *writes* these bytes —
   serialising each parsed line back and comparing. Byte-for-byte rather than
   value-for-value, for what a round-trip through Rust's own types cannot see:
-  `800.0` where a hand-written fixture would say `800`, and `region` *absent*
-  rather than `null`. Both are things the SDK has to be ready for.
+  `800.0` where a hand-written fixture would say `800`, and an `Option` written
+  as `null` rather than left out — a size the client has not reported is
+  `"size":null`, not an absent key. Both are things the SDK has to be ready for.
 - `packages/chrome-sdk/src/wire-fixture.test.ts` asserts the SDK's Zod schemas
   *read* them.
 

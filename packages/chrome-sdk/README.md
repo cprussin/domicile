@@ -20,9 +20,9 @@ It provides four things:
   the process, and `bridge.hop` is what that costs to get from there to here.
 - **Custom elements** (`./register-elements`) — `<domicile-app>` and
   `<domicile-webview>`. An `<domicile-app>` reports its on-screen box to the
-  host, forwards pointer and keyboard input to the client underneath it, and
-  draws the frames the host pushes back; `focusApp` routes the keyboard to it
-  without a click, for a chrome that shows a window the user did not click.
+  host, embeds that client's surface, and forwards pointer and keyboard input
+  to it; `focusApp` routes the keyboard to it without a click, for a chrome
+  that shows a window the user did not click.
   A `<domicile-webview>` embeds a nested browsing context the engine renders
   directly: its `src` is the address on screen (it follows the page wherever the
   content navigates, and fires `domicile-navigate` when it lands), `goBack` /
@@ -37,8 +37,7 @@ It provides four things:
   `domicile-scene::Transform`, `./chrome-message` builders for the wire format,
   `./protocol` schemas for decoding host frames, `./input` keycode mapping,
   `./newline-frames` for the delimiter on chrome→host messages, and
-  `./host-stream` for reading the host's direction, where an `app_frame`'s
-  pixels follow its header as raw bytes.
+  `./host-stream` for reading the host's direction.
 
 ## Usage
 

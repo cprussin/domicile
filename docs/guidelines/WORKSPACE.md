@@ -128,6 +128,11 @@ crate — without confirming with the developer that this is the intent.
 
 ## Required code checks
 
+`./scripts/check.sh` runs everything — both languages, the shell scripts and
+the e2e suites — and arranges what each needs. It is what AGENTS.md points at
+and what to run before a PR. The rest of this section is the TypeScript half on
+its own, for when that is all you have changed.
+
 All TypeScript code should pass all checks run via
 `bun run turbo test -- --ui stream`. This runs linting, formatting,
 typechecking, and unit tests, and builds the shells' Vite bundles so a green
