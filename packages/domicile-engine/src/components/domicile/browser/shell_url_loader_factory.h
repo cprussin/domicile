@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_SHELL_URL_LOADER_FACTORY_H_
 #define COMPONENTS_DOMICILE_BROWSER_SHELL_URL_LOADER_FACTORY_H_
 
+#include <string>
+
 #include "base/files/file_path.h"
 #include "base/memory/self_deleting.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -47,6 +49,11 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
   ShellURLLoaderFactory(const ShellURLLoaderFactory&) = delete;
   ShellURLLoaderFactory& operator=(const ShellURLLoaderFactory&) = delete;
 
+  // The document Domicile writes for a shell, given the module it should load.
+  // Exposed for testing: what is in it is not negotiable and a test is how that
+  // stays true.
+  static std::string ShellDocument(const std::string& module);
+
   // Resolve a domicile:// URL to a file under `shell_root`, or fail. Exposed
   // for testing, because the refusals are the part worth testing and they do
   // not need a mojo pipe to exercise.
@@ -56,6 +63,10 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
 
  private:
   ~ShellURLLoaderFactory() override;
+
+  // Answer with the generated document rather than a file on disk.
+  void ServeDocument(
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client);
 
   // network::mojom::URLLoaderFactory:
   void CreateLoaderAndStart(

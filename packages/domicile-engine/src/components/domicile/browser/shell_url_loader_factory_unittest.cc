@@ -85,5 +85,56 @@ TEST(ShellURLLoaderFactoryTest, RefusesEverythingWithoutARoot) {
       base::FilePath(), GURL("domicile://shell/main.js"), &path));
 }
 
+// The document. What is in it is not negotiable, so it is pinned rather than
+// described: each of these is something a desktop cannot do without, and each
+// has a failure that looks like something else when it is missing.
+
+TEST(ShellDocumentTest, DeclaresACharset) {
+  // Without one the page is decoded by guesswork.
+  EXPECT_NE(ShellURLLoaderFactory::ShellDocument("shell.js")
+                .find("charset=\"utf-8\""),
+            std::string::npos);
+}
+
+TEST(ShellDocumentTest, DeclaresAViewport) {
+  // Without one the engine lays out for a phone and every coordinate the
+  // compositor is told about is wrong by a scale factor.
+  EXPECT_NE(ShellURLLoaderFactory::ShellDocument("shell.js")
+                .find("width=device-width, initial-scale=1"),
+            std::string::npos);
+}
+
+TEST(ShellDocumentTest, HasNoBodyMargin) {
+  // Eight pixels of body margin is eight pixels the compositor believes it has
+  // and does not, and a client's window drawn in the wrong place looks like the
+  // seam rather than like a stylesheet.
+  EXPECT_NE(ShellURLLoaderFactory::ShellDocument("shell.js").find("margin: 0"),
+            std::string::npos);
+}
+
+TEST(ShellDocumentTest, LoadsTheModuleAsAModule) {
+  const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
+  EXPECT_NE(document.find("src=\"shell.js\""), std::string::npos);
+  EXPECT_NE(document.find("type=\"module\""), std::string::npos);
+}
+
+TEST(ShellDocumentTest, EncodesTheModuleName) {
+  // The name came off somebody's disk and lands in the most privileged page in
+  // this system. Nothing in it may be parsed as markup.
+  const std::string document =
+      ShellURLLoaderFactory::ShellDocument("a\"><script>b.js");
+  EXPECT_EQ(document.find("<script>b.js"), std::string::npos);
+  EXPECT_EQ(document.find("a\">"), std::string::npos);
+}
+
+TEST(ShellDocumentTest, LeavesAHashInAFilenameAlone) {
+  // `#` is legal in a POSIX filename and is not HTML-special, so an HTML
+  // escaper would pass it through -- the browser would then ask for the part
+  // before it and the desktop would be blank with nothing in any log.
+  const std::string document = ShellURLLoaderFactory::ShellDocument("a#b.js");
+  EXPECT_EQ(document.find("a#b.js"), std::string::npos);
+  EXPECT_NE(document.find("a%23b.js"), std::string::npos);
+}
+
 }  // namespace
 }  // namespace domicile
