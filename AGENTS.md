@@ -114,6 +114,7 @@ working in its area; it is context, not compliance.
 | [/docs/architecture/ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md) | Why Domicile is a compositor whose renderer is a web engine, the decisions that follow from it, and what each crate and package is for. Start here. |
 | [/docs/architecture/WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) | How a window reaches the screen: the compositor submits the client's dmabuf into a viz surface and the page's `<app>` embeds it, so what CSS does to a window is what CSS does to a layer. What is still open is at the bottom. |
 | [/docs/architecture/STACKING-PARITY.md](/docs/architecture/STACKING-PARITY.md) | Why an unforked engine cannot do this, measured: every route to stacking parity that was tried and the evidence that closed it. The record behind the fork decision, not a design. |
+| [/docs/architecture/THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md) | Replacing the three layers of bash between `domicile` and a running desktop with one binary: what moves into `domicile-launch`, what stays in the flake, and the order it lands in. |
 | [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The fork itself: the design, the C ABI between the compositor and the engine, the measurements, and the plan — phase 1 shipped, phases 2 and 3 have items left. |
 
 [`/ROADMAP.md`](/ROADMAP.md) carries the current state and the ordered plan;
