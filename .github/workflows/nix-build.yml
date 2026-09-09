@@ -69,13 +69,12 @@ jobs:
       # in a generated shell script, because that is what a desktop was: a
       # wrapper that named the page, the engine, the compositor and the bridge
       # and handed them to a script. It is `domicile` with a page for an
-      # argument now, and `domicile` finds the other three beside itself — so
+      # argument now, and `domicile` finds the other two beside itself — so
       # what has to be checked is the layout rather than a wrapper's text.
       #
       #   bin/domicile
       #   bin/domicile-compositor
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
-      #   libexec/domicile/bridge     the page server
       #
       # THE ONE THAT IS NOT A TAUTOLOGY: `bin/domicile` must be a *copy*.
       # `current_exe` reads `/proc/self/exe`, which resolves symlinks, so a
@@ -103,10 +102,6 @@ jobs:
           }
           [ -x "$out/libexec/domicile/engine/chrome" ] || {
             echo "domicile: libexec/domicile/engine holds no chrome"
-            exit 1
-          }
-          [ -x "$out/libexec/domicile/bridge" ] || {
-            echo "domicile: libexec/domicile/bridge is not something that runs"
             exit 1
           }
 
@@ -147,9 +142,9 @@ jobs:
           done
 
       # THE ASSERTIONS THAT NEED THE BINARY TO ACTUALLY RUN, and neither needs
-      # a display — because `domicile` resolves its three components before it
+      # a display — because `domicile` resolves its two components before it
       # looks at the page. So a run given a page that cannot exist fails about
-      # *the page*, and that failure is the proof the other three were found:
+      # *the page*, and that failure is the proof the other two were found:
       # a symlinked or mislaid component fails first, and says which.
       - name: An installed Domicile finds its components before its page
         run: |

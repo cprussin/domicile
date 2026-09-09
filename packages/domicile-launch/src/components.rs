@@ -1,14 +1,13 @@
-//! The three programs a desktop is, found beside the one the user ran.
+//! The two programs a desktop is, found beside the one the user ran.
 //!
-//! `domicile` is one of four things that ship together, the way a multi-binary
-//! program like postfix does, and it finds the other three from its own path
-//! rather than being handed them:
+//! `domicile` is one of three things that ship together, the way a
+//! multi-binary program like postfix does, and it finds the other two from its
+//! own path rather than being handed them:
 //!
 //! ```text
 //! <prefix>/bin/domicile
 //! <prefix>/bin/domicile-compositor
 //! <prefix>/libexec/domicile/engine     the Chromium tree, `chrome` inside it
-//! <prefix>/libexec/domicile/bridge     the page server
 //! ```
 //!
 //! On Linux `current_exe` reads `/proc/self/exe`, which resolves symlinks — so
@@ -21,8 +20,8 @@ use std::path::{Path, PathBuf};
 /// A component that is neither beside the binary nor named in the environment.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error(
-    "no {what} at {}, and {variable} is not set. The three components ship \
-     beside `domicile`; set {variable} to point at one built somewhere else.",
+    "no {what} at {}, and {variable} is not set. The components ship beside \
+     `domicile`; set {variable} to point at one built somewhere else.",
     .looked.display()
 )]
 pub struct Missing {
@@ -31,16 +30,15 @@ pub struct Missing {
     pub variable: &'static str,
 }
 
-/// Where each of the three is.
+/// Where each of the two is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Components {
     /// The directory holding `chrome`.
     pub engine: PathBuf,
     pub compositor: PathBuf,
-    pub bridge: PathBuf,
 }
 
-/// Resolve all three from the running binary's own path.
+/// Resolve both from the running binary's own path.
 ///
 /// `exists` is asked only about the siblings. A path somebody named in the
 /// environment is taken as given: they meant it, and checking would refuse a
@@ -58,13 +56,6 @@ pub fn components(
         .join("libexec")
         .join("domicile");
     Ok(Components {
-        bridge: one(
-            "bridge",
-            "DOMICILE_BRIDGE",
-            libexec.join("bridge"),
-            env,
-            exists,
-        )?,
         compositor: one(
             "compositor",
             "DOMICILE_COMPOSITOR",

@@ -1,6 +1,6 @@
 //! The command line, and the one line of the bridge's that is an interface.
 
-use domicile_launch::cli::{invocation, serving_url, CliError, Invocation};
+use domicile_launch::cli::{invocation, CliError, Invocation};
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
     invocation(args.iter().map(|arg| (*arg).to_string()))
@@ -33,21 +33,4 @@ fn a_second_argument_is_refused_and_named() {
             extra: "simple".to_string()
         })
     );
-}
-
-#[test]
-fn the_bridge_line_is_read_for_its_url() {
-    assert_eq!(
-        serving_url("domicile: serving http://127.0.0.1:41234/"),
-        Some("http://127.0.0.1:41234/")
-    );
-}
-
-#[test]
-fn any_other_line_the_bridge_says_is_not_a_url() {
-    // It logs. Taking the first line for the URL is how a desktop opens a
-    // window on a message.
-    assert_eq!(serving_url("domicile: waiting for the compositor"), None);
-    assert_eq!(serving_url(""), None);
-    assert_eq!(serving_url("  domicile: serving http://x/"), None);
 }

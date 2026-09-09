@@ -98,17 +98,6 @@ echo "building the compositor and the runner"
 cargo build -p domicile-launch --bin domicile \
             -p domicile-compositor --bin domicile-compositor || exit 1
 
-# The bridge as something that runs. A packaged desktop ships it compiled, with
-# the runtime embedded, because an end user has no `bun`. A checkout has one,
-# and a three-line shim starts instantly where `--compile` writes a hundred
-# megabytes on every save.
-BRIDGE="$WORK/domicile-bridge"
-cat >"$BRIDGE" <<SHIM
-#!/bin/sh
-exec bun "$ROOT/packages/engine-chrome-host/src/main.ts" "\$@"
-SHIM
-chmod +x "$BRIDGE"
-
 # `DOMICILE_DEV_RELOAD` is the only thing that separates this from an installed
 # desktop: the bridge serves the reload token and writes the poller into the
 # page, and nothing else in the repository sets it. It goes when `load-shell`
@@ -116,7 +105,6 @@ chmod +x "$BRIDGE"
 echo "starting $SHELL_NAME"
 DOMICILE_ENGINE="$ENGINE" \
 DOMICILE_COMPOSITOR="$ROOT/target/debug/domicile-compositor" \
-DOMICILE_BRIDGE="$BRIDGE" \
 DOMICILE_PAGE="$PAGE_DIR" \
 DOMICILE_DEV_RELOAD=1 \
   "$ROOT/target/debug/domicile" "$SHELL_NAME"

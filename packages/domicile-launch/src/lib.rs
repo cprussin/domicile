@@ -1,13 +1,11 @@
 //! `domicile`: everything it decides, and the boundary it decides it across.
 //!
-//! `domicile ./my-desktop/dist` starts a bridge, an engine and a compositor.
-//! What that takes is a handful of decisions, and each is a module here with
-//! tests of its own — which command line was given ([`cli`]),
-//! which page to serve ([`shell_path`]), which ozone
-//! platform ([`platform`]), where the three components are
-//! ([`components`]), what each is started with
-//! ([`spawn`]), and the order they go up in
-//! ([`supervise`]).
+//! `domicile ./my-desktop/dist` starts an engine and a compositor. What that
+//! takes is a handful of decisions, and each is a module here with tests of
+//! its own — which command line was given ([`cli`]), which page to serve
+//! ([`shell_path`]), which ozone platform ([`platform`]), where the two
+//! components are ([`components`]), what each is started with ([`spawn`]),
+//! and the order they go up in ([`supervise`]).
 //!
 //! The other boundary is the compositor's own: the command line it is started
 //! with ([`arguments`]) and the session document it

@@ -13,7 +13,7 @@ use domicile_launch::cli::{invocation, Invocation};
 use domicile_launch::components::components;
 use domicile_launch::platform::platform;
 use domicile_launch::shell_path::shell_page;
-use domicile_launch::spawn::{bridge, compositor, engine, Runtime};
+use domicile_launch::spawn::{compositor, engine, Runtime};
 use domicile_launch::supervise::{wait_for_broker, Running};
 
 /// How long the engine gets to open its broker socket. A debug build on a
@@ -43,7 +43,6 @@ fn run() -> Result<ExitCode, String> {
         path.metadata().ok().map(|found| found.is_dir())
     })
     .map_err(|why| why.to_string())?;
-    let module = page.join("shell.js");
 
     // One directory per run, thrown away with it. The sockets and the engine's
     // profile go in it, so a desktop that exits leaves nothing behind and two
@@ -56,13 +55,9 @@ fn run() -> Result<ExitCode, String> {
     };
 
     // What was chosen, before anything is started: a failure below is about
-    // this module, and naming it after the failure is too late to be read.
-    println!("shell: {}", module.display());
+    // this shell, and naming it after the failure is too late to be read.
+    println!("shell: {}", page.display());
     let mut running = Running::new();
-    let url = running
-        .start_bridge(&bridge(&components.bridge, &module, &places))
-        .map_err(|why| why.to_string())?;
-    println!("the shell is at {url}");
 
     let platform = platform(
         env("OZONE").as_deref(),
@@ -76,7 +71,7 @@ fn run() -> Result<ExitCode, String> {
             "engine",
             &engine(
                 &components.engine,
-                &url,
+                &page,
                 &platform,
                 &places,
                 env("DOMICILE_ENGINE_ARGS").as_deref(),

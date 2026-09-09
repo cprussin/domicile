@@ -1,8 +1,5 @@
 //! What `domicile` was asked to do.
 
-/// What the bridge prefixes the one line that is an interface with.
-const SERVING: &str = "domicile: serving ";
-
 /// A command line `domicile` will not run.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CliError {
@@ -38,15 +35,4 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
         None => Ok(Invocation::Run { shell }),
         Some(extra) => Err(CliError::TooMany { extra }),
     }
-}
-
-/// The URL out of the bridge\'s own line, or nothing.
-///
-/// The bridge says where it is serving on one line, in a shape a caller can
-/// read, because the port is the kernel\'s choice and nothing else knows it.
-/// Matched from the start of the line rather than searched for: the bridge
-/// logs, and taking the first line that happens to contain a URL is how a
-/// desktop opens a window on a message.
-pub fn serving_url(line: &str) -> Option<&str> {
-    line.strip_prefix(SERVING)
 }
