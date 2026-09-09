@@ -32,8 +32,9 @@ checkout, `scripts/dev-shell.sh simple` builds the page and runs the engine and
 the compositor against it. The end-to-end scripts drive the
 compositor directly with a stand-in chrome of their own, which is why they name
 a `--chrome-socket` and a `--session` and start no shell at all.
-See `packages/domicile-launch`, which is both halves of the compositor's own
-command line and the session it publishes.
+See `packages/domicile-launch`, which is `domicile` itself — every decision it
+makes on the way to a running desktop, and the compositor's own command line
+and session besides.
 
 Neither in-tree shell is privileged. Both are served and loaded through exactly
 the machinery an out-of-tree shell uses, and

@@ -72,11 +72,6 @@ you run — `#manganese` is the reference chrome
 `nix run github:cprussin/domicile` is Domicile itself, which wants a shell of
 your own to point at.
 
-Nix hands the app the source read-only in the store while the build writes into
-the tree, so it first stages the fetched source under
-`~/.cache/domicile/<revision>` — set `DOMICILE_RUN_DIR` to put it elsewhere —
-and builds there. Re-running the same revision reuses those artifacts.
-
 The desktop comes up empty but for the keys it answers to. **Alt+Enter** opens
 a terminal; the next section covers that and the ways in from outside.
 

@@ -72,9 +72,9 @@ lays out and `<domicile-app>` says once that it cannot show a window. Ask
 
 Do not develop against that, though: it is the chrome with every window in it
 missing, and a desktop's interesting behaviour is all on the other side of the
-transport. `bun run --filter @domicile/shell-<name> start:dev` runs your shell
-in a real desktop and rebuilds it as you save — which is what `vite dev` used
-to be here, and what it could not be.
+transport. Point `domicile` at your build output and let your own bundler watch
+it — `vite build --watch` beside `domicile ./dist` is the whole dev loop, and
+it is a real desktop rather than a page pretending to be one.
 
 ## The handshake
 
@@ -148,7 +148,7 @@ React at all.
 
 ## The smallest shell that works
 
-Two files. The full version, with the comments, is in
+One source file and a build config. The full version, with the comments, is in
 [`examples/minimal-shell`](/examples/minimal-shell).
 
 **`src/renderer.ts`** — the page, and the whole of the shell's behaviour:
@@ -183,14 +183,14 @@ bridge.connect().then(/* report the Result */);
 That is a working desktop: every window full-screen, newest on top. A real
 shell differs from it only in where it puts the elements.
 
-Three things this abbreviates, all of which the example does in full and none of
-which are optional. `app_closed` is handled, because without it every window
-leaks an element. `bridge.connect()` resolves a `Result` that must be reported
-rather than discarded. And the example's `app_closed` *throws* on an app it
-never mounted, because a close for something never announced means the page and
-the compositor disagree about what is on screen.
+`app_closed` is in there rather than left out because without it every window
+leaks an element. Two things the snippet does abbreviate, and the example does
+in full: `bridge.connect()` resolves a `Result` that must be reported rather
+than discarded, and the example's `app_closed` *throws* on an app it never
+mounted, because a close for something never announced means the page and the
+compositor disagree about what is on screen.
 
-There is no second file. **Domicile writes the document**: a charset, a
+There is no document to write. **Domicile writes it**: a charset, a
 viewport, and a `<body>` that fills the window with no margin. That last one is
 not a nicety — eight pixels of default body margin is eight pixels the
 compositor believes it has and does not, and a client's window drawn eight

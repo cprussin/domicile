@@ -127,7 +127,7 @@ work on it, and carry no authority level.
 
 | Doc | Covers |
 |---|---|
-| [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | How to write a shell that lives outside this repo: that the shell is what a user runs and what starts the compositor, the launcher, the config a shell owns, the session the compositor publishes, the handshake, and how the bundles are built. Read it before changing anything a shell can see — the compositor's command line, the session document, the SDK's public surface — because it is the contract those changes break. Its worked example is `examples/minimal-shell`. |
+| [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | How to write a shell that lives outside this repo: that a shell is one built module `domicile` is pointed at, the document Domicile writes rather than the shell, the config a shell owns, the handshake, and the bundling rules that fail quietly. Read it before changing anything a shell can see — the module's name, the document, the SDK's public surface — because it is the contract those changes break. Its worked example is `examples/minimal-shell`. |
 
 ## Checking your work
 
