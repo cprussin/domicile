@@ -39,6 +39,7 @@ use smithay::reexports::{
     calloop::{
         channel::{channel, Event as ChannelEvent, Sender},
         generic::Generic,
+        timer::{TimeoutAction, Timer},
         EventLoop, Interest, Mode, PostAction,
     },
     wayland_protocols::xdg::shell::server::xdg_toplevel,
@@ -1545,7 +1546,7 @@ impl DomicileCompositor {
     /// `WaitableEvent` while the engine's own thread runs a nested run loop,
     /// so the reply does not need this thread back.
     fn drive_latency(&mut self, app_id: &str, committed: Instant, held: bool) {
-        let (Some(point), Some(budget)) = (spike_latency_point(), spike_latency_budget()) else {
+        let (Some(_), Some(budget)) = (spike_latency_point(), spike_latency_budget()) else {
             return;
         };
         // Only a frame the engine took can answer a keystroke, and waiting for
@@ -1564,61 +1565,106 @@ impl DomicileCompositor {
         if self.latency_app.get_or_insert_with(|| app_id.to_string()) != app_id {
             return;
         }
-        // Taken out for the drive, because the `Press` arm needs all of
-        // `self`, and put back at the end. There is no early return between
-        // the two — if one is ever added it has to restore this, because a run
-        // dropped here starts over from an empty floor on the next commit.
+        // Taken out and put back, because a run dropped here starts over from
+        // an empty floor on the next commit.
         let mut run = self.latency.take().unwrap_or_else(|| Latency::new(budget));
         // The caller's stamp, from before `publish_frame` ran. The import and
         // the submit are this design's cost and belong in `commit_to_pixel`;
         // stamping here would have put them in the client's half instead.
         run.committed(committed);
-        loop {
-            match run.next(Instant::now()) {
-                LatencyStep::Sample => {
-                    match self.engine.as_mut().and_then(|engine| match point {
-                        LatencyPoint::Centre => engine.spike_window_centre(),
-                        LatencyPoint::At(x, y) => engine.spike_pixel(x, y),
-                    }) {
-                        Some(argb) => run.sampled(Instant::now(), argb),
-                        None => run.unreadable(),
-                    }
+        self.latency = Some(run);
+        // AND NOTHING ELSE. This used to drive the whole run from here, in a
+        // loop that sampled until the colour changed. See `step_the_latency`.
+    }
+
+    /// One step of the latency run, and then back to the event loop.
+    ///
+    /// **One.** This was a loop, and the loop is the bug it exists to not be.
+    ///
+    /// Everything in this compositor runs on one calloop thread: the clients'
+    /// fd, the engine's fd, and the commit callback this used to be driven
+    /// from. A poll loop inside that callback holds the thread, so for as long
+    /// as it spins, `pump_the_engine` cannot run and no `wl_buffer.release`
+    /// reaches anybody, and `dispatch_clients` cannot run and no frame
+    /// callback is flushed. The client is frozen.
+    ///
+    /// Which makes the wait unwinnable whenever the colour needs a *second*
+    /// commit — a toolkit that renders on `wl_surface.frame`, or one that
+    /// needs its buffer back first, which is most of them. The run spent its
+    /// whole poll budget and recorded the round as "abandoned by the client".
+    /// The client had done nothing wrong: it was starved by the compositor
+    /// waiting on it, and the accusation was backwards.
+    ///
+    /// Four of sixty rounds on the run that found this, and two before #246 —
+    /// which made it worse exactly as this predicts, by making a release
+    /// something the client has to be handed rather than something it got
+    /// early from a bug. `key_to_commit` had all sixty samples and
+    /// `commit_to_pixel` fifty-six: every round got its *first* commit, which
+    /// is the one that arrives while the thread is still free.
+    ///
+    /// So: one step, then return, and let the loop serve the client in
+    /// between. The timer in `main` is what brings us back.
+    ///
+    /// Returns whether the run wants another step immediately.
+    fn step_the_latency(&mut self) -> bool {
+        let (Some(point), Some(_)) = (spike_latency_point(), spike_latency_budget()) else {
+            return false;
+        };
+        let Some(mut run) = self.latency.take() else {
+            return false;
+        };
+        let app_id = self.latency_app.clone();
+        let wants_more = match run.next(Instant::now()) {
+            LatencyStep::Sample => {
+                match self.engine.as_mut().and_then(|engine| match point {
+                    LatencyPoint::Centre => engine.spike_window_centre(),
+                    LatencyPoint::At(x, y) => engine.spike_pixel(x, y),
+                }) {
+                    Some(argb) => run.sampled(Instant::now(), argb),
+                    None => run.unreadable(),
                 }
-                LatencyStep::Press => {
-                    // Focused every round rather than once: the keyboard is
-                    // one seat's and anything else that moved it would send
-                    // the rest of the run somewhere the probe is not looking.
-                    match self.surface_for(app_id) {
-                        Some(surface) => {
-                            let keyboard = self.seat.get_keyboard().unwrap();
-                            let serial = SERIAL_COUNTER.next_serial();
-                            keyboard.set_focus(self, Some(surface), serial);
-                            self.inject_key(LATENCY_KEY, true);
-                            self.inject_key(LATENCY_KEY, false);
-                        }
-                        // Never silently, and never merely logged: `next` has
-                        // already started this round, and the only way out of
-                        // a started round is a commit answering the key we
-                        // just failed to send. A client that does not redraw
-                        // on its own would leave the run there for ever with
-                        // no report — which is the shape of every other bug in
-                        // this file. The round is given up instead.
-                        None => {
-                            warn!(
-                                app_id,
-                                "the latency run has no surface to press a key into; \
-                                 giving the round up"
-                            );
-                            run.press_went_nowhere();
-                        }
-                    }
-                    break;
-                }
-                LatencyStep::Wait => break,
+                true
             }
-        }
+            LatencyStep::Press => {
+                // Focused every round rather than once: the keyboard is one
+                // seat's and anything else that moved it would send the rest
+                // of the run somewhere the probe is not looking.
+                match app_id
+                    .as_deref()
+                    .and_then(|app_id| self.surface_for(app_id))
+                {
+                    Some(surface) => {
+                        let keyboard = self.seat.get_keyboard().unwrap();
+                        let serial = SERIAL_COUNTER.next_serial();
+                        keyboard.set_focus(self, Some(surface), serial);
+                        self.inject_key(LATENCY_KEY, true);
+                        self.inject_key(LATENCY_KEY, false);
+                    }
+                    // Never silently, and never merely logged: `next` has
+                    // already started this round, and the only way out of a
+                    // started round is a commit answering the key we just
+                    // failed to send. A client that does not redraw on its own
+                    // would leave the run there for ever with no report —
+                    // which is the shape of every other bug in this file. The
+                    // round is given up instead.
+                    None => {
+                        warn!(
+                            ?app_id,
+                            "the latency run has no surface to press a key into; \
+                             giving the round up"
+                        );
+                        run.press_went_nowhere();
+                    }
+                }
+                // The client has to redraw before there is anything to look
+                // at, and it cannot do that while we are here.
+                false
+            }
+            LatencyStep::Wait => false,
+        };
         self.latency = Some(run);
         self.report_latency();
+        wants_more
     }
 
     /// One display frame, as this desktop advertises it.
@@ -1674,6 +1720,17 @@ impl DomicileCompositor {
             target: "domicile::engine::spike",
             "latency: {} round(s) abandoned by the client",
             report.abandoned
+        );
+        // What the client did with the key, as opposed to whether it answered
+        // at all. A round counted here answered with more than one frame, and
+        // its `commit to pixel` is timed from the first of them — so a run
+        // with a high count here is reporting some of the client's own second
+        // draw as ours. Said always, so that qualification is never missing
+        // from a number somebody is about to compare against a floor.
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: {} round(s) where the client drew again while polling",
+            report.redrew_while_polling
         );
         // Said always, and separately from the line above. A key we never
         // delivered is this compositor's failure and not the client's, and
@@ -3821,6 +3878,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
     }
 
+    // The latency run's own turn of the loop.
+    //
+    // A source rather than a loop inside the commit callback, and that is the
+    // whole point: see `step_the_latency`. Sampling from the callback held
+    // this thread, so the client whose redraw the run was waiting for could
+    // be handed neither a buffer release nor a frame callback, and the run
+    // blamed it for not answering.
+    //
+    // Only when a run is asked for. `--domicile-latency-*` is the guard's, and
+    // a desktop nobody is measuring should not have a timer at all.
+    if spike_latency_point().is_some() {
+        handle.insert_source(Timer::immediate(), |_, _, data: &mut CalloopData| {
+            // Immediate again while the run has work: calloop dispatches every
+            // ready source each turn, so an immediate re-arm still gives the
+            // clients' fd and the engine's their turn — which is exactly what
+            // was missing. Idling at a millisecond rather than immediately
+            // when it has none, so a compositor between rounds is not a
+            // spinning one.
+            if data.state.step_the_latency() {
+                TimeoutAction::ToInstant(Instant::now())
+            } else {
+                TimeoutAction::ToDuration(Duration::from_millis(1))
+            }
+        })?;
+    }
+
     // Inject forwarded input (from chrome threads) on the Wayland thread.
     handle.insert_source(request_rx, |event, _, data: &mut CalloopData| {
         if let ChannelEvent::Msg(input) = event {
@@ -4034,8 +4117,13 @@ fn spike_latency_point() -> Option<LatencyPoint> {
 ///
 /// Unset is the real measurement's sixty and sixty. A guard's negative control
 /// sets it small, because what a control proves — that a client answering no
-/// keys makes the guard fail — needs three rounds rather than sixty, and sixty
-/// of them abandoning is minutes of a blocked desktop.
+/// keys makes the guard fail — needs three rounds rather than sixty, and each
+/// abandoning round spends its whole poll budget a display frame at a time.
+///
+/// It is minutes of a *slow* control now rather than minutes of a blocked
+/// desktop: the run steps from a timer and gives the loop its turn between
+/// samples, so the clients keep being served throughout. See
+/// `step_the_latency`.
 ///
 /// A value the run could not use is refused with a warning and no run, rather
 /// than clamped: see `Budget::parse`.

@@ -175,6 +175,36 @@ pub struct Report {
     /// nothing here is a measurement; it is this compositor failing to do the
     /// one thing a round starts with.
     pub undelivered: usize,
+    /// Rounds where the client committed *again* while we were polling.
+    ///
+    /// Not a fault, and not counted against anybody. It is the number that
+    /// says which of two stories a round is: the client answered a key with
+    /// one frame, or it answered with more than one — a toolkit rendering on
+    /// `wl_surface.frame`, or one whose first commit was already in flight
+    /// when the key landed.
+    ///
+    /// It exists because it used to be unobservable, and its being
+    /// unobservable was a bug. The run sampled in a loop inside the commit
+    /// callback, holding the compositor's one thread, so a client could not
+    /// commit a second time even when that was the only way the colour was
+    /// ever going to change: no buffer release reached it and no frame
+    /// callback was flushed. Those rounds spent their whole poll budget and
+    /// were reported as the client not answering. See `step_the_latency`.
+    ///
+    /// So this is also the discriminator. A round that would have been
+    /// abandoned before and completes now shows up here. One still abandoned
+    /// with nothing here is a frame that genuinely never reached the screen,
+    /// which is a different bug in a different place.
+    ///
+    /// **It qualifies `commit_to_pixel`.** That is timed from the *first*
+    /// commit after the key, so for a round counted here it has some of the
+    /// client's own second think-and-draw in it and overstates what this
+    /// design costs. Reported rather than corrected: timing from the last
+    /// commit instead understates it by exactly as much, since a commit that
+    /// changed nothing would reset the clock, and there is no way from here to
+    /// tell which commit the pixel came from. A number beside it is honest;
+    /// silently picking one end is not.
+    pub redrew_while_polling: usize,
     /// Why the run stopped, when it was not by running out of rounds.
     ///
     /// Separate from `abandoned` because they are different accusations: an
@@ -401,6 +431,7 @@ pub struct Latency {
     commit_to_pixel: Vec<Duration>,
     key_to_pixel: Vec<Duration>,
     abandoned: usize,
+    redrew_while_polling: usize,
     undelivered: usize,
 }
 
@@ -432,6 +463,7 @@ impl Latency {
             commit_to_pixel: Vec::new(),
             key_to_pixel: Vec::new(),
             abandoned: 0,
+            redrew_while_polling: 0,
             undelivered: 0,
         }
     }
@@ -580,14 +612,22 @@ impl Latency {
     /// self-repainting client *does* interrupt is the floor's stillness, which
     /// is `Ended::NeverSettled`'s job and not this one's.)
     pub fn committed(&mut self, now: Instant) {
-        if let Phase::Pressed { at, before } = self.phase {
-            self.key_to_commit.push(now.saturating_duration_since(at));
-            self.phase = Phase::Polling {
-                keyed: at,
-                committed: now,
-                before,
-                polls: 0,
-            };
+        match self.phase {
+            Phase::Pressed { at, before } => {
+                self.key_to_commit.push(now.saturating_duration_since(at));
+                self.phase = Phase::Polling {
+                    keyed: at,
+                    committed: now,
+                    before,
+                    polls: 0,
+                };
+            }
+            // A second frame for the same key. Counted, not acted on: see
+            // `Report::redrew_while_polling` for why the clock is not moved to
+            // it. Reachable only since the run stopped holding the thread it
+            // would have to arrive on.
+            Phase::Polling { .. } => self.redrew_while_polling += 1,
+            Phase::Floor { .. } | Phase::Ready | Phase::Done(_) => {}
         }
     }
 
@@ -682,6 +722,7 @@ impl Latency {
             commit_to_pixel: Spread::of(&self.commit_to_pixel),
             key_to_pixel: Spread::of(&self.key_to_pixel),
             abandoned: self.abandoned,
+            redrew_while_polling: self.redrew_while_polling,
             undelivered: self.undelivered,
             ended,
         })
@@ -1063,6 +1104,71 @@ mod tests {
 
     /// A client that stops drawing must end the run with the round counted,
     /// not leave the guard polling for ever.
+    /// A second frame for one key is counted, and does not disturb the round.
+    ///
+    /// It was unreachable until the run stopped holding the compositor's one
+    /// thread: the commit could not arrive, because the loop waiting for its
+    /// pixels was the reason nothing was serving the client. Now that it can,
+    /// what it must not do is restart anything — the round is already timed,
+    /// and a second `key_to_commit` sample would price one keystroke twice.
+    #[test]
+    fn a_second_frame_for_one_key_is_counted_and_changes_nothing_else() {
+        let mut driver = Driver::new(1, 3, 8);
+        driver.reach_first_press(ms(17));
+
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+        driver.now += ms(5);
+        driver.latency.committed(driver.now);
+        // The client draws again before its first frame reached the screen.
+        driver.now += ms(5);
+        driver.latency.committed(driver.now);
+        driver.now += ms(5);
+        driver.latency.committed(driver.now);
+
+        driver.colour = 0xFF00_FF00;
+        driver.answer(ms(17));
+
+        let report = driver.latency.report().unwrap();
+        assert_eq!(
+            report.redrew_while_polling, 2,
+            "both extra frames are the same fact and both are counted"
+        );
+        assert_eq!(
+            report.abandoned, 0,
+            "the colour changed, so nothing was abandoned"
+        );
+        assert_eq!(
+            report.key_to_commit.unwrap().count,
+            1,
+            "one keystroke is one sample of what the client took to answer it, \
+             however many frames the answer was"
+        );
+        assert_eq!(
+            report.commit_to_pixel.unwrap().median,
+            ms(27),
+            "timed from the first commit and not moved to either later one — \
+             see Report::redrew_while_polling"
+        );
+    }
+
+    /// A run nobody redrew during reports zero rather than nothing.
+    ///
+    /// The count qualifies `commit to pixel`, so its absence must never be
+    /// readable as its being fine.
+    #[test]
+    fn a_run_the_client_answered_in_one_frame_says_so() {
+        let mut driver = Driver::new(1, 3, 8);
+        driver.reach_first_press(ms(17));
+
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+        driver.now += ms(5);
+        driver.latency.committed(driver.now);
+        driver.colour = 0xFF00_FF00;
+        driver.answer(ms(17));
+
+        assert_eq!(driver.latency.report().unwrap().redrew_while_polling, 0);
+    }
+
     #[test]
     fn a_round_that_never_changes_is_abandoned_rather_than_waited_on() {
         let mut driver = Driver::new(1, 3, 4);

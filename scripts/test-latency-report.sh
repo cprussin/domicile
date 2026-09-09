@@ -51,6 +51,7 @@ COMPLETE="$(cat <<'RUN'
 2026-09-07T14:00:00.4Z  INFO domicile::engine::spike: latency commit to pixel: min 16.61, median 16.68, max 34.10 ms over 60 (median 1.0 frames)
 2026-09-07T14:00:00.5Z  INFO domicile::engine::spike: latency key to pixel: min 17.51, median 18.08, max 43.20 ms over 60 (median 1.1 frames)
 2026-09-07T14:00:00.6Z  INFO domicile::engine::spike: latency: 0 round(s) abandoned by the client
+2026-09-07T14:00:00.65Z  INFO domicile::engine::spike: latency: 2 round(s) where the client drew again while polling
 2026-09-07T14:00:00.7Z  INFO domicile::engine::spike: latency: the run completed
 RUN
 )"
@@ -70,6 +71,16 @@ expect "a two-word label reads as one label" \
 
 expect "a completed run says so" "completed" "$(latency_ended "$RUN_LOG")"
 expect "an unabandoned run says none" "0" "$(latency_abandoned "$RUN_LOG")"
+
+# Its own line and its own reader, and the reason both exist: a round the
+# client answered with two frames and one it never answered at all look the
+# same from the abandoned count, and they are opposite findings. Anchored on
+# its own wording so it cannot read the abandoned line, which also matches
+# `latency: <n> round(s)`.
+expect "a run the client redrew during says how often" \
+  "2" "$(latency_redrew "$RUN_LOG")"
+expect "and the abandoned count is not it" \
+  "0" "$(latency_abandoned "$RUN_LOG")"
 
 # "Nothing measured" is the compositor's own line for a spread with no samples.
 # It must not read as a number, and it must not read as the previous line's.

@@ -56,8 +56,13 @@ MOST_FLOORS="${MOST_FLOORS:-2}"
 
 # Three numbers: rounds, floor samples, polls per round. The control runs short
 # because what it proves needs three rounds, and sixty rounds each spending
-# every poll is minutes of a blocked desktop — the run holds the Wayland thread
-# while it waits on the browser, which `drive_latency` documents.
+# every poll is minutes of waiting: a poll costs a display frame, because asking
+# what colour a pixel is forces the draw it then reads.
+#
+# It is not a blocked desktop any more. The run used to sample in a loop inside
+# the commit callback, which held the compositor's one thread and starved the
+# client it was waiting on; it steps from a timer now and the loop keeps
+# serving clients between samples. See `step_the_latency`.
 BUDGET="${BUDGET:-60,60,200}"
 [ "$NEGATIVE" = "1" ] && BUDGET="${NEGATIVE_BUDGET:-3,8,6}"
 
@@ -231,9 +236,11 @@ THEIRS="$(latency_median "key to commit" "$COMP_LOG")"
 WHOLE="$(latency_median "key to pixel" "$COMP_LOG")"
 ABANDONED="$(latency_abandoned "$COMP_LOG")"
 UNDELIVERED="$(latency_undelivered "$COMP_LOG")"
+REDREW="$(latency_redrew "$COMP_LOG")"
 echo "ended: $ENDED; floor ${FLOOR:-none} ms; commit to pixel ${OURS:-none} ms;"
 echo "key to commit ${THEIRS:-none} ms; key to pixel ${WHOLE:-none} ms;"
-echo "abandoned ${ABANDONED:-none}; undelivered ${UNDELIVERED:-none}"
+echo "abandoned ${ABANDONED:-none}; undelivered ${UNDELIVERED:-none};"
+echo "drew again while polling ${REDREW:-none}"
 
 if [ "$NEGATIVE" = "1" ]; then
   # A control that passes because the whole run fell over proves nothing: the

@@ -57,6 +57,19 @@ latency_abandoned() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
+# How many rounds the client answered with more than one frame. Empty when the
+# run never said.
+#
+# Not a fault, and not read as one. It qualifies `commit to pixel`, which is
+# timed from the first of those frames, and it is the number that tells an
+# abandoned round apart from a starved one: see `step_the_latency`.
+latency_redrew() {
+  local log="$1"
+  grep -a "round(s) where the client drew again while polling" "$log" 2>/dev/null |
+    tail -1 |
+    sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
+}
+
 # How many rounds this compositor failed to deliver a key for. Empty when the
 # run never said.
 #
