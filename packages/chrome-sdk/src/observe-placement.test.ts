@@ -54,7 +54,7 @@ afterEach(() => {
 });
 
 describe("defaultObservePlacement", () => {
-  it("measures every portal on each frame", () => {
+  it("measures every window on each frame", () => {
     frames = new Frames();
     const seen: string[] = [];
     frames.follow(() => seen.push("term"));
@@ -66,7 +66,7 @@ describe("defaultObservePlacement", () => {
     expect(seen).toStrictEqual(["term", "editor", "term", "editor"]);
   });
 
-  it("runs one loop however many portals there are", () => {
+  it("runs one loop however many windows there are", () => {
     // A timer each would multiply the cost of a layout read per window per
     // frame by nothing gained — they all want the same moment.
     frames = new Frames();
@@ -83,7 +83,7 @@ describe("defaultObservePlacement", () => {
     expect(frames.requested - started).toBe(1);
   });
 
-  it("stops the loop when the last portal goes", () => {
+  it("stops the loop when the last window goes", () => {
     // A desktop with no windows on it should not be reading layout sixty times
     // a second for nothing, and the loop is the only thing keeping itself
     // alive — nothing else would ever cancel it.
@@ -100,7 +100,7 @@ describe("defaultObservePlacement", () => {
     expect(frames.requested).toBe(settled);
   });
 
-  it("starts the loop again when a portal comes back", () => {
+  it("starts the loop again when a window comes back", () => {
     // The loop stops itself, so mounting a window after the last one closed
     // has to restart it or that window never moves again.
     frames = new Frames();
@@ -118,15 +118,15 @@ describe("defaultObservePlacement", () => {
     expect(measured).toBe(1);
   });
 
-  it("skips a portal unfollowed while the pass was running", () => {
-    // Unfollowing is what `disconnectedCallback` does, and a portal that has
-    // just been disconnected has no box: measuring it would report a window
-    // that is not on the stage. Its turn in this very pass is the one moment
-    // it can be asked after it has gone.
+  it("skips a window unfollowed while the pass was running", () => {
+    // Unfollowing is what `disconnectedCallback` does, and a window that has
+    // just been disconnected has no box: measuring it would report a size
+    // nothing is laid out at. Its turn in this very pass is the one moment it
+    // can be asked after it has gone.
     frames = new Frames();
     const seen: string[] = [];
     let unfollowSecond = (): void => {
-      // Replaced below, once there is a second portal to unfollow.
+      // Replaced below, once there is a second window to unfollow.
     };
     frames.follow(() => {
       seen.push("first");
@@ -141,8 +141,8 @@ describe("defaultObservePlacement", () => {
     expect(seen).toStrictEqual(["first"]);
   });
 
-  it("stops the loop on the frame the last portal goes, not the one after", () => {
-    // A portal can unfollow itself from inside its own callback — a chrome
+  it("stops the loop on the frame the last window goes, not the one after", () => {
+    // A window can unfollow itself from inside its own callback — a chrome
     // that unmounts a window in response to what it measured. Deciding whether
     // to carry on before the pass rather than after it would queue a frame
     // whose only work is to notice there is none.
@@ -163,7 +163,7 @@ describe("defaultObservePlacement", () => {
     expect(frames.requested).toBe(booked);
   });
 
-  it("keeps following every other portal when one of them throws", () => {
+  it("keeps following every other window when one of them throws", () => {
     // The loop is shared, so a throw that stopped it would stop the whole
     // desktop following — not just this window, and not just this frame:
     // nothing restarts a loop that never rescheduled itself, so every window
@@ -193,7 +193,7 @@ describe("defaultObservePlacement", () => {
     expect(measured).toBe(2);
   });
 
-  it("reports every portal that could not be measured, not just the first", () => {
+  it("reports every window that could not be measured, not just the first", () => {
     // Set order is stable, so keeping only the first would hide the second
     // window's failure for the life of the page while reporting the first
     // sixty times a second — one window broken loudly and another broken
@@ -221,8 +221,8 @@ describe("defaultObservePlacement", () => {
 
   it("does nothing where the page cannot animate at all", () => {
     // A DOM implementation outside a browsing context lays nothing out, so
-    // nothing can move; throwing on the way in would stop every portal being
-    // placed rather than stop it being followed.
+    // nothing can change size; throwing on the way in would stop every window
+    // being measured rather than stop it being followed.
     frames = new Frames();
     const original = globalThis.requestAnimationFrame;
     // @ts-expect-error -- removing a global the module guards against

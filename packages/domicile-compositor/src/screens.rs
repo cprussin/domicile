@@ -361,7 +361,6 @@ fn as_measure(coordinate: i32) -> u32 {
 mod tests {
     use super::*;
     use domicile_config::Config;
-    use domicile_scene::{Portal, Transform};
 
     fn desktop(text: &str) -> Desktop {
         Config::parse(text)
@@ -612,9 +611,16 @@ mod tests {
         ))
     }
 
-    /// A window of `size` at `at`, as the chrome would have placed it.
+    /// A window of `size` with its top-left corner at `at`.
+    ///
+    /// Built here rather than from a placement the chrome sent: the chrome no
+    /// longer reports where its boxes are, and what this file asks of a box is
+    /// only which displays it overlaps.
     fn window_at(at: (f64, f64), size: (f64, f64)) -> Bounds {
-        Portal::new("app", size, Transform::translate(at.0, at.1), 0).bounds()
+        Bounds {
+            min: Point::new(at.0, at.1),
+            max: Point::new(at.0 + size.0, at.1 + size.1),
+        }
     }
 
     #[test]

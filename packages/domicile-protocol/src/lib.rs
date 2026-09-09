@@ -45,56 +45,6 @@ pub struct Shortcut {
     pub logo: bool,
 }
 
-/// A shadow an element casts, in the logical units the placement is in.
-///
-/// One shadow, not the list CSS allows: the first, which is the one on top.
-/// Inset shadows are not represented at all — they fall *inside* the box, over
-/// the client's own pixels, and drawing one as an outer shadow would ring a
-/// window that asked for the opposite.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Shadow {
-    pub dx: f64,
-    pub dy: f64,
-    /// The width of the falloff. Zero is a hard edge, never negative.
-    pub blur: f64,
-    /// How much bigger than the window the shadow is before it blurs.
-    pub spread: f64,
-    /// Straight RGBA: channels 0-255, alpha 0-1, as CSS reports them.
-    pub color: [f64; 4],
-}
-
-/// What an element with no `opacity` set has: all of it.
-///
-/// Spelled out because serde needs a function, and because a missing field
-/// meaning *invisible* would be the worst possible default — a chrome that
-/// omits the field would place windows nobody could see.
-fn opaque() -> f64 {
-    1.0
-}
-
-/// A rectangle of the page that takes the pointer, at a depth.
-///
-/// The chrome's answer to what [`ChromeMessage::PlacePortal::takes_pointer`]
-/// cannot say. That flag makes a *whole* window inert, which covers a menu or
-/// a dialog drawn over it; it has nothing to say about chrome lying across
-/// part of one window and none of the one beside it. A floating window's title
-/// bar is exactly that, and without this the press on it goes to whichever
-/// window the bar happens to overlap.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct PointerRegion {
-    /// A CSS `matrix(a,b,c,d,e,f)` mapping the region's local pixels to
-    /// screen space — the same mapping, and the same space, as a portal's.
-    pub transform: [f64; 6],
-    /// Local size `(width, height)`, in the units `transform` maps from.
-    pub size: [f64; 2],
-    /// Stacking order, in the space `place_portal` reports a window's in.
-    pub z_index: i32,
-}
-
-fn interactive() -> bool {
-    true
-}
-
 /// Messages sent from the chrome (in-page bridge) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -102,61 +52,10 @@ pub enum ChromeMessage {
     /// First message after connecting; declares the version the chrome speaks.
     Hello { protocol_version: u32 },
 
-    /// Report the on-screen placement of an `<app>` element. Sent whenever the
-    /// element's geometry, stacking, or visibility changes. `transform` is a
-    /// CSS `matrix(a,b,c,d,e,f)` mapping app-local pixels to screen space.
-    PlacePortal {
-        app_id: String,
-        transform: [f64; 6],
-        size: [f64; 2],
-        z_index: i32,
-        visible: bool,
-        /// The element's `border-radius`, in the same logical units as `size`.
-        ///
-        /// One radius, not four: it is what the compositor's shader can apply
-        /// without knowing which way up a client's buffer is, and it is what
-        /// every window actually asks for. An element with four different
-        /// corners reports the one it uses most.
-        #[serde(default)]
-        corner_radius: f64,
-        /// The element's `opacity`, 0 to 1.
-        #[serde(default = "opaque")]
-        opacity: f64,
-        /// The element's `box-shadow`, if it casts one that can be drawn.
-        #[serde(default)]
-        shadow: Option<Shadow>,
-        /// Whether a pointer over this window belongs to it.
-        ///
-        /// False for an element with `pointer-events: none`. The compositor
-        /// hit-tests a rectangle and cannot see what the engine painted over
-        /// it, so a window under a menu, a dialog or a browser tab would
-        /// swallow the clicks meant for them — and the click that hands the
-        /// keyboard back to the chrome is one the chrome has to receive, so it
-        /// would swallow the way out too.
-        ///
-        /// Takes the pointer by default: a chrome that cannot say is a chrome
-        /// from before there was anything to paint over a window, and every
-        /// window it places is meant to be used.
-        #[serde(default = "interactive")]
-        takes_pointer: bool,
-    },
-
-    /// An `<app>` element was unmounted; the host should stop compositing it.
-    RemovePortal { app_id: String },
-
     /// The chrome laid an `<app>` element out at a new size. The compositor
     /// configures the client to match so it re-renders at that resolution,
     /// rather than having its old buffer stretched into the new box.
     ResizeApp { app_id: String, size: [f64; 2] },
-
-    /// Where the chrome takes the pointer over the windows.
-    ///
-    /// The whole set each time, re-sent whenever the page's own layout moves: a bar that has moved must
-    /// not go on taking the pointer where it used to be. A chrome that sends
-    /// nothing here claims nothing, which is what every chrome did before this
-    /// existed — and what leaves a press on a floating window's title bar
-    /// landing on whichever window that bar overlaps.
-    ClaimPointer { regions: Vec<PointerRegion> },
 
     /// How many physical pixels the chrome paints per CSS pixel — its
     /// `devicePixelRatio`. The compositor advertises this as the `wl_output`

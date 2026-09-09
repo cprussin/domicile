@@ -5,9 +5,8 @@
 //! decides where input goes. The Smithay Wayland-server backend (behind the
 //! `smithay-backend` feature) is thin glue that drives this: it calls
 //! [`Host::app_appeared`] when a client maps a toplevel, feeds
-//! [`Host::handle_chrome_message`] with messages from the in-page bridge, and
-//! asks [`Host::route_pointer`] / [`Host::keyboard_target`] where to deliver
-//! input.
+//! [`Host::handle_chrome_message`] with messages from the page, and asks
+//! [`Host::keyboard_target`] where the keyboard goes.
 //!
 //! This split keeps the interesting logic unit-testable end to end.
 
@@ -16,7 +15,7 @@ use std::collections::HashMap;
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage};
 
 pub mod ipc;
-use domicile_scene::{Claim, KeyboardTarget, PointerTarget, Portal, Scene, Style, Transform};
+use domicile_scene::{KeyboardTarget, Scene};
 
 /// Identifier for a connected app (Wayland toplevel), assigned by the host.
 pub type AppId = String;
@@ -45,15 +44,6 @@ pub struct App {
     /// The size the chrome last laid its `<app>` element out at, which the
     /// compositor configures the client to. `None` until the chrome resizes it.
     pub requested_size: Option<(f64, f64)>,
-}
-
-/// Where an input event should be delivered.
-#[derive(Debug, Clone, PartialEq)]
-pub enum InputDelivery {
-    /// Deliver to a Wayland client at an app-local coordinate.
-    App { app_id: AppId, local: (f64, f64) },
-    /// Deliver to the chrome (web page) at a screen coordinate.
-    Chrome { screen: (f64, f64) },
 }
 
 /// The compositor's orchestration state.
@@ -238,7 +228,7 @@ impl Host {
     /// notification, or `None` if the app was already gone.
     pub fn app_closed(&mut self, app_id: &str) -> Option<HostMessage> {
         self.apps.remove(app_id)?;
-        self.scene.remove(app_id);
+        self.scene.window_gone(app_id);
         Some(HostMessage::AppClosed {
             app_id: app_id.to_string(),
         })
@@ -263,80 +253,18 @@ impl Host {
                 // already sends absolute. Intercepted in the compositor beside
                 // the density above.
             }
-            ChromeMessage::ClaimPointer { regions } => {
-                // Where the chrome takes the pointer over the windows, which
-                // is routing and so the scene's — unlike the depths above,
-                // which are only ever about how the desktop is drawn.
-                self.scene.claim_pointer(
-                    regions
-                        .into_iter()
-                        .map(|region| {
-                            Claim::new(
-                                (region.size[0], region.size[1]),
-                                transform_from_wire(region.transform),
-                                region.z_index,
-                            )
-                        })
-                        .collect(),
-                );
-            }
-            ChromeMessage::PlacePortal {
-                app_id,
-                transform,
-                size,
-                z_index,
-                visible,
-                corner_radius,
-                opacity,
-                shadow,
-                takes_pointer,
-            } => {
-                if !self.apps.contains_key(&app_id) {
-                    return Err(HostError::UnknownApp(app_id));
-                }
-                if visible {
-                    let placed = Portal::new(
-                        app_id,
-                        (size[0], size[1]),
-                        transform_from_wire(transform),
-                        z_index,
-                    )
-                    .styled(Style {
-                        corner_radius,
-                        opacity,
-                        shadow: shadow.map(|shadow| domicile_scene::Shadow {
-                            blur: shadow.blur,
-                            color: shadow.color,
-                            dx: shadow.dx,
-                            dy: shadow.dy,
-                            spread: shadow.spread,
-                        }),
-                    });
-                    // A window the chrome painted something over takes no
-                    // pointer, so the click reaches what covers it.
-                    let placed = if takes_pointer {
-                        placed
-                    } else {
-                        placed.inert()
-                    };
-                    self.scene.upsert(placed);
-                } else {
-                    // A hidden app is not composited or hit-tested.
-                    self.scene.remove(&app_id);
-                }
-            }
-            ChromeMessage::RemovePortal { app_id } => {
-                self.scene.remove(&app_id);
-            }
             ChromeMessage::ResizeApp { app_id, size } => match self.apps.get_mut(&app_id) {
                 Some(app) => app.requested_size = Some((size[0], size[1])),
                 None => return Err(HostError::UnknownApp(app_id)),
             },
             ChromeMessage::FocusApp { app_id } => {
-                // Focus is what a click means, so it raises the app too:
-                // otherwise a click on the lower of two overlapping apps would
-                // type into it while the other still takes the pointer.
-                self.scene.raise(&app_id);
+                // Gated on a window this host knows about, which is a window
+                // that has mapped. It used to be gated on the page having
+                // *placed* it, and that gate is gone with placement — see
+                // `Scene::focus_app`.
+                if !self.apps.contains_key(&app_id) {
+                    return Err(HostError::UnknownApp(app_id));
+                }
                 self.scene.focus_app(&app_id);
             }
             ChromeMessage::FocusChrome => {
@@ -361,19 +289,6 @@ impl Host {
         Ok(())
     }
 
-    /// Decide where a pointer event at screen `(x, y)` should be delivered.
-    pub fn route_pointer(&self, x: f64, y: f64) -> InputDelivery {
-        match self.scene.route_pointer(domicile_scene::Point::new(x, y)) {
-            PointerTarget::App { app_id, local } => InputDelivery::App {
-                app_id,
-                local: (local.x, local.y),
-            },
-            PointerTarget::Chrome { screen } => InputDelivery::Chrome {
-                screen: (screen.x, screen.y),
-            },
-        }
-    }
-
     /// The current keyboard delivery target.
     pub fn keyboard_target(&self) -> KeyboardTarget {
         self.scene.keyboard_target()
@@ -393,11 +308,6 @@ impl Host {
     pub fn app_count(&self) -> usize {
         self.apps.len()
     }
-}
-
-/// Convert a wire affine `[a, b, c, d, e, f]` into a scene [`Transform`].
-fn transform_from_wire([a, b, c, d, e, f]: [f64; 6]) -> Transform {
-    Transform { a, b, c, d, e, f }
 }
 
 /// A size as the wire carries it. The memory form is a tuple and the protocol's

@@ -78,7 +78,7 @@ createRoot(mountPoint(document)).render(
 // observed: `ipc` is what the host's bytes cost between arriving in this
 // process and reaching this page, and `draw` is putting them on the canvas.
 //
-// Placement is reported on a line of its own, because it is not part of the
+// Measuring is reported on a line of its own, because it is not part of the
 // round trip at all: it is the one cost that grows with the number of windows
 // rather than with what any of them is doing. See `diagnostic-lines`.
 //

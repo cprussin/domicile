@@ -3,7 +3,6 @@ import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 
 import { css, cx } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
-import { CLAIMS_POINTER } from "./claim-pointer";
 import { barBox } from "./float";
 import type { Floating } from "./shell-state";
 import { useFloatDrag } from "./useFloatDrag";
@@ -54,10 +53,6 @@ export const FloatTitleBar = ({
   return (
     <div
       className={cx(barStyles, floatEdgeStyles, focused && focusedStyles)}
-      // The bar lies across whatever the window it names cascades over, and a
-      // press on it must reach the page rather than that window. See
-      // `claim-pointer`.
-      {...{ [CLAIMS_POINTER]: "" }}
       style={floatPlacement(barBox(floating.float), floating.depth)}
       {...handlers}
     >

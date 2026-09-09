@@ -11,7 +11,11 @@ use std::path::{Path, PathBuf};
 /// The name a shell's module has to have. Fixed rather than searched for:
 /// `shellBuild` pins it, because a content hash in the name would change every
 /// time the shell did and then nothing could name the file.
-const MODULE: &str = "shell.js";
+///
+/// Public because the engine is told it too: it goes into the document the
+/// fork generates as `<script src>`, and the name the launcher looks for on
+/// disk and the name the document asks for have to be the one name.
+pub const MODULE: &str = "shell.js";
 
 /// Two instructions that disagree, or none that names a shell.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

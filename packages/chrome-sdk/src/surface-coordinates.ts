@@ -2,10 +2,10 @@
 // client's surface.
 //
 // The chrome owns this mapping because pointer events land on the DOM element,
-// not on the compositor. It is the inverse of the element->screen affine the
-// chrome already ships to the host in `place_portal`, so an app under any CSS
-// transform — rotated, scaled, skewed — still receives correct surface-local
-// coordinates.
+// not on the compositor — which no longer knows where any window is, so there
+// is nowhere else it could be done. It is the inverse of the element->screen
+// affine `measure` reports, so an app under any CSS transform — rotated,
+// scaled, skewed — still receives correct surface-local coordinates.
 
 import type { Matrix, Point } from "./matrix";
 import { apply, invert } from "./matrix";

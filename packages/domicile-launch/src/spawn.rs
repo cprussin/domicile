@@ -8,6 +8,13 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use crate::shell_path::MODULE;
+
+/// The document the fork generates, and what a desktop is started on. One
+/// host and one path: `domicile_scheme.h` says there is no second host, and
+/// naming one is how a request for something that is not the shell is refused.
+const SHELL_DOCUMENT: &str = "domicile://shell/index.html";
+
 /// A child process, before anything has been started.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Spawn {
@@ -21,33 +28,22 @@ pub struct Spawn {
 pub struct Runtime {
     /// The socket the engine opens and the compositor submits through.
     pub broker: PathBuf,
-    /// The host protocol, which the bridge serves and the compositor answers.
+    /// The host protocol: the compositor listens, and the engine dials it for
+    /// the page's control channel.
     pub chrome_socket: PathBuf,
     /// The engine's own profile, thrown away with the run.
     pub profile: PathBuf,
 }
 
-/// The bridge: it serves the shell's page and pipes the session.
+/// The engine, on the shell's page.
 ///
-/// Everything by environment rather than argv, as the bridge reads it: the
-/// only caller is a launcher, and a launcher that has to quote paths into an
-/// argv is a launcher with a bug in it the first time a checkout has a space
-/// in its name.
-pub fn bridge(bridge: &Path, module: &Path, runtime: &Runtime) -> Spawn {
-    Spawn {
-        args: Vec::new(),
-        env: vec![
-            ("DOMICILE_MODULE".to_string(), module.into()),
-            (
-                "DOMICILE_SOCKET".to_string(),
-                runtime.chrome_socket.clone().into(),
-            ),
-        ],
-        program: bridge.to_path_buf(),
-    }
-}
-
-/// The engine, on the page the bridge is serving.
+/// THREE FLAGS REPLACED A PORT. The page used to be served by a bridge over
+/// HTTP on a loopback port, and it reached the compositor through a WebSocket
+/// on that same port — so every process on the machine could reach a protocol
+/// carrying `Spawn`. The fork serves the shell over `domicile://` and binds
+/// the control channel to the document's origin, so what the engine needs
+/// instead is where the files are, which module to load, and which socket the
+/// compositor is on.
 ///
 /// `--app` because a desktop is not a browser looking at a page. Without it
 /// the window carries a tab strip, an address bar and a bookmarks row — about
@@ -63,14 +59,24 @@ pub fn bridge(bridge: &Path, module: &Path, runtime: &Runtime) -> Spawn {
 /// the command every machine runs.
 pub fn engine(
     engine: &Path,
-    url: &str,
+    page: &Path,
     platform: &str,
     runtime: &Runtime,
     extra: Option<&str>,
 ) -> Spawn {
     let mut args: Vec<OsString> = vec![
         format!("--ozone-platform={platform}").into(),
-        format!("--app={url}").into(),
+        format!("--app={SHELL_DOCUMENT}").into(),
+        format!("--domicile-shell-root={}", page.display()).into(),
+        // Relative, not a path from this machine's root: the fork puts it in
+        // the document it generates as `<script src>`, resolved against
+        // `domicile://shell/`.
+        format!("--domicile-shell-module={MODULE}").into(),
+        format!(
+            "--domicile-control-socket={}",
+            runtime.chrome_socket.display()
+        )
+        .into(),
         "--password-store=basic".into(),
         "--no-first-run".into(),
         format!("--user-data-dir={}", runtime.profile.display()).into(),

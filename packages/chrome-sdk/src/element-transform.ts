@@ -4,8 +4,8 @@
 // `getBoundingClientRect` reports the *axis-aligned* box of an element after
 // its transform, which is not where the element's own coordinate system starts
 // once it rotates or skews. Composing the transform's linear part with that box
-// recovers the real mapping, which is what both `place_portal` and
-// surface-local pointer coordinates need. `transform-origin` is not part of it
+// recovers the real mapping, which is what surface-local pointer coordinates
+// invert through. `transform-origin` is not part of it
 // — see `elementToScreen` for why it cannot be.
 
 import type { Matrix, Point } from "./matrix";

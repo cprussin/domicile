@@ -45,18 +45,11 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 CHECKOUT="$WORK/checkout"
 
-# A `bun` that answers, so the bridge shim the launch writes is a thing that
-# actually runs rather than a file that merely exists.
-mkdir -p "$WORK/bin"
-printf '#!/bin/sh\nexit 0\n' >"$WORK/bin/bun"
-chmod +x "$WORK/bin/bun"
-
 # What the desktop was told, in the order a reader cares about it. `env` rather
 # than a fixed list, so a variable that stops being passed shows up as a
 # missing line instead of as nothing at all.
 launch() { # $1 DOMICILE_ENGINE
   (
-    PATH="$WORK/bin:$PATH"
     ROOT="$CHECKOUT"
     SHELL_NAME=simple
     PAGE_DIR="$WORK/page"
@@ -78,8 +71,7 @@ echo "engine=${DOMICILE_ENGINE:-unset}"
 echo "page=${DOMICILE_PAGE:-}"
 echo "reload=${DOMICILE_DEV_RELOAD:-unset}"
 echo "compositor=${DOMICILE_COMPOSITOR:-unset}"
-"${DOMICILE_BRIDGE:-/bin/false}" >/dev/null 2>&1 \
-  && echo "bridge-runs=yes" || echo "bridge-runs=no"
+echo "bridge=${DOMICILE_BRIDGE:-unset}"
 STUB
     chmod +x "$ROOT/target/debug/domicile"
     eval "$LAUNCH"
@@ -111,12 +103,11 @@ expect "the compositor comes out of this checkout" \
   "compositor=$CHECKOUT/target/debug/domicile-compositor" \
   "$(printf '%s\n' "$handed" | sed -n 's/^compositor=/compositor=/p')"
 
-# And the bridge is a thing that *runs*: a packaged desktop ships it compiled
-# because an end user has no `bun`, and a checkout gets a shim rather than a
-# hundred megabytes rewritten on every save. Either way `domicile` execs it,
-# so a path to a `.ts` file would be a desktop that starts nothing.
-expect "the bridge is something that can be executed" "bridge-runs=yes" \
-  "$(printf '%s\n' "$handed" | sed -n 's/^bridge-runs=/bridge-runs=/p')"
+# AND NO BRIDGE. The engine serves the shell itself over `domicile://` now, so
+# there is no third process and nothing sets this. A dev loop that still handed
+# one over would be starting a page server nothing reads.
+expect "no bridge is handed over any more" "bridge=unset" \
+  "$(printf '%s\n' "$handed" | sed -n 's/^bridge=/bridge=/p')"
 
 expect "an engine that was handed in is not fetched again" "" \
   "$(cat "$WORK/nix.log")"

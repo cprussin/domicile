@@ -89,43 +89,30 @@ fn a_version_refused_after_one_was_agreed_takes_the_handshake_back() {
 
 #[test]
 fn messages_before_the_handshake_are_ignored() {
+    // The vehicle is a focus rather than a placement now, but the rule is the
+    // same one: nothing a page says counts until it has said hello.
     let mut session = Session::new();
-    session.host_mut().app_appeared(None, Some((100.0, 100.0)));
-    // Not ready yet: a place is dropped rather than applied.
-    let _ = session.ingest(&to_line(&ChromeMessage::PlacePortal {
-        app_id: "app-1".into(),
-        transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-        size: [100.0, 100.0],
-        z_index: 0,
-        visible: true,
-        corner_radius: 0.0,
-        opacity: 1.0,
-        shadow: None,
-        takes_pointer: true,
-    }));
-    assert_eq!(session.host_mut().scene().len(), 0);
+    let (id, _) = session.host_mut().app_appeared(None, Some((100.0, 100.0)));
+    let _ = session.ingest(&to_line(&ChromeMessage::FocusApp { app_id: id.clone() }));
+    assert_eq!(
+        session.host_mut().keyboard_target(),
+        domicile_scene::KeyboardTarget::Chrome
+    );
 }
 
 #[test]
-fn placement_after_handshake_reaches_the_host() {
+fn a_message_after_the_handshake_reaches_the_host() {
     let mut session = Session::new();
     let (id, _) = session.host_mut().app_appeared(None, Some((100.0, 100.0)));
     session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
     }));
 
-    session.ingest(&to_line(&ChromeMessage::PlacePortal {
-        app_id: id.clone(),
-        transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-        size: [100.0, 100.0],
-        z_index: 0,
-        visible: true,
-        corner_radius: 0.0,
-        opacity: 1.0,
-        shadow: None,
-        takes_pointer: true,
-    }));
-    assert_eq!(session.host_mut().scene().len(), 1);
+    session.ingest(&to_line(&ChromeMessage::FocusApp { app_id: id.clone() }));
+    assert_eq!(
+        session.host_mut().keyboard_target(),
+        domicile_scene::KeyboardTarget::App(id)
+    );
 }
 
 #[test]

@@ -1,55 +1,55 @@
-// Watching everything that can move a portal.
+// Watching the boxes the page lays out, so a client is configured at the size
+// it was given.
 //
-// A `ResizeObserver` — which is what this used to be — sees a box change size
-// and nothing else. None of the things a chrome does to a window most often
-// changes its size: moving it, animating a transform, a `:hover` filter, a
-// class toggle, an ancestor scrolling. Every one of them changes where or how
-// the compositor must draw that window, and a portal that followed only size
-// would sit still while its element slid across the page. The window and the
-// hole it is drawn into would come apart, with no error anywhere to say so.
+// The page can resize a window without any of the chrome's code running — a
+// layout change above it, a transition, a class toggle — and a client left at
+// its old resolution is stretched into the new box until something else
+// happens to it.
 //
-// The browser has no "this element's box moved" event, so the box is read once
-// per animation frame instead. That is the rate at which the page can change
-// anyway, and it is the same answer every anchored-positioning library reached
-// before CSS grew anchors of its own.
+// Read once per animation frame rather than from a `ResizeObserver` — which is
+// what this used to be. The loop replaced the observer in order to follow a
+// window's *position*, which no event reports and which nothing asks about any
+// more, so size alone would fit an observer again. It stays a loop because
+// changing the mechanism is a change to make on its own, with the cost
+// measured, rather than folded into a deletion.
 //
-// One loop for every portal rather than one each: they all want the same
+// One loop for every window rather than one each: they all want the same
 // moment, and a second timer per window would multiply the cost for nothing.
-// That cost is not small — a `getBoundingClientRect`, a `getComputedStyle` and
-// some twenty computed-property reads per window per frame, and the shell
-// keeps every window mounted and merely hidden, so most of them are paying it
-// to learn they are still hidden. Worth an early-out for an element with no
-// box; recorded in ROADMAP.md rather than guessed at here.
+// That cost is not small — a `getBoundingClientRect` and a `getComputedStyle`
+// per window per frame, and the shell keeps every window mounted and merely
+// hidden, so most of them are paying it to learn they are still hidden. Worth
+// an early-out for an element with no box; recorded in ROADMAP.md rather than
+// guessed at here.
 //
-// The loop stops itself when the last portal goes, and the browser stops it for
+// The loop stops itself when the last window goes, and the browser stops it for
 // us while the page is not being painted at all.
 //
 // What keeps this off the socket is the caller: an element that measures the
 // same box it measured last frame sends nothing.
 
-/** Call `onMoved` on every animation frame; returns the function that stops. */
-export type ObservePlacement = (onMoved: () => void) => () => void;
+/** Call `onFrame` on every animation frame; returns the function that stops. */
+export type ObservePlacement = (onFrame: () => void) => () => void;
 
 const following = new Set<() => void>();
 let running = false;
 
-export const defaultObservePlacement: ObservePlacement = (onMoved) => {
+export const defaultObservePlacement: ObservePlacement = (onFrame) => {
   // Absent outside a browsing context, where nothing is laid out and so
-  // nothing can move. The same rule the rest of the SDK follows for a missing
-  // DOM API: an implementation that does not have this is one whose answer
-  // would have been "nothing changed" anyway.
+  // nothing can change size. The same rule the rest of the SDK follows for a
+  // missing DOM API: an implementation that does not have this is one whose
+  // answer would have been "nothing changed" anyway.
   if (typeof requestAnimationFrame === "undefined") {
     return () => {
       // Nothing was started, so there is nothing to stop.
     };
   } else {
-    following.add(onMoved);
+    following.add(onFrame);
     if (!running) {
       running = true;
       requestAnimationFrame(tick);
     }
     return () => {
-      following.delete(onMoved);
+      following.delete(onFrame);
     };
   }
 };
@@ -64,26 +64,26 @@ const tick = (): void => {
   // what a loop that stopped rescheduling itself would cost.
   const failures: unknown[] = [];
   // Iterated directly rather than through a copy. `Set` iteration skips an
-  // entry deleted before it is reached, which is what should happen: a portal
+  // entry deleted before it is reached, which is what should happen: a window
   // unfollowed earlier in this very pass has been disconnected, and measuring
-  // a detached element would report a window that is not there. Newly added
-  // entries *are* visited, which is harmless — a portal that mounts mid-pass
-  // has already placed itself from `connectedCallback`, and the second
+  // a detached element would report a size nothing is laid out at. Newly added
+  // entries *are* visited, which is harmless — a window that mounts mid-pass
+  // has already reported itself from `connectedCallback`, and the second
   // measurement finds nothing changed and sends nothing.
-  for (const onMoved of following) {
+  for (const onFrame of following) {
     try {
-      onMoved();
+      onFrame();
     } catch (failure) {
       failures.push(failure);
     }
   }
-  // Asked after the pass rather than before it, so the last portal to go stops
+  // Asked after the pass rather than before it, so the last window to go stops
   // the loop on the frame it goes rather than one after.
   running = following.size > 0;
   if (running) {
     requestAnimationFrame(tick);
   }
-  // Nothing is swallowed, and nothing is masked. Rethrown once every portal
+  // Nothing is swallowed, and nothing is masked. Rethrown once every window
   // has had its turn and the next frame is booked, so it reaches the browser's
   // own handler with its stack the way an uncaught error always would — and
   // all of them do, because set order is stable: keeping only the first would
@@ -96,6 +96,6 @@ const tick = (): void => {
   if (failures.length === 1) {
     throw failures[0];
   } else if (failures.length > 1) {
-    throw new AggregateError(failures, "portals that could not be measured");
+    throw new AggregateError(failures, "windows that could not be measured");
   }
 };

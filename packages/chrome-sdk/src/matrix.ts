@@ -1,10 +1,11 @@
 // 2D affine transforms as a 6-tuple [a, b, c, d, e, f], matching CSS
-// `matrix(a,b,c,d,e,f)` and the `transform` field of domicile-protocol. A matrix
-// maps a local point to screen space: screen = (a*x + c*y + e, b*x + d*y + f).
+// `matrix(a,b,c,d,e,f)`. A matrix maps a local point to screen space:
+// screen = (a*x + c*y + e, b*x + d*y + f).
 //
-// This mirrors the Rust `domicile-scene::Transform`; the chrome computes the
-// element->screen matrix here and ships it to the host, which inverts it to
-// route input. Keeping the math identical on both sides avoids drift.
+// None of this crosses the socket any more: an `<app>` is a layer the page
+// positions, so the host is never told where a window is. What the chrome still
+// needs a matrix for is its own inversion — a pointer position on screen into
+// the client's surface, which is `surface-coordinates`.
 
 export type Matrix = readonly [
   a: number,

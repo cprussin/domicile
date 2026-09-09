@@ -287,40 +287,11 @@
         '';
       };
 
-      # The bridge, compiled to a binary that carries its own runtime.
-      #
-      # It was `bun packages/.../main.ts` with the whole workspace copied
-      # beside it, and `bun` supplied by the wrapper around `domicile`. That
-      # wrapper is gone, and a component found beside the binary has to be a
-      # thing that *runs* — so this embeds the runtime rather than assuming an
-      # end user has one. `bun build --compile` needs no network, which is what
-      # makes it usable in a sandbox.
-      domicileBridge = pkgs.stdenv.mkDerivation {
-        pname = "domicile-bridge";
-        version = "0.0.0";
-        src = self;
-        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
-        configurePhase = sharedShellConfigure;
-        buildPhase = ''
-          runHook preBuild
-          bun build --compile \
-            --outfile domicile-bridge \
-            packages/engine-chrome-host/src/main.ts
-          runHook postBuild
-        '';
-        installPhase = ''
-          runHook preInstall
-          install -Dm755 domicile-bridge "$out/bin/domicile-bridge"
-          runHook postInstall
-        '';
-      };
-
       # Domicile, laid out so that `domicile` can find the rest of itself.
       #
       #   bin/domicile
       #   bin/domicile-compositor
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
-      #   libexec/domicile/bridge     the page server
       #
       # THE BINARIES ARE COPIED, NOT SYMLINKED, and that is the whole trick.
       # `domicile` finds its siblings from `current_exe`, which on Linux reads
@@ -328,10 +299,10 @@
       # symlinked into the Rust derivation would report that derivation's path,
       # where there is no `libexec` and never will be — so the desktop would
       # refuse to start, naming a directory nobody wrote. Copied, it reports a
-      # path inside this layout, which is the one that has the other three.
+      # path inside this layout, which is the one that has the other two.
       #
-      # Only the binary's own path matters, so the two under `libexec` stay
-      # symlinks: nothing asks where *they* really are.
+      # Only the binary's own path matters, so the engine under `libexec` stays
+      # a symlink: nothing asks where *it* really is.
       domicilePackage = pkgs.runCommand "domicile"
         {
           meta = {
@@ -344,7 +315,6 @@
         cp ${domicileBinaries}/bin/domicile "$out/bin/domicile"
         cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
-        ln -s ${domicileBridge}/bin/domicile-bridge "$out/libexec/domicile/bridge"
       '';
 
       # A desktop: Domicile with the page already chosen.

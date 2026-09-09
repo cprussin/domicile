@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use domicile_launch::spawn::{bridge, compositor, engine, Runtime};
+use domicile_launch::spawn::{compositor, engine, Runtime};
 
 fn runtime() -> Runtime {
     Runtime {
@@ -29,24 +29,6 @@ fn args_of(spawn: &domicile_launch::spawn::Spawn) -> Vec<String> {
 }
 
 #[test]
-fn the_bridge_is_told_the_module_and_the_socket() {
-    let spawned = bridge(
-        Path::new("/l/bridge"),
-        Path::new("/d/dist/shell.js"),
-        &runtime(),
-    );
-    assert_eq!(spawned.program, PathBuf::from("/l/bridge"));
-    assert_eq!(
-        env_of(&spawned, "DOMICILE_MODULE").unwrap(),
-        "/d/dist/shell.js"
-    );
-    assert_eq!(
-        env_of(&spawned, "DOMICILE_SOCKET").unwrap(),
-        "/run/d/chrome.sock"
-    );
-}
-
-#[test]
 fn the_engine_is_a_desktop_rather_than_a_browser() {
     // `--app` because a desktop is not a browser looking at a page: without it
     // the window carries a tab strip, an address bar and a bookmarks row above
@@ -54,7 +36,7 @@ fn the_engine_is_a_desktop_rather_than_a_browser() {
     // bound where a shell wants to bind them.
     let spawned = engine(
         Path::new("/l/engine"),
-        "http://localhost:41234/",
+        Path::new("/d/dist"),
         "wayland",
         &runtime(),
         None,
@@ -62,7 +44,7 @@ fn the_engine_is_a_desktop_rather_than_a_browser() {
     assert_eq!(spawned.program, PathBuf::from("/l/engine/chrome"));
     let args = args_of(&spawned);
     assert!(
-        args.contains(&"--app=http://localhost:41234/".to_string()),
+        args.contains(&"--app=domicile://shell/index.html".to_string()),
         "{args:?}"
     );
     assert!(
@@ -80,6 +62,57 @@ fn the_engine_is_a_desktop_rather_than_a_browser() {
 }
 
 #[test]
+fn the_engine_is_told_where_the_shell_is_and_where_the_compositor_is() {
+    // THE THREE THAT REPLACED THE BRIDGE. The page was served over a loopback
+    // HTTP port and reached the compositor through a WebSocket on it; now the
+    // engine reads the files itself and dials the compositor's own socket. A
+    // launcher that forgets any of the three gets a desktop that starts and
+    // shows nothing, so each is asserted by name.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        Path::new("/d/dist"),
+        "wayland",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        args.contains(&"--domicile-shell-root=/d/dist".to_string()),
+        "{args:?}"
+    );
+    // Relative, not absolute: it goes into the generated document as
+    // `<script src>`, resolved against `domicile://shell/`. An absolute path
+    // there would be a URL path off the shell root and would not resolve.
+    assert!(
+        args.contains(&"--domicile-shell-module=shell.js".to_string()),
+        "{args:?}"
+    );
+    assert!(
+        args.contains(&"--domicile-control-socket=/run/d/chrome.sock".to_string()),
+        "{args:?}"
+    );
+}
+
+#[test]
+fn no_page_is_served_over_a_port() {
+    // The whole point of the change. A flag naming a URL with a host and a
+    // port is the bridge coming back, and it would be reachable by every
+    // process on the machine.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        Path::new("/d/dist"),
+        "wayland",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        !args
+            .iter()
+            .any(|arg| arg.contains("http://") || arg.contains("localhost")),
+        "{args:?}"
+    );
+}
+
+#[test]
 fn the_sandbox_stays_on() {
     // It was `--no-sandbox` unconditionally, and that was wrong twice: it
     // turns off what stands between a page and the machine, and Chromium says
@@ -87,7 +120,7 @@ fn the_sandbox_stays_on() {
     // reasonably reads as broken. A container that needs it says so itself.
     let args = args_of(&engine(
         Path::new("/l/engine"),
-        "http://x/",
+        Path::new("/d/dist"),
         "wayland",
         &runtime(),
         None,
@@ -109,7 +142,7 @@ fn a_machine_that_needs_more_flags_adds_its_own() {
     // can extend is smaller than a flag per problem.
     let args = args_of(&engine(
         Path::new("/l/engine"),
-        "http://x/",
+        Path::new("/d/dist"),
         "wayland",
         &runtime(),
         Some("--no-sandbox  --disable-gpu"),

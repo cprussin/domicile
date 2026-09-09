@@ -1,4 +1,4 @@
-//! A desktop is four programs shipped together, and three of them are found.
+//! A desktop is three programs shipped together, and two of them are found.
 
 use std::path::{Path, PathBuf};
 
@@ -13,7 +13,6 @@ const INSTALLED: &[&str] = &[
     "/usr/bin/domicile",
     "/usr/bin/domicile-compositor",
     "/usr/libexec/domicile/engine",
-    "/usr/libexec/domicile/bridge",
 ];
 
 fn installed(path: &Path) -> bool {
@@ -21,11 +20,10 @@ fn installed(path: &Path) -> bool {
 }
 
 #[test]
-fn the_three_are_found_beside_the_binary() {
+fn the_two_are_found_beside_the_binary() {
     assert_eq!(
         components(Path::new("/usr/bin/domicile"), &nothing, &installed).unwrap(),
         Components {
-            bridge: PathBuf::from("/usr/libexec/domicile/bridge"),
             compositor: PathBuf::from("/usr/bin/domicile-compositor"),
             engine: PathBuf::from("/usr/libexec/domicile/engine"),
         }
@@ -41,7 +39,6 @@ fn a_store_path_finds_its_own_siblings() {
         [
             "/nix/store/abc-domicile/bin/domicile-compositor",
             "/nix/store/abc-domicile/libexec/domicile/engine",
-            "/nix/store/abc-domicile/libexec/domicile/bridge",
         ]
         .iter()
         .any(|there| Path::new(there) == path)
