@@ -22,7 +22,7 @@ const ignored = (): undefined => undefined;
  * constructor and a double missing `addEventListener` would throw there.
  */
 class Host implements DomicileHost {
-  displays: readonly DomicileDisplay[] = [];
+  displays: readonly DomicileDisplay[] | null = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 

@@ -258,11 +258,15 @@ export type DomicileHost = {
    * arrived can read it, where an event carrying the only copy is gone once
    * dispatched.
    *
-   * **Empty until the compositor has described the desktop**, and a different
-   * frozen array after every `displayschanged` — the compositor sends the
-   * whole desktop each time it changes.
+   * **`null` until the compositor has described the desktop**, and an empty
+   * array for a desktop with no screens on it — different answers, because
+   * nothing at all is what an unknown screen renders and that is right for
+   * "there is no such screen" and wrong for "wait".
+   *
+   * A different frozen array after every `displayschanged`: the compositor
+   * sends the whole desktop each time it changes.
    */
-  readonly displays: readonly DomicileDisplay[];
+  readonly displays: readonly DomicileDisplay[] | null;
 
   addEventListener<T extends keyof DomicileHostEventMap>(
     type: T,

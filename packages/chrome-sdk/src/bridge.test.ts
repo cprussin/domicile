@@ -58,7 +58,7 @@ class FakeHost implements DomicileHost {
   readonly calls: Call[] = [];
 
   /** Empty until the compositor has described the desktop, as the fork's is. */
-  displays: readonly DomicileDisplay[] = [];
+  displays: readonly DomicileDisplay[] | null = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 
@@ -364,6 +364,19 @@ describe("BridgeClient", () => {
       // that could not tell them apart would render its "no screens" case for
       // the moment before the answer arrives.
       expect(bridge.displays).toBeUndefined();
+    });
+
+    it("is a desktop of no screens when that is what it was told", () => {
+      // The other half of the rule above, and the one that used to be
+      // unsayable: the attribute was a FrozenArray that started empty, so
+      // "nobody has described a desktop" and "this desktop has none" were the
+      // same value and the SDK guessed between them. `null` is the first and
+      // `[]` is the second, and a `<Screen>` renders nothing for either — which
+      // is right for one and wrong for the other, so a shell needs to know.
+      host.describes([]);
+
+      expect(bridge.displays).toStrictEqual([]);
+      expect(bridge.displays).not.toBeUndefined();
     });
 
     it("reads through to the host, so everything that asks gets it", () => {

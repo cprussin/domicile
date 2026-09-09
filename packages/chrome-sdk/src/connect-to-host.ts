@@ -106,15 +106,16 @@ const compositorOn = (navigator: HostNavigator): DomicileHost | undefined =>
  * need to be — nothing will ever dispatch on it, so a listener that is dropped
  * on the floor and one that is kept and never called are the same thing.
  *
- * `displays` is empty, which is the same thing the engine's own attribute says
- * before the compositor has described a desktop. Here it is what it says
- * forever, and {@link hasHost} is how a shell knows the difference and reaches
- * for the viewport instead.
+ * `displays` is `null`, which is what the engine's own attribute says before a
+ * compositor has described a desktop. Here it is what it says forever, and
+ * {@link hasHost} is how a shell knows the difference and reaches for the
+ * viewport instead. Not `[]`: that would claim a desktop with no screens on
+ * it, which is a description, and nothing here has described anything.
  */
 const absentHost = (): DomicileHost => ({
   addEventListener: () => undefined,
   closeApp: () => undefined,
-  displays: [],
+  displays: null,
   focusApp: () => undefined,
   focusChrome: () => undefined,
   grabShortcut: () => undefined,

@@ -64,13 +64,15 @@ describe("connectToHost", () => {
   });
 
   it("describes no desktop, because nothing ever will", () => {
-    // Empty is what the engine's own attribute starts as, and here it is also
-    // where it ends: a shell reads it as "not described yet" and takes the
-    // viewport's geometry instead — see `hasHost`, which is the question it
-    // asks to know that.
+    // `null`, which is what the engine's own attribute says before a desktop
+    // has been described — and here it is also where it ends. Not `[]`: that
+    // claims a desktop with no screens on it, which is a description, and
+    // nothing here has described anything. A shell reads this as "not
+    // described yet" and takes the viewport's geometry instead — see
+    // `hasHost`, which is the question it asks to know that.
     expect(
       connectToHost(navigatorWith(undefined), () => undefined).displays,
-    ).toStrictEqual([]);
+    ).toBeNull();
   });
 });
 

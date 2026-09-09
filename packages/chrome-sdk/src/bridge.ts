@@ -219,7 +219,17 @@ export class BridgeClient {
       // the desktop as of when it fired, and since the last one held carries
       // the latest, a handler processing them in order still ends on the
       // desktop that is there now.
-      this.#deliver("displays", { displays: this.#host.displays });
+      const described = this.#host.displays;
+      // Not deliverable as `null`, and not invented as `[]` either: an empty
+      // array claims a desktop with no screens, which is a description, and
+      // this would be the absence of one. The engine writes the attribute
+      // before it dispatches, so this cannot happen from a real host — it is
+      // here because the alternative to dropping an impossible event is
+      // fabricating a desktop, and a shell that rendered "no screens" from it
+      // would be unpickable from one that had been told so.
+      if (described !== null) {
+        this.#deliver("displays", { displays: described });
+      }
     });
   }
 
@@ -232,16 +242,18 @@ export class BridgeClient {
    * one that was there for it, and where a second reader cannot take it from
    * the first.
    *
-   * **Empty reads as `undefined`, and that is a translation the IDL forces.**
-   * `displays` is a `FrozenArray` that starts empty, so the engine has one
-   * value for "the compositor has not described the desktop yet" and for "a
-   * desktop of no screens" — and a shell has to tell them apart, because a
-   * `<Screen>` renders nothing for a display nobody mentioned and that is the
-   * right answer for one and the wrong one for the other. What makes the
-   * collapse safe is the compositor's own invariant, stated in the IDL beside
-   * the attribute: it describes at least one output, and the
-   * window-following case is a display named `domicile-0` rather than an
-   * absence. So an empty list is only ever the first of the two.
+   * **`null` is "not told yet" and `[]` is a desktop with no screens**, and
+   * the SDK keeps them apart rather than collapsing them: a `<Screen>` renders
+   * nothing for a display nobody mentioned, which is the right answer for
+   * "there is no such screen" and the wrong one for "wait".
+   *
+   * This used to be a guess. The attribute was a `FrozenArray` that started
+   * empty, so the two states had one value, and the SDK read empty as "not
+   * told yet" on the strength of the compositor describing at least one
+   * output. That invariant is the compositor's and not the channel's — the
+   * `domicile` daemon has a host nobody has described a desktop to, and it is
+   * exactly what sends the empty list — so the guess was wrong for the one
+   * case that produces it. The engine says which it means now.
    *
    * Units are the display's own: logical CSS pixels for the geometry, and a
    * `scale` that is what *clients* on that screen draw at — not this page's
@@ -249,8 +261,7 @@ export class BridgeClient {
    * it spans.
    */
   get displays(): readonly DomicileDisplay[] | undefined {
-    const described = this.#host.displays;
-    return described.length === 0 ? undefined : described;
+    return this.#host.displays ?? undefined;
   }
 
   /**
