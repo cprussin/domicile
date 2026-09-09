@@ -35,10 +35,12 @@ TEST(ShellURLLoaderFactoryTest, ResolvesANestedFile) {
   EXPECT_EQ(path, Root().Append("assets").Append("icon.svg"));
 }
 
-TEST(ShellURLLoaderFactoryTest, BareRootIsTheIndex) {
+TEST(ShellURLLoaderFactoryTest, BareRootIsNotAFile) {
+  // The bare root is the document the engine writes, answered before the
+  // resolver is asked. There is no file it should resolve to, and an index.html
+  // fallback here would be a second way to serve a shell that nobody chose.
   base::FilePath path;
-  ASSERT_TRUE(Resolve("domicile://shell/", &path));
-  EXPECT_EQ(path, Root().Append("index.html"));
+  EXPECT_FALSE(Resolve("domicile://shell/", &path));
 }
 
 TEST(ShellURLLoaderFactoryTest, RefusesAnotherHost) {
