@@ -45,85 +45,12 @@ pub struct Shortcut {
     pub logo: bool,
 }
 
-/// A shadow an element casts, in the logical units the placement is in.
-///
-/// One shadow, not the list CSS allows: the first, which is the one on top.
-/// Inset shadows are not represented at all — they fall *inside* the box, over
-/// the client's own pixels, and drawing one as an outer shadow would ring a
-/// window that asked for the opposite.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Shadow {
-    pub dx: f64,
-    pub dy: f64,
-    /// The width of the falloff. Zero is a hard edge, never negative.
-    pub blur: f64,
-    /// How much bigger than the window the shadow is before it blurs.
-    pub spread: f64,
-    /// Straight RGBA: channels 0-255, alpha 0-1, as CSS reports them.
-    pub color: [f64; 4],
-}
-
-/// What an element with no `opacity` set has: all of it.
-///
-/// Spelled out because serde needs a function, and because a missing field
-/// meaning *invisible* would be the worst possible default — a chrome that
-/// omits the field would place windows nobody could see.
-fn opaque() -> f64 {
-    1.0
-}
-
-fn interactive() -> bool {
-    true
-}
-
 /// Messages sent from the chrome (in-page bridge) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChromeMessage {
     /// First message after connecting; declares the version the chrome speaks.
     Hello { protocol_version: u32 },
-
-    /// Report the on-screen placement of an `<app>` element. Sent whenever the
-    /// element's geometry, stacking, or visibility changes. `transform` is a
-    /// CSS `matrix(a,b,c,d,e,f)` mapping app-local pixels to screen space.
-    PlacePortal {
-        app_id: String,
-        transform: [f64; 6],
-        size: [f64; 2],
-        z_index: i32,
-        visible: bool,
-        /// The element's `border-radius`, in the same logical units as `size`.
-        ///
-        /// One radius, not four: it is what the compositor's shader can apply
-        /// without knowing which way up a client's buffer is, and it is what
-        /// every window actually asks for. An element with four different
-        /// corners reports the one it uses most.
-        #[serde(default)]
-        corner_radius: f64,
-        /// The element's `opacity`, 0 to 1.
-        #[serde(default = "opaque")]
-        opacity: f64,
-        /// The element's `box-shadow`, if it casts one that can be drawn.
-        #[serde(default)]
-        shadow: Option<Shadow>,
-        /// Whether a pointer over this window belongs to it.
-        ///
-        /// False for an element with `pointer-events: none`. The compositor
-        /// hit-tests a rectangle and cannot see what the engine painted over
-        /// it, so a window under a menu, a dialog or a browser tab would
-        /// swallow the clicks meant for them — and the click that hands the
-        /// keyboard back to the chrome is one the chrome has to receive, so it
-        /// would swallow the way out too.
-        ///
-        /// Takes the pointer by default: a chrome that cannot say is a chrome
-        /// from before there was anything to paint over a window, and every
-        /// window it places is meant to be used.
-        #[serde(default = "interactive")]
-        takes_pointer: bool,
-    },
-
-    /// An `<app>` element was unmounted; the host should stop compositing it.
-    RemovePortal { app_id: String },
 
     /// The chrome laid an `<app>` element out at a new size. The compositor
     /// configures the client to match so it re-renders at that resolution,

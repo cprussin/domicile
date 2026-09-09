@@ -8,53 +8,8 @@
 
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Host, HostError};
-use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Shadow, PROTOCOL_VERSION};
+use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, PROTOCOL_VERSION};
 use domicile_scene::KeyboardTarget;
-
-fn place(
-    app_id: &str,
-    transform: [f64; 6],
-    size: [f64; 2],
-    z: i32,
-    visible: bool,
-) -> ChromeMessage {
-    ChromeMessage::PlacePortal {
-        app_id: app_id.into(),
-        transform,
-        size,
-        z_index: z,
-        visible,
-        // Unstyled: what these tests are about is where a portal goes, and a
-        // style would be a second thing changing in every one of them.
-        corner_radius: 0.0,
-        opacity: 1.0,
-        shadow: None,
-        takes_pointer: true,
-    }
-}
-
-const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
-
-/// The same, with a style — the compositor draws the window itself, so how it
-/// should look travels with where it goes.
-fn place_styled(
-    app_id: &str,
-    corner_radius: f64,
-    opacity: f64,
-    shadow: Option<Shadow>,
-) -> ChromeMessage {
-    ChromeMessage::PlacePortal {
-        app_id: app_id.into(),
-        transform: IDENTITY,
-        size: [100.0, 50.0],
-        z_index: 0,
-        visible: true,
-        corner_radius,
-        opacity,
-        shadow,
-        takes_pointer: true,
-    }
-}
 
 // ---- app lifecycle --------------------------------------------------------
 
@@ -181,8 +136,6 @@ fn focus_is_reported_when_it_moves_and_not_when_it_does_not() {
     // message, so a report per ask would be a message per mouse move.
     let mut host = Host::new();
     let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    host.handle_chrome_message(place(&app, IDENTITY, [100.0, 100.0], 0, true))
-        .unwrap();
 
     host.handle_chrome_message(ChromeMessage::FocusApp {
         app_id: app.clone(),
@@ -203,8 +156,6 @@ fn the_keyboard_coming_back_to_the_chrome_is_reported_too() {
     // The mirror, and the one a chrome cannot infer: it did not ask for this.
     let mut host = Host::new();
     let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    host.handle_chrome_message(place(&app, IDENTITY, [100.0, 100.0], 0, true))
-        .unwrap();
     host.handle_chrome_message(ChromeMessage::FocusApp {
         app_id: app.clone(),
     })
@@ -227,8 +178,6 @@ fn a_focused_window_closing_hands_the_keyboard_back_and_says_so() {
     // active, and there is nothing else it could consult.
     let mut host = Host::new();
     let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    host.handle_chrome_message(place(&app, IDENTITY, [100.0, 100.0], 0, true))
-        .unwrap();
     host.handle_chrome_message(ChromeMessage::FocusApp {
         app_id: app.clone(),
     })
@@ -249,8 +198,6 @@ fn a_chrome_that_arrives_late_is_told_who_has_the_keyboard() {
     // other route to this message is a *change* it was not there for.
     let mut host = Host::new();
     let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    host.handle_chrome_message(place(&app, IDENTITY, [100.0, 100.0], 0, true))
-        .unwrap();
     host.handle_chrome_message(ChromeMessage::FocusApp {
         app_id: app.clone(),
     })
@@ -324,7 +271,6 @@ fn app_appeared_assigns_ids_and_announces_to_chrome() {
     }
 
     // An app exists but has no on-screen portal until the chrome places it.
-    assert_eq!(host.scene().len(), 0);
 }
 
 #[test]
@@ -350,33 +296,12 @@ fn resizing_and_closing_report_to_chrome() {
 
 // ---- placement from the chrome --------------------------------------------
 
-#[test]
-fn placing_an_unknown_app_is_an_error() {
-    let mut host = Host::new();
-    assert!(host
-        .handle_chrome_message(place("ghost", IDENTITY, [10.0, 10.0], 0, true))
-        .is_err());
-}
-
-#[test]
-fn closing_an_app_also_tears_down_its_portal() {
-    let mut host = Host::new();
-    let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    host.handle_chrome_message(place(&id, IDENTITY, [100.0, 100.0], 0, true))
-        .unwrap();
-    host.app_closed(&id);
-
-    assert_eq!(host.scene().len(), 0);
-}
-
 // ---- focus ----------------------------------------------------------------
 
 #[test]
 fn focus_routes_keyboard_between_app_and_chrome() {
     let mut host = Host::new();
     let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    host.handle_chrome_message(place(&id, IDENTITY, [100.0, 100.0], 0, true))
-        .unwrap();
 
     assert_eq!(host.keyboard_target(), KeyboardTarget::Chrome);
 
@@ -397,7 +322,6 @@ fn spawn_is_a_no_op_in_the_brain() {
         command: vec!["kitty".into()],
     })
     .unwrap();
-    assert_eq!(host.scene().len(), 0);
     assert_eq!(host.app_count(), 0);
 }
 
@@ -409,107 +333,14 @@ fn asking_a_client_to_close_leaves_the_window_where_it_is() {
     // puts it back — `app_appeared` is sent once.
     let mut host = Host::new();
     let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-    host.handle_chrome_message(place(&id, IDENTITY, [100.0, 100.0], 0, true))
-        .unwrap();
 
     host.handle_chrome_message(ChromeMessage::CloseApp { app_id: id.clone() })
         .unwrap();
 
     assert_eq!(host.app_count(), 1);
-    assert_eq!(host.scene().len(), 1);
 }
 
 // ---- how a window is drawn, as opposed to where ---------------------------
-
-#[test]
-fn a_portals_style_reaches_the_scene() {
-    // The compositor reads this off the scene to draw with, so a radius the
-    // brain drops is a window that stays square however it is styled.
-    let mut host = Host::new();
-    let (app_id, _) = host.app_appeared(None, Some((100.0, 50.0)));
-
-    host.handle_chrome_message(place_styled(&app_id, 12.0, 0.5, None))
-        .expect("a styled placement is applied");
-
-    let portal = host.scene().get(&app_id).expect("the portal is placed");
-    assert_eq!(portal.style.corner_radius, 12.0);
-    assert_eq!(portal.style.opacity, 0.5);
-}
-
-#[test]
-fn a_portal_that_takes_no_pointer_reaches_the_scene_inert() {
-    // The compositor routes the pointer off the scene, so a `pointer-events`
-    // the brain drops is a window that goes on swallowing the clicks meant for
-    // whatever the engine painted over it.
-    let mut host = Host::new();
-    let (app_id, _) = host.app_appeared(None, Some((100.0, 50.0)));
-
-    host.handle_chrome_message(ChromeMessage::PlacePortal {
-        app_id: app_id.clone(),
-        transform: IDENTITY,
-        size: [100.0, 50.0],
-        z_index: 0,
-        visible: true,
-        corner_radius: 0.0,
-        opacity: 1.0,
-        shadow: None,
-        takes_pointer: false,
-    })
-    .expect("an inert placement is applied");
-
-    let portal = host.scene().get(&app_id).expect("the portal is placed");
-    assert!(!portal.takes_pointer);
-}
-
-#[test]
-fn a_portals_shadow_reaches_the_scene() {
-    // A shadow is the one style that draws outside the window, so the
-    // compositor has to be told its numbers rather than infer them from the
-    // placement — nothing else in the message describes where it falls.
-    let mut host = Host::new();
-    let (app_id, _) = host.app_appeared(None, Some((100.0, 50.0)));
-
-    host.handle_chrome_message(place_styled(
-        &app_id,
-        0.0,
-        1.0,
-        Some(Shadow {
-            dx: 4.0,
-            dy: 8.0,
-            blur: 12.0,
-            spread: 2.0,
-            color: [0.0, 0.0, 0.0, 0.5],
-        }),
-    ))
-    .expect("a shadowed placement is applied");
-
-    let portal = host.scene().get(&app_id).expect("the portal is placed");
-    assert_eq!(
-        portal.style.shadow,
-        Some(domicile_scene::Shadow {
-            dx: 4.0,
-            dy: 8.0,
-            blur: 12.0,
-            spread: 2.0,
-            color: [0.0, 0.0, 0.0, 0.5],
-        })
-    );
-}
-
-#[test]
-fn a_portal_that_styles_nothing_is_square_and_opaque() {
-    // The floor: a chrome that reports no style must not get invisible windows,
-    // which is what a zero default for opacity would mean.
-    let mut host = Host::new();
-    let (app_id, _) = host.app_appeared(None, Some((100.0, 50.0)));
-
-    host.handle_chrome_message(place(&app_id, IDENTITY, [100.0, 50.0], 0, true))
-        .expect("an unstyled placement is applied");
-
-    let portal = host.scene().get(&app_id).expect("the portal is placed");
-    assert_eq!(portal.style, domicile_scene::Style::default());
-    assert_eq!(portal.style.opacity, 1.0);
-}
 
 // ---- the desktop the chrome is told about --------------------------------
 

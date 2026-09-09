@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage};
 
 pub mod ipc;
-use domicile_scene::{KeyboardTarget, Portal, Scene, Style, Transform};
+use domicile_scene::{KeyboardTarget, Scene};
 
 /// Identifier for a connected app (Wayland toplevel), assigned by the host.
 pub type AppId = String;
@@ -228,7 +228,7 @@ impl Host {
     /// notification, or `None` if the app was already gone.
     pub fn app_closed(&mut self, app_id: &str) -> Option<HostMessage> {
         self.apps.remove(app_id)?;
-        self.scene.remove(app_id);
+        self.scene.window_gone(app_id);
         Some(HostMessage::AppClosed {
             app_id: app_id.to_string(),
         })
@@ -253,62 +253,18 @@ impl Host {
                 // already sends absolute. Intercepted in the compositor beside
                 // the density above.
             }
-            ChromeMessage::PlacePortal {
-                app_id,
-                transform,
-                size,
-                z_index,
-                visible,
-                corner_radius,
-                opacity,
-                shadow,
-                takes_pointer,
-            } => {
-                if !self.apps.contains_key(&app_id) {
-                    return Err(HostError::UnknownApp(app_id));
-                }
-                if visible {
-                    let placed = Portal::new(
-                        app_id,
-                        (size[0], size[1]),
-                        transform_from_wire(transform),
-                        z_index,
-                    )
-                    .styled(Style {
-                        corner_radius,
-                        opacity,
-                        shadow: shadow.map(|shadow| domicile_scene::Shadow {
-                            blur: shadow.blur,
-                            color: shadow.color,
-                            dx: shadow.dx,
-                            dy: shadow.dy,
-                            spread: shadow.spread,
-                        }),
-                    });
-                    // A window the chrome painted something over takes no
-                    // pointer, so the click reaches what covers it.
-                    let placed = if takes_pointer {
-                        placed
-                    } else {
-                        placed.inert()
-                    };
-                    self.scene.upsert(placed);
-                } else {
-                    // A hidden app is not composited or hit-tested.
-                    self.scene.remove(&app_id);
-                }
-            }
-            ChromeMessage::RemovePortal { app_id } => {
-                self.scene.remove(&app_id);
-            }
             ChromeMessage::ResizeApp { app_id, size } => match self.apps.get_mut(&app_id) {
                 Some(app) => app.requested_size = Some((size[0], size[1])),
                 None => return Err(HostError::UnknownApp(app_id)),
             },
             ChromeMessage::FocusApp { app_id } => {
-                // Focus is what a click means, so it raises the app too:
-                // otherwise a click on the lower of two overlapping apps would
-                // type into it while the other still takes the pointer.
+                // Gated on a window this host knows about, which is a window
+                // that has mapped. It used to be gated on the page having
+                // *placed* it, and that gate is gone with placement — see
+                // `Scene::focus_app`.
+                if !self.apps.contains_key(&app_id) {
+                    return Err(HostError::UnknownApp(app_id));
+                }
                 self.scene.focus_app(&app_id);
             }
             ChromeMessage::FocusChrome => {
@@ -352,11 +308,6 @@ impl Host {
     pub fn app_count(&self) -> usize {
         self.apps.len()
     }
-}
-
-/// Convert a wire affine `[a, b, c, d, e, f]` into a scene [`Transform`].
-fn transform_from_wire([a, b, c, d, e, f]: [f64; 6]) -> Transform {
-    Transform { a, b, c, d, e, f }
 }
 
 /// A size as the wire carries it. The memory form is a tuple and the protocol's

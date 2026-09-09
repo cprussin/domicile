@@ -196,30 +196,6 @@ impl Gpu {
     }
 }
 
-/// The app whose element this message says has stopped showing it, if it does.
-///
-/// The compositor cannot see the page, so it keeps its own record of which
-/// windows the chrome holds a canvas for. `remove_portal` is what takes a
-/// canvas away without the compositor asking: an element unmounted, or one
-/// whose `app-id` changed to another window. Both drop their pixels, and the
-/// second has to — they are the *previous* app's, and nothing would ever
-/// correct them, because the message that clears a canvas is only sent to a
-/// window whose pixels we sent under that name.
-///
-/// A window merely *hidden* is emphatically not that, and reading it as such
-/// is a bug with a long fuse. The shell keeps every window mounted and toggles
-/// `hidden`, which reaches the host as a placement with `visible: false` and
-/// takes the portal out of the scene — while the element, and the canvas
-/// holding that window's last frame, stay exactly where they were. Forgetting
-/// the canvas then means never telling the chrome to drop it, so a window
-/// backgrounded and brought back wears a still of itself for good.
-fn unmounts_the_element(message: &ChromeMessage) -> Option<&str> {
-    match message {
-        ChromeMessage::RemovePortal { app_id } => Some(app_id),
-        _ => None,
-    }
-}
-
 /// Data threaded through the calloop event loop. The `Display` lives here (not
 /// inside the wayland source) so we can flush queued events after handling input
 /// that originated off the Wayland thread.
@@ -282,20 +258,8 @@ enum ClientRequest {
         width: i32,
         height: i32,
     },
-    /// The chrome moved or restyled a portal.
-    ///
-    /// The scene is mutated on the chrome's own thread, which draws nothing
-    /// and cannot wake the event loop. Without this a placement waits for an
-    /// unrelated reason to redraw — and one of the things it waits for is the
-    ScenePlaced,
     /// A chrome's page said `hello`. Whatever it is, it holds no pixels yet.
     ChromeHello,
-    /// The chrome unmounted an app's element.
-    ///
-    /// Carries no app id: what it triggers is a re-place of every window,
-    /// because a window with no portal is on every display and the one that
-    /// just lost its element has nothing laid out to place it by.
-    PortalRemoved,
 }
 
 /// Shared between the Wayland thread (calloop) and the chrome-connection threads.
@@ -916,21 +880,19 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                     ChromeMessage::ResizeApp { app_id, size },
                 )
             }
-            // THE BRAIN DECIDES AND THE SEAT FOLLOWS, in that order. Both used
-            // to answer this on their own, and they do not know the same
-            // things: the seat looks for a *surface*, the scene for a
-            // *portal*. A window that has mapped but that the page has not
-            // placed yet has the first and not the second — which is every
-            // window between `app_appeared` and its element's first box, so a
-            // shell that focuses a window as it opens asks for it — and the
-            // keyboard went there while `keyboard_target` went on naming the
-            // chrome. The page marks that window inactive and every key typed
-            // into it.
+            // THE BRAIN DECIDES AND THE SEAT FOLLOWS, in that order, and the
+            // disagreement it settled is gone rather than fixed. The seat
+            // looked for a *surface* and the scene for a *portal*, so a window
+            // that had mapped but that the page had not placed had the first
+            // and not the second: the keyboard went there while
+            // `keyboard_target` still named the chrome, and the page drew that
+            // window inactive while every key went into it.
             //
-            // So the seat is told what the scene settled on rather than what
-            // was asked for. A refusal leaves the keyboard where it was, which
-            // is the answer `ClientRequest::KeyboardFocus` already gives for
-            // the window it can see is missing.
+            // There is no placement now, so there is no second answer to
+            // disagree with. `Host` refuses an app it does not know and
+            // accepts every one it does, and the seat still follows what came
+            // back — which is what `ClientRequest::KeyboardFocus` wants, and
+            // is still the right shape if a second opinion ever returns.
             Ok(ChromeMessage::FocusApp { app_id }) => {
                 let (out, holder) = {
                     let mut host = hub.host.lock().unwrap();
@@ -944,7 +906,7 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                     (out, host.focus_holder())
                 };
                 if holder.as_deref() != Some(app_id.as_str()) {
-                    info!(app_id = %app_id, "keyboard focus -> a window with no portal; the scene refused it and the keyboard stays where it was");
+                    info!(app_id = %app_id, "keyboard focus -> a window this compositor does not know; the keyboard stays where it was");
                 }
                 hub.send_request(ClientRequest::KeyboardFocus { app_id: holder });
                 out
@@ -960,25 +922,6 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                 hub.send_request(ClientRequest::KeyboardFocus { app_id: None });
                 let mut host = hub.host.lock().unwrap();
                 apply_chrome_message(&mut host, &mut ready, ChromeMessage::FocusChrome)
-            }
-            // A placement changes what is drawn and where, so the desktop is
-            // dirty — and the chrome's thread is not the one that can draw.
-            Ok(
-                message @ (ChromeMessage::PlacePortal { .. } | ChromeMessage::RemovePortal { .. }),
-            ) => {
-                // Read before the message is consumed, and from the message
-                // rather than from the scene: a backgrounded window leaves the
-                // scene too, and its element is still in the page.
-                let unmounted = unmounts_the_element(&message).map(str::to_string);
-                let responses = {
-                    let mut host = hub.host.lock().unwrap();
-                    apply_chrome_message(&mut host, &mut ready, message)
-                };
-                hub.send_request(match unmounted {
-                    Some(_) => ClientRequest::PortalRemoved,
-                    None => ClientRequest::ScenePlaced,
-                });
-                responses
             }
             // No catch-all: every message is named above, so a new one is a
             // compile error here rather than a silent trip to the brain that
@@ -1391,38 +1334,27 @@ impl DomicileCompositor {
     /// the ones a reload adds — which is why that is not "once and for all",
     /// as this said while the display list could not change.
     fn enter_the_displays_each_window_is_on(&self) {
-        let host = self.hub.host.lock().unwrap();
-        let scene = host.scene();
-        let where_it_is = |app_id: &str| scene.get(app_id).map(domicile_scene::Portal::bounds);
-        for (app_id, toplevel) in &self.toplevels {
-            self.enter_only(toplevel.wl_surface(), where_it_is(app_id));
+        // EVERY DISPLAY, FOR EVERY WINDOW, and that is a known gap rather than
+        // a simplification. This asked the scene for a window's box and
+        // narrowed the entered outputs to the displays it overlapped. The page
+        // reported that box; it does not any more, because CSS positions the
+        // layer and nothing else on this side needed the geometry — so the
+        // narrowing has no input left and every surface takes the fallback.
+        //
+        // It costs nothing on the one output a desktop has today: `domicile`
+        // starts the compositor with no `--config`, so there is a single
+        // output following the browser window. On a two-screen desktop a
+        // client would be told it is on both and would draw at the larger
+        // scale of the two. Wiring that back wants the shell naming a screen
+        // — `<Screen name="left">`, which ARCHITECTURE.md already calls the
+        // seam — rather than this side inferring one from a rectangle.
+        for (_, toplevel) in &self.toplevels {
+            self.enter_only(toplevel.wl_surface(), None);
         }
-        // And a popup goes where its parent's window goes. Decided on every
-        // pass rather than once when the popup is created, because the window
-        // under it moves: a menu left holding the screen its window used to be
-        // on is a client drawing it at that screen's density over a window now
-        // at another's.
-        //
-        // Smithay's own list rather than one of ours: it is pushed to before
-        // `new_popup` is dispatched and popped from when the popup goes away,
-        // so a second copy here would be a lifecycle to keep in step for
-        // nothing.
-        //
-        // The *root* rather than the immediate parent, because a submenu's
-        // parent is another popup: resolved one step, a nested menu would fall
-        // through to every display and be drawn at the largest scale of them —
-        // which is the failure this narrowing exists to prevent, arrived at by
-        // going one level deeper into the same menu.
-        //
-        // `None` — a popup whose chain does not end at a window this
-        // compositor announced, or one whose window has no portal — takes the
-        // every-display fallback, which is where a surface with nothing to
-        // place it by belongs.
+        // A popup goes with its window, and that is the same answer now:
+        // with no geometry on this side there is nothing to narrow either to.
         for popup in self.xdg_shell_state.popup_surfaces() {
-            let on = self
-                .window_under(popup)
-                .and_then(|app_id| where_it_is(&app_id));
-            self.enter_only(popup.wl_surface(), on);
+            self.enter_only(popup.wl_surface(), None);
         }
     }
 
@@ -1441,33 +1373,6 @@ impl DomicileCompositor {
                 output.leave(surface);
             }
         }
-    }
-
-    /// The window a popup ultimately belongs to, through any submenus.
-    ///
-    /// A popup's parent is either the window it hangs off or the menu it hangs
-    /// off, so this walks until it reaches something announced as a window.
-    /// Resolving one step instead would leave every *nested* menu with no
-    /// window, and so on every display at the largest scale of them — the
-    /// failure the narrowing exists to prevent, one level deeper into the same
-    /// menu.
-    ///
-    /// Bounded by the number of live popups, which is what a chain can be at
-    /// its longest. `xdg_shell` forbids a cycle, and a bound is what keeps a
-    /// client that made one anyway from taking the compositor with it.
-    fn window_under(&self, popup: &PopupSurface) -> Option<String> {
-        let popups = self.xdg_shell_state.popup_surfaces();
-        let mut surface = popup.get_parent_surface()?;
-        for _ in 0..=popups.len() {
-            if let Some(app_id) = self.app_id_of(&surface) {
-                return Some(app_id);
-            }
-            surface = popups
-                .iter()
-                .find(|above| above.wl_surface() == &surface)?
-                .get_parent_surface()?;
-        }
-        None
     }
 
     /// The window this surface is, if it is one this compositor announced.
@@ -2305,11 +2210,6 @@ impl DomicileCompositor {
             ClientRequest::GrabShortcut { shortcut } => {
                 info!(key = shortcut.key, "the chrome claimed a shortcut");
             }
-            ClientRequest::ScenePlaced => {
-                // A placement is also a window possibly having moved to
-                // another screen, and nothing else tells the client that.
-                self.enter_the_displays_each_window_is_on();
-            }
             ClientRequest::ChromeHello => {
                 // A page has started, and whatever the page before it was
                 // holding down is gone along with it: nothing will ever send
@@ -2326,19 +2226,6 @@ impl DomicileCompositor {
                 // Nothing is held and nothing is owed. The windows a chrome
                 // needs are re-supplied by the hand-over pass in `present`,
                 announce_open_apps(&self.hub);
-            }
-            ClientRequest::PortalRemoved => {
-                // A window with no portal is on every display, and this
-                // window has just lost one: its element left the page, so
-                // there is nothing laid out to place it by. Told nothing, it
-                // would keep the screen it was last on and draw at that
-                // density wherever the chrome mounts it next.
-                //
-                // Not the backgrounding case, which never reaches here — a
-                // backgrounded tab is laid out invisibly, which arrives as a
-                // `place_portal` and so as `ScenePlaced`. `unmounts_the_element`
-                // is what tells the two apart.
-                self.enter_the_displays_each_window_is_on();
             }
             ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
             ClientRequest::SetOutputSize { logical } => self.set_output_size(logical),
