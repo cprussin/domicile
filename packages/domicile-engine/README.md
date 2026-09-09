@@ -82,6 +82,12 @@ the desktop. The desktop is a fact and not a stream: a component that mounts
 after the description has to be able to read it, and an event carrying the only
 copy is gone once dispatched.
 
+It is **null** until the compositor has described a desktop, and an empty array
+for a desktop with no screens. Those are different answers and a shell renders
+them differently — nothing at all is right for "there is no such screen" and
+wrong for "wait" — which is why `domicile-protocol` carries the distinction
+across the wire in the first place.
+
 **Deliberately absent:** `place_portal`, `remove_portal`, `declare_bands`,
 `render_band`, `claim_pointer`, `app_composited`. These are the bands and
 copy-path protocol, which `docs/architecture/ENGINE-FORK.md` lists under what

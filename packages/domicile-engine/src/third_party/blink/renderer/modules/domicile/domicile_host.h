@@ -94,9 +94,10 @@ class MODULES_EXPORT DomicileHost final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(displayschanged, kDisplayschanged)
 
-  // The desktop's screens, empty until the compositor has described them.
-  const FrozenArray<DomicileDisplay>& displays() const {
-    return *displays_.Get();
+  // The desktop's screens, or null until the compositor has described them.
+  // An empty array is a desktop with no screens, which is a different answer.
+  const FrozenArray<DomicileDisplay>* displays() const {
+    return displays_.Get();
   }
 
   // EventTarget:

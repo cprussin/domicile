@@ -93,16 +93,25 @@
   // component that mounts long after the description arrived, which an event
   // would have left with nothing.
   //
-  // Empty until the compositor has described the desktop, and empty again for
-  // a desktop with no screens. The compositor does not send that second one --
-  // it describes at least one output, and the window-following case is a
-  // display named `domicile-0` -- so in practice a shell that waits for the
-  // first `displayschanged` never sees an empty list.
+  // NULL UNTIL THE COMPOSITOR HAS DESCRIBED THE DESKTOP, and an empty array
+  // for a desktop with no screens on it. They are different states and a shell
+  // renders them differently: nothing at all is what an unknown screen shows,
+  // which is the right answer for "there is no such screen" and the wrong one
+  // for "wait". `domicile-protocol` carries that distinction deliberately --
+  // an empty `Vec` that serialises to nothing and one that serialises to `[]`
+  // both come back empty, and only the second is a desktop a shell can parse
+  // -- and an attribute that started empty threw it away again here.
+  //
+  // The compositor describes at least one output, so it does not send the
+  // empty one; the `domicile` daemon, which no desktop has been described to,
+  // does. Leaning on "in practice it never happens" is what made the SDK guess,
+  // and this is instead of the guess.
+  //
   // No [SameObject]: the compositor sends the whole desktop each time it
   // changes and a FrozenArray is frozen, so this is a different array after
   // every `displayschanged`. That is also the shape a shell wants -- an
   // identity that survived a desktop it no longer describes would be worse.
-  readonly attribute FrozenArray<DomicileDisplay> displays;
+  readonly attribute FrozenArray<DomicileDisplay>? displays;
 
   // The desktop changed: a screen arrived or left, a display was resized, or
   // its density moved. Read `displays` for what it is now.
