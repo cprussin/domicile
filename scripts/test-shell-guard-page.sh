@@ -28,18 +28,18 @@ GUARD="$ROOT/packages/domicile-engine/scripts/spike-shell.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$ROOT/packages/domicile-engine/scripts/lib-annotate.sh"
 
-# `MODULE=""` to the `fi` that closes the choice it makes.
-RESOLVE="$(awk '/^MODULE=""$/,/^fi$/' "$GUARD")"
-# The launch, which is the other half: finding a module and then handing the
-# bridge a root is the same failure as not finding it.
-LAUNCH="$(awk '/^if \[ -n "\$MODULE" \]; then$/,/^fi$/' "$GUARD")"
+# The name it looks for, to the `fi` that refuses when it is not there.
+RESOLVE="$(awk '/^MODULE="\$PAGE_DIR\/shell.js"$/,/^fi$/' "$GUARD")"
+# The launch, which is the other half: finding the module and then handing the
+# bridge something else is the same failure as not finding it.
+LAUNCH="$(awk '/^DOMICILE_SOCKET=.*DOMICILE_MODULE=/,/^  bun /' "$GUARD")"
 [ -n "$RESOLVE" ] && [ -n "$LAUNCH" ] || {
   echo "no page resolution in $GUARD — its markers moved. Fix this test with it." >&2
   exit 1
 }
 case "$RESOLVE" in
-  (*shell.js*index.html*) ;;
-  (*) echo "the resolution block no longer names both shapes." >&2; exit 1 ;;
+  (*shell.js*) ;;
+  (*) echo "the resolution block no longer names shell.js." >&2; exit 1 ;;
 esac
 
 FAILED=0
@@ -56,12 +56,10 @@ expect() {
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# The three shapes a built shell comes in, and the fourth that is not one.
-mkdir -p "$WORK/module" "$WORK/document" "$WORK/both" "$WORK/nothing"
+# What a built shell is, and what is not one.
+mkdir -p "$WORK/module" "$WORK/document" "$WORK/nothing"
 : >"$WORK/module/shell.js"
 : >"$WORK/document/index.html"
-: >"$WORK/both/shell.js"
-: >"$WORK/both/index.html"
 
 resolve() { # $1 the built directory
   local out
@@ -81,21 +79,15 @@ expect "a module is what a shell in this workspace builds" \
   "module=$WORK/module/shell.js" \
   "$(resolve "$WORK/module")"
 
-# Not dead weight: `run-engine.sh` takes a document too, for a shell built from
-# an HTML entry that predates the module, and a guard that refused one would
-# refuse a shell the desktop itself runs.
-expect "a document is still a shell" \
-  "module=" \
+# A document is not a shell. Domicile writes the document, so a directory with
+# one and no module is a build that emitted the wrong thing — and it has to be
+# refused rather than served, or the desktop comes up on someone's stray HTML.
+expect "a document alone is refused" \
+  "refused: spike-shell: simple built no shell.js in $WORK/document" \
   "$(resolve "$WORK/document")"
 
-expect "a module wins over a document beside it" \
-  "module=$WORK/both/shell.js" \
-  "$(resolve "$WORK/both")"
-
-# And the refusal names both, because "no index.html" sent a reader looking for
-# a file the build is *supposed* not to emit.
-expect "neither is refused, in words that name both shapes" \
-  "refused: spike-shell: simple built neither a shell.js nor an index.html in $WORK/nothing" \
+expect "an empty directory is refused, in words that name what is missing" \
+  "refused: spike-shell: simple built no shell.js in $WORK/nothing" \
   "$(resolve "$WORK/nothing")"
 
 # WHICH ONE THE BRIDGE IS TOLD, which is the half a resolution alone does not
@@ -113,7 +105,7 @@ launch() { # $1 MODULE, $2 PAGE_DIR
     # `bun` as a function, which wins over anything on PATH, so the launch is
     # exercised without a bridge: it writes what it was handed where the real
     # one writes what it is serving.
-    bun() { echo "module=${DOMICILE_MODULE:-} root=${DOMICILE_ROOT:-}"; }
+    bun() { echo "module=${DOMICILE_MODULE:-}"; }
     : >"$BRIDGE_LOG"
     eval "$LAUNCH"
     wait
@@ -121,13 +113,9 @@ launch() { # $1 MODULE, $2 PAGE_DIR
   )
 }
 
-expect "a module is handed over as DOMICILE_MODULE, and no root with it" \
-  "module=$WORK/module/shell.js root=" \
+expect "the module is handed over as DOMICILE_MODULE" \
+  "module=$WORK/module/shell.js" \
   "$(launch "$WORK/module/shell.js" "$WORK/module")"
-
-expect "a document is handed over as DOMICILE_ROOT, and no module with it" \
-  "module= root=$WORK/document" \
-  "$(launch "" "$WORK/document")"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

@@ -193,16 +193,11 @@ PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 # on `packages/domicile-engine/**` and that change touched none of it. The
 # first thing to run this guard afterwards was an unrelated pull request.
 #
-# Both shapes are taken, in `run-engine.sh`'s order and for its reasons: a
-# module by the name `shellBuild` pins for it, or a document for a shell that
-# predates the module. Which one was found is what the bridge is told —
-# `DOMICILE_MODULE` or `DOMICILE_ROOT`, never both, because the bridge refuses
-# a shell named twice.
-MODULE=""
-if [ -f "$PAGE_DIR/shell.js" ]; then
-  MODULE="$PAGE_DIR/shell.js"
-elif [ ! -f "$PAGE_DIR/index.html" ]; then
-  annotate "spike-shell: $SHELL_NAME built neither a shell.js nor an index.html in $PAGE_DIR"
+# `shell.js` by the name `shellBuild` pins, as `run-engine.sh` does it and for
+# its reasons.
+MODULE="$PAGE_DIR/shell.js"
+if [ ! -f "$MODULE" ]; then
+  annotate "spike-shell: $SHELL_NAME built no shell.js in $PAGE_DIR"
   exit 1
 fi
 
@@ -221,15 +216,9 @@ rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 # on a debug build on a loaded runner is minutes. A session that gave up in
 # between would leave the page with a dead transport and the guard would report
 # that the shell never joined, which is not the thing it guards.
-if [ -n "$MODULE" ]; then
-  DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_MODULE="$MODULE" \
-  DOMICILE_REACH_MS="${DOMICILE_REACH_MS:-600000}" \
-    bun "$ROOT/packages/engine-chrome-host/src/main.ts" >"$BRIDGE_LOG" 2>&1 &
-else
-  DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_ROOT="$PAGE_DIR" \
-  DOMICILE_REACH_MS="${DOMICILE_REACH_MS:-600000}" \
-    bun "$ROOT/packages/engine-chrome-host/src/main.ts" >"$BRIDGE_LOG" 2>&1 &
-fi
+DOMICILE_SOCKET="$COMP_SOCK" DOMICILE_MODULE="$MODULE" \
+DOMICILE_REACH_MS="${DOMICILE_REACH_MS:-600000}" \
+  bun "$ROOT/packages/engine-chrome-host/src/main.ts" >"$BRIDGE_LOG" 2>&1 &
 STARTED+=($!)
 
 URL=""

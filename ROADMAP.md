@@ -62,12 +62,6 @@ decides whether an item is waiting or workable.
 3. **Keystroke-to-pixel latency** (#206). The one requirement nothing has
    measured: a client's window must cost the user nothing a plain Wayland
    compositor would not. Guard written, unit-tested, never run on hardware.
-4. **Delete `DOMICILE_ROOT`.** A shell is a module and Domicile writes the
-   document — "there is no way to supply one", in the commit that decided it.
-   The bridge still accepts a directory with an `index.html` of its own, and
-   `run-engine.sh` still falls back to one. It survived the migration because
-   both shells were still HTML entries at the time; neither is now, and nothing
-   outside the repo can be, because the guide says the path does not exist.
 
 ### In the engine fork — the agent on `crux`
 
