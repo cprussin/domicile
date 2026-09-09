@@ -55,8 +55,15 @@ fn the_engine_is_a_desktop_rather_than_a_browser() {
     );
     assert_eq!(spawned.program, PathBuf::from("/l/engine/chrome"));
     let args = args_of(&spawned);
+    // THE BARE ROOT. The engine writes the document rather than reading one
+    // off disk, and `CreateLoaderAndStart` answers a path of `/` itself; every
+    // other path goes to the file resolver. `index.html` went there, looked
+    // for a file of that name under the shell root, and found none — a built
+    // shell is `shell.js` and nothing else — so the desktop came up on an
+    // empty window with nothing said anywhere. Pinned as a whole string, not
+    // a prefix, because a trailing path is exactly what breaks it.
     assert!(
-        args.contains(&"--app=domicile://shell/index.html".to_string()),
+        args.contains(&"--app=domicile://shell/".to_string()),
         "{args:?}"
     );
     assert!(

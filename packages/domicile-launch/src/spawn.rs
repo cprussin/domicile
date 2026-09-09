@@ -13,7 +13,17 @@ use crate::shell_path::Shell;
 /// The document the fork generates, and what a desktop is started on. One
 /// host and one path: `domicile_scheme.h` says there is no second host, and
 /// naming one is how a request for something that is not the shell is refused.
-const SHELL_DOCUMENT: &str = "domicile://shell/index.html";
+///
+/// THE BARE ROOT, AND IT HAS TO BE. The engine writes this document rather
+/// than reading it off disk — a shell is a module, and the page that loads it
+/// is the fork's — so `ShellURLLoaderFactory::CreateLoaderAndStart` answers a
+/// path of `/` itself and hands anything else to the file resolver. Asking for
+/// `index.html` went to the resolver, which looked for a file of that name
+/// under the shell root; a built shell is `shell.js` and nothing else, so
+/// there was none, and a desktop came up on an empty window with nothing said
+/// anywhere. `shell_url_loader_factory_unittest.cc` asserts the other side of
+/// this: `domicile://shell/` must resolve to no file at all.
+const SHELL_DOCUMENT: &str = "domicile://shell/";
 
 /// A child process, before anything has been started.
 #[derive(Debug, Clone, PartialEq, Eq)]
