@@ -24,12 +24,29 @@ module domicile.mojom;
 // TCP connection. domicile:// is not web-safe and not CORS-enabled, so no
 // ordinary web content has that origin.
 
-// VERTICAL SLICE. Two members, one in each direction, chosen because they are
-// the two hardest shapes in the protocol: Spawn is the dangerous one, and
-// AppTitled is an unsolicited event from the compositor. The other 27 members
-// are mechanical once these compile and run, and are deliberately not written
-// yet -- twenty-nine members written blind is twenty-nine mistakes instead of
-// one.
+// The members the fork keeps. The bands and copy-path protocol -- place_portal,
+// remove_portal, declare_bands, render_band, claim_pointer, app_composited --
+// is absent on purpose: layout positions the layer now and the page has stopped
+// reporting where its own boxes are. See docs/architecture/ENGINE-FORK.md.
+//
+// Adding a member costs a near-full Blink rebuild, so they are added in
+// batches rather than one at a time.
+
+// A key combination the desktop claims for itself.
+//
+// A struct rather than a string, because the compositor's protocol takes one:
+// serialising this as text would mean the browser inventing a syntax and the
+// compositor parsing it back, and the two halves are built from one repository
+// with no reason to disagree about a keystroke. `keycode` is a Linux evdev
+// code -- the same numbering `Key` forwards in, not the X keycode the Wayland
+// keymap uses, which is this plus 8.
+struct Shortcut {
+  uint32 keycode;
+  bool alt;
+  bool ctrl;
+  bool shift;
+  bool meta;
+};
 
 // Page -> browser -> compositor.
 interface ControlChannel {
@@ -58,15 +75,19 @@ interface ControlChannel {
 
   // The layout box, as a resize. For an <app> element the box IS the
   // xdg_toplevel.configure, which is why this exists at all.
-  ResizeApp(string app_id, uint32 width, uint32 height);
+  //
+  // Doubles because the compositor's sizes are doubles, and because these come
+  // from a layout box: a CSS pixel is fractional and rounding it here would
+  // make a window's size depend on which half of the channel measured it.
+  ResizeApp(string app_id, double width, double height);
 
   // The desktop's own geometry, and the scale the page is drawn at.
-  SetDesktopSize(uint32 width, uint32 height);
+  SetDesktopSize(double width, double height);
   SetDevicePixelRatio(double ratio);
 
   // A key combination the compositor should route to the page rather than to
   // whichever client has focus.
-  GrabShortcut(string shortcut);
+  GrabShortcut(Shortcut shortcut);
 
   // Input forwarding. Coordinates are surface-local and keycodes are evdev,
   // because that is what a Wayland client expects to be handed.
@@ -88,20 +109,25 @@ interface ControlChannelClient {
   // is something it says by drawing. Believing a zero here is what opened
   // windows at nothing at all.
   AppAppeared(string app_id, string title, bool has_size,
-              uint32 width, uint32 height);
+              double width, double height);
 
-  AppResized(string app_id, uint32 width, uint32 height);
+  AppResized(string app_id, double width, double height);
   AppClosed(string app_id);
 
   // The cursor a client asked for over its own surface.
   AppCursor(string app_id, string cursor);
 
-  // A grabbed shortcut fired.
-  Shortcut(string shortcut);
+  // A grabbed shortcut fired. Named for the event rather than the struct,
+  // which would shadow the type inside the generated class.
+  ShortcutPressed(Shortcut shortcut);
 
   // The seat's modifier state. One seat, outliving every window, which is why
   // a dropped key release latches modifiers into clients that never saw it.
-  Modifiers(uint32 depressed, uint32 latched, uint32 locked, uint32 group);
+  //
+  // Which modifiers are held, not xkb's four masks: the compositor has already
+  // resolved depressed/latched/locked against the keymap, and a shell asking
+  // "is control down" cannot answer that from a mask without the keymap too.
+  Modifiers(bool alt, bool ctrl, bool shift, bool meta);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id);

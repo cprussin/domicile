@@ -31,25 +31,25 @@ class MODULES_EXPORT DomicileModifiersEvent final : public Event {
   DomicileModifiersEvent(const AtomicString& type,
                          const DomicileModifiersEventInit* initializer);
   DomicileModifiersEvent(const AtomicString& type,
-                         uint32_t depressed,
-                         uint32_t latched,
-                         uint32_t locked,
-                         uint32_t group);
+                         bool alt,
+                         bool ctrl,
+                         bool shift,
+                         bool meta);
   ~DomicileModifiersEvent() override;
 
-  uint32_t depressed() const { return depressed_; }
-  uint32_t latched() const { return latched_; }
-  uint32_t locked() const { return locked_; }
-  uint32_t group() const { return group_; }
+  bool altKey() const { return alt_; }
+  bool ctrlKey() const { return ctrl_; }
+  bool shiftKey() const { return shift_; }
+  bool metaKey() const { return meta_; }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
 
  private:
-  uint32_t depressed_ = 0;
-  uint32_t latched_ = 0;
-  uint32_t locked_ = 0;
-  uint32_t group_ = 0;
+  bool alt_ = false;
+  bool ctrl_ = false;
+  bool shift_ = false;
+  bool meta_ = false;
 };
 
 }  // namespace blink

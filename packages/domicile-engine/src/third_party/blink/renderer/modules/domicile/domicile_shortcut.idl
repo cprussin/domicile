@@ -1,0 +1,19 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// A key combination the desktop claims for itself.
+//
+// The same shape `DomicileShortcutEvent` hands back, so a shell writes the
+// combination once and compares against the press with the same field names.
+//
+// `keycode` rather than `key`: this is a Linux evdev code, and `KeyboardEvent`
+// already spends `key` on a string ("Enter"). The modifiers keep the web's
+// names, so a shell that already reads `event.ctrlKey` reads this the same way.
+dictionary DomicileShortcut {
+  required unsigned long keycode;
+  boolean altKey = false;
+  boolean ctrlKey = false;
+  boolean shiftKey = false;
+  boolean metaKey = false;
+};

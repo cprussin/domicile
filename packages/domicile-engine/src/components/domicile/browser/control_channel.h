@@ -55,11 +55,11 @@ class ControlChannel : public mojom::ControlChannel {
   void FocusChrome() override;
   void CloseApp(const std::string& app_id) override;
   void ResizeApp(const std::string& app_id,
-                 uint32_t width,
-                 uint32_t height) override;
-  void SetDesktopSize(uint32_t width, uint32_t height) override;
+                 double width,
+                 double height) override;
+  void SetDesktopSize(double width, double height) override;
   void SetDevicePixelRatio(double ratio) override;
-  void GrabShortcut(const std::string& shortcut) override;
+  void GrabShortcut(mojom::ShortcutPtr shortcut) override;
   void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;
   void PointerMotion(const std::string& app_id, double x, double y) override;
   void PointerLeave(const std::string& app_id) override;

@@ -17,6 +17,7 @@
 
 namespace blink {
 
+class DomicileShortcut;
 class LocalDOMWindow;
 
 // navigator.domicile — the shell's control channel to the compositor.
@@ -49,15 +50,14 @@ class MODULES_EXPORT DomicileHost final
   void closeApp(ScriptState*, const String& app_id, ExceptionState&);
   void resizeApp(ScriptState*,
                  const String& app_id,
-                 uint32_t width,
-                 uint32_t height,
+                 double width,
+                 double height,
                  ExceptionState&);
-  void setDesktopSize(ScriptState*,
-                      uint32_t width,
-                      uint32_t height,
-                      ExceptionState&);
+  void setDesktopSize(ScriptState*, double width, double height, ExceptionState&);
   void setDevicePixelRatio(ScriptState*, double ratio, ExceptionState&);
-  void grabShortcut(ScriptState*, const String& shortcut, ExceptionState&);
+  void grabShortcut(ScriptState*,
+                    const DomicileShortcut* shortcut,
+                    ExceptionState&);
   void key(ScriptState*,
            const String& app_id,
            uint32_t keycode,
@@ -100,18 +100,13 @@ class MODULES_EXPORT DomicileHost final
   void AppAppeared(const String& app_id,
                    const String& title,
                    bool has_size,
-                   uint32_t width,
-                   uint32_t height) override;
-  void AppResized(const String& app_id,
-                  uint32_t width,
-                  uint32_t height) override;
+                   double width,
+                   double height) override;
+  void AppResized(const String& app_id, double width, double height) override;
   void AppClosed(const String& app_id) override;
   void AppCursor(const String& app_id, const String& cursor) override;
-  void Shortcut(const String& shortcut) override;
-  void Modifiers(uint32_t depressed,
-                 uint32_t latched,
-                 uint32_t locked,
-                 uint32_t group) override;
+  void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
+  void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void FocusChanged(const String& app_id) override;
 
   void Trace(Visitor*) const override;

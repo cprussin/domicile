@@ -9,9 +9,11 @@
   constructor(DOMString type,
               optional DomicileModifiersEventInit eventInitDict = {});
 
-  // xkb's four, meaning what xkb says they mean.
-  readonly attribute unsigned long depressed;
-  readonly attribute unsigned long latched;
-  readonly attribute unsigned long locked;
-  readonly attribute unsigned long group;
+  // Which modifiers are held, under the web's names. The compositor has
+  // already resolved xkb's depressed/latched/locked against the keymap; a mask
+  // would hand the shell a number it cannot read without the keymap too.
+  readonly attribute boolean altKey;
+  readonly attribute boolean ctrlKey;
+  readonly attribute boolean shiftKey;
+  readonly attribute boolean metaKey;
 };

@@ -35,8 +35,8 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
                    const String& app_id,
                    const String& title,
                    const String& cursor,
-                   std::optional<uint32_t> width,
-                   std::optional<uint32_t> height);
+                   std::optional<double> width,
+                   std::optional<double> height);
   ~DomicileAppEvent() override;
 
   const String& appId() const { return app_id_; }
@@ -44,8 +44,8 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
   const String& cursor() const { return cursor_; }
 
   bool hasSize() const { return width_.has_value(); }
-  uint32_t width() const { return width_.value_or(0); }
-  uint32_t height() const { return height_.value_or(0); }
+  double width() const { return width_.value_or(0); }
+  double height() const { return height_.value_or(0); }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
@@ -54,8 +54,8 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
   String app_id_;
   String title_;
   String cursor_;
-  std::optional<uint32_t> width_;
-  std::optional<uint32_t> height_;
+  std::optional<double> width_;
+  std::optional<double> height_;
 };
 
 }  // namespace blink
