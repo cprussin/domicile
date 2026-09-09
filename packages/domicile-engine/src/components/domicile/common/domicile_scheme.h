@@ -27,9 +27,6 @@ inline constexpr char kDomicileScheme[] = "domicile";
 // something that is not the shell is refused.
 inline constexpr char kDomicileShellHost[] = "shell";
 
-// What `domicile://shell/` resolves to when no file is named.
-inline constexpr char kDomicileShellIndex[] = "index.html";
-
 // Where the shell's files are read from. Same shape as
 // --domicile-broker-socket: the engine already takes what it needs on its
 // command line.

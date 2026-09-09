@@ -63,8 +63,12 @@ bool ShellURLLoaderFactory::ResolveShellPath(const base::FilePath& shell_root,
   while (!path.empty() && path.front() == '/') {
     path.erase(0, 1);
   }
+  // No index fallback. The bare root is the document the engine writes, and
+  // CreateLoaderAndStart answers it before asking this -- so an empty path
+  // reaching here is a URL that resolved to the root some other way, and there
+  // is no file it should mean.
   if (path.empty()) {
-    path = kDomicileShellIndex;
+    return false;
   }
 
   base::FilePath relative = base::FilePath::FromUTF8Unsafe(path);
