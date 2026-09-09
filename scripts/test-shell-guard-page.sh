@@ -30,9 +30,16 @@ GUARD="$ROOT/packages/domicile-engine/scripts/guard-shell.sh"
 
 # The name it looks for, to the `fi` that refuses when it is not there.
 RESOLVE="$(awk '/^MODULE="\$PAGE_DIR\/shell.js"$/,/^fi$/' "$GUARD")"
-# The launch, which is the other half: finding the module and then handing the
-# bridge something else is the same failure as not finding it.
-LAUNCH="$(awk '/^DOMICILE_SOCKET=.*DOMICILE_MODULE=/,/^  bun /' "$GUARD")"
+# The launch, which is the other half: finding the module and then telling the
+# engine about a different one is the same failure as not finding it.
+#
+# It used to slice the bridge's start-up and read `DOMICILE_MODULE`. There is
+# no bridge -- the engine serves the shell over `domicile://` now -- so it
+# slices chrome's command line and reads the switches that say where the shell
+# is. Same rule, and the same failure it exists to catch: a module handed over
+# as a root serves a directory with no module in it, and the desktop comes up
+# blank with nothing in any log to say why.
+LAUNCH="$(awk '/^"\$CHROMIUM\/\$OUT\/chrome" \\$/,/^STARTED\+=\(\$!\)$/' "$GUARD")"
 [ -n "$RESOLVE" ] && [ -n "$LAUNCH" ] || {
   echo "no page resolution in $GUARD — its markers moved. Fix this test with it." >&2
   exit 1
@@ -99,23 +106,43 @@ launch() { # $1 MODULE, $2 PAGE_DIR
     MODULE="$1"
     PAGE_DIR="$2"
     COMP_SOCK="$WORK/sock"
-    ROOT="$WORK"
-    BRIDGE_LOG="$WORK/bridge.log"
+    PROFILE="$WORK/profile"
+    BROKER="$WORK/broker"
+    ENGINE_LOG="$WORK/engine.log"
+    WIDTH=800
+    HEIGHT=600
     STARTED=()
-    # `bun` as a function, which wins over anything on PATH, so the launch is
-    # exercised without a bridge: it writes what it was handed where the real
-    # one writes what it is serving.
-    bun() { echo "module=${DOMICILE_MODULE:-}"; }
-    : >"$BRIDGE_LOG"
+    # A `chrome` that writes its own arguments where the real one writes its
+    # log, so the launch is exercised without an engine.
+    CHROMIUM="$WORK"
+    OUT="bin"
+    mkdir -p "$WORK/bin"
+    printf '#!/bin/sh\nfor a in "$@"; do echo "$a"; done\n' >"$WORK/bin/chrome"
+    chmod +x "$WORK/bin/chrome"
+    : >"$ENGINE_LOG"
     eval "$LAUNCH"
     wait
-    cat "$BRIDGE_LOG"
+    cat "$ENGINE_LOG"
   )
 }
 
-expect "the module is handed over as DOMICILE_MODULE" \
-  "module=$WORK/module/shell.js" \
-  "$(launch "$WORK/module/shell.js" "$WORK/module")"
+ARGS="$(launch "$WORK/module/shell.js" "$WORK/module")"
+
+expect "the directory holding the module is what the engine serves" \
+  "--domicile-shell-root=$WORK/module" \
+  "$(printf '%s\n' "$ARGS" | grep '^--domicile-shell-root=')"
+
+expect "the module is named relative to that root, not as a path" \
+  "--domicile-shell-module=shell.js" \
+  "$(printf '%s\n' "$ARGS" | grep '^--domicile-shell-module=')"
+
+# The bare root, because the engine writes the document and serves it there.
+# Asking for a file under it sends the request to the file resolver instead,
+# which looks for something no build emits -- see `spawn.rs`, which had this
+# wrong and produced exactly the blank window this guard exists to catch.
+expect "the desktop starts on the document the engine writes" \
+  "--app=domicile://shell/" \
+  "$(printf '%s\n' "$ARGS" | grep '^--app=')"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

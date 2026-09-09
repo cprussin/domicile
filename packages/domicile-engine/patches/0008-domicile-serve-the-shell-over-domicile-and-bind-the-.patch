@@ -15,7 +15,7 @@ has a real origin without a port behind it, and the control channel becomes an
 interface the browser binds for the shell's origin rather than a socket the
 page opens.
 
-FOUR INDEPENDENT GATES stand between a registered scheme and a page that
+FIVE INDEPENDENT GATES stand between a registered scheme and a page that
 loads, and each was found by running it rather than by reading:
 
   1. ContentClient::AddAdditionalSchemes           -- gives it an origin
@@ -23,15 +23,26 @@ loads, and each was found by running it rather than by reading:
                                                       becomes the New Tab page
   3. ValidateLaunchUrlWebUnsafe                    -- or it cannot be launched
                                                       from the command line
-  4. ChildProcessSecurityPolicy                    -- or the document commits
+  4. MaybeLaunchAppShortcutWindow                  -- or --app= is dropped and
+                                                      the window is an ordinary
+                                                      one on the New Tab page
+  5. ChildProcessSecurityPolicy                    -- or the document commits
                                                       and every subresource in
                                                       it fails
 
-Gate 3 is where the design's own choice bites: launching by URL requires a
-web-safe scheme, and domicile:// is deliberately not web-safe. Those two lists
-answer different questions -- web-safe is "may a web page navigate here", this
-is "may the command line ask for this" -- and the command line is trusted.
-chrome:// sits in the same list for the same reason.
+Gates 3 and 4 are where the design's own choice bites: launching by URL
+requires a web-safe scheme, and domicile:// is deliberately not web-safe. Those
+two lists answer different questions -- web-safe is "may a web page navigate
+here", this is "may the command line ask for this" -- and the command line is
+trusted. chrome:// sits in the same list for the same reason.
+
+They are two checks, not one, and that is the trap: url_util.cc guards a URL
+given as a bare argument, startup_browser_creator.cc guards the same URL given
+to --app=, and patching the first leaves the second. Gate 4 also fails in the
+quietest way of the five. It does not refuse; it declines, and startup carries
+on as if --app= had never been passed -- so a desktop launches as a browser
+window on about:newtab, no line is logged on either side, and the compositor
+sits waiting for a chrome that will never speak to it.
 
 Gate 4 is granted per process, never with RegisterWebSafeIsolatedScheme, which
 would let any renderer request domicile:// URLs. GrantRequestScheme only, never
@@ -63,6 +74,7 @@ protocol members, and shellDocument still lives in TypeScript.
  .../chrome_browser_interface_binders.cc       | 40 ++++++++++++++
  .../browser/chrome_content_browser_client.cc  | 55 +++++++++++++++++++
  chrome/browser/profiles/profile_io_data.cc    |  8 +++
+ .../ui/startup/startup_browser_creator.cc     | 18 +++++-
  chrome/browser/ui/startup/url_util.cc         | 14 +++++
  chrome/common/BUILD.gn                        |  1 +
  chrome/common/chrome_content_client.cc        | 14 +++++
@@ -72,7 +84,7 @@ protocol members, and shellDocument still lives in TypeScript.
  .../core/events/event_type_names.json5        |  2 +
  third_party/blink/renderer/modules/BUILD.gn   |  1 +
  .../platform/runtime_enabled_features.json5   |  9 +++
- 13 files changed, 171 insertions(+)
+ 14 files changed, 188 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
 index 2a3958f78ddb6..5380296102cc3 100644
@@ -266,6 +278,43 @@ index 080e9b0e43c70..b51364906c241 100644
  #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
      BUILDFLAG(IS_CHROMEOS)
        webapps::kIsolatedAppScheme,
+diff --git a/chrome/browser/ui/startup/startup_browser_creator.cc b/chrome/browser/ui/startup/startup_browser_creator.cc
+index 0b8d0aabf04ed..644b8d0d10c3e 100644
+--- a/chrome/browser/ui/startup/startup_browser_creator.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/startup/startup_browser_creator.h"
+ 
++#include "components/domicile/common/domicile_scheme.h"
++
+ #include <stddef.h>
+ 
+ #include <optional>
+@@ -395,8 +397,22 @@ bool MaybeLaunchAppShortcutWindow(const base::CommandLine& command_line,
+   if (!url.is_empty() && url.is_valid()) {
+     content::ChildProcessSecurityPolicy* policy =
+         content::ChildProcessSecurityPolicy::GetInstance();
++    // Domicile's engine fork. `--app=domicile://shell/` is how a desktop is
++    // launched, and domicile:// is deliberately not web-safe -- so without
++    // this the switch is dropped here, the browser goes on to start as though
++    // it had never been given, and what the user gets is an ordinary window on
++    // the New Tab page. That is the whole of "the shell does not load", and
++    // nothing on either side says so: the engine never navigates, so the page
++    // never runs, so the control channel is never bound and the compositor
++    // waits for a chrome that is sitting on about:newtab.
++    //
++    // The twin of the hunk in url_util.cc, and there for the same reason: a
++    // command line is trusted, because whoever writes it already runs as the
++    // user. Two separate checks asking the same question, which is why the
++    // first one was patched and this one was not.
+     if (policy->IsWebSafeScheme(url.GetScheme()) ||
+-        url.SchemeIs(url::kFileScheme)) {
++        url.SchemeIs(url::kFileScheme) ||
++        url.SchemeIs(domicile::kDomicileScheme)) {
+       const content::WebContents* web_contents =
+           apps::OpenExtensionAppShortcutWindow(profile, url);
+       if (web_contents) {
 diff --git a/chrome/browser/ui/startup/url_util.cc b/chrome/browser/ui/startup/url_util.cc
 index 2dd42fefa3899..89e5495afe67e 100644
 --- a/chrome/browser/ui/startup/url_util.cc
