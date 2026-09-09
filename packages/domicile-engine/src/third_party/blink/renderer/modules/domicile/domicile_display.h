@@ -17,6 +17,9 @@ namespace blink {
 // as the type of an attribute, and these are read off
 // `navigator.domicile.displays`.
 //
+// Its geometry is logical -- the CSS pixels a shell lays out in -- and `scale`
+// is what *clients* on this screen draw at, not the shell's own density.
+//
 // Immutable. The compositor re-describes the whole desktop when any of it
 // changes -- a resize, a density change, a config reload -- so a display is
 // replaced rather than edited, and a shell holding one from a previous

@@ -8,9 +8,9 @@
 // dictionary as the type of an attribute, and this is read off
 // `navigator.domicile.displays` rather than handed over in a call.
 //
-// Integers, unlike everything else the channel carries: a display's geometry
-// comes from the desktop's configuration in device pixels, not from a layout
-// box, so there is no fraction to lose.
+// Integers, unlike the sizes elsewhere on this channel. Those come from a
+// layout box, where a CSS pixel is fractional; a display comes from the
+// desktop's configuration, which names whole ones.
 
 [
     Exposed=Window,
@@ -21,14 +21,20 @@
   // window rather than driving displays.
   readonly attribute DOMString name;
 
-  // The top-left corner, in the desktop's coordinates. Screens are laid out in
-  // one plane, so a second screen beside the first starts at the first's width.
+  // The top-left corner, in the desktop's coordinate space, whose origin is
+  // the top-left of the displays' bounding box. Signed: the config may put a
+  // display anywhere, and a screen left of the origin has a negative x.
   readonly attribute long x;
   readonly attribute long y;
 
+  // Logical -- the CSS pixels a shell lays out in, the same units everything
+  // else here is in. NOT the `wl_output` mode, which is this times `scale`.
   readonly attribute unsigned long width;
   readonly attribute unsigned long height;
 
-  // The device pixel ratio this screen is driven at.
+  // The scale advertised to *clients* on this screen: what a window drawn on
+  // it renders at. Not the shell's own `devicePixelRatio` -- the shell is one
+  // page at one density however many screens it spans -- so multiplying the
+  // sizes above by this gives a client's buffer, not anything to lay out with.
   readonly attribute unsigned long scale;
 };

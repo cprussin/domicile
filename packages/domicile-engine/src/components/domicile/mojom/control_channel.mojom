@@ -50,9 +50,11 @@ struct Shortcut {
 
 // One screen of the desktop.
 //
-// Integers, unlike the sizes above: a display's geometry comes from the
-// desktop's configuration in device pixels rather than from a layout box, so
-// there is no fraction to lose.
+// Integers, unlike the sizes above. Those come from a layout box, where a CSS
+// pixel is fractional; a display comes from the desktop's configuration, which
+// names whole ones. Its geometry is logical all the same -- a `wl_output` mode
+// is `width`/`height` times `scale` -- and `scale` is what clients on the
+// screen draw at, not the shell's own density.
 struct Display {
   string name;
   int32 x;

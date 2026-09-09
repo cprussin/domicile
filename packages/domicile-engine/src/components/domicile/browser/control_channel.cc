@@ -371,10 +371,16 @@ void ControlChannel::DispatchLine(const std::string& line) {
 
   if (*type == "app_titled") {
     const std::string* app_id = message.FindString("app_id");
-    const std::string* title = message.FindString("title");
-    if (app_id && title) {
-      client_->AppTitled(*app_id, *title);
+    if (!app_id) {
+      return;
     }
+    // A null title is a window saying it has no name, not a malformed message.
+    // Requiring the string dropped the whole thing, so a shell went on showing
+    // the name a window had stopped using -- and `app_appeared` two branches
+    // down already reads the same field the other way, which is the reading
+    // that matches the wire.
+    const std::string* title = message.FindString("title");
+    client_->AppTitled(*app_id, title ? *title : std::string());
     return;
   }
 
