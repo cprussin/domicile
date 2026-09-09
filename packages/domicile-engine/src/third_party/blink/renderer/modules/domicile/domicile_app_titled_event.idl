@@ -1,0 +1,20 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// The event behind navigator.domicile.onapptitled.
+//
+// A real event type rather than a CustomEvent carrying a detail bag, because
+// the whole point of the typed surface is that a shell does not parse anything.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileAppTitledEvent : Event {
+  constructor(DOMString type, optional DomicileAppTitledEventInit eventInitDict = {});
+
+  // Which window. The same id an <app> element's app-id names.
+  readonly attribute DOMString appId;
+
+  readonly attribute DOMString title;
+};

@@ -32,16 +32,69 @@ source_set("browser") {
   ]
 }
 
+# The scheme's name, its one host, and the switch that points at the shell.
+#
+# Header-only and dependency-free on purpose. chrome/common needs it to register
+# the scheme in every process, and must not acquire //content to do that.
+source_set("common") {
+  sources = [ "common/domicile_scheme.h" ]
+}
+
+# Serving the shell over domicile://.
+#
+# A target of its own rather than part of :browser, because this depends on
+# //content and :browser deliberately does not -- that is a property worth
+# keeping, and the one thing here that needs content is its file loader.
+source_set("shell_scheme") {
+  sources = [
+    "browser/shell_url_loader_factory.cc",
+    "browser/shell_url_loader_factory.h",
+  ]
+
+  public_deps = [
+    ":common",
+    "//base",
+    "//content/public/browser",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+    "//url",
+  ]
+}
+
+# The shell's control channel, in the browser process.
+#
+# Its own target so the slice can meet a compiler before the Blink half exists,
+# and because what it needs is //net, which nothing else here wants. Like
+# :browser, it does not depend on //content.
+source_set("control_channel") {
+  sources = [
+    "browser/control_channel.cc",
+    "browser/control_channel.h",
+  ]
+
+  public_deps = [
+    ":common",
+    "//base",
+    "//components/domicile/mojom",
+    "//mojo/public/cpp/bindings",
+    "//net",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
 
   sources = [
     "browser/frame_sink_broker_unittest.cc",
+    "browser/shell_url_loader_factory_unittest.cc",
     "spike/window_diff_unittest.cc",
   ]
 
   deps = [
     ":browser",
+    ":shell_scheme",
     "//components/domicile/engine:event_queue_unit_tests",
     "//base",
     "//base/test:test_support",

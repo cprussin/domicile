@@ -1,0 +1,160 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module domicile.mojom;
+
+// The shell's control channel to the compositor, as a renderer-to-browser
+// interface rather than a socket the page opens.
+//
+// This replaces a WebSocket to a loopback TCP port. The port was not a page
+// server with a socket beside it -- it was the desktop's control plane, and
+// `Spawn` on it is arbitrary commands on the machine running the desktop. A
+// loopback port is reachable by every process on the box and no header can fix
+// that; what fixes it is not having a port. See docs/architecture/
+// ENGINE-FORK.md, "The page is served over a TCP port, and it should not be".
+//
+// The browser already holds a unix socket to the compositor. This interface is
+// how the page reaches it without opening one of its own.
+//
+// WHAT MAKES THIS SAFE IS NOT THIS FILE. A renderer that is compromised can
+// call anything here, `Spawn` included. What changed is *which* renderers can:
+// the browser binds this only for a document whose origin is the shell's, so
+// the capability follows the origin instead of following whoever can open a
+// TCP connection. domicile:// is not web-safe and not CORS-enabled, so no
+// ordinary web content has that origin.
+
+// The members the fork keeps. The bands and copy-path protocol -- place_portal,
+// remove_portal, declare_bands, render_band, claim_pointer, app_composited --
+// is absent on purpose: layout positions the layer now and the page has stopped
+// reporting where its own boxes are. See docs/architecture/ENGINE-FORK.md.
+//
+// Adding a member costs a near-full Blink rebuild, so they are added in
+// batches rather than one at a time.
+
+// A key combination the desktop claims for itself.
+//
+// A struct rather than a string, because the compositor's protocol takes one:
+// serialising this as text would mean the browser inventing a syntax and the
+// compositor parsing it back, and the two halves are built from one repository
+// with no reason to disagree about a keystroke. `keycode` is a Linux evdev
+// code -- the same numbering `Key` forwards in, not the X keycode the Wayland
+// keymap uses, which is this plus 8.
+struct Shortcut {
+  uint32 keycode;
+  bool alt;
+  bool ctrl;
+  bool shift;
+  bool meta;
+};
+
+// One screen of the desktop.
+//
+// Integers, unlike the sizes above. Those come from a layout box, where a CSS
+// pixel is fractional; a display comes from the desktop's configuration, which
+// names whole ones. Its geometry is logical all the same -- a `wl_output` mode
+// is `width`/`height` times `scale` -- and `scale` is what clients on the
+// screen draw at, not the shell's own density.
+struct DisplayInfo {
+  string name;
+  int32 x;
+  int32 y;
+  uint32 width;
+  uint32 height;
+  uint32 scale;
+};
+
+// Page -> browser -> compositor.
+interface ControlChannel {
+  // Hand the browser the page's end of the other direction.
+  //
+  // A method here rather than a second interface the page brokers for itself:
+  // the client end means nothing to anyone who does not already hold this
+  // channel, so brokering it separately would be a second place to get the
+  // access control right, for no gain.
+  SetClient(pending_remote<ControlChannelClient> client);
+
+  // Run a command on the machine running the desktop.
+  //
+  // The argv form rather than a string, and not because it is tidier: a string
+  // would have to be split by somebody, and the somebody would be a shell.
+  // There is no shell in this path and there should not be one.
+  Spawn(array<string> command);
+
+  // Which window has the keyboard. FocusChrome takes it back to the page.
+  FocusApp(string app_id);
+  FocusChrome();
+
+  // Ask a client to close. Not a kill: the client decides, which is why a
+  // window can refuse and show a save dialog instead.
+  CloseApp(string app_id);
+
+  // The layout box, as a resize. For an <app> element the box IS the
+  // xdg_toplevel.configure, which is why this exists at all.
+  //
+  // Doubles because the compositor's sizes are doubles, and because these come
+  // from a layout box: a CSS pixel is fractional and rounding it here would
+  // make a window's size depend on which half of the channel measured it.
+  ResizeApp(string app_id, double width, double height);
+
+  // The desktop's own geometry, and the scale the page is drawn at.
+  SetDesktopSize(double width, double height);
+  SetDevicePixelRatio(double ratio);
+
+  // A key combination the compositor should route to the page rather than to
+  // whichever client has focus.
+  GrabShortcut(Shortcut shortcut);
+
+  // Input forwarding. Coordinates are surface-local and keycodes are evdev,
+  // because that is what a Wayland client expects to be handed.
+  Key(string app_id, uint32 keycode, bool pressed);
+  PointerMotion(string app_id, double x, double y);
+  PointerLeave(string app_id);
+  PointerButton(string app_id, uint32 button, bool pressed);
+  PointerAxis(string app_id, double dx, double dy, int32 v120_x, int32 v120_y);
+};
+
+// Compositor -> browser -> page. One method, not a callback on Spawn: these
+// arrive because a client did something, not because the page asked.
+interface ControlChannelClient {
+  // A window's title changed. `app_id` is the same id an <app> element names.
+  AppTitled(string app_id, string title);
+
+  // A window exists. Size is absent until the client has committed a buffer --
+  // a toplevel maps before it draws, and how big a Wayland client wants to be
+  // is something it says by drawing. Believing a zero here is what opened
+  // windows at nothing at all.
+  AppAppeared(string app_id, string title, bool has_size,
+              double width, double height);
+
+  AppResized(string app_id, double width, double height);
+  AppClosed(string app_id);
+
+  // The cursor a client asked for over its own surface.
+  AppCursor(string app_id, string cursor);
+
+  // A grabbed shortcut fired. Named for the event rather than the struct,
+  // which would shadow the type inside the generated class.
+  ShortcutPressed(Shortcut shortcut);
+
+  // The seat's modifier state. One seat, outliving every window, which is why
+  // a dropped key release latches modifiers into clients that never saw it.
+  //
+  // Which modifiers are held, not xkb's four masks: the compositor has already
+  // resolved depressed/latched/locked against the keymap, and a shell asking
+  // "is control down" cannot answer that from a mask without the keymap too.
+  Modifiers(bool alt, bool ctrl, bool shift, bool meta);
+
+  // The whole desktop, whenever any of it changes.
+  //
+  // Every screen every time, not a delta: the compositor re-describes the
+  // desktop on a resize, a density change or a config reload, and a page that
+  // had to reconcile deltas could be wrong about a screen forever after
+  // missing one. An empty list is a desktop with no screens on it, which the
+  // compositor does not send -- it describes at least one output -- but which
+  // is an answer rather than a silence, and the page must be able to hold it.
+  Displays(array<DisplayInfo> displays);
+
+  // Focus moved, including to the chrome itself, in which case app_id is empty.
+  FocusChanged(string app_id);
+};

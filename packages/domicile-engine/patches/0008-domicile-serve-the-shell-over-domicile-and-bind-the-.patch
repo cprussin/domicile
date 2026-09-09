@@ -1,0 +1,444 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 8 Sep 2026 16:07:23 -0700
+Subject: [PATCH] domicile: serve the shell over domicile:// and bind the
+ control channel
+
+The shell was served over a loopback HTTP port whose WebSocket was a byte pipe
+to the compositor's control socket -- and that protocol carries Spawn, which is
+arbitrary commands on the machine running the desktop. A loopback port is
+reachable by every process on the box and no header fixes that. What fixes it
+is not having a port.
+
+Two halves, and this is the engine's. domicile:// serves the shell so the page
+has a real origin without a port behind it, and the control channel becomes an
+interface the browser binds for the shell's origin rather than a socket the
+page opens.
+
+FOUR INDEPENDENT GATES stand between a registered scheme and a page that
+loads, and each was found by running it rather than by reading:
+
+  1. ContentClient::AddAdditionalSchemes           -- gives it an origin
+  2. ProfileIOData::IsHandledURL                   -- or the URL silently
+                                                      becomes the New Tab page
+  3. ValidateLaunchUrlWebUnsafe                    -- or it cannot be launched
+                                                      from the command line
+  4. ChildProcessSecurityPolicy                    -- or the document commits
+                                                      and every subresource in
+                                                      it fails
+
+Gate 3 is where the design's own choice bites: launching by URL requires a
+web-safe scheme, and domicile:// is deliberately not web-safe. Those two lists
+answer different questions -- web-safe is "may a web page navigate here", this
+is "may the command line ask for this" -- and the command line is trusted.
+chrome:// sits in the same list for the same reason.
+
+Gate 4 is granted per process, never with RegisterWebSafeIsolatedScheme, which
+would let any renderer request domicile:// URLs. GrantRequestScheme only, never
+GrantCommitScheme: committing is what confers the origin, and the origin is
+what the control channel keys on.
+
+THE ACCESS CONTROL IS ONE CONDITION, and it is checked at bind time rather than
+when the binder map is built. The map is per-RenderFrameHost and is populated
+before any document commits, so gating there reads an empty origin, registers
+nothing, and Chromium then kills the renderer for requesting an unbound
+interface. That is a mistake that looks like it is working.
+
+The channel runs on the IO thread because net::SocketPosix DCHECKs it, and the
+hop is done in chrome/ so components/domicile keeps its property of not
+depending on //content.
+
+Verified end to end against a stand-in compositor. The page:
+  {"origin":"domicile://shell","hostCtor":"DomicileHost","probeRan":true,
+   "titled":{"appId":"term","title":"kitty"},"spawnSent":true}
+The compositor:
+  RECV {"protocol_version": 1, "type": "hello"}
+  RECV {"command": ["kitty"], "type": "spawn"}
+
+So navigation, subresources, the origin, the binding, an outbound message and
+an unsolicited inbound one all work. What does not yet exist is the other 27
+protocol members, and shellDocument still lives in TypeScript.
+---
+ chrome/browser/BUILD.gn                       |  6 ++
+ .../chrome_browser_interface_binders.cc       | 40 ++++++++++++++
+ .../browser/chrome_content_browser_client.cc  | 55 +++++++++++++++++++
+ chrome/browser/profiles/profile_io_data.cc    |  8 +++
+ chrome/browser/ui/startup/url_util.cc         | 14 +++++
+ chrome/common/BUILD.gn                        |  1 +
+ chrome/common/chrome_content_client.cc        | 14 +++++
+ .../bindings/generated_in_modules.gni         |  6 ++
+ .../renderer/bindings/idl_in_modules.gni      |  4 ++
+ .../core/events/event_target_names.json5      |  2 +
+ .../core/events/event_type_names.json5        |  2 +
+ third_party/blink/renderer/modules/BUILD.gn   |  1 +
+ .../platform/runtime_enabled_features.json5   |  9 +++
+ 13 files changed, 162 insertions(+)
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 2a3958f78ddb6..5380296102cc3 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -2372,6 +2372,12 @@ source_set("browser") {
+     "//components/device_event_log",
+     "//components/dom_distiller/content/browser",
+     "//components/domain_reliability",
++
++    # Domicile's engine fork: serving the shell over domicile://, and the
++    # shell's control channel to the compositor.
++    "//components/domicile:control_channel",
++    "//components/domicile:shell_scheme",
++
+     "//components/download/content/factory",
+     "//components/embedder_support:user_agent",
+     "//components/facilitated_payments/core/features",
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index ae2d77825d359..d55fad9fefd13 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -4,6 +4,11 @@
+ 
+ #include "chrome/browser/chrome_browser_interface_binders.h"
+ 
++#include "components/domicile/browser/control_channel.h"
++#include "content/public/browser/browser_thread.h"
++#include "mojo/public/cpp/bindings/message.h"
++#include "components/domicile/common/domicile_scheme.h"
++
+ #include <utility>
+ 
+ #include "base/feature_list.h"
+@@ -466,6 +471,41 @@ void PopulateChromeFrameBinders(
+     map->Add<pwc::mojom::PrivilegedBridge>(&pwc::BindPrivilegedBridge);
+     map->Add<geic::mojom::GeicApi>(&geic::BindGeicApi);
+   }
++  // Domicile's engine fork: the shell's control channel to the compositor.
++  //
++  // Registered unconditionally and gated at BIND time, not here. This map is
++  // built when the RenderFrameHost is created, before any document has
++  // committed, so GetLastCommittedOrigin() is empty at this point -- gating
++  // here silently registers nothing and the renderer is then killed for
++  // requesting an interface with no binder. That is how this was found.
++  //
++  // THE CHECK IN THE CALLBACK IS THE WHOLE OF THE ACCESS CONTROL. It works
++  // because domicile:// is registered neither web-safe nor CORS-enabled, so no
++  // ordinary web content can hold that origin, and because a document's
++  // committed origin is fixed by the time it can ask for anything. If it is
++  // ever loosened, this is worse than the loopback TCP port it replaced,
++  // because it looks safe.
++  map->Add<domicile::mojom::ControlChannel>(base::BindRepeating(
++      [](content::RenderFrameHost* frame,
++         mojo::PendingReceiver<domicile::mojom::ControlChannel> receiver) {
++        if (frame->GetLastCommittedOrigin().scheme() !=
++            domicile::kDomicileScheme) {
++          // Not the shell. Reporting it rather than dropping quietly: a
++          // document that is not the shell asking for the desktop's control
++          // plane is not a mistake to absorb.
++          mojo::ReportBadMessage(
++              "domicile: only a domicile:// document may control the "
++              "compositor.");
++          return;
++        }
++        // On the IO thread: the channel talks to a unix socket through
++        // net::SocketPosix, which DCHECKs that it is on a thread with an IO
++        // message pump. Binders run on the UI thread, so this has to hop.
++        content::GetIOThreadTaskRunner({})->PostTask(
++            FROM_HERE, base::BindOnce(&domicile::BindControlChannel,
++                                      std::move(receiver)));
++      }));
++
+   map->Add<image_annotation::mojom::Annotator>(&BindImageAnnotator);
+ 
+   map->Add<blink::mojom::ScriptToolHost>(
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 7a4cef2435e82..29a0f4d6bda01 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -4,6 +4,9 @@
+ 
+ #include "chrome/browser/chrome_content_browser_client.h"
+ 
++#include "components/domicile/browser/shell_url_loader_factory.h"
++#include "components/domicile/common/domicile_scheme.h"
++
+ #include <algorithm>
+ #include <iterator>
+ #include <map>
+@@ -2540,6 +2543,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
+ 
+   const GURL& site_url =
+       site_instance->GetSecurityPrincipal().GetDeprecatedSiteURL();
++
++  // Domicile's engine fork. A renderer hosting the shell has to be allowed to
++  // request its own subresources: domicile:// is deliberately not web-safe, so
++  // without this grant ChildProcessSecurityPolicy refuses every script,
++  // stylesheet and image the shell's document asks for -- the navigation
++  // commits and then the page is inert, which is how this was found.
++  //
++  // Granted per process rather than by RegisterWebSafeIsolatedScheme, which
++  // would let *any* renderer request domicile:// URLs. This grants only the
++  // process that is already hosting the shell, so a compromised renderer of
++  // some other origin gains nothing. Request only, never GrantCommitScheme:
++  // committing a domicile:// document is what confers the origin, and the
++  // origin is what the control channel's binder keys on.
++  if (site_url.SchemeIs(domicile::kDomicileScheme)) {
++    content::ChildProcessSecurityPolicy::GetInstance()->GrantRequestScheme(
++        site_instance->GetProcess()->GetDeprecatedID(),
++        domicile::kDomicileScheme);
++  }
++
+   if (search::IsNTPURL(site_url)) {
+     site_instance->GetProcess()->SetUserData(search::kIsNTPProcessKey,
+                                              std::make_unique<NTPUserData>());
+@@ -6051,10 +6073,31 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
+   return result;
+ }
+ 
++namespace {
++
++// Where the shell's files are. Empty when the engine was started without
++// --domicile-shell-root, and a factory on an empty root refuses everything --
++// the honest answer when there is no shell, and better than guessing.
++base::FilePath DomicileShellRoot() {
++  return base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++      domicile::kDomicileShellRootSwitch);
++}
++
++}  // namespace
++
+ mojo::PendingRemote<network::mojom::URLLoaderFactory>
+ ChromeContentBrowserClient::CreateNonNetworkNavigationURLLoaderFactory(
+     const std::string& scheme,
+     content::FrameTreeNodeId frame_tree_node_id) {
++  // Domicile's engine fork. Answered before anything below, because the shell
++  // is not a profile's: there is one shell root, given on the command line,
++  // and it is the same whichever BrowserContext asks. Everything past this
++  // point resolves a Profile first, and a scheme that does not need one should
++  // not inherit the ways that can fail.
++  if (scheme == domicile::kDomicileScheme) {
++    return domicile::ShellURLLoaderFactory::Create(DomicileShellRoot());
++  }
++
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE) || BUILDFLAG(IS_CHROMEOS) || \
+     !BUILDFLAG(IS_ANDROID)
+   content::WebContents* web_contents =
+@@ -6470,6 +6513,18 @@ void ChromeContentBrowserClient::
+         int render_frame_id,
+         const std::optional<url::Origin>& request_initiator_origin,
+         NonNetworkURLLoaderFactoryMap* factories) {
++  // Domicile's engine fork. This is the half that makes the scheme usable
++  // rather than merely navigable: without it the shell's document commits and
++  // then every script, stylesheet and image in it fails, which reads as a
++  // blank shell rather than as a loader that is missing.
++  //
++  // The navigation twin returns one factory; this fills a map. Same job, two
++  // shapes -- and the shapes diverged upstream, which is exactly the kind of
++  // thing that makes writing one and forgetting the other easy.
++  factories->emplace(
++      domicile::kDomicileScheme,
++      domicile::ShellURLLoaderFactory::Create(DomicileShellRoot()));
++
+ #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(ENABLE_EXTENSIONS_CORE) || \
+     !BUILDFLAG(IS_ANDROID)
+   content::RenderFrameHost* frame_host =
+diff --git a/chrome/browser/profiles/profile_io_data.cc b/chrome/browser/profiles/profile_io_data.cc
+index 080e9b0e43c70..b51364906c241 100644
+--- a/chrome/browser/profiles/profile_io_data.cc
++++ b/chrome/browser/profiles/profile_io_data.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/profiles/profile_io_data.h"
+ 
++#include "components/domicile/common/domicile_scheme.h"
++
+ #include "base/containers/fixed_flat_set.h"
+ #include "base/feature_list.h"
+ #include "base/logging.h"
+@@ -56,6 +58,12 @@ bool ProfileIOData::IsHandledProtocol(std::string_view scheme) {
+       url::kBlobScheme,
+       url::kFileSystemScheme,
+       chrome::kChromeSearchScheme,
++      // Domicile's engine fork. Registering domicile:// as a standard scheme
++      // gives it an origin; it does not make Chrome willing to navigate to it.
++      // This list is a second, independent gate -- a URL whose scheme is
++      // missing here is silently replaced by the New Tab page, which is how
++      // this was found.
++      domicile::kDomicileScheme,
+ #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+     BUILDFLAG(IS_CHROMEOS)
+       webapps::kIsolatedAppScheme,
+diff --git a/chrome/browser/ui/startup/url_util.cc b/chrome/browser/ui/startup/url_util.cc
+index 2dd42fefa3899..89e5495afe67e 100644
+--- a/chrome/browser/ui/startup/url_util.cc
++++ b/chrome/browser/ui/startup/url_util.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/startup/url_util.h"
+ 
++#include "components/domicile/common/domicile_scheme.h"
++
+ #include "base/logging.h"
+ #include "build/build_config.h"
+ #include "chrome/common/url_constants.h"
+@@ -79,9 +81,21 @@ bool ValidateLaunchUrlWebUnsafe(const GURL& url) {
+   url_scheme_is_content = url.SchemeIs(url::kContentScheme);
+ #endif  // BUILDFLAG(IS_ANDROID)
+ 
++  // Domicile's engine fork. The shell is launched by URL on the command line,
++  // and domicile:// is deliberately NOT web-safe -- that is the whole security
++  // property, and making it web-safe to get past this check would hand the
++  // scheme back to any web page.
++  //
++  // These two lists answer different questions and only look alike. Web-safe is
++  // "may a web page navigate here". This is "may the command line ask for
++  // this", and the command line is trusted: whoever writes it already runs as
++  // the user. chrome:// sits here for the same reason, under a headless flag.
++  const bool url_scheme_is_domicile = url.SchemeIs(domicile::kDomicileScheme);
++
+   auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
+   return policy->IsWebSafeScheme(url.GetScheme()) ||
+          url.SchemeIs(url::kFileScheme) || url_scheme_is_chrome ||
++         url_scheme_is_domicile ||
+          url_scheme_is_content || url_points_to_an_approved_settings_page ||
+          url.spec() == url::kAboutBlankURL;
+ }
+diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
+index d90779a833fa4..4c4d5ed7cc659 100644
+--- a/chrome/common/BUILD.gn
++++ b/chrome/common/BUILD.gn
+@@ -389,6 +389,7 @@ static_library("common_lib") {
+ 
+     public_deps += [
+       "//components/dom_distiller/core",  # Needed by chrome_content_client.cc.
++      "//components/domicile:common",  # Needed by chrome_content_client.cc.
+       "//third_party/wtl",
+     ]
+ 
+diff --git a/chrome/common/chrome_content_client.cc b/chrome/common/chrome_content_client.cc
+index 1136dad871e5f..6de24a1b8211b 100644
+--- a/chrome/common/chrome_content_client.cc
++++ b/chrome/common/chrome_content_client.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/common/chrome_content_client.h"
+ 
++#include "components/domicile/common/domicile_scheme.h"
++
+ #include <stdint.h>
+ 
+ #include <memory>
+@@ -204,6 +206,18 @@ void ChromeContentClient::AddAdditionalSchemes(Schemes* schemes) {
+   for (auto* standard_scheme : kChromeStandardURLSchemes)
+     schemes->standard_schemes.push_back(standard_scheme);
+ 
++  // Domicile's engine fork. domicile:// serves the shell, so the page has a
++  // real origin without a TCP port behind it.
++  //
++  // Standard, because an origin is the whole reason the shell was on
++  // http://127.0.0.1 to begin with. Secure, so it is a trustworthy origin.
++  // Deliberately absent from cors_enabled_schemes and deliberately not
++  // web-safe, so ordinary web content can neither fetch it nor navigate to it.
++  // This scheme is not a smaller door onto the same room; it is the removal of
++  // that room's door onto the street.
++  schemes->standard_schemes.push_back(domicile::kDomicileScheme);
++  schemes->secure_schemes.push_back(domicile::kDomicileScheme);
++
+ #if BUILDFLAG(IS_ANDROID)
+   schemes->referrer_schemes.push_back(content::kAndroidAppScheme);
+   schemes->referrer_schemes.push_back(dom_distiller::kDomDistillerScheme);
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index 1e3e8468080c4..838a9c4f8883a 100644
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -312,6 +312,8 @@ generated_dictionary_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_close_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_collected_client_data.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_collected_client_data.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_result.cc",
+@@ -2351,6 +2353,10 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_eye_dropper.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_eye_dropper.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_face_detector.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index 70786b3cafad4..06bc263861259 100644
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -274,6 +274,10 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/encryptedmedia/navigator_request_media_key_system_access.idl",
+   "//third_party/blink/renderer/modules/eventsource/event_source.idl",
+   "//third_party/blink/renderer/modules/eventsource/event_source_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_app_titled_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_app_titled_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_host.idl",
++  "//third_party/blink/renderer/modules/domicile/navigator_domicile.idl",
+   "//third_party/blink/renderer/modules/eyedropper/color_selection_options.idl",
+   "//third_party/blink/renderer/modules/eyedropper/color_selection_result.idl",
+   "//third_party/blink/renderer/modules/eyedropper/eye_dropper.idl",
+diff --git a/third_party/blink/renderer/core/events/event_target_names.json5 b/third_party/blink/renderer/core/events/event_target_names.json5
+index eb8bce6fd9408..60d1f0f725471 100644
+--- a/third_party/blink/renderer/core/events/event_target_names.json5
++++ b/third_party/blink/renderer/core/events/event_target_names.json5
+@@ -12,6 +12,8 @@
+     "Clipboard",
+     "EditContext",
+     "FontFaceSet",
++    // Domicile's engine fork.
++    "DomicileHost",
+     "MediaQueryList",
+     "ContainerQueryList",
+     "BroadcastChannel",
+diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/third_party/blink/renderer/core/events/event_type_names.json5
+index a7c56db14010c..37929c05d7a78 100644
+--- a/third_party/blink/renderer/core/events/event_type_names.json5
++++ b/third_party/blink/renderer/core/events/event_type_names.json5
+@@ -23,6 +23,8 @@
+     "animationiteration",
+     "animationstart",
+     "appinstalled",
++    // Domicile's engine fork: navigator.domicile.onapptitled.
++    "apptitled",
+     "audioend",
+     "audioprocess",
+     "audiostart",
+diff --git a/third_party/blink/renderer/modules/BUILD.gn b/third_party/blink/renderer/modules/BUILD.gn
+index 5119717a184ea..cf0a73af72c52 100644
+--- a/third_party/blink/renderer/modules/BUILD.gn
++++ b/third_party/blink/renderer/modules/BUILD.gn
+@@ -88,6 +88,7 @@ component("modules") {
+     "//third_party/blink/renderer/modules/spell_check_custom_dictionary",
+     "//third_party/blink/renderer/modules/delegated_ink",
+     "//third_party/blink/renderer/modules/device_orientation",
++    "//third_party/blink/renderer/modules/domicile",
+     "//third_party/blink/renderer/modules/device_posture",
+     "//third_party/blink/renderer/modules/document_metadata",
+     "//third_party/blink/renderer/modules/document_picture_in_picture",
+diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
+index a000b4980b36a..9daf657d922d3 100644
+--- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
++++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
+@@ -2484,6 +2484,15 @@
+       name: "DomicileExternalSurface",
+       status: "stable",
+     },
++    // Domicile's engine fork: navigator.domicile, the shell's control channel
++    // to the compositor. Deliberately statusless while it is a vertical slice
++    // -- two of the protocol's twenty-nine members are implemented, so a page
++    // that found it would find a channel that mostly does nothing. It goes to
++    // stable with the other twenty-seven, and until then it is reachable only
++    // with --enable-blink-features=DomicileControlChannel.
++    {
++      name: "DomicileControlChannel",
++    },
+     {
+       name: "DocumentPolicyNegotiation",
+       origin_trial_feature_name: "DocumentPolicyNegotiation",

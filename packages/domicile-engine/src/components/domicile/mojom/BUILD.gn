@@ -6,6 +6,7 @@ import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
   sources = [
+    "control_channel.mojom",
     "external_surface.mojom",
     "frame_sink_broker.mojom",
   ]

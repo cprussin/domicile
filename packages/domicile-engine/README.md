@@ -61,6 +61,84 @@ work on NixOS, where a generic-linux Chromium cannot start at all.
 `DOMICILE_ENGINE` points `domicile` at a different one — a checkout's
 `out/Domicile`, say. It names the directory holding `chrome`.
 
+## The control channel's protocol, and what of it is here
+
+`navigator.domicile` is the shell's control channel. The wire protocol lives in
+the browser process rather than in the page, which is what makes a malformed
+message unconstructable — and what makes adding one cost an engine release
+rather than a TypeScript edit. That trade was made deliberately; it is worth
+knowing which side of it you are on before asking for a new message.
+
+**Implemented — every member the fork keeps.** Outbound: `spawn`, `focus_app`,
+`focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
+`set_device_pixel_ratio`, `grab_shortcut`, `key`, `pointer_motion`,
+`pointer_leave`, `pointer_button`, `pointer_axis`. Inbound: `welcome`,
+`app_appeared`, `app_titled`, `app_resized`, `app_closed`, `app_cursor`,
+`shortcut`, `modifiers`, `focus_changed`, `displays`.
+
+`displays` reaches the page as an attribute — `navigator.domicile.displays` —
+with a bare `displayschanged` event beside it, rather than as an event carrying
+the desktop. The desktop is a fact and not a stream: a component that mounts
+after the description has to be able to read it, and an event carrying the only
+copy is gone once dispatched.
+
+It is **null** until the compositor has described a desktop, and an empty array
+for a desktop with no screens. Those are different answers and a shell renders
+them differently — nothing at all is right for "there is no such screen" and
+wrong for "wait" — which is why `domicile-protocol` carries the distinction
+across the wire in the first place.
+
+**Deliberately absent:** `place_portal`, `remove_portal`, `declare_bands`,
+`render_band`, `claim_pointer`, `app_composited`. These are the bands and
+copy-path protocol, which `docs/architecture/ENGINE-FORK.md` lists under what
+the fork scraps: layout positions the layer now, and the page has stopped
+reporting where its own boxes are. Implementing them here would make removing
+a dying protocol cost a release build.
+
+**The typed surface is not the wire, and the difference is deliberate.** The
+compositor speaks JSON; a shell speaks JS values. Three places where the
+translation is a choice rather than a mapping:
+
+- Sizes are `double` the whole way across. The compositor's sizes are `f64`,
+  so `800.0` reaches the browser with a decimal point and a JSON reader types
+  it as a double. Reading it as an integer got nothing, and every window
+  arrived at zero.
+- Modifiers arrive as `altKey`/`ctrlKey`/`shiftKey`/`metaKey`, not as xkb's
+  depressed/latched/locked masks. The compositor has already resolved those
+  against the keymap, and a page holding a mask cannot read it without the
+  keymap too.
+- A shortcut is a `DomicileShortcut` — `{ keycode, altKey, ctrlKey, shiftKey,
+  metaKey }` — in both directions, so `grabShortcut()` takes the same shape the
+  `shortcut` event hands back. `keycode` rather than `key` because it is an
+  evdev code and `KeyboardEvent.key` already means a string.
+
+If you are adding a message, add it in four places — the mojom, the IDL, the
+browser-side serialiser, and the Blink method — and add it to the list above,
+because the list is how the next person knows whether a gap is deliberate.
+
+**Batch them.** A new inbound message means a new event type, and a new event
+type means an entry in `event_type_names.json5`, which invalidates Blink's
+generated bindings and costs most of a full rebuild — tens of minutes, not the
+usual seconds. Nineteen members added together cost one of those. Nineteen
+members added one at a time cost nineteen. This is the standing cost of the
+protocol living in the browser process, and it is the reason to arrive with a
+list rather than with one message at a time.
+
+### The dev-reload poller does not survive the scheme
+
+`shellDocument` used to inject a poller in dev mode: a `fetch` of a token from
+the bridge every 400ms, reloading when the token changed. It existed because a
+desktop runs under `--app`, which drops the browser's own keyboard shortcuts,
+so there is no reload in it — without something in the page, a one-character
+change to a shell means killing the desktop and starting it again.
+
+It polled the HTTP server that this work deletes, so it is not in the C++ port
+and there is nothing in its place. Whatever replaces it must not be a TCP port,
+which is the whole point; the obvious shape is a control-channel message the
+compositor sends when a shell is rebuilt, since the page already has that
+channel and it is not reachable from outside. `DOMICILE_DEV_RELOAD` is read
+outside this package, so the two halves have to agree before either moves.
+
 ## Working on it
 
 This is built on a machine with a Chromium checkout — `crux`, at
@@ -75,6 +153,28 @@ here as spell-check, never as proof.
 # ... work in the checkout, commit there ...
 ./scripts/extract.sh /build/chromium/src     # write it back here
 ```
+
+### The checkout is scratch, and you are not alone in it
+
+The loop above is right when one person is on the box. It is a trap when two
+are, and both of these have already happened rather than been imagined:
+
+- **CI resets that tree.** `engine.yml` and `engine-release.yml` reset
+  `/build/chromium/src` to the pin and lay the series over it, and they trigger
+  on any push touching `packages/domicile-engine/**` — which is every push
+  either agent makes to the fork. Uncommitted work in the checkout is taken
+  without warning. Take the lock around builds:
+  `.github/scripts/engine-tree-lock.sh take /build/chromium/src "<who>"`, and
+  drop it with the same owner string when you are done.
+- **A file in the checkout with no counterpart in `src/` wedges the next run.**
+  The reset removes the series' own files by walking `src/`, so anything not
+  mirrored there survives, and `apply.sh` then refuses the dirty tree. The
+  failure lands on somebody else's unrelated PR.
+
+So: **write in this repo, compile in the checkout.** New files go into `src/`
+at their mirrored path in the same change that creates them; edits to files
+Chromium owns become patches via `extract.sh`. Then a reset costs you a re-run
+of `apply.sh` and nothing else, which is the whole reason the series exists.
 
 `build.sh`, `spike.sh` and `guard-css-and-resize.sh` all have to run inside
 Chromium's own toolchain shell — a component build links against that shell's glibc and

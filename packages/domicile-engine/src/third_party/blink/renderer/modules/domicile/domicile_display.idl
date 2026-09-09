@@ -1,0 +1,40 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// One screen of the desktop.
+//
+// An interface rather than a dictionary because WebIDL will not have a
+// dictionary as the type of an attribute, and this is read off
+// `navigator.domicile.displays` rather than handed over in a call.
+//
+// Integers, unlike the sizes elsewhere on this channel. Those come from a
+// layout box, where a CSS pixel is fractional; a display comes from the
+// desktop's configuration, which names whole ones.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileDisplay {
+  // What a shell names this screen. The compositor's own name for it, from the
+  // config -- `left`, `right` -- or `domicile-0` when Domicile is following a
+  // window rather than driving displays.
+  readonly attribute DOMString name;
+
+  // The top-left corner, in the desktop's coordinate space, whose origin is
+  // the top-left of the displays' bounding box. Signed: the config may put a
+  // display anywhere, and a screen left of the origin has a negative x.
+  readonly attribute long x;
+  readonly attribute long y;
+
+  // Logical -- the CSS pixels a shell lays out in, the same units everything
+  // else here is in. NOT the `wl_output` mode, which is this times `scale`.
+  readonly attribute unsigned long width;
+  readonly attribute unsigned long height;
+
+  // The scale advertised to *clients* on this screen: what a window drawn on
+  // it renders at. Not the shell's own `devicePixelRatio` -- the shell is one
+  // page at one density however many screens it spans -- so multiplying the
+  // sizes above by this gives a client's buffer, not anything to lay out with.
+  readonly attribute unsigned long scale;
+};

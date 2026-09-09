@@ -1,0 +1,119 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// navigator.domicile — the shell's control channel to the compositor.
+//
+// Not a web standard and not proposed as one. It exists in Domicile's engine
+// fork, on documents served over domicile://, and nowhere else.
+//
+// This is the typed surface rather than a message pipe: the page calls methods
+// and listens for events, and the wire protocol lives in the browser process.
+// The reason is that the protocol carries Spawn, and a page that cannot
+// construct a message cannot construct a malformed one. The cost, which is
+// real, is that adding a message means an engine release rather than editing a
+// TypeScript file.
+//
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel,
+    SecureContext
+] interface DomicileHost : EventTarget {
+  // Run a command on the machine running the desktop.
+  //
+  // Sequence<DOMString> rather than a single string: splitting a command line
+  // is a shell's job and there is no shell in this path.
+  [CallWith=ScriptState, RaisesException] undefined spawn(sequence<DOMString> command);
+
+  // Which window has the keyboard. focusChrome() takes it back to the page.
+  [CallWith=ScriptState, RaisesException] undefined focusApp(DOMString appId);
+  [CallWith=ScriptState, RaisesException] undefined focusChrome();
+
+  // Ask a client to close. Not a kill -- the client decides, which is why a
+  // window can refuse and show a save dialog instead.
+  [CallWith=ScriptState, RaisesException] undefined closeApp(DOMString appId);
+
+  // The layout box, as a resize. For an <app> the box IS the configure.
+  //
+  // Doubles because a CSS pixel is fractional and this comes from a layout box.
+  [CallWith=ScriptState, RaisesException] undefined resizeApp(
+      DOMString appId, double width, double height);
+
+  [CallWith=ScriptState, RaisesException] undefined setDesktopSize(
+      double width, double height);
+  [CallWith=ScriptState, RaisesException] undefined setDevicePixelRatio(
+      double ratio);
+
+  // Route a key combination to the page rather than to the focused client.
+  //
+  // The press comes back as a `shortcut` event carrying the same fields, so a
+  // shell compares what it grabbed against what fired without parsing a string.
+  [CallWith=ScriptState, RaisesException] undefined grabShortcut(
+      DomicileShortcut shortcut);
+
+  // Input forwarding. Surface-local coordinates and evdev keycodes, because
+  // that is what a Wayland client expects to be handed.
+  [CallWith=ScriptState, RaisesException] undefined key(
+      DOMString appId, unsigned long keycode, boolean pressed);
+  [CallWith=ScriptState, RaisesException] undefined pointerMotion(
+      DOMString appId, double x, double y);
+  [CallWith=ScriptState, RaisesException] undefined pointerLeave(
+      DOMString appId);
+  [CallWith=ScriptState, RaisesException] undefined pointerButton(
+      DOMString appId, unsigned long button, boolean pressed);
+  [CallWith=ScriptState, RaisesException] undefined pointerAxis(
+      DOMString appId, double dx, double dy, long v120X, long v120Y);
+
+  // A window's title changed. `event.appId` is the id an <app> element names,
+  // so a shell can put a title on the frame it already drew.
+  attribute EventHandler onapptitled;
+
+  // A window exists. `size` is absent until the client has committed a buffer:
+  // a toplevel maps before it draws. A shell that believes a zero here opens
+  // the window at nothing at all.
+  attribute EventHandler onappappeared;
+  attribute EventHandler onappresized;
+  attribute EventHandler onappclosed;
+  attribute EventHandler onappcursor;
+
+  // A grabbed shortcut fired, as a DomicileShortcutEvent.
+  attribute EventHandler onshortcut;
+
+  // Which modifiers the seat holds, as a DomicileModifiersEvent. One seat,
+  // outliving every window.
+  attribute EventHandler onmodifiers;
+
+  // Focus moved. `appId` is empty when the chrome itself has it.
+  attribute EventHandler onfocuschanged;
+
+  // The screens of the desktop.
+  //
+  // An attribute rather than an event payload, because the desktop is a fact
+  // and not a stream. A shell reads this when it needs it -- including a
+  // component that mounts long after the description arrived, which an event
+  // would have left with nothing.
+  //
+  // NULL UNTIL THE COMPOSITOR HAS DESCRIBED THE DESKTOP, and an empty array
+  // for a desktop with no screens on it. They are different states and a shell
+  // renders them differently: nothing at all is what an unknown screen shows,
+  // which is the right answer for "there is no such screen" and the wrong one
+  // for "wait". `domicile-protocol` carries that distinction deliberately --
+  // an empty `Vec` that serialises to nothing and one that serialises to `[]`
+  // both come back empty, and only the second is a desktop a shell can parse
+  // -- and an attribute that started empty threw it away again here.
+  //
+  // The compositor describes at least one output, so it does not send the
+  // empty one; the `domicile` daemon, which no desktop has been described to,
+  // does. Leaning on "in practice it never happens" is what made the SDK guess,
+  // and this is instead of the guess.
+  //
+  // No [SameObject]: the compositor sends the whole desktop each time it
+  // changes and a FrozenArray is frozen, so this is a different array after
+  // every `displayschanged`. That is also the shape a shell wants -- an
+  // identity that survived a desktop it no longer describes would be worse.
+  readonly attribute FrozenArray<DomicileDisplay>? displays;
+
+  // The desktop changed: a screen arrived or left, a display was resized, or
+  // its density moved. Read `displays` for what it is now.
+  attribute EventHandler ondisplayschanged;
+};
