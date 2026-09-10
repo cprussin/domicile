@@ -117,7 +117,7 @@ use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::session::{publish, Session};
-use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Shortcut};
+use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
 use smithay::backend::renderer::gles::GlesRenderer;
 
 /// The log messages *this change's* scripts and tests grep for, pinned to them.
@@ -233,10 +233,6 @@ enum ClientRequest {
     },
     KeyboardFocus {
         app_id: Option<String>,
-    },
-    /// The chrome claimed a key combination for the desktop.
-    GrabShortcut {
-        shortcut: Shortcut,
     },
     SetOutputScale {
         scale: i32,
@@ -395,12 +391,12 @@ fn write_responses(
     // Before the lock, and not a fast path for its own sake. This runs at the
     // end of *every* iteration of the read loop, and the whole high-volume
     // input path — `Key`, `PointerMotion`, `PointerButton`, `PointerAxis`,
-    // `CloseApp`, `GrabShortcut` — answers with nothing. Taking the writer
-    // lock to write zero bytes parks the reader behind `serve_outbound`, which
-    // is blocked in `write_all` to a chrome that is not reading; the
-    // compositor then stops reading *that chrome* and everything it says
-    // afterwards is dropped on the floor. A chrome that only says things is
-    // the ordinary case, so this was the ordinary case too.
+    // `CloseApp` — answers with nothing. Taking the writer lock to write zero
+    // bytes parks the reader behind `serve_outbound`, which is blocked in
+    // `write_all` to a chrome that is not reading; the compositor then stops
+    // reading *that chrome* and everything it says afterwards is dropped on
+    // the floor. A chrome that only says things is the ordinary case, so this
+    // was the ordinary case too.
     //
     // Guarded by `an_answer_with_nothing_in_it_does_not_wait_for_the_writer`
     // below, which says the invariant directly. `tests/stuck_keys.rs` also
@@ -800,10 +796,6 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                     info!("chrome took its protocol agreement back; it no longer gets the desktop");
                 }
                 responses
-            }
-            Ok(ChromeMessage::GrabShortcut { shortcut }) => {
-                hub.send_request(ClientRequest::GrabShortcut { shortcut });
-                Vec::new()
             }
             Ok(ChromeMessage::Spawn { command }) => {
                 spawn_client(&command, &hub.wayland_display);
@@ -2475,19 +2467,6 @@ impl DomicileCompositor {
                 let keyboard = self.seat.get_keyboard().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 keyboard.set_focus(self, surface, serial);
-            }
-            // LOGGED AND NOTHING ELSE, DELIBERATELY. The compositor used to
-            // keep the claim and take the chord's keys out of the stream; it
-            // could, because `--present` gave it a window and the window gave
-            // it the keyboard. Now the chrome holds the keyboard and forwards
-            // every key here, so it has already matched its own chords before
-            // the compositor sees anything — the claim has nothing left to do.
-            //
-            // The message stays because the chrome still sends it and the line
-            // is what says a shortcut was claimed at all, which is worth
-            // having when a chord does not fire.
-            ClientRequest::GrabShortcut { shortcut } => {
-                info!(key = shortcut.key, "the chrome claimed a shortcut");
             }
             ClientRequest::ChromeHello => {
                 // A page has started, and whatever the page before it was

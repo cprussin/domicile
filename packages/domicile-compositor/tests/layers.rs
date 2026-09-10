@@ -41,7 +41,7 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, HostMessage, Shortcut};
+use domicile_protocol::{ChromeMessage, HostMessage};
 
 use crate::running::Compositor;
 
@@ -49,8 +49,7 @@ const ONE_DISPLAY: &str = r#"{
   "output": { "displays": [ { "name": "left", "size": [1920, 1080] } ] }
 }"#;
 
-/// Tab and `a`, in the evdev codes a chrome sends.
-const TAB: u32 = 15;
+/// `a`, in the evdev code a chrome sends.
 const KEY_A: u32 = 30;
 
 /// The `app_id` on a `key`, which the compositor discards — see [`key`].
@@ -140,53 +139,6 @@ fn a_client_on_the_chrome_display_is_the_desktop_rather_than_a_window_on_it() {
          apps' display, so the compositor announced its own desktop as a \
          window on itself"
     );
-}
-
-/// A shortcut the chrome claims reaches the compositor.
-///
-/// The compositor is the only thing that sees a key before its client does, so
-/// a claim that never crossed the socket means every desktop shortcut dies the
-/// moment a window takes the keyboard.
-///
-/// # This asserts arrival, not effect, and that is a real limit
-///
-/// Deleting `self.shortcuts.grab(shortcut)` — keeping the log line above it —
-/// passes this test and the whole suite. Measured. So the check pins that the
-/// claim was read off the socket and reached the Wayland thread, and nothing
-/// more.
-///
-/// It is not weakness that a stronger version would fix. `ClientRequest::Key`,
-/// the path a chrome-injected key takes, forwards unconditionally and never
-/// consults `shortcuts`: the filter that intercepts a claimed chord is on
-/// `InputEvent::Keyboard`, the *physical* keys Domicile's own window receives.
-/// A behavioural test driven over the chrome socket therefore cannot see the
-/// interception at all — verified, by writing one: with the chord injected and
-/// Alt+Tab claimed, the window is given the Tab, because that path was never
-/// filtered.
-///
-/// So the effect needs a real window and a real keyboard, and it is unit-tested
-/// instead — `shortcut.rs` has twelve tests over `grab`, `press`, `release` and
-/// `matching`, including that an unclaimed key passes through and that the
-/// release of a taken press is taken too. The deleted script said exactly this
-/// and was right; what is left for an e2e check is the wiring.
-#[test]
-fn a_shortcut_the_chrome_claims_reaches_the_compositor() {
-    let compositor = Compositor::started_with(ONE_DISPLAY);
-    let mut chrome = compositor.chrome();
-
-    chrome
-        .say(&ChromeMessage::GrabShortcut {
-            shortcut: Shortcut {
-                key: TAB,
-                alt: true,
-                ctrl: false,
-                shift: false,
-                logo: false,
-            },
-        })
-        .expect("the chrome socket takes a shortcut claim");
-
-    compositor.wait_for_log("the chrome claimed a shortcut");
 }
 
 /// Focusing a window that has no surface leaves the keyboard with the chrome.

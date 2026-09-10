@@ -1,3 +1,4 @@
+import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import type { DomicileWebviewElement } from "@domicile/chrome-sdk/webview-element";
 import { WEBVIEW_NAVIGATE_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { Button } from "@domicile/component-library/Button";
@@ -24,6 +25,14 @@ import {
 import { withScheme } from "./with-scheme";
 
 type Props = {
+  /**
+   * How the window says a client no longer holds the keyboard.
+   *
+   * A browser window's keyboard is its page's, and its page is part of this
+   * one — so taking focus here is a client somewhere losing it, and there is
+   * nothing else in the tree that knows.
+   */
+  bridge: BridgeClient;
   /**
    * Whether the pointer goes through this window to the page behind it.
    *
@@ -61,6 +70,7 @@ type Props = {
  * itself; this is the chrome the user drives it with.
  */
 export const BrowserWindow = ({
+  bridge,
   clickThrough,
   dragging,
   floating,
@@ -94,11 +104,21 @@ export const BrowserWindow = ({
 
   // The window the user is working in takes the keyboard, and a browser
   // window's belongs to its page rather than to the chrome around it.
+  //
+  // AND THE HOST HAS TO BE TOLD, which `<domicile-app>` does for itself and
+  // this element cannot. There is one seat: the compositor holds `wl_keyboard`
+  // focus on whichever client the chrome last named, and a browser window
+  // names none — its page is inside the chrome's own window. Without this the
+  // focus a terminal was given stays with it while the user types into a site,
+  // and every key they press is delivered to a window they have switched away
+  // from. `focusChrome` is how the seat comes back to the page, and it is the
+  // same call `<domicile-app>` makes when it stops standing for a window.
   useEffect(() => {
     if (focused && view !== null) {
+      bridge.focusChrome();
       view.focus();
     }
-  }, [focused, view]);
+  }, [bridge, focused, view]);
 
   // Every control here drives the view element, which is rendered by this
   // component and so is attached by the time anyone can press one. A press

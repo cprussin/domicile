@@ -63,6 +63,22 @@ source_set("shell_scheme") {
   ]
 }
 
+# The chords the shell claimed for the desktop, and who to tell when one fires.
+#
+# Its own target between :control_channel and :web_view_guest because it is the
+# one thing both of them touch, and because it is the only piece of this that
+# can be tested without a browser at all -- which is where the matching rules
+# are asserted. Like :browser and :control_channel it does not depend on
+# //content: a chord is a keycode and four booleans.
+source_set("shortcut_registry") {
+  sources = [
+    "browser/shortcut_registry.cc",
+    "browser/shortcut_registry.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 # The page behind a <webview>.
 #
 # Its own target beside :shell_scheme rather than part of it, for the reason
@@ -77,12 +93,15 @@ source_set("web_view_guest") {
   ]
 
   public_deps = [
+    ":shortcut_registry",
     "//base",
     "//components/domicile/mojom",
+    "//components/input",
     "//content/public/browser",
     "//mojo/public/cpp/bindings",
     "//third_party/blink/public/common",
     "//ui/base",
+    "//ui/events:dom_keycode_converter",
     "//url",
   ]
 }
@@ -100,6 +119,7 @@ source_set("control_channel") {
 
   public_deps = [
     ":common",
+    ":shortcut_registry",
     "//base",
     "//components/domicile/mojom",
     "//mojo/public/cpp/bindings",
@@ -113,12 +133,14 @@ source_set("unit_tests") {
   sources = [
     "browser/frame_sink_broker_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
+    "browser/shortcut_registry_unittest.cc",
     "spike/window_diff_unittest.cc",
   ]
 
   deps = [
     ":browser",
     ":shell_scheme",
+    ":shortcut_registry",
     "//components/domicile/engine:event_queue_unit_tests",
     "//base",
     "//base/test:test_support",

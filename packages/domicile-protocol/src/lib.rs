@@ -106,17 +106,6 @@ pub enum ChromeMessage {
     /// Used by chrome keybindings/launchers.
     Spawn { command: Vec<String> },
 
-    /// Claim a key combination for the desktop, whatever holds the keyboard.
-    ///
-    /// A chrome shortcut cannot depend on the chrome being focused: the moment
-    /// a window is, every key goes to it, and the combination that would put
-    /// another window on screen is the one the user can no longer press. The
-    /// compositor holds these and takes matching presses out of the stream
-    /// before anyone is given them, which is what "global" means.
-    ///
-    /// Registering the same combination twice is not an error; it is one claim.
-    GrabShortcut { shortcut: Shortcut },
-
     // --- input forwarding: the chrome captures input over an <app> element and
     // forwards it here so the compositor can inject it into the client. ---
     /// Pointer moved to a surface-local coordinate `(x, y)` over an app.
@@ -155,11 +144,18 @@ pub enum HostMessage {
     /// Response to `Hello`; declares the version the host agreed to speak.
     Welcome { protocol_version: u32 },
 
-    /// A combination claimed with `GrabShortcut` was pressed.
+    /// A combination the desktop claimed for itself was pressed.
     ///
     /// Delivered instead of to whatever held the keyboard, so the chrome hears
     /// it whether or not it was focused. Only presses: a release changes
     /// nothing and would arrive as a second event for one keystroke.
+    ///
+    /// THE CLAIM ITSELF IS NO LONGER MADE HERE. A chrome used to send
+    /// `grab_shortcut` down this socket and the compositor held the set; it
+    /// cannot any more, because a browser window is a page inside the chrome's
+    /// own window and forwards not one of its keys. The browser process is the
+    /// only layer above a focused guest, so it holds the claims and matches
+    /// them.
     Shortcut { shortcut: Shortcut },
 
     /// Which modifier keys are held now, whenever that changes.
@@ -176,9 +172,8 @@ pub enum HostMessage {
     /// would be caught up on is one a user is holding — the next thing that
     /// happens is them letting go, which is a message.
     ///
-    /// Not a claim, unlike [`ChromeMessage::GrabShortcut`]: the focused client
-    /// is given the key as well. A modifier the chrome had to take would be
-    /// one no window could ever use.
+    /// Not a claim: the focused client is given the key as well. A modifier
+    /// the chrome had to take would be one no window could ever use.
     Modifiers {
         alt: bool,
         ctrl: bool,

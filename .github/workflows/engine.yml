@@ -330,7 +330,7 @@ jobs:
         working-directory: /build/chromium/src/out/Domicile
         run: |
           set -euo pipefail
-          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*'
+          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*'
           # `--gtest_filter` matching nothing exits 0, so a suite that was
           # renamed or never linked would be a silent pass. Test names are the
           # indented lines of --gtest_list_tests; suite names are not.
@@ -338,8 +338,9 @@ jobs:
             ./components_unittests --gtest_filter="$filter" --gtest_list_tests |
             grep -cE '^  ' || true)
           echo "$count tests match $filter"
-          # 11 in FrameSinkBrokerTest alone at the time of writing.
-          [ "$count" -ge 11 ] || {
+          # 11 in FrameSinkBrokerTest alone at the time of writing, and 7
+          # in ShortcutRegistryTest.
+          [ "$count" -ge 18 ] || {
             echo "::error::only $count tests matched; the suites were renamed or did not link" >&2
             exit 1
           }
@@ -491,6 +492,34 @@ jobs:
           set -euo pipefail
           nix develop .#full --command \
             packages/domicile-engine/scripts/guard-webview-framing.sh "$CHROMIUM"
+
+      # A desktop chord pressed while a browser window holds the keyboard —
+      # the other half of what a guest is for, which the framing guard above
+      # does not touch. Same headless, software-composited configuration and
+      # for the same reason: nothing here is measured in pixels, so no GPU and no
+      # nested compositor are needed. The keystroke goes in over the debugging
+      # port, which is the only keyboard this machine has;
+      # guard-webview-keyboard-key.py sets out why that is the same path a real
+      # key takes rather than a way around it.
+      - name: A desktop chord, over a browser window that has the keyboard
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-keyboard.sh "$CHROMIUM"
+
+      # Its control, and it is the same sharp kind the framing guard has: an
+      # <iframe> in the element's place, pointed at the same page. It takes the
+      # keyboard just as thoroughly — that is the defect this fixes, not the
+      # guest — and there is no guest delegate behind it, so NOTHING may fire.
+      # A run where the chord arrives here is a run where the press did not
+      # come from the hook under test.
+      - name: The keyboard guard is looking at the guest's hook
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-keyboard.sh "$CHROMIUM"
 
       # REQUIREMENT 2, WHICH NOTHING HAS RUN SINCE IT WAS WRITTEN. An <app> has
       # to behave like any other replaced element, and `guard-css-and-resize.sh` is what

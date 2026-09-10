@@ -126,7 +126,7 @@ network::ParsedPermissionsPolicy HTMLWebViewElement::ConstructContainerPolicy()
 // throwing at a shell driving them from an address bar, which is the same
 // behaviour they had before and for a different reason.
 //
-// Wiring them to the guest is BROWSER-WINDOW-PARITY.md's next piece of work.
+// Wiring them to the guest is a known gap, and ROADMAP.md carries it.
 // It is also the half of it that gets *better*: a guest has a history of its
 // own, the way Electron's <webview> did because it was a WebContents of its
 // own, where a frame shared the whole session's.

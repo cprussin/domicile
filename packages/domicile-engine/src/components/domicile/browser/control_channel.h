@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/timer/timer.h"
+#include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -101,6 +102,12 @@ class ControlChannel : public mojom::ControlChannel {
   void WriteNext();
   void OnWrite(int result);
 
+  // The registry's two deliveries, on this channel's own sequence. Both are
+  // registered wrapped in base::BindPostTask, because a press is matched on the
+  // UI thread and `client_` is a mojo remote bound to the IO thread.
+  void DeliverShortcut(Chord chord);
+  void DeliverModifiers(Modifiers modifiers);
+
   void ReadLoop();
   void OnRead(int result);
   // One complete line off the socket. Anything unparseable is dropped with a
@@ -111,6 +118,12 @@ class ControlChannel : public mojom::ControlChannel {
   const std::string socket_path_;
   mojo::Receiver<mojom::ControlChannel> receiver_;
   mojo::Remote<mojom::ControlChannelClient> client_;
+
+  // This page's registration with the process's shortcut registry, given back
+  // in the destructor. The claims it made are not: the desktop's keys stay the
+  // desktop's across a reload, and a gap between the two is a chord delivered
+  // to whatever window is focused instead.
+  ShortcutRegistry::ChannelId channel_;
 
   std::unique_ptr<net::UnixDomainClientSocket> socket_;
   bool connected_ = false;

@@ -10,8 +10,10 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -46,8 +48,8 @@ namespace domicile {
 // frame is a main frame -- AncestorThrottle walks GetParentOrOuterDocument(),
 // which by contract does not cross the boundary into an embedder -- so both
 // checks pass, back and forward work across a process change, and storage is
-// first-party rather than partitioned as a third party. See
-// docs/architecture/BROWSER-WINDOW-PARITY.md in the Domicile repository.
+// first-party rather than partitioned as a third party. `guard-webview-
+// framing.sh` is the assertion that a site refusing framing loads in one.
 //
 // NOT AttachGuestPage/GuestPageHolder, which is the nicer API and is unusable
 // here: web_contents_impl.cc CHECKs features::kGuestViewMPArch, which is
@@ -94,6 +96,31 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // content::WebContentsDelegate:
   //
+  // WHERE A DESKTOP CHORD IS CAUGHT WHEN A BROWSER WINDOW HAS THE KEYBOARD,
+  // and the reason there has to be somewhere. Both of the shell's own paths
+  // die at once here: `<domicile-app>` is a portal element in the chrome's
+  // document, so the shell sees every key a Wayland window is sent, but a
+  // `<webview>` is a page of its own and `view.focus()` moves DOM focus into
+  // it -- the shell's document is then told nothing, and neither is the
+  // compositor, because the shell is what forwards keys to it. This runs for
+  // the focused widget whichever frame owns it, which over a browser window is
+  // the guest's, and it is the last layer above that page. On a match the key
+  // is swallowed and the press goes back down the control channel; the
+  // modifiers go every time, because a page that hears no keys hears no
+  // modifier changes either and Alt is what a window is dragged with.
+  //
+  // A KEY NOBODY CLAIMED STOPS AT THE GUEST, which is measured rather than
+  // assumed: `guard-webview-keyboard.sh` presses one before the window takes
+  // the keyboard and one after, and the shell's document hears the first and
+  // not the second. It is what content does with an unhandled key -- it comes
+  // back to *this* WebContents' delegate in
+  // WebContentsImpl::HandleKeyboardEvent, and there is no path from there into
+  // the embedder's renderer. So this hook is not one of two ways a chord
+  // reaches the shell over a browser window. It is the only one.
+  content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
+      content::WebContents* source,
+      const input::NativeWebKeyboardEvent& event) override;
+
   // A page in a browser window cannot open a second one yet. Overridden rather
   // than left to the default because the default is content creating the
   // window itself, and for a guest with no guest SiteInstance that path CHECKs
