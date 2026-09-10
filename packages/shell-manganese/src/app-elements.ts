@@ -70,7 +70,8 @@ export class AppElements {
    * those are not the same event. A portal is unmounted whenever the shell
    * stops rendering it — while the display list is empty, say — and the client
    * behind it is still running and still drawn; dropping the record there
-   * would put the placeholder back over it when the window returns.
+   * would leave the window's next element with no size to scale pointer
+   * coordinates by.
    */
   closed(appId: string): void {
     this.#drawnAlready.delete(appId);
@@ -86,8 +87,8 @@ export class AppElements {
    * nothing else will: where the compositor draws the client itself the
    * hand-over sends no frame, and `app_resized` answers only a size that
    * *changed*, so an idle client sends neither. Left untold, the element
-   * paints its "app surface" placeholder over a live window until the user
-   * happens to resize it.
+   * scales the live window's pointer coordinates 1:1 against its own CSS box
+   * until the user happens to resize it.
    *
    * No size is the ordinary case — a window that has just mapped — and there
    * is nothing to note about it. Worth a branch rather than a caller's

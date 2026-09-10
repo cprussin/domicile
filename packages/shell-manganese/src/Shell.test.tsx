@@ -344,13 +344,13 @@ describe("Shell", () => {
       expect(container.querySelector(APP_TAG_NAME)).toBeNull();
     });
 
-    it("does not cover a window that arrived already drawn with a placeholder", () => {
+    it("gives a window that arrived already drawn the size it drew at", () => {
       // A size on the announcement is the replay a reloading chrome gets, and
       // the portal it mounts is never sent a frame or a resize where the
-      // compositor draws the client itself — so the label would sit over a
-      // live window. The portal mounts a render after the message, which is
-      // why the size waits in `AppElements` rather than being applied on the
-      // spot.
+      // compositor draws the client itself — so a live window would scale its
+      // pointer coordinates against nothing. The portal mounts a render after
+      // the message, which is why the size waits in `AppElements` rather than
+      // being applied on the spot.
       const { container } = renderShell();
       bridge.emit("app_appeared", {
         app_id: "term",
@@ -382,7 +382,7 @@ describe("Shell", () => {
       );
     });
 
-    it("leaves the placeholder up for a client that has not drawn yet", () => {
+    it("gives no size to a client that has not drawn yet", () => {
       const { container } = renderShell();
       bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
       expect(container.querySelector(APP_TAG_NAME)?.classList).not.toContain(
