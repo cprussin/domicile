@@ -113,3 +113,38 @@ echo "what was complained about:"
 sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
   grep -aoE '(WARN|ERROR) .*' | cut -c1-200 | sort | uniq -c |
   sort -rn | head -20 | sed 's/^/  /' || true
+
+# THE BUILD'S OWN ERROR, AND IT IS LAST BECAUSE A FAILED JOB IS READ FROM THE
+# END. Everything above this reports on a guard, which presumes a build. When
+# the build is what failed, none of it has anything to say and this is the only
+# section with the answer in it.
+#
+# It exists because `siso` does not print the compiler error. It prints a
+# summary -- `1 steps failed: exit=1` -- and then names a file:
+#
+#   see ./out/Domicile/siso_output for full command line and output
+#
+# That file is on the runner and nothing published it, so a build failure
+# reached CI as a step that went red saying only how many targets were done.
+# Two consecutive cycles were spent guessing which of three new files broke it,
+# each guess costing a full build on a shared self-hosted runner. The guard
+# half of this script was written after the same lesson: a `tail -25` that
+# showed a summary and never the error hid a one-line `-Wreorder` failure for
+# an afternoon.
+#
+# Quiet when the build passed: `siso_output` is absent or empty then, and this
+# script runs on success too.
+BUILD_OUT="${CHROMIUM:-/build/chromium/src}/${OUT:-out/Domicile}/siso_output"
+if [ -s "$BUILD_OUT" ]; then
+  echo "::group::what the build said"
+  # The error lines first and then the file's end, for the same reason the
+  # guard sections do it: a diagnostic that only greps misses the failure whose
+  # wording nobody predicted, and one that only tails misses the error that
+  # scrolled past. Capped, because a template error in Chromium runs to
+  # hundreds of lines and burying the first one defeats the section.
+  grep -aE 'error:|FAILED:|fatal error|ninja: build stopped' "$BUILD_OUT" |
+    head -40 | cut -c1-300 | sed 's/^/  E /' || true
+  echo "  --- last 60 lines:"
+  tail -60 "$BUILD_OUT" | cut -c1-300 | sed 's/^/  | /' || true
+  echo "::endgroup::"
+fi
