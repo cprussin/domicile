@@ -9,10 +9,12 @@
 // binds WebViewGuestHost only for the shell's origin, so a <webview> on any
 // other page cannot ask for a guest at all.
 //
-// ?kind= is the whole experiment. `webview` must show a site that refuses to
-// be framed; `iframe`, laid out identically beside nothing, must not — and
-// that is the negative control, because a run where neither shows anything and
-// a run where the guard cannot see anything look the same from outside.
+// This is the claim and only the claim. The control that goes with it is not
+// here and cannot be: an <iframe> on a domicile:// document does not load an
+// http page at all, so a control written on this page would be measuring that
+// rather than a framing header — which is exactly what the one that used to
+// live here did. It frames the same site from an ordinary http page instead;
+// see the guard's header, and guard-webview-framing-server.py.
 
 /**
  * A query parameter this cannot run without. Missing means the guard invoked
@@ -28,30 +30,8 @@ const required = (parameters, name) => {
   }
 };
 
-/**
- * The element under test. Not `document.createElement(kind)` on whatever the
- * query said: an unknown tag would become an HTMLUnknownElement, lay out as
- * nothing, and the run would report "the colour is absent" about an element
- * that was never there.
- */
-const buildView = (kind) => {
-  switch (kind) {
-    case "webview": {
-      return document.createElement("webview");
-    }
-    case "iframe": {
-      return document.createElement("iframe");
-    }
-    default: {
-      throw new Error(
-        `guard-webview-framing: ?kind= is "webview" or "iframe", got "${kind}"`,
-      );
-    }
-  }
-};
-
 const parameters = new URLSearchParams(location.search);
-const view = buildView(required(parameters, "kind"));
+const view = document.createElement("webview");
 
 // Inset rather than filling the page, so the witness colour the body paints is
 // still visible around it. The probe needs to find the witness to be able to
@@ -59,9 +39,11 @@ const view = buildView(required(parameters, "kind"));
 //
 // Whole percentages of a window whose size the harness chose, so the box lands
 // on integer pixels and the flat colour inside it is not resampled onto a
-// half-pixel edge. No transform, for the same reason: spike-iframe.sh measured
-// a surface-backed element under `transform` differing from a <div> on its
-// outline, and this assertion is an exact colour match.
+// half-pixel edge. The control's framing page insets its <iframe> by the same
+// numbers, so the two runs put the framed page in the same place. No
+// transform, for the same reason: spike-iframe.sh measured a surface-backed
+// element under `transform` differing from a <div> on its outline, and this
+// assertion is an exact colour match.
 view.style.position = "absolute";
 view.style.left = "10%";
 view.style.top = "10%";

@@ -12,6 +12,14 @@
 # So the fixture is asserted here, where it is free: the headers by name,
 # because a page carrying one of them is half a fixture, and the colour,
 # because the whole assertion downstream is an exact match on it.
+#
+# AND THE OTHER TWO PAGES, which are what make the control a control. The
+# guard's negative run frames `/permits` and then frames `/refuses`, and reads
+# the difference between them as the framing headers -- so it is those two
+# being identical in every other respect that the reading rests on, and this is
+# where that is checked. A `/permits` that carried a framing header, or that
+# was some other colour, would turn "the harness can see a framed page here"
+# into a run that proves nothing and cannot say so.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,9 +42,13 @@ command -v curl >/dev/null || {
 # on `crux`; sharing a number would make them unable to overlap for no reason.
 PORT="${PORT:-8732}"
 COLOUR="D81B60"
+# The framer's own background, which is what the probe looks for to know it
+# measured anything at all. Not the colour: a page that painted the subject's
+# colour itself would answer the question the iframe is there to answer.
+WITNESS="20304A"
 
 LOG="$(mktemp)"
-python3 "$SERVER" --port "$PORT" --colour "$COLOUR" >"$LOG" 2>&1 &
+python3 "$SERVER" --port "$PORT" --colour "$COLOUR" --witness "$WITNESS" >"$LOG" 2>&1 &
 SERVER_PID=$!
 cleanup() {
   kill "$SERVER_PID" 2>/dev/null
@@ -91,6 +103,46 @@ expect "the body is the colour the probe looks for" "yes" \
 expect "anything else is a 404" "yes" \
   "$(case "$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/")" in
      404) echo yes ;; *) echo no ;; esac)"
+
+# --- the pages the control is a comparison between ---
+
+# The same page, in the same colour, without the two headers. It is the leg
+# that establishes an <iframe> in this position can show a page at all, so
+# everything the control concludes rests on it being reachable.
+PERMITS="$(curl -sS -i "http://127.0.0.1:$PORT/permits" || echo "curl failed")"
+
+expect "the framable page is served too" "yes" \
+  "$(case "$PERMITS" in *"200 OK"*) echo yes ;; *) echo no ;; esac)"
+expect "and is the same colour as the one that refuses" "yes" \
+  "$(case "$PERMITS" in *"#$COLOUR"*) echo yes ;; *) echo no ;; esac)"
+# THE COMPARISON IS ONLY WORTH ANYTHING IF THIS HOLDS. The control reads the
+# difference between the two pages as the framing headers; a `/permits` that
+# carried one would be a leg that fails for the reason the other one is
+# supposed to.
+expect "and carries no X-Frame-Options" "yes" \
+  "$(case "$PERMITS" in *[Xx]-[Ff]rame-[Oo]ptions:*) echo no ;; *) echo yes ;; esac)"
+expect "and no frame-ancestors directive" "yes" \
+  "$(case "$PERMITS" in *"frame-ancestors"*) echo no ;; *) echo yes ;; esac)"
+
+# The page that does the framing: an ordinary http document, so that the frame
+# under test has an ancestor a header can be checked against. The guard's own
+# shell page cannot be it -- an <iframe> on a domicile:// document does not
+# load an http page at all, which is the defect this control was rebuilt for.
+FRAMES="$(curl -sS -i "http://127.0.0.1:$PORT/frames?src=/permits" || echo "curl failed")"
+
+expect "the framing page is served" "yes" \
+  "$(case "$FRAMES" in *"200 OK"*) echo yes ;; *) echo no ;; esac)"
+expect "and frames what it was asked to" "yes" \
+  "$(case "$FRAMES" in *"<iframe"*"src=\"/permits\""*) echo yes ;; *) echo no ;; esac)"
+# So a run that finds neither colour can say the browser drew nothing, rather
+# than reporting an absence it has no standing to report.
+expect "and paints the witness around it" "yes" \
+  "$(case "$FRAMES" in *"#$WITNESS"*) echo yes ;; *) echo no ;; esac)"
+# A framer with nothing to frame would render an empty box, which is exactly
+# what a refused frame renders. It must be an error rather than a page.
+expect "a framing page with nothing to frame is refused" "yes" \
+  "$(case "$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/frames")" in
+     400) echo yes ;; *) echo no ;; esac)"
 
 echo
 if [ "$FAILED" -eq 0 ]; then
