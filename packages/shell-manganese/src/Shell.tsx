@@ -341,6 +341,9 @@ const Desktop = ({ appElements, bridge }: DesktopProps) => {
                       onNavigate={(url) => {
                         renameToSite(window.id, url);
                       }}
+                      onReach={() => {
+                        select(window.id);
+                      }}
                       onScreen={onScreen}
                       src={window.src}
                     />

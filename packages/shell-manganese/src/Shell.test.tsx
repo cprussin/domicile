@@ -4,8 +4,9 @@ import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import {
   APP_TAG_NAME,
   registerElements,
+  WEBVIEW_TAG_NAME,
 } from "@domicile/chrome-sdk/register-elements";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
@@ -636,6 +637,86 @@ describe("Shell", () => {
 
       expect(portalFor(container, "two")?.style.zIndex).toBe("1");
       expect(portalFor(container, "one")?.style.zIndex).toBe("2");
+    });
+  });
+
+  describe("a click in a browser window", () => {
+    /** The `at`th browser window on the stage, in the order they opened. */
+    const browserWindow = (at: number): HTMLElement => {
+      const window = screen.getAllByRole("region", { name: "Browser" })[at];
+      if (window === undefined) {
+        throw new Error(`no browser window ${at} on the stage`);
+      } else {
+        return window;
+      }
+    };
+
+    /** Where each browser window sits in the stack, oldest window first. */
+    const depths = (): string[] =>
+      screen
+        .getAllByRole("region", { name: "Browser" })
+        .map((window) => window.style.zIndex);
+
+    /** The page inside the browser window `window` takes the focus. */
+    const focusPageIn = (window: HTMLElement): void => {
+      const view = window.querySelector(WEBVIEW_TAG_NAME);
+      if (view === null) {
+        throw new Error("the browser window rendered no view");
+      } else {
+        fireEvent.focusIn(view);
+      }
+    };
+
+    /** Two browser windows floating, the second cascaded over the first. */
+    const twoBrowsers = async () => {
+      const rendered = renderShell();
+      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      return rendered;
+    };
+
+    it("brings the window to the front when the user clicks into the page", async () => {
+      // The click itself is not an event the shell is given — the page is a
+      // guest, and nothing about a pointer inside it crosses back out — so
+      // the focus it takes is the whole of what a click looks like here.
+      await twoBrowsers();
+      expect(depths()).toStrictEqual(["1", "2"]);
+
+      focusPageIn(browserWindow(0));
+
+      // Restacked, and in place: the document order is what a drag reads
+      // pointer capture against, so a raise moves `z-index` and nothing else.
+      expect(depths()).toStrictEqual(["2", "1"]);
+    });
+
+    it("brings it to the front from the chrome as well as the page", async () => {
+      // The half of the window that does send the shell a pointer event. A
+      // window is reached by being clicked anywhere in it — the user reaching
+      // for the address bar of the window behind is reaching for that window.
+      await twoBrowsers();
+
+      await userEvent.click(
+        within(browserWindow(0)).getByRole("textbox", { name: "Address" }),
+      );
+
+      expect(depths()).toStrictEqual(["2", "1"]);
+    });
+
+    it("makes it the window Alt+Tab acts on", async () => {
+      // Raising it is half the answer; the other half is that it becomes the
+      // window the user is working in, which is what everything keyed acts
+      // on. Without it the shell would put back the window they had left
+      // rather than the one they are typing into.
+      await twoBrowsers();
+
+      focusPageIn(browserWindow(0));
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+
+      // Back in the rail, on the stage, and the other one still floating.
+      expect(browserWindow(0).style.zIndex).toBe("");
+      expect(browserWindow(1).style.zIndex).toBe("1");
     });
   });
 
