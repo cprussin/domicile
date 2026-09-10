@@ -15,6 +15,7 @@
 #include "components/domicile/browser/shortcut_registry.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/base/page_transition_types.h"
@@ -182,6 +183,45 @@ void WebViewGuest::Navigate(const GURL& url) {
   content::NavigationController::LoadURLParams params(url);
   params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
   guest_contents_->GetController().LoadURLWithParams(params);
+}
+
+void WebViewGuest::GoBack() {
+  // The same CHECK Navigate makes, and for the same reason: this object is
+  // destroyed with the guest's WebContents, so there is no moment at which the
+  // pipe is open and the WebContents is gone.
+  CHECK(guest_contents_);
+
+  // NOT GUARDED WITH CanGoBack(), which would be a guard on a condition the
+  // callee already answers: GoBack returns without navigating when there is
+  // nowhere to go. An address bar whose buttons cannot yet be greyed out
+  // presses this with an empty history as a matter of course, so a back with
+  // nowhere to go is the ordinary case rather than a bad message.
+  guest_contents_->GetController().GoBack();
+}
+
+void WebViewGuest::GoForward() {
+  CHECK(guest_contents_);
+  guest_contents_->GetController().GoForward();
+}
+
+void WebViewGuest::Stop() {
+  CHECK(guest_contents_);
+  // The WebContents rather than its controller, which has no Stop: a pending
+  // navigation is the WebContents', and cancelling it is what an address bar's
+  // stop button means.
+  guest_contents_->Stop();
+}
+
+void WebViewGuest::Reload() {
+  CHECK(guest_contents_);
+  // `check_for_repost` true, which is what a browser passes in production. It
+  // reaches this delegate's ShowRepostFormWarningDialog, which is content's
+  // do-nothing default -- so reloading a POST result currently does nothing
+  // rather than silently reposting. That is the guest's "refuses everything an
+  // embedder is asked for" gap, and reposting without asking would be the
+  // worse half of it to close by accident.
+  guest_contents_->GetController().Reload(content::ReloadType::NORMAL,
+                                          /*check_for_repost=*/true);
 }
 
 content::WebContents* WebViewGuest::GetOwnerWebContents() {

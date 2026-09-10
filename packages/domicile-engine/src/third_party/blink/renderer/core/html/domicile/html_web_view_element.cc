@@ -8,13 +8,10 @@
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
-#include "third_party/blink/renderer/core/frame/history.h"
-#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
-#include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
@@ -119,45 +116,41 @@ network::ParsedPermissionsPolicy HTMLWebViewElement::ConstructContainerPolicy()
   return network::ParsedPermissionsPolicy();
 }
 
-// The history controls, and they now reach the wrong page. They drive the
-// placeholder frame's History, and the placeholder has been on about:blank
-// since it was made -- the guest's own NavigationController is in the browser
-// process and nothing here can reach it. So these do nothing rather than
-// throwing at a shell driving them from an address bar, which is the same
-// behaviour they had before and for a different reason.
+// The history controls, and they reach the guest.
 //
-// Wiring them to the guest is a known gap, and ROADMAP.md carries it.
-// It is also the half of it that gets *better*: a guest has a history of its
-// own, the way Electron's <webview> did because it was a WebContents of its
-// own, where a frame shared the whole session's.
-LocalDOMWindow* HTMLWebViewElement::ContentWindow() const {
-  LocalFrame* frame = DynamicTo<LocalFrame>(ContentFrame());
-  return frame ? frame->DomWindow() : nullptr;
-}
-
-void HTMLWebViewElement::goBack(ScriptState* script_state,
-                                ExceptionState& exception_state) {
-  if (LocalDOMWindow* window = ContentWindow()) {
-    window->history()->back(script_state, exception_state);
+// EACH IS ONE MESSAGE AND NOTHING ELSE, which is the whole of the wiring: the
+// page a <webview> shows is a WebContents in the browser process, its history
+// is a NavigationController there, and this process cannot see either. What
+// used to be here drove `ContentFrame()` -- the placeholder, on about:blank
+// since it was made and swapped out by the attach -- so all four did nothing.
+//
+// AN UNBOUND REMOTE IS A NO-OP RATHER THAN A THROW, and it is the same
+// condition `NavigateGuest` already answers that way: the pipe is bound in
+// DidNotifySubtreeInsertionsToDocument, so an element that is not in a
+// document has no guest yet and a shell that drove one would be pressing a
+// button on a window that is not on screen. There is nothing to report and
+// nothing to recover.
+void HTMLWebViewElement::goBack() {
+  if (guest_.is_bound()) {
+    guest_->GoBack();
   }
 }
 
-void HTMLWebViewElement::goForward(ScriptState* script_state,
-                                   ExceptionState& exception_state) {
-  if (LocalDOMWindow* window = ContentWindow()) {
-    window->history()->forward(script_state, exception_state);
+void HTMLWebViewElement::goForward() {
+  if (guest_.is_bound()) {
+    guest_->GoForward();
   }
 }
 
 void HTMLWebViewElement::stop() {
-  if (LocalFrame* frame = DynamicTo<LocalFrame>(ContentFrame())) {
-    frame->Loader().StopAllLoaders(/*abort_client=*/true);
+  if (guest_.is_bound()) {
+    guest_->Stop();
   }
 }
 
 void HTMLWebViewElement::reload() {
-  if (LocalFrame* frame = DynamicTo<LocalFrame>(ContentFrame())) {
-    frame->Reload(WebFrameLoadType::kReload);
+  if (guest_.is_bound()) {
+    guest_->Reload();
   }
 }
 

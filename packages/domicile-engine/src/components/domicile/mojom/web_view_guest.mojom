@@ -63,4 +63,41 @@ interface WebViewGuest {
   // page. This is what `src` does, and what it does instead of navigating the
   // frame the element owns.
   Navigate(url.mojom.Url url);
+
+  // The four controls a chrome's address bar has, on the guest's own
+  // NavigationController.
+  //
+  // THEY HAVE TO COME OVER THIS PIPE, and that is the whole reason they are
+  // here rather than in the renderer. The element is a frame owner, so it has
+  // a placeholder frame with a History of its own -- and that frame has been
+  // on about:blank since it was made and was swapped out by the attach. The
+  // page the user is looking at is a WebContents in the browser process, whose
+  // history is a NavigationController this process cannot see. So the four
+  // travel, and what they buy by travelling is the half that gets BETTER: a
+  // guest has a history of its own, across process changes, where a frame
+  // shared the whole session's.
+  //
+  // Nothing comes back from any of them, for the reason Navigate returns
+  // nothing: what happens next is a navigation, which is asynchronous however
+  // it was asked for, and there is nothing the element would do differently
+  // with an answer.
+  //
+  // A BACK WITH NOWHERE TO GO IS NOT AN ERROR, in any of the three that can
+  // have one: `NavigationControllerImpl::GoBack` returns without navigating
+  // when `CanGoBack()` is false, and an address bar pressing a button the user
+  // can see is the ordinary way that happens. WHETHER it can is not reportable
+  // yet -- there is no browser-to-renderer leg on this interface, so a chrome
+  // that wants to grey out its own buttons needs one, and adding it is its own
+  // piece of work.
+  GoBack();
+  GoForward();
+
+  // Cancel whatever the guest is loading. `WebContents::Stop`, which is where
+  // a pending navigation lives -- the controller has no Stop of its own.
+  Stop();
+
+  // Load the current entry again. The repost warning a POST entry would raise
+  // has no dialog behind it yet: a guest refuses everything an embedder is
+  // asked for, which ROADMAP.md carries as its own gap.
+  Reload();
 };
