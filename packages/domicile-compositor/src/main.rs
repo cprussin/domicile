@@ -39,6 +39,7 @@ use smithay::reexports::{
     calloop::{
         channel::{channel, Event as ChannelEvent, Sender},
         generic::Generic,
+        timer::{TimeoutAction, Timer},
         EventLoop, Interest, Mode, PostAction,
     },
     wayland_protocols::xdg::shell::server::xdg_toplevel,
@@ -89,6 +90,7 @@ mod dmabuf_import;
 mod engine;
 mod engine_buffers;
 mod engine_session;
+mod latency;
 mod modifiers;
 mod outbound;
 mod scale;
@@ -99,6 +101,7 @@ mod viewport;
 use crate::engine::{Bounds, Capture};
 use crate::engine_buffers::Returned;
 use crate::engine_session::EngineSession;
+use crate::latency::{Latency, Step as LatencyStep};
 
 use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
@@ -1067,6 +1070,16 @@ struct DomicileCompositor {
     /// Only the oldest is kept, for the reason the chrome keeps the oldest: a
     /// burst answered by one frame is felt as how long its first key waited.
     pending_key: Option<Instant>,
+    /// The keystroke-to-pixel run, once an app has committed something to
+    /// measure. `None` when `DOMICILE_SPIKE_LATENCY` names no point, which is
+    /// every run that is not the measurement.
+    latency: Option<Latency>,
+    /// Which app the run is watching. The first to commit, and then that one
+    /// for the whole run.
+    latency_app: Option<String>,
+    /// Whether the report has been said. It is said once: the driver keeps
+    /// being called for as long as the client keeps drawing.
+    latency_reported: bool,
     /// The chrome's own toplevel, when it is a client of ours. Kept apart from
     /// `toplevels` because it is not an app: it is never announced and never
     /// placed by a portal. It is the window the desktop is, and the keyboard
@@ -1478,6 +1491,273 @@ impl DomicileCompositor {
         }
     }
 
+    /// Put one key into the seat, and let the focus it already has deliver it.
+    ///
+    /// Shared by the chrome's keys and the latency run's, because a
+    /// measurement that went in by a different door would be measuring a
+    /// different door.
+    fn inject_key(&mut self, keycode: u32, pressed: bool) {
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+        let state = if pressed {
+            KeyState::Pressed
+        } else {
+            KeyState::Released
+        };
+        // wl keymaps use X keycodes (evdev + 8); callers speak evdev.
+        let key: Keycode = (keycode + 8).into();
+        keyboard.input::<(), _>(self, key, state, serial, time, |_, _, _| {
+            FilterResult::Forward
+        });
+    }
+
+    /// Drive the keystroke-to-pixel run, if one is going, on this app's frame.
+    ///
+    /// **On the commit path, and that is the only place it can be.** A round
+    /// is bounded by two things this compositor sees and nothing else does:
+    /// the client's answering commit, which arrives here, and what the engine
+    /// then draws, which only `EngineSession` can be asked. See `latency.rs`
+    /// for what the numbers are and why they are three.
+    ///
+    /// THIS BLOCKS THE WAYLAND THREAD, and the worst case is worth knowing
+    /// before turning it on. `spike_pixel` is a `CopyOutputRequest` that waits
+    /// for the browser to answer, and the loop below spends one per ask.
+    ///
+    /// One invocation is either a whole floor or at most one round — the
+    /// `Press` arm breaks. A settling floor is `Budget::floor_samples` asks
+    /// plus the priming one that is not timed, about **1.0 s** at 60Hz. A
+    /// floor that keeps being restarted is `Budget::max_floor_asks`, about
+    /// **6.7 s**, and a round the client never answers is `Budget::max_polls`,
+    /// about **3.3 s**. For every one of
+    /// those there is no client dispatch and no frame callbacks: nothing on
+    /// this desktop is served. It is a spike instrument, off unless
+    /// `DOMICILE_SPIKE_LATENCY` names a point, and that is the trade.
+    ///
+    /// **The screen at that point has to hold still, and providing that is the
+    /// caller's job.** A client repainting on its own — a terminal blinking
+    /// its cursor over the probe point — restarts the floor faster than the
+    /// floor completes, so the run spends its whole budget and reports
+    /// `NeverSettled` having measured nothing. That is a legible failure
+    /// rather than a hang, which is what the budgets buy, but it is still a
+    /// run wasted: a guard driving this wants a client whose cursor does not
+    /// blink.
+    ///
+    /// It does not deadlock against the engine: `SamplePixel` parks on a
+    /// `WaitableEvent` while the engine's own thread runs a nested run loop,
+    /// so the reply does not need this thread back.
+    fn drive_latency(&mut self, app_id: &str, committed: Instant, held: bool) {
+        let (Some(_), Some(budget)) = (spike_latency_point(), spike_latency_budget()) else {
+            return;
+        };
+        // Only a frame the engine took can answer a keystroke, and waiting for
+        // one is also what keeps the run from starting before there is
+        // anything to read. Started on the client's first commit instead, the
+        // probe refuses — no engine yet, or a browser window that has not
+        // painted — and a refusal costs no time at all, so the floor spends
+        // its whole run of them inside that one callback and the run is over
+        // as `ProbeWentDark` before the desktop has finished starting.
+        if !held {
+            return;
+        }
+        // The first app to commit is the one measured, and it keeps the run
+        // for the whole of it: a second window appearing partway would
+        // otherwise contribute commits to rounds its keys never caused.
+        if self.latency_app.get_or_insert_with(|| app_id.to_string()) != app_id {
+            return;
+        }
+        // Taken out and put back, because a run dropped here starts over from
+        // an empty floor on the next commit.
+        let mut run = self.latency.take().unwrap_or_else(|| Latency::new(budget));
+        // The caller's stamp, from before `publish_frame` ran. The import and
+        // the submit are this design's cost and belong in `commit_to_pixel`;
+        // stamping here would have put them in the client's half instead.
+        run.committed(committed);
+        self.latency = Some(run);
+        // AND NOTHING ELSE. This used to drive the whole run from here, in a
+        // loop that sampled until the colour changed. See `step_the_latency`.
+    }
+
+    /// One step of the latency run, and then back to the event loop.
+    ///
+    /// **One.** This was a loop, and the loop is the bug it exists to not be.
+    ///
+    /// Everything in this compositor runs on one calloop thread: the clients'
+    /// fd, the engine's fd, and the commit callback this used to be driven
+    /// from. A poll loop inside that callback holds the thread, so for as long
+    /// as it spins, `pump_the_engine` cannot run and no `wl_buffer.release`
+    /// reaches anybody, and `dispatch_clients` cannot run and no frame
+    /// callback is flushed. The client is frozen.
+    ///
+    /// Which makes the wait unwinnable whenever the colour needs a *second*
+    /// commit — a toolkit that renders on `wl_surface.frame`, or one that
+    /// needs its buffer back first, which is most of them. The run spent its
+    /// whole poll budget and recorded the round as "abandoned by the client".
+    /// The client had done nothing wrong: it was starved by the compositor
+    /// waiting on it, and the accusation was backwards.
+    ///
+    /// Four of sixty rounds on the run that found this, and two before #246 —
+    /// which made it worse exactly as this predicts, by making a release
+    /// something the client has to be handed rather than something it got
+    /// early from a bug. `key_to_commit` had all sixty samples and
+    /// `commit_to_pixel` fifty-six: every round got its *first* commit, which
+    /// is the one that arrives while the thread is still free.
+    ///
+    /// So: one step, then return, and let the loop serve the client in
+    /// between. The timer in `main` is what brings us back.
+    ///
+    /// Returns whether the run wants another step immediately.
+    fn step_the_latency(&mut self) -> bool {
+        let (Some(point), Some(_)) = (spike_latency_point(), spike_latency_budget()) else {
+            return false;
+        };
+        let Some(mut run) = self.latency.take() else {
+            return false;
+        };
+        let app_id = self.latency_app.clone();
+        let wants_more = match run.next(Instant::now()) {
+            LatencyStep::Sample => {
+                match self.engine.as_mut().and_then(|engine| match point {
+                    LatencyPoint::Centre => engine.spike_window_centre(),
+                    LatencyPoint::At(x, y) => engine.spike_pixel(x, y),
+                }) {
+                    Some(argb) => run.sampled(Instant::now(), argb),
+                    None => run.unreadable(),
+                }
+                true
+            }
+            LatencyStep::Press => {
+                // Focused every round rather than once: the keyboard is one
+                // seat's and anything else that moved it would send the rest
+                // of the run somewhere the probe is not looking.
+                match app_id
+                    .as_deref()
+                    .and_then(|app_id| self.surface_for(app_id))
+                {
+                    Some(surface) => {
+                        let keyboard = self.seat.get_keyboard().unwrap();
+                        let serial = SERIAL_COUNTER.next_serial();
+                        keyboard.set_focus(self, Some(surface), serial);
+                        self.inject_key(LATENCY_KEY, true);
+                        self.inject_key(LATENCY_KEY, false);
+                    }
+                    // Never silently, and never merely logged: `next` has
+                    // already started this round, and the only way out of a
+                    // started round is a commit answering the key we just
+                    // failed to send. A client that does not redraw on its own
+                    // would leave the run there for ever with no report —
+                    // which is the shape of every other bug in this file. The
+                    // round is given up instead.
+                    None => {
+                        warn!(
+                            ?app_id,
+                            "the latency run has no surface to press a key into; \
+                             giving the round up"
+                        );
+                        run.press_went_nowhere();
+                    }
+                }
+                // The client has to redraw before there is anything to look
+                // at, and it cannot do that while we are here.
+                false
+            }
+            LatencyStep::Wait => false,
+        };
+        self.latency = Some(run);
+        self.report_latency();
+        wants_more
+    }
+
+    /// One display frame, as this desktop advertises it.
+    ///
+    /// **Advertised, not viz's own.** The number the latency run is divided by
+    /// ought to be the browser's display-frame interval, and nothing here can
+    /// ask viz for it — `css_parity.cc` can, because it runs inside the
+    /// browser, and reads it off `BeginFrameArgs`. Both are 60Hz on the one
+    /// machine this runs on, and the floor is reported beside every other
+    /// number so a reader can calibrate against what the probe actually cost
+    /// rather than trusting this.
+    fn display_interval(&self) -> Duration {
+        Duration::from_secs_f64(1000.0 / f64::from(ADVERTISED_REFRESH_MHZ))
+    }
+
+    /// Say what the run measured, once, in the shape the guard reads.
+    fn report_latency(&mut self) {
+        if self.latency_reported {
+            return;
+        }
+        let Some(report) = self.latency.as_ref().and_then(Latency::report) else {
+            return;
+        };
+        self.latency_reported = true;
+        let interval = self.display_interval();
+        // The text is `Spread::line`'s and is tested there, because the guard
+        // greps it.
+        let say = |what: &str, spread: Option<&latency::Spread>| match spread {
+            Some(spread) => tracing::info!(
+                target: "domicile::engine::spike",
+                "{}", spread.line(what, interval)
+            ),
+            // Named rather than skipped: a missing line and a fast one must
+            // not look alike to whoever reads this log.
+            None => tracing::info!(
+                target: "domicile::engine::spike",
+                "latency {what}: nothing measured"
+            ),
+        };
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: the display frame is {:.2} ms",
+            interval.as_secs_f64() * 1000.0
+        );
+        say("floor", report.floor.as_ref());
+        say("key to commit", report.key_to_commit.as_ref());
+        say("commit to pixel", report.commit_to_pixel.as_ref());
+        say("key to pixel", report.key_to_pixel.as_ref());
+        // How it ended and what the client did are two different accusations,
+        // so they are two lines. A run that never settled has no floor and no
+        // rounds, and "0 abandoned" on its own would read like a clean sheet.
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: {} round(s) abandoned by the client",
+            report.abandoned
+        );
+        // What the client did with the key, as opposed to whether it answered
+        // at all. A round counted here answered with more than one frame, and
+        // its `commit to pixel` is timed from the first of them — so a run
+        // with a high count here is reporting some of the client's own second
+        // draw as ours. Said always, so that qualification is never missing
+        // from a number somebody is about to compare against a floor.
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: {} round(s) where the client drew again while polling",
+            report.redrew_while_polling
+        );
+        // Said always, and separately from the line above. A key we never
+        // delivered is this compositor's failure and not the client's, and
+        // folding the two together is the wrong-end report this instrument has
+        // had to be talked out of three times.
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: {} round(s) whose key was never delivered",
+            report.undelivered
+        );
+        match report.ended {
+            latency::Ended::Completed => tracing::info!(
+                target: "domicile::engine::spike",
+                "latency: the run completed"
+            ),
+            latency::Ended::NeverSettled => tracing::info!(
+                target: "domicile::engine::spike",
+                "latency: the run gave up — the screen at the probe point never held \
+                 still, so the probe could not be priced against it"
+            ),
+            latency::Ended::ProbeWentDark => tracing::info!(
+                target: "domicile::engine::spike",
+                "latency: the run gave up — the probe stopped answering"
+            ),
+        }
+    }
+
     /// Show this app's frame, and say whether the engine took the buffer.
     ///
     /// `true` means viz is sampling the client's dmabuf and the caller must not
@@ -1683,7 +1963,17 @@ impl DomicileCompositor {
             self.last_find = Some(Instant::now());
         }
 
-        if spike_probe_points().is_empty() && spike_find_colours().is_empty() {
+        // Not while a latency run is going, and this is not tidiness. This
+        // capture is a `CopyOutputRequest` that forces a draw and waits, and it
+        // runs on the submit path — inside the window `commit_to_pixel` is
+        // timed over, which starts before `publish_frame`. The floor is one
+        // capture and this would make every round two, so the ratio the guard
+        // asserts would sit on its own threshold and fail, blaming the product
+        // for the instrument's own readback.
+        if spike_probe_points().is_empty()
+            && spike_find_colours().is_empty()
+            && spike_latency_point().is_none()
+        {
             if let Some(drawn) = session.spike_window_centre() {
                 tracing::info!(
                     target: "domicile::engine::spike",
@@ -1843,7 +2133,7 @@ impl DomicileCompositor {
                 .expect("a window-following desktop advertises its one output")
                 .mode()
                 .into(),
-            refresh: 60_000,
+            refresh: ADVERTISED_REFRESH_MHZ,
         };
         let output = &self
             .outputs
@@ -2154,18 +2444,7 @@ impl DomicileCompositor {
                 if pressed {
                     self.pending_key.get_or_insert_with(Instant::now);
                 }
-                let keyboard = self.seat.get_keyboard().unwrap();
-                let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
-                let state = if pressed {
-                    KeyState::Pressed
-                } else {
-                    KeyState::Released
-                };
-                // wl keymaps use X keycodes (evdev + 8); the chrome sends evdev.
-                let key: Keycode = (keycode + 8).into();
-                keyboard.input::<(), _>(self, key, state, serial, time, |_, _, _| {
-                    FilterResult::Forward
-                });
+                self.inject_key(keycode, pressed);
                 self.tell_the_chromes_the_modifiers();
             }
             ClientRequest::KeyboardFocus { app_id } => {
@@ -2720,7 +2999,15 @@ impl CompositorHandler for DomicileCompositor {
                 }
             }
             let engine_holds = match &committer {
-                Committer::App(app_id) => self.publish_frame(app_id, &buffer),
+                Committer::App(app_id) => {
+                    let held = self.publish_frame(app_id, &buffer);
+                    // Driven after the submit, because the polling needs
+                    // something submitted to find — but timed from `started`,
+                    // which is before it. The import and the submit are ours,
+                    // and a round's second half is meant to contain them.
+                    self.drive_latency(app_id, started, held);
+                    held
+                }
                 Committer::Chrome => {
                     self.publish_chrome_frame(&buffer, buffer_scale, viewport);
                     false
@@ -2910,7 +3197,7 @@ fn advertise_output(dh: &DisplayHandle, advertised: &Advertised) -> LiveOutput {
 fn restate_output(output: &Output, advertised: &Advertised) {
     let mode = OutputMode {
         size: advertised.mode().into(),
-        refresh: 60_000,
+        refresh: ADVERTISED_REFRESH_MHZ,
     };
     output.change_current_state(
         Some(mode),
@@ -3524,6 +3811,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         last_frame: HashMap::new(),
         last_commit: None,
         pending_key: None,
+        latency: None,
+        latency_app: None,
+        latency_reported: false,
         shm_refused: HashSet::new(),
         first_frame_logged: HashSet::new(),
         last_probe: None,
@@ -3586,6 +3876,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(PostAction::Continue)
             },
         )?;
+    }
+
+    // The latency run's own turn of the loop.
+    //
+    // A source rather than a loop inside the commit callback, and that is the
+    // whole point: see `step_the_latency`. Sampling from the callback held
+    // this thread, so the client whose redraw the run was waiting for could
+    // be handed neither a buffer release nor a frame callback, and the run
+    // blamed it for not answering.
+    //
+    // Only when a run is asked for. `--domicile-latency-*` is the guard's, and
+    // a desktop nobody is measuring should not have a timer at all.
+    if spike_latency_point().is_some() {
+        handle.insert_source(Timer::immediate(), |_, _, data: &mut CalloopData| {
+            // Immediate again while the run has work: calloop dispatches every
+            // ready source each turn, so an immediate re-arm still gives the
+            // clients' fd and the engine's their turn — which is exactly what
+            // was missing. Idling at a millisecond rather than immediately
+            // when it has none, so a compositor between rounds is not a
+            // spinning one.
+            if data.state.step_the_latency() {
+                TimeoutAction::ToInstant(Instant::now())
+            } else {
+                TimeoutAction::ToDuration(Duration::from_millis(1))
+            }
+        })?;
     }
 
     // Inject forwarded input (from chrome threads) on the Wayland thread.
@@ -3740,6 +4056,102 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// What this desktop tells clients its output refreshes at, in mHz.
+///
+/// Advertised rather than measured: the winit backend has no mode to report
+/// and the headless one has no display at all, so 60 is what a client is told
+/// to pace itself to. It is also the divisor that turns the latency run's
+/// milliseconds into frames — which is why it is a named constant rather than
+/// a third copy of the number.
+const ADVERTISED_REFRESH_MHZ: i32 = 60_000;
+
+/// THROWAWAY, with the rest of the spike. Which key the latency run presses.
+///
+/// Enter, because what has to happen is that the client draws something
+/// different, and a line-buffered program on the other end of a terminal is
+/// the least exotic way to make one do that on demand.
+const LATENCY_KEY: u32 = 28;
+
+/// THROWAWAY, with the rest of the spike. Where the latency run watches for
+/// the client's answer, from `DOMICILE_SPIKE_LATENCY`.
+///
+/// `centre` — the browser window's middle, which is what a guard wants: a page
+/// with one `<app>` on it has the client's window under the centre, so nothing
+/// has to name a coordinate that would go stale the moment the page's CSS
+/// changed. `guard-client-window.sh` reads the drawn colour the same way and
+/// for the same reason.
+///
+/// `x,y` — a point, for a page where the centre is not over the client.
+///
+/// Unset means no run, which is every guard but one: the measurement presses
+/// keys into whatever has focus and would be a strange thing to do by default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LatencyPoint {
+    Centre,
+    At(i32, i32),
+}
+
+fn spike_latency_point() -> Option<LatencyPoint> {
+    static POINT: std::sync::OnceLock<Option<LatencyPoint>> = std::sync::OnceLock::new();
+    *POINT.get_or_init(|| {
+        let raw = std::env::var("DOMICILE_SPIKE_LATENCY").ok()?;
+        let raw = raw.trim();
+        if raw.eq_ignore_ascii_case("centre") || raw.eq_ignore_ascii_case("center") {
+            return Some(LatencyPoint::Centre);
+        }
+        match parse_point(raw) {
+            Some((x, y)) => Some(LatencyPoint::At(x, y)),
+            None => {
+                warn!(
+                    raw,
+                    "DOMICILE_SPIKE_LATENCY: not `centre` or an `x,y` point; no latency run"
+                );
+                None
+            }
+        }
+    })
+}
+
+/// THROWAWAY, with the rest of the spike. What a latency run may spend, from
+/// `DOMICILE_SPIKE_LATENCY_BUDGET` as `rounds,floor_samples,max_polls`.
+///
+/// Unset is the real measurement's sixty and sixty. A guard's negative control
+/// sets it small, because what a control proves — that a client answering no
+/// keys makes the guard fail — needs three rounds rather than sixty, and each
+/// abandoning round spends its whole poll budget a display frame at a time.
+///
+/// It is minutes of a *slow* control now rather than minutes of a blocked
+/// desktop: the run steps from a timer and gives the loop its turn between
+/// samples, so the clients keep being served throughout. See
+/// `step_the_latency`.
+///
+/// A value the run could not use is refused with a warning and no run, rather
+/// than clamped: see `Budget::parse`.
+fn spike_latency_budget() -> Option<latency::Budget> {
+    static BUDGET: std::sync::OnceLock<Option<latency::Budget>> = std::sync::OnceLock::new();
+    *BUDGET.get_or_init(|| {
+        let Ok(raw) = std::env::var("DOMICILE_SPIKE_LATENCY_BUDGET") else {
+            return Some(latency::Budget::default());
+        };
+        let parsed = latency::Budget::parse(raw.trim());
+        if parsed.is_none() {
+            warn!(
+                raw,
+                "DOMICILE_SPIKE_LATENCY_BUDGET: not `rounds,floor,polls`, or nothing \
+                 a run could measure with; no latency run"
+            );
+        }
+        parsed
+    })
+}
+
+/// `x,y`, and nothing else. Shared with `DOMICILE_SPIKE_PROBE`'s parse so the
+/// two knobs cannot drift into spelling a point differently.
+fn parse_point(entry: &str) -> Option<(i32, i32)> {
+    let (x, y) = entry.split_once(',')?;
+    Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
+}
+
 /// THROWAWAY, with the rest of the spike. Where in the browser's window to
 /// ask what viz drew, from `DOMICILE_SPIKE_PROBE` as `x,y;x,y`.
 ///
@@ -3761,14 +4173,11 @@ fn spike_probe_points() -> &'static [(i32, i32)] {
         raw.split(';')
             .filter(|entry| !entry.trim().is_empty())
             .filter_map(|entry| {
-                let (x, y) = entry.split_once(',')?;
-                match (x.trim().parse(), y.trim().parse()) {
-                    (Ok(x), Ok(y)) => Some((x, y)),
-                    _ => {
-                        warn!(entry, "DOMICILE_SPIKE_PROBE: not an `x,y` point; ignored");
-                        None
-                    }
+                let point = parse_point(entry.trim());
+                if point.is_none() {
+                    warn!(entry, "DOMICILE_SPIKE_PROBE: not an `x,y` point; ignored");
                 }
+                point
             })
             .collect()
     })
