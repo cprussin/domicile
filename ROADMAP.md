@@ -42,6 +42,7 @@ The wire protocol is at `PROTOCOL_VERSION = 1`.
 | A window composites at native cost | A submitted frame reaches the display compositor's output in one display frame, indistinguishable from the probe's own floor. `ENGINE-FORK.md`, *What it costs* |
 | CSS is structural, not reimplemented | Seven properties measured on a GPU — `z-index` against ordinary DOM, `transform`, `border-radius`, `opacity`, `filter: blur()`, `mix-blend-mode`, resize — every one bit-exact against an ordinary element beside it. `ENGINE-FORK.md`, *What CSS does to an `<app>`* |
 | `<app>` and `<webview>` are elements the fork defines | Patch 0007. `document.createElement("app").constructor.name` is `HTMLAppElement`; `app-id` reflects both ways |
+| A shell loads over `domicile://`, with no port behind it | Patches 0008 and 0009: a standard scheme, deliberately not web-safe, both loader hooks, the document the fork writes, and `navigator.domicile` bound for that origin — a stand-in compositor read `hello` and a `spawn` back over it. Five gates stand between a registered scheme and a page that loads and all five are through, the last of them `MaybeLaunchAppShortcutWindow`, which declines `--app=domicile://shell/` for a scheme that is not web-safe and launches an ordinary browser window on the New Tab page instead, logging nothing on either side. The bridge still serves a shell over a TCP port; deleting it is *In this repository*, item 1 |
 | A `<webview>` is a guest, so a site that refuses framing loads in one | `guard-webview-framing.sh`, with an `<iframe>` on the same page and the same URL as its control: the frame shows nothing and the element shows the site |
 | A desktop chord reaches the shell while a browser window has the keyboard | `guard-webview-keyboard.sh`. A key pressed before focus moves reaches the shell's `document`; the chord after it comes back as `shortcut` and the window never sees it; an ungrabbed key reaches the window's page and not the shell |
 | A client's dmabuf imports on AMD | Patch 0005, confirmed on a Radeon 890M on 2026-09-08: kitty survives being floated and resized, on the DCC modifier that used to be refused, with no `gbm_bo_import` failure in the run |
@@ -57,9 +58,10 @@ decides whether an item is waiting or workable.
 ### In this repository
 
 1. **`domicile://`, the repo half.** Delete `engine-chrome-host`'s HTTP server
-   and `connectToHost`'s WebSocket, and serve the shell over the scheme
-   instead. **Cannot land first** — it breaks every desktop until the engine
-   can serve the scheme. Blocked on the fork's half.
+   and `connectToHost`'s WebSocket, and let the engine serve the shell over the
+   scheme instead. **Unblocked, and first**: the fork's half is in the pinned
+   engine, so this no longer breaks a desktop — it deletes the desktop's last
+   TCP port, and the origin check that is the only thing guarding it.
 2. **The SDK's shape.** `<app>` and `<webview>` are real elements now, but the
    SDK still defines `domicile-app` and `domicile-webview` as custom elements
    and still measures and reports placement that patch 0007 does natively — an
@@ -78,8 +80,7 @@ decides whether an item is waiting or workable.
 
 ### In the engine fork — the agent on `crux`
 
-1. **`domicile://`.** Scheme registration and both loader hooks. In progress.
-2. **A browser window's address bar drives the wrong page.** The element hosts
+1. **A browser window's address bar drives the wrong page.** The element hosts
    a guest now, so framing headers no longer apply and a desktop chord reaches
    the shell over one — but `goBack()`, `goForward()`, `stop()` and `reload()`
    still reach the *placeholder* frame's `History`, and the placeholder has been
@@ -87,7 +88,7 @@ decides whether an item is waiting or workable.
    `NavigationController` is in the browser process; wiring the four to it is
    the work, and it is the half that gets better — a guest has a history of its
    own, where a frame shared the whole session's.
-3. **A desktop on a tty.** `ozone_platform_drm = true` fails at `gn gen` on this
+2. **A desktop on a tty.** `ozone_platform_drm = true` fails at `gn gen` on this
    pin: `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`. Needs a
    patch that makes the DRM platform build on Linux, or a `target_os =
    "chromeos"` build, which brings a great deal else. Until then a desktop is a
