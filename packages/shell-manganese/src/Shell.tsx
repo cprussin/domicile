@@ -27,6 +27,7 @@ import { floatingOf } from "./shell-state";
 import { WindowKind } from "./shell-window";
 import { useModifiers } from "./useModifiers";
 import { useShellWindows } from "./useShellWindows";
+import { Wallpaper } from "./Wallpaper";
 
 /** A window with no tab selected — the rail's resting state on an empty shell. */
 const NO_WINDOW = "";
@@ -235,6 +236,14 @@ const Desktop = ({ appElements, bridge }: DesktopProps) => {
 
   return (
     <>
+      {/*
+        First, and outside every `<Screen>`: the viewport is the desktop, so one
+        fixed sheet is the wallpaper of every screen on it, and a positioned
+        sibling that comes first in the document is painted under all of them.
+        It waits for no desktop either — there is no region for it to be moved
+        into — so the handshake happens over a photograph.
+      */}
+      <Wallpaper />
       <OnTheFirstScreen>
         <div className={rootStyles}>
           {/*

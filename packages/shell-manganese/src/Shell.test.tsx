@@ -262,6 +262,35 @@ describe("Shell", () => {
     });
   });
 
+  describe("the wallpaper", () => {
+    it("hangs behind every screen rather than inside one", () => {
+      // Outside the regions and before them: the viewport is the desktop, so
+      // one fixed sheet is the wallpaper of every screen on it, and a
+      // positioned sibling that comes first in the document is painted under
+      // all of them. A `<Screen>` of its own would put a second region on
+      // every display, which is one region too many for anything that looks a
+      // display up by `data-screen` — the helper above included.
+      const { container } = renderShell([LEFT, RIGHT]);
+
+      expect(
+        container.querySelector("[data-screen] [data-wallpaper]"),
+      ).toBeNull();
+      expect(
+        container.firstElementChild?.querySelector("[data-wallpaper]"),
+      ).toBeInTheDocument();
+    });
+
+    it("is up before the host has described a desktop", () => {
+      // The chrome waits for a desktop because a chrome moved onto a screen is
+      // a chrome remounted. The wallpaper is on no screen and so has nothing to
+      // wait for, which makes the handshake a photograph rather than a blank
+      // window.
+      const { container } = renderUndescribedShell();
+
+      expect(container.querySelector("[data-wallpaper]")).toBeInTheDocument();
+    });
+  });
+
   describe("filling the space it is given", () => {
     // A `<Screen>` is a region of the page at the display's own rectangle, so
     // everything inside it has to reach that rectangle's edges — nothing below

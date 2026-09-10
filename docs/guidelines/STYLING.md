@@ -236,6 +236,7 @@ equivalent (`background`, `card`, `foreground`, …) instead.
 | `shadows.md` | Default Panda shadow scale. |
 | `shadows.lifted`, `shadows.modal` | Domicile preset. `lifted` is a soft, broad drop shadow for floating surfaces (e.g. the message composer); `modal` is the heavier elevation used by dialogs. |
 | `durations.fastest/faster/fast/normal/slow/slower/slowest/pulse` | Used in `transition` shorthands. |
+| `durations.crossfade` | Domicile preset. A 2s dissolve between two pictures — far longer than the scale above, which measures how long a control takes to answer. |
 | `easings.default/linear/in/out/in-out` | Used in `transition` shorthands. |
 | `opacity.disabled` (0.6), `opacity.dragging` (0.4), `opacity.pulseMin` (0.3) | Domicile preset. |
 | `zIndex.modalBackdrop` / `zIndex.modal` | Domicile preset. Stacking for portaled overlays. |
