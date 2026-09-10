@@ -109,18 +109,6 @@ export const AppWindow = ({
 };
 
 const appStyles = css({
-  // Placeholder label until the real surface is composited in, hidden the
-  // moment the element has pixels of its own to show.
-  "&:not(.has-surface)::after": {
-    color: "muted",
-    content: '"⬚  app surface: " attr(app-id)',
-    display: "grid",
-    fontSize: "sm",
-    inset: 0,
-    placeItems: "center",
-    position: "absolute",
-    textAlign: "center",
-  },
   // Rounded by the compositor, not by the browser: this element is a hole in
   // the page and has no pixels of its own to clip. The SDK reports the radius
   // with the placement and the compositor's shader applies it to the client's

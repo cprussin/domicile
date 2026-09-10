@@ -28,8 +28,8 @@ describe("AppElements", () => {
       // does not exist yet when it arrives, because React mounts it a render
       // later. Nothing else would tell it: where the compositor draws the
       // client itself no frame comes, and `app_resized` answers only a size
-      // that changed, so an idle client sends neither. The placeholder would
-      // be painted over the live window until the user resized it.
+      // that changed, so an idle client sends neither. The live window's
+      // pointer coordinates would go unscaled until the user resized it.
       const calls: Call[] = [];
       const elements = new AppElements();
       elements.announced("term", [640, 480]);
