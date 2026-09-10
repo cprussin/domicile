@@ -53,6 +53,8 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<domicile-webview>`. |
 | `src/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
 | `src/Clock.tsx` | The live clock: in the rail's footer, and alone on every display the rail is not on. |
+| `src/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
+| `src/wallpaper-photos.ts` | Which photographs those are, and where they come from. |
 | `src/diagnostic-lines.ts` | What the chrome has to say about its own timings — the keystroke round trip, and placement. |
 | `src/window-styles.ts` | What every window on the stage shares. |
 | `src/global.css`, `src/css.d.ts` | The document-level styling, and the type for importing it. |
@@ -128,11 +130,6 @@ of one window and none of the window beside it. So the shell says where it
 takes the pointer, at what depth, and the compositor gives the press to
 whichever is on top there. See `claim-pointer`.
 
-**This shell paints no desktop background of its own.** A background element
-would go behind every window and fill in the holes the clients show through — a
-desktop of windows hidden behind their own wallpaper. The background is the
-host's: `html, body { background: transparent }`.
-
 A floating window's corners are the frame's rather than its own, and square:
 the compositor's shader takes one radius for all four (it is the element's
 `border-top-left-radius` the SDK reports), so a window cannot be square under
@@ -192,6 +189,44 @@ shell owns it; a client's window is the client's, so the X *asks* it to close �
 a terminal exits, an editor with unsaved work is free to put a dialog up and
 stay. That tab leaves the rail when the host says the client actually went
 (`app_closed`), not when the close is asked for.
+
+## The wallpaper
+
+A photograph behind the whole desktop, and the next one a minute later.
+
+One sheet rather than one per screen: the page spans every display, so
+`position: fixed` *is* the desktop — and a `<Screen>` of its own would put a
+second region on every display, which is one too many for anything that looks a
+display up by `data-screen`. It is up before the host has described anything,
+because it is on no screen and so has nothing to wait for: the handshake happens
+over a photograph rather than a blank window.
+
+**Every photograph is mounted the whole time**, and a tick of the rotation
+changes only which of three things each one is — the one on screen, the one
+still opaque underneath it, and the rest, loaded and transparent. The one coming
+in rises *over* the one going out, which is what makes the dissolve clean: fade
+one out as the other rises and the theme's `background` shows through the middle
+of every transition at a quarter strength, which reads as the desktop blinking.
+Mounting them all is also what has each one fetched before its turn. The
+stacking is the role's rather than the markup's, because at the end of the
+rotation the photograph coming in is the *earlier* element of the two, and
+`isolation: isolate` on the sheet keeps that `z-index` out of the page's own
+stacking context — where it would be a wallpaper painted over the chrome, level
+with a floating window.
+
+**A background element used to fill in the windows**, and the note here that
+said so was out of date: where the compositor drew a client's buffer over the
+page, a window was a hole and anything behind it filled the hole in — a desktop
+of windows hidden behind their own wallpaper. A window is a `cc::SurfaceLayer` in
+this page's layer tree now (`/docs/architecture/WINDOW-COMPOSITING.md`), so an
+element behind one is simply behind it.
+
+The photographs are [Lorem Picsum](https://picsum.photos) URLs, by seed, so they
+are the same six every time and the browser holds them after the first fetch.
+The subject is not promised — Picsum picks by hashing the seed, so these are six
+photographs rather than six landscapes — and a desktop with no network comes up
+on the theme's own `background`, which is what it came up on before this
+existed. A shell that wants its own pictures owns its own list.
 
 ## Configure
 

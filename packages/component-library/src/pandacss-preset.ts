@@ -356,6 +356,11 @@ export const domicilePreset = definePreset({
       },
       tokens: {
         durations: {
+          // A dissolve between two pictures — far longer than any of the
+          // default durations, which measure how long a control takes to
+          // answer. Nothing is waiting on this one: the shell's wallpaper
+          // crossfades over it while the user carries on working.
+          crossfade: { value: "2s" },
           pulse: { value: "1.5s" },
         },
         easings: {
