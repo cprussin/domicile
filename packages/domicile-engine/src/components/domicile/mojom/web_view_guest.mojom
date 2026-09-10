@@ -20,8 +20,8 @@ import "url/mojom/url.mojom";
 // guest's main frame IS a main frame, so it has no ancestor for
 // X-Frame-Options or CSP frame-ancestors to be checked against, history is the
 // guest's own across processes, and its storage is first-party rather than
-// partitioned as a third party. See docs/architecture/
-// BROWSER-WINDOW-PARITY.md in the Domicile repository.
+// partitioned as a third party. See components/domicile/browser/
+// web_view_guest.h.
 //
 // THE ACCESS CONTROL IS THE BINDER'S, not this file's, and it is the same one
 // ControlChannel has: the browser binds WebViewGuestHost only for a document

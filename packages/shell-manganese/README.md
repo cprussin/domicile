@@ -160,13 +160,17 @@ something, and a window with no tab and nothing selected is a window you have
 lost — so picking the tab of a floating window brings it to the front rather
 than putting it back on the stage. Alt+Tab is what changes the mode.
 
-Both combinations are claimed three times over, because three different things
-can be holding the keyboard when the user presses one. The page listens for its
-own `keydown`; the compositor is asked to take the combination before a Wayland
-client is given it (`grab_shortcut`); and the engine is asked to take it before
-an embedded page is — a `<domicile-webview>` is a browsing context of its own,
-so the keys pressed on a site the shell is showing would otherwise reach
-neither the page nor Domicile. Exactly one of the three fires for any press.
+Both combinations are claimed twice over, because two different things can be
+holding the keyboard when the user presses one. The page listens for its own
+`keydown`, which is what answers when the shell itself has focus — including
+over a `<domicile-app>`, whose pixels are a portal element in this document.
+And `grabShortcut` claims the combination for the desktop, which is what
+answers when a window has it: the compositor takes it before a Wayland client
+is given it, and the browser process takes it before a browser window's page
+is — a `<domicile-webview>` is a browsing context of its own, so a key pressed
+on a site the shell is showing reaches neither this page nor the compositor,
+and the layer inside the engine is the only one above it. One ask, honoured
+wherever the keyboard happens to be; exactly one path fires for any press.
 
 A tab reorders by drag, or by Alt+Up / Alt+Shift+Up (and their Down
 counterparts) on a focused row. Every tab closes its window — by its X, or by a

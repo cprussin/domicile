@@ -42,7 +42,7 @@ core/DEPS and core/BUILD.gn are the price of a Blink core element holding a
 mojo remote to something in //components. components/performance_manager sits
 in both lists for the same reason.
 
-See docs/architecture/BROWSER-WINDOW-PARITY.md in the Domicile repository.
+See components/domicile/browser/web_view_guest.h in the Domicile repository.
 ---
  chrome/browser/BUILD.gn                       |  1 +
  .../chrome_browser_interface_binders.cc       | 25 +++++++++++++++++++

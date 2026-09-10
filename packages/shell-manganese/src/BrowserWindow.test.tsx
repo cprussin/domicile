@@ -19,6 +19,15 @@ const silentBridge = {
   resizeApp: () => undefined,
 } as unknown as BridgeClient;
 
+/** A bridge that keeps what the window told the host, in order. */
+const recordingBridge = (calls: string[]): BridgeClient =>
+  ({
+    ...silentBridge,
+    focusChrome: () => {
+      calls.push("focusChrome");
+    },
+  }) as unknown as BridgeClient;
+
 const stubMeasure: Measure = () => ({
   size: [100, 100],
   transform: [1, 0, 0, 1, 0, 0],
@@ -84,6 +93,7 @@ describe("BrowserWindow", () => {
   it("points its view at the address it opened with", () => {
     const { container } = render(
       <BrowserWindow
+        bridge={silentBridge}
         clickThrough={false}
         dragging={false}
         floating={undefined}
@@ -101,6 +111,7 @@ describe("BrowserWindow", () => {
     it("loads what was typed, filling in a missing scheme", async () => {
       const { container } = render(
         <BrowserWindow
+          bridge={silentBridge}
           clickThrough={false}
           dragging={false}
           floating={undefined}
@@ -120,6 +131,7 @@ describe("BrowserWindow", () => {
     it("follows the page wherever it goes", () => {
       const { container } = render(
         <BrowserWindow
+          bridge={silentBridge}
           clickThrough={false}
           dragging={false}
           floating={undefined}
@@ -137,6 +149,7 @@ describe("BrowserWindow", () => {
       const seen: string[] = [];
       const { container } = render(
         <BrowserWindow
+          bridge={silentBridge}
           clickThrough={false}
           dragging={false}
           floating={undefined}
@@ -157,6 +170,7 @@ describe("BrowserWindow", () => {
     it("takes the whole stage under the address bar", () => {
       const { container } = render(
         <BrowserWindow
+          bridge={silentBridge}
           clickThrough={false}
           dragging={false}
           floating={undefined}
@@ -180,9 +194,50 @@ describe("BrowserWindow", () => {
     });
   });
 
+  describe("the keyboard", () => {
+    // The window the user is working in takes the keyboard, and the compositor
+    // has one seat: whatever held it before must be told it no longer does, or
+    // `wl_keyboard` focus strands on a client the user has switched away from
+    // and every key they type goes to a window they cannot see.
+    it("tells the host no client holds the keyboard when it takes focus", () => {
+      const calls: string[] = [];
+      render(
+        <BrowserWindow
+          bridge={recordingBridge(calls)}
+          clickThrough={false}
+          dragging={false}
+          floating={undefined}
+          focused
+          onNavigate={() => undefined}
+          onScreen
+          src="https://example.com"
+        />,
+      );
+      expect(calls).toStrictEqual(["focusChrome"]);
+    });
+
+    it("says nothing while the user is working somewhere else", () => {
+      const calls: string[] = [];
+      render(
+        <BrowserWindow
+          bridge={recordingBridge(calls)}
+          clickThrough={false}
+          dragging={false}
+          floating={undefined}
+          focused={false}
+          onNavigate={() => undefined}
+          onScreen
+          src="https://example.com"
+        />,
+      );
+      expect(calls).toStrictEqual([]);
+    });
+  });
+
   it("hides the window when it is not on the stage", () => {
     render(
       <BrowserWindow
+        bridge={silentBridge}
         clickThrough={false}
         dragging={false}
         floating={undefined}

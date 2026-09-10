@@ -11,6 +11,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/task/bind_post_task.h"
 #include "base/values.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "net/base/net_errors.h"
@@ -36,11 +37,22 @@ ControlChannel::ControlChannel(
   receiver_.set_disconnect_handler(
       base::BindOnce([](ControlChannel* self) { delete self; },
                      base::Unretained(this)));
+  // Both directions of the shortcut leg, in one place. The registry matches a
+  // chord wherever the key arrived -- which for a browser window is the UI
+  // thread, in the guest's delegate -- so what it is handed is posted back
+  // here, where `client_` is bound and where this object may be touched at all.
+  channel_ = ShortcutRegistry::Get().AddChannel(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::DeliverShortcut, weak_factory_.GetWeakPtr())),
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::DeliverModifiers, weak_factory_.GetWeakPtr())));
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
   Connect();
 }
 
-ControlChannel::~ControlChannel() = default;
+ControlChannel::~ControlChannel() {
+  ShortcutRegistry::Get().RemoveChannel(channel_);
+}
 
 void ControlChannel::Connect() {
   socket_ = std::make_unique<net::UnixDomainClientSocket>(
@@ -203,16 +215,17 @@ void ControlChannel::SetDevicePixelRatio(double ratio) {
 }
 
 void ControlChannel::GrabShortcut(mojom::ShortcutPtr shortcut) {
-  base::DictValue combination;
-  combination.Set("key", static_cast<int>(shortcut->keycode));
-  combination.Set("alt", shortcut->alt);
-  combination.Set("ctrl", shortcut->ctrl);
-  combination.Set("shift", shortcut->shift);
-  // `logo` is what Wayland calls the key the web calls Meta.
-  combination.Set("logo", shortcut->meta);
-  base::DictValue message = Typed("grab_shortcut");
-  message.Set("shortcut", std::move(combination));
-  SendMessage(std::move(message));
+  // RECORDED HERE RATHER THAN RELAYED, and the compositor no longer has a
+  // message for it. It used to hold the claims, and it is the layer that
+  // should: it sees a key before the client it belongs to does. It cannot see
+  // these ones. A browser window is a `<webview>` whose page is a guest, DOM
+  // focus moves into it, and its keys reach neither the shell's document nor
+  // -- since the shell is what forwards them -- the compositor. This process is
+  // the only layer above a focused guest, so this is where the set lives and
+  // `WebViewGuest::PreHandleKeyboardEvent` is what matches against it.
+  ShortcutRegistry::Get().Grab(Chord{shortcut->keycode, shortcut->alt,
+                                     shortcut->ctrl, shortcut->shift,
+                                     shortcut->meta});
 }
 
 void ControlChannel::Key(const std::string& app_id,
@@ -306,6 +319,20 @@ void ControlChannel::OnWrite(int result) {
       MISSING_TRAFFIC_ANNOTATION);
   if (written != net::ERR_IO_PENDING) {
     OnWrite(written);
+  }
+}
+
+void ControlChannel::DeliverShortcut(Chord chord) {
+  if (client_) {
+    client_->ShortcutPressed(mojom::Shortcut::New(
+        chord.keycode, chord.alt, chord.ctrl, chord.shift, chord.meta));
+  }
+}
+
+void ControlChannel::DeliverModifiers(Modifiers modifiers) {
+  if (client_) {
+    client_->Modifiers(modifiers.alt, modifiers.ctrl, modifiers.shift,
+                       modifiers.meta);
   }
 }
 
@@ -426,25 +453,35 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
+  // The compositor's own two, through the same pair of methods the registry
+  // reaches -- so that a chord matched in this process and one matched out
+  // there arrive at the page as the same thing.
+  //
+  // A CLAIM CAN NO LONGER BE MADE OUT THERE, so nothing sends `shortcut` today:
+  // `grab_shortcut` is gone from the protocol and the browser holds the set.
+  // The arm stays because the compositor is still the layer that sees a
+  // client's keys, and giving it a chord back is the shape a desktop shortcut
+  // over a Wayland window would take. `logo` is what Wayland calls the key the
+  // web calls Meta.
   if (*type == "shortcut") {
     const base::DictValue* combination = message.FindDict("shortcut");
     if (!combination) {
       return;
     }
-    client_->ShortcutPressed(mojom::Shortcut::New(
-        static_cast<uint32_t>(combination->FindInt("key").value_or(0)),
-        combination->FindBool("alt").value_or(false),
-        combination->FindBool("ctrl").value_or(false),
-        combination->FindBool("shift").value_or(false),
-        combination->FindBool("logo").value_or(false)));
+    DeliverShortcut(
+        Chord{static_cast<uint32_t>(combination->FindInt("key").value_or(0)),
+              combination->FindBool("alt").value_or(false),
+              combination->FindBool("ctrl").value_or(false),
+              combination->FindBool("shift").value_or(false),
+              combination->FindBool("logo").value_or(false)});
     return;
   }
 
   if (*type == "modifiers") {
-    client_->Modifiers(message.FindBool("alt").value_or(false),
-                       message.FindBool("ctrl").value_or(false),
-                       message.FindBool("shift").value_or(false),
-                       message.FindBool("logo").value_or(false));
+    DeliverModifiers(Modifiers{message.FindBool("alt").value_or(false),
+                               message.FindBool("ctrl").value_or(false),
+                               message.FindBool("shift").value_or(false),
+                               message.FindBool("logo").value_or(false)});
     return;
   }
 

@@ -12,10 +12,14 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "components/domicile/browser/shortcut_registry.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_process_host.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
 
 namespace domicile {
 namespace {
@@ -139,7 +143,9 @@ void WebViewGuest::Attach(std::unique_ptr<WebViewGuest> guest,
   // `is_full_page` is false, and it is not a detail. It means "give the inner
   // WebContents focus", and it CHECKs that the outer WebContents has exactly
   // one inner one -- which a shell with two browser windows open does not.
-  // Focus is BROWSER-WINDOW-PARITY.md's own item and is not this one.
+  // Focus is the shell's to move -- `BrowserWindow.tsx` calls `view.focus()`
+  // when a browser window becomes the one the user is working in -- and this
+  // flag is not how.
   owner->AttachInnerWebContents(std::move(contents), outer_contents_frame,
                                 /*is_full_page=*/false);
 
@@ -191,6 +197,56 @@ content::RenderFrameHost* WebViewGuest::GetProspectiveOuterDocument() {
 base::WeakPtr<content::BrowserPluginGuestDelegate>
 WebViewGuest::GetGuestDelegateWeakPtr() {
   return weak_factory_.GetWeakPtr();
+}
+
+content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
+    content::WebContents* source,
+    const input::NativeWebKeyboardEvent& event) {
+  const int modifiers = event.GetModifiers();
+  const Modifiers held{
+      (modifiers & blink::WebInputEvent::kAltKey) != 0,
+      (modifiers & blink::WebInputEvent::kControlKey) != 0,
+      (modifiers & blink::WebInputEvent::kShiftKey) != 0,
+      (modifiers & blink::WebInputEvent::kMetaKey) != 0,
+  };
+
+  // EVERY EVENT, including the releases and the ones no chord matches. A
+  // modifier is a state the shell holds rather than a keystroke it answers --
+  // Alt hands the pointer back to the page, Shift makes the drag a resize --
+  // and the registry drops the ones that changed nothing, so this is a compare
+  // and not a message. Doing it before the match, so that a chord's own Alt is
+  // reported rather than swallowed with the key.
+  ShortcutRegistry::Get().SetModifiers(held);
+
+  // Presses only, which is what the control protocol carries: a release
+  // changes nothing and would arrive as a second event for one keystroke.
+  //
+  // And not an auto-repeat, which is the page's own reading of the same rule --
+  // a held key repeats tens of times a second and only the first of them acts.
+  const bool pressed =
+      event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
+      event.GetType() == blink::WebInputEvent::Type::kKeyDown;
+  if (!pressed || (modifiers & blink::WebInputEvent::kIsAutoRepeat) != 0) {
+    return content::KeyboardEventProcessingResult::NOT_HANDLED;
+  }
+
+  // Evdev, because that is the numbering the control protocol speaks and the
+  // one the shell claimed its chords in. Zero is a key with no evdev code at
+  // all, which no claim can name.
+  const int evdev = ui::KeycodeConverter::DomCodeToEvdevCode(
+      static_cast<ui::DomCode>(event.dom_code));
+  if (evdev == 0) {
+    return content::KeyboardEventProcessingResult::NOT_HANDLED;
+  }
+
+  // HANDLED rather than NOT_HANDLED, and that is the half that makes a claim a
+  // claim: the guest's page never sees the key, so a site that binds Alt+Tab
+  // for itself cannot take the desktop's chord away from the user.
+  return ShortcutRegistry::Get().Press(
+             Chord{static_cast<uint32_t>(evdev), held.alt, held.ctrl,
+                   held.shift, held.meta})
+             ? content::KeyboardEventProcessingResult::HANDLED
+             : content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 bool WebViewGuest::IsWebContentsCreationOverridden(

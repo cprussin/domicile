@@ -77,6 +77,15 @@ knowing which side of it you are on before asking for a new message.
 `app_appeared`, `app_titled`, `app_resized`, `app_closed`, `app_cursor`,
 `shortcut`, `modifiers`, `focus_changed`, `displays`.
 
+`grab_shortcut` is the one member that goes no further than the browser
+process. It used to be relayed to the compositor, which held the claims and
+took a matching press out of the stream before the focused client saw it. It
+cannot: a browser window is a `<webview>` whose page is a guest, and the
+compositor never sees one of its keys — the shell is what forwards keys, and a
+guest's never reach the shell. So the browser holds the set and matches it in
+`WebViewGuest::PreHandleKeyboardEvent`, and the press comes back up `shortcut`
+from there. See `src/components/domicile/browser/shortcut_registry.h`.
+
 `displays` reaches the page as an attribute — `navigator.domicile.displays` —
 with a bare `displayschanged` event beside it, rather than as an event carrying
 the desktop. The desktop is a fact and not a stream: a component that mounts

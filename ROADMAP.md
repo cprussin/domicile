@@ -42,6 +42,8 @@ The wire protocol is at `PROTOCOL_VERSION = 1`.
 | A window composites at native cost | A submitted frame reaches the display compositor's output in one display frame, indistinguishable from the probe's own floor. `ENGINE-FORK.md`, *What it costs* |
 | CSS is structural, not reimplemented | Seven properties measured on a GPU — `z-index` against ordinary DOM, `transform`, `border-radius`, `opacity`, `filter: blur()`, `mix-blend-mode`, resize — every one bit-exact against an ordinary element beside it. `ENGINE-FORK.md`, *What CSS does to an `<app>`* |
 | `<app>` and `<webview>` are elements the fork defines | Patch 0007. `document.createElement("app").constructor.name` is `HTMLAppElement`; `app-id` reflects both ways |
+| A `<webview>` is a guest, so a site that refuses framing loads in one | `guard-webview-framing.sh`, with an `<iframe>` on the same page and the same URL as its control: the frame shows nothing and the element shows the site |
+| A desktop chord reaches the shell while a browser window has the keyboard | `guard-webview-keyboard.sh`. A key pressed before focus moves reaches the shell's `document`; the chord after it comes back as `shortcut` and the window never sees it; an ungrabbed key reaches the window's page and not the shell |
 | A client's dmabuf imports on AMD | Patch 0005, confirmed on a Radeon 890M on 2026-09-08: kitty survives being floated and resized, on the DCC modifier that used to be refused, with no `gbm_bo_import` failure in the run |
 | The desktop a user runs contains all of it | `packages/domicile-engine/engine-release.nix` pins the published engine; `nix run github:cprussin/domicile#manganese` runs it |
 
@@ -77,14 +79,14 @@ decides whether an item is waiting or workable.
 ### In the engine fork — the agent on `crux`
 
 1. **`domicile://`.** Scheme registration and both loader hooks. In progress.
-2. **`<webview>` is a subframe, and that shows.** It is a frame owner, so
-   X-Frame-Options and CSP `frame-ancestors` apply and a site that refuses
-   framing will not load; and `goBack()`/`goForward()` reach the nested
-   context's `History` directly, so they stop working the moment the user
-   browses cross-site. Both need browser-side work: a navigation controller and
-   a frame tree the guest owns. Chromium has exactly that machinery for its own
-   `<webview>` — `extensions`' guest views — which the fork **disabled** to take
-   the tag name. Porting it or accepting subframe semantics is the decision.
+2. **A browser window's address bar drives the wrong page.** The element hosts
+   a guest now, so framing headers no longer apply and a desktop chord reaches
+   the shell over one — but `goBack()`, `goForward()`, `stop()` and `reload()`
+   still reach the *placeholder* frame's `History`, and the placeholder has been
+   on `about:blank` since it was made. They do nothing. The guest's own
+   `NavigationController` is in the browser process; wiring the four to it is
+   the work, and it is the half that gets better — a guest has a history of its
+   own, where a frame shared the whole session's.
 3. **A desktop on a tty.** `ozone_platform_drm = true` fails at `gn gen` on this
    pin: `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`. Needs a
    patch that makes the DRM platform build on Linux, or a `target_os =
@@ -130,6 +132,11 @@ costs nothing.
   but an ancestor's perspective does not reach the child's matrix, and `zoom`
   scales the box without being a transform — so the compositor is told two wrong
   things about one window, and an ancestor's `zoom` mispositions it as well.
+- **A guest refuses everything an embedder is asked for.** A page in a browser
+  window cannot open a second window, and permissions and dialogs route through
+  `WebViewGuest`'s `WebContentsDelegate` and are answered by the default. A
+  refusal is the answer that has a guard behind it; opening them is one piece of
+  work each, and `CreateCustomWebContents` logs when one is refused.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
 - **Hot-swapping the chrome page** is a page reload on the engine, and
   `announce_open_apps` is what makes one survivable. `scripts/dev-shell.sh` is

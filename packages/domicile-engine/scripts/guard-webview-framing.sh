@@ -14,9 +14,9 @@
 # owner and named the cost in the same breath: "a site that refuses framing
 # refuses to load -- that is the one thing Electron's guest-view <webview>
 # bought that this does not." Most of the web sends X-Frame-Options or CSP
-# frame-ancestors, so that was most of the web. `BROWSER-WINDOW-PARITY.md` is
-# the design that closes it, by putting a guest page behind the element instead
-# of a subframe, and this is the assertion that it is closed.
+# frame-ancestors, so that was most of the web. A guest page behind the element
+# instead of a subframe is what closes it -- see `web_view_guest.h` -- and this
+# is the assertion that it is closed.
 #
 # A UNIT TEST CANNOT MAKE THIS CLAIM. There is no nested browsing context in
 # jsdom, no ancestor for a header to be checked against, and no pixels. The

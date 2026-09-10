@@ -149,13 +149,13 @@ const Desktop = ({ appElements, bridge }: DesktopProps) => {
     }
   }, [activeId, toggleFloat]);
 
-  // Claimed from the compositor as well as listened for in the page. Where
+  // Claimed from the desktop as well as listened for in the page. Where
   // Domicile draws this window, a key goes to whatever holds the keyboard —
   // so once a window is on screen the page hears nothing, which is exactly
   // when the user wants to open another one. A claimed combination is taken
-  // out of the stream before the window is given it and arrives here instead.
-  // The two never both fire: the compositor either intercepted the key or the
-  // page received it.
+  // out of the stream before the focused window is given it and arrives here
+  // instead. Exactly one of the two paths fires per keystroke: either the
+  // claim caught the key, or the page received it.
   useEffect(() => {
     bridge.grabShortcut(ALT_ENTER);
     bridge.grabShortcut({ ...ALT_ENTER, shiftKey: true });
@@ -175,13 +175,16 @@ const Desktop = ({ appElements, bridge }: DesktopProps) => {
     });
   }, [bridge, float, launch]);
 
-  // There used to be a third claim here, on an Electron host, for the one
-  // keyboard neither of the two above reached: a `<webview>` is a browsing
-  // context of its own, so a key pressed in a browser window on the stage went
-  // to the site showing there and nowhere else, and the host was the only
-  // layer above it. Under the fork the compositor takes the combination first
-  // — `grab_shortcut`, the effect above — whichever window has the keyboard,
-  // so there is no layer left for a third claim to be made at.
+  // WHO ACTUALLY CATCHES THE CLAIM DEPENDS ON WHICH WINDOW HAS THE KEYBOARD,
+  // and the claim above is one call because the shell should not have to care.
+  // A Wayland client's keys never reach this process at all, so the compositor
+  // matches those. A browser window's keys never leave it: a `<webview>` hosts
+  // a page of its own and `view.focus()` hands the keyboard to it, so this
+  // document is told nothing — which is why the browser process matches those,
+  // in the guest's `PreHandleKeyboardEvent`, and sends the press back down the
+  // same `shortcut` leg. This is where an Electron host needed a third claim
+  // of its own; the fork needs none, because the layer that can see a guest's
+  // keys is inside it.
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -329,6 +332,7 @@ const Desktop = ({ appElements, bridge }: DesktopProps) => {
                 case WindowKind.Browser: {
                   return (
                     <BrowserWindow
+                      bridge={bridge}
                       clickThrough={clickThrough}
                       dragging={dragging}
                       floating={floating}

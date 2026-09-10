@@ -36,8 +36,8 @@ class LocalDOMWindow;
 // -- the one thing Electron's guest-view <webview> bought that this did not.
 // A guest's main frame is a main frame and has no ancestor to check. It also
 // gets history that survives a process change and storage that is not
-// partitioned as a third party's. See docs/architecture/
-// BROWSER-WINDOW-PARITY.md in the Domicile repository.
+// partitioned as a third party's. See components/domicile/browser/
+// web_view_guest.h.
 //
 // KNOWN GAP: `srcdoc` is not intercepted, so setting it still navigates the
 // placeholder frame out from under the guest. A <webview> has no srcdoc in its
@@ -55,9 +55,9 @@ class CORE_EXPORT HTMLWebViewElement final : public HTMLFrameElementBase {
   // does not have to reach for the page inside.
   //
   // STILL THE PLACEHOLDER'S, not the guest's, and so still broken -- the guest
-  // has a NavigationController of its own and these do not reach it. Wiring
-  // them to it is BROWSER-WINDOW-PARITY.md's next piece of work and is not
-  // this one; what changed here is where the page lives, not who drives it.
+  // has a NavigationController of its own and these do not reach it. What the
+  // guest changed is where the page lives, not who drives it; ROADMAP.md
+  // carries the wiring as a known gap.
   void goBack(ScriptState*, ExceptionState&);
   void goForward(ScriptState*, ExceptionState&);
   void stop();
