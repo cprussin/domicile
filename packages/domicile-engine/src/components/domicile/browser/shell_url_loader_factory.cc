@@ -120,6 +120,80 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
   // `&` survives it to be parsed as markup. An HTML escaper beside it would
   // never fire -- and would not do the job it looked like it was doing, since
   // `#`, `?` and `%` are legal in a POSIX filename and none is HTML-special.
+  //
+  // THE DOCUMENT REPORTS ITS OWN MODULE FAILING, and that is the one thing in
+  // here that is not about laying a shell out. A module that 404s, will not
+  // parse, or throws on its first line leaves this page blank and completely
+  // silent: the engine served exactly what it was asked for, so it logs
+  // nothing; the compositor is waiting for a page that will never say hello, so
+  // it knows only that it is waiting; and the shell never ran, so it cannot
+  // report either. A blank window with nothing anywhere was the symptom of four
+  // separate startup bugs, and a day went into telling them apart by hand.
+  //
+  // Three listeners, because they are three different failures and none of them
+  // reports the others: the element's own `error` for a module that did not load
+  // (which covers a static import of a file that is not there, and a parse
+  // error), `error` on the window for one that threw while it ran, and
+  // `unhandledrejection` for one whose top-level await rejected.
+  //
+  // GATED ON `ran`, WHICH IS THE HALF THAT KEEPS THIS HARMLESS. The element's
+  // `load` fires when the module has finished evaluating, so after that the page
+  // belongs to the shell: a shell that throws an hour later is the shell's own
+  // error to handle, and a full-screen report painted over a working desktop
+  // would be worse than the blank window this exists to replace.
+  //
+  // Said on the screen as well as on the console. `--app` is the whole point of
+  // the window, so there is no tab strip to open devtools from and nobody is
+  // looking at a console. `textContent` rather than markup, because the text
+  // has a filename and an exception message in it, both from outside.
+  //
+  // AND IT ADDS NO NAME TO THE DOCUMENT, WHICH IS NOT FASTIDIOUSNESS. The first
+  // version of this found the module script by an id -- `domicile-shell` --
+  // and `shell-manganese`'s `mountPoint` looks up that exact id to decide
+  // whether it has already made its mount point. It picked the name for the
+  // same obvious reason this did. So it found the script tag, React mounted the
+  // whole desktop inside a <script>, and a <script> is `display: none`: the
+  // shell connected, embedded its window and logged its diagnostics every five
+  // seconds while not one pixel of it was laid out. This document is the one
+  // thing every shell is written against, so every name in it is a name in the
+  // shell's namespace. `document.currentScript` names nothing, and the element
+  // takes itself back out afterwards so the body is the one `WRITING-A-SHELL.md`
+  // describes: one script tag and nothing else.
+  //
+  // It must stay immediately after the module's tag for `previousElementSibling`
+  // to be that tag.
+  static constexpr char kReporter[] = R"js(
+    <script>
+      (() => {
+        const here = document.currentScript;
+        const shell = here.previousElementSibling;
+        const say = (what) => {
+          console.error("domicile: " + what);
+          const said = document.createElement("pre");
+          said.textContent = "domicile: " + what;
+          said.setAttribute("style", "position:fixed;inset:0;margin:0;padding:16px;overflow:auto;white-space:pre-wrap;font:13px/1.5 monospace;background:#2b0b0b;color:#ffd7d7;z-index:2147483647");
+          document.body.append(said);
+        };
+        let ran = false;
+        shell.addEventListener("load", () => { ran = true; });
+        shell.addEventListener("error", () => {
+          say("the shell module at " + shell.src + " did not load. The engine serves it out of --domicile-shell-root under the name --domicile-shell-module gave; a module that imports a file which is not there fails here too.");
+        });
+        addEventListener("error", (failure) => {
+          if (!ran) {
+            say("the shell module threw before it finished loading: " + failure.message + " (" + failure.filename + ":" + failure.lineno + ")");
+          }
+        });
+        addEventListener("unhandledrejection", (failure) => {
+          if (!ran) {
+            say("the shell module rejected before it finished loading: " + failure.reason);
+          }
+        });
+        here.remove();
+      })();
+    </script>
+)js";
+
   return base::StrCat({
       "<!doctype html>\n"
       "<html lang=\"en\">\n"
@@ -142,7 +216,12 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
       "  <body>\n"
       "    <script src=\"",
       base::EscapeAllExceptUnreserved(module),
-      "\" type=\"module\"></script>\n"
+      "\" type=\"module\"></script>\n",
+      // After the module's own tag, not before it: the reporter attaches to
+      // that element, so the element has to exist by the time this runs. It
+      // still runs first -- a classic inline script runs while the parser is
+      // here, and a module script is deferred until the document is parsed.
+      kReporter,
       "  </body>\n"
       "</html>\n"});
 }

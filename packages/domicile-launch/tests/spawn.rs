@@ -16,11 +16,17 @@ fn shell() -> Shell {
     }
 }
 
+/// The session document is deliberately not `chrome.sock.session` here. It was
+/// derived from the socket inside `compositor`, which made it a path the
+/// launcher could not name — and the launcher is the one that has to wait for
+/// it, because a compositor that never publishes one is a desktop that never
+/// comes up.
 fn runtime() -> Runtime {
     Runtime {
         broker: PathBuf::from("/run/d/broker"),
         chrome_socket: PathBuf::from("/run/d/chrome.sock"),
         profile: PathBuf::from("/run/d/profile"),
+        session: PathBuf::from("/run/d/session.json"),
     }
 }
 
@@ -190,7 +196,7 @@ fn the_compositor_is_a_producer_to_the_engine() {
             "--chrome-socket",
             "/run/d/chrome.sock",
             "--session",
-            "/run/d/chrome.sock.session",
+            "/run/d/session.json",
             "--engine-socket",
             "/run/d/broker",
         ]
