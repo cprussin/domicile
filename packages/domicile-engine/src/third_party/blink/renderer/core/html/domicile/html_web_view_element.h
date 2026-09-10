@@ -5,10 +5,12 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HTML_DOMICILE_HTML_WEB_VIEW_ELEMENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_DOMICILE_HTML_WEB_VIEW_ELEMENT_H_
 
+#include "components/domicile/mojom/web_view_guest.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 
 namespace blink {
 
@@ -23,17 +25,24 @@ class LocalDOMWindow;
 // name must contain a hyphen -- so the fork defines it, which is also how
 // Electron's <webview> came to exist.
 //
-// It is a frame owner, so the nested browsing context is the one <iframe>
-// creates and everything downstream of that -- process allocation, site
-// isolation, navigation, focus -- is Chromium's own.
+// It is still a frame owner, and the nested browsing context it creates is
+// still Chromium's -- but that context is NOT where the page goes. The frame
+// stays on about:blank and becomes the attach point for a guest: `src` is sent
+// to the browser over WebViewGuestHost, which creates a WebContents and
+// attaches it there with AttachInnerWebContents.
 //
-// KNOWN GAP, and it is the one thing Electron's <webview> bought that this does
-// not: a frame owner is a frame, so X-Frame-Options and CSP frame-ancestors
-// apply, and a site that refuses to be framed will refuse to load here.
-// Electron avoided that by making its <webview> a separate WebContents behind
-// the guest-view machinery, which is a subsystem this fork would have to carry
-// whole. Closing it is its own piece of work; see docs/architecture/
-// ENGINE-FORK.md in the Domicile repository.
+// WHY, in one sentence: a frame owner is a frame, so as a frame this element
+// was refused by every site that sends X-Frame-Options or CSP frame-ancestors
+// -- the one thing Electron's guest-view <webview> bought that this did not.
+// A guest's main frame is a main frame and has no ancestor to check. It also
+// gets history that survives a process change and storage that is not
+// partitioned as a third party's. See docs/architecture/
+// BROWSER-WINDOW-PARITY.md in the Domicile repository.
+//
+// KNOWN GAP: `srcdoc` is not intercepted, so setting it still navigates the
+// placeholder frame out from under the guest. A <webview> has no srcdoc in its
+// IDL and nothing in this repository sets one; intercepting it would be a
+// branch no guard covers.
 class CORE_EXPORT HTMLWebViewElement final : public HTMLFrameElementBase {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -45,20 +54,37 @@ class CORE_EXPORT HTMLWebViewElement final : public HTMLFrameElementBase {
   // corresponding operation on the nested context's own history, so a shell
   // does not have to reach for the page inside.
   //
-  // SAME-PROCESS ONLY. These reach the nested context's History directly, which
-  // exists only while that context is a LocalFrame. A <webview> that Chromium
-  // has put in a process of its own has a RemoteFrame here and these do
-  // nothing -- which is most cross-site navigations, so a shell's address bar
-  // stops working exactly when the user browses away from where it started.
-  // Driving history across a process boundary is the browser's to do, and
-  // wiring that is its own piece of work.
+  // STILL THE PLACEHOLDER'S, not the guest's, and so still broken -- the guest
+  // has a NavigationController of its own and these do not reach it. Wiring
+  // them to it is BROWSER-WINDOW-PARITY.md's next piece of work and is not
+  // this one; what changed here is where the page lives, not who drives it.
   void goBack(ScriptState*, ExceptionState&);
   void goForward(ScriptState*, ExceptionState&);
   void stop();
   void reload();
 
+  void Trace(Visitor*) const override;
+
  private:
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
+
+  // `src` never reaches HTMLFrameElementBase, which would navigate the
+  // placeholder frame. Everything else does.
+  void ParseAttribute(const AttributeModificationParams&) override;
+
+  // The base creates the placeholder frame here, on about:blank, because
+  // ParseAttribute kept `src` from it. That frame is what the guest attaches
+  // to, so this is the first moment there is anything to ask for.
+  void DidNotifySubtreeInsertionsToDocument() override;
+
+  // Ask the browser for a guest for the placeholder frame. Does nothing when
+  // there is already one, or when there is no placeholder to name yet.
+  void RequestGuest();
+
+  // Send the current `src` to the guest. Safe before the attach finishes: the
+  // browser holds the guest's WebContents from the moment it is created, and a
+  // navigation started before it is attached is one content brings up with it.
+  void NavigateGuest();
 
   // kIframe rather than a value of its own. Everything that switches on the
   // owner type -- process allocation, the frame tree the browser keeps, devtools
@@ -74,6 +100,11 @@ class CORE_EXPORT HTMLWebViewElement final : public HTMLFrameElementBase {
   // The nested context's window, or null when there is not one in this
   // process to reach.
   LocalDOMWindow* ContentWindow() const;
+
+  // The guest, for as long as this element lives. Bound once, and not
+  // rebuilt on a later `src`: the placeholder frame is destroyed by the
+  // attach, so there would be nothing left to name in a second request.
+  HeapMojoRemote<domicile::mojom::blink::WebViewGuest> guest_;
 };
 
 }  // namespace blink

@@ -63,6 +63,30 @@ source_set("shell_scheme") {
   ]
 }
 
+# The page behind a <webview>.
+#
+# Its own target beside :shell_scheme rather than part of it, for the reason
+# every target here is separate: this is the one thing in the fork that needs
+# content's guest machinery, and a target boundary is what says so. Like
+# :shell_scheme it depends on //content, which is why neither is part of
+# :browser.
+source_set("web_view_guest") {
+  sources = [
+    "browser/web_view_guest.cc",
+    "browser/web_view_guest.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/domicile/mojom",
+    "//content/public/browser",
+    "//mojo/public/cpp/bindings",
+    "//third_party/blink/public/common",
+    "//ui/base",
+    "//url",
+  ]
+}
+
 # The shell's control channel, in the browser process.
 #
 # Its own target so the slice can meet a compiler before the Blink half exists,
@@ -125,6 +149,7 @@ group("spike") {
 group("engine") {
   deps = [
     "//components/domicile/engine:domicile_engine",
+    "//components/domicile/engine:engine_colour_probe",
     "//components/domicile/engine:engine_dmabuf_smoke",
     "//components/domicile/engine:engine_smoke",
   ]

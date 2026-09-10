@@ -80,6 +80,20 @@ executable("engine_smoke") {
   deps = [ ":domicile_engine" ]
 }
 
+# Is a colour on the browser's page? The instrument guard-webview-framing.sh
+# reads its answer from, and the only pixel assertion in this series that needs
+# no Wayland client: the colours it looks for are a page's own, not a client's.
+executable("engine_colour_probe") {
+  output_name = "domicile_colour_probe"
+
+  sources = [ "engine_colour_probe.cc" ]
+
+  deps = [
+    ":domicile_engine",
+    "//base",
+  ]
+}
+
 # THROWAWAY. Phase 1's last assertion: a real dmabuf, allocated by something
 # that is not Chromium, reaching the screen through a page.
 executable("engine_dmabuf_smoke") {

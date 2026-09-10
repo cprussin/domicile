@@ -291,7 +291,7 @@ jobs:
           set -euo pipefail
           out="$CHROMIUM/out/Domicile"
           for artefact in chrome libdomicile_engine.so components_unittests \
-                          domicile_css_parity; do
+                          domicile_css_parity domicile_colour_probe; do
             [ -e "$out/$artefact" ] || {
               echo "::error::the build produced no $artefact" >&2
               exit 1
@@ -468,6 +468,29 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
             packages/domicile-engine/scripts/guard-shell.sh "$CHROMIUM" manganese
+
+      # A <webview> showing a site that refuses to be framed, which is the one
+      # thing patch 0007 said it could not do. No nested compositor and no
+      # client: the colours this looks for are a page's own, so headless and
+      # software-composited is the whole environment it needs.
+      - name: A site that refuses framing, in a <webview>
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-framing.sh "$CHROMIUM"
+
+      # Its control, and it is the sharp kind: the same page, the same URL, an
+      # <iframe> in place of the <webview>. It must show NOTHING — a frame is a
+      # frame and the site refuses to be framed — which is what separates "a
+      # guest is being made" from "this harness cannot see a page at all". The
+      # positive run cannot tell those apart from the inside.
+      - name: The framing guard is looking at a guest
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-framing.sh "$CHROMIUM"
 
       # REQUIREMENT 2, WHICH NOTHING HAS RUN SINCE IT WAS WRITTEN. An <app> has
       # to behave like any other replaced element, and `guard-css-and-resize.sh` is what

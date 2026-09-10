@@ -86,16 +86,16 @@ message. The shell needs no change for the keybindings.
 
 ## Plan
 
-- [ ] a mojo interface for the element to request a guest, and its binder
-- [ ] the fork's guest delegate: `BrowserPluginGuestDelegate` + `WebContentsDelegate`
-- [ ] create and attach the guest; navigate it from `src`
+- [x] a mojo interface for the element to request a guest, and its binder
+- [x] the fork's guest delegate: `BrowserPluginGuestDelegate` + `WebContentsDelegate`
+- [x] create and attach the guest; navigate it from `src`
 - [ ] `PreHandleKeyboardEvent`: match a grabbed chord, send `ShortcutPressed`
 - [ ] the same hook sends `Modifiers`
 - [ ] `ControlChannel::GrabShortcut` records in the browser process instead of relaying
 - [ ] decide the compositor's `grab_shortcut` message per [`DATA.md`](/docs/guidelines/DATA.md); delete the dead arm and its wrong comment
 - [ ] `BrowserWindow.tsx` tells the host the keyboard left the app
 - [ ] fix the two comments that state the false premise: `Shell.tsx` and `main.rs:2205-2212`
-- [ ] an engine guard that loads a framing-refusing site and asserts pixels
+- [x] an engine guard that loads a framing-refusing site and asserts pixels
 - [ ] an engine guard that drives a chord while a browser window holds focus
 
 ## Open questions

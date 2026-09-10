@@ -9,13 +9,21 @@ mojom("mojom") {
     "control_channel.mojom",
     "external_surface.mojom",
     "frame_sink_broker.mojom",
+    "web_view_guest.mojom",
   ]
 
   public_deps = [
     "//gpu/ipc/common:interfaces",
     "//services/viz/public/mojom",
     "//services/viz/public/mojom:surfaces",
+
+    # web_view_guest.mojom names the placeholder frame by its LocalFrameToken
+    # and the guest's address by a URL. The mojom template rewrites both of
+    # these per variant, so the Blink half of the fork gets the `-blink`
+    # bindings of each without naming them here.
+    "//third_party/blink/public/mojom/tokens",
     "//ui/gfx/geometry/mojom",
     "//ui/gfx/mojom",
+    "//url/mojom:url_mojom_gurl",
   ]
 }
