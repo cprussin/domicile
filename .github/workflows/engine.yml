@@ -480,11 +480,15 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/guard-webview-framing.sh "$CHROMIUM"
 
-      # Its control, and it is the sharp kind: the same page, the same URL, an
-      # <iframe> in place of the <webview>. It must show NOTHING — a frame is a
-      # frame and the site refuses to be framed — which is what separates "a
-      # guest is being made" from "this harness cannot see a page at all". The
-      # positive run cannot tell those apart from the inside.
+      # Its control, and it is two runs rather than one: an <iframe> on an
+      # ordinary http page framing a copy of the site that permits framing,
+      # which MUST show it, and then the same frame on the same page framing
+      # the copy that refuses, which must show NOTHING. The two copies differ
+      # only in X-Frame-Options and frame-ancestors, so the difference between
+      # the runs is a reading of those headers — where a run that only ever
+      # measured an absence cannot tell "the site is refused" from "this
+      # harness cannot draw a framed page at all". The positive run cannot tell
+      # those apart from the inside either, which is why the control exists.
       - name: The framing guard is looking at a guest
         env:
           NEGATIVE: "1"
