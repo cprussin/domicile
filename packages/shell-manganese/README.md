@@ -86,6 +86,19 @@ floats over the stage in a box of its own; pressing it again puts the window
 back. Each float opens cascaded past the ones already out, and comes to the
 front when you click it or pick its tab.
 
+**A browser window comes to the front from a click anywhere in it**, its
+address bar and its page alike, and the two halves say so differently. The
+chrome sends the shell a pointer event like any other page furniture. The page
+does not: it is a guest with a browsing context of its own, so nothing about a
+pointer inside it ever crosses back out — a click there used to leave the
+window under whatever was covering it, while the rail went on highlighting the
+window before it and the keyboard stayed there too. What does cross is the
+focus that click takes, on the element the guest hangs off in the chrome's own
+document. So the window listens for both, and either one brings it to the front
+and makes it the window everything keyed acts on. A client's window needs none
+of this: the compositor moves the keyboard onto it and says so
+(`focus_changed`), and the shell follows.
+
 The float order is the stacking order, and the shell writes it as the
 `z-index` of the window's *own* element — which is what stacks the window,
 because the window is a layer in this page's own layer tree, and what the SDK

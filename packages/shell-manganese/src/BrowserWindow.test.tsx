@@ -8,7 +8,7 @@ import {
 } from "@domicile/chrome-sdk/register-elements";
 import type { DomicileWebviewElement } from "@domicile/chrome-sdk/webview-element";
 import { WEBVIEW_NAVIGATE_EVENT } from "@domicile/chrome-sdk/webview-element";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { BrowserWindow } from "./BrowserWindow";
@@ -99,6 +99,7 @@ describe("BrowserWindow", () => {
         floating={undefined}
         focused
         onNavigate={() => undefined}
+        onReach={() => undefined}
         onScreen
         src="https://example.com"
       />,
@@ -117,6 +118,7 @@ describe("BrowserWindow", () => {
           floating={undefined}
           focused
           onNavigate={() => undefined}
+          onReach={() => undefined}
           onScreen
           src="https://example.com"
         />,
@@ -137,6 +139,7 @@ describe("BrowserWindow", () => {
           floating={undefined}
           focused
           onNavigate={() => undefined}
+          onReach={() => undefined}
           onScreen
           src="https://example.com"
         />,
@@ -157,6 +160,7 @@ describe("BrowserWindow", () => {
           onNavigate={(url) => {
             seen.push(url);
           }}
+          onReach={() => undefined}
           onScreen
           src="https://example.com"
         />,
@@ -176,6 +180,7 @@ describe("BrowserWindow", () => {
           floating={undefined}
           focused
           onNavigate={() => undefined}
+          onReach={() => undefined}
           onScreen
           src="https://example.com"
         />,
@@ -209,6 +214,7 @@ describe("BrowserWindow", () => {
           floating={undefined}
           focused
           onNavigate={() => undefined}
+          onReach={() => undefined}
           onScreen
           src="https://example.com"
         />,
@@ -226,11 +232,89 @@ describe("BrowserWindow", () => {
           floating={undefined}
           focused={false}
           onNavigate={() => undefined}
+          onReach={() => undefined}
           onScreen
           src="https://example.com"
         />,
       );
       expect(calls).toStrictEqual([]);
+    });
+  });
+
+  // A CLICK ANYWHERE IN THE WINDOW IS THE USER STARTING TO WORK IN IT, and the
+  // two halves of the window say so differently. The chrome sends a pointer
+  // event this document can see. The page inside sends none at all — the view
+  // hosts a browsing context of its own and the guest keeps them — so what
+  // comes back from there is the focus the click took.
+  describe("reaching the window", () => {
+    it("reports a reach when focus lands in the page", async () => {
+      await new Promise<void>((resolve) => {
+        const { container } = render(
+          <BrowserWindow
+            bridge={silentBridge}
+            clickThrough={false}
+            dragging={false}
+            floating={undefined}
+            focused={false}
+            onNavigate={() => undefined}
+            onReach={() => {
+              resolve();
+            }}
+            onScreen
+            src="https://example.com"
+          />,
+        );
+        fireEvent.focusIn(view(container));
+      });
+    });
+
+    it("reports a reach when the chrome around the page is clicked", async () => {
+      // Pressed where nothing takes the focus — the bar behind the controls —
+      // so the pointer is the only thing that could have said this. A window
+      // is reached by being clicked, not by having something in it focused.
+      await new Promise<void>((resolve) => {
+        render(
+          <BrowserWindow
+            bridge={silentBridge}
+            clickThrough={false}
+            dragging={false}
+            floating={undefined}
+            focused={false}
+            onNavigate={() => undefined}
+            onReach={() => {
+              resolve();
+            }}
+            onScreen
+            src="https://example.com"
+          />,
+        );
+        fireEvent.pointerDown(browser());
+      });
+    });
+
+    it("says nothing when the shell put the focus there itself", () => {
+      // The window the user is already working in has nothing to report: the
+      // focus in its page is the focus this window was given for being the one
+      // they are in, and answering it would ask the shell to reach a window it
+      // has just reached.
+      const reaches: string[] = [];
+      const { container } = render(
+        <BrowserWindow
+          bridge={silentBridge}
+          clickThrough={false}
+          dragging={false}
+          floating={undefined}
+          focused
+          onNavigate={() => undefined}
+          onReach={() => {
+            reaches.push("reach");
+          }}
+          onScreen
+          src="https://example.com"
+        />,
+      );
+      fireEvent.focusIn(view(container));
+      expect(reaches).toStrictEqual([]);
     });
   });
 
@@ -243,6 +327,7 @@ describe("BrowserWindow", () => {
         floating={undefined}
         focused={false}
         onNavigate={() => undefined}
+        onReach={() => undefined}
         onScreen={false}
         src="https://example.com"
       />,

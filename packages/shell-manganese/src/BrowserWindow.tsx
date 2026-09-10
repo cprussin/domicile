@@ -50,6 +50,19 @@ type Props = {
   /** Called with the address on show whenever the page navigates. */
   onNavigate: (url: string) => void;
   /**
+   * Called when the user clicks into this window — the page, the address bar,
+   * anywhere in it.
+   *
+   * A click inside the *page* is one the shell never sees: the view hosts a
+   * browsing context of its own, so no pointer event crosses back out of it —
+   * which is why a browser window could be clicked into while the rail went on
+   * highlighting the window before it and the keyboard stayed there too. What
+   * does cross is the focus that click takes: the engine focuses the element
+   * the guest hangs off, in this document. So the window reports both, and the
+   * one they arrive in is the window the user is now working in.
+   */
+  onReach: () => void;
+  /**
    * Whether this window is on screen at all.
    *
    * Not the same as being focused: a floating window is on screen whatever
@@ -76,6 +89,7 @@ export const BrowserWindow = ({
   floating,
   focused,
   onNavigate,
+  onReach,
   onScreen,
   src,
 }: Props) => {
@@ -135,6 +149,18 @@ export const BrowserWindow = ({
     withView(command);
   };
 
+  // A click anywhere in this window is the user starting to work in it, and
+  // the two halves of the window say so differently — a pointer event from the
+  // chrome, and from the page nothing but the focus it took. Both land here.
+  const reach = () => {
+    // The window the user is already in has nothing to report: a focus in its
+    // page is the one it was handed for being that window, and answering it
+    // would ask the shell to reach what it has just reached.
+    if (!focused) {
+      onReach();
+    }
+  };
+
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     withView((loaded) => {
@@ -143,6 +169,7 @@ export const BrowserWindow = ({
   };
 
   return (
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a window is not a control and is not being made into one — these say the user clicked into it, which is what raises a window in any desktop, and there is no interactive element that could carry them: the page half of this window sends no pointer events at all
     <section
       aria-label="Browser"
       className={cx(
@@ -155,6 +182,12 @@ export const BrowserWindow = ({
         floating !== undefined && noTopEdgeStyles,
       )}
       hidden={!onScreen}
+      // Focus as well as the press, because a click inside the page is not an
+      // event this document is given at all — see `onReach`. What arrives from
+      // there is the focus, on the element the guest hangs off, and it bubbles
+      // to here like any other.
+      onFocus={reach}
+      onPointerDown={reach}
       // Inline because the box is a runtime number and Panda reads literals;
       // `window-styles` owns everything static. `undefined` leaves the window
       // filling the stage, which is where a window that is not floating is.
