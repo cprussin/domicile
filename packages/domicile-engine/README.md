@@ -29,10 +29,11 @@ same reason.
 | `scripts/apply.sh` | series → checkout |
 | `scripts/extract.sh` | checkout → series. Run before every push |
 | `scripts/build.sh` | `gn gen` + `autoninja` with the args the spike is measured under |
-| `scripts/under-wayland.sh` | runs another script under a nested wlroots compositor on the GPU — the only platform that can import a dmabuf. Every guard below runs under it |
+| `scripts/under-wayland.sh` | runs another script under a nested wlroots compositor on the GPU — the only platform that can import a dmabuf. Every guard below runs under it except `guard-webview-framing.sh`, which has no client to import from |
 | `scripts/guard-client-window.sh` | a real Wayland client's window on the page, and the colour it drew coming back out |
 | `scripts/guard-two-windows.sh`, `guard-two-windows.html` | two clients, two windows, one page — two `SurfaceDrawQuad`s in one aggregation |
 | `scripts/guard-shell.sh` | a real shell, built by its own vite config and joined by the SDK, with a client's window in it |
+| `scripts/guard-webview-framing.sh`, `guard-webview-framing.js`, `guard-webview-framing-server.py` | a site that refuses framing, shown in a `<webview>`. The one guard here that runs headless and needs no compositor: what it measures is a page against itself, so there is no client and nothing to import |
 | `scripts/guard-css-and-resize.sh` | the measurement: seven CSS properties, the resize, and the latency |
 | `scripts/spike.sh` | run one step of the spike end to end; the producer's exit code is the verdict. What `guard-css-and-resize.sh` runs twice |
 | `scripts/spike-page.html` | steps 2 and 3's page: a `<canvas>` that embeds instead of drawing |

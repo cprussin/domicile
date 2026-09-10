@@ -1,0 +1,66 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module domicile.mojom;
+
+import "third_party/blink/public/mojom/tokens/tokens.mojom";
+import "url/mojom/url.mojom";
+
+// A <webview> asking the browser for a guest to put behind it.
+//
+// WHY THE ELEMENT HAS TO ASK. Patch 0007 makes <webview> report
+// FrameOwnerElementType::kIframe on purpose, so that the fork stays out of
+// every switch on that enum -- which leaves the browser process unable to tell
+// a <webview> from an <iframe> by looking. Nothing in the frame tree carries
+// the signal, so the element carries it, over this. Keying on an explicit
+// request is also what extensions' <webview> does.
+//
+// WHAT A GUEST BUYS, and why it is not a carve-out in AncestorThrottle: a
+// guest's main frame IS a main frame, so it has no ancestor for
+// X-Frame-Options or CSP frame-ancestors to be checked against, history is the
+// guest's own across processes, and its storage is first-party rather than
+// partitioned as a third party. See docs/architecture/
+// BROWSER-WINDOW-PARITY.md in the Domicile repository.
+//
+// THE ACCESS CONTROL IS THE BINDER'S, not this file's, and it is the same one
+// ControlChannel has: the browser binds WebViewGuestHost only for a document
+// whose origin is the shell's. domicile:// is neither web-safe nor
+// CORS-enabled, so no ordinary web content can hold that origin. A shell that
+// asks for a guest can already ask for `Spawn`, so there is nothing here to
+// protect it from itself.
+
+// Renderer -> browser, bound per document.
+interface WebViewGuestHost {
+  // Give `placeholder_frame` a guest page.
+  //
+  // `placeholder_frame` is the child frame the <webview>'s frame owner already
+  // created -- the one an <iframe> would navigate. It is what
+  // WebContents::AttachInnerWebContents wants, and it is left on about:blank
+  // because attaching swaps it out and a frame with a beforeunload handler in
+  // it would have to be asked first.
+  //
+  // The browser refuses a token that is not a child of the asking document's
+  // own frame: the element may claim a guest for its own placeholder and for
+  // nothing else.
+  //
+  // Nothing comes back. Attaching is asynchronous -- the frame has to be
+  // prepared first -- and the element has nothing to do differently either
+  // way; what it does next is Navigate, which is safe before the attach
+  // finishes and is why this is not a callback.
+  CreateGuest(blink.mojom.LocalFrameToken placeholder_frame,
+              pending_receiver<WebViewGuest> guest);
+};
+
+// One guest, for as long as the element that asked for it lives.
+//
+// A pipe of its own rather than more methods on WebViewGuestHost taking a
+// frame token: attaching DESTROYS the placeholder frame, so the token that
+// named the guest stops naming anything the moment the guest exists, and a
+// second src would have nothing to send.
+interface WebViewGuest {
+  // Load `url` in the guest, as a top-level navigation of the guest's own
+  // page. This is what `src` does, and what it does instead of navigating the
+  // frame the element owns.
+  Navigate(url.mojom.Url url);
+};

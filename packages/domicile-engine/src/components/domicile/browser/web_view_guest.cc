@@ -1,0 +1,238 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "components/domicile/browser/web_view_guest.h"
+
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/logging.h"
+#include "base/memory/ptr_util.h"
+#include "content/public/browser/document_service.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/render_process_host.h"
+#include "ui/base/page_transition_types.h"
+
+namespace domicile {
+namespace {
+
+// The interface a <webview> asks for a guest over, for one document.
+//
+// A DocumentService rather than a self-owned receiver, because everything it
+// does is relative to the document that asked: the frame it is handed has to be
+// that document's own child, and a document that navigates away has no claim on
+// the guests the previous one made.
+class WebViewGuestHost final
+    : public content::DocumentService<mojom::WebViewGuestHost> {
+ public:
+  WebViewGuestHost(content::RenderFrameHost& frame,
+                   mojo::PendingReceiver<mojom::WebViewGuestHost> receiver)
+      : DocumentService(frame, std::move(receiver)) {}
+
+ private:
+  // mojom::WebViewGuestHost:
+  void CreateGuest(
+      const blink::LocalFrameToken& placeholder_frame,
+      mojo::PendingReceiver<mojom::WebViewGuest> guest) override {
+    // Same process as the asking document, always: the placeholder is the
+    // frame the owner element created and never navigated, so it is still the
+    // local about:blank frame its parent made.
+    content::RenderFrameHost* placeholder =
+        content::RenderFrameHost::FromFrameToken(
+            content::GlobalRenderFrameHostToken(
+                render_frame_host().GetProcess()->GetID(), placeholder_frame));
+
+    // Gone between the element sending this and the browser reading it -- the
+    // <webview> was removed from the document. A race, not a lie, so the pipe
+    // is dropped and the element's remote learns it: killing the shell over
+    // its own timing would be the fork's bug and not the shell's.
+    if (placeholder == nullptr) {
+      LOG(WARNING) << "domicile: the frame a <webview> asked a guest for is "
+                      "already gone.";
+      return;
+    }
+
+    // A lie, though, and the only one available here: a document claiming a
+    // guest for a frame that is not its own child could put a page it does not
+    // own inside somebody else's element.
+    //
+    // DocumentService's own version rather than mojo::ReportBadMessage, which
+    // its header asks for: it resets the receiver before deleting, so a reply
+    // callback does not have to be run with made-up arguments first.
+    if (placeholder->GetParent() != &render_frame_host()) {
+      ReportBadMessageAndDeleteThis(
+          "domicile: a <webview> may only ask for a guest for its own frame.");
+      return;
+    }
+
+    WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
+                                  std::move(guest));
+  }
+};
+
+}  // namespace
+
+// static
+void WebViewGuest::CreateAndAttach(
+    content::RenderFrameHost& owner,
+    content::RenderFrameHost& placeholder,
+    mojo::PendingReceiver<mojom::WebViewGuest> receiver) {
+  std::unique_ptr<WebViewGuest> guest =
+      base::WrapUnique(new WebViewGuest(owner, std::move(receiver)));
+
+  // `guest_delegate` is what makes the new WebContents a guest, and content
+  // asks it for its owner while constructing -- which is why the delegate is
+  // built first and knows its owner from its constructor.
+  //
+  // No SiteInstance and no StoragePartitionConfig: the guest belongs in the
+  // default partition, where the user's cookies are. See the class comment.
+  content::WebContents::CreateParams params(owner.GetBrowserContext());
+  params.guest_delegate = guest.get();
+  std::unique_ptr<content::WebContents> contents =
+      content::WebContents::Create(params);
+
+  guest->guest_contents_ = contents.get();
+  guest->owned_guest_contents_ = std::move(contents);
+  guest->Observe(guest->guest_contents_);
+  guest->guest_contents_->SetDelegate(guest.get());
+
+  // Asynchronous, and the API says why: the placeholder is about to be swapped
+  // out, so every beforeunload handler under it has to answer first, and a
+  // cross-process placeholder has to be replaced by a same-process one. What
+  // comes back is the frame that is safe to swap, which may not be the frame
+  // handed in.
+  placeholder.PrepareForInnerWebContentsAttach(
+      base::BindOnce(&WebViewGuest::Attach, std::move(guest)));
+}
+
+// static
+void WebViewGuest::Attach(std::unique_ptr<WebViewGuest> guest,
+                          content::RenderFrameHost* outer_contents_frame) {
+  // Null is a refusal: a beforeunload handler kept the frame, or the frame was
+  // detached while this was in flight. Returning destroys `guest`, and with it
+  // the WebContents it still owns.
+  if (outer_contents_frame == nullptr) {
+    return;
+  }
+
+  // The frame's own WebContents rather than the owner this was built with:
+  // AttachInnerWebContents CHECKs that they are the same, and a shell that
+  // navigated while the attach was in flight has a new document -- and so a new
+  // RenderFrameHost -- behind the id this object holds.
+  content::WebContents* owner =
+      content::WebContents::FromRenderFrameHost(outer_contents_frame);
+  CHECK(owner);
+
+  std::unique_ptr<content::WebContents> contents =
+      std::move(guest->owned_guest_contents_);
+
+  // From here the guest is scoped to the guest page's lifetime, exactly as
+  // GuestViewBase does it: the outer WebContents takes the inner one, and this
+  // object self-destructs in WebContentsDestroyed.
+  guest->self_owned_ = true;
+  guest.release();
+
+  // `is_full_page` is false, and it is not a detail. It means "give the inner
+  // WebContents focus", and it CHECKs that the outer WebContents has exactly
+  // one inner one -- which a shell with two browser windows open does not.
+  // Focus is BROWSER-WINDOW-PARITY.md's own item and is not this one.
+  owner->AttachInnerWebContents(std::move(contents), outer_contents_frame,
+                                /*is_full_page=*/false);
+
+  // The one line that says the guest exists, and it earns its place: a
+  // <webview> showing nothing has four possible causes and only this tells
+  // three of them from the fourth. `domicile:` is the prefix
+  // engine-diagnostics.sh greps the browser's log for.
+  LOG(INFO) << "domicile: attached a guest to a <webview>.";
+}
+
+WebViewGuest::WebViewGuest(content::RenderFrameHost& owner,
+                           mojo::PendingReceiver<mojom::WebViewGuest> receiver)
+    : owner_rfh_id_(owner.GetGlobalId()),
+      receiver_(this, std::move(receiver)) {}
+
+WebViewGuest::~WebViewGuest() = default;
+
+void WebViewGuest::Navigate(const GURL& url) {
+  // A CHECK rather than a guard: this object is destroyed with the guest's
+  // WebContents, so there is no moment at which the pipe is open and the
+  // WebContents is gone.
+  //
+  // Before the attach as well as after, and that is why the element needs no
+  // callback to wait on: a guest still waiting for its placeholder navigates
+  // all the same, because content brings the browser side of a guest up during
+  // the attach whether or not it has been anywhere.
+  CHECK(guest_contents_);
+
+  // NOT VALIDATED HERE, and that is deliberate rather than missed. The only
+  // document that can reach this is the shell's, and the shell can already ask
+  // the compositor to run a command on the machine; a scheme allowlist in
+  // front of a page that holds `Spawn` would protect nothing. What keeps this
+  // safe is the binder, and it is the same one ControlChannel has.
+  content::NavigationController::LoadURLParams params(url);
+  params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+  guest_contents_->GetController().LoadURLWithParams(params);
+}
+
+content::WebContents* WebViewGuest::GetOwnerWebContents() {
+  content::RenderFrameHost* owner =
+      content::RenderFrameHost::FromID(owner_rfh_id_);
+  return owner ? content::WebContents::FromRenderFrameHost(owner) : nullptr;
+}
+
+content::RenderFrameHost* WebViewGuest::GetProspectiveOuterDocument() {
+  return content::RenderFrameHost::FromID(owner_rfh_id_);
+}
+
+base::WeakPtr<content::BrowserPluginGuestDelegate>
+WebViewGuest::GetGuestDelegateWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
+bool WebViewGuest::IsWebContentsCreationOverridden(
+    content::RenderFrameHost* opener,
+    content::SiteInstance* source_site_instance,
+    content::mojom::WindowContainerType window_container_type,
+    const GURL& opener_url,
+    const std::string& frame_name,
+    const GURL& target_url) {
+  return true;
+}
+
+content::WebContents* WebViewGuest::CreateCustomWebContents(
+    content::RenderFrameHost* opener,
+    content::SiteInstance* source_site_instance,
+    bool is_new_browsing_instance,
+    const GURL& opener_url,
+    const std::string& frame_name,
+    const GURL& target_url,
+    WindowOpenDisposition disposition,
+    const blink::mojom::WindowFeatures& window_features,
+    const content::StoragePartitionConfig& partition_config,
+    content::SessionStorageNamespace* session_storage_namespace) {
+  LOG(WARNING) << "domicile: a <webview> refused to open a window for "
+               << target_url.possibly_invalid_spec()
+               << "; new windows from a guest are not wired up yet.";
+  return nullptr;
+}
+
+void WebViewGuest::WebContentsDestroyed() {
+  guest_contents_ = nullptr;
+  if (self_owned_) {
+    delete this;
+  }
+}
+
+void BindWebViewGuestHost(
+    content::RenderFrameHost* frame,
+    mojo::PendingReceiver<mojom::WebViewGuestHost> receiver) {
+  // Owns itself and goes with the document. `new` with no matching delete is
+  // what DocumentService is.
+  new WebViewGuestHost(*frame, std::move(receiver));
+}
+
+}  // namespace domicile

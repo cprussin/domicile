@@ -57,4 +57,7 @@ gn gen "$OUT" --args='
 # is a thing a person runs and it cannot without one. The BUILD.gn's own header
 # has named both since it was written; this script named one, so step 4 needed
 # a second command nobody documented here.
-exec autoninja -C "$OUT" chrome domicile_solid_color_submitter domicile_css_parity
+# `domicile_colour_probe` for the same reason as `domicile_css_parity`:
+# guard-webview-framing.sh is a thing a person runs and it cannot without one.
+exec autoninja -C "$OUT" chrome domicile_solid_color_submitter \
+  domicile_css_parity domicile_colour_probe
