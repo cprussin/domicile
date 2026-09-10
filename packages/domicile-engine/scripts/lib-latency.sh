@@ -32,6 +32,26 @@ latency_median() {
     sed -n 's/.*median \([0-9.]*\), max .*/\1/p'
 }
 
+# One display frame, in milliseconds, as the run reported it. Empty when the
+# run never said, which every caller here treats as failure.
+#
+# THIS IS WHAT THE GUARD'S ASSERTION IS A MULTIPLE OF, and the floor is not.
+# Both are the same quantity -- a probe round trip is one display frame,
+# because asking what colour a pixel is forces the draw it then reads -- but
+# only one of them is measured while the browser is busy starting. `floor` has
+# come back at 48.71 ms on a run whose own `commit to pixel` was 29.18, and a
+# denominator larger than a number quantised to it is not that number's floor.
+#
+# It is the interval `Spread::line` divides by for its `(median N frames)`
+# column, so the guard's ratio and the compositor's own frame counts are the
+# same arithmetic on the same number.
+latency_display_frame() {
+  local log="$1"
+  grep -a "latency: the display frame is " "$log" 2>/dev/null |
+    tail -1 |
+    sed -n 's/.*the display frame is \([0-9.]*\) ms.*/\1/p'
+}
+
 # How a run ended, as one word: `completed`, `unsettled`, `dark`, or empty when
 # the run never said.
 #
