@@ -219,6 +219,50 @@ The title is Domicile's until you say otherwise with `document.title`. It does
 not guess — the directory a module came out of is as likely to be `dist` as
 anything a person would recognise.
 
+## Who gets the keyboard
+
+The compositor holds it — it is the only thing that can deliver a key — but
+every move of it starts with your shell. Two questions reach you, and a shell
+that answers neither is the desktop the smallest one above already is: a click
+focuses the window under it, and a client that asks for focus is ignored.
+
+**A click on a window** is the first. `<domicile-app>` fires a cancellable
+`domicile-focus-requested` on itself (`APP_FOCUS_REQUESTED_EVENT` from
+`@domicile/chrome-sdk/app-element`) and, left alone, focuses the client — which
+is what you want when your shell has no opinion. Call `preventDefault()` on it
+and nothing moves until you say so:
+
+```ts
+document.addEventListener(APP_FOCUS_REQUESTED_EVENT, (event) => {
+  const { appId } = (event as CustomEvent<AppFocusRequest>).detail;
+  event.preventDefault();
+  if (myPolicySays(appId)) {
+    mounted.get(appId)?.focusApp();
+  }
+});
+```
+
+It bubbles, so one listener covers every window.
+
+**A client asking for focus** is the second, and it arrives as a message rather
+than an event: `bridge.on("focus_requested", ({ app_id }) => …)`. This is
+`xdg-activation` — "open this link in the browser I already have running", and
+also the dialog that puts itself in front of what you were typing into. The
+compositor does not grant it and makes no attempt to tell those two apart; it
+passes the question on with the seat where it was. Answer with
+`bridge.focusApp(app_id)`, or do nothing, which is a desktop where a background
+window cannot take the keyboard.
+
+**Where it actually is** comes back on `focus_changed`, which reports the
+answer rather than asking anything. Your shell's idea of the active window and
+the compositor's seat are two different facts, and this is the one that says
+where the keys are going. It also arrives for the one move the compositor makes
+on its own: a focused client that crashes hands the keyboard back to the page,
+because a keyboard pointed at a surface that is gone is a desktop that has
+stopped listening. That is a fallback and not a decision — the `app_closed` for
+that window reaches you first, so a shell that would rather move to the next
+window says so and has the last word.
+
 ## Bundling
 
 One build, from your module rather than from a document, emitting one file

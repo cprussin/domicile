@@ -95,6 +95,11 @@ export const useShellWindows = (
     bridge.on("focus_changed", ({ app_id }) => {
       dispatch(ShellAction.FocusChanged(app_id));
     });
+    bridge.on("focus_requested", ({ app_id }) => {
+      // A client asking, which the compositor forwards without granting — so
+      // what happens next is `reduceShell`'s to say and not the desktop's.
+      dispatch(ShellAction.FocusRequested(app_id));
+    });
   }, [appElements, bridge]);
 
   const close = useCallback(

@@ -1,4 +1,5 @@
 import type { DomicileAppElement } from "@domicile/chrome-sdk/app-element";
+import { APP_FOCUS_REQUESTED_EVENT } from "@domicile/chrome-sdk/app-element";
 import { useEffect, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
@@ -32,6 +33,16 @@ type Props = {
   /** Whether the user is working in this window, so it takes the keyboard. */
   focused: boolean;
   /**
+   * Called when the user clicks into this window.
+   *
+   * The SDK would move the keyboard here by itself — a click on a client's
+   * window is a request for it, and left alone the element grants one. This
+   * shell takes that back: which window the user is working in is one fact
+   * with one owner, and a keyboard that moved without the shell saying so is
+   * the rail highlighting one window while another is typed into.
+   */
+  onReach: () => void;
+  /**
    * Whether this window is on screen at all.
    *
    * Not the same as being focused: a floating window is on screen whatever
@@ -54,6 +65,7 @@ export const AppWindow = ({
   dragging,
   floating,
   focused,
+  onReach,
   onScreen,
 }: Props) => {
   // `null` rather than `undefined` because that is what React's ref API hands
@@ -73,6 +85,33 @@ export const AppWindow = ({
       };
     }
   }, [appElements, appId, portal]);
+
+  // A click on a client's window asks for the keyboard, and the element grants
+  // it unless something answers first. This answers first: the request becomes
+  // the shell's to decide, and the effect below is what carries the decision
+  // back to the same element a render later.
+  useEffect(() => {
+    if (portal === null) {
+      return undefined;
+    } else {
+      const answer = (event: Event) => {
+        // Unconditionally, and before the branch below: the keyboard stays
+        // where the shell put it whether or not this particular click moves
+        // anything, which is the difference between a shell that owns focus
+        // and one that owns it except where it agrees with the SDK.
+        event.preventDefault();
+        // The window the user is already in has nothing to report: it would be
+        // asking the shell to reach what it has just reached, on every press.
+        if (!focused) {
+          onReach();
+        }
+      };
+      portal.addEventListener(APP_FOCUS_REQUESTED_EVENT, answer);
+      return () => {
+        portal.removeEventListener(APP_FOCUS_REQUESTED_EVENT, answer);
+      };
+    }
+  }, [focused, onReach, portal]);
 
   // The window the user is working in takes the keyboard with it, so they can
   // type into what they just opened, switched to, or brought to the front

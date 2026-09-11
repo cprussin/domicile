@@ -97,6 +97,7 @@ class MODULES_EXPORT DomicileHost final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(shortcut, kShortcut)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(modifiers, kModifiers)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(focusrequested, kFocusrequested)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(displayschanged, kDisplayschanged)
 
   // The desktop's screens, or null until the compositor has described them.
@@ -122,6 +123,7 @@ class MODULES_EXPORT DomicileHost final
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void FocusChanged(const String& app_id) override;
+  void FocusRequested(const String& app_id) override;
   void Displays(
       Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;
 

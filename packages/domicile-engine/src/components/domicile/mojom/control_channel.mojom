@@ -157,4 +157,11 @@ interface ControlChannelClient {
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id);
+
+  // A client asked for the keyboard and has not been given it. The shell
+  // decides: the compositor forwards the request with the seat where it was,
+  // so a page that ignores this is a desktop where a background window cannot
+  // take what its user is typing into. Never empty -- a request comes from a
+  // client, and the chrome asking itself for focus does not cross the wire.
+  FocusRequested(string app_id);
 };

@@ -97,9 +97,21 @@ window under whatever was covering it, while the rail went on highlighting the
 window before it and the keyboard stayed there too. What does cross is the
 focus that click takes, on the element the guest hangs off in the chrome's own
 document. So the window listens for both, and either one brings it to the front
-and makes it the window everything keyed acts on. A client's window needs none
-of this: the compositor moves the keyboard onto it and says so
-(`focus_changed`), and the shell follows.
+and makes it the window everything keyed acts on.
+
+A client's window arrives at the same place by a different road. The SDK would
+focus a clicked client by itself, and the shell stops it: `<domicile-app>` asks
+first, with a cancellable `domicile-focus-requested`, and this shell answers
+every one of them. So both kinds of window are reached the same way — the shell
+decides, and `focus_changed` comes back afterwards to say where the keyboard
+actually is.
+
+That is also what `focus_requested` is for: a client asking for the keyboard
+over `xdg-activation`, which the compositor forwards without granting.
+Manganese grants it, by the same path picking a tab takes — one arm of
+`reduceShell`, because it is a policy rather than a mechanism. A shell that
+would rather refuse a window the user has not touched changes that arm and
+nothing else.
 
 The float order is the stacking order, and the shell writes it as the
 `z-index` of the window's *own* element — which is what stacks the window,

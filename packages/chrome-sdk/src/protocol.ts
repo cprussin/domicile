@@ -138,6 +138,16 @@ const focusChangedSchema = z.looseObject({
   type: z.literal("focus_changed"),
 });
 
+// A client asking for the keyboard, which is a question rather than news: the
+// shell answers it with `focus_app` or lets it go unanswered. The compositor
+// deciding for itself is what this message exists instead of.
+const focusRequestedSchema = z.looseObject({
+  // Never `null`, unlike `focus_changed`'s: a request comes from a client, and
+  // the chrome asking itself for focus is not a thing that crosses the wire.
+  app_id: z.string(),
+  type: z.literal("focus_requested"),
+});
+
 // One display of the desktop. All logical — the CSS pixels the chrome lays out
 // in — and all in one desktop-wide space whose origin is the top-left of the
 // displays' bounding box, so `position` is directly where a `<Screen>` goes on
@@ -201,6 +211,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appCursorSchema,
   displaysSchema,
   focusChangedSchema,
+  focusRequestedSchema,
   shortcutMessageSchema,
   modifiersSchema,
 ]);
@@ -224,6 +235,7 @@ export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
+export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 

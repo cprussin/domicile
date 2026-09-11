@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import type { DomicileAppElement } from "./app-element";
+import type { AppFocusRequest, DomicileAppElement } from "./app-element";
+import { APP_FOCUS_REQUESTED_EVENT } from "./app-element";
 import type { BridgeClient } from "./bridge";
 import { BTN_LEFT } from "./input";
 import type { Matrix, Point } from "./matrix";
@@ -124,15 +125,24 @@ afterEach(() => {
 describe("<domicile-app>", () => {
   let bridge: FakeBridge;
   let frames: FakeFrames;
+  // A shell listens for focus requests on `document` rather than per window,
+  // so those listeners outlive the element that was clicked and the body this
+  // empties between tests. Aborting is what takes them off again.
+  let shell: AbortController;
 
   beforeEach(() => {
     document.body.innerHTML = "";
     bridge = new FakeBridge();
     frames = new FakeFrames();
+    shell = new AbortController();
     registerElements(bridge as unknown as BridgeClient, {
       measure: stubMeasure,
       observePlacement: frames.observe,
     });
+  });
+
+  afterEach(() => {
+    shell.abort();
   });
 
   it("asks the compositor to render the client at the element's size", () => {
@@ -478,6 +488,44 @@ describe("<domicile-app>", () => {
       new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
     );
     expect(bridge.calls).toContainEqual(["key", "term", 30, false]);
+  });
+
+  it("announces a click as a focus request the shell can answer for itself", () => {
+    const element = mountApp("term");
+    const requests: (string | undefined)[] = [];
+    document.addEventListener(
+      APP_FOCUS_REQUESTED_EVENT,
+      (event) => {
+        requests.push((event as CustomEvent<AppFocusRequest>).detail.appId);
+      },
+      { signal: shell.signal },
+    );
+
+    element.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+
+    expect(requests).toStrictEqual(["term"]);
+  });
+
+  it("leaves the keyboard alone when the shell cancels the request", () => {
+    const element = mountApp("term");
+    document.addEventListener(
+      APP_FOCUS_REQUESTED_EVENT,
+      (event) => {
+        event.preventDefault();
+      },
+      { signal: shell.signal },
+    );
+
+    element.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+
+    expect(bridge.calls).not.toContainEqual(["focusApp", "term"]);
+    // The click itself still belongs to the client: what the shell refused is
+    // the keyboard, not the button the user pressed.
+    expect(bridge.calls).toContainEqual(["button", "term", BTN_LEFT, true]);
   });
 
   it("focusApp gives the client the keyboard without a click", () => {

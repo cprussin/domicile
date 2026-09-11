@@ -268,6 +268,29 @@ pub enum HostMessage {
         /// `None` means the chrome holds the keyboard.
         app_id: Option<String>,
     },
+
+    /// A client asked for the keyboard. Nothing has moved yet.
+    ///
+    /// The counterpart to [`HostMessage::FocusChanged`], and deliberately not
+    /// the same message: that one reports a decision, this one is a request,
+    /// and the shell is what turns the second into the first by answering with
+    /// `focus_app` — or by ignoring it, which is the point. A compositor that
+    /// honoured the request itself would be deciding the shell's policy for
+    /// it, and there would be no way to write a desktop where a window cannot
+    /// steal what the user is typing into.
+    ///
+    /// `xdg-activation` is what a client sends to raise this — the protocol
+    /// behind "open this link in the browser you already have running", and
+    /// behind every dialog that wants to be in front. A shell that does
+    /// nothing with it is a desktop where those requests are refused, which is
+    /// a defensible policy and used to be the only one available.
+    ///
+    /// Not sent for the click that focuses a window: the click is the page's
+    /// own event, it never reaches the compositor as anything but pointer
+    /// input, and the shell has already decided by the time the seat moves.
+    /// See `APP_FOCUS_REQUESTED_EVENT` in `@domicile/chrome-sdk`, which is the
+    /// same question asked where the answer is known.
+    FocusRequested { app_id: String },
 }
 
 /// One display of the desktop, as the chrome is told about it.

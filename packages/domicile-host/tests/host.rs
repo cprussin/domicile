@@ -172,6 +172,50 @@ fn the_keyboard_coming_back_to_the_chrome_is_reported_too() {
 }
 
 #[test]
+fn a_client_asking_for_the_keyboard_is_a_question_rather_than_a_move() {
+    // The whole point of the message: a client that asks is telling the shell
+    // it wants the keyboard, and the shell is what decides whether it gets it.
+    // A host that moved the seat here would be writing the shell's focus
+    // policy for it, and no desktop built on this could refuse a window that
+    // interrupts what its user is typing into.
+    let mut host = Host::new();
+    let (asking, _) = host.app_appeared(None, None);
+    let (typing, _) = host.app_appeared(None, None);
+    host.handle_chrome_message(ChromeMessage::FocusApp {
+        app_id: typing.clone(),
+    })
+    .unwrap();
+    host.focus_change();
+
+    assert_eq!(
+        host.focus_requested(&asking),
+        Some(HostMessage::FocusRequested {
+            app_id: asking.clone(),
+        })
+    );
+    assert_eq!(
+        host.focus_holder(),
+        Some(typing),
+        "asking is not getting: the keyboard has not moved"
+    );
+    assert_eq!(
+        host.focus_change(),
+        None,
+        "and the chromes are told nothing"
+    );
+}
+
+#[test]
+fn a_client_nobody_has_heard_of_cannot_ask_for_the_keyboard() {
+    // The same gate `focus_app` keeps. A request naming a window no chrome has
+    // an element for is one no shell could answer, and forwarding it would
+    // have every shell write the check this one owes them.
+    let host = Host::new();
+
+    assert_eq!(host.focus_requested("app-404"), None);
+}
+
+#[test]
 fn a_focused_window_closing_hands_the_keyboard_back_and_says_so() {
     // Nothing asked for this at all — the client went away, possibly by
     // crashing. A chrome told only that the app closed would go on marking it

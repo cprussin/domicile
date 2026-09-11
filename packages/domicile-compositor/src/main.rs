@@ -76,11 +76,14 @@ use smithay::wayland::{
     single_pixel_buffer::SinglePixelBufferState,
     socket::ListeningSocketSource,
     tablet_manager::TabletSeatHandler,
+    xdg_activation::{
+        XdgActivationHandler, XdgActivationState, XdgActivationToken, XdgActivationTokenData,
+    },
 };
 use smithay::{
     delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_device,
     delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_single_pixel_buffer,
-    delegate_viewporter, delegate_xdg_shell,
+    delegate_viewporter, delegate_xdg_activation, delegate_xdg_shell,
 };
 use tracing::{debug, info, warn};
 
@@ -334,11 +337,37 @@ fn broadcast_focus_decision(hub: &ChromeHub, decision: ChromeMessage) {
     }
 }
 
+/// Tell every chrome that a client asked for the keyboard, and move nothing.
+///
+/// The asymmetry with [`broadcast_focus_decision`] is the whole point: that
+/// one applies a decision and reports where the seat went, this one reports a
+/// question and leaves the seat alone. What answers it is a shell sending
+/// `focus_app` back, or no shell answering at all — which is the desktop where
+/// a window cannot interrupt what its user is typing into, and a policy no
+/// shell could have written while the compositor granted these itself.
+///
+/// Broadcast for [`broadcast_focus_decision`]'s reason: a request reaches the
+/// chrome that is showing the desktop, and the compositor does not know which
+/// of the connected pages that is.
+fn broadcast_focus_request(hub: &ChromeHub, app_id: &str) {
+    let asked = hub.host.lock().unwrap().focus_requested(app_id);
+    if let Some(message) = asked {
+        hub.broadcast(message);
+    }
+}
+
 /// Forget a client that went away, and tell every chrome what that changed.
 ///
 /// Two things, in this order: that the app is gone, and — if it was the one
 /// being typed into — that the keyboard came back. A chrome told only the
 /// first would go on marking a window that no longer exists as active.
+///
+/// The order is also what lets a shell get in front of the second. Handing the
+/// keyboard to the chrome is a fallback rather than a decision — the shell
+/// usually asks for it back, but it does not have to, and a client that
+/// crashed never got the chance — so a shell that would rather move to the
+/// next window has already been told which window went by the time the
+/// fallback arrives, and its answer is the last word.
 fn broadcast_closed(hub: &ChromeHub, app_id: &str) {
     let (closed, focus) = {
         let mut host = hub.host.lock().unwrap();
@@ -988,6 +1017,9 @@ fn read_chrome_messages(
 struct DomicileCompositor {
     compositor_state: CompositorState,
     xdg_shell_state: XdgShellState,
+    // The global a client asks for the keyboard through. Held rather than
+    // acted on: see `XdgActivationHandler` below.
+    xdg_activation_state: XdgActivationState,
     shm_state: ShmState,
     seat_state: SeatState<DomicileCompositor>,
     seat: Seat<DomicileCompositor>,
@@ -3426,6 +3458,45 @@ impl XdgShellHandler for DomicileCompositor {
 
 delegate_xdg_shell!(DomicileCompositor);
 
+// ---- xdg-activation: a client asking for the keyboard ---------------------
+
+impl XdgActivationHandler for DomicileCompositor {
+    fn activation_state(&mut self) -> &mut XdgActivationState {
+        &mut self.xdg_activation_state
+    }
+
+    /// A client asked for a window to be activated. Nothing here activates it.
+    ///
+    /// This is the request every desktop calls "focus stealing" when it goes
+    /// wrong and "open the link in the browser I already have running" when it
+    /// goes right, and which of those it is depends entirely on what the user
+    /// was doing — which the compositor does not know and the shell does. So
+    /// it is forwarded as `focus_requested` and the seat stays where it is; a
+    /// shell that decided to grant it says so with `focus_app`, exactly as it
+    /// would for a click.
+    ///
+    /// Deliberately without the checks a compositor usually makes here — how
+    /// old the token is, whether the client that asked is the one the user was
+    /// last in — because each of those is the policy this hands over. A shell
+    /// that wants them writes them.
+    fn request_activation(
+        &mut self,
+        token: XdgActivationToken,
+        _token_data: XdgActivationTokenData,
+        surface: WlSurface,
+    ) {
+        // Spent either way. The pool is keyed by token and nothing else prunes
+        // it, so a token left in it after the request it was minted for is a
+        // client's way of growing this process without bound.
+        self.xdg_activation_state.remove_token(&token);
+        if let Some(app_id) = self.app_id_of(&surface) {
+            broadcast_focus_request(&self.hub, &app_id);
+        }
+    }
+}
+
+delegate_xdg_activation!(DomicileCompositor);
+
 // ---- data device: drag-and-drop, and the clipboard ------------------------
 
 impl SelectionHandler for DomicileCompositor {
@@ -3807,6 +3878,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = DomicileCompositor {
         compositor_state: CompositorState::new::<DomicileCompositor>(&dh),
         xdg_shell_state: XdgShellState::new::<DomicileCompositor>(&dh),
+        xdg_activation_state: XdgActivationState::new::<DomicileCompositor>(&dh),
         shm_state: ShmState::new::<DomicileCompositor>(&dh, vec![]),
         seat_state,
         data_device_state,
@@ -4270,9 +4342,10 @@ mod tests {
     use domicile_protocol::CursorShape;
 
     use super::{
-        announce_open_apps, answers_keystroke, broadcast_closed, broadcast_focus_decision, channel,
-        chrome_connection, client_command, cursor_shape, freshened, parse_find_colours, to_line,
-        write_responses, ChromeHub, ClientRequest, Committer, Handshake, Outbound,
+        announce_open_apps, answers_keystroke, broadcast_closed, broadcast_focus_decision,
+        broadcast_focus_request, channel, chrome_connection, client_command, cursor_shape,
+        freshened, parse_find_colours, to_line, write_responses, ChromeHub, ClientRequest,
+        Committer, Handshake, Outbound,
     };
 
     use std::sync::Arc;
@@ -4775,6 +4848,43 @@ mod tests {
             queued(&outbound),
             vec![HostMessage::FocusChanged { app_id: None }]
         );
+    }
+
+    #[test]
+    fn a_client_asking_for_the_keyboard_reaches_every_chrome_and_moves_nothing() {
+        // `xdg-activation` is a client saying it wants the keyboard, and the
+        // compositor honouring that itself would be deciding a policy that
+        // belongs to the shell — there would be no way to write a desktop
+        // where a background window cannot take what its user is typing into.
+        // So it is broadcast as a question and the seat stays where it is.
+        let (hub, outbound, app_id) = hub_with_an_app();
+        broadcast_focus_decision(&hub, ChromeMessage::FocusChrome);
+        let _ = queued(&outbound);
+
+        broadcast_focus_request(&hub, &app_id);
+
+        assert_eq!(
+            queued(&outbound),
+            vec![HostMessage::FocusRequested {
+                app_id: app_id.clone()
+            }],
+            "the request goes out, and no `focus_changed` with it"
+        );
+        assert_eq!(
+            hub.host.lock().unwrap().focus_holder(),
+            None,
+            "the keyboard is where it was"
+        );
+    }
+
+    #[test]
+    fn a_request_from_a_window_this_compositor_never_announced_goes_nowhere() {
+        // A shell has no element for it and could not answer if it wanted to.
+        let (hub, outbound, _) = hub_with_an_app();
+
+        broadcast_focus_request(&hub, "app-404");
+
+        assert_eq!(queued(&outbound), vec![]);
     }
 
     #[test]

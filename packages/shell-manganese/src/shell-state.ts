@@ -111,6 +111,7 @@ export enum ShellActionKind {
   AppTitled,
   BrowserOpened,
   FocusChanged,
+  FocusRequested,
   WindowClosed,
   WindowDropped,
   WindowFloated,
@@ -168,6 +169,20 @@ export const ShellAction = {
   FocusChanged: (appId: string | undefined) => ({
     appId,
     kind: ShellActionKind.FocusChanged as const,
+  }),
+
+  /**
+   * A client asked for the keyboard. Nothing has moved yet.
+   *
+   * The question {@link ShellAction.FocusChanged} is the answer to, and it
+   * arrives unanswered on purpose: the compositor forwards the request and
+   * leaves the seat where it is, so what happens next is this shell's policy
+   * rather than the desktop's. See the reducer's arm for what manganese
+   * decided.
+   */
+  FocusRequested: (appId: string) => ({
+    appId,
+    kind: ShellActionKind.FocusRequested as const,
   }),
 
   /** The user closed a window from its tab. */
@@ -287,6 +302,24 @@ export const reduceShell = (
       return focusedId === state.focusedId
         ? state
         : followFocus({ ...state, focusedId }, focusedId);
+    }
+    case ShellActionKind.FocusRequested: {
+      // Manganese grants it, by the same path picking a tab takes. That is a
+      // policy and not a mechanism: a client asking for the keyboard is what
+      // "open this link in the browser I already have running" is made of, and
+      // it is also what a dialog stealing the window you were typing into is
+      // made of. This shell cannot tell those apart and lets both through; a
+      // shell that wants to refuse the second — because the user is mid-drag,
+      // because the window that asked is not one they have touched — changes
+      // this arm and nothing else.
+      //
+      // A window this shell has no record of is not refused so much as
+      // unreachable: `showWindow` throws for one, and a request can name a
+      // window whose close has already been reduced here.
+      const requested = appWindowId(action.appId);
+      return state.windows.some((window) => window.id === requested)
+        ? showWindow(state, requested)
+        : state;
     }
     case ShellActionKind.WindowClosed: {
       return closeWindow(state, action.id);

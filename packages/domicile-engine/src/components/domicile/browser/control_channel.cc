@@ -526,6 +526,16 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
+  if (*type == "focus_requested") {
+    // Unlike focus_changed, a missing app_id is malformed rather than an
+    // answer: nothing but a client asks for the keyboard.
+    const std::string* app_id = message.FindString("app_id");
+    if (app_id) {
+      client_->FocusRequested(*app_id);
+    }
+    return;
+  }
+
   // What is left is the bands and copy-path protocol -- place_portal,
   // render_band, app_composited and their kin. Deliberately not implemented:
   // docs/architecture/ENGINE-FORK.md lists them under what the fork scraps,

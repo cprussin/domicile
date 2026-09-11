@@ -69,6 +69,7 @@ import {
   appResized,
   appTitled,
   focusChanged,
+  focusRequested,
   modifiers,
   shortcut,
 } from "./host-message";
@@ -204,6 +205,9 @@ export class BridgeClient {
     });
     host.addEventListener("focuschanged", (event) => {
       this.#deliver("focus_changed", focusChanged(event));
+    });
+    host.addEventListener("focusrequested", (event) => {
+      this.#deliver("focus_requested", focusRequested(event));
     });
     host.addEventListener("shortcut", (event) => {
       this.#deliver("shortcut", shortcut(event));

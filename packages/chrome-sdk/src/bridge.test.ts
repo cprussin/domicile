@@ -237,6 +237,23 @@ describe("BridgeClient", () => {
       });
       expect(seen).toStrictEqual(["appeared:term", "closed:term"]);
     });
+
+    it("delivers a client's request for the keyboard without moving it", () => {
+      const asked: unknown[] = [];
+      bridge.on("focus_requested", (message) => {
+        asked.push(message);
+      });
+
+      host.dispatch(
+        "focusrequested",
+        appEvent("focusrequested", { appId: "term" }),
+      );
+
+      expect(asked).toStrictEqual([{ app_id: "term" }]);
+      // And nothing was asked of the host: a request the shell has not
+      // answered yet is a request, and answering it is `focusApp`.
+      expect(host.lastCall()).toBeUndefined();
+    });
   });
 
   describe("asking the host for something", () => {

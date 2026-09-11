@@ -211,7 +211,19 @@ impl Compositor {
         self.client_on(&self.session.chrome_wayland_display, title)
     }
 
+    /// A client that asks for the keyboard once its window is up.
+    ///
+    /// `xdg-activation`, which is the one thing in this repo that produces a
+    /// `focus_requested` from a real client rather than from a unit test.
+    pub fn client_asking_for_focus(&self, title: &str) -> Client {
+        self.client_on_with(&self.session.wayland_display, title, &["--ask-for-focus"])
+    }
+
     fn client_on(&self, display: &str, title: &str) -> Client {
+        self.client_on_with(display, title, &[])
+    }
+
+    fn client_on_with(&self, display: &str, title: &str, extra: &[&str]) -> Client {
         // Handed over by cargo rather than looked for, which is the whole
         // reason the client's binary is a target of this crate: cargo builds
         // it before it runs these tests, and `CARGO_BIN_EXE_` is how it says
@@ -221,6 +233,7 @@ impl Compositor {
             .arg("--title")
             .arg(title)
             .arg("--trace")
+            .args(extra)
             .env("WAYLAND_DISPLAY", display)
             .env("XDG_RUNTIME_DIR", &self.runtime_dir)
             .stdout(Stdio::piped())

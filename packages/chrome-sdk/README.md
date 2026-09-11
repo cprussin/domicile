@@ -27,7 +27,10 @@ It provides four things:
   `<domicile-webview>`. An `<domicile-app>` reports its on-screen box to the
   host, embeds that client's surface, and forwards pointer and keyboard input
   to it; `focusApp` routes the keyboard to it without a click, for a chrome
-  that shows a window the user did not click.
+  that shows a window the user did not click. A click on one fires a
+  cancellable `domicile-focus-requested` and then focuses the client, so a
+  shell that wants focus to be its own decision calls `preventDefault()` and a
+  shell with no opinion needs to know nothing about it.
   A `<domicile-webview>` embeds a nested browsing context the engine renders
   directly: its `src` is the address on screen (it follows the page wherever the
   content navigates, and fires `domicile-navigate` when it lands), `goBack` /
