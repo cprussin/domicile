@@ -62,6 +62,25 @@ describe("<domicile-webview>", () => {
       expect(calls).toEqual(["goBack", "goForward", "stop", "reload"]);
     });
 
+    it("reports whether the embedded view can go back or forward", () => {
+      const element = mountWebview("https://example.com");
+      const view = embedOf(element);
+      Object.assign(view, { canGoBack: false, canGoForward: false });
+
+      expect(element.canGoBack).toBe(false);
+      expect(element.canGoForward).toBe(false);
+
+      // Read through rather than remembered, which is the whole reason this is
+      // a property and not the payload of an event: the engine pushes the
+      // guest's history state onto the embed whenever it changes, and a chrome
+      // that mounts after a push — a React shell registers its listeners in its
+      // first effect flush — still has to see the state that push carried.
+      Object.assign(view, { canGoBack: true, canGoForward: true });
+
+      expect(element.canGoBack).toBe(true);
+      expect(element.canGoForward).toBe(true);
+    });
+
     it("tracks where the embedded view navigated on its own", async () => {
       const element = mountWebview("https://example.com");
 

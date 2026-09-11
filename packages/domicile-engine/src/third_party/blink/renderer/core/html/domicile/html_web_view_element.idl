@@ -29,4 +29,21 @@
   [CEReactions] undefined goForward();
   [CEReactions] undefined stop();
   [CEReactions] undefined reload();
+
+  // Whether either of the first two would move the page, so an address bar can
+  // grey out a button that would do nothing.
+  //
+  // READONLY PROPERTIES rather than a `domicile-history-change` event's detail,
+  // and that is the whole design decision: a shell renders from state, so what
+  // it needs is a value it can read at the moment it renders. An availability
+  // carried only by an event is gone for a chrome that mounted after the
+  // guest's first commit, which a React shell always is -- it registers its
+  // listeners in its first effect flush. The event exists beside these and says
+  // only "read them again"; see html_web_view_element.h for what was ruled out.
+  //
+  // Not reflected, because there is no content attribute behind them: these are
+  // the browser's answer about a page in another process, and a content
+  // attribute is the author's to write.
+  readonly attribute boolean canGoBack;
+  readonly attribute boolean canGoForward;
 };

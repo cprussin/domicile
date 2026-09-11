@@ -28,9 +28,34 @@ export const WEBVIEW_NAVIGATE_EVENT = "domicile-navigate";
  */
 export const WEBVIEW_GUEST_FOCUS_EVENT = "domicile-guest-focus";
 
+/**
+ * Fired when the embedded view's history changes what it can do — a page
+ * committed, a back taken, a forward spent.
+ *
+ * THE ENGINE DISPATCHES THIS, and it carries nothing. What changed is readable
+ * on the element as {@link DomicileWebviewElement.canGoBack} and
+ * {@link DomicileWebviewElement.canGoForward}, and those are the values a
+ * chrome renders from; this only says "read them again". A payload here would
+ * be a second copy of the same state, correct at the instant it was made and
+ * stale for a chrome that read it later.
+ *
+ * WHICH IS ALSO WHY THE STATE IS NOT THIS EVENT. A shell that mounts after the
+ * guest's first commit hears nothing — a React shell registers its listeners
+ * in its first effect flush — and an address bar that learned only from events
+ * would grey out the wrong button until the user navigated again. The
+ * properties are always readable; this is the re-render trigger, not the
+ * source of truth.
+ *
+ * It bubbles, so a chrome can listen on the window it drew rather than on the
+ * view.
+ */
+export const WEBVIEW_HISTORY_CHANGE_EVENT = "domicile-history-change";
+
 // The navigation surface Electron adds to its `<webview>` tag. The eventual
 // engine gives a CEF browsing context the same shape.
 type WebviewFrame = HTMLElement & {
+  canGoBack: boolean;
+  canGoForward: boolean;
   goBack: () => void;
   goForward: () => void;
   stop: () => void;
@@ -77,6 +102,25 @@ export class DomicileWebviewElement extends HTMLElement {
    */
   override focus(): void {
     this.#ensureView().focus();
+  }
+
+  /**
+   * Whether {@link goBack} would move the page, so an address bar can grey out
+   * a button that would do nothing.
+   *
+   * READ THROUGH TO THE EMBED, every time, rather than remembered here. The
+   * answer lives in the browser process — a guest's history is a
+   * NavigationController there — and the engine pushes it onto the embed as it
+   * changes, so the embed is where the current value is. A copy kept here would
+   * be one more thing to miss a push with.
+   */
+  get canGoBack(): boolean {
+    return this.#ensureView().canGoBack;
+  }
+
+  /** Whether {@link goForward} would move the page. See {@link canGoBack}. */
+  get canGoForward(): boolean {
+    return this.#ensureView().canGoForward;
   }
 
   goBack(): void {

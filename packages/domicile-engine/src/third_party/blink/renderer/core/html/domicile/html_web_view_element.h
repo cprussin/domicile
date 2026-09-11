@@ -8,6 +8,7 @@
 #include "components/domicile/mojom/web_view_guest.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 
 namespace blink {
@@ -39,7 +40,9 @@ namespace blink {
 // placeholder frame out from under the guest. A <webview> has no srcdoc in its
 // IDL and nothing in this repository sets one; intercepting it would be a
 // branch no guard covers.
-class CORE_EXPORT HTMLWebViewElement final : public HTMLFrameElementBase {
+class CORE_EXPORT HTMLWebViewElement final
+    : public HTMLFrameElementBase,
+      public domicile::mojom::blink::WebViewGuestClient {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -68,6 +71,34 @@ class CORE_EXPORT HTMLWebViewElement final : public HTMLFrameElementBase {
   void goForward();
   void stop();
   void reload();
+
+  // WHETHER EITHER OF THE FIRST TWO WOULD DO ANYTHING, so an address bar can
+  // grey out a button that would not.
+  //
+  // A PROPERTY, NOT AN EVENT'S PAYLOAD, and that is the decision this pair
+  // records. A shell renders from state: it is handed a moment and asked what
+  // the window looks like now, and the answer has to be readable at that
+  // moment rather than have been announced at some earlier one. An availability
+  // that existed only in an event would be gone for a chrome that mounted after
+  // the guest's first commit -- a React shell registers its listeners in its
+  // first effect flush, which is after the element is in the document -- and
+  // its Back button would stay wrong until the user navigated again. So the
+  // value is here, always, and `domicile-history-change` only says to read it
+  // again.
+  //
+  // NOT A CONTENT ATTRIBUTE either, which is the other shape a chrome could
+  // read: a content attribute is the author's, it serialises into innerHTML,
+  // and a shell or a devtools user writing one would make the DOM say something
+  // the browser never did.
+  //
+  // AND NOT A SYNCHRONOUS ASK, which is the shape that would need no pushing at
+  // all: the answer is a NavigationController's in the browser process, so
+  // reading it on demand means a blocking round trip out of a renderer inside a
+  // property read. The browser pushes instead -- see WebViewGuestClient in
+  // components/domicile/mojom/web_view_guest.mojom -- and this is where it
+  // lands.
+  bool canGoBack() const { return can_go_back_; }
+  bool canGoForward() const { return can_go_forward_; }
 
   void Trace(Visitor*) const override;
 
@@ -147,10 +178,32 @@ class CORE_EXPORT HTMLWebViewElement final : public HTMLFrameElementBase {
 
   network::ParsedPermissionsPolicy ConstructContainerPolicy() const override;
 
+  // domicile::mojom::blink::WebViewGuestClient:
+  //
+  // The browser saying what the guest's history can do now. It arrives when it
+  // CHANGES and not otherwise, so there is no case in which this stores what it
+  // already held -- and the event below is therefore never dispatched for a
+  // change that is not one.
+  void HistoryChanged(bool can_go_back, bool can_go_forward) override;
+
   // The guest, for as long as this element lives. Bound once, and not
   // rebuilt on a later `src`: the placeholder frame is destroyed by the
   // attach, so there would be nothing left to name in a second request.
   HeapMojoRemote<domicile::mojom::blink::WebViewGuest> guest_;
+
+  // The other direction, handed over in the same CreateGuest that asks for the
+  // guest -- so the browser can never have a history to report and nowhere to
+  // report it to.
+  HeapMojoReceiver<domicile::mojom::blink::WebViewGuestClient,
+                   HTMLWebViewElement>
+      client_receiver_;
+
+  // What the browser last said. False both until it says otherwise, which is
+  // not a guess: a guest that has been nowhere has no entry behind it and none
+  // ahead, so the browser's first answer for a fresh guest is this one and it
+  // does not spend a message saying so.
+  bool can_go_back_ = false;
+  bool can_go_forward_ = false;
 };
 
 }  // namespace blink

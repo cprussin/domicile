@@ -20,6 +20,17 @@
 #     answers
 #   a slow page the server was never asked for is a failure in both, because
 #     an absence nobody caused is not an absence anybody measured
+#   in the control, `back` STAYING available is the pass and its going dead is
+#     the failure, which is the availability half of the same inversion: a
+#     guest whose history goes dead with nothing driving it means the positive
+#     run's dead back need not have been goBack()'s
+#   in the control, an event is a failure, because the positive run reads its
+#     two events as the two calls and a run that pushes without being driven
+#     makes that reading noise
+#   a `can` read at two-pages by an element that HAD heard an event is a
+#     failure even though the value is right: that reading is the one that says
+#     a late-mounting chrome sees the state, and it says it only while the
+#     element has never had a listener
 #
 # The block is run out of the real script rather than copied, so a rewrite that
 # moves it fails here loudly instead of leaving this passing against a version
@@ -69,6 +80,12 @@ baseline() { # $1 NEGATIVE
   # Not a reading: the fixture's wait, which one failing sentence quotes back.
   SLOW_SECONDS=20
   NEGATIVE="$1"
+  # The first page of a history has nowhere to go in either direction, and no
+  # listener has been on the element yet. Shared, because nothing has been
+  # driven at this point in either run.
+  START_CAN="false/false"
+  TWO_CAN="true/false"
+  TWO_EVENTS=0
   if [ "$1" = "1" ]; then
     FIRST="/one"
     SECOND="/two"
@@ -77,6 +94,10 @@ baseline() { # $1 NEGATIVE
     FIFTH=""
     COUNT=3
     SAW_SLOW_SHOWN=1
+    # Nothing drove the guest, so its history neither moved nor pushed.
+    BACK_CAN="true/false"
+    FORWARD_CAN="true/false"
+    FORWARD_EVENTS=0
   else
     FIRST="/one"
     SECOND="/two"
@@ -85,6 +106,11 @@ baseline() { # $1 NEGATIVE
     FIFTH="/two"
     COUNT=5
     SAW_SLOW_SHOWN=0
+    # Back spent, forward earned; then forward spent and back earned again.
+    # One push each, which is the two events.
+    BACK_CAN="false/true"
+    FORWARD_CAN="true/false"
+    FORWARD_EVENTS=2
   fi
 }
 
@@ -206,6 +232,52 @@ expect "a slow page that never arrived says stop() was not measured" "yes" \
   "$(blames "stop()" 1 SAW_SLOW_SHOWN=0 THIRD='""' COUNT=2)"
 expect "more pages than were driven is a failure in the control too" "fail" \
   "$(verdict 1 COUNT=4)"
+
+echo
+echo "what the element says back and forward can do, which is the new claim"
+# THE POSITIVE, AND IT IS FIRST ON PURPOSE. A guard that read only "back is
+# unavailable on the first page" would pass against an element that always said
+# no, so the reading that has to hold before any absence means anything is that
+# back becomes available once there IS a page behind.
+expect "back never becoming available is a failure" "fail" \
+  "$(verdict 0 TWO_CAN=false/false)"
+expect "back never becoming available names the positive it rests on" "yes" \
+  "$(blames "never became available" 0 TWO_CAN=false/false)"
+expect "a first page with somewhere to go is a failure" "fail" \
+  "$(verdict 0 START_CAN=true/true)"
+# THE LATE-MOUNT READING. The value is right in this case and the run still
+# fails, because what that reading establishes is that an element which has
+# never had a listener reports the state anyway — and an element that had
+# heard an event establishes nothing of the sort.
+expect "a two-pages reading taken after an event is a failure" "fail" \
+  "$(verdict 0 TWO_EVENTS=1)"
+expect "a two-pages reading taken after an event names the listener" "yes" \
+  "$(blames "listener" 0 TWO_EVENTS=1)"
+expect "back staying available after goBack is a failure" "fail" \
+  "$(verdict 0 BACK_CAN=true/false)"
+expect "back staying available after goBack names goBack" "yes" \
+  "$(blames "goBack()" 0 BACK_CAN=true/false)"
+expect "forward not coming back after goForward is a failure" "fail" \
+  "$(verdict 0 FORWARD_CAN=false/true)"
+expect "no event at all is a failure" "fail" "$(verdict 0 FORWARD_EVENTS=0)"
+expect "no event at all names the chrome that would never re-read" "yes" \
+  "$(blames "re-read" 0 FORWARD_EVENTS=0)"
+
+echo
+echo "and the control, where the same readings invert"
+expect "back never becoming available is a failure in the control too" "fail" \
+  "$(verdict 1 TWO_CAN=false/false)"
+# THE INVERTED ONE. With nothing driving it, a guest that stops being able to
+# go back has done so on its own — and the positive run's dead back is then
+# not a reading of goBack().
+expect "back going dead with nothing driving it is the failure" "fail" \
+  "$(verdict 1 BACK_CAN=false/true)"
+expect "back going dead on its own says the positive measured something else" \
+  "yes" "$(blames "on its own" 1 BACK_CAN=false/true)"
+expect "an event with nothing driving it is a failure" "fail" \
+  "$(verdict 1 FORWARD_EVENTS=1)"
+expect "an event with nothing driving it says the positive count is noise" \
+  "yes" "$(blames "noise" 1 FORWARD_EVENTS=1)"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

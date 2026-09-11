@@ -42,7 +42,8 @@ class WebViewGuestHost final
   // mojom::WebViewGuestHost:
   void CreateGuest(
       const blink::LocalFrameToken& placeholder_frame,
-      mojo::PendingReceiver<mojom::WebViewGuest> guest) override {
+      mojo::PendingReceiver<mojom::WebViewGuest> guest,
+      mojo::PendingRemote<mojom::WebViewGuestClient> client) override {
     // Same process as the asking document, always: the placeholder is the
     // frame the owner element created and never navigated, so it is still the
     // local about:blank frame its parent made.
@@ -75,7 +76,7 @@ class WebViewGuestHost final
     }
 
     WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
-                                  std::move(guest));
+                                  std::move(guest), std::move(client));
   }
 };
 
@@ -85,9 +86,10 @@ class WebViewGuestHost final
 void WebViewGuest::CreateAndAttach(
     content::RenderFrameHost& owner,
     content::RenderFrameHost& placeholder,
-    mojo::PendingReceiver<mojom::WebViewGuest> receiver) {
-  std::unique_ptr<WebViewGuest> guest =
-      base::WrapUnique(new WebViewGuest(owner, std::move(receiver)));
+    mojo::PendingReceiver<mojom::WebViewGuest> receiver,
+    mojo::PendingRemote<mojom::WebViewGuestClient> client) {
+  std::unique_ptr<WebViewGuest> guest = base::WrapUnique(
+      new WebViewGuest(owner, std::move(receiver), std::move(client)));
 
   // `guest_delegate` is what makes the new WebContents a guest, and content
   // asks it for its owner while constructing -- which is why the delegate is
@@ -157,10 +159,13 @@ void WebViewGuest::Attach(std::unique_ptr<WebViewGuest> guest,
   LOG(INFO) << "domicile: attached a guest to a <webview>.";
 }
 
-WebViewGuest::WebViewGuest(content::RenderFrameHost& owner,
-                           mojo::PendingReceiver<mojom::WebViewGuest> receiver)
+WebViewGuest::WebViewGuest(
+    content::RenderFrameHost& owner,
+    mojo::PendingReceiver<mojom::WebViewGuest> receiver,
+    mojo::PendingRemote<mojom::WebViewGuestClient> client)
     : owner_rfh_id_(owner.GetGlobalId()),
-      receiver_(this, std::move(receiver)) {}
+      receiver_(this, std::move(receiver)),
+      client_(std::move(client)) {}
 
 WebViewGuest::~WebViewGuest() = default;
 
@@ -287,6 +292,33 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
                    held.shift, held.meta})
              ? content::KeyboardEventProcessingResult::HANDLED
              : content::KeyboardEventProcessingResult::NOT_HANDLED;
+}
+
+void WebViewGuest::NavigationStateChanged(
+    content::WebContents* source,
+    content::InvalidateTypes changed_flags) {
+  ReportHistory();
+}
+
+void WebViewGuest::ReportHistory() {
+  // The same CHECK the four controls make: this object is destroyed with the
+  // guest's WebContents, and content does not call a delegate of a WebContents
+  // it has already destroyed.
+  CHECK(guest_contents_);
+
+  content::NavigationController& history = guest_contents_->GetController();
+  const bool can_go_back = history.CanGoBack();
+  const bool can_go_forward = history.CanGoForward();
+
+  // A CHANGE, not a notification. See the header: this call is also how a
+  // title and a favicon arrive, and a chrome that re-rendered its address bar
+  // for a favicon would be re-rendering it for every page it loads.
+  if (can_go_back != reported_can_go_back_ ||
+      can_go_forward != reported_can_go_forward_) {
+    reported_can_go_back_ = can_go_back;
+    reported_can_go_forward_ = can_go_forward;
+    client_->HistoryChanged(can_go_back, can_go_forward);
+  }
 }
 
 bool WebViewGuest::IsWebContentsCreationOverridden(

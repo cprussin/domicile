@@ -48,8 +48,45 @@ interface WebViewGuestHost {
   // prepared first -- and the element has nothing to do differently either
   // way; what it does next is Navigate, which is safe before the attach
   // finishes and is why this is not a callback.
+  //
+  // BOTH ENDS OF THE GUEST ARE NAMED HERE, which is why `client` is a
+  // parameter of this call rather than a SetClient on WebViewGuest. The guest
+  // is created by this message, so a client handed over in a later one would
+  // leave a window in which the guest's history could change with nothing to
+  // report it to -- and the element would have to either replay that change or
+  // lose it. It also costs a second round trip for a pipe the element always
+  // wants.
   CreateGuest(blink.mojom.LocalFrameToken placeholder_frame,
-              pending_receiver<WebViewGuest> guest);
+              pending_receiver<WebViewGuest> guest,
+              pending_remote<WebViewGuestClient> client);
+};
+
+// The leg back: what the browser tells a <webview> about the guest behind it.
+//
+// THE ANSWERS ONLY THE BROWSER HAS. A guest's history is a
+// NavigationController in the browser process, so `CanGoBack()` and
+// `CanGoForward()` cannot be read from the renderer at all -- and an address
+// bar that cannot read them cannot grey out a button that would do nothing.
+// This is how they arrive.
+//
+// PUSHED RATHER THAN ASKED FOR, and that is the decision the shape of this
+// interface records. A [Sync] getter would put a blocking browser round trip
+// inside a property read, in a renderer, on whatever path a chrome renders
+// from. So the browser sends the answer when it changes and the element holds
+// it, which makes the read free and always available.
+interface WebViewGuestClient {
+  // What the guest's history can do now.
+  //
+  // SENT ONLY WHEN THE PAIR CHANGES. The browser notices this in
+  // WebContentsDelegate::NavigationStateChanged, which fires for a title, a
+  // favicon and an audio state as well, so an unfiltered forward would be a
+  // message per page load event and an event per message in the page.
+  //
+  // A FRESH GUEST SENDS NOTHING, because it has nowhere to go in either
+  // direction and neither has the element that has not heard from it. The
+  // first message is the first commit that gives the guest an entry to go back
+  // to -- see components/domicile/browser/web_view_guest.cc.
+  HistoryChanged(bool can_go_back, bool can_go_forward);
 };
 
 // One guest, for as long as the element that asked for it lives.
@@ -85,10 +122,9 @@ interface WebViewGuest {
   // A BACK WITH NOWHERE TO GO IS NOT AN ERROR, in any of the three that can
   // have one: `NavigationControllerImpl::GoBack` returns without navigating
   // when `CanGoBack()` is false, and an address bar pressing a button the user
-  // can see is the ordinary way that happens. WHETHER it can is not reportable
-  // yet -- there is no browser-to-renderer leg on this interface, so a chrome
-  // that wants to grey out its own buttons needs one, and adding it is its own
-  // piece of work.
+  // can see is the ordinary way that happens. WHETHER it can is now reportable:
+  // WebViewGuestClient above carries it, and a chrome that greys out a dead
+  // button reads `canGoBack` on the element rather than pressing to find out.
   GoBack();
   GoForward();
 
