@@ -1,8 +1,8 @@
-import { css, cx } from "../styled-system/css";
+import { css, cx } from "../../../styled-system/css";
+import type { Floating } from "../window-state";
+import { floatPlacement } from "../window-styles";
 import { frameBox } from "./float";
-import type { Floating } from "./shell-state";
 import { useFloatDrag } from "./useFloatDrag";
-import { floatPlacement } from "./window-styles";
 
 type Props = {
   floating: Floating;

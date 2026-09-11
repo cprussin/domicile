@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { css } from "../styled-system/css";
-import { WALLPAPER_PHOTOS } from "./wallpaper-photos";
+import { css } from "../../styled-system/css";
+import { WALLPAPER_PHOTOS } from "./photos";
 
 /** How long one photograph stays up before the next fades in over it. */
 const DWELL_MS = 60_000;

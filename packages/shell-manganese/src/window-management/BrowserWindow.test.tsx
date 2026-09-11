@@ -73,7 +73,7 @@ const browser = (): HTMLElement =>
 // source order lands on the same winner the cascade would.
 const stylesheet = document.createElement("style");
 stylesheet.textContent = readFileSync(
-  new URL("../styled-system/styles.css", import.meta.url),
+  new URL("../../styled-system/styles.css", import.meta.url),
   "utf8",
 )
   .replaceAll(/@layer [^;{]+;/g, "")

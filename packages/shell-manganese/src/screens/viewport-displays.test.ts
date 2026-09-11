@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { viewportDisplays } from "./viewport-display";
+import { viewportDisplays } from "./viewport-displays";
 
 /** A window of a size, whose resize listeners can be turned. */
 class FakeWindow {

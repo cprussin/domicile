@@ -13,11 +13,8 @@ const PAGE = "page";
  * a region for a screen nobody has mentioned is a guess about where things are.
  * So the case where nothing ever will describe one needs an answer rather than
  * a fallback: opened in a plain browser for styling work there is no compositor
- * to ask, and the window is the only geometry there is.
- *
- * The same answer the compositor gives to the same question. With no displays
- * configured it describes its own window as a single display, because a desktop
- * has to be *somewhere* — this is that, one process further out.
+ * to ask, and the window is the only geometry there is. It is the same answer
+ * the compositor gives to the same question, one process further out.
  *
  * Re-described on every resize, for the same reason the compositor re-describes
  * on one: the desktop is the window, so a window that changed is a desktop that

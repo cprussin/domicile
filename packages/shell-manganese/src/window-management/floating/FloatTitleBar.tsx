@@ -1,12 +1,12 @@
 import { Button } from "@domicile/component-library/Button";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 
-import { css, cx } from "../styled-system/css";
-import { hstack } from "../styled-system/patterns";
+import { css, cx } from "../../../styled-system/css";
+import { hstack } from "../../../styled-system/patterns";
+import type { Floating } from "../window-state";
+import { floatEdgeStyles, floatPlacement } from "../window-styles";
 import { barBox } from "./float";
-import type { Floating } from "./shell-state";
 import { useFloatDrag } from "./useFloatDrag";
-import { floatEdgeStyles, floatPlacement } from "./window-styles";
 
 type Props = {
   floating: Floating;
@@ -23,19 +23,14 @@ type Props = {
 /**
  * A floating window's title bar: what it is called, and the way out of it.
  *
- * Chrome rather than window, and that is the point of it beyond looking like a
- * window. A bar is page pixels at the depth of the window it names, so a window
- * in front of that one has to be drawn *over* it — which is the one thing a
- * compositor that composites the whole page above every window cannot do.
- * The bar of a window
- * behind another is drawn on top of the one in front, and this is what makes
- * that visible rather than theoretical.
+ * Page pixels at the depth of the window they name, so the bar of a window
+ * behind another is drawn under the window in front — which is what a bar
+ * painted over the whole page could not be.
  *
  * Draggable without a modifier, for the same reason it is chrome at all: the
  * pointer over a client's surface belongs to the client, and the pointer over
- * this belongs to the page. Alt is only needed for the rest of the window,
- * where it does not. A bar never resizes — the corner a resize is driven from
- * is the opposite one.
+ * this belongs to the page. Alt is only needed for the rest of the window. A
+ * bar never resizes — the corner a resize is driven from is the opposite one.
  */
 export const FloatTitleBar = ({
   floating,

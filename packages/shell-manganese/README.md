@@ -36,27 +36,33 @@ client's keyboard goes to the host, a browser window's to its page.
 
 | Path | What |
 |---|---|
-| `src/renderer.tsx` | Renderer entry: applies the theme, builds the `DomicileClient`, registers the SDK's custom elements, mounts `<Shell>`, prints the diagnostics line. |
-| `src/Shell.tsx` | The chrome: the rail, the launchers, the stage, the keybindings, and which screen each of them is on. |
-| `src/display-source.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
-| `src/viewport-display.ts` | The same, for a shell with no host: the window is the only display there is. |
-| `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
-| `src/useShellWindows.ts` | Wires host events and user actions into the reducer, and the host's window events into the portal elements. |
-| `src/shell-state.ts` | Every change the window list can undergo, as one pure reduction. |
-| `src/shell-window.ts` | The window model: a client's portal or a browser window. |
-| `src/float.ts` | A window that has left the rail: where it sits on the stage and how big. Its own module because floating is not a kind of window. |
-| `src/useFloatDrag.ts`, `src/FloatGrab.tsx`, `src/FloatTitleBar.tsx` | Dragging and resizing a floating window, and the furniture that offers it. |
-| `src/claim-pointer.ts` | Where the chrome takes the pointer *over* a window — the compositor hit-tests the window's box and knows nothing about what the page painted on top of it. |
-| `src/useModifiers.ts` | The modifiers the shell reacts to. |
-| `src/app-elements.ts` | The live `<domicile-app>` elements by app id — where resizes and cursors are applied. |
-| `src/AppWindow.tsx` | A Wayland client's window: one `<domicile-app>` portal. |
-| `src/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<domicile-webview>`. |
-| `src/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
+| `src/index.tsx` | Entry point: applies the theme, builds the `DomicileClient`, registers the SDK's custom elements, mounts `<Shell>`, prints the diagnostics line. |
+| `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
+| `src/Desktop.tsx` | What is on the desktop: the window state, the keybindings, the rail beside the stage, and which screen each of them is on. |
 | `src/Clock.tsx` | The live clock: in the rail's footer, and alone on every display the rail is not on. |
-| `src/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
-| `src/wallpaper-photos.ts` | Which photographs those are, and where they come from. |
+| `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/placement-line.ts` | What the chrome has to say about its own timings, which is what measuring every window on every frame costs. |
-| `src/window-styles.ts` | What every window on the stage shares. |
+| `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
+| `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
+| `src/screens/viewport-displays.ts` | The same, for a shell with no host: the window is the only display there is. |
+| `src/screens/FirstScreen.tsx`, `OtherScreens.tsx`, `NoScreens.tsx` | The screen the chrome goes on, the screens it is not on, and what the page says for a desktop with no screens at all. |
+| `src/screens/IdleScreen.tsx` | What a screen with no chrome on it shows: the clock. |
+| `src/window-management/` | The windows: what one is, everything that changes them, and how they are drawn. |
+| `src/window-management/window.ts` | The window model: a client's portal or a browser window. |
+| `src/window-management/window-state.ts` | Every change the window list can undergo, as one pure reduction. |
+| `src/window-management/useWindows.ts` | Wires host events and user actions into that reduction. |
+| `src/window-management/WindowRail.tsx` | A tab per window, the launchers, the theme toggle and the clock. |
+| `src/window-management/Stage.tsx` | The windows on screen: the one the rail selected, and every float over it. |
+| `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<domicile-app>` portal. |
+| `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<domicile-webview>`. |
+| `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
+| `src/window-management/window-styles.ts` | What every window on the stage shares, and where a floating one is placed. |
+| `src/window-management/floating/float.ts` | A window that has left the rail: where it sits on the stage and how big. Its own module because floating is not a kind of window. |
+| `src/window-management/floating/useFloatDrag.ts`, `FloatGrab.tsx`, `FloatTitleBar.tsx` | Dragging and resizing a floating window, and the furniture that offers it. |
+| `src/keyboard/useShortcuts.ts` | The combinations the desktop answers, claimed from the host as well as listened for in the page. |
+| `src/keyboard/useModifiers.ts` | Which modifiers are held, from both of the places that can know. |
+| `src/wallpaper/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
+| `src/wallpaper/photos.ts` | Which photographs those are, and where they come from. |
 | `src/global.css`, `src/css.d.ts` | The document-level styling, and the type for importing it. |
 | `src/domicile-elements.d.ts` | The SDK's custom elements, as JSX. |
 
@@ -118,7 +124,7 @@ actually is.
 That is also what `focus_requested` is for: a client asking for the keyboard
 over `xdg-activation`, which the compositor forwards without granting.
 Manganese grants it, by the same path picking a tab takes — one arm of
-`reduceShell`, because it is a policy rather than a mechanism. A shell that
+`reduceWindows`, because it is a policy rather than a mechanism. A shell that
 would rather refuse a window the user has not touched changes that arm and
 nothing else.
 
@@ -137,19 +143,12 @@ rather than being added to it, so a window dragged to a size is that size, bar
 included, and a resize does not have to reason about a frame that grows with
 it.
 
-**And the bar claims the pointer where it lies.** Being drawn in the right
-place is only half of it: the compositor hit-tests rectangles, it knows where
-every window is because the page reports each `<domicile-app>` element's box,
-and it knows nothing about what the page painted over one. A bar lies across
-whatever the window it names cascades over, so without a claim the press on it
-goes to *that* window — which focuses it, which raises it. Clicking the front
-window's title bar raised the one behind it, and the bar never heard the click.
-`pointer-events: none` on the window is the other half of the same mechanism
-and cannot answer this: it makes a whole window inert, which is right for a
-menu drawn across all of it and wrong for a bar covering the top thirty pixels
-of one window and none of the window beside it. So the shell says where it
-takes the pointer, at what depth, and the compositor gives the press to
-whichever is on top there. See `claim-pointer`.
+**And the press on the bar is the bar's**, because the page is what hit-tests
+it: a bar lies across whatever the window it names cascades over, the DOM gives
+the press to the bar, and the `<domicile-app>` under it never hears one — so
+nothing about the window below is focused or raised. That is the browser's own
+hit-testing rather than a rectangle the compositor was told about, which is why
+it sees corner radius, transforms and stacking.
 
 A floating window's corners are the frame's rather than its own, and square:
 the compositor's shader takes one radius for all four (it is the element's

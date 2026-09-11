@@ -2,14 +2,14 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DropPosition } from "@domicile/component-library/TabRail";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 
-import type { ShellState } from "./shell-state";
+import { appIdOf, siteOf } from "./window";
+import type { WindowState } from "./window-state";
 import {
-  EMPTY_SHELL,
   floatingOf,
-  reduceShell,
-  ShellAction,
-} from "./shell-state";
-import { appIdOf, siteOf } from "./shell-window";
+  NO_WINDOWS,
+  reduceWindows,
+  WindowAction,
+} from "./window-state";
 
 /** Where a browser window starts. */
 const HOME_PAGE = "https://www.google.com";
@@ -17,7 +17,7 @@ const HOME_PAGE = "https://www.google.com";
 /** What the terminal launcher asks the compositor to run. */
 const TERMINAL_COMMAND = ["kitty"] as const;
 
-export type ShellWindows = ShellState & {
+export type Windows = WindowState & {
   /**
    * Close the window `id` — what a tab's close button does.
    *
@@ -65,39 +65,39 @@ export type ShellWindows = ShellState & {
  * not come through here, and they do not come through the page at all: the
  * compositor submits the client's buffer and the portal embeds the surface.
  */
-export const useShellWindows = (domicile: DomicileClient): ShellWindows => {
-  const [state, dispatch] = useReducer(reduceShell, EMPTY_SHELL);
+export const useWindows = (domicile: DomicileClient): Windows => {
+  const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
 
   useEffect(() => {
     domicile.on("app_appeared", ({ app_id, size, title }) => {
-      dispatch(ShellAction.AppAppeared(app_id, title));
+      dispatch(WindowAction.AppAppeared(app_id, title));
       // A size here is a client that has committed a buffer already — the
       // replay a reloading chrome is given — and it says the same thing
       // `app_resized` does, so it is reduced the same way. A window that has
       // only just mapped carries none, and there is nothing to record.
       if (size !== undefined) {
-        dispatch(ShellAction.AppDrewAt(app_id, size));
+        dispatch(WindowAction.AppDrewAt(app_id, size));
       }
     });
     domicile.on("app_titled", ({ app_id, title }) => {
-      dispatch(ShellAction.AppTitled(app_id, title));
+      dispatch(WindowAction.AppTitled(app_id, title));
     });
     domicile.on("app_closed", ({ app_id }) => {
-      dispatch(ShellAction.AppClosed(app_id));
+      dispatch(WindowAction.AppClosed(app_id));
     });
     domicile.on("app_resized", ({ app_id, size }) => {
-      dispatch(ShellAction.AppDrewAt(app_id, size));
+      dispatch(WindowAction.AppDrewAt(app_id, size));
     });
     domicile.on("app_cursor", ({ app_id, cursor }) => {
-      dispatch(ShellAction.AppCursorChanged(app_id, cursor));
+      dispatch(WindowAction.AppCursorChanged(app_id, cursor));
     });
     domicile.on("focus_changed", ({ app_id }) => {
-      dispatch(ShellAction.FocusChanged(app_id));
+      dispatch(WindowAction.FocusChanged(app_id));
     });
     domicile.on("focus_requested", ({ app_id }) => {
       // A client asking, which the compositor forwards without granting — so
-      // what happens next is `reduceShell`'s to say and not the desktop's.
-      dispatch(ShellAction.FocusRequested(app_id));
+      // what happens next is `reduceWindows`'s to say and not the desktop's.
+      dispatch(WindowAction.FocusRequested(app_id));
     });
   }, [domicile]);
 
@@ -105,7 +105,7 @@ export const useShellWindows = (domicile: DomicileClient): ShellWindows => {
     (id: string) => {
       const appId = appIdOf(id);
       if (appId === undefined) {
-        dispatch(ShellAction.WindowClosed(id));
+        dispatch(WindowAction.WindowClosed(id));
       } else {
         // Nothing here ends a client: the compositor sends its toplevel a
         // close, and an editor with unsaved work is entitled to stay. What
@@ -117,7 +117,7 @@ export const useShellWindows = (domicile: DomicileClient): ShellWindows => {
   );
 
   const openBrowser = useCallback(() => {
-    dispatch(ShellAction.BrowserOpened(HOME_PAGE));
+    dispatch(WindowAction.BrowserOpened(HOME_PAGE));
   }, []);
 
   const openTerminal = useCallback(() => {
@@ -125,42 +125,42 @@ export const useShellWindows = (domicile: DomicileClient): ShellWindows => {
   }, [domicile]);
 
   const renameToSite = useCallback((id: string, url: string) => {
-    dispatch(ShellAction.WindowRenamed(id, siteOf(url)));
+    dispatch(WindowAction.WindowRenamed(id, siteOf(url)));
   }, []);
 
   const reorder = useCallback(
     (fromId: string, toId: string, position: DropPosition) => {
-      dispatch(ShellAction.WindowsReordered(fromId, toId, position));
+      dispatch(WindowAction.WindowsReordered(fromId, toId, position));
     },
     [],
   );
 
   const select = useCallback((id: string) => {
-    dispatch(ShellAction.WindowSelected(id));
+    dispatch(WindowAction.WindowSelected(id));
   }, []);
 
   const grab = useCallback((id: string) => {
-    dispatch(ShellAction.WindowGrabbed(id));
+    dispatch(WindowAction.WindowGrabbed(id));
   }, []);
 
   const drop = useCallback(() => {
-    dispatch(ShellAction.WindowDropped());
+    dispatch(WindowAction.WindowDropped());
   }, []);
 
   const move = useCallback((id: string, x: number, y: number) => {
-    dispatch(ShellAction.WindowMoved(id, x, y));
+    dispatch(WindowAction.WindowMoved(id, x, y));
   }, []);
 
   const resize = useCallback((id: string, width: number, height: number) => {
-    dispatch(ShellAction.WindowResized(id, width, height));
+    dispatch(WindowAction.WindowResized(id, width, height));
   }, []);
 
   const toggleFloat = useCallback(
     (id: string) => {
       dispatch(
         floatingOf(state.floats, id) === undefined
-          ? ShellAction.WindowFloated(id)
-          : ShellAction.WindowTabbed(id),
+          ? WindowAction.WindowFloated(id)
+          : WindowAction.WindowTabbed(id),
       );
     },
     [state.floats],

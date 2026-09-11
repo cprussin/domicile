@@ -1,9 +1,9 @@
 import { describe, expect, it, jest } from "bun:test";
 import { act, render } from "@testing-library/react";
 
-import { css } from "../styled-system/css";
+import { css } from "../../styled-system/css";
+import { WALLPAPER_PHOTOS } from "./photos";
 import { Wallpaper } from "./Wallpaper";
-import { WALLPAPER_PHOTOS } from "./wallpaper-photos";
 
 /** How long one photograph is up, which is what a tick of the rotation is. */
 const DWELL_MS = 60_000;
