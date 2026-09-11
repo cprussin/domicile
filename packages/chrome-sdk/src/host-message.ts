@@ -104,6 +104,20 @@ export type FocusChangedMessage = {
 };
 
 /**
+ * A client asked for the keyboard.
+ *
+ * A question, not news — {@link FocusChangedMessage} is the news, and the
+ * shell is what turns one into the other by calling `focusApp`. Ignoring it is
+ * a policy, and the one a desktop that will not let a background window
+ * interrupt its user has.
+ *
+ * Never the chrome, so never `undefined`: this comes from a client.
+ */
+export type FocusRequestedMessage = {
+  app_id: string;
+};
+
+/**
  * A combination the chrome claimed, pressed.
  *
  * The same shape `grabShortcut` takes — see `DomicileShortcut` — so a shell
@@ -161,6 +175,7 @@ export type HostMessageMap = {
   app_closed: AppClosedMessage;
   app_cursor: AppCursorMessage;
   focus_changed: FocusChangedMessage;
+  focus_requested: FocusRequestedMessage;
   shortcut: ShortcutMessage;
   modifiers: ModifiersMessage;
   displays: DisplaysMessage;
@@ -224,6 +239,12 @@ export const appCursor = (event: DomicileAppEvent): AppCursorMessage => ({
 
 export const focusChanged = (event: DomicileAppEvent): FocusChangedMessage => ({
   app_id: named(event.appId),
+});
+
+export const focusRequested = (
+  event: DomicileAppEvent,
+): FocusRequestedMessage => ({
+  app_id: event.appId,
 });
 
 export const shortcut = (event: DomicileShortcutEvent): ShortcutMessage => ({

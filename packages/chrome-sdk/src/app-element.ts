@@ -21,6 +21,29 @@ import { axisFromWheel } from "./wheel-axis";
 const HAS_SURFACE_CLASS = "has-surface";
 
 /**
+ * Fired on the element when something asks for the keyboard on its behalf — a
+ * click, today — and cancellable, because who holds the keyboard is the
+ * shell's to decide rather than this element's.
+ *
+ * Left uncancelled it does what it always did and focuses the client, so a
+ * shell with no focus policy of its own needs to know nothing about this. A
+ * shell that has one — focus that follows the pointer, a window that may not
+ * be interrupted, a click that raises without focusing — calls
+ * `preventDefault()` and then does whatever it decided, which is usually
+ * {@link DomicileAppElement.focusApp} a moment later.
+ *
+ * It bubbles: a shell renders one of these per window and would otherwise
+ * have to bind a listener to each.
+ */
+export const APP_FOCUS_REQUESTED_EVENT = "domicile-focus-requested";
+
+/** The detail of an {@link APP_FOCUS_REQUESTED_EVENT}. */
+export type AppFocusRequest = {
+  /** The host's name for the client whose window was reached for. */
+  appId: string;
+};
+
+/**
  * What a `<domicile-app>` is, to everything holding one.
  *
  * Written out rather than derived from the class with `InstanceType` — which is
@@ -320,7 +343,7 @@ export const createAppElement = (
       });
 
       this.addEventListener("pointerdown", (event) => {
-        this.focusApp();
+        this.#requestFocus();
         this.#withTarget((appId) => {
           this.#forwardMotion(appId, event);
           const button = buttonCodeFromJs(event.button);
@@ -354,6 +377,25 @@ export const createAppElement = (
         },
         { passive: true },
       );
+    }
+
+    // A click is the user reaching for this window, and in most shells the
+    // keyboard follows it — but *most* is not *every*, and the SDK is in no
+    // position to know which this is. So it asks, and focuses only if the
+    // shell lets the request stand. See `APP_FOCUS_REQUESTED_EVENT`.
+    #requestFocus(): void {
+      this.#withTarget((appId) => {
+        const unanswered = this.dispatchEvent(
+          new CustomEvent<AppFocusRequest>(APP_FOCUS_REQUESTED_EVENT, {
+            bubbles: true,
+            cancelable: true,
+            detail: { appId },
+          }),
+        );
+        if (unanswered) {
+          this.focusApp();
+        }
+      });
     }
 
     // Motion is the one forward that needs a layout box: without one there is no

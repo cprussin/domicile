@@ -11,3 +11,4 @@
 {"type":"displays","displays":[{"name":"domicile-0","position":[0,0],"size":[1280,800],"scale":1}]}
 {"type":"focus_changed","app_id":"app-2"}
 {"type":"focus_changed","app_id":null}
+{"type":"focus_requested","app_id":"app-2"}

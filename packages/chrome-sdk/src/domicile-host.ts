@@ -166,6 +166,12 @@ export type DomicileHostEventMap = {
   appclosed: DomicileAppEvent;
   appcursor: DomicileAppEvent;
   focuschanged: DomicileAppEvent;
+  /**
+   * A client asked for the keyboard, and nothing has moved: the shell answers
+   * with `focusApp()` or lets it stand. See `focus_requested` in
+   * `domicile-protocol`.
+   */
+  focusrequested: DomicileAppEvent;
   apptitled: DomicileAppTitledEvent;
   shortcut: DomicileShortcutEvent;
   modifiers: DomicileModifiersEvent;

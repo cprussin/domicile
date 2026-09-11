@@ -174,6 +174,25 @@ impl Host {
         }
     }
 
+    /// A client asked for the keyboard. Nothing here gives it to them.
+    ///
+    /// The message goes out and the seat stays where it is, because which
+    /// window the user is typing into is the shell's to decide — this is the
+    /// question, [`Host::focus_change`] reports the answer, and `focus_app` is
+    /// how a shell that decided to grant it says so. A host that granted this
+    /// itself would make focus stealing unrefusable by any shell built on it.
+    ///
+    /// `None` for a client this host has no window for, which is the gate
+    /// `ChromeMessage::FocusApp` keeps on the way back: a request no shell
+    /// could answer is not one worth broadcasting.
+    pub fn focus_requested(&self, app_id: &str) -> Option<HostMessage> {
+        self.apps
+            .contains_key(app_id)
+            .then(|| HostMessage::FocusRequested {
+                app_id: app_id.to_string(),
+            })
+    }
+
     /// What the chrome has to be told about focus, which is nothing unless it
     /// moved since the last time this was asked.
     ///
