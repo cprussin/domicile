@@ -118,6 +118,11 @@ contains "and the object that failed to build" \
 # of the probe is that the answer comes back without a second fetch.
 expect_within "the diagnostic is at the top of the report, not a tail away" 25 \
   "fatal error: 'ash/constants/ash_switches.h' file not found" "$out"
+# And the tail comes too. This script's header has always said the windows go
+# first and the tail follows "for context rather than instead of them"; the
+# gate that withheld it from every real run contradicted that, so the rule is
+# asserted here rather than left to the comment.
+contains "and the tail follows it for context" "-- the last of" "$out"
 
 # ---- a link failure, which has no `stderr:` block at all --------------------
 #
@@ -140,18 +145,65 @@ contains "a link failure names the symbol" \
 expect_within "and that too is at the top" 25 \
   "undefined symbol" "$out"
 
-# ---- nothing recognisable --------------------------------------------------
+# ---- the script never ran at all -------------------------------------------
 #
 # The shell around the build has swallowed a command's output before in this
 # repository — twice, in engine.yml's own history — and a report that prints
 # nothing when it recognises nothing is indistinguishable from a build that
 # passed. It has to say so in its own words and show the log's last lines.
+#
+# THIS FIXTURE IS THE ONE SHAPE WITH NO `drm probe:` LINE IN IT, and that is
+# the whole of what it stands for: engine-drm-probe.sh prints `configuring
+# out/DrmProbe` before anything can go wrong, so a log without that line is a
+# log whose script never ran. It is NOT the shape of a probe that ran and
+# failed — see the next case, which is, and which this fixture was once
+# mistaken for.
 QUIET="$WORK/quiet.log"
 { echo "entering environment"; noise 30; } >"$QUIET"
 out="$("$REPORT" "$QUIET" 2>&1)"
-contains "an unrecognisable log still says that it was unrecognisable" \
+contains "a log with no probe output says the script never ran" \
   "nothing in the log looks like a failure" "$out"
 contains "and shows the last thing that was said" "filler_30.o" "$out"
+
+# ---- a probe that ran, failed, and used none of the markers -----------------
+#
+# THE CASE THE `[ -z "$verdict" ]` GATE MADE UNREACHABLE. Every branch of
+# engine-drm-probe.sh that can fail has already printed `drm probe:
+# configuring out/DrmProbe` by the time it does, so on any run that started at
+# all the verdict is non-empty — and the tail that is supposed to catch a
+# failure none of the markers recognise sat behind exactly that test. The
+# result was a report that brought back neither the error nor a tail nor an
+# alarm, which is the one thing its own header says it exists to prevent.
+#
+# A python action that died is the realistic shape: `gcc_solink_wrapper.py`
+# raising MemoryError writes no `FAILED:`, no `ERROR at `, no `stderr:` and
+# not even an `error:` — `MemoryError` carries no colon. The probe still says
+# it could not build, but what it could not say is why.
+RAW="$WORK/raw.log"
+{
+  echo "depot_tools: /build/depot_tools"
+  echo "drm probe: configuring out/DrmProbe"
+  echo "drm probe: gn gen accepted ozone_platform_drm = true"
+  echo "drm probe: building ui/ozone"
+  noise 60
+  echo "Traceback (most recent call last):"
+  echo '  File "../../build/toolchain/gcc_solink_wrapper.py", line 174, in <module>'
+  echo "    sys.exit(main(sys.argv[1:]))"
+  echo '  File "../../build/toolchain/gcc_solink_wrapper.py", line 141, in main'
+  echo "    tocfile.write(toc)"
+  echo "MemoryError"
+  echo "drm probe: gn gen accepted the arguments and autoninja could not build ui/ozone"
+} >"$RAW"
+out="$("$REPORT" "$RAW" 2>&1)"
+contains "an unrecognised failure comes back in the tail" "MemoryError" "$out"
+contains "with the action that raised it" "gcc_solink_wrapper.py" "$out"
+contains "and the probe's own account of how far it got" \
+  "drm probe: building ui/ozone" "$out"
+# The probe ran and said so. Telling a reader the shell never ran the build
+# would send them to the wrong machine — that alarm belongs to the case above
+# and to nothing else.
+lacks "and it does not blame the shell for a probe that plainly ran" \
+  "so the shell around it did not run the build" "$out"
 
 # A log that does not exist is not the same as one with nothing in it: the
 # first means the step before never ran, and guessing between them is how a
@@ -184,6 +236,9 @@ OK="$WORK/ok.log"
 out="$("$REPORT" "$OK" 2>&1)"
 contains "a clean log reports the verdict line" "drm probe: ui/ozone built" "$out"
 lacks "and invents no failure" "nothing in the log looks like a failure" "$out"
+# The other direction of the fix above: a tail printed under a success reads
+# as one, so widening the tail must not widen it onto a green run.
+lacks "and a run that got there needs no tail" "-- the last of" "$out"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

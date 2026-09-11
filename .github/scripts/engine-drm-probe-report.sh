@@ -25,8 +25,9 @@
 # before running it, so a long one buries the failure under its own source.
 #
 # scripts/test-engine-drm-probe-report.sh drives this over synthesised logs of
-# each shape -- a gn assertion, a compiler error, a link error, a log with
-# nothing in it, and a clean one.
+# each shape -- a gn assertion, a compiler error, a link error, a failure that
+# uses none of those markers, a log with nothing of the probe's in it, and a
+# clean one.
 set -u
 
 LOG="${1:-}"
@@ -77,22 +78,40 @@ fi
 
 [ -z "$found" ] || printf '%s\n' "$found"
 
-# The probe's own verdict, which is the whole answer on the run where it works.
-# Its own prefix rather than a guess at siso's wording: the script that writes
-# it is the one thing here whose output this owns.
-verdict="$(grep -a '^drm probe:' "$LOG" | sed 's/^/  /')"
-[ -z "$verdict" ] || printf '%s\n' "$verdict"
+# What the probe said about itself, which is the whole answer on the run where
+# it works. Its own prefix rather than a guess at siso's wording: the script
+# that writes it is the one thing here whose output this owns.
+said="$(grep -a '^drm probe:' "$LOG" | sed 's/^/  /')"
+[ -z "$said" ] || printf '%s\n' "$said"
 
-# Only when the probe did not reach its own verdict. A run that got there
-# needs no tail, and a tail printed under a success reads as one.
-if [ -z "$verdict" ]; then
-  if [ -z "$found" ]; then
-    # THE SHELL AROUND THE BUILD HAS SWALLOWED A COMMAND'S OUTPUT BEFORE, twice
-    # in engine.yml's short life. A report that prints nothing when it
-    # recognises nothing is indistinguishable from a build that passed, which
-    # is the worst thing a report can be.
-    echo "::error::nothing in the log looks like a failure and the probe never reached its verdict, so the shell around it did not run the build"
-  fi
+# THE PROBE SAYING SOMETHING IS NOT THE PROBE SAYING WHY, and one `[ -z
+# "$verdict" ]` used to gate both of the branches below as though it were.
+# engine-drm-probe.sh prints `configuring out/DrmProbe` before anything can go
+# wrong, so on every run that started at all that test was false and neither
+# branch could be reached by anything. A probe killed in a python action --
+# `gcc_solink_wrapper.py` raising MemoryError, which writes no `FAILED:`, no
+# `stderr:` and not even an `error:` -- printed `autoninja could not build
+# ui/ozone` and brought back no tail, no alarm, and not one word of the
+# traceback. They are two questions and they are asked separately now.
+
+# Did the script run at all? Nothing of its own in the log AND nothing shaped
+# like a failure means the shell around it swallowed the build -- which has
+# happened twice in engine.yml's short life, and which looks exactly like a
+# pass. This is the only shape that warrants blaming the shell, because a probe
+# that reached any of its own branches has already printed a line above.
+if [ -z "$said" ] && [ -z "$found" ]; then
+  echo "::error::nothing in the log looks like a failure and the probe said nothing of its own, so the shell around it did not run the build"
+fi
+
+# Did it build? That, and nothing else, is what withholds the tail -- a tail
+# printed under a success reads as a failure, and that is the only harm a tail
+# can do. It is deliberately NOT gated on `found` as well: the fallback matches
+# a bare `ninja: build stopped`, which says a build stopped and not one word
+# about why, and gating on it would withhold the tail from exactly the failure
+# that has nothing else to offer. This is what this script's own header always
+# said -- the windows first, and the tail after them FOR CONTEXT RATHER THAN
+# INSTEAD OF THEM.
+if ! grep -qa '^drm probe: ui/ozone built' "$LOG"; then
   echo "-- the last of $(wc -l <"$LOG" | tr -d ' ') lines:"
   tail -30 "$LOG" | sed 's/^/  | /'
 fi
