@@ -83,14 +83,14 @@ decides whether an item is waiting or workable.
 
 ### In the engine fork — the agent on `crux`
 
-1. **A browser window's address bar drives the wrong page.** The element hosts
-   a guest now, so framing headers no longer apply and a desktop chord reaches
-   the shell over one — but `goBack()`, `goForward()`, `stop()` and `reload()`
-   still reach the *placeholder* frame's `History`, and the placeholder has been
-   on `about:blank` since it was made. They do nothing. The guest's own
-   `NavigationController` is in the browser process; wiring the four to it is
-   the work, and it is the half that gets better — a guest has a history of its
-   own, where a frame shared the whole session's.
+1. **A browser window cannot say whether back or forward is available.**
+   `goBack()`, `goForward()`, `stop()` and `reload()` reach the guest's own
+   `NavigationController` now, so the four work — but `CanGoBack()` and
+   `CanGoForward()` are answers only the browser process has, and `WebViewGuest`
+   has no leg back to the renderer to carry them. An address bar cannot grey out
+   a dead button. The work is a client interface passed at `CreateGuest` plus a
+   DOM surface for a chrome to read; the mojom records the gap where the next
+   person will look.
 2. **A desktop on a tty.** `ozone_platform_drm = true` fails at `gn gen` on this
    pin: `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`. Needs a
    patch that makes the DRM platform build on Linux, or a `target_os =
