@@ -97,16 +97,15 @@ Input runs the other way. The engine delivers pointer and keyboard events to the
 page; the page reports what is under a pointer and which window has focus; the
 compositor routes to the client's seat accordingly.
 
-The page reaches the compositor over a WebSocket that the bridge
-(`packages/engine-chrome-host`) pipes to the compositor's control socket. The
-bridge serves the shell's page from the same origin, so nothing has to be told
-where the session is.
+The page reaches the compositor through `navigator.domicile`, which the fork
+binds on the shell's origin and the browser process carries to the compositor's
+control socket. The engine serves the shell over `domicile://`, so nothing has
+to be told where the session is and nothing binds a port.
 
-`domicile` is what starts the three, in the one order they can start in: the
-bridge first, because the engine needs a URL and a page cannot open a Unix
-socket; then the engine, which creates the broker socket; then the compositor,
-which connects to it as a producer. It builds nothing — the three ship beside
-it and it finds them from its own path.
+`domicile` is what starts the two, in the one order they can start in: the
+engine first, because it serves the shell and creates the broker socket; then
+the compositor, which connects to it as a producer. It builds nothing — both
+ship beside it and it finds them from its own path.
 
 ## Crate layout
 
@@ -120,7 +119,7 @@ a GPU, an engine or Smithay:
 - `domicile-host` — the orchestrator brain: where input goes and what the chrome
   is told. No Wayland.
 - `domicile-launch` — `domicile` itself: which page to serve, which ozone
-  platform, where the three components are, and what each is started with. The
+  platform, where the two components are, and what each is started with. The
   binary that reads the world is ninety lines; everything with a decision in it
   is a module here.
 - `domicile-test-chrome`, `domicile-test-client` — a chrome and a Wayland
@@ -136,7 +135,6 @@ Web side:
 
 - `packages/chrome-sdk` — the shell-facing API: elements, the bridge client,
   measurement, input.
-- `packages/engine-chrome-host` — the bridge.
 - `packages/component-library` — the shared components and the Panda preset.
 - `packages/shell-manganese` — the reference desktop.
 - `packages/shell-simple` — a desktop with nothing in it but windows.

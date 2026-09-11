@@ -26,7 +26,7 @@ LAUNCH="$(awk '/^ENGINE="\$\{DOMICILE_ENGINE:-\}"$/,0' "$SCRIPT_UNDER_TEST")"
   exit 1
 }
 case "$LAUNCH" in
-  (*DOMICILE_DEV_RELOAD*target/debug/domicile*) ;;
+  (*DOMICILE_PAGE*target/debug/domicile*) ;;
   (*) echo "the launch block no longer starts a desktop." >&2; exit 1 ;;
 esac
 
@@ -85,11 +85,12 @@ expect "the engine handed in is the one that is run" \
   "engine=$WORK/my-engine" \
   "$(printf '%s\n' "$handed" | sed -n 's/^engine=/engine=/p')"
 
-# THE ONE THAT SEPARATES THIS FROM AN INSTALLED DESKTOP. Without it the bridge
-# serves no reload token and writes no poller, so the page never reloads — and
-# a dev loop where every edit needs the desktop killed and restarted is the
-# thing this script exists to replace. It would look like it worked.
-expect "dev mode is switched on" "reload=1" \
+# AND NO DEV RELOAD. It was the bridge that read this, served the token and
+# wrote the poller into the page; both went with the bridge and the C++ that
+# writes the document has nothing in their place. Handing it over now would
+# switch nothing on while reading like a dev loop that reloads — which is the
+# expensive way to find out that it does not.
+expect "no reload token is handed over any more" "reload=unset" \
   "$(printf '%s\n' "$handed" | sed -n 's/^reload=/reload=/p')"
 
 # THE MODULE, NOT THE DIRECTORY HOLDING IT. `domicile` takes the file now, and

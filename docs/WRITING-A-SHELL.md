@@ -37,18 +37,20 @@ Domicile owns the window, the socket and the process. What is left for a
 shell to be is the page.
 
 So there is no launcher to write, no `bin/` stub, no session to read out of the
-environment, and nothing to install. There are three processes at run time and
-none of them is yours:
+environment, and nothing to install. There are two processes at run time and
+neither of them is yours:
 
 | Process | What it does |
 |---|---|
-| the **bridge** | serves your page, and the compositor's socket, on one port |
-| the **engine** | the fork, loading that page. It is the display compositor |
+| the **engine** | the fork. It serves your page over `domicile://` and loads it, and it is the display compositor |
 | the **compositor** | a producer to the engine: it keeps the Wayland clients and hands their buffers over |
 
-The order is forced and Domicile forces it. A page cannot open a Unix socket
-and `file:` has no origin to derive one from, which is why the bridge exists
-and why your page is served over HTTP rather than opened off disk.
+The order is forced and Domicile forces it: the engine first, because the
+compositor connects to the socket it creates. Your page is served over
+`domicile://` rather than opened off disk because `file:` has no origin, and
+the channel to the compositor is `navigator.domicile` rather than a socket the
+page opens, because a page cannot open a Unix socket and nothing here binds a
+port.
 
 ## The connection
 
@@ -148,9 +150,6 @@ typed surface rather than a wire, described in
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
 Doing so means handling the registration order above yourself, along with the
 input mapping and the size reporting that `registerElements` does.
-
-`@domicile/engine-chrome-host` is Domicile's own bridge — the program that
-serves your page and the socket. You do not depend on it; it runs you.
 
 `@domicile/component-library` is **not** part of the contract. It is the React
 and Panda CSS design system this repo's own shells are built from, and it exists
@@ -312,10 +311,10 @@ Three things there are not vite's defaults, and each fails quietly:
 
 - **The entry is a `.ts` file**, so nothing emits a document for Domicile to
   have to ignore.
-- **`entryFileNames` is fixed.** Vite hashes entry names by default, and
-  `DOMICILE_MODULE` is a path — a hash in it changes every time your shell
-  does, so nothing could name the file: not you, not a package manager, not a
-  script.
+- **`entryFileNames` is fixed.** Vite hashes entry names by default, and the
+  module you hand `domicile` is a path — a hash in it changes every time your
+  shell does, so nothing could name the file: not you, not a package manager,
+  not a script.
 - **`base: "./"`** keeps the emitted URLs relative to the document Domicile
   writes rather than to a server root.
 

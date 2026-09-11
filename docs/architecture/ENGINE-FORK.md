@@ -1026,16 +1026,17 @@ Phase 3 — be the display server:
 
 - [ ] Ozone/DRM instead of a nested backend
 
-## The page is served over a TCP port, and it should not be
+## The page was served over a TCP port, and it is not any more
 
-**Found by a user asking why the bridge binds an HTTP port at all**, and it is
-the fork's next piece of work rather than the bridge's.
+**Found by a user asking why the bridge binds an HTTP port at all**, and it was
+the fork's work rather than the bridge's. **Done** — patches 0008 and 0009,
+and `engine-chrome-host` is deleted. What follows is the record of why.
 
 A shell is a page inside our Chromium. For the engine to load it, and for the
 page's JavaScript to open a channel to the compositor, it needs a URL with a
 real origin: `file:` has no origin — no WebSocket, restricted `fetch` — and
-JavaScript cannot open a unix socket. So `engine-chrome-host` serves both from
-`http://127.0.0.1:<kernel-chosen>`, and `connectToHost` derives the socket's URL
+JavaScript cannot open a unix socket. So `engine-chrome-host` served both from
+`http://127.0.0.1:<kernel-chosen>`, and `connectToHost` derived the socket's URL
 from the page's own.
 
 That works, and it costs more than it looks.
@@ -1106,12 +1107,13 @@ while the page still opens a WebSocket to a TCP port improves nothing.
    precedent — it opens a unix socket at browser startup for exactly this sort
    of reason.
 
-Together those delete `engine-chrome-host`'s HTTP server, the WebSocket, the
-port, and the origin check that guards it — not by hardening them but by
-leaving nothing to harden. The only thing left to connect to is the
-compositor's socket under `XDG_RUNTIME_DIR`, which is mode 700 and the user's.
+Together those deleted `engine-chrome-host`'s HTTP server, the WebSocket, the
+port, and the origin check that guarded it — not by hardening them but by
+leaving nothing to harden, and the package went with them. The only thing left
+to connect to is the compositor's socket under `XDG_RUNTIME_DIR`, which is mode
+700 and the user's.
 
-### Why it is not done yet
+### Why it waited on a checkout
 
 It is browser-process Chromium C++ against a pinned revision, and the two APIs
 it turns on — the scheme registry and the non-network loader factories — have
@@ -1125,10 +1127,10 @@ paragraph that this was the risk. The signature above is now the one read off
 the tree; treat every other name here as recalled until someone with the
 checkout has confirmed it.
 
-So the prerequisite is not a decision, it is a checkout: either a session on a
-machine with the tree, or network access to `chromium.googlesource.com` at the
-pin. The design above is settled; the signatures are what has to be read rather
-than recalled.
+So the prerequisite was not a decision, it was a checkout: a session on a
+machine with the tree. The design above was settled long before the signatures
+were, and the signatures had to be read rather than recalled — which is what a
+session on `crux` finally did.
 
 ## Open questions
 

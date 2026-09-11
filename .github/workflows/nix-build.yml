@@ -28,7 +28,7 @@ jobs:
   #
   # It is also the only check that runs an installed desktop at all. A build
   # that succeeds says the derivation ran, and file existence says what it
-  # wrote — neither would notice a `domicile` that cannot find the three
+  # wrote — neither would notice a `domicile` that cannot find the two
   # programs laid out beside it. The steps below are what start one.
   packages:
     runs-on: ubuntu-latest

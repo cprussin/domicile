@@ -61,13 +61,7 @@ decides whether an item is waiting or workable.
 
 ### In this repository
 
-1. **Delete `engine-chrome-host`.** The repo half of `domicile://` is done:
-   `supervise` starts two processes rather than three, `connectToHost` takes
-   `navigator.domicile` instead of opening a WebSocket, and nothing a user runs
-   binds a loopback port. What is left is the package, which nothing imports —
-   one guard's comment names it in the past tense and the turbo cache remembers
-   building it. This is the tail of that work rather than the start of it.
-2. **`<app>` and `<webview>`, not `domicile-app` and `domicile-webview`.** The
+1. **`<app>` and `<webview>`, not `domicile-app` and `domicile-webview`.** The
    fork defines both as real HTML tags — `document.createElement("app")` is an
    `HTMLAppElement`, `app-id` reflects both ways — and the SDK still registers
    hyphenated custom elements beside them, because a custom element's name must
@@ -89,18 +83,21 @@ decides whether an item is waiting or workable.
 
    **Unblocked.** It was parked in case the `domicile://` work deleted the SDK's
    runtime; it did not.
-3. **Keystroke-to-pixel latency** (#206). The requirement is that a client's
+2. **Keystroke-to-pixel latency** (#206). The requirement is that a client's
    window costs the user nothing a plain Wayland compositor would not.
    `guard-latency.sh` has run on `crux` now — it reads `commit to pixel` at
    28–29 ms against a 16.67 ms display frame on every run so far, which is 1.7
    frames and no stage of its own. What is left is a machine with a screen: the
    runs are in a nested compositor with nothing presenting, and the probe's own
    round trip is inside every figure.
-4. **A control socket, and `domicile load-shell <path>`.** Switching the
+3. **A control socket, and `domicile load-shell <path>`.** Switching the
    running shell without restarting the desktop, so a watcher outside Domicile
-   can trigger a reload and `DOMICILE_DEV_RELOAD` — the poller the bridge
-   writes into the page — can go. **After `domicile://`**, which deletes the
-   hop it would otherwise be built on. `docs/architecture/THE-DOMICILE-BINARY.md`
+   can trigger a reload. **Unblocked** — it was waiting on `domicile://`, and
+   the hop to the page is the engine's now. It is also where dev reload comes
+   back from: the poller the bridge wrote into every served document went with
+   the bridge, the C++ that writes the document has nothing in its place, and
+   `DOMICILE_DEV_RELOAD` is gone rather than left switching nothing on.
+   `docs/architecture/THE-DOMICILE-BINARY.md`
 
 ### In the engine fork — the agent on `crux`
 
@@ -316,7 +313,6 @@ Clients, for testing:
 | `packages/domicile-launch` | `domicile` itself: which page, which platform, where the components are, and the supervisor that starts them | core |
 | `packages/domicile-compositor` | **the running compositor**: Smithay server, imports, input, the engine seam | `.#full` |
 | `packages/domicile-engine` | the Chromium fork: the patch series, the pin, the published engine | — |
-| `packages/engine-chrome-host` | the bridge: serves the shell's page and pipes its session to the compositor | bun |
 | `packages/chrome-sdk` | the shell-facing API: elements, `BridgeClient`, measurement, input | bun |
 | `packages/component-library` | shared React components, the Panda preset, `shellBuild` | bun |
 | `packages/shell-manganese` | the reference desktop: tabs, stage, rail, address bar | bun |
