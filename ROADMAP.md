@@ -119,7 +119,7 @@ decides whether an item is waiting or workable.
    person will look.
 2. **A desktop on a tty.** Audited against the pin in
    `docs/architecture/A-DESKTOP-ON-A-TTY.md`. Getting `gn gen` to accept
-   `ozone_platform_drm = true` is a **patch**: five edits, not one of them
+   `ozone_platform_drm = true` is a **patch**: eight edits, not one of them
    inside the DRM platform's own logic, because its 49 `.cc` files hold two
    ChromeOS references between them and no `BUILDFLAG(IS_CHROMEOS)` at all — the
    assert is conservative about the platform. Getting a lit screen out of it is
@@ -128,10 +128,19 @@ decides whether an item is waiting or workable.
    without `//ui/display/manager`, no VT handling or input revocation, and no
    route by which a display list reaches the compositor. It is **not a fork**.
 
-   The doc's first plan item is a `gn gen` probe on `crux`, and it is first for
-   a reason: a static read cannot see an `is_chromeos`-conditional header three
-   targets down or a `visibility` refusal. Until that runs, "a patch" is a
-   reasoned answer and not a measured one.
+   That the patched tree configures **and compiles and links** is now
+   **measured, not reasoned**: `.github/workflows/engine-drm-probe.yml` builds
+   `//ui/ozone` with the argument on and the patch applied, on the engine
+   runner, and it is green -- `ozone_platform_drm = true configures and
+   //ui/ozone compiles at this pin`. It earned its keep immediately: three of
+   the eight edits exist only because it ran, and one of them was a link error
+   that no `git grep` and no compiler could have reached. Five edits was the
+   reading; eight is the count, and the gap between those two numbers is the
+   argument for owning a runner.
+
+   What has *not* been measured is a lit screen. The probe builds `//ui/ozone`,
+   not `chrome`, and `crux` has no card node, so nothing here says a display
+   comes up -- only that the tree the display would come out of builds.
 
    Until both halves land, a desktop is a window inside an existing Wayland
    session, or headless.
