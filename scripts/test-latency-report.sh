@@ -70,6 +70,15 @@ expect "a two-word label reads as one label" \
   "1.40" "$(latency_median "key to commit" "$RUN_LOG")"
 
 expect "a completed run says so" "completed" "$(latency_ended "$RUN_LOG")"
+
+# THE DENOMINATOR, and the reason it is read off the run rather than written
+# here. `commit to pixel` is quantised to probe round trips and a probe round
+# trip is one display frame, so one display frame is what the assertion is a
+# multiple of. It is not the floor: the floor is that same frame sampled while
+# the browser is still starting, and it has come back at three times this on a
+# run whose own commit-to-pixel was less than two.
+expect "the display frame comes off its own line" \
+  "16.67" "$(latency_display_frame "$RUN_LOG")"
 expect "an unabandoned run says none" "0" "$(latency_abandoned "$RUN_LOG")"
 
 # Its own line and its own reader, and the reason both exist: a round the
@@ -111,6 +120,8 @@ expect "a dark probe is not a screen that never settled" \
 EMPTY="$(log_of "2026-09-07T14:00:00.7Z  INFO domicile_compositor: chrome client connected")"
 expect "a log with no run in it says nothing rather than completed" \
   "" "$(latency_ended "$EMPTY")"
+expect "and no display frame to divide by" \
+  "" "$(latency_display_frame "$EMPTY")"
 expect "and has no abandoned count to report" \
   "" "$(latency_abandoned "$EMPTY")"
 
@@ -128,6 +139,10 @@ ANSI="$(log_of "$(printf '\033[2m2026-09-07T14:00:00.4Z\033[0m \033[32m INFO\033
 expect "a colourised line reads the same as a plain one" \
   "16.68" "$(latency_median "commit to pixel" "$ANSI")"
 
+FRAME_ANSI="$(log_of "$(printf '\033[2m2026-09-07T14:00:00.1Z\033[0m \033[32m INFO\033[0m \033[2mdomicile::engine::spike\033[0m\033[2m:\033[0m latency: the display frame is 16.67 ms')")"
+expect "and so does the display frame" \
+  "16.67" "$(latency_display_frame "$FRAME_ANSI")"
+
 # The threshold. Two decimals, and the numbers that matter are within a few
 # hundredths of each other.
 latency_within 16.68 2 16.67 && expect "one floor is within two floors" ok ok ||
@@ -136,6 +151,16 @@ latency_within 33.35 2 16.67 && expect "just over two floors is not" ok FAILED |
   expect "just over two floors is not" ok ok
 latency_within 33.33 2 16.67 && expect "just under two floors is" ok ok ||
   expect "just under two floors is" ok FAILED
+
+# The pair that moved the denominator. Both are real: `commit to pixel` came
+# back at 28-29 ms on every CI run there has been, and the floor came back at
+# 16.43 on one of them and 48.71 on another. Against a display frame the two
+# runs agree; against their own floors they are 1.70 and 0.60, and the guard
+# would have been a coin toss between them.
+latency_within 27.99 2 16.67 && expect "a run whose floor sampled low still passes" ok ok ||
+  expect "a run whose floor sampled low still passes" ok FAILED
+latency_within 29.18 2 16.67 && expect "and so does the one whose floor sampled high" ok ok ||
+  expect "and so does the one whose floor sampled high" ok FAILED
 
 # The case that decides whether this is a comparison at all: integer truncation
 # would make both of these 16 and 16, and pass.

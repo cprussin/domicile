@@ -52,9 +52,13 @@ spread() { # $1 label, $2 median
   say "latency $1: min $2, median $2, max $2 ms over 60 (median 1.0 frames)"
 }
 
-run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered
+run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered, $6 display frame
   local f; f="$(mktemp "$FIXTURES/XXXXXX")"
   {
+    # The compositor says this first, and the guard divides by it. Defaulted to
+    # 60Hz, which is what `crux` advertises, so that a fixture only says
+    # otherwise when the frame is what it is about.
+    [ -n "${6-16.67}" ] && say "latency: the display frame is ${6-16.67} ms"
     [ -n "$1" ] && spread floor "$1"
     say "latency key to commit: min 1.40, median 1.40, max 1.40 ms over 60 (median 0.1 frames)"
     if [ -n "$2" ]; then
@@ -81,7 +85,7 @@ verdict() { # $1 log, $2 NEGATIVE
   (
     COMP_LOG="$1"
     NEGATIVE="$2"
-    MOST_FLOORS=2
+    MOST_FRAMES=2
     eval "$VERDICT"
   ) 2>/dev/null | grep -E '^(::error::|PASS:|negative control: correct)' | head -1
 }
@@ -89,7 +93,7 @@ verdict_code() { # $1 log, $2 NEGATIVE
   (
     COMP_LOG="$1"
     NEGATIVE="$2"
-    MOST_FLOORS=2
+    MOST_FRAMES=2
     eval "$VERDICT"
   ) >/dev/null 2>&1
   echo $?
@@ -98,25 +102,60 @@ verdict_code() { # $1 log, $2 NEGATIVE
 # --- the measurement itself ---
 
 GOOD="$(run_log 16.67 16.68 0 completed)"
-expect "a frame that arrives in one floor passes" \
+expect "a frame that arrives in one display frame passes" \
   "0" "$(verdict_code "$GOOD" 0)"
-expect "and says both numbers" \
-  "PASS: a client's frame reaches the page in 16.68ms against a probe" \
+expect "and says what it was measured against" \
+  "PASS: a client's frame reaches the page in 16.68ms, within 2 display frames of 16.67ms." \
   "$(verdict "$GOOD" 0)"
 
 # The whole point of the threshold: a stage of its own is what a readback, an
 # extra composite or a frame held for a queue would look like.
 SLOW="$(run_log 16.67 50.10 0 completed)"
-expect "a frame that takes three floors fails" "1" "$(verdict_code "$SLOW" 0)"
-expect "and names the floor it is measured against" \
-  "::error::guard-latency: commit to pixel is 50.10ms against a floor of 16.67ms, more than 2x — a client's frame is waiting on a stage of its own somewhere between the commit and the page" \
+expect "a frame that takes three display frames fails" "1" "$(verdict_code "$SLOW" 0)"
+expect "and names the frame it is measured against" \
+  "::error::guard-latency: commit to pixel is 50.10ms against a display frame of 16.67ms, more than 2x — a client's frame is waiting on a stage of its own somewhere between the commit and the page" \
   "$(verdict "$SLOW" 0)"
 
 # Just inside and just outside, because this is a float comparison in a shell.
-expect "just under twice the floor passes" \
+expect "just under twice the display frame passes" \
   "0" "$(verdict_code "$(run_log 16.67 33.33 0 completed)" 0)"
-expect "just over twice the floor fails" \
+expect "just over twice the display frame fails" \
   "1" "$(verdict_code "$(run_log 16.67 33.35 0 completed)" 0)"
+
+# THE PAIR THIS DENOMINATOR EXISTS FOR, and both are readings off real CI runs
+# rather than shapes somebody imagined. `commit to pixel` came back at 28-29 ms
+# on all four runs there have been; the floor came back at 16.43 on one and
+# 48.71 on another, of the same probe on the same machine. Against the display
+# frame the verdict is the same both times. Against the floor it was 1.70 and
+# 0.60 — the same reading, three quarters of the way to failing on one run and
+# comfortable on the next.
+expect "a run whose floor sampled one frame passes" \
+  "0" "$(verdict_code "$(run_log 16.43 27.99 0 completed)" 0)"
+expect "and the same reading against a floor that sampled three still passes" \
+  "0" "$(verdict_code "$(run_log 48.71 29.18 0 completed)" 0)"
+
+# The other end of it, and the one that matters more: a floor sampled high used
+# to RAISE the bar, so a run that had genuinely grown a stage would have been
+# let through by the same noise. 50.10ms is three display frames and fails
+# whatever the floor did.
+expect "a floor that sampled three frames does not excuse a slow one" \
+  "1" "$(verdict_code "$(run_log 48.71 50.10 0 completed)" 0)"
+# And a floor sampled below one frame does not manufacture a failure out of a
+# reading every other run called a pass.
+expect "nor does a floor that sampled low condemn a good one" \
+  "0" "$(verdict_code "$(run_log 13.50 28.18 0 completed)" 0)"
+
+# THE FLOOR STILL HAS A JOB, and this is it: the display frame is what this
+# desktop *advertises* — `display_interval` in the compositor says so — and
+# nothing else here can ask viz what it really is. The floor is the same
+# quantity measured, so a frame far larger than the floor means the number the
+# bar is built from is not the number the display is running at. It can only
+# fire in that direction: contention pushes the floor up, never below the frame.
+expect "a display frame nowhere near the floor is not a bar at all" \
+  "1" "$(verdict_code "$(run_log 4.20 28.18 0 completed 0 16.67)" 0)"
+expect "and says which two numbers disagree" \
+  "::error::guard-latency: the run reports a display frame of 16.67ms and priced its probe at 4.20ms — a probe round trip is one display frame, so the frame this would be measured against is not the one this desktop is drawing at" \
+  "$(verdict "$(run_log 4.20 28.18 0 completed 0 16.67)" 0)"
 
 # A round nobody answered means the client did not do the thing being timed, so
 # whatever was measured is not a keystroke reaching a pixel.
@@ -140,11 +179,16 @@ expect "a dark probe points at the page or the browser" \
 # too, so a code-only check passes through that instead of through the branch
 # it names — and the branch could be deleted outright with these still green.
 expect "a completed run with no floor is not a measurement" \
-  "::error::guard-latency: the run completed without both a floor and a commit-to-pixel figure, so there is nothing to compare" \
+  "::error::guard-latency: the run completed without all of a floor, a display frame and a commit-to-pixel figure, so there is nothing to compare" \
   "$(verdict "$(run_log '' 16.68 0 completed)" 0)"
 expect "nor one with no commit-to-pixel" \
-  "::error::guard-latency: the run completed without both a floor and a commit-to-pixel figure, so there is nothing to compare" \
+  "::error::guard-latency: the run completed without all of a floor, a display frame and a commit-to-pixel figure, so there is nothing to compare" \
   "$(verdict "$(run_log 16.67 '' 0 completed)" 0)"
+# And a run that never said what a display frame is has no denominator at all,
+# which must be its own answer rather than a comparison against an empty string.
+expect "nor one that never reported a display frame" \
+  "::error::guard-latency: the run completed without all of a floor, a display frame and a commit-to-pixel figure, so there is nothing to compare" \
+  "$(verdict "$(run_log 16.67 16.68 0 completed 0 '')" 0)"
 
 # One unanswered round out of sixty is the signal this guard exists for, and
 # the only abandoned fixture above uses four — which a `-gt 3` would let past.

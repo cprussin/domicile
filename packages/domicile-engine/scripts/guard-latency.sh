@@ -15,13 +15,67 @@
 # WHAT IT ASSERTS, AND WHY IT IS A RATIO. The number that matters is
 # `commit to pixel`, and it cannot be read as an absolute: the probe is a
 # `CopyOutputRequest` that forces the draw it then reads, so every reading is at
-# least one display frame and the floor measures exactly that. So the assertion
-# is against the floor — this design must not add a stage of its own — which is
-# also the claim ENGINE-FORK.md makes for the producer's half, in the same
-# words, from the same shape of measurement.
+# least one display frame and is quantised to it. So the assertion is that it is
+# within a small number of display frames — this design must not add a stage of
+# its own — which is also the claim ENGINE-FORK.md makes for the producer's
+# half, in the same words, from the same shape of measurement.
 #
 # It does not assert a millisecond figure. A threshold in milliseconds is a
 # threshold on whatever else the runner was doing.
+#
+# THE FRAME IS THE DENOMINATOR, AND THE FLOOR USED TO BE. Both are the same
+# quantity -- one probe round trip is one display frame -- and only one of them
+# is sampled, at the start of a run, while a browser and a client are still
+# starting. Four CI runs of this guard, and the control's own floor beside the
+# one that has it:
+#
+#   floor 48.71 ms   commit to pixel 29.18 ms   ratio 0.60
+#   floor 16.43 ms   commit to pixel 27.99 ms   ratio 1.70   (control: 32.49)
+#   floor 16.69 ms   commit to pixel 28.18 ms   ratio 1.69   (control: 39.19)
+#   floor 16.55 ms   commit to pixel 28.24 ms   ratio 1.71   (control: 31.82)
+#
+# `commit to pixel` moves by four per cent across all of them. The floor moves
+# by three times, and it was the number the bar was built from -- so the guard
+# was a coin toss between 0.60 and 1.71 against a threshold of 2, and it would
+# have flaked reading like a regression. The 48.71 sample is not merely noisy,
+# it is impossible: `commit to pixel` is quantised to probe round trips and can
+# never be less than one, and that run's was 29.18. Whatever those samples
+# priced, it was not a probe round trip.
+#
+# So the run's own reported display frame is the denominator. It is not a
+# millisecond threshold in disguise -- it is this desktop's frame period, the
+# same number `Spread::line` divides by for its `(median N frames)` column, and
+# a desktop advertising 144Hz moves the bar with it. What it stops being is a
+# bar that moves with whatever the runner was doing during the samples that
+# priced the probe, which is worse than noise in a reading: it moves the bar
+# rather than the measurement.
+#
+# AND THE ADVERTISED FRAME IS THE REAL ONE HERE, which is the objection this
+# has to answer, because `display_interval` cannot ask viz. `css_parity.cc`
+# can -- it runs inside the browser and reads `BeginFrameArgs` -- and in the
+# same CI job as the fourth row above it reported
+#
+#   display frame interval, per viz     16.67 ms
+#   probe round trip, nothing changed   min 13.47, median 16.75, max 21.11 ms
+#                                       (median 1.0 frames)
+#
+# against the 16.67 ms this compositor advertises. Two instruments, one from
+# inside the browser and one from outside it, agreeing on the frame and on the
+# round trip being one of them. That min is also why the floor's own minimum
+# is not the denominator either: a sample can come in under a frame.
+#
+# The threshold itself is untouched at 2. Widening it is how this would have
+# been made to stop failing rather than made to mean something, and a stage of
+# its own -- a readback, an extra composite, a frame held for a queue -- is one
+# more display frame, which 2 still catches with the readings above sitting at
+# 1.7.
+#
+# THE FLOOR IS STILL READ, and it still has a job: the display frame is what
+# the compositor *advertises* (`display_interval` says so, because nothing
+# outside the browser can ask viz), and the floor is that same quantity
+# measured. A frame far larger than the floor means the bar is built from a
+# number this display is not running at, and the guard says so instead of
+# comparing against it.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -49,10 +103,12 @@ APP_ID="${APP_ID:-app-1}"
 # once already.
 NEGATIVE="${NEGATIVE:-0}"
 
-# How much `commit to pixel` may exceed the floor. One means "no stage of its
-# own"; the runner is shared, so there is headroom. It is a ratio and not a
-# duration on purpose — see the header.
-MOST_FLOORS="${MOST_FLOORS:-2}"
+# How many display frames `commit to pixel` may take. One means "no stage of
+# its own"; the probe is only asked after the commit and each ask costs a
+# frame, so a clean run lands between one and two and every reading there has
+# been sits at 1.7. Two is where a stage of its own starts. It is a count of
+# frames and not a duration on purpose — see the header.
+MOST_FRAMES="${MOST_FRAMES:-2}"
 
 # Three numbers: rounds, floor samples, polls per round. The control runs short
 # because what it proves needs three rounds, and sixty rounds each spending
@@ -230,6 +286,7 @@ committed a frame after a key — check that it takes OSC 11 for its background 
   exit 1
 fi
 
+FRAME="$(latency_display_frame "$COMP_LOG")"
 FLOOR="$(latency_median floor "$COMP_LOG")"
 OURS="$(latency_median "commit to pixel" "$COMP_LOG")"
 THEIRS="$(latency_median "key to commit" "$COMP_LOG")"
@@ -237,7 +294,8 @@ WHOLE="$(latency_median "key to pixel" "$COMP_LOG")"
 ABANDONED="$(latency_abandoned "$COMP_LOG")"
 UNDELIVERED="$(latency_undelivered "$COMP_LOG")"
 REDREW="$(latency_redrew "$COMP_LOG")"
-echo "ended: $ENDED; floor ${FLOOR:-none} ms; commit to pixel ${OURS:-none} ms;"
+echo "ended: $ENDED; display frame ${FRAME:-none} ms; floor ${FLOOR:-none} ms;"
+echo "commit to pixel ${OURS:-none} ms;"
 echo "key to commit ${THEIRS:-none} ms; key to pixel ${WHOLE:-none} ms;"
 echo "abandoned ${ABANDONED:-none}; undelivered ${UNDELIVERED:-none};"
 echo "drew again while polling ${REDREW:-none}"
@@ -302,20 +360,35 @@ if [ "${UNDELIVERED:-0}" -gt 0 ]; then
   exit 1
 fi
 
-if [ -z "$OURS" ] || [ -z "$FLOOR" ]; then
-  annotate "guard-latency: the run completed without both a floor and a" \
-       "commit-to-pixel figure, so there is nothing to compare"
+if [ -z "$OURS" ] || [ -z "$FLOOR" ] || [ -z "$FRAME" ]; then
+  annotate "guard-latency: the run completed without all of a floor, a display" \
+       "frame and a commit-to-pixel figure, so there is nothing to compare"
+  exit 1
+fi
+
+# WHETHER THE BAR IS A BAR, before anything is measured against it. The frame
+# is advertised and the floor is the same thing sampled, so the floor is the
+# only check there is on the advertisement — and it can only fail in one
+# direction, because contention pushes a sampled floor up and nothing pushes it
+# below one frame.
+if ! latency_within "$FRAME" 2 "$FLOOR"; then
+  annotate "guard-latency: the run reports a display frame of ${FRAME}ms and" \
+       "priced its probe at ${FLOOR}ms — a probe round trip is one display" \
+       "frame, so the frame this would be measured against is not the one this" \
+       "desktop is drawing at"
+  grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
   exit 1
 fi
 
 # The assertion. Everything above is about having a measurement at all.
-if latency_within "$OURS" "$MOST_FLOORS" "$FLOOR"; then
-  echo "PASS: a client's frame reaches the page in ${OURS}ms against a probe"
-  echo "floor of ${FLOOR}ms — no stage of its own, which is the claim."
+if latency_within "$OURS" "$MOST_FRAMES" "$FRAME"; then
+  echo "PASS: a client's frame reaches the page in ${OURS}ms, within ${MOST_FRAMES} display frames of ${FRAME}ms."
+  echo "No stage of its own, which is the claim. The probe's own floor, which"
+  echo "is the same quantity sampled rather than advertised: ${FLOOR}ms."
   exit 0
 fi
-annotate "guard-latency: commit to pixel is ${OURS}ms against a floor of" \
-     "${FLOOR}ms, more than ${MOST_FLOORS}x — a client's frame is waiting on a" \
-     "stage of its own somewhere between the commit and the page"
+annotate "guard-latency: commit to pixel is ${OURS}ms against a display frame" \
+     "of ${FRAME}ms, more than ${MOST_FRAMES}x — a client's frame is waiting" \
+     "on a stage of its own somewhere between the commit and the page"
 grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
 exit 1

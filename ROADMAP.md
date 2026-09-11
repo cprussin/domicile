@@ -68,10 +68,13 @@ decides whether an item is waiting or workable.
    `<app>`'s layout box *is* the `xdg_toplevel.configure`. **Parked**: the
    `domicile://` work may delete the SDK's runtime entirely, and splitting it
    before then would be a seam drawn twice.
-3. **Keystroke-to-pixel latency** (#206). The one requirement nothing has
-   measured: a client's window must cost the user nothing a plain Wayland
-   compositor would not. Guard written, unit-tested, never run on hardware —
-   every engine run so far has been refused at the `crux` tree lock.
+3. **Keystroke-to-pixel latency** (#206). The requirement is that a client's
+   window costs the user nothing a plain Wayland compositor would not.
+   `guard-latency.sh` has run on `crux` now — it reads `commit to pixel` at
+   28–29 ms against a 16.67 ms display frame on every run so far, which is 1.7
+   frames and no stage of its own. What is left is a machine with a screen: the
+   runs are in a nested compositor with nothing presenting, and the probe's own
+   round trip is inside every figure.
 4. **A control socket, and `domicile load-shell <path>`.** Switching the
    running shell without restarting the desktop, so a watcher outside Domicile
    can trigger a reload and `DOMICILE_DEV_RELOAD` — the poller the bridge
