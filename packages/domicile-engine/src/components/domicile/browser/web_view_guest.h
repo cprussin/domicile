@@ -88,6 +88,22 @@ class WebViewGuest : public mojom::WebViewGuest,
   // mojom::WebViewGuest:
   void Navigate(const GURL& url) override;
 
+  // THE HISTORY A BROWSER WINDOW'S ADDRESS BAR DRIVES, and the reason it has
+  // to be driven from here. `<webview>` is a frame owner, so the element has a
+  // nested browsing context and a `History` in the renderer -- and that frame
+  // is the placeholder, which has been on about:blank since it was made and
+  // which the attach swapped out. The page the user sees is this guest, and
+  // its history is a NavigationController in this process. So the four calls
+  // travel, and the guest's own controller is what answers them.
+  //
+  // What that buys, beyond working at all: a guest's history is a page's, kept
+  // across the process changes a cross-site navigation makes, where the
+  // placeholder's was one frame's inside the shell's own session.
+  void GoBack() override;
+  void GoForward() override;
+  void Stop() override;
+  void Reload() override;
+
   // content::BrowserPluginGuestDelegate:
   content::WebContents* GetOwnerWebContents() override;
   content::RenderFrameHost* GetProspectiveOuterDocument() override;

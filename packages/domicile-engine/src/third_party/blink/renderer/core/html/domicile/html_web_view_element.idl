@@ -19,8 +19,14 @@
   // read and to write.
   [CEReactions, Reflect, URL] attribute USVString src;
 
-  [CallWith=ScriptState, RaisesException] undefined goBack();
-  [CallWith=ScriptState, RaisesException] undefined goForward();
+  // The four go to the browser, which drives the guest's own
+  // NavigationController -- see html_web_view_element.h. None of them raises:
+  // there is nothing here for a ScriptState to be needed for and nothing a
+  // caller could do about a message it cannot fail to send. A back with
+  // nowhere to go is answered by not navigating, which is what an address bar
+  // that cannot yet grey out its buttons asks for constantly.
+  [CEReactions] undefined goBack();
+  [CEReactions] undefined goForward();
   [CEReactions] undefined stop();
   [CEReactions] undefined reload();
 };

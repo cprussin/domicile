@@ -8,13 +8,9 @@
 #include "components/domicile/mojom/web_view_guest.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
-#include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 
 namespace blink {
-
-class LocalDOMWindow;
 
 // <webview> — web content in a browsing context of its own.
 //
@@ -51,15 +47,25 @@ class CORE_EXPORT HTMLWebViewElement final : public HTMLFrameElementBase {
   ~HTMLWebViewElement() override;
 
   // The navigation surface a chrome's address bar drives. Each is the
-  // corresponding operation on the nested context's own history, so a shell
-  // does not have to reach for the page inside.
+  // corresponding operation on the GUEST's own history, sent to the browser
+  // over the same pipe `src` goes down.
   //
-  // STILL THE PLACEHOLDER'S, not the guest's, and so still broken -- the guest
-  // has a NavigationController of its own and these do not reach it. What the
-  // guest changed is where the page lives, not who drives it; ROADMAP.md
-  // carries the wiring as a known gap.
-  void goBack(ScriptState*, ExceptionState&);
-  void goForward(ScriptState*, ExceptionState&);
+  // NOT THE PLACEHOLDER'S History, which is what these used to reach and why
+  // all four did nothing: this element is a frame owner, so it has a nested
+  // browsing context -- but that context is the attach point, it has been on
+  // about:blank since it was made, and the attach swapped it out. The page a
+  // user sees is a WebContents in the browser process and its history is a
+  // NavigationController there.
+  //
+  // NOTHING IS THROWN AND NOTHING IS RETURNED. `History::back()` raises when
+  // the frame is detached and when a sandboxed document may not navigate its
+  // top; neither has a counterpart here -- there is one pipe, it is bound for
+  // the element's whole life, and a browser that has torn the guest down has
+  // closed it. A back with nowhere to go is not an error either: the browser's
+  // controller answers it by not navigating, which is what an address bar
+  // whose buttons cannot yet be greyed out asks for constantly.
+  void goBack();
+  void goForward();
   void stop();
   void reload();
 
@@ -96,10 +102,6 @@ class CORE_EXPORT HTMLWebViewElement final : public HTMLFrameElementBase {
   }
 
   network::ParsedPermissionsPolicy ConstructContainerPolicy() const override;
-
-  // The nested context's window, or null when there is not one in this
-  // process to reach.
-  LocalDOMWindow* ContentWindow() const;
 
   // The guest, for as long as this element lives. Bound once, and not
   // rebuilt on a later `src`: the placeholder frame is destroyed by the
