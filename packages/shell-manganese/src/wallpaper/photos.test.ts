@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { WALLPAPER_PHOTOS } from "./wallpaper-photos";
+import { WALLPAPER_PHOTOS } from "./photos";
 
 describe("WALLPAPER_PHOTOS", () => {
   it("is several photographs, no two of them the same", () => {

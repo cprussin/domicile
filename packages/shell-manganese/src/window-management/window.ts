@@ -1,4 +1,4 @@
-// A window on the stage: either a Wayland client the host announced or a
+// A window the shell holds: either a Wayland client the host announced or a
 // browser window the shell opened itself. Both get a tab, and the tab rail is
 // what switches between them, so they share one id space and one title.
 
@@ -19,10 +19,9 @@ export enum WindowKind {
  *
  * Two kinds of fact on one record: the shell's own — a tab, a title — and the
  * client's, which arrive as host messages and are rendered onto the portal.
- * The client's are what a side registry of live elements used to hold, and they
- * are here for the reason state is anywhere: the portal for a window is
- * unmounted and mounted again whenever the shell stops rendering it and starts
- * again, and what it is told on the way back has to be current.
+ * The client's are here for the reason state is anywhere: the portal for a
+ * window is unmounted and mounted again whenever the shell stops rendering it
+ * and starts again, and what it is told on the way back has to be current.
  *
  * Written out rather than left to the constructor's inferred shape because a
  * field the client has not reported yet still has a type — a window that has

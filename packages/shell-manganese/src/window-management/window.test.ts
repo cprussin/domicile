@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { appIdOf, ShellWindow, WindowKind } from "./shell-window";
+import { appIdOf, ShellWindow, WindowKind } from "./window";
 
 describe("ShellWindow", () => {
   describe("App", () => {

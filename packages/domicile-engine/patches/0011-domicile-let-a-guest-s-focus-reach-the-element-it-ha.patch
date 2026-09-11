@@ -72,7 +72,7 @@ claim: there is no nested browsing context in happy-dom, so the shell's unit
 test passes on a synthesised event whether or not a real one ever arrives --
 which is how the shell shipped a handler for an event nothing sent.
 
-See packages/shell-manganese/src/BrowserWindow.tsx in the Domicile repository
+See packages/shell-manganese/src/window-management/BrowserWindow.tsx in the Domicile repository
 for the other end of it.
 ---
  .../core/html/html_frame_element_base.h       |  7 ++++-

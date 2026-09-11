@@ -6,27 +6,19 @@ import type {
 } from "@domicile/component-library/display-source";
 
 /**
- * The desktop, as the component library wants to be told about it.
+ * The desktop the host describes, as the component library wants to be told
+ * about it.
  *
  * The whole of the adapter between the control channel and the design system,
  * and the reason `DisplaySource` is a port rather than the `DomicileClient`
  * itself: `@domicile/component-library` has no protocol dependency, so the
  * shell — which has both — is where the two meet.
  *
- * It used to be the case that nothing was mapped, because `DisplayInfo` and
- * `Display` happened to be the same four fields. That comment said the
- * coincidence was not worth relying on, and it turned out not to be: the engine
- * describes a screen as `x`/`y`/`width`/`height`, because WebIDL has no tuple,
- * where `<Screen>` lays out against a `position` and a `size`. {@link asDisplay}
- * is that reshaping, and it is now what this module is for.
- *
  * Built once per client and not per render. `DomicileClient.on` is a single
  * slot and `DisplayProvider` re-registers whenever its source's identity
- * changes, so
- * a source rebuilt each render would re-register each render — see
- * {@link DisplaySource}.
+ * changes, so a source rebuilt each render would re-register each render.
  */
-export const displaysFrom = (domicile: DomicileClient): DisplaySource => ({
+export const hostDisplays = (domicile: DomicileClient): DisplaySource => ({
   get displays() {
     // A getter, not a snapshot: the provider reads this when it mounts and
     // again when the source changes, and the client may have been told a new
@@ -54,7 +46,9 @@ export const displaysFrom = (domicile: DomicileClient): DisplaySource => ({
 });
 
 /**
- * One screen, as a rectangle the layout can use.
+ * One screen, as a rectangle the layout can use. The engine describes a screen
+ * as `x`/`y`/`width`/`height`, because WebIDL has no tuple, where `<Screen>`
+ * lays out against a `position` and a `size`.
  *
  * Both shapes are logical CSS pixels in one desktop-wide space whose origin is
  * the top-left of the displays' bounding box, so `position` is directly where a

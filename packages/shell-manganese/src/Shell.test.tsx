@@ -10,11 +10,11 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
-import { displaysFrom } from "./display-source";
 import { Shell } from "./Shell";
+import { hostDisplays } from "./screens/host-displays";
 
 // The desktop as the *engine* describes it: a corner and an extent as four
-// numbers, which `display-source.ts` is what regroups into the rectangle the
+// numbers, which `screens/host-displays.ts` is what regroups into the rectangle the
 // component library lays out against. The double below holds this shape rather
 // than that one, so the mapping is exercised by every render here.
 const LEFT: DomicileDisplay = {
@@ -138,7 +138,7 @@ const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
       // Never turned: nothing here tests what happens when a window moves.
     },
   });
-  return render(<Shell displays={displaysFrom(client)} domicile={client} />);
+  return render(<Shell displays={hostDisplays(client)} domicile={client} />);
 };
 
 /** The chrome on a desktop the host has already described. */
@@ -206,7 +206,7 @@ describe("Shell", () => {
       // A chrome laid out over the page and then moved onto a screen is two
       // different elements in that slot, and the switch takes the whole
       // subtree with it. Waiting costs the handshake's worth of blank window;
-      // a shell that will never be told has `viewport-display` instead.
+      // a shell that will never be told has `viewport-displays` instead.
       const { container } = renderUndescribedShell();
 
       expect(container.querySelector("main")).toBeNull();

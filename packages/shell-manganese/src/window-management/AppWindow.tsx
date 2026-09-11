@@ -4,9 +4,9 @@ import type {
 } from "@domicile/chrome-sdk/app-element";
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 
-import { css, cx } from "../styled-system/css";
-import { surfaceBox } from "./float";
-import type { Floating } from "./shell-state";
+import { css, cx } from "../../styled-system/css";
+import { surfaceBox } from "./floating/float";
+import type { Floating } from "./window-state";
 import {
   clickThroughStyles,
   draggingStyles,

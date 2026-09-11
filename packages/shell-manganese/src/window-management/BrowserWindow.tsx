@@ -14,10 +14,10 @@ import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
-import { css, cx } from "../styled-system/css";
-import { flex, hstack } from "../styled-system/patterns";
-import { surfaceBox } from "./float";
-import type { Floating } from "./shell-state";
+import { css, cx } from "../../styled-system/css";
+import { flex, hstack } from "../../styled-system/patterns";
+import { surfaceBox } from "./floating/float";
+import type { Floating } from "./window-state";
 import {
   clickThroughStyles,
   draggingStyles,
@@ -57,17 +57,13 @@ type Props = {
    * anywhere in it.
    *
    * A click inside the *page* is one the shell never sees: the view hosts a
-   * browsing context of its own, so no pointer event crosses back out of it —
-   * which is why a browser window could be clicked into while the rail went on
-   * highlighting the window before it and the keyboard stayed there too. Nor
-   * does the focus that click takes: a guest is a remote frame, upstream Blink
-   * dispatches no focus event across that boundary, and even with the fork
-   * focusing the element (patch 0011) there is still no `focusin` — those are
-   * dispatched only while the page is focused, and a guest taking focus is the
-   * moment this page loses it. So the engine's element says so in an event of
-   * its own, {@link WEBVIEW_GUEST_FOCUS_EVENT}, and the window listens for
-   * that as well as for its own chrome's pointer events. Whichever arrives,
-   * this is the window the user is now working in.
+   * browsing context of its own, so no pointer event crosses back out of it,
+   * and neither does the focus that click takes — Blink dispatches no focus
+   * event across a remote frame's boundary, and `focusin` fires only while the
+   * page is focused, which is exactly what a guest taking focus ends. So the
+   * element says so itself, in {@link WEBVIEW_GUEST_FOCUS_EVENT}, and the
+   * window listens for that as well as for its own chrome's pointer events.
+   * Whichever arrives, this is the window the user is now working in.
    */
   onReach: () => void;
   /**
@@ -124,12 +120,9 @@ export const BrowserWindow = ({
     }
   }, [onNavigate, view]);
 
-  // THE CLICK IN THE PAGE, which is the half of this window the shell cannot
-  // see. The element dispatches this when its guest takes focus, because
-  // nothing else about that click leaves the guest — see `onReach`. It bubbles,
-  // so the handler could hang on the window below; it hangs here because that
-  // is where the element is, and a listener on an element this component owns
-  // cannot be reached by anything else in the page.
+  // The click in the page, which is the half of this window the shell cannot
+  // see: the element dispatches this when its guest takes focus, because
+  // nothing else about that click leaves the guest — see `onReach`.
   useEffect(() => {
     if (view === null) {
       return undefined;
@@ -151,14 +144,13 @@ export const BrowserWindow = ({
   // The window the user is working in takes the keyboard, and a browser
   // window's belongs to its page rather than to the chrome around it.
   //
-  // AND THE HOST HAS TO BE TOLD, which `<domicile-app>` does for itself and
+  // The host has to be told as well, which `<domicile-app>` does for itself and
   // this element cannot. There is one seat: the compositor holds `wl_keyboard`
-  // focus on whichever client the chrome last named, and a browser window
-  // names none — its page is inside the chrome's own window. Without this the
-  // focus a terminal was given stays with it while the user types into a site,
-  // and every key they press is delivered to a window they have switched away
-  // from. `focusChrome` is how the seat comes back to the page, and it is the
-  // same call `<domicile-app>` makes when it stops standing for a window.
+  // focus on whichever client the chrome last named, and a browser window names
+  // none — its page is inside the chrome's own window. Without `focusChrome`
+  // the focus a terminal was given stays with it while the user types into a
+  // site, and every key they press is delivered to a window they have switched
+  // away from.
   useEffect(() => {
     if (focused && view !== null) {
       domicile.focusChrome();
@@ -311,15 +303,15 @@ const addressFieldStyles = css({
   minInlineSize: 0,
 });
 
-// The page takes the height the address bar leaves, and gives it to the embed
-// inside it rather than making the embed resolve a percentage against it — so
-// the view is a column, which is what the embed's `flex` below grows into. The
-// embed has no height of its own: Electron's `<webview>` is a shell around an
-// iframe, and an iframe left to itself is 150px tall.
+// The page takes the height the address bar leaves and gives it to the frame
+// inside it rather than making that frame resolve a percentage against it — so
+// the view is a column the frame's `flex` below grows into. The frame has no
+// height of its own: it is an iframe, and an iframe left to itself is 150px
+// tall.
 //
-// The embed's own `display` is left alone on purpose: Electron ships
-// `<webview>` as `display: flex` so the browsing context inside fills the tag,
-// and overriding it collapses the page to nothing.
+// The element's own `display` is left alone on purpose: it is set so the
+// browsing context inside fills the tag, and overriding it collapses the page
+// to nothing.
 const viewStyles = flex({
   "& .domicile-webview-frame": {
     borderStyle: "none",

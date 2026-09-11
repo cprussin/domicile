@@ -7,14 +7,9 @@
 // of windows rather than with what any of them is doing, which is why it is
 // worth a line of its own on an idle desktop.
 //
-// **The keystroke line that used to run beside it is gone, and the measurement
-// went with it rather than being lost.** Three of that line's four numbers —
-// the round trip, the hop into the page, the draw — came off instruments that
-// had stopped recording when the shell stopped drawing a client's pixels, so
-// the line reported `rt_ms=0 msgs=0 draw_ms=0` on every interval somebody
-// typed in. Keystroke to pixel is measured in `domicile-compositor`'s
-// `latency.rs` now, which is the only process that both puts the key into the
-// client's seat and can ask the engine what was drawn; see ENGINE-FORK.md.
+// Keystroke to pixel is not measured here: `domicile-compositor`'s `latency.rs`
+// is the only process that both puts the key into the client's seat and can ask
+// the engine what was drawn. See ENGINE-FORK.md.
 
 import type { SampleReport } from "@domicile/chrome-sdk/sample-window";
 

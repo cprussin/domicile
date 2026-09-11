@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 
-import { css } from "../styled-system/css";
-import type { Box } from "./float";
+import { css } from "../../styled-system/css";
+import type { Box } from "./floating/float";
 
 /**
  * What every window shares: it fills the stage, and the one that is not on it

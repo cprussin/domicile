@@ -7,7 +7,7 @@ import type {
 } from "@domicile/chrome-sdk/domicile-host";
 import type { Display } from "@domicile/component-library/display-source";
 
-import { displaysFrom } from "./display-source";
+import { hostDisplays } from "./host-displays";
 
 /** What every call *out* to the compositor does here, which is nothing. */
 const ignored = (): undefined => undefined;
@@ -100,7 +100,7 @@ describe("the desktop a shell lays out against", () => {
 
     host.describes([LEFT]);
 
-    expect(displaysFrom(client).displays).toStrictEqual([LEFT_LAID_OUT]);
+    expect(hostDisplays(client).displays).toStrictEqual([LEFT_LAID_OUT]);
   });
 
   it("reads the domicile when asked, not when built", () => {
@@ -108,7 +108,7 @@ describe("the desktop a shell lays out against", () => {
     // the desktop as of the moment the source was made, which on a desktop
     // that changed in between is the one that is gone.
     const [client, host] = connected();
-    const source = displaysFrom(client);
+    const source = hostDisplays(client);
     expect(source.displays).toBeUndefined();
 
     host.describes([LEFT]);
@@ -119,7 +119,7 @@ describe("the desktop a shell lays out against", () => {
   it("passes on every desktop after that", () => {
     const [client, host] = connected();
     const seen: (readonly unknown[])[] = [];
-    displaysFrom(client).onDisplays((displays) => {
+    hostDisplays(client).onDisplays((displays) => {
       seen.push(displays);
     });
 
@@ -135,7 +135,7 @@ describe("the desktop a shell lays out against", () => {
   it("stops when the teardown runs", () => {
     const [client, host] = connected();
     const seen: unknown[] = [];
-    const stop = displaysFrom(client).onDisplays((displays) => {
+    const stop = hostDisplays(client).onDisplays((displays) => {
       seen.push(displays);
     });
 
@@ -151,7 +151,7 @@ describe("the desktop a shell lays out against", () => {
     // then silence the live handler — which is a desktop that stops updating
     // with nothing anywhere to say why.
     const [client, host] = connected();
-    const source = displaysFrom(client);
+    const source = hostDisplays(client);
     const seen: unknown[] = [];
 
     const stopFirst = source.onDisplays(() => {

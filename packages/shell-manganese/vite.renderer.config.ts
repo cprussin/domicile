@@ -17,7 +17,7 @@ import { defineConfig } from "vite";
 //
 // `base: "./"` so the emitted URLs are relative to the document Domicile
 // writes rather than to a server root.
-const shell = shellBuild({ entry: "src/renderer.tsx" });
+const shell = shellBuild({ entry: "src/index.tsx" });
 
 export default defineConfig({
   base: "./",

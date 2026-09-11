@@ -1,19 +1,10 @@
 // Where this shell's chrome mounts.
 //
-// Its own file because it is the one thing the entry point does that can be
-// wrong quietly. It used to be `document.getElementById("root")` and a throw,
-// against an id that came from an `index.html` this shell had of its own.
-// There is no second file any more — Domicile writes the document, and what it
-// writes is a charset, a viewport, a body with no margin and the script tag
-// that loads this module. No `#root`, so the lookup returned null on every
-// launch that was not a test, the module threw before React was reached, and
-// the desktop came up as a white window with the reason only in a console that
-// `--app` gives nobody a way to open.
-//
-// So the element is made rather than found. That is the shape every shell in
-// this position needs: `docs/WRITING-A-SHELL.md` says Domicile writes the
-// document and the shell brings everything else, and `shell-simple` is already
-// written that way — it treats `document.body` as the desktop and appends.
+// Domicile writes the document, and what it writes is a charset, a viewport, a
+// body with no margin and the script tag that loads this module. There is no
+// element to look up, so the shell makes one — which is the shape every shell
+// in this position needs: `docs/WRITING-A-SHELL.md` says Domicile writes the
+// document and the shell brings everything else.
 //
 // A container of our own rather than `document.body` itself, for one reason:
 // the body holds Domicile's script tag, and a React root that owns the body

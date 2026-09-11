@@ -3,19 +3,19 @@
 // The shell owns two things: which windows exist and which one has the stage.
 // Both move together — a window that opens takes the stage, a window that
 // closes hands it back — so they are one state, reduced in one place, with no
-// DOM or domicile client in sight. `useShellWindows` is what feeds host events
-// into it.
+// DOM or domicile client in sight. `useWindows` is what feeds host events into
+// it.
 
 import type { SurfaceSize } from "@domicile/chrome-sdk/app-element";
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 import type { DropPosition } from "@domicile/component-library/TabRail";
 
-import type { Float } from "./float";
-import { floatFor, movedTo, sizedTo } from "./float";
-import type { ClientWindow, ShellWindow } from "./shell-window";
-import { appWindowId, ShellWindow as Window, WindowKind } from "./shell-window";
+import type { Float } from "./floating/float";
+import { floatFor, movedTo, sizedTo } from "./floating/float";
+import type { ClientWindow } from "./window";
+import { appWindowId, ShellWindow, WindowKind } from "./window";
 
-export type ShellState = {
+export type WindowState = {
   /**
    * The window the user is working in, floating or not.
    *
@@ -66,7 +66,7 @@ export type ShellState = {
 };
 
 /** A shell with nothing open: what the chrome starts from. */
-export const EMPTY_SHELL: ShellState = {
+export const NO_WINDOWS: WindowState = {
   activeId: undefined,
   browsersOpened: 0,
   draggingId: undefined,
@@ -105,10 +105,10 @@ export const floatingOf = (
 };
 
 /** The box the window `id` floats in, or `undefined` when it is tabbed. */
-const floatOf = (state: ShellState, id: string): Float | undefined =>
+const floatOf = (state: WindowState, id: string): Float | undefined =>
   state.floats.find((float) => float.id === id);
 
-export enum ShellActionKind {
+export enum WindowActionKind {
   AppAppeared,
   AppClosed,
   AppCursorChanged,
@@ -130,25 +130,25 @@ export enum ShellActionKind {
   WindowsReordered,
 }
 
-export const ShellAction = {
+export const WindowAction = {
   /** The host announced a Wayland client. */
   AppAppeared: (appId: string, title: string | undefined) => ({
     appId,
-    kind: ShellActionKind.AppAppeared as const,
+    kind: WindowActionKind.AppAppeared as const,
     title,
   }),
 
   /** The host says the client is gone. */
   AppClosed: (appId: string) => ({
     appId,
-    kind: ShellActionKind.AppClosed as const,
+    kind: WindowActionKind.AppClosed as const,
   }),
 
   /** The client asked for a cursor to be shown over its window. */
   AppCursorChanged: (appId: string, cursor: CursorShape) => ({
     appId,
     cursor,
-    kind: ShellActionKind.AppCursorChanged as const,
+    kind: WindowActionKind.AppCursorChanged as const,
   }),
 
   /**
@@ -162,27 +162,27 @@ export const ShellAction = {
    */
   AppDrewAt: (appId: string, size: SurfaceSize) => ({
     appId,
-    kind: ShellActionKind.AppDrewAt as const,
+    kind: WindowActionKind.AppDrewAt as const,
     size,
   }),
 
   /**
    * The client said what its window is called, or unset it.
    *
-   * Separate from {@link ShellAction.AppAppeared} because a toplevel is
+   * Separate from {@link WindowAction.AppAppeared} because a toplevel is
    * announced when the client creates it, which is before `set_title` — and
    * because it happens again whenever the name changes, which for a terminal
    * is every command it runs.
    */
   AppTitled: (appId: string, title: string | undefined) => ({
     appId,
-    kind: ShellActionKind.AppTitled as const,
+    kind: WindowActionKind.AppTitled as const,
     title,
   }),
 
   /** The user asked for a browser window, pointed at `src`. */
   BrowserOpened: (src: string) => ({
-    kind: ShellActionKind.BrowserOpened as const,
+    kind: WindowActionKind.BrowserOpened as const,
     src,
   }),
 
@@ -195,13 +195,13 @@ export const ShellAction = {
    */
   FocusChanged: (appId: string | undefined) => ({
     appId,
-    kind: ShellActionKind.FocusChanged as const,
+    kind: WindowActionKind.FocusChanged as const,
   }),
 
   /**
    * A client asked for the keyboard. Nothing has moved yet.
    *
-   * The question {@link ShellAction.FocusChanged} is the answer to, and it
+   * The question {@link WindowAction.FocusChanged} is the answer to, and it
    * arrives unanswered on purpose: the compositor forwards the request and
    * leaves the seat where it is, so what happens next is this shell's policy
    * rather than the desktop's. See the reducer's arm for what manganese
@@ -209,24 +209,24 @@ export const ShellAction = {
    */
   FocusRequested: (appId: string) => ({
     appId,
-    kind: ShellActionKind.FocusRequested as const,
+    kind: WindowActionKind.FocusRequested as const,
   }),
 
   /** The user closed a window from its tab. */
   WindowClosed: (id: string) => ({
     id,
-    kind: ShellActionKind.WindowClosed as const,
+    kind: WindowActionKind.WindowClosed as const,
   }),
 
   /** The user let go of the window they had hold of. */
   WindowDropped: () => ({
-    kind: ShellActionKind.WindowDropped as const,
+    kind: WindowActionKind.WindowDropped as const,
   }),
 
   /** The user took a window out of the rail to float over the stage. */
   WindowFloated: (id: string) => ({
     id,
-    kind: ShellActionKind.WindowFloated as const,
+    kind: WindowActionKind.WindowFloated as const,
   }),
 
   /**
@@ -238,13 +238,13 @@ export const ShellAction = {
    */
   WindowGrabbed: (id: string) => ({
     id,
-    kind: ShellActionKind.WindowGrabbed as const,
+    kind: WindowActionKind.WindowGrabbed as const,
   }),
 
   /** The user dragged a floating window to a new corner of the stage. */
   WindowMoved: (id: string, x: number, y: number) => ({
     id,
-    kind: ShellActionKind.WindowMoved as const,
+    kind: WindowActionKind.WindowMoved as const,
     x,
     y,
   }),
@@ -252,13 +252,13 @@ export const ShellAction = {
   /** The user touched a floating window, which brings it to the front. */
   WindowRaised: (id: string) => ({
     id,
-    kind: ShellActionKind.WindowRaised as const,
+    kind: WindowActionKind.WindowRaised as const,
   }),
 
   /** A browser window's page navigated, so its tab says somewhere new. */
   WindowRenamed: (id: string, title: string) => ({
     id,
-    kind: ShellActionKind.WindowRenamed as const,
+    kind: WindowActionKind.WindowRenamed as const,
     title,
   }),
 
@@ -266,20 +266,20 @@ export const ShellAction = {
   WindowResized: (id: string, width: number, height: number) => ({
     height,
     id,
-    kind: ShellActionKind.WindowResized as const,
+    kind: WindowActionKind.WindowResized as const,
     width,
   }),
 
   /** The user picked a window's tab. */
   WindowSelected: (id: string) => ({
     id,
-    kind: ShellActionKind.WindowSelected as const,
+    kind: WindowActionKind.WindowSelected as const,
   }),
 
   /** The user dragged (or keyed) `fromId` to sit beside `toId`. */
   WindowsReordered: (fromId: string, toId: string, position: DropPosition) => ({
     fromId,
-    kind: ShellActionKind.WindowsReordered as const,
+    kind: WindowActionKind.WindowsReordered as const,
     position,
     toId,
   }),
@@ -287,38 +287,38 @@ export const ShellAction = {
   /** The user put a floating window back on the stage. */
   WindowTabbed: (id: string) => ({
     id,
-    kind: ShellActionKind.WindowTabbed as const,
+    kind: WindowActionKind.WindowTabbed as const,
   }),
 };
 
-export type ShellAction = ReturnType<
-  (typeof ShellAction)[keyof typeof ShellAction]
+export type WindowAction = ReturnType<
+  (typeof WindowAction)[keyof typeof WindowAction]
 >;
 
-export const reduceShell = (
-  state: ShellState,
-  action: ShellAction,
-): ShellState => {
+export const reduceWindows = (
+  state: WindowState,
+  action: WindowAction,
+): WindowState => {
   switch (action.kind) {
-    case ShellActionKind.AppAppeared: {
+    case WindowActionKind.AppAppeared: {
       return openApp(state, action.appId, action.title);
     }
-    case ShellActionKind.AppClosed: {
+    case WindowActionKind.AppClosed: {
       return closeWindow(state, appWindowId(action.appId));
     }
-    case ShellActionKind.AppCursorChanged: {
+    case WindowActionKind.AppCursorChanged: {
       return reshapeApp(state, action.appId, (window) => ({
         ...window,
         cursor: action.cursor,
       }));
     }
-    case ShellActionKind.AppDrewAt: {
+    case WindowActionKind.AppDrewAt: {
       return reshapeApp(state, action.appId, (window) => ({
         ...window,
         surfaceSize: action.size,
       }));
     }
-    case ShellActionKind.AppTitled: {
+    case WindowActionKind.AppTitled: {
       // The same fallback the window opened with. A client that named its
       // window nothing — `set_title("")`, which the SDK reads as no name —
       // gets the app id, exactly as one that has not named it yet does.
@@ -328,10 +328,10 @@ export const reduceShell = (
         action.title ?? action.appId,
       );
     }
-    case ShellActionKind.BrowserOpened: {
+    case WindowActionKind.BrowserOpened: {
       return openBrowser(state, action.src);
     }
-    case ShellActionKind.FocusChanged: {
+    case WindowActionKind.FocusChanged: {
       const focusedId =
         action.appId === undefined ? undefined : appWindowId(action.appId);
       // The same object when it did not move, so React bails out rather than
@@ -342,15 +342,12 @@ export const reduceShell = (
         ? state
         : followFocus({ ...state, focusedId }, focusedId);
     }
-    case ShellActionKind.FocusRequested: {
+    case WindowActionKind.FocusRequested: {
       // Manganese grants it, by the same path picking a tab takes. That is a
-      // policy and not a mechanism: a client asking for the keyboard is what
-      // "open this link in the browser I already have running" is made of, and
-      // it is also what a dialog stealing the window you were typing into is
-      // made of. This shell cannot tell those apart and lets both through; a
-      // shell that wants to refuse the second — because the user is mid-drag,
-      // because the window that asked is not one they have touched — changes
-      // this arm and nothing else.
+      // policy rather than a mechanism: the same ask carries "open this link in
+      // the browser I already have running" and a dialog stealing the window
+      // you were typing into, this shell cannot tell them apart, and a shell
+      // that would rather refuse changes this arm and nothing else.
       //
       // A window this shell has no record of is not refused so much as
       // unreachable: `showWindow` throws for one, and a request can name a
@@ -360,43 +357,43 @@ export const reduceShell = (
         ? showWindow(state, requested)
         : state;
     }
-    case ShellActionKind.WindowClosed: {
+    case WindowActionKind.WindowClosed: {
       return closeWindow(state, action.id);
     }
-    case ShellActionKind.WindowDropped: {
+    case WindowActionKind.WindowDropped: {
       return { ...state, draggingId: undefined };
     }
-    case ShellActionKind.WindowFloated: {
+    case WindowActionKind.WindowFloated: {
       return floatWindow(state, action.id);
     }
-    case ShellActionKind.WindowGrabbed: {
+    case WindowActionKind.WindowGrabbed: {
       // Taking hold of a window brings it to the front, the same way clicking
       // one does — which is what a grab is.
       return { ...raiseWindow(state, action.id), draggingId: action.id };
     }
-    case ShellActionKind.WindowMoved: {
+    case WindowActionKind.WindowMoved: {
       return reshape(state, action.id, (float) =>
         movedTo(float, action.x, action.y),
       );
     }
-    case ShellActionKind.WindowRaised: {
+    case WindowActionKind.WindowRaised: {
       return raiseWindow(state, action.id);
     }
-    case ShellActionKind.WindowRenamed: {
+    case WindowActionKind.WindowRenamed: {
       return renameWindow(state, action.id, action.title);
     }
-    case ShellActionKind.WindowResized: {
+    case WindowActionKind.WindowResized: {
       return reshape(state, action.id, (float) =>
         sizedTo(float, action.width, action.height),
       );
     }
-    case ShellActionKind.WindowSelected: {
+    case WindowActionKind.WindowSelected: {
       return showWindow(state, action.id);
     }
-    case ShellActionKind.WindowTabbed: {
+    case WindowActionKind.WindowTabbed: {
       return tabWindow(state, action.id);
     }
-    case ShellActionKind.WindowsReordered: {
+    case WindowActionKind.WindowsReordered: {
       return {
         ...state,
         windows: moveWindow(
@@ -420,9 +417,9 @@ export const reduceShell = (
 // about yet, leaves the active window where it was: there is nothing better to
 // point at, and `undefined` would be worse than stale.
 const followFocus = (
-  state: ShellState,
+  state: WindowState,
   focusedId: string | undefined,
-): ShellState => {
+): WindowState => {
   if (
     focusedId === undefined ||
     !state.windows.some((window) => window.id === focusedId)
@@ -439,27 +436,27 @@ const followFocus = (
 // A client the shell already has a window for is the host re-announcing it,
 // not a second window: the portal is keyed by app id.
 const openApp = (
-  state: ShellState,
+  state: WindowState,
   appId: string,
   title: string | undefined,
-): ShellState => {
-  const window = Window.App(appId, title ?? appId);
+): WindowState => {
+  const window = ShellWindow.App(appId, title ?? appId);
   return state.windows.some((open) => open.id === window.id)
     ? state
     : openWindow(state, window);
 };
 
-const openBrowser = (state: ShellState, src: string): ShellState => {
+const openBrowser = (state: WindowState, src: string): WindowState => {
   const browsersOpened = state.browsersOpened + 1;
   return openWindow(
     { ...state, browsersOpened },
-    Window.Browser(browsersOpened, src),
+    ShellWindow.Browser(browsersOpened, src),
   );
 };
 
 // A window that opens takes the stage; whatever had it is a tab away. It
 // opens tabbed, so it is also the window the user is now working in.
-const openWindow = (state: ShellState, window: ShellWindow): ShellState => ({
+const openWindow = (state: WindowState, window: ShellWindow): WindowState => ({
   ...state,
   activeId: window.id,
   shownId: window.id,
@@ -481,7 +478,7 @@ const lastTabbed = (
 // not a second box either: the user asking again for what they already have
 // is the same window, and re-cascading it would move a window they had put
 // somewhere on purpose.
-const floatWindow = (state: ShellState, id: string): ShellState => {
+const floatWindow = (state: WindowState, id: string): WindowState => {
   if (!state.windows.some((window) => window.id === id)) {
     throw new Error(`shell: no window ${id} to float`);
   } else if (floatOf(state, id) === undefined) {
@@ -505,7 +502,7 @@ const floatWindow = (state: ShellState, id: string): ShellState => {
 // And back into the rail, onto the stage, which is where a window that is no
 // longer floating has to go: the alternative is a window with no box and no
 // tab selected, which is a window the user has lost.
-const tabWindow = (state: ShellState, id: string): ShellState => {
+const tabWindow = (state: WindowState, id: string): WindowState => {
   if (floatOf(state, id) === undefined) {
     throw new Error(`shell: window ${id} is not floating`);
   } else {
@@ -525,10 +522,10 @@ const tabWindow = (state: ShellState, id: string): ShellState => {
 // asking to reshape a tabbed one is a wiring fault rather than a no-op: the
 // caller is dragging something the shell is not laying out.
 const reshape = (
-  state: ShellState,
+  state: WindowState,
   id: string,
   into: (float: Float) => Float,
-): ShellState => {
+): WindowState => {
   if (floatOf(state, id) === undefined) {
     throw new Error(`shell: window ${id} is not floating`);
   } else {
@@ -542,7 +539,7 @@ const reshape = (
 };
 
 // To the front, which is the end of the list: the order is the stacking order.
-const raiseWindow = (state: ShellState, id: string): ShellState => {
+const raiseWindow = (state: WindowState, id: string): WindowState => {
   const raised = floatOf(state, id);
   if (raised === undefined) {
     throw new Error(`shell: window ${id} is not floating`);
@@ -559,7 +556,7 @@ const raiseWindow = (state: ShellState, id: string): ShellState => {
 // window lands on the one the user was on before it. A close for a window the
 // shell never opened is the host draining events for a portal already torn
 // down, which leaves the list as it is.
-const closeWindow = (state: ShellState, id: string): ShellState => {
+const closeWindow = (state: WindowState, id: string): WindowState => {
   const windows = state.windows.filter((window) => window.id !== id);
   const floats = state.floats.filter((float) => float.id !== id);
   const shownId =
@@ -582,10 +579,10 @@ const closeWindow = (state: ShellState, id: string): ShellState => {
 // the list as it is, the same way a close for one does: the host drains its
 // events for a portal that has already been torn down here.
 const reshapeApp = (
-  state: ShellState,
+  state: WindowState,
   appId: string,
   into: (window: ClientWindow) => ClientWindow,
-): ShellState => ({
+): WindowState => ({
   ...state,
   windows: state.windows.map((window) =>
     window.kind === WindowKind.App && window.appId === appId
@@ -595,10 +592,10 @@ const reshapeApp = (
 });
 
 const renameWindow = (
-  state: ShellState,
+  state: WindowState,
   id: string,
   title: string,
-): ShellState => ({
+): WindowState => ({
   ...state,
   windows: state.windows.map((window) =>
     window.id === id ? { ...window, title } : window,
@@ -609,7 +606,7 @@ const renameWindow = (
 // reaching it means differs: a tabbed window goes on the stage, and a floating
 // one is on screen already, so it comes to the front instead. Putting it back
 // on the stage would undo the float the user asked for by clicking its tab.
-const showWindow = (state: ShellState, id: string): ShellState => {
+const showWindow = (state: WindowState, id: string): WindowState => {
   if (!state.windows.some((window) => window.id === id)) {
     throw new Error(`shell: no window ${id} to show`);
   } else if (floatOf(state, id) === undefined) {
