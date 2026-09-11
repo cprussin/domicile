@@ -158,6 +158,75 @@ TEST(ShellDocumentTest, EncodesTheModuleName) {
   EXPECT_EQ(document.find("a\">"), std::string::npos);
 }
 
+TEST(ShellDocumentTest, WatchesItsOwnModuleForFailure) {
+  // A module that 404s, will not parse, or throws on its first line leaves a
+  // page that is blank and completely silent: the engine has served what it was
+  // asked for, the compositor is waiting for a page that will never say hello,
+  // and the only thing that knows what happened is the document itself. So the
+  // document watches. The three listeners are three different failures -- the
+  // module not loading, it throwing while it runs, and it rejecting -- and none
+  // of the others reports the other two.
+  const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
+  EXPECT_NE(document.find("document.currentScript"), std::string::npos);
+  EXPECT_NE(document.find("shell.addEventListener(\"error\""),
+            std::string::npos);
+  EXPECT_NE(document.find("addEventListener(\"error\", (failure)"),
+            std::string::npos);
+  EXPECT_NE(document.find("addEventListener(\"unhandledrejection\""),
+            std::string::npos);
+}
+
+TEST(ShellDocumentTest, NamesNothingAShellCouldCollideWith) {
+  // THE REGRESSION, AND IT COST AN ENGINE RUN. The reporter found the module
+  // script by an id, `domicile-shell`. `shell-manganese`'s `mountPoint` looks
+  // up exactly that id to decide whether it has already made its mount point --
+  // it picked the name for the same obvious reason this document did -- so it
+  // found the script tag and returned it, React mounted the whole desktop
+  // inside a <script>, and a <script> is `display: none`. The shell ran
+  // perfectly: it connected, it embedded its window, it logged its diagnostics
+  // every five seconds, and not one pixel of it was ever laid out. What the
+  // guard read was "the client's window is not on manganese's page".
+  //
+  // An id in this document is a name in the shell's namespace, and this
+  // document is the one thing every shell is written against. So it has none,
+  // and the reporter reaches its module through `document.currentScript`, which
+  // names nothing and cannot be collided with.
+  const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
+  EXPECT_EQ(document.find("id="), std::string::npos);
+}
+
+TEST(ShellDocumentTest, LeavesTheBodyAsItFoundIt) {
+  // The other half of the same rule. The reporter's own <script> element takes
+  // itself back out once it has run, so what a shell finds is the body
+  // `WRITING-A-SHELL.md` describes: one script tag and nothing else. A shell
+  // that takes the body's first element, or counts its children, is written
+  // against that document -- `mount-point.test.ts` builds exactly it as a
+  // fixture -- and a diagnostic that changed it would be buying a report of
+  // rare failures with a new everyday one.
+  const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
+  EXPECT_NE(document.find("here.remove()"), std::string::npos);
+}
+
+TEST(ShellDocumentTest, SaysItOnTheScreenAndNotOnlyTheConsole) {
+  // There is no devtools window on a desktop that did not come up, and no tab
+  // strip to open one from -- `--app` is the whole point of the window. A
+  // message only on the console is a message nobody reads.
+  const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
+  EXPECT_NE(document.find("console.error"), std::string::npos);
+  EXPECT_NE(document.find("document.body.append"), std::string::npos);
+}
+
+TEST(ShellDocumentTest, SaysNothingAboutAShellThatIsAlreadyRunning) {
+  // The gate that keeps this from covering a working desktop: a shell that
+  // loaded and then threw an hour later is the shell's own error to handle, and
+  // painting a full-screen report over it would make this change the worst
+  // thing on the page.
+  const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
+  EXPECT_NE(document.find("shell.addEventListener(\"load\""),
+            std::string::npos);
+  EXPECT_NE(document.find("if (!ran)"), std::string::npos);
+}
+
 TEST(ShellDocumentTest, LeavesAHashInAFilenameAlone) {
   // `#` is legal in a POSIX filename and is not HTML-special, so an HTML
   // escaper would pass it through -- the browser would then ask for the part

@@ -330,7 +330,13 @@ jobs:
         working-directory: /build/chromium/src/out/Domicile
         run: |
           set -euo pipefail
-          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*'
+          # `ShellURLLoaderFactoryTest` and `ShellDocumentTest` were in the
+          # build and not in this list, so they were compiled on every run and
+          # executed on none — which is the same silent pass the count check
+          # below exists to catch, arriving by the other door. Between them
+          # they are what refuses a path traversal out of the shell root and
+          # what pins the one document every desktop is.
+          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*'
           # `--gtest_filter` matching nothing exits 0, so a suite that was
           # renamed or never linked would be a silent pass. Test names are the
           # indented lines of --gtest_list_tests; suite names are not.
@@ -338,9 +344,10 @@ jobs:
             ./components_unittests --gtest_filter="$filter" --gtest_list_tests |
             grep -cE '^  ' || true)
           echo "$count tests match $filter"
-          # 11 in FrameSinkBrokerTest alone at the time of writing, and 7
-          # in ShortcutRegistryTest.
-          [ "$count" -ge 18 ] || {
+          # 11 in FrameSinkBrokerTest alone at the time of writing, 7 in
+          # ShortcutRegistryTest, 11 in ShellURLLoaderFactoryTest and 11 in
+          # ShellDocumentTest.
+          [ "$count" -ge 40 ] || {
             echo "::error::only $count tests matched; the suites were renamed or did not link" >&2
             exit 1
           }

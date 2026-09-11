@@ -43,6 +43,13 @@ pub struct Runtime {
     pub chrome_socket: PathBuf,
     /// The engine's own profile, thrown away with the run.
     pub profile: PathBuf,
+    /// Where the compositor publishes what it bound, once it is serving.
+    ///
+    /// Named here rather than derived from `chrome_socket` inside
+    /// [`compositor`] because the launcher waits on this file: a compositor
+    /// that never publishes one is a desktop that never comes up, and a path
+    /// only the argument builder knew is one nothing could say that about.
+    pub session: PathBuf,
 }
 
 /// The engine, on the shell's module.
@@ -128,8 +135,6 @@ pub fn compositor(
     runtime: &Runtime,
     inherited: &dyn Fn(&str) -> Option<String>,
 ) -> Spawn {
-    let mut session = runtime.chrome_socket.clone().into_os_string();
-    session.push(".session");
     let mut libraries = OsString::from(engine);
     if let Some(theirs) = inherited("LD_LIBRARY_PATH") {
         libraries.push(":");
@@ -140,7 +145,7 @@ pub fn compositor(
             "--chrome-socket".into(),
             runtime.chrome_socket.clone().into(),
             "--session".into(),
-            session,
+            runtime.session.clone().into(),
             "--engine-socket".into(),
             runtime.broker.clone().into(),
         ],

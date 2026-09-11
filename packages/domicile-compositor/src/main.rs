@@ -116,6 +116,7 @@ use domicile_config::{Config, ConfigError, ConfigStore};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
+use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
 use smithay::backend::renderer::gles::GlesRenderer;
@@ -671,7 +672,7 @@ fn bind_chrome_socket(path: &std::path::Path) -> Result<UnixListener, Box<dyn st
     Ok(listener)
 }
 
-fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener) {
+fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener, handshake: Arc<Handshake>) {
     for stream in listener.incoming().flatten() {
         let writer = Arc::new(Mutex::new(match stream.try_clone() {
             Ok(w) => w,
@@ -682,8 +683,10 @@ fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener) {
         // is agreed there is no version to write to it in. `read_chrome_messages`
         // adds it once there is.
         info!("chrome client connected");
+        handshake.connected();
         let hub = hub.clone();
-        thread::spawn(move || chrome_connection(hub, stream, writer));
+        let handshake = handshake.clone();
+        thread::spawn(move || chrome_connection(hub, stream, writer, handshake));
     }
 }
 
@@ -695,8 +698,13 @@ fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener) {
 /// connection each time, so without this the list grows one dead writer per
 /// reload — every one of them held open, and counted in the `chromes=` field
 /// of the frame line.
-fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<UnixStream>>) {
-    read_chrome_messages(&hub, stream, &writer);
+fn chrome_connection(
+    hub: Arc<ChromeHub>,
+    stream: UnixStream,
+    writer: Arc<Mutex<UnixStream>>,
+    handshake: Arc<Handshake>,
+) {
+    read_chrome_messages(&hub, stream, &writer, &handshake);
     hub.chromes
         .lock()
         .unwrap()
@@ -704,7 +712,12 @@ fn chrome_connection(hub: Arc<ChromeHub>, stream: UnixStream, writer: Arc<Mutex<
     info!("chrome client disconnected");
 }
 
-fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<Mutex<UnixStream>>) {
+fn read_chrome_messages(
+    hub: &Arc<ChromeHub>,
+    stream: UnixStream,
+    writer: &Arc<Mutex<UnixStream>>,
+    handshake: &Arc<Handshake>,
+) {
     let reader = BufReader::new(stream);
     let mut ready = false;
     // Whether this connection is in the hub's broadcast list. Separate from
@@ -752,6 +765,12 @@ fn read_chrome_messages(hub: &Arc<ChromeHub>, stream: UnixStream, writer: &Arc<M
                     )
                 };
                 if ready {
+                    // The one moment that says this compositor has a desktop
+                    // rather than a socket: a page connected and agreed the
+                    // protocol. Counted so that the thread watching for the
+                    // absence of this can tell "no page came" from "a page
+                    // came and we refused its version".
+                    handshake.agreed();
                     // Joined here rather than at accept. A broadcast is
                     // written in *this* build's protocol, so sending one to a
                     // page that has not said it speaks that is a guess — and
@@ -3697,9 +3716,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // on the session document, which is published long after this — so nothing
     // can arrive before the listener exists, whatever order the rest takes.
     let chrome_listener = bind_chrome_socket(&arguments.chrome_socket)?;
+    // NOTHING HERE WAITS FOR A PAGE, AND UNTIL THIS EXISTED NOTHING SAID SO.
+    // A compositor with no chrome on it is a running desktop nobody can see:
+    // the window is blank, every log line here is about a socket that is fine,
+    // and the engine has nothing to report because from its side nothing
+    // failed. This end is the only one that can tell the difference between a
+    // page that has not arrived yet and one that is never coming, so it is the
+    // end that says it. See `domicile_launch::handshake`.
+    let handshake = Arc::new(Handshake::new());
+    {
+        let handshake = handshake.clone();
+        let socket = arguments.chrome_socket.clone();
+        thread::spawn(move || {
+            thread::sleep(WAIT_FOR_A_PAGE);
+            if let Some(said) = silence(handshake.heard(), &socket, WAIT_FOR_A_PAGE) {
+                tracing::error!("{said}");
+            }
+        });
+    }
     {
         let hub = hub.clone();
-        thread::spawn(move || serve_chrome(hub, chrome_listener));
+        let handshake = handshake.clone();
+        thread::spawn(move || serve_chrome(hub, chrome_listener, handshake));
     }
 
     {
@@ -4234,7 +4272,7 @@ mod tests {
     use super::{
         announce_open_apps, answers_keystroke, broadcast_closed, broadcast_focus_decision, channel,
         chrome_connection, client_command, cursor_shape, freshened, parse_find_colours, to_line,
-        write_responses, ChromeHub, ClientRequest, Committer, Outbound,
+        write_responses, ChromeHub, ClientRequest, Committer, Handshake, Outbound,
     };
 
     use std::sync::Arc;
@@ -4261,7 +4299,9 @@ mod tests {
 
         let serving = {
             let hub = hub.clone();
-            thread::spawn(move || chrome_connection(hub, compositor, writer))
+            thread::spawn(move || {
+                chrome_connection(hub, compositor, writer, Arc::new(Handshake::new()))
+            })
         };
         drop(page);
         serving.join().expect("the connection thread ends at EOF");
@@ -4574,7 +4614,9 @@ mod tests {
         hub.chromes.lock().unwrap().push(writer.clone());
         let serving = {
             let hub = hub.clone();
-            thread::spawn(move || chrome_connection(hub, compositor, writer))
+            thread::spawn(move || {
+                chrome_connection(hub, compositor, writer, Arc::new(Handshake::new()))
+            })
         };
 
         {
@@ -4617,7 +4659,9 @@ mod tests {
         ));
         let serving = {
             let hub = hub.clone();
-            thread::spawn(move || chrome_connection(hub, compositor, writer))
+            thread::spawn(move || {
+                chrome_connection(hub, compositor, writer, Arc::new(Handshake::new()))
+            })
         };
 
         {

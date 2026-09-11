@@ -8,8 +8,9 @@
 //! and the order they go up in ([`supervise`]).
 //!
 //! The other boundary is the compositor's own: the command line it is started
-//! with ([`arguments`]) and the session document it
-//! publishes once it is up ([`session`]).
+//! with ([`arguments`]), the session document it
+//! publishes once it is up ([`session`]), and whether a page ever reached it
+//! at all ([`handshake`]).
 //!
 //! All of it is here rather than in the compositor or in
 //! the `domicile` binary because both of those need
@@ -21,6 +22,8 @@
 pub mod arguments;
 pub mod cli;
 pub mod components;
+pub mod handshake;
+pub mod milestones;
 pub mod platform;
 pub mod session;
 pub mod shell_path;
