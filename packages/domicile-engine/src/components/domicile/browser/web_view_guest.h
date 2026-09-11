@@ -13,13 +13,16 @@
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "url/gurl.h"
 
@@ -78,7 +81,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   static void CreateAndAttach(
       content::RenderFrameHost& owner,
       content::RenderFrameHost& placeholder,
-      mojo::PendingReceiver<mojom::WebViewGuest> receiver);
+      mojo::PendingReceiver<mojom::WebViewGuest> receiver,
+      mojo::PendingRemote<mojom::WebViewGuestClient> client);
 
   WebViewGuest(const WebViewGuest&) = delete;
   WebViewGuest& operator=(const WebViewGuest&) = delete;
@@ -137,6 +141,24 @@ class WebViewGuest : public mojom::WebViewGuest,
       content::WebContents* source,
       const input::NativeWebKeyboardEvent& event) override;
 
+  // WHERE AN ADDRESS BAR'S DEAD BUTTON IS NOTICED. `CanGoBack()` and
+  // `CanGoForward()` are the guest's NavigationController's to answer and this
+  // process is the only one that can ask, so the renderer is told instead --
+  // and this is the hook that says when to tell it. Chrome's own back and
+  // forward buttons are driven from the same call: NavigationControllerImpl
+  // reports INVALIDATE_TYPE_ALL from NotifyNavigationEntryCommitted and from
+  // every other mutation of the entry list, so a commit, a prune and a
+  // replacement all arrive here.
+  //
+  // THE FLAGS ARE NOT READ, deliberately. A title, a favicon and an audio
+  // state come through this same call, and none of them says whether the
+  // history moved; what decides that is comparing the pair against the last
+  // one sent, which ReportHistory does. Reading the flags instead would be
+  // trusting a signal that means "some browser UI is stale" to mean something
+  // narrower than it does.
+  void NavigationStateChanged(content::WebContents* source,
+                              content::InvalidateTypes changed_flags) override;
+
   // A page in a browser window cannot open a second one yet. Overridden rather
   // than left to the default because the default is content creating the
   // window itself, and for a guest with no guest SiteInstance that path CHECKs
@@ -166,7 +188,21 @@ class WebViewGuest : public mojom::WebViewGuest,
 
  private:
   WebViewGuest(content::RenderFrameHost& owner,
-               mojo::PendingReceiver<mojom::WebViewGuest> receiver);
+               mojo::PendingReceiver<mojom::WebViewGuest> receiver,
+               mojo::PendingRemote<mojom::WebViewGuestClient> client);
+
+  // Tell the element what back and forward can do, if it has changed.
+  //
+  // `CanGoBack()` RATHER THAN `ShouldEnableBackButton()`, which is the other
+  // answer the controller offers and the wrong one here. They differ over a
+  // history whose only remaining entries are skippable: Chrome lights the
+  // button anyway, because a long press there opens a menu the user can pick
+  // an entry out of, while a plain click does nothing. A Domicile shell has no
+  // such menu -- it has `goBack()`, which is `NavigationController::GoBack`,
+  // which returns without navigating exactly when `CanGoBack()` is false. So
+  // reporting ShouldEnableBackButton() would light the one button this whole
+  // interface exists to grey out.
+  void ReportHistory();
 
   // The second half of CreateAndAttach, once content has produced a frame that
   // is safe to swap. `outer_contents_frame` is null when the frame went away
@@ -189,6 +225,19 @@ class WebViewGuest : public mojom::WebViewGuest,
   bool self_owned_ = false;
 
   mojo::Receiver<mojom::WebViewGuest> receiver_;
+
+  // The element, for as long as it lives. Bound from the CreateGuest that made
+  // this guest, so there is no moment at which the guest has a history and
+  // nothing to report it to.
+  mojo::Remote<mojom::WebViewGuestClient> client_;
+
+  // The last pair sent, so that a call reporting a title change does not
+  // become a message and then a DOM event. False both, because that is what a
+  // guest with no entries behind or ahead of it can do and what the element
+  // starts out holding -- so a fresh guest's first page changes nothing and
+  // sends nothing, which is correct rather than a dropped first message.
+  bool reported_can_go_back_ = false;
+  bool reported_can_go_forward_ = false;
 
   base::WeakPtrFactory<WebViewGuest> weak_factory_{this};
 };

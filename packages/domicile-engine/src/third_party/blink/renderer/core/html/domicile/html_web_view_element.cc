@@ -28,17 +28,26 @@ namespace blink {
 // static-initialisation time, so the string is made where it is used.
 constexpr char kGuestFocusEvent[] = "domicile-guest-focus";
 
+// And what it says when the guest's history changes what it can do. It carries
+// nothing: `canGoBack` and `canGoForward` are readable on the element at any
+// moment, and a detail here would be a second copy of them that is right only
+// at the instant it was made. See the header for why the state is the property
+// and not this.
+constexpr char kHistoryChangeEvent[] = "domicile-history-change";
+
 HTMLWebViewElement::HTMLWebViewElement(Document& document)
     : HTMLFrameElementBase(html_names::kWebviewTag, document),
       // Null in a document with no window -- a template's, say -- and that is
       // what HeapMojoRemote takes it for. Nothing binds until there is a frame
       // to name anyway.
-      guest_(document.GetExecutionContext()) {}
+      guest_(document.GetExecutionContext()),
+      client_receiver_(this, document.GetExecutionContext()) {}
 
 HTMLWebViewElement::~HTMLWebViewElement() = default;
 
 void HTMLWebViewElement::Trace(Visitor* visitor) const {
   visitor->Trace(guest_);
+  visitor->Trace(client_receiver_);
   HTMLFrameElementBase::Trace(visitor);
 }
 
@@ -89,9 +98,19 @@ void HTMLWebViewElement::RequestGuest() {
   mojo::Remote<domicile::mojom::blink::WebViewGuestHost> host;
   context->GetBrowserInterfaceBroker().GetInterface(
       host.BindNewPipeAndPassReceiver());
+  // BOTH ENDS IN ONE MESSAGE. The browser creates the guest from this call, so
+  // a client handed over afterwards would leave a window in which the guest
+  // could commit a page and have nothing to tell about it -- and the first
+  // thing a guest does is commit a page.
+  //
+  // The task runner is named once and passed twice, without a move: argument
+  // evaluation order is unspecified, so a moved-from runner could reach the
+  // other pipe.
+  const scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      context->GetTaskRunner(TaskType::kInternalDefault);
   host->CreateGuest(placeholder->GetLocalFrameToken(),
-                    guest_.BindNewPipeAndPassReceiver(
-                        context->GetTaskRunner(TaskType::kInternalDefault)));
+                    guest_.BindNewPipeAndPassReceiver(task_runner),
+                    client_receiver_.BindNewPipeAndPassRemote(task_runner));
 }
 
 void HTMLWebViewElement::NavigateGuest() {
@@ -211,6 +230,21 @@ void HTMLWebViewElement::reload() {
   if (guest_.is_bound()) {
     guest_->Reload();
   }
+}
+
+// The browser's answer arriving, which is the only way this element has one.
+//
+// STORED FIRST AND ANNOUNCED SECOND, because the announcement is what makes a
+// chrome read the store: a handler that ran before the fields were written
+// would read the values it was called about the change to.
+void HTMLWebViewElement::HistoryChanged(bool can_go_back, bool can_go_forward) {
+  can_go_back_ = can_go_back;
+  can_go_forward_ = can_go_forward;
+
+  // Bubbling, for the reason the focus announcement bubbles: a shell hangs one
+  // handler on the window it drew and hears everything that window's parts say
+  // through it. See BrowserWindow.tsx in the Domicile repository.
+  DispatchEvent(*Event::CreateBubble(AtomicString(kHistoryChangeEvent)));
 }
 
 }  // namespace blink

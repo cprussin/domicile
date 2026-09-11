@@ -44,6 +44,30 @@
 # back/forward-cached restore reportable at all; see
 # guard-webview-history-server.py.
 #
+# AND WHAT THE ELEMENT SAYS BACK AND FORWARD CAN DO, read at four points in the
+# same schedule. That answer lives in the browser process — a guest's history is
+# a NavigationController there — so the browser pushes it down a client pipe and
+# the element holds it as `canGoBack` and `canGoForward`. What is asserted is
+# the pair at each point:
+#
+#   start          false/false   the first page has nowhere to go either way
+#   two-pages      true/false    THE POSITIVE: a page behind, so back is live
+#   after-back     false/true    spent the back entry and earned a forward one
+#   after-forward  true/false    and spent it again
+#
+# THE POSITIVE IS FIRST HERE TOO. An element that answered `false` to everything
+# would satisfy every absence in that table, so the reading that has to hold
+# before any of them means anything is `two-pages`.
+#
+# AND THAT READING IS TAKEN BEFORE THE MODULE EVER LISTENS, which is the second
+# thing this measures. A chrome renders from state, and a React shell registers
+# its listeners in its first effect flush — after the element is in the document
+# and after the guest's first pages have committed. So the module reads
+# `two-pages` with no listener on the element at all and reports `events=0`
+# beside it: a value read that way is a value a late-mounting shell would have
+# had. Only then does it start listening, and the two events it hears over the
+# rest of the run are what says a shell has something to re-render on.
+#
 # HOW IT CAN FAIL, which is the part a guard is worth nothing without.
 # NEGATIVE=1 runs the same shell, the same element, the same guest and the same
 # two navigations, and CALLS NOTHING. Not an <iframe> in the element's place,
@@ -59,6 +83,13 @@
 #                                    positive run's not showing it is a
 #                                    measurement of nothing rather than of
 #                                    stop()
+#   back must STAY available        or a guest's history goes dead on its own,
+#                                    and the positive run's dead back need not
+#                                    have been goBack()'s
+#   no event may arrive             or something pushes history state with
+#                                    nothing driving it, and the positive run's
+#                                    two events are noise rather than the two
+#                                    calls
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -211,6 +242,32 @@ FOURTH="$(at 4)"
 FIFTH="$(at 5)"
 COUNT="$(printf '%s\n' "$SEQUENCE" | grep -c .)"
 
+# WHAT THE ELEMENT SAID BACK AND FORWARD COULD DO, at each of the four points
+# the module reads it. `at=` names the point in the schedule rather than the
+# page: in the control the guest is somewhere else by then, and it is the same
+# point all the same.
+#
+# `head -1` because a point is read once and a log that somehow holds two of
+# them should be decided by the first rather than by whichever sorted last.
+STATES="$(grep -o 'GUARD history-state at=[^ ]* can=[^ ]* events=[0-9]*' \
+  "$ENGINE_LOG")"
+can_at() { # $1 point
+  printf '%s\n' "$STATES" |
+    sed -n "s/^GUARD history-state at=$1 can=\([^ ]*\) .*\$/\1/p" | head -1
+}
+# How many times the element had said its history changed by then. Zero at
+# `two-pages` is a reading, not an absence: see the header.
+events_at() { # $1 point
+  printf '%s\n' "$STATES" |
+    sed -n "s/^GUARD history-state at=$1 .* events=\([0-9]*\)\$/\1/p" | head -1
+}
+START_CAN="$(can_at start)"
+TWO_CAN="$(can_at two-pages)"
+TWO_EVENTS="$(events_at two-pages)"
+BACK_CAN="$(can_at after-back)"
+FORWARD_CAN="$(can_at after-forward)"
+FORWARD_EVENTS="$(events_at after-forward)"
+
 SAW_MODULE=$(grep -qF "GUARD driving" "$ENGINE_LOG" && echo 1 || echo 0)
 SAW_SLOW_SHOWN=$(printf '%s\n' "$SEQUENCE" | grep -qx "/slow" && echo 1 || echo 0)
 # Asked for, which is not the same as answered: the fixture records a request
@@ -222,6 +279,8 @@ SAW_SLOW_ASKED=$(grep -qF "asked /slow" "$HTTP_LOG" && echo 1 || echo 0)
 echo
 echo "the guest showed: $(printf '%s' "$SEQUENCE" | tr '\n' ' ')"
 echo "module=$SAW_MODULE pages=$COUNT slow-asked=$SAW_SLOW_ASKED slow-shown=$SAW_SLOW_SHOWN"
+echo "the element said: start=$START_CAN two-pages=$TWO_CAN after-back=$BACK_CAN after-forward=$FORWARD_CAN"
+echo "history events: at two-pages=$TWO_EVENTS at after-forward=$FORWARD_EVENTS"
 echo
 
 # WHICH END TO BLAME, and it is the whole of this script's judgement. Six
@@ -270,11 +329,28 @@ cancelled one"
     FAILURE="the guest showed $COUNT pages where the control drove two and \
 then the slow one. Every reading in the positive run is a position in that \
 sequence, so a run with pages nobody asked for shifts all of them"
+  elif [ "$TWO_CAN" != "true/false" ]; then
+    FAILURE="the element never became available to go back, even with a page \
+behind it: at two pages it said \"$TWO_CAN\" where back is live and forward \
+is not. Every absence this guard reads rests on that, in both runs, so \
+nothing below it is a measurement"
+  elif [ "$BACK_CAN" != "true/false" ]; then
+    FAILURE="the guest's history went dead on its own: with nothing driving \
+it the element said \"$BACK_CAN\" where it had said \"$TWO_CAN\". Something \
+here moves or prunes a guest's history unasked, which means the positive \
+run's dead back need not have been goBack()'s and this pair decides nothing"
+  elif [ "$FORWARD_EVENTS" != "0" ]; then
+    FAILURE="the element announced $FORWARD_EVENTS history change(s) with \
+nothing driving it. The positive run reads its two as the two calls, so a run \
+that pushes unasked makes that count noise — a navigation the fixture caused, \
+a second send of the same src, or a push that does not check whether anything \
+changed"
   else
     PASSED="the control is sharp: the same element, the same guest and the \
 same navigations with none of the four called show no third page — so the \
-positive run's is goBack()'s — and the slow page arrives, so the positive \
-run's not showing it is stop()"
+positive run's is goBack()'s — the slow page arrives, so the positive run's \
+not showing it is stop(), and back stays available with no event behind it, \
+so the positive run's dead back and its two events are the calls"
   fi
 elif [ "$THIRD" != "/one" ]; then
   FAILURE="goBack() did not take the guest back. THIS IS THE CLAIM: the guest \
@@ -290,6 +366,39 @@ elif [ "$FIFTH" != "/two" ]; then
   FAILURE="reload() showed nothing again. The page was already on screen, so \
 what is missing is the fresh load: nothing arrived and no pageshow fired, \
 which is what reload() not reaching the guest's controller looks like"
+elif [ "$START_CAN" != "false/false" ]; then
+  FAILURE="the element said the first page of a history had somewhere to go: \
+\"$START_CAN\" where both are false. A guest that has been one place has no \
+entry behind it and none ahead, so this is the browser's answer arriving \
+wrong or the element holding somebody else's"
+elif [ "$TWO_CAN" != "true/false" ]; then
+  FAILURE="the element never became available to go back, even with a page \
+behind it: at two pages it said \"$TWO_CAN\" where back is live and forward \
+is not. THIS IS THE POSITIVE the rest of the readings rest on — an element \
+answering no to everything would satisfy every absence below — so it is the \
+browser's push, the client pipe, or CanGoBack() itself"
+elif [ "$TWO_EVENTS" != "0" ]; then
+  FAILURE="the two-pages reading was taken by an element that had already \
+heard $TWO_EVENTS history change(s), and that is the one reading which has to \
+be taken with no listener on it. It is what says a chrome mounting late reads \
+the state rather than having needed the event, and an element that had \
+listened says nothing of the sort. The module attaches its listener straight \
+after this reading; if that moved, move this with it"
+elif [ "$BACK_CAN" != "false/true" ]; then
+  FAILURE="goBack() left the element saying \"$BACK_CAN\" where back is \
+spent and forward is earned. The guest DID go back — the page order above \
+says so — so this is the browser not pushing the new answer, or pushing one \
+that does not match the controller it just drove"
+elif [ "$FORWARD_CAN" != "true/false" ]; then
+  FAILURE="goForward() left the element saying \"$FORWARD_CAN\" where the \
+forward entry is spent and the back one is earned again. The guest moved, so \
+what is wrong is the answer that followed it"
+elif [ "$FORWARD_EVENTS" = "0" ] || [ -z "$FORWARD_EVENTS" ]; then
+  FAILURE="the element never announced a history change, so a chrome has \
+nothing to re-read on. The values themselves are right, which makes this the \
+half a shell cannot do without rather than the half it renders from: an \
+address bar would show the state its first render happened to catch and never \
+move again"
 elif [ "$SAW_SLOW_ASKED" != "1" ]; then
   FAILURE="the last navigation never reached the server, so there was no \
 pending load for stop() to cancel and its reading below is about a navigation \
@@ -306,7 +415,10 @@ worse than them not"
 else
   PASSED="a <webview>'s four history controls drive the guest: it went back \
 to the page before, forward to the one after, reloaded it into a fresh load, \
-and stop() cancelled a navigation that would otherwise have landed"
+and stop() cancelled a navigation that would otherwise have landed. And the \
+element says what back and forward can do at each step — read at two pages \
+with no listener on it, which is what a chrome mounting late would read — \
+with an event behind every change for one to re-read on"
 fi
 
 if [ -n "$PASSED" ]; then
