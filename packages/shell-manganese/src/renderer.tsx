@@ -15,9 +15,9 @@ import {
 } from "@domicile/component-library/ThemeProvider";
 import { createRoot } from "react-dom/client";
 
-import { AppElements } from "./app-elements";
 import { diagnosticLines } from "./diagnostic-lines";
 import { displaysFrom } from "./display-source";
+import { drawTiming } from "./draw-timing";
 import { mountPoint } from "./mount-point";
 import { Shell } from "./Shell";
 import { viewportDisplays } from "./viewport-display";
@@ -50,7 +50,6 @@ const bridge = new BridgeClient(connectToHost(navigator));
 const displays = hasHost(navigator)
   ? displaysFrom(bridge)
   : viewportDisplays(window);
-const appElements = new AppElements();
 registerElements(bridge);
 
 // The markup this mounts into is made rather than found — see
@@ -59,7 +58,7 @@ registerElements(bridge);
 // writes the document and writes no such element, so every launch threw here
 // before React was reached and the desktop was a white window.
 createRoot(mountPoint(document)).render(
-  <Shell appElements={appElements} bridge={bridge} displays={displays} />,
+  <Shell bridge={bridge} displays={displays} />,
 );
 
 // The compositor logs its own half of the frame path every 5s; this is the
@@ -89,7 +88,7 @@ setInterval(() => {
   // and the next line to include it would report an average since startup
   // rather than since the last line.
   const lines = diagnosticLines({
-    draw: appElements.drawTiming.take(),
+    draw: drawTiming.take(),
     ipc: bridge.hop.take(),
     place: placementTiming.take(),
     // Not drained: the round trip is reported for the whole run, so the

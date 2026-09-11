@@ -2,7 +2,6 @@ import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import type { DropPosition } from "@domicile/component-library/TabRail";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 
-import type { AppElements } from "./app-elements";
 import type { ShellState } from "./shell-state";
 import {
   EMPTY_SHELL,
@@ -60,37 +59,37 @@ export type ShellWindows = ShellState & {
  *
  * The host's lifecycle events (a client appeared, a client is gone) are the
  * other half of the user's own actions, so both go through one reducer and the
- * chrome renders a single list. A client's *frames* do not come through here —
- * they go straight to the portal element via `appElements`, because a window of
- * pixels arriving many times a second has no business in React state.
+ * chrome renders a single list — and so does everything a client says about its
+ * own window, because a window's size and its cursor are facts about it in
+ * exactly the way its title is. A client's *pixels* are the one thing that does
+ * not come through here, and they do not come through the page at all: the
+ * compositor submits the client's buffer and the portal embeds the surface.
  */
-export const useShellWindows = (
-  bridge: BridgeClient,
-  appElements: AppElements,
-): ShellWindows => {
+export const useShellWindows = (bridge: BridgeClient): ShellWindows => {
   const [state, dispatch] = useReducer(reduceShell, EMPTY_SHELL);
 
   useEffect(() => {
     bridge.on("app_appeared", ({ app_id, size, title }) => {
-      // The portal for this window mounts a render later, so the size waits
-      // in `AppElements` until it registers. See `AppElements.announced`.
-      appElements.announced(app_id, size);
       dispatch(ShellAction.AppAppeared(app_id, title));
+      // A size here is a client that has committed a buffer already — the
+      // replay a reloading chrome is given — and it says the same thing
+      // `app_resized` does, so it is reduced the same way. A window that has
+      // only just mapped carries none, and there is nothing to record.
+      if (size !== undefined) {
+        dispatch(ShellAction.AppDrewAt(app_id, size));
+      }
     });
     bridge.on("app_titled", ({ app_id, title }) => {
       dispatch(ShellAction.AppTitled(app_id, title));
     });
     bridge.on("app_closed", ({ app_id }) => {
-      // The client going is what ends the record, not the portal unmounting.
-      // See `AppElements.closed`.
-      appElements.closed(app_id);
       dispatch(ShellAction.AppClosed(app_id));
     });
-    bridge.on("app_resized", (message) => {
-      appElements.resize(message);
+    bridge.on("app_resized", ({ app_id, size }) => {
+      dispatch(ShellAction.AppDrewAt(app_id, size));
     });
-    bridge.on("app_cursor", (message) => {
-      appElements.applyCursor(message);
+    bridge.on("app_cursor", ({ app_id, cursor }) => {
+      dispatch(ShellAction.AppCursorChanged(app_id, cursor));
     });
     bridge.on("focus_changed", ({ app_id }) => {
       dispatch(ShellAction.FocusChanged(app_id));
@@ -100,7 +99,7 @@ export const useShellWindows = (
       // what happens next is `reduceShell`'s to say and not the desktop's.
       dispatch(ShellAction.FocusRequested(app_id));
     });
-  }, [appElements, bridge]);
+  }, [bridge]);
 
   const close = useCallback(
     (id: string) => {
