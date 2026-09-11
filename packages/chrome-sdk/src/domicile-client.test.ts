@@ -17,7 +17,8 @@ type AppEventFields = Partial<Omit<DomicileAppEvent, keyof Event>>;
 
 /**
  * A `DomicileAppEvent`, with the fields that event does not carry left as the
- * empty string the engine fills them with.
+ * empty string the engine fills them with, and a zero `arrival` — nothing the
+ * client does with one of these is about the hop.
  *
  * `Object.assign` onto an `Event` rather than a subclass per event type: what
  * the client reads is the fields, and five classes saying that would be a test
@@ -26,6 +27,7 @@ type AppEventFields = Partial<Omit<DomicileAppEvent, keyof Event>>;
 const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
   Object.assign(new Event(type), {
     appId: "",
+    arrival: 0,
     cursor: "",
     hasSize: false,
     height: 0,

@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_APP_TITLED_EVENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_APP_TITLED_EVENT_H_
 
+#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
@@ -30,11 +31,16 @@ class MODULES_EXPORT DomicileAppTitledEvent final : public Event {
                          const DomicileAppTitledEventInit* initializer);
   DomicileAppTitledEvent(const AtomicString& type,
                          const String& app_id,
-                         const String& title);
+                         const String& title,
+                         DOMHighResTimeStamp arrival);
   ~DomicileAppTitledEvent() override;
 
   const String& appId() const { return app_id_; }
   const String& title() const { return title_; }
+
+  // When the browser process had this, on `performance.now()`'s clock. See
+  // DomicileAppEvent::arrival.
+  DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
 
@@ -43,6 +49,7 @@ class MODULES_EXPORT DomicileAppTitledEvent final : public Event {
  private:
   String app_id_;
   String title_;
+  DOMHighResTimeStamp arrival_ = 0;
 };
 
 }  // namespace blink

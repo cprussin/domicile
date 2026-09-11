@@ -5,4 +5,5 @@
 dictionary DomicileAppTitledEventInit : EventInit {
   DOMString appId = "";
   DOMString title = "";
+  DOMHighResTimeStamp arrival = 0;
 };

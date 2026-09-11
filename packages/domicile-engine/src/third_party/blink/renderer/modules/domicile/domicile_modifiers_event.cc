@@ -22,18 +22,21 @@ DomicileModifiersEvent::DomicileModifiersEvent(
       alt_(initializer->altKey()),
       ctrl_(initializer->ctrlKey()),
       shift_(initializer->shiftKey()),
-      meta_(initializer->metaKey()) {}
+      meta_(initializer->metaKey()),
+      arrival_(initializer->arrival()) {}
 
 DomicileModifiersEvent::DomicileModifiersEvent(const AtomicString& type,
                                                bool alt,
                                                bool ctrl,
                                                bool shift,
-                                               bool meta)
+                                               bool meta,
+                                               DOMHighResTimeStamp arrival)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
       alt_(alt),
       ctrl_(ctrl),
       shift_(shift),
-      meta_(meta) {}
+      meta_(meta),
+      arrival_(arrival) {}
 
 DomicileModifiersEvent::~DomicileModifiersEvent() = default;
 

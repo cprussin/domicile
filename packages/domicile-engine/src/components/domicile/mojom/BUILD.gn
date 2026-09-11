@@ -14,6 +14,12 @@ mojom("mojom") {
 
   public_deps = [
     "//gpu/ipc/common:interfaces",
+
+    # control_channel.mojom stamps every inbound event with the moment the
+    # browser process read it off the compositor's socket, which is a
+    # base::TimeTicks. Typemapped by mojo itself, so both the ordinary and the
+    # `-blink` bindings get base::TimeTicks without anything here saying so.
+    "//mojo/public/mojom/base",
     "//services/viz/public/mojom",
     "//services/viz/public/mojom:surfaces",
 

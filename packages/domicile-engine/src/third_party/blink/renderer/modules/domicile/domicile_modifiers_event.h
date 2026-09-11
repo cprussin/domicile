@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_MODIFIERS_EVENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_MODIFIERS_EVENT_H_
 
+#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 
@@ -34,13 +35,18 @@ class MODULES_EXPORT DomicileModifiersEvent final : public Event {
                          bool alt,
                          bool ctrl,
                          bool shift,
-                         bool meta);
+                         bool meta,
+                         DOMHighResTimeStamp arrival);
   ~DomicileModifiersEvent() override;
 
   bool altKey() const { return alt_; }
   bool ctrlKey() const { return ctrl_; }
   bool shiftKey() const { return shift_; }
   bool metaKey() const { return meta_; }
+
+  // When the browser process had this, on `performance.now()`'s clock. See
+  // DomicileAppEvent::arrival.
+  DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
@@ -50,6 +56,7 @@ class MODULES_EXPORT DomicileModifiersEvent final : public Event {
   bool ctrl_ = false;
   bool shift_ = false;
   bool meta_ = false;
+  DOMHighResTimeStamp arrival_ = 0;
 };
 
 }  // namespace blink

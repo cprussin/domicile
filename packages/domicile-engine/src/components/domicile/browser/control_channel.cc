@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/task/bind_post_task.h"
 #include "base/values.h"
+#include "components/domicile/common/cursor_shape.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "net/base/net_errors.h"
 
@@ -43,9 +44,9 @@ ControlChannel::ControlChannel(
   // here, where `client_` is bound and where this object may be touched at all.
   channel_ = ShortcutRegistry::Get().AddChannel(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
-          &ControlChannel::DeliverShortcut, weak_factory_.GetWeakPtr())),
+          &ControlChannel::DeliverShortcutNow, weak_factory_.GetWeakPtr())),
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
-          &ControlChannel::DeliverModifiers, weak_factory_.GetWeakPtr())));
+          &ControlChannel::DeliverModifiersNow, weak_factory_.GetWeakPtr())));
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
   Connect();
 }
@@ -322,18 +323,35 @@ void ControlChannel::OnWrite(int result) {
   }
 }
 
-void ControlChannel::DeliverShortcut(Chord chord) {
+void ControlChannel::DeliverShortcut(Chord chord, base::TimeTicks arrival) {
   if (client_) {
-    client_->ShortcutPressed(mojom::Shortcut::New(
-        chord.keycode, chord.alt, chord.ctrl, chord.shift, chord.meta));
+    client_->ShortcutPressed(
+        mojom::Shortcut::New(chord.keycode, chord.alt, chord.ctrl, chord.shift,
+                             chord.meta),
+        arrival);
   }
 }
 
-void ControlChannel::DeliverModifiers(Modifiers modifiers) {
+void ControlChannel::DeliverModifiers(Modifiers modifiers,
+                                      base::TimeTicks arrival) {
   if (client_) {
     client_->Modifiers(modifiers.alt, modifiers.ctrl, modifiers.shift,
-                       modifiers.meta);
+                       modifiers.meta, arrival);
   }
+}
+
+// THE REGISTRY'S SIDE OF THOSE TWO, AND THE STAMP IS TAKEN HERE RATHER THAN
+// BOUND INTO THE CALLBACK. A chord claimed by the shell is matched on the UI
+// thread and posted to this sequence; `base::TimeTicks::Now()` at the far end
+// of that post is when this channel had it, which is the quantity the page
+// subtracts. Taking it at the match instead would price the post into the hop
+// and report a stage that is not the one being measured.
+void ControlChannel::DeliverShortcutNow(Chord chord) {
+  DeliverShortcut(chord, base::TimeTicks::Now());
+}
+
+void ControlChannel::DeliverModifiersNow(Modifiers modifiers) {
+  DeliverModifiers(modifiers, base::TimeTicks::Now());
 }
 
 void ControlChannel::ReadLoop() {
@@ -355,11 +373,19 @@ void ControlChannel::OnRead(int result) {
     return;
   }
 
+  // WHEN THE BROWSER PROCESS TOOK THIS OFF THE COMPOSITOR'S SOCKET. This line
+  // is the whole of `arrival`: everything downstream of it -- the JSON parse,
+  // the mojo call, the renderer, Blink's dispatch -- is the stage the page
+  // prices by subtracting this from `Event.timeStamp`. Before the read's own
+  // bookkeeping, so the parse of the first message is inside the measurement
+  // rather than outside it.
+  const base::TimeTicks arrival = base::TimeTicks::Now();
+
   read_remainder_.append(read_buffer_->data(), static_cast<size_t>(result));
 
   size_t newline = read_remainder_.find('\n');
   while (newline != std::string::npos) {
-    DispatchLine(read_remainder_.substr(0, newline));
+    DispatchLine(read_remainder_.substr(0, newline), arrival);
     read_remainder_.erase(0, newline + 1);
     newline = read_remainder_.find('\n');
   }
@@ -367,7 +393,8 @@ void ControlChannel::OnRead(int result) {
   ReadLoop();
 }
 
-void ControlChannel::DispatchLine(const std::string& line) {
+void ControlChannel::DispatchLine(const std::string& line,
+                                 base::TimeTicks arrival) {
   if (line.empty() || !client_) {
     return;
   }
@@ -407,7 +434,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
     // down already reads the same field the other way, which is the reading
     // that matches the wire.
     const std::string* title = message.FindString("title");
-    client_->AppTitled(*app_id, title ? *title : std::string());
+    client_->AppTitled(*app_id, title ? *title : std::string(), arrival);
     return;
   }
 
@@ -424,7 +451,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
     const bool has_size = size && size->size() == 2u;
     client_->AppAppeared(*app_id, title ? *title : std::string(), has_size,
                          has_size ? Number((*size)[0]) : 0.0,
-                         has_size ? Number((*size)[1]) : 0.0);
+                         has_size ? Number((*size)[1]) : 0.0, arrival);
     return;
   }
 
@@ -432,14 +459,15 @@ void ControlChannel::DispatchLine(const std::string& line) {
     const std::string* app_id = message.FindString("app_id");
     const base::ListValue* size = message.FindList("size");
     if (app_id && size && size->size() == 2u) {
-      client_->AppResized(*app_id, Number((*size)[0]), Number((*size)[1]));
+      client_->AppResized(*app_id, Number((*size)[0]), Number((*size)[1]),
+                          arrival);
     }
     return;
   }
 
   if (*type == "app_closed") {
     if (const std::string* app_id = message.FindString("app_id")) {
-      client_->AppClosed(*app_id);
+      client_->AppClosed(*app_id, arrival);
     }
     return;
   }
@@ -447,9 +475,27 @@ void ControlChannel::DispatchLine(const std::string& line) {
   if (*type == "app_cursor") {
     const std::string* app_id = message.FindString("app_id");
     const std::string* cursor = message.FindString("cursor");
-    if (app_id && cursor) {
-      client_->AppCursor(*app_id, *cursor);
+    if (!app_id || !cursor) {
+      return;
     }
+    // THE CLOSED SET, ASKED ABOUT HERE AND NOWHERE ELSE. This used to copy the
+    // string through to the page, where an unknown CSS keyword is a no-op and
+    // the symptom is an arrow instead of a hand with nothing said anywhere.
+    // See components/domicile/common/cursor_shape.h.
+    const std::optional<mojom::CursorShape> shape =
+        CursorShapeFromWire<mojom::CursorShape>(*cursor);
+    if (!shape) {
+      // Dropped with a name, like every other unrecognised message on this
+      // channel: a cursor this build does not know is a compositor newer than
+      // it rather than a broken stream, and the one thing that must not happen
+      // is a shape being invented for it.
+      LOG(WARNING) << "domicile: the compositor asked for a cursor named '"
+                   << *cursor
+                   << "', which is not one of the shapes this engine knows; "
+                      "the request was dropped.";
+      return;
+    }
+    client_->AppCursor(*app_id, *shape, arrival);
     return;
   }
 
@@ -473,7 +519,8 @@ void ControlChannel::DispatchLine(const std::string& line) {
               combination->FindBool("alt").value_or(false),
               combination->FindBool("ctrl").value_or(false),
               combination->FindBool("shift").value_or(false),
-              combination->FindBool("logo").value_or(false)});
+              combination->FindBool("logo").value_or(false)},
+        arrival);
     return;
   }
 
@@ -481,7 +528,8 @@ void ControlChannel::DispatchLine(const std::string& line) {
     DeliverModifiers(Modifiers{message.FindBool("alt").value_or(false),
                                message.FindBool("ctrl").value_or(false),
                                message.FindBool("shift").value_or(false),
-                               message.FindBool("logo").value_or(false)});
+                               message.FindBool("logo").value_or(false)},
+                     arrival);
     return;
   }
 
@@ -522,7 +570,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
     // Empty app_id means the chrome itself has focus, which is a state rather
     // than a missing field.
     const std::string* app_id = message.FindString("app_id");
-    client_->FocusChanged(app_id ? *app_id : std::string());
+    client_->FocusChanged(app_id ? *app_id : std::string(), arrival);
     return;
   }
 
@@ -531,7 +579,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
     // answer: nothing but a client asks for the keyboard.
     const std::string* app_id = message.FindString("app_id");
     if (app_id) {
-      client_->FocusRequested(*app_id);
+      client_->FocusRequested(*app_id, arrival);
     }
     return;
   }

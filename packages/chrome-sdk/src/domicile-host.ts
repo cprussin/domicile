@@ -104,6 +104,18 @@ export type DomicileAppEvent = Event & {
   /** The id an `<app>` element names. Empty on `focuschanged` means the chrome. */
   readonly appId: string;
   readonly title: string;
+  /**
+   * The CSS `cursor` keyword a client asked for, or the empty string on every
+   * event that is not `appcursor`.
+   *
+   * One of the shapes in `cursor-shape.ts` by construction: the browser
+   * process refuses a name that is not, at the socket, so this is a closed set
+   * arriving as a `DOMString` rather than an open one. `host-message.ts` still
+   * parses it — the DOM is a boundary and DATA.md is about boundaries, not
+   * about trust — but the parse is now a second reading of a value already
+   * checked rather than the only thing standing between a typo and an arrow
+   * where a hand should be.
+   */
   readonly cursor: string;
   /**
    * False until the client has committed a buffer.
@@ -117,6 +129,24 @@ export type DomicileAppEvent = Event & {
   readonly hasSize: boolean;
   readonly width: number;
   readonly height: number;
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds.
+   *
+   * **Not `timeStamp`**, which is when the event object was *constructed* — in
+   * the renderer, at dispatch — so a shell pricing the IPC against it measures
+   * a few microseconds of Blink and calls it the hop. The difference between
+   * the two is the stage: the compositor's line read off a socket in the
+   * browser process, turned into a mojo message, carried into this renderer
+   * and dispatched here.
+   *
+   * `shortcut` is the one event whose stamp is not a socket read — a chord the
+   * shell claimed is matched in the browser process and never reaches the
+   * compositor — but it is the same quantity on the same clock: when that
+   * process had it.
+   */
+  readonly arrival: DOMHighResTimeStamp;
 };
 
 /**
@@ -129,6 +159,24 @@ export type DomicileAppEvent = Event & {
 export type DomicileAppTitledEvent = Event & {
   readonly appId: string;
   readonly title: string;
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds.
+   *
+   * **Not `timeStamp`**, which is when the event object was *constructed* — in
+   * the renderer, at dispatch — so a shell pricing the IPC against it measures
+   * a few microseconds of Blink and calls it the hop. The difference between
+   * the two is the stage: the compositor's line read off a socket in the
+   * browser process, turned into a mojo message, carried into this renderer
+   * and dispatched here.
+   *
+   * `shortcut` is the one event whose stamp is not a socket read — a chord the
+   * shell claimed is matched in the browser process and never reaches the
+   * compositor — but it is the same quantity on the same clock: when that
+   * process had it.
+   */
+  readonly arrival: DOMHighResTimeStamp;
 };
 
 /**
@@ -143,6 +191,24 @@ export type DomicileShortcutEvent = Event & {
   readonly ctrlKey: boolean;
   readonly shiftKey: boolean;
   readonly metaKey: boolean;
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds.
+   *
+   * **Not `timeStamp`**, which is when the event object was *constructed* — in
+   * the renderer, at dispatch — so a shell pricing the IPC against it measures
+   * a few microseconds of Blink and calls it the hop. The difference between
+   * the two is the stage: the compositor's line read off a socket in the
+   * browser process, turned into a mojo message, carried into this renderer
+   * and dispatched here.
+   *
+   * `shortcut` is the one event whose stamp is not a socket read — a chord the
+   * shell claimed is matched in the browser process and never reaches the
+   * compositor — but it is the same quantity on the same clock: when that
+   * process had it.
+   */
+  readonly arrival: DOMHighResTimeStamp;
 };
 
 /**
@@ -157,6 +223,24 @@ export type DomicileModifiersEvent = Event & {
   readonly ctrlKey: boolean;
   readonly shiftKey: boolean;
   readonly metaKey: boolean;
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds.
+   *
+   * **Not `timeStamp`**, which is when the event object was *constructed* — in
+   * the renderer, at dispatch — so a shell pricing the IPC against it measures
+   * a few microseconds of Blink and calls it the hop. The difference between
+   * the two is the stage: the compositor's line read off a socket in the
+   * browser process, turned into a mojo message, carried into this renderer
+   * and dispatched here.
+   *
+   * `shortcut` is the one event whose stamp is not a socket read — a chord the
+   * shell claimed is matched in the browser process and never reaches the
+   * compositor — but it is the same quantity on the same clock: when that
+   * process had it.
+   */
+  readonly arrival: DOMHighResTimeStamp;
 };
 
 /** Every event `navigator.domicile` fires, and what each one carries. */

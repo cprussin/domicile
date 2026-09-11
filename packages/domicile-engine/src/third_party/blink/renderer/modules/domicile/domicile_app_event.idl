@@ -12,6 +12,17 @@
   readonly attribute DOMString title;
   readonly attribute DOMString cursor;
 
+  // When the browser process had this message, on `performance.now()`'s
+  // clock.
+  //
+  // NOT `timeStamp`, which is when this object was constructed -- in this
+  // renderer, at dispatch -- so subtracting it from itself reports a few
+  // microseconds of Blink and calls it the IPC. The difference between the two
+  // IS the stage: the read off the compositor's socket, the mojo message, the
+  // hop into this process and the dispatch. See
+  // components/domicile/mojom/control_channel.mojom.
+  readonly attribute DOMHighResTimeStamp arrival;
+
   // False until the client has committed a buffer. A shell that treats width
   // and height as meaningful while this is false opens the window at nothing.
   readonly attribute boolean hasSize;
