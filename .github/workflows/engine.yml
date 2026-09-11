@@ -40,14 +40,34 @@ on:
       - .github/scripts/engine-*.sh
   workflow_dispatch:
 
-# Serialised, and never cancelled mid-flight.
+# Per ref, and never cancelled mid-flight.
 #
-# One runner is one job at a time, so this mostly queues rather than overlaps —
-# but a cancelled `autoninja` leaves a half-linked `out/Domicile` that the next
-# run inherits, and the failure it produces looks like a code error rather than
-# an interrupted build. Waiting is cheaper than that.
+# THE SLOT IS THE QUEUE, NOT THIS. `crux` runs one job at a time, and a job
+# holds that slot from `actions/checkout` to the `if: always()` drop below — so
+# two runs of this workflow cannot be inside /build/chromium/src at once no
+# matter what is written here. The queue in front of that slot is GitHub's
+# runner queue: unbounded, FIFO, and it never throws a run away.
+#
+# A CONCURRENCY GROUP IS NOT THAT QUEUE, WHICH IS WHY THIS IS KEYED BY REF. A
+# group holds exactly ONE pending run and evicts it when a newer run arrives.
+# Shared across refs — as this was, with `group: engine`, together with
+# engine-release.yml — that makes every branch able to discard every other
+# branch's queued run: runs 176 and 177 were each cancelled seconds after they
+# were created, by a push to a different branch, and one branch lost two runs
+# before it got a result. Keyed by ref, the only run a push can evict is the
+# pending run for the same ref, which is the one it supersedes.
+#
+# `cancel-in-progress: false` stays, and is the half that group name never
+# provided: a cancelled `autoninja` leaves a half-linked `out/Domicile` that
+# the next run inherits, and the failure it produces looks like a code error
+# rather than an interrupted build. Waiting is cheaper than that.
+#
+# What still keeps CI out of a person's build in that tree is
+# .github/scripts/engine-tree-lock.sh, and it refuses rather than waits — it
+# has to, because a waiter would hold the one slot the holder needs in order to
+# finish. See scripts/test-engine-concurrency.sh, which asserts all of this.
 concurrency:
-  group: engine
+  group: engine-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
