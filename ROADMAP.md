@@ -28,10 +28,13 @@ submitted to the engine as a viz surface, and the page embeds that surface in
 its `<app>` element, so nothing is copied by the CPU and the browser's own
 display compositor is what reaches the screen.
 
-`domicile` is the entry point: `domicile ./my-desktop/dist` starts the bridge,
-the engine and the compositor, in the one order they can start in. It builds
-nothing and wraps nothing — the three components ship beside it, the way a
-multi-binary program like postfix does, and it finds them from its own path.
+`domicile` is the entry point: `domicile ./my-desktop/dist/shell.js` starts the
+engine and the compositor, in the one order they can start in — the engine
+first, because it serves the shell over `domicile://` and opens the broker
+socket the compositor connects to as a producer. It builds nothing and wraps
+nothing: both components ship beside it, the way a multi-binary program like
+postfix does, and it finds them from its own path. There were three, and the
+bridge that served the page over a loopback HTTP port is gone with the port.
 
 The wire protocol is at `PROTOCOL_VERSION = 1`.
 
@@ -42,7 +45,7 @@ The wire protocol is at `PROTOCOL_VERSION = 1`.
 | A window composites at native cost | A submitted frame reaches the display compositor's output in one display frame, indistinguishable from the probe's own floor. `ENGINE-FORK.md`, *What it costs* |
 | CSS is structural, not reimplemented | Seven properties measured on a GPU — `z-index` against ordinary DOM, `transform`, `border-radius`, `opacity`, `filter: blur()`, `mix-blend-mode`, resize — every one bit-exact against an ordinary element beside it. `ENGINE-FORK.md`, *What CSS does to an `<app>`* |
 | `<app>` and `<webview>` are elements the fork defines | Patch 0007. `document.createElement("app").constructor.name` is `HTMLAppElement`; `app-id` reflects both ways |
-| A shell loads over `domicile://`, with no port behind it | Patches 0008 and 0009: a standard scheme, deliberately not web-safe, both loader hooks, the document the fork writes, and `navigator.domicile` bound for that origin — a stand-in compositor read `hello` and a `spawn` back over it. Five gates stand between a registered scheme and a page that loads and all five are through, the last of them `MaybeLaunchAppShortcutWindow`, which declines `--app=domicile://shell/` for a scheme that is not web-safe and launches an ordinary browser window on the New Tab page instead, logging nothing on either side. The bridge still serves a shell over a TCP port; deleting it is *In this repository*, item 1 |
+| A shell loads over `domicile://`, with no port behind it | Patches 0008 and 0009: a standard scheme, deliberately not web-safe, both loader hooks, the document the fork writes, and `navigator.domicile` bound for that origin — a stand-in compositor read `hello` and a `spawn` back over it. Five gates stand between a registered scheme and a page that loads and all five are through, the last of them `MaybeLaunchAppShortcutWindow`, which declines `--app=domicile://shell/` for a scheme that is not web-safe and launches an ordinary browser window on the New Tab page instead, logging nothing on either side. No desktop binds a loopback port any more: the process that served one is gone, and `connectToHost` takes `navigator.domicile` rather than opening a WebSocket |
 | A `<webview>` is a guest, so a site that refuses framing loads in one | `guard-webview-framing.sh`. The element shows a page sending `X-Frame-Options: DENY` and `frame-ancestors 'none'`; its control frames that page and a copy differing only in those two headers from an ordinary http page, and shows the copy and not the original. So the site is refused where it has an ancestor, and the element is not giving it one |
 | A desktop chord reaches the shell while a browser window has the keyboard | `guard-webview-keyboard.sh`. A key pressed before focus moves reaches the shell's `document`; the chord after it comes back as `shortcut` and the window never sees it; an ungrabbed key reaches the window's page and not the shell |
 | A click inside a browser window reaches the shell that has to raise it | `guard-webview-click.sh`. A press driven at the engine lands in the guest's own page and arrives in the shell's `document` as an event on the element the guest hangs off, which is what a shell raises the window on; its control clicks the shell's own chrome instead and nothing reaches the element. Patch 0011 is both halves of why it crosses: upstream dispatches no focus event across a remote frame's process boundary, and focusing the element across it dispatches none either — Blink suppresses focus events while the page is unfocused, which a guest taking focus always makes it — so the element says so in an event of its own. The first run of the guard, with only the focus, is what found the second half |
@@ -58,17 +61,34 @@ decides whether an item is waiting or workable.
 
 ### In this repository
 
-1. **`domicile://`, the repo half.** Delete `engine-chrome-host`'s HTTP server
-   and `connectToHost`'s WebSocket, and let the engine serve the shell over the
-   scheme instead. **Unblocked, and first**: the fork's half is in the pinned
-   engine, so this no longer breaks a desktop — it deletes the desktop's last
-   TCP port, and the origin check that is the only thing guarding it.
-2. **The SDK's shape.** `<app>` and `<webview>` are real elements now, but the
-   SDK still defines `domicile-app` and `domicile-webview` as custom elements
-   and still measures and reports placement that patch 0007 does natively — an
-   `<app>`'s layout box *is* the `xdg_toplevel.configure`. **Parked**: the
-   `domicile://` work may delete the SDK's runtime entirely, and splitting it
-   before then would be a seam drawn twice.
+1. **Delete `engine-chrome-host`.** The repo half of `domicile://` is done:
+   `supervise` starts two processes rather than three, `connectToHost` takes
+   `navigator.domicile` instead of opening a WebSocket, and nothing a user runs
+   binds a loopback port. What is left is the package, which nothing imports —
+   one guard's comment names it in the past tense and the turbo cache remembers
+   building it. This is the tail of that work rather than the start of it.
+2. **`<app>` and `<webview>`, not `domicile-app` and `domicile-webview`.** The
+   fork defines both as real HTML tags — `document.createElement("app")` is an
+   `HTMLAppElement`, `app-id` reflects both ways — and the SDK still registers
+   hyphenated custom elements beside them, because a custom element's name must
+   contain a hyphen and the SDK predates the fork. `alias-tags.ts` offers a
+   chrome the short spelling by upgrading every `<app>` in the document to
+   `<domicile-app>`; nothing in this repository calls it, and it could never
+   have done the same for `<webview>`, since aliasing a name the host engine
+   claims would recurse.
+
+   The work is subtraction, in this order: stop registering the two custom
+   elements; delete `alias-tags.ts` with them; write `<app>` and `<webview>` in
+   the shells directly; then delete the placement machinery the elements exist
+   to drive — `measure.ts`, `observe-placement.ts`, `element-transform.ts`,
+   `matrix.ts`, `placement-timing.ts` — because an `<app>`'s layout box *is* the
+   `xdg_toplevel.configure` and patch 0007 reports it natively. Each step is
+   separately shippable and the last one is the one with the measurements behind
+   it. `WRITING-A-SHELL.md` is the contract this breaks, so it moves in the same
+   change as the tags.
+
+   **Unblocked.** It was parked in case the `domicile://` work deleted the SDK's
+   runtime; it did not.
 3. **Keystroke-to-pixel latency** (#206). The requirement is that a client's
    window costs the user nothing a plain Wayland compositor would not.
    `guard-latency.sh` has run on `crux` now — it reads `commit to pixel` at
@@ -92,11 +112,37 @@ decides whether an item is waiting or workable.
    a dead button. The work is a client interface passed at `CreateGuest` plus a
    DOM surface for a chrome to read; the mojom records the gap where the next
    person will look.
-2. **A desktop on a tty.** `ozone_platform_drm = true` fails at `gn gen` on this
-   pin: `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`. Needs a
-   patch that makes the DRM platform build on Linux, or a `target_os =
-   "chromeos"` build, which brings a great deal else. Until then a desktop is a
-   window inside an existing Wayland session, or headless.
+2. **A desktop on a tty.** Audited against the pin in
+   `docs/architecture/A-DESKTOP-ON-A-TTY.md`. Getting `gn gen` to accept
+   `ozone_platform_drm = true` is a **patch**: five edits, not one of them
+   inside the DRM platform's own logic, because its 49 `.cc` files hold two
+   ChromeOS references between them and no `BUILDFLAG(IS_CHROMEOS)` at all — the
+   assert is conservative about the platform. Getting a lit screen out of it is
+   a **port**, of the embedder ozone/drm has never had off ChromeOS: no
+   `PlatformScreen` (`CreateScreen()` is `NOTREACHED()`), nothing that modesets
+   without `//ui/display/manager`, no VT handling or input revocation, and no
+   route by which a display list reaches the compositor. It is **not a fork**.
+
+   The doc's first plan item is a `gn gen` probe on `crux`, and it is first for
+   a reason: a static read cannot see an `is_chromeos`-conditional header three
+   targets down or a `visibility` refusal. Until that runs, "a patch" is a
+   reasoned answer and not a measured one.
+
+   Until both halves land, a desktop is a window inside an existing Wayland
+   session, or headless.
+
+3. **What the engine ships that a desktop never runs.** Chrome carries a tab
+   strip, a New Tab page, a settings UI, sign-in and sync. A desktop can reach
+   none of it, all of it is built, and all of it is in the ~216 MB release
+   tarball and in the attack surface. **Measure before patching**: nobody knows
+   whether stripping it saves 5% or 40%, so the work starts with a size figure
+   per subsystem and a list of what each `enable_*` argument actually removes.
+
+   One decision is already made. **PDFium stays** — a desktop should render a
+   PDF in a window, so `enable_pdf` is not a free win. The separable question is
+   the viewer UI (`chrome/browser/resources/pdf` and the
+   `//extensions/browser/mime_handler` dependency it drags in), which is a
+   different subsystem with a different answer.
 
 ### Needs a machine with a screen
 
