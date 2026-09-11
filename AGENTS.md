@@ -116,6 +116,7 @@ working in its area; it is context, not compliance.
 | [/docs/architecture/STACKING-PARITY.md](/docs/architecture/STACKING-PARITY.md) | Why an unforked engine cannot do this, measured: every route to stacking parity that was tried and the evidence that closed it. The record behind the fork decision, not a design. |
 | [/docs/architecture/THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md) | Replacing the three layers of bash between `domicile` and a running desktop with one binary: what moves into `domicile-launch`, what stays in the flake, and the order it lands in. |
 | [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The fork itself: the design, the C ABI between the compositor and the engine, the measurements, and the plan — phase 1 shipped, phases 2 and 3 have items left. |
+| [/docs/architecture/A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md) | What stands between Domicile and a tty, audited against the Chromium pin: the ChromeOS-only assert on Ozone DRM is a patch, the missing embedder behind it is a port. Who opens the card and holds master, why input needs no new route, and what changes when outputs come from DRM. |
 
 [`/ROADMAP.md`](/ROADMAP.md) carries the current state and the ordered plan;
 read it before starting anything substantial.
