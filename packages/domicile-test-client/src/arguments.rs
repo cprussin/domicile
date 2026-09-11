@@ -49,6 +49,14 @@ pub struct Arguments {
     /// background painted over the window; a half-opaque one makes *fully*
     /// opaque mean one thing only.
     pub translucent: bool,
+
+    /// Whether to ask for the keyboard once the window is up.
+    ///
+    /// Off by default: a client that asked on every run would make every check
+    /// about focus. On, it binds `xdg_activation_v1` and activates its own
+    /// surface — the request a Domicile shell is free to refuse, and the only
+    /// way to produce one from a real client.
+    pub ask_for_focus: bool,
 }
 
 /// A command line the client will not run.
@@ -73,6 +81,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut trace = None;
     let mut translucent = None;
     let mut follow_configure = None;
+    let mut ask_for_focus = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -90,6 +99,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--follow-configure" => {
                 take(&mut follow_configure, &flag, true)?;
             }
+            "--ask-for-focus" => {
+                take(&mut ask_for_focus, &flag, true)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -99,6 +111,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         follow_configure: follow_configure.unwrap_or(false),
         trace: trace.unwrap_or(false),
         translucent: translucent.unwrap_or(false),
+        ask_for_focus: ask_for_focus.unwrap_or(false),
     })
 }
 

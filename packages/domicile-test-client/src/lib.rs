@@ -40,7 +40,7 @@ pub fn run(command_line: impl IntoIterator<Item = OsString>) -> ExitCode {
         Err(err) => {
             eprintln!("domicile-test-client: {err}");
             eprintln!(
-                "usage: domicile-test-client [--title NAME] [--trace] [--translucent] [--follow-configure]"
+                "usage: domicile-test-client [--title NAME] [--trace] [--translucent] [--follow-configure] [--ask-for-focus]"
             );
             return ExitCode::from(2);
         }
@@ -52,7 +52,12 @@ pub fn run(command_line: impl IntoIterator<Item = OsString>) -> ExitCode {
 
     // `window::run` only returns a failure — a window's job here lasts as long
     // as the check that opened it, and every caller ends it with a signal.
-    let Err(err) = window::run(&asked.title, asked.translucent, asked.follow_configure);
+    let Err(err) = window::run(
+        &asked.title,
+        asked.translucent,
+        asked.follow_configure,
+        asked.ask_for_focus,
+    );
     eprintln!("domicile-test-client: {err}");
     ExitCode::FAILURE
 }

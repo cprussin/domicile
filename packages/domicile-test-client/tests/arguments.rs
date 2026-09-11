@@ -31,6 +31,10 @@ fn a_client_told_nothing_still_opens_a_window() {
         !asked.follow_configure,
         "a client keeps the size it opened at unless a check says otherwise",
     );
+    assert!(
+        !asked.ask_for_focus,
+        "a client takes the keyboard it is given rather than asking for one",
+    );
 }
 
 #[test]
@@ -142,6 +146,27 @@ fn asking_for_a_see_through_window_twice_is_refused_like_any_other_repeat() {
         given(&["--translucent", "--translucent"]),
         Err(ArgumentError::Repeated {
             flag: "--translucent".to_string()
+        })
+    );
+}
+
+#[test]
+fn a_client_can_be_asked_to_ask_for_the_keyboard() {
+    // `xdg-activation`, which is how a client says it wants focus — the
+    // request a shell is free to refuse. Nothing else in this client sends it,
+    // so a check about focus policy has no other way to produce one.
+    let asked = given(&["--ask-for-focus"]).expect("a client that wants the keyboard");
+
+    assert!(asked.ask_for_focus);
+    assert!(!asked.translucent, "and nothing else came on with it");
+}
+
+#[test]
+fn asking_for_the_keyboard_twice_is_refused_like_any_other_repeat() {
+    assert_eq!(
+        given(&["--ask-for-focus", "--ask-for-focus"]),
+        Err(ArgumentError::Repeated {
+            flag: "--ask-for-focus".to_string()
         })
     );
 }

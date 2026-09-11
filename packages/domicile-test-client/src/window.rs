@@ -19,6 +19,7 @@ use wayland_client::{delegate_noop, Connection, Dispatch, Proxy as _, QueueHandl
 use wayland_protocols::wp::cursor_shape::v1::client::{
     wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1,
 };
+use wayland_protocols::xdg::activation::v1::client::{xdg_activation_token_v1, xdg_activation_v1};
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel, xdg_wm_base};
 
 /// What can go wrong being a client.
@@ -124,6 +125,7 @@ pub fn run(
     title: &str,
     translucent: bool,
     follow_configure: bool,
+    ask_for_focus: bool,
 ) -> Result<std::convert::Infallible, ClientError> {
     let connection =
         Connection::connect_to_env().map_err(|err| ClientError::NoDisplay(err.to_string()))?;
@@ -138,7 +140,12 @@ pub fn run(
     // Two roundtrips: the first brings the globals, the second brings what
     // binding them produced — the `wl_shm.format` list, and the seat's
     // capabilities, which is what says whether there is a keyboard to bind.
-    let mut client = Client::new(title.to_string(), translucent, follow_configure);
+    let mut client = Client::new(
+        title.to_string(),
+        translucent,
+        follow_configure,
+        ask_for_focus,
+    );
     queue
         .roundtrip(&mut client)
         .map_err(|err| ClientError::Lost(err.to_string()))?;
@@ -166,6 +173,14 @@ struct Client {
     /// Whether a configure's size is taken rather than the one this client
     /// opened at — see [`crate::arguments::Arguments::follow_configure`].
     follow_configure: bool,
+    /// Whether this client asks for the keyboard once its window is up — see
+    /// [`crate::arguments::Arguments::ask_for_focus`].
+    ask_for_focus: bool,
+    /// Whether it has asked already. Once per window: the request is answered
+    /// by a shell rather than by the compositor, and a client that repeated it
+    /// every configure would be asking a question nobody had finished
+    /// answering.
+    asked: bool,
     /// A size the compositor configured and this client has not drawn at yet.
     ///
     /// Held between the two halves of one configure. `xdg_toplevel.configure`
@@ -278,15 +293,23 @@ struct Globals {
     shm: Option<wl_shm::WlShm>,
     wm_base: Option<xdg_wm_base::XdgWmBase>,
     cursor: Option<wp_cursor_shape_manager_v1::WpCursorShapeManagerV1>,
+    activation: Option<xdg_activation_v1::XdgActivationV1>,
     named: Vec<(u32, String, u32)>,
 }
 
 impl Client {
-    fn new(title: String, translucent: bool, follow_configure: bool) -> Client {
+    fn new(
+        title: String,
+        translucent: bool,
+        follow_configure: bool,
+        ask_for_focus: bool,
+    ) -> Client {
         Client {
             title,
             translucent,
             follow_configure,
+            ask_for_focus,
+            asked: false,
             configured_size: None,
             globals: Globals::default(),
             window: None,
@@ -320,6 +343,9 @@ impl Client {
                 }
                 "wp_cursor_shape_manager_v1" => {
                     self.globals.cursor = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "xdg_activation_v1" => {
+                    self.globals.activation = Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 // Bound and dropped on purpose: a seat is what carries the
                 // keyboard and the pointer, and a compositor only sends input
@@ -392,6 +418,30 @@ impl Client {
             size: SIZE,
             scale: 1,
         });
+        Ok(())
+    }
+
+    /// Mint an activation token for this window's surface.
+    ///
+    /// No serial and no seat, which the protocol allows and which is the
+    /// honest shape of what this is for: a client with a recent input serial
+    /// is one the user was just in, and the request a focus policy has to be
+    /// able to refuse is the one from a client they were *not*.
+    fn ask_for_the_keyboard(&self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
+        let activation = self
+            .globals
+            .activation
+            .as_ref()
+            .ok_or(ClientError::Missing {
+                global: "xdg_activation_v1",
+            })?;
+        let window = self.window.as_ref().ok_or(ClientError::Missing {
+            global: "a mapped window",
+        })?;
+        let token = activation.get_activation_token(handle, window.surface.clone());
+        token.set_surface(&window.surface);
+        token.commit();
+        crate::say!(token.id(), "commit()");
         Ok(())
     }
 
@@ -654,6 +704,21 @@ fn anonymous(bytes: usize) -> std::io::Result<std::fs::File> {
 /// skipped the `frame` request it needed to be woken again, so carrying on
 /// means a live process with no window and nothing left to wake it — which a
 /// check reads as the compositor never mapping anything.
+/// Ask for the keyboard, if this client was told to and has not yet.
+///
+/// Two steps, which is what the protocol is: a token is minted for the surface
+/// and the compositor answers it with a string, and the string is what the
+/// activation request carries. The answer arrives on the token object, so the
+/// second half is in that object's own handler rather than here.
+fn ask_for_focus_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
+    if client.ask_for_focus && !client.asked {
+        client.asked = true;
+        if let Err(err) = client.ask_for_the_keyboard(handle) {
+            crate::say!("client", "cannot ask for the keyboard: {err}");
+        }
+    }
+}
+
 fn draw_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     if let Err(err) = client.draw(handle) {
         eprintln!("domicile-test-client: {err}");
@@ -807,6 +872,10 @@ impl Dispatch<xdg_surface::XdgSurface, ()> for Client {
             if !client.configured || resized {
                 client.configured = true;
                 draw_or_stop(client, handle);
+                // After the window exists, because activation names a surface
+                // and a surface nothing has mapped is not a window any shell
+                // could be asked about.
+                ask_for_focus_or_stop(client, handle);
             }
         }
     }
@@ -954,6 +1023,34 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
     }
 }
 
+/// The compositor answered a token request: activate with what it said.
+///
+/// The surface is the token's user data, set when the token was minted, so the
+/// two halves of one request do not need a field on the client to find each
+/// other — which matters because a client may have more than one in flight.
+impl Dispatch<xdg_activation_token_v1::XdgActivationTokenV1, wl_surface::WlSurface> for Client {
+    fn event(
+        client: &mut Client,
+        token: &xdg_activation_token_v1::XdgActivationTokenV1,
+        event: xdg_activation_token_v1::Event,
+        surface: &wl_surface::WlSurface,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let xdg_activation_token_v1::Event::Done { token: minted } = event {
+            crate::say!(token.id(), "done(\"{minted}\")");
+            // Spent: the token is good for one activation, and the object for
+            // one token.
+            token.destroy();
+            if let Some(activation) = client.globals.activation.as_ref() {
+                activation.activate(minted, surface);
+                crate::say!(activation.id(), "activate()");
+            }
+        }
+    }
+}
+
+delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
 delegate_noop!(Client: ignore wl_compositor::WlCompositor);
 delegate_noop!(Client: ignore wl_shm::WlShm);
 delegate_noop!(Client: ignore wl_shm_pool::WlShmPool);
