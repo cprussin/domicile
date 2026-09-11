@@ -7,18 +7,26 @@ import {
 } from "@domicile/chrome-sdk/register-elements";
 import { render } from "@testing-library/react";
 import { AppWindow } from "./AppWindow";
-import { AppElements } from "./app-elements";
 
-// The elements report their size to a bridge as they mount, and ask it for the
-// keyboard when they are clicked. Only the second is read here — whether the
-// keyboard moved, and on whose say-so.
+// The elements report their size to a bridge as they mount, ask it for the
+// keyboard when they are clicked, and forward the pointer over them in the
+// client's own coordinates. The last two are what is read here — whether the
+// keyboard moved and on whose say-so, and what the client was told the pointer
+// was over.
 let focused: string[] = [];
+let motions: (readonly [x: number, y: number])[] = [];
 
 const recordingBridge = {
   focusApp: (appId: string) => {
     focused.push(appId);
   },
   focusChrome: () => undefined,
+  // Recorded only so a click does not throw out of the element's own handler:
+  // the button belongs to the client, and nothing here asserts on it.
+  pointerButton: () => undefined,
+  pointerMotion: (_appId: string, x: number, y: number) => {
+    motions.push([x, y]);
+  },
   resizeApp: () => undefined,
 } as unknown as BridgeClient;
 
@@ -40,6 +48,7 @@ const portal = (container: HTMLElement): Element => {
 
 beforeEach(() => {
   focused = [];
+  motions = [];
   registerElements(recordingBridge, {
     measure: stubMeasure,
     // Otherwise these suites run the SDK's own animation loop, which happy-dom
@@ -55,9 +64,9 @@ describe("AppWindow", () => {
   it("mounts a portal carrying the host's app id", () => {
     const { container } = render(
       <AppWindow
-        appElements={new AppElements()}
         appId="term"
         clickThrough={false}
+        cursor={undefined}
         dragging={false}
         floating={undefined}
         focused
@@ -65,6 +74,7 @@ describe("AppWindow", () => {
           // Nothing here clicks the window.
         }}
         onScreen
+        surfaceSize={undefined}
       />,
     );
     expect(portal(container).getAttribute("app-id")).toBe("term");
@@ -79,9 +89,9 @@ describe("AppWindow", () => {
     const reached: string[] = [];
     const { container } = render(
       <AppWindow
-        appElements={new AppElements()}
         appId="term"
         clickThrough={false}
+        cursor={undefined}
         dragging={false}
         floating={undefined}
         focused={false}
@@ -89,6 +99,7 @@ describe("AppWindow", () => {
           reached.push("term");
         }}
         onScreen
+        surfaceSize={undefined}
       />,
     );
 
@@ -109,9 +120,9 @@ describe("AppWindow", () => {
     const reached: string[] = [];
     const { container } = render(
       <AppWindow
-        appElements={new AppElements()}
         appId="term"
         clickThrough={false}
+        cursor={undefined}
         dragging={false}
         floating={undefined}
         focused
@@ -119,6 +130,7 @@ describe("AppWindow", () => {
           reached.push("term");
         }}
         onScreen
+        surfaceSize={undefined}
       />,
     );
 
@@ -132,9 +144,9 @@ describe("AppWindow", () => {
   it("hides the portal when the window is not on the stage", () => {
     const { container } = render(
       <AppWindow
-        appElements={new AppElements()}
         appId="term"
         clickThrough={false}
+        cursor={undefined}
         dragging={false}
         floating={undefined}
         focused={false}
@@ -142,8 +154,83 @@ describe("AppWindow", () => {
           // Nothing here clicks the window.
         }}
         onScreen={false}
+        surfaceSize={undefined}
       />,
     );
     expect(portal(container)).not.toBeVisible();
+  });
+
+  it("gives the keyboard to the window the shell says is focused", () => {
+    // Without a click: the user types into what they just opened, switched to,
+    // or brought to the front. The shell names one window and the portal is
+    // what carries that to the compositor.
+    render(
+      <AppWindow
+        appId="term"
+        clickThrough={false}
+        cursor={undefined}
+        dragging={false}
+        floating={undefined}
+        focused
+        onReach={() => {
+          // Nothing here clicks the window.
+        }}
+        onScreen
+        surfaceSize={undefined}
+      />,
+    );
+    expect(focused).toStrictEqual(["term"]);
+  });
+
+  it("scales the client's pointer by the size the shell holds for it", () => {
+    // The client draws at its own resolution and the page lays the window out
+    // at whatever fits, so a pointer at the middle of the box is at the middle
+    // of the client's surface rather than at the same number of pixels in. The
+    // element measures 100x100 here, so a client that drew at 200x400 is
+    // twice as far across and four times as far down.
+    const { container } = render(
+      <AppWindow
+        appId="term"
+        clickThrough={false}
+        cursor={undefined}
+        dragging={false}
+        floating={undefined}
+        focused={false}
+        onReach={() => {
+          // Nothing here clicks the window.
+        }}
+        onScreen
+        surfaceSize={[200, 400]}
+      />,
+    );
+
+    portal(container).dispatchEvent(
+      new MouseEvent("pointermove", {
+        bubbles: true,
+        clientX: 10,
+        clientY: 10,
+      }),
+    );
+
+    expect(motions).toStrictEqual([[20, 40]]);
+  });
+
+  it("shows the cursor the client asked for", () => {
+    const { container } = render(
+      <AppWindow
+        appId="term"
+        clickThrough={false}
+        cursor="text"
+        dragging={false}
+        floating={undefined}
+        focused={false}
+        onReach={() => {
+          // Nothing here clicks the window.
+        }}
+        onScreen
+        surfaceSize={undefined}
+      />,
+    );
+    expect(portal(container)).toHaveStyle({ cursor: "text" });
   });
 });

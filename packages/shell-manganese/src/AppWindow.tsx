@@ -1,9 +1,10 @@
-import type { DomicileAppElement } from "@domicile/chrome-sdk/app-element";
-import { APP_FOCUS_REQUESTED_EVENT } from "@domicile/chrome-sdk/app-element";
-import { useEffect, useState } from "react";
+import type {
+  AppFocusRequest,
+  SurfaceSize,
+} from "@domicile/chrome-sdk/app-element";
+import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 
 import { css, cx } from "../styled-system/css";
-import type { AppElements } from "./app-elements";
 import { surfaceBox } from "./float";
 import type { Floating } from "./shell-state";
 import {
@@ -25,9 +26,13 @@ type Props = {
   clickThrough: boolean;
   /** Whether the user has hold of this window, which makes it see-through. */
   dragging: boolean;
-  appElements: AppElements;
   /** The host's name for the client this portal shows. */
   appId: string;
+  /**
+   * The cursor the client has asked for, or `undefined` while it has asked for
+   * none — which leaves the pointer whatever the page's own styling says.
+   */
+  cursor: CursorShape | undefined;
   /** How this window floats over the stage, or `undefined` while it is on it. */
   floating: Floating | undefined;
   /** Whether the user is working in this window, so it takes the keyboard. */
@@ -50,6 +55,12 @@ type Props = {
    * is the selected one.
    */
   onScreen: boolean;
+  /**
+   * The size the client is last known to have drawn at, which is what the
+   * pointer over this window is scaled by. `undefined` is a client that has
+   * not drawn yet, and the element maps its own box 1:1 until one arrives.
+   */
+  surfaceSize: SurfaceSize | undefined;
 };
 
 /**
@@ -57,95 +68,64 @@ type Props = {
  * point of Domicile — the client's live pixels are a real element that takes
  * ordinary CSS. Hiding is what takes it off the stage: a hidden element has no
  * box, so the SDK reports it to the host as no longer composited.
+ *
+ * Everything the portal has to be told is rendered onto it. The element
+ * declares these as properties, so React writes them the way it writes any
+ * other prop — and a window whose portal is unmounted and mounted again, which
+ * is what the shell does whenever it stops rendering a window and starts
+ * again, is told what the shell holds now rather than what it held then.
  */
 export const AppWindow = ({
-  appElements,
   appId,
   clickThrough,
+  cursor,
   dragging,
   floating,
   focused,
   onReach,
   onScreen,
-}: Props) => {
-  // `null` rather than `undefined` because that is what React's ref API hands
-  // a callback ref on unmount.
-  const [portal, setPortal] = useState<DomicileAppElement | null>(null);
-
-  // The host's frames, resizes, and cursor requests go straight to the element
-  // rather than through React state — a frame is a window of pixels arriving
-  // many times a second.
-  useEffect(() => {
-    if (portal === null) {
-      return undefined;
-    } else {
-      appElements.register(appId, portal);
-      return () => {
-        appElements.unregister(appId);
-      };
-    }
-  }, [appElements, appId, portal]);
-
-  // A click on a client's window asks for the keyboard, and the element grants
-  // it unless something answers first. This answers first: the request becomes
-  // the shell's to decide, and the effect below is what carries the decision
-  // back to the same element a render later.
-  useEffect(() => {
-    if (portal === null) {
-      return undefined;
-    } else {
-      const answer = (event: Event) => {
-        // Unconditionally, and before the branch below: the keyboard stays
-        // where the shell put it whether or not this particular click moves
-        // anything, which is the difference between a shell that owns focus
-        // and one that owns it except where it agrees with the SDK.
-        event.preventDefault();
-        // The window the user is already in has nothing to report: it would be
-        // asking the shell to reach what it has just reached, on every press.
-        if (!focused) {
-          onReach();
-        }
-      };
-      portal.addEventListener(APP_FOCUS_REQUESTED_EVENT, answer);
-      return () => {
-        portal.removeEventListener(APP_FOCUS_REQUESTED_EVENT, answer);
-      };
-    }
-  }, [focused, onReach, portal]);
-
-  // The window the user is working in takes the keyboard with it, so they can
-  // type into what they just opened, switched to, or brought to the front
-  // without clicking it.
-  useEffect(() => {
-    if (focused && portal !== null) {
-      portal.focusApp();
-    }
-  }, [focused, portal]);
-
-  return (
-    <domicile-app
-      app-id={appId}
-      className={cx(
-        windowStyles,
-        appStyles,
-        clickThrough && clickThroughStyles,
-        dragging && draggingStyles,
-        floating !== undefined && framedStyles,
-        floating !== undefined && floatEdgeStyles,
-      )}
-      hidden={!onScreen}
-      ref={setPortal}
-      // Inline because the box is a runtime number and Panda reads literals;
-      // `window-styles` owns everything static. `undefined` leaves the window
-      // filling the stage, which is where a window that is not floating is.
-      style={
-        floating === undefined
-          ? undefined
-          : floatPlacement(surfaceBox(floating.float), floating.depth)
+  surfaceSize,
+}: Props) => (
+  <domicile-app
+    app-id={appId}
+    className={cx(
+      windowStyles,
+      appStyles,
+      clickThrough && clickThroughStyles,
+      dragging && draggingStyles,
+      floating !== undefined && framedStyles,
+      floating !== undefined && floatEdgeStyles,
+    )}
+    cursor={cursor}
+    focused={focused}
+    hidden={!onScreen}
+    // A click on a client's window asks for the keyboard, and the element
+    // grants it unless something answers first. This answers first: the
+    // request becomes the shell's to decide, and `focused` above is what
+    // carries the decision back to the same element a render later.
+    ondomicile-focus-requested={(event: CustomEvent<AppFocusRequest>) => {
+      // Unconditionally, and before the branch below: the keyboard stays where
+      // the shell put it whether or not this particular click moves anything,
+      // which is the difference between a shell that owns focus and one that
+      // owns it except where it agrees with the SDK.
+      event.preventDefault();
+      // The window the user is already in has nothing to report: it would be
+      // asking the shell to reach what it has just reached, on every press.
+      if (!focused) {
+        onReach();
       }
-    />
-  );
-};
+    }}
+    // Inline because the box is a runtime number and Panda reads literals;
+    // `window-styles` owns everything static. `undefined` leaves the window
+    // filling the stage, which is where a window that is not floating is.
+    style={
+      floating === undefined
+        ? undefined
+        : floatPlacement(surfaceBox(floating.float), floating.depth)
+    }
+    surfaceSize={surfaceSize}
+  />
+);
 
 const appStyles = css({
   // Rounded by the compositor, not by the browser: this element is a hole in

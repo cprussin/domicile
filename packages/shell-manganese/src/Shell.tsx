@@ -17,12 +17,10 @@ import { Fragment, useCallback, useEffect } from "react";
 import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
 import { AppWindow } from "./AppWindow";
-import type { AppElements } from "./app-elements";
 import { BrowserWindow } from "./BrowserWindow";
 import { Clock } from "./Clock";
 import { FloatGrab } from "./FloatGrab";
 import { FloatTitleBar } from "./FloatTitleBar";
-
 import { floatingOf } from "./shell-state";
 import { WindowKind } from "./shell-window";
 import { useModifiers } from "./useModifiers";
@@ -53,11 +51,8 @@ const ALT_ENTER: DomicileShortcut = {
 const ALT_TAB: DomicileShortcut = { ...ALT_ENTER, keycode: 15 };
 
 type ChromeProps = {
-  appElements: AppElements;
   bridge: BridgeClient;
 };
-
-type DesktopProps = ChromeProps;
 
 type Props = ChromeProps & {
   /**
@@ -79,10 +74,10 @@ type Props = ChromeProps & {
  * its screens from. `on` is a single slot, so there is exactly one listener for
  * the host's descriptions and every `<Screen>` below fans out from it.
  */
-export const Shell = ({ appElements, bridge, displays }: Props) => (
+export const Shell = ({ bridge, displays }: Props) => (
   <Provider>
     <DisplayProvider source={displays}>
-      <Desktop appElements={appElements} bridge={bridge} />
+      <Desktop bridge={bridge} />
     </DisplayProvider>
   </Provider>
 );
@@ -102,7 +97,7 @@ export const Shell = ({ appElements, bridge, displays }: Props) => (
  * between screens is moving where its `<domicile-app>` is laid out, not handing
  * it to another shell.
  */
-const Desktop = ({ appElements, bridge }: DesktopProps) => {
+const Desktop = ({ bridge }: ChromeProps) => {
   const {
     activeId,
     close,
@@ -120,7 +115,7 @@ const Desktop = ({ appElements, bridge }: DesktopProps) => {
     shownId,
     toggleFloat,
     windows,
-  } = useShellWindows(bridge, appElements);
+  } = useShellWindows(bridge);
 
   // Alt is what hands the pointer back to the page, and Shift is what makes
   // the drag a resize. Neither can be read off a DOM event here: while a
@@ -327,9 +322,9 @@ const Desktop = ({ appElements, bridge }: DesktopProps) => {
                 case WindowKind.App: {
                   return (
                     <AppWindow
-                      appElements={appElements}
                       appId={window.appId}
                       clickThrough={clickThrough}
+                      cursor={window.cursor}
                       dragging={dragging}
                       floating={floating}
                       focused={window.id === activeId}
@@ -338,6 +333,7 @@ const Desktop = ({ appElements, bridge }: DesktopProps) => {
                         select(window.id);
                       }}
                       onScreen={onScreen}
+                      surfaceSize={window.surfaceSize}
                     />
                   );
                 }

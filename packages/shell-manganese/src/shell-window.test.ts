@@ -7,8 +7,12 @@ describe("ShellWindow", () => {
     it("namespaces the app id so a client cannot collide with a browser", () => {
       expect(ShellWindow.App("term", "Terminal")).toStrictEqual({
         appId: "term",
+        // A window opens knowing nothing the client has not said yet: a
+        // toplevel maps before it draws, and it asks for a cursor later still.
+        cursor: undefined,
         id: "app:term",
         kind: WindowKind.App,
+        surfaceSize: undefined,
         title: "Terminal",
       });
     });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { ShellState } from "./shell-state";
 import { EMPTY_SHELL, reduceShell, ShellAction } from "./shell-state";
-import { WindowKind } from "./shell-window";
+import { appWindowId, WindowKind } from "./shell-window";
 
 /** Apply actions in order, so a case reads as the history that produced it. */
 const after = (...actions: readonly ShellAction[]): ShellState =>
@@ -10,6 +10,12 @@ const after = (...actions: readonly ShellAction[]): ShellState =>
 
 const titles = (state: ShellState): string[] =>
   state.windows.map((window) => window.title);
+
+/** The window the shell holds for a client, with the client's own facts on it. */
+const appOf = (state: ShellState, appId: string) => {
+  const window = state.windows.find((open) => open.id === appWindowId(appId));
+  return window?.kind === WindowKind.App ? window : undefined;
+};
 
 describe("reduceShell", () => {
   describe("app windows", () => {
@@ -74,6 +80,52 @@ describe("reduceShell", () => {
         ShellAction.AppClosed("ghost"),
       );
       expect(titles(state)).toStrictEqual(["Terminal"]);
+    });
+
+    it("records the size the client drew at", () => {
+      // What the portal scales pointer coordinates by. It arrives twice over —
+      // on the announcement for a client that has already drawn, which is the
+      // replay a reloading chrome is given, and on every redraw at a new
+      // resolution after that — and it is one fact either way.
+      const state = after(
+        ShellAction.AppAppeared("term", "Terminal"),
+        ShellAction.AppDrewAt("term", [640, 480]),
+      );
+      expect(appOf(state, "term")?.surfaceSize).toStrictEqual([640, 480]);
+    });
+
+    it("forgets what the client drew when it goes", () => {
+      // App ids come off a counter that only goes up, so this is housekeeping
+      // rather than correctness — but the size has to go *with* the window
+      // rather than with the portal showing it: the shell stops rendering a
+      // window for reasons the client knows nothing about, and one that is
+      // still running is still drawn at the size it last reported.
+      const state = after(
+        ShellAction.AppAppeared("term", "Terminal"),
+        ShellAction.AppDrewAt("term", [640, 480]),
+        ShellAction.AppClosed("term"),
+        ShellAction.AppAppeared("term", "Terminal"),
+      );
+      expect(appOf(state, "term")?.surfaceSize).toBeUndefined();
+    });
+
+    it("records the cursor the client asked for", () => {
+      const state = after(
+        ShellAction.AppAppeared("term", "Terminal"),
+        ShellAction.AppCursorChanged("term", "text"),
+      );
+      expect(appOf(state, "term")?.cursor).toBe("text");
+    });
+
+    it("says nothing about a client it has no window for", () => {
+      // The host drains its events for a window whose close has already been
+      // reduced here, so a size or a cursor can name one that is gone.
+      expect(() =>
+        after(
+          ShellAction.AppDrewAt("ghost", [640, 480]),
+          ShellAction.AppCursorChanged("ghost", "text"),
+        ),
+      ).not.toThrow();
     });
   });
 

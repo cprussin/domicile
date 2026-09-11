@@ -10,7 +10,6 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
-import { AppElements } from "./app-elements";
 import { displaysFrom } from "./display-source";
 import { Shell } from "./Shell";
 
@@ -139,13 +138,7 @@ const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
       // Never turned: nothing here tests what happens when a window moves.
     },
   });
-  return render(
-    <Shell
-      appElements={new AppElements()}
-      bridge={client}
-      displays={displaysFrom(client)}
-    />,
-  );
+  return render(<Shell bridge={client} displays={displaysFrom(client)} />);
 };
 
 /** The chrome on a desktop the host has already described. */
@@ -379,8 +372,8 @@ describe("Shell", () => {
       // the portal it mounts is never sent a frame or a resize where the
       // compositor draws the client itself — so a live window would scale its
       // pointer coordinates against nothing. The portal mounts a render after
-      // the message, which is why the size waits in `AppElements` rather than
-      // being applied on the spot.
+      // the message, which is why the size is state the window is rendered
+      // from rather than something applied to an element on the spot.
       const { container } = renderShell();
       bridge.emit("app_appeared", {
         app_id: "term",
@@ -393,10 +386,9 @@ describe("Shell", () => {
     });
 
     it("forgets what a client had drawn once it is gone", () => {
-      // The record is the client's, so it ends with the client rather than
-      // with the portal — a portal comes and goes for reasons the client knows
-      // nothing about, and one kept for the session is one per window the
-      // session ever opened. Observed by announcing the id a second time,
+      // The size is the client's, so it ends with the client rather than with
+      // the portal — a portal comes and goes for reasons the client knows
+      // nothing about. Observed by announcing the id a second time,
       // which the host will not do (its ids only count up); what is pinned is
       // that the drop happens on the close rather than on the unmount.
       const { container } = renderShell();

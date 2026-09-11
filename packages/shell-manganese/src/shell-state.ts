@@ -5,12 +5,14 @@
 // closes hands it back — so they are one state, reduced in one place, with no
 // DOM or bridge in sight. `useShellWindows` is what feeds host events into it.
 
+import type { SurfaceSize } from "@domicile/chrome-sdk/app-element";
+import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 import type { DropPosition } from "@domicile/component-library/TabRail";
 
 import type { Float } from "./float";
 import { floatFor, movedTo, sizedTo } from "./float";
-import type { ShellWindow } from "./shell-window";
-import { appWindowId, ShellWindow as Window } from "./shell-window";
+import type { ClientWindow, ShellWindow } from "./shell-window";
+import { appWindowId, ShellWindow as Window, WindowKind } from "./shell-window";
 
 export type ShellState = {
   /**
@@ -108,6 +110,8 @@ const floatOf = (state: ShellState, id: string): Float | undefined =>
 export enum ShellActionKind {
   AppAppeared,
   AppClosed,
+  AppCursorChanged,
+  AppDrewAt,
   AppTitled,
   BrowserOpened,
   FocusChanged,
@@ -137,6 +141,28 @@ export const ShellAction = {
   AppClosed: (appId: string) => ({
     appId,
     kind: ShellActionKind.AppClosed as const,
+  }),
+
+  /** The client asked for a cursor to be shown over its window. */
+  AppCursorChanged: (appId: string, cursor: CursorShape) => ({
+    appId,
+    cursor,
+    kind: ShellActionKind.AppCursorChanged as const,
+  }),
+
+  /**
+   * The client is now known to have drawn, at this size.
+   *
+   * One action for two messages, because they say the same thing: a size on
+   * `app_appeared` is a client that has committed a buffer already — the replay
+   * a reloading chrome is given — and `app_resized` is one that has just
+   * committed another at a new resolution. What reads it is the portal, which
+   * scales the pointer by the client's own pixels rather than by its CSS box.
+   */
+  AppDrewAt: (appId: string, size: SurfaceSize) => ({
+    appId,
+    kind: ShellActionKind.AppDrewAt as const,
+    size,
   }),
 
   /**
@@ -278,6 +304,18 @@ export const reduceShell = (
     }
     case ShellActionKind.AppClosed: {
       return closeWindow(state, appWindowId(action.appId));
+    }
+    case ShellActionKind.AppCursorChanged: {
+      return reshapeApp(state, action.appId, (window) => ({
+        ...window,
+        cursor: action.cursor,
+      }));
+    }
+    case ShellActionKind.AppDrewAt: {
+      return reshapeApp(state, action.appId, (window) => ({
+        ...window,
+        surfaceSize: action.size,
+      }));
     }
     case ShellActionKind.AppTitled: {
       // The same fallback the window opened with. A client that named its
@@ -537,6 +575,23 @@ const closeWindow = (state: ShellState, id: string): ShellState => {
     windows,
   };
 };
+
+// A fact the client reported about its own window, written onto the shell's
+// record of it. A message naming a client the shell has no window for leaves
+// the list as it is, the same way a close for one does: the host drains its
+// events for a portal that has already been torn down here.
+const reshapeApp = (
+  state: ShellState,
+  appId: string,
+  into: (window: ClientWindow) => ClientWindow,
+): ShellState => ({
+  ...state,
+  windows: state.windows.map((window) =>
+    window.kind === WindowKind.App && window.appId === appId
+      ? into(window)
+      : window,
+  ),
+});
 
 const renameWindow = (
   state: ShellState,
