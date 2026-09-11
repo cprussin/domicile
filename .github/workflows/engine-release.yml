@@ -8,16 +8,23 @@ name: Engine release
 # .so files in a tree nobody can move. This is `is_component_build = false`,
 # which is the shape you can put in a tarball.
 #
-# THEY SHARE A CONCURRENCY GROUP, AND MUST. Both reset /build/chromium/src to
-# the pin and apply the series over it. Two of them in the same tree at once is
-# a `git reset --hard` under a running `git am`.
+# IT SHARED engine.yml's CONCURRENCY GROUP, AND THAT WAS THE WRONG MECHANISM.
+# Both do reset /build/chromium/src to the pin and apply the series over it,
+# and two of them in that tree at once is a `git reset --hard` under a running
+# `git am` — but the thing that prevents it is `crux` having one job slot, held
+# from checkout to the `if: always()` drop. A shared group did not add to that;
+# it only meant this workflow's queued run could be evicted by an unrelated
+# push to a branch, because a group holds one pending run and the newest
+# arrival wins. A release thrown away by somebody's README-adjacent push is not
+# a queue, and it is silent. See engine.yml's own note and
+# scripts/test-engine-concurrency.sh.
 on:
   push:
     tags: [engine-v*]
   workflow_dispatch:
 
 concurrency:
-  group: engine
+  group: engine-release-${{ github.ref }}
   cancel-in-progress: false
 
 # To create the release and upload to it.
@@ -71,11 +78,14 @@ jobs:
             exit 1
           }
 
-      # ONE WRITER AT A TIME IN THAT CHECKOUT. The concurrency group above
-      # keeps these two workflows apart from each other; it says nothing about
-      # the person or the agent building in the same tree by hand, and a reset
-      # landing inside their build links a binary compiled from two trees
-      # without failing. Held until the last step that reads the tree.
+      # ONE WRITER AT A TIME IN THAT CHECKOUT. `crux`'s single job slot keeps
+      # this workflow and engine.yml apart from each other; it says nothing
+      # about the person or the agent building in the same tree by hand, and a
+      # reset landing inside their build links a binary compiled from two trees
+      # without failing. That is this lock's case, and it is why the lock
+      # refuses instead of waiting: the only queue that can safely make a run
+      # wait here is the one in front of the slot, because a run that waits is
+      # a run already holding it. Held until the last step that reads the tree.
       # See .github/scripts/engine-tree-lock.sh.
       - name: Take the tree
         run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
