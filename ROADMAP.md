@@ -49,6 +49,8 @@ The wire protocol is at `PROTOCOL_VERSION = 1`.
 | A `<webview>` is a guest, so a site that refuses framing loads in one | `guard-webview-framing.sh`. The element shows a page sending `X-Frame-Options: DENY` and `frame-ancestors 'none'`; its control frames that page and a copy differing only in those two headers from an ordinary http page, and shows the copy and not the original. So the site is refused where it has an ancestor, and the element is not giving it one |
 | A desktop chord reaches the shell while a browser window has the keyboard | `guard-webview-keyboard.sh`. A key pressed before focus moves reaches the shell's `document`; the chord after it comes back as `shortcut` and the window never sees it; an ungrabbed key reaches the window's page and not the shell |
 | A click inside a browser window reaches the shell that has to raise it | `guard-webview-click.sh`. A press driven at the engine lands in the guest's own page and arrives in the shell's `document` as an event on the element the guest hangs off, which is what a shell raises the window on; its control clicks the shell's own chrome instead and nothing reaches the element. Patch 0011 is both halves of why it crosses: upstream dispatches no focus event across a remote frame's process boundary, and focusing the element across it dispatches none either — Blink suppresses focus events while the page is unfocused, which a guest taking focus always makes it — so the element says so in an event of its own. The first run of the guard, with only the focus, is what found the second half |
+| A browser window can say whether back and forward are available | `guard-webview-history.sh`. `CanGoBack()`/`CanGoForward()` are answers only the browser process has, and they reach the page as `canGoBack`/`canGoForward` properties on the element plus a payload-free `domicile-history-change` event. Properties rather than event payload on purpose: a DOM event dispatched before a React shell's first effect flush is gone, so a late-mounting chrome reads the state it missed instead of having had to be listening. Note `ShouldEnableBackButton()` is not the same question — it is true when only skippable entries remain, because Chrome uses it for the long-press menu, and a button greyed in from it does nothing |
+| What the browser-to-renderer hop costs | Every `ControlChannelClient` method carries a `mojo_base.mojom.TimeTicks arrival`, stamped once per socket read rather than per parsed message — a read can carry several, and stamping at parse time would price the JSON parse into the second and later ones, so a batch read would report a hop that grows with position in the batch. Converted through `WindowPerformance`, so `event.timeStamp - event.arrival` is the stage and not arithmetic in the renderer. Measured at 0.300 ms and 0.200 ms. **On the socket path only**: `ShortcutPressed` and `Modifiers` also have a registry path stamped elsewhere that nothing measures, and `Displays` dispatches a bare `Event` and is deliberately unstamped |
 | A client's dmabuf imports on AMD | Patch 0005, confirmed on a Radeon 890M on 2026-09-08: kitty survives being floated and resized, on the DCC modifier that used to be refused, with no `gbm_bo_import` failure in the run |
 | The desktop a user runs contains all of it | `packages/domicile-engine/engine-release.nix` pins the published engine; `nix run github:cprussin/domicile#manganese` runs it |
 
@@ -95,9 +97,10 @@ decides whether an item is waiting or workable.
    and manganese's `drawTiming` were deleted with the diagnostic line they fed,
    because a shell reading an instrument nothing records into printed
    `rt_ms=0` every interval anyone typed — and a zero is a measurement to
-   whoever reads the log. `latency.rs` is where the measurement lives now; the
-   engine stamp the browser-to-renderer hop would need is a phase 2 item in
-   `ENGINE-FORK.md`.
+   whoever reads the log. `latency.rs` is where the compositor-side
+   measurement lives. The engine stamp the browser-to-renderer hop needed has
+   since landed, so that hop is a number rather than an assertion — see *What
+   is proven* above for which of the three paths it actually covers.
 3. **A control socket, and `domicile load-shell <path>`.** Switching the
    running shell without restarting the desktop, so a watcher outside Domicile
    can trigger a reload. **Unblocked** — it was waiting on `domicile://`, and
@@ -109,14 +112,22 @@ decides whether an item is waiting or workable.
 
 ### In the engine fork — the agent on `crux`
 
-1. **A browser window cannot say whether back or forward is available.**
-   `goBack()`, `goForward()`, `stop()` and `reload()` reach the guest's own
-   `NavigationController` now, so the four work — but `CanGoBack()` and
-   `CanGoForward()` are answers only the browser process has, and `WebViewGuest`
-   has no leg back to the renderer to carry them. An address bar cannot grey out
-   a dead button. The work is a client interface passed at `CreateGuest` plus a
-   DOM surface for a chrome to read; the mojom records the gap where the next
-   person will look.
+1. **`cursor` is closed on the wire but not in the page's type system.**
+   The shape a client asks for was a bare `DOMString` over a closed set, which
+   is the quietest kind of wrong: an unknown CSS keyword is a no-op, so
+   `element.style.cursor = "pointr"` does nothing and the user sees an arrow
+   where a hand should be, on one client, with no error anywhere. It is
+   `mojom::CursorShape` now, with codecs at the socket and IDL edges generated
+   from one X-macro list and the Zod codec at the DOM — so every boundary the
+   change could reach refuses a name that is not in the set.
+
+   What is left is the WebIDL `enum`, which would put the closed set in the
+   page's own type system rather than only on the wire. It needs a new `.idl`
+   registered in `bindings/idl_in_modules.gni` and
+   `bindings/generated_in_modules.gni`, both Chromium-owned, so it is a change
+   to patch `0009` and wants whoever owns the series.
+   `packages/chrome-sdk/src/cursor-shape.ts` records it as the step left
+   rather than dropping it silently.
 2. **A desktop on a tty.** Audited against the pin in
    `docs/architecture/A-DESKTOP-ON-A-TTY.md`. Getting `gn gen` to accept
    `ozone_platform_drm = true` is a **patch**: eight edits, not one of them
