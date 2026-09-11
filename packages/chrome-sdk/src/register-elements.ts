@@ -1,8 +1,8 @@
-// Wiring the SDK to a bridge: bind the element context, install the
+// Wiring the SDK to a domicile client: bind the element context, install the
 // document-level input listeners, and define the custom elements.
 
 import { createAppElement } from "./app-element";
-import type { BridgeClient } from "./bridge";
+import type { DomicileClient } from "./domicile-client";
 import type { ElementContext } from "./element-context";
 import {
   bindElementContext,
@@ -28,15 +28,15 @@ export type RegisterOptions = {
 let globalInputInstalled = false;
 
 /**
- * Wire the SDK to a bridge and define the custom elements. Idempotent: safe to
- * call once at chrome startup, and safe to call again with a different bridge
- * (which is how tests rebind between cases).
+ * Wire the SDK to a domicile client and define the custom elements.
+ * Idempotent: safe to call once at chrome startup, and safe to call again with
+ * a different client (which is how tests rebind between cases).
  */
 export const registerElements = (
-  bridge: BridgeClient,
+  domicile: DomicileClient,
   { measure, observePlacement }: RegisterOptions = {},
 ): void => {
-  const context = bindElementContext(bridge, measure, observePlacement);
+  const context = bindElementContext(domicile, measure, observePlacement);
   installGlobalInput(context);
   defineElements(context);
 };
@@ -92,7 +92,7 @@ const forwardPress =
       // draws as the same character over and over.
       if (!event.repeat) {
         heldKeys.set(keycode, appId);
-        context.bridge.key(appId, keycode, true);
+        context.domicile.key(appId, keycode, true);
       }
     }
   };
@@ -109,7 +109,7 @@ const forwardRelease =
         // Whatever is bound now, rather than what took the press: the context
         // is one cell that a rebind writes through, and what the release is
         // for is the compositor's seat — this is the connection to it.
-        context.bridge.key(appId, keycode, false);
+        context.domicile.key(appId, keycode, false);
       }
     }
   };
@@ -119,7 +119,7 @@ const forwardRelease =
 // going somewhere else — they are never coming.
 const releaseHeldKeys = (context: ElementContext) => (): void => {
   for (const [keycode, appId] of heldKeys) {
-    context.bridge.key(appId, keycode, false);
+    context.domicile.key(appId, keycode, false);
   }
   heldKeys.clear();
 };
@@ -132,16 +132,16 @@ const releaseFocusOffApp =
       target instanceof Element && target.closest(APP_TAG_NAME) !== null;
     if (!onApp && focusedApp() !== undefined) {
       setFocusedApp(undefined);
-      context.bridge.focusChrome();
+      context.domicile.focusChrome();
     }
   };
 
 // `customElements` is absent when the SDK is loaded outside a browsing context
-// (a unit test of the message layer, say); binding the bridge is still useful
+// (a unit test of the message layer, say); binding the client is still useful
 // there, defining the elements is not.
 //
 // The app element is built here, against the context, because that is what
-// lets it hold a bridge it cannot doubt. A second call with a different bridge
+// lets it hold a client it cannot doubt. A second call with a different client
 // does not build it again — a tag name can only be defined once — and does not
 // need to: the context is one cell, and rebinding writes through it to the
 // class already registered.

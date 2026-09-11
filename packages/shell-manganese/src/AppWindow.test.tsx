@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Measure } from "@domicile/chrome-sdk/measure";
 import {
   APP_TAG_NAME,
@@ -8,7 +8,7 @@ import {
 import { render } from "@testing-library/react";
 import { AppWindow } from "./AppWindow";
 
-// The elements report their size to a bridge as they mount, ask it for the
+// The elements report their size to a client as they mount, ask it for the
 // keyboard when they are clicked, and forward the pointer over them in the
 // client's own coordinates. The last two are what is read here — whether the
 // keyboard moved and on whose say-so, and what the client was told the pointer
@@ -16,7 +16,7 @@ import { AppWindow } from "./AppWindow";
 let focused: string[] = [];
 let motions: (readonly [x: number, y: number])[] = [];
 
-const recordingBridge = {
+const recordingDomicile = {
   focusApp: (appId: string) => {
     focused.push(appId);
   },
@@ -28,7 +28,7 @@ const recordingBridge = {
     motions.push([x, y]);
   },
   resizeApp: () => undefined,
-} as unknown as BridgeClient;
+} as unknown as DomicileClient;
 
 // The test DOM performs no layout, so measurement is injected.
 const stubMeasure: Measure = () => ({
@@ -49,7 +49,7 @@ const portal = (container: HTMLElement): Element => {
 beforeEach(() => {
   focused = [];
   motions = [];
-  registerElements(recordingBridge, {
+  registerElements(recordingDomicile, {
     measure: stubMeasure,
     // Otherwise these suites run the SDK's own animation loop, which happy-dom
     // serves as fast as it can: every mounted window re-measured tens of

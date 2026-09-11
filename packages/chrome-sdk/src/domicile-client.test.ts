@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 
-import { BridgeClient } from "./bridge";
+import { DomicileClient } from "./domicile-client";
 import type {
   DomicileAppEvent,
   DomicileDisplay,
@@ -20,7 +20,7 @@ type AppEventFields = Partial<Omit<DomicileAppEvent, keyof Event>>;
  * empty string the engine fills them with.
  *
  * `Object.assign` onto an `Event` rather than a subclass per event type: what
- * the bridge reads is the fields, and five classes saying that would be a test
+ * the client reads is the fields, and five classes saying that would be a test
  * of the test.
  */
 const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
@@ -40,9 +40,9 @@ const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
  * `addEventListener`.
  *
  * **That last part is the point of the double.** What is under test is that
- * `BridgeClient` registers listeners *of its own*, in its constructor, rather
+ * `DomicileClient` registers listeners *of its own*, in its constructor, rather
  * than leaving the page to do it — so `dispatch` below reaches nothing unless
- * it did. A double that called the bridge's handlers directly would be green
+ * it did. A double that called the client's handlers directly would be green
  * with those listeners never registered at all, which is the one failure that
  * loses a live client's window.
  *
@@ -147,19 +147,19 @@ const LEFT: DomicileDisplay = {
   y: 0,
 };
 
-describe("BridgeClient", () => {
+describe("DomicileClient", () => {
   let host: FakeHost;
-  let bridge: BridgeClient;
+  let domicile: DomicileClient;
 
   beforeEach(() => {
     host = new FakeHost();
-    bridge = new BridgeClient(host);
+    domicile = new DomicileClient(host);
   });
 
   describe("delivering what the host says", () => {
     it("dispatches a host event to the registered handler", () => {
       const seen: unknown[] = [];
-      bridge.on("app_appeared", (message) => {
+      domicile.on("app_appeared", (message) => {
         seen.push(message);
       });
       host.dispatch(
@@ -196,7 +196,7 @@ describe("BridgeClient", () => {
       );
 
       const seen: string[] = [];
-      bridge.on("app_appeared", (message) => {
+      domicile.on("app_appeared", (message) => {
         seen.push(message.app_id);
       });
 
@@ -207,12 +207,12 @@ describe("BridgeClient", () => {
       // The flush empties the hold. Without that, every later `on` for the
       // same type would mount the same windows again.
       host.dispatch("appappeared", appEvent("appappeared", { appId: "term" }));
-      bridge.on("app_appeared", () => {
+      domicile.on("app_appeared", () => {
         // The first handler takes the held message; this is about the second.
       });
 
       const seen: string[] = [];
-      bridge.on("app_appeared", (message) => {
+      domicile.on("app_appeared", (message) => {
         seen.push(message.app_id);
       });
 
@@ -227,12 +227,12 @@ describe("BridgeClient", () => {
       host.dispatch("appclosed", appEvent("appclosed", { appId: "term" }));
       host.dispatch("appappeared", appEvent("appappeared", { appId: "term" }));
 
-      bridge.on("app_appeared", (message) => {
+      domicile.on("app_appeared", (message) => {
         seen.push(`appeared:${message.app_id}`);
       });
       expect(seen).toStrictEqual(["appeared:term"]);
 
-      bridge.on("app_closed", (message) => {
+      domicile.on("app_closed", (message) => {
         seen.push(`closed:${message.app_id}`);
       });
       expect(seen).toStrictEqual(["appeared:term", "closed:term"]);
@@ -240,7 +240,7 @@ describe("BridgeClient", () => {
 
     it("delivers a client's request for the keyboard without moving it", () => {
       const asked: unknown[] = [];
-      bridge.on("focus_requested", (message) => {
+      domicile.on("focus_requested", (message) => {
         asked.push(message);
       });
 
@@ -258,34 +258,34 @@ describe("BridgeClient", () => {
 
   describe("asking the host for something", () => {
     it("calls the host's methods rather than building a message", () => {
-      bridge.focusApp("term");
+      domicile.focusApp("term");
       expect(host.lastCall()).toStrictEqual(["focusApp", "term"]);
 
-      bridge.focusChrome();
+      domicile.focusChrome();
       expect(host.lastCall()).toStrictEqual(["focusChrome"]);
 
-      bridge.closeApp("term");
+      domicile.closeApp("term");
       expect(host.lastCall()).toStrictEqual(["closeApp", "term"]);
 
-      bridge.spawn(["kitty"]);
+      domicile.spawn(["kitty"]);
       expect(host.lastCall()).toStrictEqual(["spawn", ["kitty"]]);
 
-      bridge.setDevicePixelRatio(2);
+      domicile.setDevicePixelRatio(2);
       expect(host.lastCall()).toStrictEqual(["setDevicePixelRatio", 2]);
 
-      bridge.grabShortcut({ altKey: true, keycode: 28 });
+      domicile.grabShortcut({ altKey: true, keycode: 28 });
       expect(host.lastCall()).toStrictEqual([
         "grabShortcut",
         { altKey: true, keycode: 28 },
       ]);
 
-      bridge.pointerMotion("term", 5, 6);
+      domicile.pointerMotion("term", 5, 6);
       expect(host.lastCall()).toStrictEqual(["pointerMotion", "term", 5, 6]);
 
-      bridge.pointerLeave("term");
+      domicile.pointerLeave("term");
       expect(host.lastCall()).toStrictEqual(["pointerLeave", "term"]);
 
-      bridge.pointerButton("term", BTN_LEFT, true);
+      domicile.pointerButton("term", BTN_LEFT, true);
       expect(host.lastCall()).toStrictEqual([
         "pointerButton",
         "term",
@@ -293,7 +293,7 @@ describe("BridgeClient", () => {
         true,
       ]);
 
-      bridge.pointerAxis("term", { dx: 0, dy: 100, v120X: 0, v120Y: 120 });
+      domicile.pointerAxis("term", { dx: 0, dy: 100, v120X: 0, v120Y: 120 });
       expect(host.lastCall()).toStrictEqual([
         "pointerAxis",
         "term",
@@ -303,7 +303,7 @@ describe("BridgeClient", () => {
         120,
       ]);
 
-      bridge.key("term", 30, true);
+      domicile.key("term", 30, true);
       expect(host.lastCall()).toStrictEqual(["key", "term", 30, true]);
     });
 
@@ -312,7 +312,7 @@ describe("BridgeClient", () => {
       // no tuple. Unpacked here rather than at every call site — and the
       // fractions survive, because a CSS pixel is fractional and the whole
       // path is `double`.
-      bridge.resizeApp("term", [800.5, 600.25]);
+      domicile.resizeApp("term", [800.5, 600.25]);
       expect(host.lastCall()).toStrictEqual([
         "resizeApp",
         "term",
@@ -320,7 +320,7 @@ describe("BridgeClient", () => {
         600.25,
       ]);
 
-      bridge.setDesktopSize([1280.5, 800]);
+      domicile.setDesktopSize([1280.5, 800]);
       expect(host.lastCall()).toStrictEqual(["setDesktopSize", 1280.5, 800]);
     });
   });
@@ -334,8 +334,8 @@ describe("BridgeClient", () => {
       const handler = (message: { app_id: string }) => {
         seen.push(message.app_id);
       };
-      bridge.on("app_closed", handler);
-      bridge.off("app_closed", handler);
+      domicile.on("app_closed", handler);
+      domicile.off("app_closed", handler);
       host.dispatch("appclosed", appEvent("appclosed", { appId: "gone" }));
 
       expect(seen).toStrictEqual([]);
@@ -346,12 +346,12 @@ describe("BridgeClient", () => {
       // type — see `#held`. An `off` says the page listened and stopped, so
       // holding again would accumulate forever with nothing to drain it.
       const handler = () => undefined;
-      bridge.on("app_closed", handler);
-      bridge.off("app_closed", handler);
+      domicile.on("app_closed", handler);
+      domicile.off("app_closed", handler);
       host.dispatch("appclosed", appEvent("appclosed", { appId: "gone" }));
 
       const seen: unknown[] = [];
-      bridge.on("app_closed", (message) => {
+      domicile.on("app_closed", (message) => {
         seen.push(message.app_id);
       });
 
@@ -366,9 +366,9 @@ describe("BridgeClient", () => {
       // handler is what makes letting one go safe in any order.
       const seen: unknown[] = [];
       const first = () => seen.push("first");
-      bridge.on("app_closed", first);
-      bridge.on("app_closed", () => seen.push("second"));
-      bridge.off("app_closed", first);
+      domicile.on("app_closed", first);
+      domicile.on("app_closed", () => seen.push("second"));
+      domicile.off("app_closed", first);
       host.dispatch("appclosed", appEvent("appclosed", { appId: "gone" }));
 
       expect(seen).toStrictEqual(["second"]);
@@ -380,7 +380,7 @@ describe("BridgeClient", () => {
       // Distinct from a desktop of no displays, which is an answer. A shell
       // that could not tell them apart would render its "no screens" case for
       // the moment before the answer arrives.
-      expect(bridge.displays).toBeUndefined();
+      expect(domicile.displays).toBeUndefined();
     });
 
     it("is a desktop of no screens when that is what it was told", () => {
@@ -392,8 +392,8 @@ describe("BridgeClient", () => {
       // is right for one and wrong for the other, so a shell needs to know.
       host.describes([]);
 
-      expect(bridge.displays).toStrictEqual([]);
-      expect(bridge.displays).not.toBeUndefined();
+      expect(domicile.displays).toStrictEqual([]);
+      expect(domicile.displays).not.toBeUndefined();
     });
 
     it("reads through to the host, so everything that asks gets it", () => {
@@ -403,8 +403,8 @@ describe("BridgeClient", () => {
       // there for it.
       host.describes([LEFT]);
 
-      expect(bridge.displays).toStrictEqual([LEFT]);
-      expect(bridge.displays).toStrictEqual([LEFT]);
+      expect(domicile.displays).toStrictEqual([LEFT]);
+      expect(domicile.displays).toStrictEqual([LEFT]);
     });
 
     it("is the desktop the host describes now", () => {
@@ -422,18 +422,18 @@ describe("BridgeClient", () => {
       host.describes([LEFT]);
       host.describes([LEFT, RIGHT]);
 
-      expect(bridge.displays).toStrictEqual([LEFT, RIGHT]);
+      expect(domicile.displays).toStrictEqual([LEFT, RIGHT]);
     });
 
     it("reaches a handler that registers after the description", () => {
       // `displayschanged` is bare, so a shell that wants to *react* to a
       // change would otherwise have to go and read the attribute itself. The
-      // bridge reads it and delivers it, and the hold covers a handler that
+      // client reads it and delivers it, and the hold covers a handler that
       // was not there when it fired.
       host.describes([LEFT]);
 
       const seen: unknown[] = [];
-      bridge.on("displays", (message) => {
+      domicile.on("displays", (message) => {
         seen.push(message.displays);
       });
 
@@ -445,8 +445,8 @@ describe("BridgeClient", () => {
       // ordering, not this class's — so a handler that reads the accessor sees
       // this desktop rather than the one before it.
       let seen: readonly DomicileDisplay[] | undefined;
-      bridge.on("displays", () => {
-        seen = bridge.displays;
+      domicile.on("displays", () => {
+        seen = domicile.displays;
       });
       host.describes([LEFT]);
 

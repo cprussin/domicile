@@ -62,13 +62,13 @@ from module `d`, import from `d` directly — not through `b` and `c`.
 
 ```ts
 // wrong — barrel import
-import { BridgeClient } from "@domicile/chrome-sdk";
+import { DomicileClient } from "@domicile/chrome-sdk";
 
 // wrong — unnecessary chain (a → b → c → d)
-import { BridgeClient } from "../chrome/helpers";
+import { DomicileClient } from "../chrome/helpers";
 
 // correct — direct import from the defining module
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 ```
 
 ## Avoid grab-bag files and directories

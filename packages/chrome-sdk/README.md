@@ -13,7 +13,7 @@ clients as DOM elements.
 
 It provides four things:
 
-- **`BridgeClient`** (`./bridge`) — the client for `navigator.domicile`, the
+- **`DomicileClient`** (`./domicile-client`) — the client for `navigator.domicile`, the
   typed control channel the forked engine puts on a document it served. It
   takes a `DomicileHost` and gives back a handler table for what the compositor
   says and a typed call per thing the chrome asks of it. There is no handshake
@@ -43,7 +43,7 @@ It provides four things:
   would leave every client drawing at the old resolution.
 - **Pure helpers** — affine `./matrix` math mirroring the Rust
   `domicile-scene::Transform`, `./domicile-host` mirroring the engine's IDL,
-  `./host-message` for what the bridge delivers and how an event becomes one,
+  `./host-message` for what the client delivers and how an event becomes one,
   `./cursor-shape` for the keyword set a client can ask for, and `./input`
   keycode mapping. `./protocol`, `./chrome-message`, `./newline-frames` and
   `./host-stream` are the compositor's own JSON wire, which **a page no longer
@@ -53,18 +53,18 @@ It provides four things:
 ## Usage
 
 ```ts
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-const bridge = new BridgeClient(connectToHost(navigator));
-registerElements(bridge);
+const domicile = new DomicileClient(connectToHost(navigator));
+registerElements(domicile);
 ```
 
 That is the whole of it. There is nothing to await: `connect()` is gone with
 the handshake it performed, the compositor's protocol version is checked in the
 browser process and only logged, and the first call on the channel is what
-binds it. Say what you have to say as soon as you have a bridge.
+binds it. Say what you have to say as soon as you have a domicile.
 
 Opened in an ordinary browser there is no `navigator.domicile` at all —
 `vite dev` on a shell's page is a real thing to do — and `connectToHost` hands
@@ -88,7 +88,7 @@ which is exactly when a shell wants to know, because that is when it would
 begin an alt-drag. The host says instead:
 
 ```ts
-bridge.on("modifiers", ({ altKey }) => {
+domicile.on("modifiers", ({ altKey }) => {
   // While Alt is held, let the pointer reach the page rather than the window
   // it is over: `pointer-events: none` is what tells the compositor the
   // window is not taking clicks, and it hit-tests accordingly.
@@ -127,5 +127,5 @@ bun run --filter @domicile/chrome-sdk test
 DOM-dependent suites run against happy-dom via
 [`@domicile/test-support`](../test-support/README.md). That DOM performs no
 layout, so element tests inject a `measure` stub through
-`registerElements(bridge, { measure })` rather than relying on
+`registerElements(domicile, { measure })` rather than relying on
 `getBoundingClientRect`.

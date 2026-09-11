@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { AppFocusRequest, DomicileAppElement } from "./app-element";
 import { APP_FOCUS_REQUESTED_EVENT } from "./app-element";
-import type { BridgeClient } from "./bridge";
+import type { DomicileClient } from "./domicile-client";
 import { BTN_LEFT } from "./input";
 import type { Matrix, Point } from "./matrix";
 import type { Measure } from "./measure";
@@ -12,9 +12,9 @@ import { APP_TAG_NAME, registerElements } from "./register-elements";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
-// A double for the bridge, capturing the size reports and input calls the
-// elements make. Only the surface the elements use is implemented.
-class FakeBridge {
+// A double for the domicile client, capturing the size reports and input
+// calls the elements make. Only the surface the elements use is implemented.
+class FakeDomicile {
   readonly calls: Call[] = [];
 
   resizeApp(appId: string, size: readonly number[]): void {
@@ -123,7 +123,7 @@ afterEach(() => {
 });
 
 describe("<domicile-app>", () => {
-  let bridge: FakeBridge;
+  let domicile: FakeDomicile;
   let frames: FakeFrames;
   // A shell listens for focus requests on `document` rather than per window,
   // so those listeners outlive the element that was clicked and the body this
@@ -132,10 +132,10 @@ describe("<domicile-app>", () => {
 
   beforeEach(() => {
     document.body.innerHTML = "";
-    bridge = new FakeBridge();
+    domicile = new FakeDomicile();
     frames = new FakeFrames();
     shell = new AbortController();
-    registerElements(bridge as unknown as BridgeClient, {
+    registerElements(domicile as unknown as DomicileClient, {
       measure: stubMeasure,
       observePlacement: frames.observe,
     });
@@ -147,14 +147,14 @@ describe("<domicile-app>", () => {
 
   it("asks the compositor to render the client at the element's size", () => {
     mountApp("term");
-    expect(bridge.calls).toContainEqual(["resize", "term", [10, 20]]);
+    expect(domicile.calls).toContainEqual(["resize", "term", [10, 20]]);
   });
 
   it("leaves a client's size alone while its element has no box", () => {
     // A tabbed chrome hides every inactive window, and a hidden element
     // measures as nothing: reporting that as a resize would configure the
     // client to 0x0 and make it redraw on every tab switch.
-    registerElements(bridge as unknown as BridgeClient, {
+    registerElements(domicile as unknown as DomicileClient, {
       measure: () => ({
         size: [0, 0],
         transform: [1, 0, 0, 1, 0, 0],
@@ -164,7 +164,7 @@ describe("<domicile-app>", () => {
     });
     mountApp("term");
 
-    expect(bridge.calls.some(([kind]) => kind === "resize")).toBe(false);
+    expect(domicile.calls.some(([kind]) => kind === "resize")).toBe(false);
   });
 
   it("prices every measurement, not only the ones that send something", () => {
@@ -200,7 +200,7 @@ describe("<domicile-app>", () => {
     // happy-dom rather than a browser — the DOM spec has a custom element
     // reaction that throws *reported* rather than rethrown to whoever appended
     // the element — so the assertion that matters is the count below.
-    registerElements(bridge as unknown as BridgeClient, {
+    registerElements(domicile as unknown as DomicileClient, {
       measure: () => {
         throw new Error("a window the SDK could not measure");
       },
@@ -224,7 +224,7 @@ describe("<domicile-app>", () => {
     // the cheap counterpart: a window that was already throwing at mount never
     // joined the loop, so it costs one measurement rather than every frame's.
     mountApp("term");
-    registerElements(bridge as unknown as BridgeClient, {
+    registerElements(domicile as unknown as DomicileClient, {
       measure: () => {
         throw new Error("a window the SDK could not measure");
       },
@@ -253,12 +253,12 @@ describe("<domicile-app>", () => {
     // — down a socket shared with every client's pixels, and a client redraws
     // every time it is configured.
     mountApp("term");
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     frames.turn();
     frames.turn();
 
-    expect(bridge.calls).toStrictEqual([]);
+    expect(domicile.calls).toStrictEqual([]);
   });
 
   it("does not make a client redraw because its window moved", () => {
@@ -266,32 +266,32 @@ describe("<domicile-app>", () => {
     // a window that only moved would cost every app on the desktop a repaint
     // per frame of any animation.
     const moved = { transform: [1, 0, 0, 1, 0, 0] as Matrix };
-    registerElements(bridge as unknown as BridgeClient, {
+    registerElements(domicile as unknown as DomicileClient, {
       measure: (element) => ({ ...stubMeasure(element), ...moved }),
       observePlacement: frames.observe,
     });
     mountApp("term");
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     moved.transform = [1, 0, 0, 1, 40, 5];
     frames.turn();
 
-    expect(bridge.calls.some(([kind]) => kind === "resize")).toBe(false);
+    expect(domicile.calls.some(([kind]) => kind === "resize")).toBe(false);
   });
 
   it("configures the client again when the element's box changes", () => {
     const box = { size: [10, 20] as Point };
-    registerElements(bridge as unknown as BridgeClient, {
+    registerElements(domicile as unknown as DomicileClient, {
       measure: (element) => ({ ...stubMeasure(element), ...box }),
       observePlacement: frames.observe,
     });
     mountApp("term");
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     box.size = [30, 40];
     frames.turn();
 
-    expect(bridge.calls).toContainEqual(["resize", "term", [30, 40]]);
+    expect(domicile.calls).toContainEqual(["resize", "term", [30, 40]]);
   });
 
   it("stops watching the box once disconnected", () => {
@@ -315,7 +315,7 @@ describe("<domicile-app>", () => {
         deltaY: 3,
       }),
     );
-    expect(bridge.calls).toContainEqual([
+    expect(domicile.calls).toContainEqual([
       "axis",
       "term",
       { dx: 0, dy: 100, v120X: 0, v120Y: 120 },
@@ -331,7 +331,7 @@ describe("<domicile-app>", () => {
 
     element.remove();
 
-    expect(bridge.calls).toContainEqual(["focusChrome"]);
+    expect(domicile.calls).toContainEqual(["focusChrome"]);
   });
 
   it("leaves the keyboard alone when an unfocused window goes away", () => {
@@ -343,12 +343,12 @@ describe("<domicile-app>", () => {
 
     other.remove();
 
-    expect(bridge.calls).not.toContainEqual(["focusChrome"]);
+    expect(domicile.calls).not.toContainEqual(["focusChrome"]);
   });
 
   it("does nothing without an app-id", () => {
     mountApp();
-    expect(bridge.calls).toHaveLength(0);
+    expect(domicile.calls).toHaveLength(0);
   });
 
   it("exposes appId as a property", () => {
@@ -377,13 +377,13 @@ describe("<domicile-app>", () => {
     // suppresses the next one, nothing would send it again until the window
     // changed size.
     const box = { size: [10, 20] as Point };
-    registerElements(bridge as unknown as BridgeClient, {
+    registerElements(domicile as unknown as DomicileClient, {
       measure: (element) => ({ ...stubMeasure(element), ...box }),
       observePlacement: frames.observe,
     });
     mountApp("term");
-    const resizeApp = bridge.resizeApp.bind(bridge);
-    bridge.resizeApp = () => {
+    const resizeApp = domicile.resizeApp.bind(domicile);
+    domicile.resizeApp = () => {
       throw new Error("the socket went away");
     };
 
@@ -391,11 +391,11 @@ describe("<domicile-app>", () => {
     expect(() => {
       frames.turn();
     }).toThrow("the socket went away");
-    bridge.resizeApp = resizeApp;
-    bridge.calls.length = 0;
+    domicile.resizeApp = resizeApp;
+    domicile.calls.length = 0;
     frames.turn();
 
-    expect(bridge.calls).toContainEqual(["resize", "term", [30, 40]]);
+    expect(domicile.calls).toContainEqual(["resize", "term", [30, 40]]);
   });
 
   it("tells a newly shown app its size even if it was swapped in detached", () => {
@@ -410,10 +410,10 @@ describe("<domicile-app>", () => {
 
     element.remove();
     element.setAttribute("app-id", "editor");
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
     parent.append(element);
 
-    expect(bridge.calls).toContainEqual(["resize", "editor", [10, 20]]);
+    expect(domicile.calls).toContainEqual(["resize", "editor", [10, 20]]);
   });
 
   it("shows again a window whose app-id was taken away and given back", () => {
@@ -451,11 +451,11 @@ describe("<domicile-app>", () => {
     // draw at whatever the previous one happened to be until the element next
     // resized, which for a window that fills the stage is never.
     const element = mountApp("term");
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     element.setAttribute("app-id", "editor");
 
-    expect(bridge.calls).toContainEqual(["resize", "editor", [10, 20]]);
+    expect(domicile.calls).toContainEqual(["resize", "editor", [10, 20]]);
   });
 
   it("drops the placeholder as soon as the client has a size", () => {
@@ -476,18 +476,18 @@ describe("<domicile-app>", () => {
     element.dispatchEvent(
       new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
     );
-    expect(bridge.calls).toContainEqual(["focusApp", "term"]);
-    expect(bridge.calls).toContainEqual(["button", "term", BTN_LEFT, true]);
+    expect(domicile.calls).toContainEqual(["focusApp", "term"]);
+    expect(domicile.calls).toContainEqual(["button", "term", BTN_LEFT, true]);
 
     // A global keystroke now reaches the focused app (KeyA -> evdev 30).
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, code: "KeyA" }),
     );
-    expect(bridge.calls).toContainEqual(["key", "term", 30, true]);
+    expect(domicile.calls).toContainEqual(["key", "term", 30, true]);
     document.dispatchEvent(
       new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
     );
-    expect(bridge.calls).toContainEqual(["key", "term", 30, false]);
+    expect(domicile.calls).toContainEqual(["key", "term", 30, false]);
   });
 
   it("announces a click as a focus request the shell can answer for itself", () => {
@@ -522,22 +522,22 @@ describe("<domicile-app>", () => {
       new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
     );
 
-    expect(bridge.calls).not.toContainEqual(["focusApp", "term"]);
+    expect(domicile.calls).not.toContainEqual(["focusApp", "term"]);
     // The click itself still belongs to the client: what the shell refused is
     // the keyboard, not the button the user pressed.
-    expect(bridge.calls).toContainEqual(["button", "term", BTN_LEFT, true]);
+    expect(domicile.calls).toContainEqual(["button", "term", BTN_LEFT, true]);
   });
 
   it("focusApp gives the client the keyboard without a click", () => {
     const element = mountApp("term");
 
     element.focusApp();
-    expect(bridge.calls).toContainEqual(["focusApp", "term"]);
+    expect(domicile.calls).toContainEqual(["focusApp", "term"]);
 
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, code: "KeyA" }),
     );
-    expect(bridge.calls).toContainEqual(["key", "term", 30, true]);
+    expect(domicile.calls).toContainEqual(["key", "term", 30, true]);
     // Released, because a key left down is left down for the whole suite: the
     // page holds it until its release, which is the point of the tests below.
     document.dispatchEvent(
@@ -554,7 +554,7 @@ describe("<domicile-app>", () => {
     element.dispatchEvent(
       new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
     );
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, code: "KeyA" }),
@@ -572,7 +572,7 @@ describe("<domicile-app>", () => {
       new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
     );
 
-    expect(bridge.calls.filter(([kind]) => kind === "key")).toEqual([
+    expect(domicile.calls.filter(([kind]) => kind === "key")).toEqual([
       ["key", "term", 30, true],
       ["key", "term", 30, false],
     ]);
@@ -593,7 +593,7 @@ describe("<domicile-app>", () => {
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
     );
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     // The keyboard goes back to the chrome while the key is still down.
     document.body.dispatchEvent(
@@ -603,7 +603,7 @@ describe("<domicile-app>", () => {
       new KeyboardEvent("keyup", { bubbles: true, code: "Escape" }),
     );
 
-    expect(bridge.calls).toContainEqual(["key", "term", 1, false]);
+    expect(domicile.calls).toContainEqual(["key", "term", 1, false]);
   });
 
   it("releases what it is holding when the page loses the keyboard", () => {
@@ -617,17 +617,17 @@ describe("<domicile-app>", () => {
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
     );
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     globalThis.window.dispatchEvent(new Event("blur"));
 
-    expect(bridge.calls).toEqual([["key", "term", 1, false]]);
+    expect(domicile.calls).toEqual([["key", "term", 1, false]]);
   });
 
-  it("releases onto the bridge that is connected now", () => {
+  it("releases onto the domicile that is connected now", () => {
     // The release is for the compositor's sake — its seat is what holds the
     // key down — so it belongs on the connection to that compositor, not on
-    // whichever bridge object happened to be bound when the key went down.
+    // whichever client object happened to be bound when the key went down.
     const element = mountApp("term");
     element.dispatchEvent(
       new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
@@ -635,19 +635,19 @@ describe("<domicile-app>", () => {
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
     );
-    const rebound = new FakeBridge();
-    registerElements(rebound as unknown as BridgeClient, {
+    const rebound = new FakeDomicile();
+    registerElements(rebound as unknown as DomicileClient, {
       measure: stubMeasure,
       observePlacement: frames.observe,
     });
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     document.dispatchEvent(
       new KeyboardEvent("keyup", { bubbles: true, code: "Escape" }),
     );
 
     expect(rebound.calls).toEqual([["key", "term", 1, false]]);
-    expect(bridge.calls).toEqual([]);
+    expect(domicile.calls).toEqual([]);
   });
 
   it("releases what it is holding when the page goes away", () => {
@@ -660,11 +660,11 @@ describe("<domicile-app>", () => {
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
     );
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     globalThis.window.dispatchEvent(new Event("pagehide"));
 
-    expect(bridge.calls).toEqual([["key", "term", 1, false]]);
+    expect(domicile.calls).toEqual([["key", "term", 1, false]]);
   });
 
   it("does not release a key it never forwarded a press for", () => {
@@ -677,13 +677,13 @@ describe("<domicile-app>", () => {
     element.dispatchEvent(
       new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
     );
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     document.dispatchEvent(
       new KeyboardEvent("keyup", { bubbles: true, code: "Escape" }),
     );
 
-    expect(bridge.calls).toEqual([]);
+    expect(domicile.calls).toEqual([]);
   });
 
   it("clicking off every app returns keyboard focus to the chrome", () => {
@@ -691,12 +691,12 @@ describe("<domicile-app>", () => {
     element.dispatchEvent(
       new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
     );
-    bridge.calls.length = 0;
+    domicile.calls.length = 0;
 
     document.body.dispatchEvent(
       new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
     );
-    expect(bridge.calls).toContainEqual(["focusChrome"]);
+    expect(domicile.calls).toContainEqual(["focusChrome"]);
   });
 
   describe("the facts a shell renders", () => {
@@ -720,7 +720,7 @@ describe("<domicile-app>", () => {
         }),
       );
 
-      expect(bridge.calls).toContainEqual(["motion", "term", 50, 100]);
+      expect(domicile.calls).toContainEqual(["motion", "term", 50, 100]);
     });
 
     it("has nothing behind it again when the size goes away", () => {
@@ -756,11 +756,11 @@ describe("<domicile-app>", () => {
       const element = mountApp("term");
 
       element.focused = false;
-      expect(bridge.calls).not.toContainEqual(["focusApp", "term"]);
+      expect(domicile.calls).not.toContainEqual(["focusApp", "term"]);
 
       element.focused = true;
 
-      expect(bridge.calls).toContainEqual(["focusApp", "term"]);
+      expect(domicile.calls).toContainEqual(["focusApp", "term"]);
     });
   });
 

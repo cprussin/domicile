@@ -57,10 +57,10 @@ port.
 One call, and it is the whole of the wiring:
 
 ```ts
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 
-const bridge = new BridgeClient(connectToHost(navigator));
+const domicile = new DomicileClient(connectToHost(navigator));
 ```
 
 `connectToHost` reads `navigator.domicile`, which is the control channel the
@@ -88,11 +88,11 @@ host's, and everything a shell said before that on the floor. **A shell does
 nothing about versions now.** The channel is a typed surface rather than a
 message pipe: the compositor's protocol version is checked in the browser
 process, which logs a disagreement and carries on, and a page has no part in it
-and nothing to await. `BridgeClient` has no `connect()` — say what you have to
-say as soon as you have a bridge, and the first call is what binds the channel.
+and nothing to await. `DomicileClient` has no `connect()` — say what you have to
+say as soon as you have a client, and the first call is what binds the channel.
 
 What replaces the handshake as a *shell's* concern is registration order, and
-`BridgeClient` is what handles it: it registers its own listeners in its
+`DomicileClient` is what handles it: it registers its own listeners in its
 constructor and holds anything that arrives before your `on` does. A React
 shell registers in its first effect flush, tens of milliseconds late, and every
 window already running is announced before then.
@@ -102,9 +102,9 @@ works, and it works for everything dispatched after your listener existed —
 which on a desktop with no clients open is everything, which is what makes the
 bug invisible until somebody reloads with a terminal running.
 
-The desktop is not an event at all: `bridge.displays` reads it whenever you
+The desktop is not an event at all: `domicile.displays` reads it whenever you
 ask, so a component that mounts long after the compositor described one still
-gets it. `bridge.on("displays", …)` is for reacting to a change, not for
+gets it. `domicile.on("displays", …)` is for reacting to a change, not for
 learning what is there.
 
 ## Reporting a failure
@@ -142,7 +142,7 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile/chrome-sdk` | `BridgeClient` (the control channel), `connectToHost` (finding it), `registerElements` (the `<domicile-app>` and `<domicile-webview>` custom elements), and the pure helpers around them. |
+| `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the `<domicile-app>` and `<domicile-webview>` custom elements), and the pure helpers around them. |
 
 It is not required. A shell may drive `navigator.domicile` itself — it is a
 typed surface rather than a wire, described in
@@ -164,23 +164,23 @@ One source file and a build config. The full version, with the comments, is in
 **`src/renderer.ts`** — the page, and the whole of the shell's behaviour:
 
 ```ts
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-const bridge = new BridgeClient(connectToHost(navigator));
-registerElements(bridge);
+const domicile = new DomicileClient(connectToHost(navigator));
+registerElements(domicile);
 
 const mounted = new Map<string, HTMLElement>();
 
-bridge.on("app_appeared", ({ app_id }) => {
+domicile.on("app_appeared", ({ app_id }) => {
   const element = document.createElement("domicile-app");
   element.setAttribute("app-id", app_id);
   document.body.append(element);
   mounted.set(app_id, element);
 });
 
-bridge.on("app_closed", ({ app_id }) => {
+domicile.on("app_closed", ({ app_id }) => {
   mounted.get(app_id)?.remove();
   mounted.delete(app_id);
 });
@@ -270,12 +270,12 @@ document.addEventListener(APP_FOCUS_REQUESTED_EVENT, (event) => {
 It bubbles, so one listener covers every window.
 
 **A client asking for focus** is the second, and it arrives as a message rather
-than an event: `bridge.on("focus_requested", ({ app_id }) => …)`. This is
+than an event: `domicile.on("focus_requested", ({ app_id }) => …)`. This is
 `xdg-activation` — "open this link in the browser I already have running", and
 also the dialog that puts itself in front of what you were typing into. The
 compositor does not grant it and makes no attempt to tell those two apart; it
 passes the question on with the seat where it was. Answer with
-`bridge.focusApp(app_id)`, or do nothing, which is a desktop where a background
+`domicile.focusApp(app_id)`, or do nothing, which is a desktop where a background
 window cannot take the keyboard.
 
 **Where it actually is** comes back on `focus_changed`, which reports the

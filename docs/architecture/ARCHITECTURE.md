@@ -133,8 +133,8 @@ libraries — build it in `nix develop .#full`:
 
 Web side:
 
-- `packages/chrome-sdk` — the shell-facing API: elements, the bridge client,
-  measurement, input.
+- `packages/chrome-sdk` — the shell-facing API: elements, the client for
+  `navigator.domicile`, measurement, input.
 - `packages/component-library` — the shared components and the Panda preset.
 - `packages/shell-manganese` — the reference desktop.
 - `packages/shell-simple` — a desktop with nothing in it but windows.

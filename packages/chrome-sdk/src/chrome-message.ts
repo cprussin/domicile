@@ -4,8 +4,8 @@
 // methods on `navigator.domicile` and the browser process serialises them, so
 // the eleven other builders that used to live here — resize, focus, close,
 // spawn, grab, and the five input forwards — had exactly one caller between
-// them and it was `BridgeClient.send`, which is gone. They went with it rather
-// than staying as a second, unexercised copy of a wire shape that can only
+// them and it was `DomicileClient.send`, which is gone. They went with it
+// rather than staying as a second, unexercised copy of a wire shape that can only
 // drift from the one the browser process actually writes.
 //
 // What is left has a caller that is not a page: `@domicile/e2e-harness` is a

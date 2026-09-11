@@ -3,14 +3,16 @@ import { act, render, screen } from "@testing-library/react";
 import { DisplayProvider, useDisplays } from "./DisplayProvider";
 import type { Display, DisplaySource } from "./display-source";
 
-/** A display source that never says anything, standing in for a bridge. */
+/**
+ * A display source that never says anything, standing in for a domicile client.
+ */
 const silent = (): DisplaySource => ({
   displays: undefined,
   onDisplays: () => () => undefined,
 });
 
 /**
- * A source that has already been told, the way a bridge that received
+ * A source that has already been told, the way a client that received
  * `displays` before this provider mounted has.
  */
 const alreadyTold = (displays: readonly Display[]): DisplaySource => ({
@@ -178,7 +180,7 @@ describe("useDisplays", () => {
   });
 
   it("registers once for a source that does not change", () => {
-    // `BridgeClient.on` is a single slot and a source is the connection, so a
+    // `DomicileClient.on` is a single slot and a source is the connection, so a
     // provider that re-registered on every render would churn the one
     // registration the page has.
     const { registrations, source } = toldLater();
@@ -212,7 +214,7 @@ describe("useDisplays", () => {
   });
 
   it("survives a source that answers registration immediately", () => {
-    // A `BridgeClient` replays what it is holding to the first handler that
+    // A `DomicileClient` replays what it is holding to the first handler that
     // registers, so an adapter over one calls back inside `onDisplays` — with
     // the same desktop the seed just used. Setting state during an effect is
     // fine; the point is that the provider does not care whether the answer

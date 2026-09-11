@@ -51,7 +51,7 @@ describe("connectToHost", () => {
 
   it("gives back something inert rather than nothing at all", () => {
     // The stand-in has to satisfy everything a real host does, because the
-    // bridge registers its listeners on whatever it is given and does it in
+    // client registers its listeners on whatever it is given and does it in
     // its constructor. Throwing here — or handing back `undefined` — would
     // turn "no desktop" into "no page".
     const host = connectToHost(navigatorWith(undefined), () => undefined);

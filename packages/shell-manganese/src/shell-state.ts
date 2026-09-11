@@ -3,7 +3,8 @@
 // The shell owns two things: which windows exist and which one has the stage.
 // Both move together — a window that opens takes the stage, a window that
 // closes hands it back — so they are one state, reduced in one place, with no
-// DOM or bridge in sight. `useShellWindows` is what feeds host events into it.
+// DOM or domicile client in sight. `useShellWindows` is what feeds host events
+// into it.
 
 import type { SurfaceSize } from "@domicile/chrome-sdk/app-element";
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";

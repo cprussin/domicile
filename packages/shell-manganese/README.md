@@ -36,9 +36,9 @@ client's keyboard goes to the host, a browser window's to its page.
 
 | Path | What |
 |---|---|
-| `src/renderer.tsx` | Renderer entry: applies the theme, builds the `BridgeClient`, registers the SDK's custom elements, mounts `<Shell>`, prints the diagnostics line. |
+| `src/renderer.tsx` | Renderer entry: applies the theme, builds the `DomicileClient`, registers the SDK's custom elements, mounts `<Shell>`, prints the diagnostics line. |
 | `src/Shell.tsx` | The chrome: the rail, the launchers, the stage, the keybindings, and which screen each of them is on. |
-| `src/display-source.ts` | The `BridgeClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
+| `src/display-source.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
 | `src/viewport-display.ts` | The same, for a shell with no host: the window is the only display there is. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/useShellWindows.ts` | Wires host events and user actions into the reducer, and the host's window events into the portal elements. |
@@ -55,14 +55,14 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/Clock.tsx` | The live clock: in the rail's footer, and alone on every display the rail is not on. |
 | `src/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
 | `src/wallpaper-photos.ts` | Which photographs those are, and where they come from. |
-| `src/diagnostic-lines.ts` | What the chrome has to say about its own timings — the keystroke round trip, and placement. |
+| `src/placement-line.ts` | What the chrome has to say about its own timings, which is what measuring every window on every frame costs. |
 | `src/window-styles.ts` | What every window on the stage shares. |
 | `src/global.css`, `src/css.d.ts` | The document-level styling, and the type for importing it. |
 | `src/domicile-elements.d.ts` | The SDK's custom elements, as JSX. |
 
 There is no main process and no preload. The engine is the display compositor
-and the page opens a WebSocket to the bridge serving it, so what is here is the
-chrome and nothing else.
+and serves this page over `domicile://`, and the channel to it is
+`navigator.domicile`, so what is here is the chrome and nothing else.
 
 React owns this DOM, so the chrome writes `<domicile-app>` in JSX rather than
 letting the SDK's `aliasTag` upgrade a short `<app>` tag — a MutationObserver
@@ -285,13 +285,14 @@ shell builds: a page and what it loads.
 nix run 'github:cprussin/domicile#manganese'
 ```
 
-runs it — the bridge, the engine on that page, and the compositor as a producer
-to it. `./scripts/dev-shell.sh manganese` does the same from a checkout.
+runs it — the engine on that page, and the compositor as a producer to it.
+`./scripts/dev-shell.sh manganese` does the same from a checkout.
 
 `bun run --filter @domicile/shell-manganese start:dev` runs this shell in a real
-desktop and rebuilds it as you edit: the engine the flake pins, the compositor
-and the bridge built out of this checkout, and the page reloading itself when
-vite finishes a build.
+desktop and rebuilds it as you edit: the engine the flake pins and the
+compositor built out of this checkout. A rebuilt shell needs the desktop
+restarted — nothing reloads the page for you until `domicile load-shell` lands,
+see `scripts/dev-shell.sh`.
 
 `styled-system/` is Panda's generated output, produced by `bun run prepare`
 (run automatically as a turbo dependency of the build, type check, and tests)

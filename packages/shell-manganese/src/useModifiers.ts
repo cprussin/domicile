@@ -1,4 +1,4 @@
-import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { useCallback, useEffect, useState } from "react";
 
 /**
@@ -32,7 +32,7 @@ const NONE: Modifiers = { alt: false, ctrl: false, shift: false };
  * hearing this keyboard is the only one delivering, and both describe the same
  * keys.
  */
-export const useModifiers = (bridge: BridgeClient): Modifiers => {
+export const useModifiers = (domicile: DomicileClient): Modifiers => {
   const [held, setHeld] = useState(NONE);
 
   // The same object when nothing moved, so a page that holds Alt through a
@@ -48,16 +48,16 @@ export const useModifiers = (bridge: BridgeClient): Modifiers => {
   }, []);
 
   useEffect(() => {
-    // `on` returns the bridge for chaining, so it is deliberately not returned
+    // `on` returns the client for chaining, so it is deliberately not returned
     // as a cleanup — there is one handler per message type and re-registering
     // replaces it.
     // The compositor's names for these are the web's now, so the two halves
     // below read the same: `altKey` off a `modifiers` message is the same fact
     // as `altKey` off a `KeyboardEvent`.
-    bridge.on("modifiers", ({ altKey, ctrlKey, shiftKey }) => {
+    domicile.on("modifiers", ({ altKey, ctrlKey, shiftKey }) => {
       settle({ alt: altKey, ctrl: ctrlKey, shift: shiftKey });
     });
-  }, [bridge, settle]);
+  }, [domicile, settle]);
 
   useEffect(() => {
     const follow = (event: KeyboardEvent) => {

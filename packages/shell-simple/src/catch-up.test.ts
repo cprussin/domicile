@@ -1,18 +1,18 @@
 import { describe, expect, it } from "bun:test";
 
-import type { CatchUpBridge, CatchUpDesktop } from "./catch-up";
+import type { CatchUpDesktop, CatchUpDomicile } from "./catch-up";
 import { endCatchUpOnFocusChange } from "./catch-up";
 
-/** A bridge that hands back whatever the shell listened with. */
-const fakeBridge = () => {
+/** A domicile client that hands back whatever the shell listened with. */
+const fakeDomicile = () => {
   let heard: (() => void) | undefined;
-  const bridge: CatchUpBridge = {
+  const domicile: CatchUpDomicile = {
     on: (_type, listener) => {
       heard = listener;
     },
   };
   return {
-    bridge,
+    domicile,
     /** The host saying who holds the keyboard, which ends the replay. */
     focusChanged: () => {
       if (heard === undefined) {
@@ -36,9 +36,9 @@ const fakeDesktop = () => {
 
 describe("endCatchUpOnFocusChange", () => {
   it("tells the desktop the catch-up is over when the host says who has the keyboard", () => {
-    const { bridge, focusChanged } = fakeBridge();
+    const { domicile, focusChanged } = fakeDomicile();
     const { desktop, told } = fakeDesktop();
-    endCatchUpOnFocusChange(bridge, desktop);
+    endCatchUpOnFocusChange(domicile, desktop);
     focusChanged();
     expect(told).toStrictEqual([true]);
   });
@@ -46,9 +46,9 @@ describe("endCatchUpOnFocusChange", () => {
   it("says nothing until the host does", () => {
     // The replayed windows arrive first, and a desktop told too early would
     // focus them — which is the whole reason this exists.
-    const { bridge } = fakeBridge();
+    const { domicile } = fakeDomicile();
     const { desktop, told } = fakeDesktop();
-    endCatchUpOnFocusChange(bridge, desktop);
+    endCatchUpOnFocusChange(domicile, desktop);
     expect(told).toStrictEqual([]);
   });
 });

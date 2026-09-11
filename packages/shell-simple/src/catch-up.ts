@@ -10,8 +10,8 @@
 // This is one line of wiring, in a module of its own because it is the line
 // that decides whether reloading the desktop moves the user's keyboard.
 
-/** As much of the bridge as noticing the end of the catch-up needs. */
-export type CatchUpBridge = {
+/** As much of the domicile client as noticing the end of the catch-up needs. */
+export type CatchUpDomicile = {
   on: (type: "focus_changed", listener: () => void) => unknown;
 };
 
@@ -29,10 +29,10 @@ export type CatchUpDesktop = {
  * click or the open that moved it. Only its arrival is the news.
  */
 export const endCatchUpOnFocusChange = (
-  bridge: CatchUpBridge,
+  domicile: CatchUpDomicile,
   desktop: CatchUpDesktop,
 ): void => {
-  bridge.on("focus_changed", () => {
+  domicile.on("focus_changed", () => {
     desktop.caughtUp();
   });
 };

@@ -1,6 +1,6 @@
 // Telling the host how big the desktop is, and keeping it told.
 
-import type { BridgeClient } from "./bridge";
+import type { DomicileClient } from "./domicile-client";
 
 /**
  * The page's own view of the desktop: how big it is, and how to hear that
@@ -41,11 +41,11 @@ export type ViewportView = {
  * Send it after the handshake: the host ignores everything before it.
  */
 export const reportDesktopSize = (
-  bridge: Pick<BridgeClient, "setDesktopSize">,
+  domicile: Pick<DomicileClient, "setDesktopSize">,
   view: ViewportView,
 ): void => {
   const report = () => {
-    bridge.setDesktopSize([view.innerWidth, view.innerHeight]);
+    domicile.setDesktopSize([view.innerWidth, view.innerHeight]);
   };
   report();
   view.addEventListener("resize", report);

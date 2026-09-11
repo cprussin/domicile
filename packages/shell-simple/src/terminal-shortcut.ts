@@ -35,8 +35,8 @@ const ALT_ENTER: DomicileShortcut = {
   shiftKey: false,
 };
 
-/** As much of the bridge as opening a terminal needs. */
-export type TerminalBridge = {
+/** As much of the domicile client as opening a terminal needs. */
+export type TerminalDomicile = {
   grabShortcut: (shortcut: DomicileShortcut) => void;
   on: (type: "shortcut", listener: () => void) => unknown;
   spawn: (command: readonly string[]) => void;
@@ -53,17 +53,17 @@ export type TerminalBridge = {
  *   was already there.
  */
 export const openTerminalOnAltEnter = (
-  bridge: TerminalBridge,
+  domicile: TerminalDomicile,
   keys: HTMLElement,
 ): void => {
   const openTerminal = () => {
-    bridge.spawn(TERMINAL_COMMAND);
+    domicile.spawn(TERMINAL_COMMAND);
   };
 
-  bridge.grabShortcut(ALT_ENTER);
+  domicile.grabShortcut(ALT_ENTER);
   // Every claimed press is this one: it is the only combination claimed, so
   // there is nothing to tell apart.
-  bridge.on("shortcut", openTerminal);
+  domicile.on("shortcut", openTerminal);
 
   keys.addEventListener(
     "keydown",

@@ -6,9 +6,9 @@
 // still be one. Everything else a desktop has is CSS and event handlers on top
 // of exactly this.
 
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
+import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
 // One call, two places. Under the engine this is `navigator.domicile`, the
@@ -16,15 +16,15 @@ import { registerElements } from "@domicile/chrome-sdk/register-elements";
 // is none, and `connectToHost` says so on the console and hands back a
 // stand-in — which is worth keeping possible, because the layout can be worked
 // on without a compositor, against apps that will never arrive.
-const bridge = new BridgeClient(connectToHost(navigator));
-// Defines `<domicile-app>` and `<domicile-webview>`, bound to this bridge.
+const domicile = new DomicileClient(connectToHost(navigator));
+// Defines `<domicile-app>` and `<domicile-webview>`, bound to this client.
 // Until this runs the tags are unknown elements and mount nothing.
-registerElements(bridge);
+registerElements(domicile);
 
 /** Every app the host has announced, by the id it announced it under. */
 const mounted = new Map<string, HTMLElement>();
 
-bridge.on("app_appeared", ({ app_id }) => {
+domicile.on("app_appeared", ({ app_id }) => {
   const element = document.createElement("domicile-app");
   element.setAttribute("app-id", app_id);
   // Appending is what puts it on top: the elements are absolutely positioned
@@ -33,7 +33,7 @@ bridge.on("app_appeared", ({ app_id }) => {
   mounted.set(app_id, element);
 });
 
-bridge.on("app_closed", ({ app_id }) => {
+domicile.on("app_closed", ({ app_id }) => {
   const element = mounted.get(app_id);
   if (element === undefined) {
     // Not a case to shrug off: the host announces every app before it closes
@@ -52,4 +52,4 @@ bridge.on("app_closed", ({ app_id }) => {
 // page is the only part of Domicile that can see either. Sent straight away:
 // there is no handshake to wait for, and the first call is what binds the
 // channel.
-reportDevicePixelRatio(bridge, window);
+reportDevicePixelRatio(domicile, window);

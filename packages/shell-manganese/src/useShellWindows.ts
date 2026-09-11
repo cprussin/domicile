@@ -1,4 +1,4 @@
-import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DropPosition } from "@domicile/component-library/TabRail";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 
@@ -65,11 +65,11 @@ export type ShellWindows = ShellState & {
  * not come through here, and they do not come through the page at all: the
  * compositor submits the client's buffer and the portal embeds the surface.
  */
-export const useShellWindows = (bridge: BridgeClient): ShellWindows => {
+export const useShellWindows = (domicile: DomicileClient): ShellWindows => {
   const [state, dispatch] = useReducer(reduceShell, EMPTY_SHELL);
 
   useEffect(() => {
-    bridge.on("app_appeared", ({ app_id, size, title }) => {
+    domicile.on("app_appeared", ({ app_id, size, title }) => {
       dispatch(ShellAction.AppAppeared(app_id, title));
       // A size here is a client that has committed a buffer already — the
       // replay a reloading chrome is given — and it says the same thing
@@ -79,27 +79,27 @@ export const useShellWindows = (bridge: BridgeClient): ShellWindows => {
         dispatch(ShellAction.AppDrewAt(app_id, size));
       }
     });
-    bridge.on("app_titled", ({ app_id, title }) => {
+    domicile.on("app_titled", ({ app_id, title }) => {
       dispatch(ShellAction.AppTitled(app_id, title));
     });
-    bridge.on("app_closed", ({ app_id }) => {
+    domicile.on("app_closed", ({ app_id }) => {
       dispatch(ShellAction.AppClosed(app_id));
     });
-    bridge.on("app_resized", ({ app_id, size }) => {
+    domicile.on("app_resized", ({ app_id, size }) => {
       dispatch(ShellAction.AppDrewAt(app_id, size));
     });
-    bridge.on("app_cursor", ({ app_id, cursor }) => {
+    domicile.on("app_cursor", ({ app_id, cursor }) => {
       dispatch(ShellAction.AppCursorChanged(app_id, cursor));
     });
-    bridge.on("focus_changed", ({ app_id }) => {
+    domicile.on("focus_changed", ({ app_id }) => {
       dispatch(ShellAction.FocusChanged(app_id));
     });
-    bridge.on("focus_requested", ({ app_id }) => {
+    domicile.on("focus_requested", ({ app_id }) => {
       // A client asking, which the compositor forwards without granting — so
       // what happens next is `reduceShell`'s to say and not the desktop's.
       dispatch(ShellAction.FocusRequested(app_id));
     });
-  }, [bridge]);
+  }, [domicile]);
 
   const close = useCallback(
     (id: string) => {
@@ -110,10 +110,10 @@ export const useShellWindows = (bridge: BridgeClient): ShellWindows => {
         // Nothing here ends a client: the compositor sends its toplevel a
         // close, and an editor with unsaved work is entitled to stay. What
         // takes the tab away is the `app_closed` that follows if it goes.
-        bridge.closeApp(appId);
+        domicile.closeApp(appId);
       }
     },
-    [bridge],
+    [domicile],
   );
 
   const openBrowser = useCallback(() => {
@@ -121,8 +121,8 @@ export const useShellWindows = (bridge: BridgeClient): ShellWindows => {
   }, []);
 
   const openTerminal = useCallback(() => {
-    bridge.spawn(TERMINAL_COMMAND);
-  }, [bridge]);
+    domicile.spawn(TERMINAL_COMMAND);
+  }, [domicile]);
 
   const renameToSite = useCallback((id: string, url: string) => {
     dispatch(ShellAction.WindowRenamed(id, siteOf(url)));

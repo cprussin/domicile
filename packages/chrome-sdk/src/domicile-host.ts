@@ -200,7 +200,7 @@ export type DomicileHostEventMap = {
  * keeps the events typed, and the members `EventTarget` would add
  * (`removeEventListener`, `dispatchEvent`) are ones the SDK has no business
  * calling on the host anyway: a page must never listen on `navigator.domicile`
- * directly — see `bridge.ts` — and nothing in a page dispatches to it.
+ * directly — see `domicile-client.ts` — and nothing in a page dispatches to it.
  *
  * The practical consequence, worth knowing before writing a double: an
  * `EventTarget` does not satisfy this type. `lib.dom` types its callback as

@@ -93,7 +93,7 @@ export type DomicileAppElement = HTMLElement & {
  *
  * A factory rather than a class because a custom element is constructed by the
  * DOM, which hands it nothing: the collaborators have to reach it some other
- * way, and reading them back from module scope means reading a bridge that the
+ * way, and reading them back from module scope means reading a client that the
  * types say might not be bound. It always is — this class does not exist until
  * `registerElements` has bound one — so closing over the context is what makes
  * the case that cannot happen also impossible to write.
@@ -157,7 +157,7 @@ export const createAppElement = (
           // The window that had the keyboard has gone, so say who has it now.
           // Without this the host is left holding a focus for a client that no
           // longer exists, and the chrome stops receiving keys.
-          context.bridge.focusChrome();
+          context.domicile.focusChrome();
         }
       }
     }
@@ -234,7 +234,7 @@ export const createAppElement = (
     focusApp(): void {
       this.#withTarget((appId) => {
         setFocusedApp(appId);
-        context.bridge.focusApp(appId);
+        context.domicile.focusApp(appId);
       });
     }
 
@@ -386,7 +386,7 @@ export const createAppElement = (
             // otherwise leave the element sure it had reported a size the host
             // never received, and nothing would send it again until the window
             // changed size.
-            context.bridge.resizeApp(appId, size);
+            context.domicile.resizeApp(appId, size);
             this.#rendered = rendered;
           }
         }
@@ -411,7 +411,7 @@ export const createAppElement = (
           this.#forwardMotion(appId, event);
           const button = buttonCodeFromJs(event.button);
           if (button !== undefined) {
-            context.bridge.pointerButton(appId, button, true);
+            context.domicile.pointerButton(appId, button, true);
           }
         });
       });
@@ -420,14 +420,14 @@ export const createAppElement = (
         this.#withTarget((appId) => {
           const button = buttonCodeFromJs(event.button);
           if (button !== undefined) {
-            context.bridge.pointerButton(appId, button, false);
+            context.domicile.pointerButton(appId, button, false);
           }
         });
       });
 
       this.addEventListener("pointerleave", () => {
         this.#withTarget((appId) => {
-          context.bridge.pointerLeave(appId);
+          context.domicile.pointerLeave(appId);
         });
       });
 
@@ -435,7 +435,7 @@ export const createAppElement = (
         "wheel",
         (event) => {
           this.#withTarget((appId) => {
-            context.bridge.pointerAxis(appId, axisFromWheel(event));
+            context.domicile.pointerAxis(appId, axisFromWheel(event));
           });
         },
         { passive: true },
@@ -475,7 +475,7 @@ export const createAppElement = (
         [event.clientX, event.clientY],
       );
       if (local !== undefined) {
-        context.bridge.pointerMotion(appId, local.x, local.y);
+        context.domicile.pointerMotion(appId, local.x, local.y);
       }
     }
 

@@ -19,12 +19,12 @@
 // which is to say a live, drawing client with no window on screen and no
 // second announcement coming.
 //
-// So the bridge registers its own listener for every event type in its
-// constructor, and {@link BridgeClient.on} is a registration against *this*
+// So this client registers its own listener for every event type in its
+// constructor, and {@link DomicileClient.on} is a registration against *this*
 // class rather than against the host. Anything that arrived before the page
-// asked for it is held (see {@link BridgeClient.#held}) and delivered when it
+// asked for it is held (see {@link DomicileClient.#held}) and delivered when it
 // does. That is what `#held` was always for; what changed is that the gap it
-// covers is now between the page's handlers and the bridge's own, inside one
+// covers is now between the page's handlers and this client's own, inside one
 // process, rather than between a page and a socket.
 //
 // **A page must therefore never call `addEventListener` on
@@ -33,7 +33,7 @@
 // which is the subset that makes the bug invisible on a desktop with no
 // clients open.
 //
-// # Nothing can arrive before the bridge is listening
+// # Nothing can arrive before the client is listening
 //
 // The channel binds on first use, and as of the engine's control-channel
 // change that includes the first `addEventListener` — `DomicileHost::
@@ -41,9 +41,19 @@
 // compositor its way back into the page: until the channel is bound there is
 // no client end for the browser process to push on, so there is nothing that
 // could be dispatched and dropped. The constructor below registers before it
-// returns, so by the time anything holds a `BridgeClient` the ordering is
+// returns, so by the time anything holds a `DomicileClient` the ordering is
 // already safe. A socket the page has not opened cannot deliver either, and
 // this is the same guarantee one process further in.
+//
+// # It was `BridgeClient`, and there is no bridge
+//
+// The old name was the process's: `engine-chrome-host` served the shell over a
+// loopback HTTP port and proxied a WebSocket to the compositor, and this class
+// was the page's end of that socket. The engine serves the page over
+// `domicile://` now, `navigator.domicile` replaced the socket, and `supervise`
+// starts two processes. Nothing here is a transport — the channel is the
+// engine's, and this is a client of it that holds what arrived before the page
+// asked. So it is named for the channel rather than for what used to carry it.
 //
 // # It translates, because WebIDL's shapes are not a shell's
 //
@@ -73,16 +83,7 @@ import {
   modifiers,
   shortcut,
 } from "./host-message";
-import { RoundTripWindow } from "./round-trip";
-import { SampleWindow } from "./sample-window";
 import type { AxisDelta } from "./wheel-axis";
-
-/** The clock the round-trip timing reads; a parameter so tests can hold it. */
-const monotonicNow = (): number => performance.now();
-
-export type BridgeOptions = {
-  now?: typeof monotonicNow;
-};
 
 type Handler = (message: never) => void;
 
@@ -90,56 +91,7 @@ type Handler = (message: never) => void;
  * The chrome's half of the control channel: a handler table for what the
  * compositor says, and a typed call per thing the chrome asks of it.
  */
-export class BridgeClient {
-  /**
-   * How long keystrokes are taking to become pixels.
-   *
-   * **This no longer measures anything, and that is a gap rather than a
-   * tidy-up.** The bridge used to see both ends of the loop: it sent the key
-   * and it drew the frame that answered. A client's buffer now goes to the
-   * display compositor and the page embeds the surface, so the far end of the
-   * loop does not pass through here at all — `keyed` is still called and
-   * `drew` never is, so every report is empty.
-   *
-   * It is kept, empty, rather than deleted because it is the instrument for
-   * the one requirement this whole fork is answerable to: that the compositor
-   * add no latency a user can see. Deleting it would leave nothing measuring
-   * that and no sign that anything used to. The measurement has to be rebuilt
-   * where both ends are now visible — the compositor, which sends the key and
-   * holds the engine connection that knows when viz presented.
-   */
-  readonly roundTrip = new RoundTripWindow();
-
-  /**
-   * What the compositor's bytes cost between arriving in this process and
-   * reaching this page.
-   *
-   * **Also empty, and for a different reason than {@link roundTrip}: the thing
-   * it measures is still happening, and the instrument is gone.** The hop is
-   * as real as it ever was — the compositor's JSON is read in the browser
-   * process, becomes a mojo message, crosses to the renderer and is dispatched
-   * as a DOM event — and it is the stage that was Electron's IPC at 79ms a
-   * frame, which is why it was ever reported separately from a total that
-   * would have hidden it.
-   *
-   * What is gone is the stamp. The old transport was handed the moment the
-   * host's own bytes arrived, because whoever read the socket ran in this
-   * process and could take it. Nothing on `navigator.domicile` carries an
-   * equivalent: not the events, which have no arrival member, and not
-   * `Event.timeStamp`, which is when the event was *constructed* — in the
-   * renderer, at dispatch — so pricing against it would report a few
-   * microseconds of Blink and call it the IPC. An always-zero number is worse
-   * than an empty one, because a reader believes it.
-   *
-   * **The engine member that would fix this does not exist.** A
-   * `DOMHighResTimeStamp` on the events saying when the browser process took
-   * the message off the compositor's socket is one field on the mojo struct
-   * and one attribute on the event classes; until it is there this stays
-   * empty, and `diagnostic-lines` renders an empty window as no line rather
-   * than as a zero.
-   */
-  readonly hop = new SampleWindow();
-
+export class DomicileClient {
   readonly #host: DomicileHost;
   readonly #handlers = new Map<HostMessageType, Handler>();
 
@@ -178,10 +130,8 @@ export class BridgeClient {
    * page can recover the state some other way.
    */
   readonly #released = new Set<HostMessageType>();
-  readonly #now: typeof monotonicNow;
 
-  constructor(host: DomicileHost, { now = monotonicNow }: BridgeOptions = {}) {
-    this.#now = now;
+  constructor(host: DomicileHost) {
     this.#host = host;
 
     // One listener per event type, registered here rather than left to the
@@ -400,14 +350,6 @@ export class BridgeClient {
   }
 
   key(appId: string, keycode: number, pressed: boolean): void {
-    // Presses only. Releasing a key changes nothing on screen, so the next
-    // frame to arrive is some unrelated redraw — a terminal's blinking cursor,
-    // half a second later — and timing to that reports the blink interval as
-    // input latency. Since every press is followed by a release, counting them
-    // would contaminate half of every sample.
-    if (pressed) {
-      this.roundTrip.keyed(appId, this.#now());
-    }
     this.#host.key(appId, keycode, pressed);
   }
 
