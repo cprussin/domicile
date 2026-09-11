@@ -1,7 +1,7 @@
 # A desktop on a tty
 
-**Getting `gn gen` to accept `ozone_platform_drm = true` is a patch: five
-files, and not one of the edits is inside the DRM platform's own logic.**
+**Getting `gn gen` to accept `ozone_platform_drm = true` is a patch: eight
+edits, and not one of them is inside the DRM platform's own logic.**
 Getting a lit screen out of it is a port — of the *embedder* ozone/drm has
 never had off ChromeOS, not of ozone/drm itself. It is not a fork: at
 `bbbfd22b56d9df22e578e9faf55b286714b7303c` the 49 `.cc` files in
@@ -23,8 +23,12 @@ anything compiles. True, and it says nothing about depth. This doc establishes
 the depth.
 
 Everything below is read from the sparse checkout at the pin in
-`packages/domicile-engine/CHROMIUM_PIN`. Nothing here was compiled — see
-[Open questions](#open-questions).
+`packages/domicile-engine/CHROMIUM_PIN`. The reading is no longer the only
+evidence: `.github/workflows/engine-drm-probe.yml` builds `//ui/ozone` with
+`ozone_platform_drm = true` and the patch applied, and what it found is in
+[What the compiler said](#what-the-compiler-said). Three of the eight edits are
+there because it ran — a static read had not found them and, as that section
+explains, could not have.
 
 ## What the assert guards
 
@@ -37,7 +41,24 @@ Nothing in the platform. `git grep` over `ui/ozone/platform/drm` at the pin:
 | `BUILDFLAG(IS_CHROMEOS)` / `IS_CHROMEOS_ASH` | 0 |
 | `is_chromeos` | 2, both in `BUILD.gn` (lines 14 and 169) |
 
-Both C++ hits are incidental, and neither is load-bearing:
+**That table is accurate and it is not sufficient — do not re-derive a bound
+from it.** Three of the eight edits in the patch are about things *outside*
+this directory that it merely consumes, and no search scoped to the platform's
+own path could have found any of them. One is worth naming, because it is a
+lesson about the method rather than about ozone/drm:
+
+The first row searches for `include "chromeos/`, a pattern anchored at the
+*start* of the include path. `host/drm_cursor.cc:22` includes
+`ui/events/ozone/chromeos/cursor_controller.h`, where `chromeos/` is a path
+segment rather than a prefix — the row could never have matched it, however
+many times it is re-run. And that one is invisible to the compiler as well:
+`ui/events/ozone/BUILD.gn:44` compiles `chromeos/cursor_controller.cc` only
+`if (is_chromeos)` while shipping the header on every platform, so the include
+resolves, the call type-checks, and the only thing that ever objects is the
+linker. It cost three probe rounds to reach, and it is the reason the last
+edit in the patch exists.
+
+The two hits the table does find are incidental, and neither is load-bearing:
 
 | Hit | What it does | Cost to remove |
 |---|---|---|
@@ -236,31 +257,102 @@ size, refresh and hotplug off the `DisplaySnapshot`s the engine already has.
   is whether the patched tree configures and links, and it costs one engine-job
   slot.
 
+## What the compiler said
+
+`.github/workflows/engine-drm-probe.yml` configures `out/DrmProbe` with
+`ozone_platform_drm = true` on top of the patch series and builds `//ui/ozone`.
+It is a manual-dispatch job on the engine runner, it takes the same tree lock
+the release build takes, and it deletes its output directory whether it passes
+or fails. It exists because the question "does the patched tree compile" has no
+honest answer short of compiling it.
+
+`gn gen` accepted the argument on the first attempt and on every attempt since.
+What it found after that:
+
+| Round | Reached | First failure |
+|---|---|---|
+| 1 | 9336 / 9413 compile steps | `gpu/hardware_display_plane_manager_atomic.cc:345` — `no member named 'kCtmColorManagement' in namespace 'display::features'` |
+| 2 | 9373 / 9412 compile steps | `gpu/drm_thread_proxy.cc:42` — `use of undeclared identifier 'ERROR'` at `PLOG(ERROR)` |
+| 3 | every compile step; failed at `SOLINK libui_ozone.so` | `mold: undefined symbol: ui::CursorController::GetInstance()`, referenced by `host/drm_cursor.cc` |
+
+Three distinct failures in three categories, none of them a repeat, each one
+further than the last:
+
+1. **`is_chromeos`-gated symbols in `ui/display`.** `kCtmColorManagement` and
+   `kDrmColorSpaceDefaultIsRec709` are declared inside a
+   `#if BUILDFLAG(IS_CHROMEOS)` in `ui/display/display_features.h`. The
+   namespace exists on Linux; the members do not. Four call sites, each now
+   taking the branch a disabled flag would take.
+2. **Include-what-you-use gaps.** `PLOG` without `base/logging.h`. Not
+   ChromeOS-specific at all — upstream has simply never compiled these files
+   anywhere the header was not already on the path. Seven files, found with one
+   query rather than one build apiece.
+3. **A ChromeOS-gated *target*.** `CursorController`, described under
+   [What the assert guards](#what-the-assert-guards) — header everywhere,
+   object file only on ChromeOS, so only the linker complains.
+
+None of the three is inside the DRM platform's logic, which is what keeps step 1
+a patch rather than a port. But the count is eight edits and not the five a
+reading of the platform predicted, and the difference is entirely category 1 and
+3: things the platform *uses* that are conditional where it is not.
+
+**Round 4 is green.** With all eight edits, on run 34623575435:
+
+```
+drm probe: gn gen accepted ozone_platform_drm = true
+drm probe: ui/ozone built with ozone_platform_drm = true
+
+ozone_platform_drm = true configures and //ui/ozone compiles at this pin
+```
+
+So the headline of this doc is measured rather than reasoned: `gn gen` accepts
+the argument, and `//ui/ozone` -- the DRM platform included -- compiles and
+links with it, at this pin, with this patch. The eight edits are the whole of
+what the assert was standing in front of.
+
+What that sentence does **not** say is worth as much as what it does. It builds
+`//ui/ozone`, not `chrome`, and `crux` has no card node. Nothing here has run a
+binary, opened a DRM device, or lit a display. Step 2 is still the port
+described below, and the first Open question that a build could answer is now
+answered while the ones a build cannot are not.
+
 ## Plan
 
 Step 1 — make the tree accept the argument (the patch):
 
-- [ ] add a patch to the series relaxing `ui/ozone/platform/drm/BUILD.gn:14` to
+All eight edits are one patch,
+`packages/domicile-engine/patches/0011-domicile-let-gn-gen-accept-ozone_platform_drm-off-Ch.patch`,
+and it compiles nothing that ships: `scripts/build.sh` and
+`.github/scripts/engine-release-build.sh` both set `ozone_auto_platforms =
+false` and name only wayland and headless, so `//ui/ozone/BUILD.gn` never adds
+`platform/drm:gbm` and `ui/ozone/platform/drm/BUILD.gn` is not loaded at all.
+
+- [x] add a patch to the series relaxing `ui/ozone/platform/drm/BUILD.gn:14` to
       `assert(is_linux || is_chromeos)` and moving `deps += [ "//ash/constants",
       "//ui/base/ime/ash" ]` under `if (is_chromeos)`
-- [ ] replace `ash::switches::IsRevenBranding()` in `gpu/page_flip_watchdog.cc`
+- [x] replace `ash::switches::IsRevenBranding()` in `gpu/page_flip_watchdog.cc`
       with the non-Flex threshold on non-ChromeOS, and drop the
       `Platform.FlexPageFlipFlakes2` histogram there
-- [ ] swap `ash::InputMethodAsh` for `InputMethodMinimal` in
+- [x] swap `ash::InputMethodAsh` for `InputMethodMinimal` in
       `ozone_platform_drm.cc:170-174` on non-ChromeOS, matching
       `ozone_platform_headless.cc:104-108`
-- [ ] remove `+ash/constants/ash_switches.h` from
+- [x] remove `+ash/constants/ash_switches.h` from
       `ui/ozone/platform/drm/gpu/DEPS`
-- [ ] gate the `gbm_unittests` target's use of
+- [x] gate the `gbm_unittests` target's use of
       `ui/display/manager/test/fake_display_snapshot.h` on `is_chromeos`, or
-      drop the target from the build
-- [ ] add a CI job that takes the `crux` tree lock, runs `gn gen out/DrmProbe
+      drop the target from the build — gated, not dropped: `//ui/ozone/BUILD.gn`
+      names `platform/drm:gbm_unittests` unconditionally when the argument is
+      true, so dropping it moves the `gn gen` failure rather than removing it,
+      and only `gpu/drm_display_unittest.cc` and `gpu/screen_manager_unittest.cc`
+      reach for the header
+- [x] add a CI job that takes the `crux` tree lock, runs `gn gen out/DrmProbe
       --args='use_ozone=true ozone_auto_platforms=false
       ozone_platform_headless=true ozone_platform_drm=true'`, then `autoninja -C
       out/DrmProbe ui/ozone`, and reports the first failure verbatim. It
       contends with the guards for the single-slot engine runner, so it runs on
-      demand rather than per-PR
-- [ ] record the job's verdict here and fix whatever it finds
+      demand rather than per-PR — `.github/workflows/engine-drm-probe.yml`,
+      `workflow_dispatch` only and in engine.yml's `concurrency` group
+- [x] record the job's verdict here and fix whatever it finds
 
 Step 2 — the embedder (the port):
 
@@ -285,11 +377,15 @@ Step 2 — the embedder (the port):
 
 ## Open questions
 
-- **Does the patched tree actually compile and link?** Only `gn gen` plus a
-  build can say. A static read cannot see a header that is
-  `is_chromeos`-conditional three targets down, and cannot see a `visibility`
-  refusal. *Recommendation:* run the CI job above before committing to any of
-  step 2 — it is the first plan item for that reason.
+- **Does the patched tree actually compile and link?** **Answered: yes**, by
+  `.github/workflows/engine-drm-probe.yml` run 34623575435 — `gn gen` accepts
+  `ozone_platform_drm = true` and `//ui/ozone` builds and links with it. The
+  question was right to be here and right to be first: it took four rounds, and
+  three of the eight edits in the patch exist only because a compiler and then a
+  linker said so. The `is_chromeos`-conditional header this question predicted
+  turned out to be an `is_chromeos`-conditional *source file* --
+  `ui/events/ozone/BUILD.gn:44` — which ships its header on every platform, so
+  it defeated the grep and the compiler both and surfaced only at the link.
 - **Does the engine's `chrome` target start at all under ozone/drm with no
   ash?** Beyond `CreateScreen()`, browser startup touches display state in
   places this audit did not trace. *Recommendation:* the same job cannot answer

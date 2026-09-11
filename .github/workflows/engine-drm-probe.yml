@@ -1,0 +1,253 @@
+name: Engine DRM probe
+
+# One question, asked of a compiler rather than of a reader: does the patched
+# tree accept `ozone_platform_drm = true`, and does `//ui/ozone` build with it?
+#
+# docs/architecture/A-DESKTOP-ON-A-TTY.md established from the source that the
+# ChromeOS-only assert on ozone/drm guards almost nothing -- two incidental
+# references across 49 .cc files -- and then said, in its own first Open
+# question, that a static read cannot finish the job: it cannot see a header
+# that is `is_chromeos`-conditional three targets down, and it cannot see a
+# `visibility` refusal. Those are sentences in a build log and nowhere else.
+# This is the job that goes and gets them.
+#
+# ON DEMAND, AND NOT ON ENGINE CHANGES. It resets the shared Chromium checkout
+# on `crux` and configures a second output directory in it, and `crux` is one
+# runner with one slot that the engine guards and the release build already
+# contend for. A probe that ran on every engine pull request would put an
+# hours-long queue in front of every patch to re-answer a question whose answer
+# does not move until the pin does. So nothing under
+# `packages/domicile-engine/**` triggers this, which is the whole difference
+# between this job and engine.yml: that one guards every engine change, this
+# one is asked a question when someone has one.
+#
+# DISPATCH ONLY, NOW THAT IT CAN BE. This carried a `pull_request` trigger on
+# its own two paths while it was being written, for one reason that has since
+# expired: GitHub registers `workflow_dispatch` only for workflows already on
+# the default branch, so the runs that first proved this job works could not be
+# dispatches. Four of them proved it, and the last one answered the question
+# the job was built to ask. Once this is on `main` a dispatch is available, and
+# the trigger would be left firing a fifteen-minute Chromium build on any push
+# that touches this file -- a cost with no question behind it, on the one slot
+# the engine guards and the release build already contend for.
+on:
+  workflow_dispatch:
+
+# PER REF, AND NOT `engine`. This did share that group with engine.yml and
+# engine-release.yml, on the reasoning that all three reset
+# `/build/chromium/src` and two of them in that tree at once is a `git reset
+# --hard` under a running `git am`. The hazard is real; the group was never
+# what prevented it. `crux` has one job slot, held from `actions/checkout` to
+# the `if: always()` drop, so no two of these are ever in that tree together
+# whatever is written here. What a shared group added was an eviction hazard --
+# it holds exactly one pending run and the newest arrival wins -- and this
+# branch paid for it repeatedly, losing queued probe runs both to unrelated
+# pushes and to its own engine guard run.
+#
+# Dispatch-only does not exempt it. A dispatched run resets the same tree as
+# any other, and scripts/test-engine-concurrency.sh globs on `self-hosted,
+# crux` rather than on trigger type: every workflow that reaches for this
+# machine must key its group by ref and share that expression with no other.
+# That test arrived in a change that could not see this file -- it was not on
+# `main` -- and caught it on their first encounter. Its positive control goes
+# from two workflows to three here, which is a guard doing what a guard is for.
+#
+# Never cancelled mid-flight, for the reason engine.yml is not: a killed
+# `autoninja` leaves a half-linked output directory that the next run inherits.
+concurrency:
+  group: engine-drm-probe-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  drm-probe:
+    # `crux` is a label, not the runner's name; both are set in
+    # cprussin/dotfiles: config/machines/crux/domicile-ci.nix. It is the only
+    # machine with the 97G checkout, and this job is safe to run on it only
+    # while fork pull requests cannot -- Settings -> Actions -> "Require
+    # approval for all external contributors".
+    runs-on: [self-hosted, crux]
+
+    # The tree is warm but this output directory is not: `out/DrmProbe` starts
+    # empty every run, and the closure of `//ui/ozone` is most of base, skia,
+    # mojo and gpu. The budget is for that from cold.
+    timeout-minutes: 360
+
+    env:
+      CHROMIUM: /build/chromium/src
+
+      # Its own directory, never `out/Domicile`. `gn gen` reconfigures an
+      # existing output directory when the arguments differ, so a probe pointed
+      # at `out/Domicile` would leave the next guard run and the next release
+      # build configured for DRM -- or throw away a warm tree that exists
+      # precisely so they do not have to rebuild. Removed again below.
+      OUT: out/DrmProbe
+
+      # Everything this run writes, under one prefix: the shell's log and the
+      # two sentinels. See engine-drm-probe.sh for why there are two.
+      PROBE: /tmp/domicile-drm-probe
+
+      # Who holds the tree lock, in words a person reading a held-lock message
+      # can act on: the workflow to look at and the run to open. The attempt is
+      # in it because a re-run is a different holder -- the first attempt's
+      # `drop` and the second's `take` must not be able to agree.
+      LOCK_OWNER: engine-drm-probe.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+
+      # `apply.sh` ends in `git am`, which refuses to write a commit without an
+      # identity, and this unit's HOME is the work directory it deletes on
+      # every start. See engine.yml, where the absence of these failed the
+      # apply step in zero seconds and looked like the patches not applying.
+      GIT_AUTHOR_NAME: domicile CI
+      GIT_AUTHOR_EMAIL: ci@domicile.invalid
+      GIT_COMMITTER_NAME: domicile CI
+      GIT_COMMITTER_EMAIL: ci@domicile.invalid
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # /tmp belongs to the runner unit, not to this job: PrivateTmp is
+      # per-service and the service outlives every job it runs. So last run's
+      # log and last run's sentinels are still there when this one starts, and
+      # a report over the previous run's file is worse than no report.
+      - name: Forget the last run's log and sentinels
+        run: rm -f "$PROBE"*
+
+      - name: Room to build in
+        run: |
+          set -euo pipefail
+          free_gb=$(df -BG --output=avail /build | tail -1 | tr -dc '0-9')
+          echo "/build has ${free_gb}G free"
+          # A component build of //ui/ozone's closure is ~15G of objects, and
+          # /build already holds a 97G checkout and whatever out/Release the
+          # last release left. Under 30 there is no point starting: the failure
+          # is a full dataset on a machine whose interactive builds live there
+          # too.
+          [ "$free_gb" -ge 30 ] || {
+            echo "::error::only ${free_gb}G free on /build; this probe needs ~15G" >&2
+            echo "Reclaim it by removing $CHROMIUM/out/Release or $CHROMIUM/$OUT, which are caches and nothing else." >&2
+            exit 1
+          }
+
+      # ONE WRITER AT A TIME IN THAT CHECKOUT. The concurrency group keeps the
+      # three workflows apart from each other; it says nothing about the person
+      # or the agent building in the same tree by hand. Held until the last
+      # step that reads the tree, which here is the removal of the output
+      # directory. See .github/scripts/engine-tree-lock.sh.
+      - name: Take the tree
+        run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
+
+      - name: Check the tree is at the pin this series expects
+        run: |
+          set -euo pipefail
+          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+          echo "series expects $pin"
+          git -C "$CHROMIUM" cat-file -e "$pin^{commit}" 2>/dev/null || {
+            echo "::error::$CHROMIUM has no commit $pin. Roll the checkout forward by hand:" >&2
+            echo "  git -C $CHROMIUM fetch origin && gclient sync" >&2
+            exit 1
+          }
+
+      # The same two scripts the other two workflows use, called rather than
+      # copied. The reset is where the series' own untracked files come off the
+      # tree and where the diagnostic for a tree that is still dirty lives;
+      # apply.sh is where the pin is checked a second time and the series goes
+      # on. A third copy of either is what engine-reset.sh exists to prevent.
+      #
+      # Not through Chromium's shell: apply.sh is git, grep, cp and find, and
+      # the sandbox swallowed both its exit status and its output when
+      # engine.yml tried it that way.
+      - name: Reset the checkout to the pin and apply the series
+        run: |
+          set -euo pipefail
+          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+          .github/scripts/engine-reset.sh "$CHROMIUM"
+          packages/domicile-engine/scripts/apply.sh "$CHROMIUM"
+          [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
+            echo "::error::apply.sh succeeded but the checkout is still at the pin, so no patch was applied" >&2
+            exit 1
+          }
+          echo "series applied: $(git -C "$CHROMIUM" log --oneline "$pin..HEAD" | wc -l) patches"
+
+      # THE MEASUREMENT. Inside Chromium's own toolchain shell, because gn
+      # probes for host tools that only it supplies, and through NIX_SHELL_RUN
+      # with a PATH rather than a command: upstream's shell is a buildFHSEnv
+      # whose shellHook execs bwrap before nix's appended `exec` is reached, so
+      # `--command` lands in an interactive bash having run nothing, and a
+      # composed string is re-quoted twice on the way in.
+      #
+      # The step does not fail here even when the probe does. Everything that
+      # decides is in the two steps below, which read the log and the
+      # sentinels -- because a command run through that shell does not reliably
+      # carry its exit status back out, and a probe whose verdict came from an
+      # exit code has been wrong in both directions in this repository.
+      - name: Probe
+        run: |
+          set -euo pipefail
+
+          # tools/nix/shell.nix imports <nixpkgs>, and a systemd service has no
+          # NIX_PATH -- that is something NixOS arranges for an interactive
+          # user and this unit is not one. Without it nix-shell hands the
+          # script an ambient shell with no toolchain in it. From the flake
+          # registry, which is what pins nixpkgs on this machine.
+          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
+          echo "nixpkgs is $nixpkgs"
+          export NIX_PATH="nixpkgs=$nixpkgs"
+
+          if NIX_SHELL_RUN="$GITHUB_WORKSPACE/.github/scripts/engine-drm-probe.sh $CHROMIUM $PROBE" \
+               nix-shell "$CHROMIUM/tools/nix/shell.nix" >"$PROBE.log" 2>&1; then
+            echo "the shell exited 0"
+          else
+            echo "the shell exited $?"
+          fi
+
+      # THE WHOLE REASON THIS JOB EXISTS. A run that comes back saying only
+      # "exit 1" has spent a slot on the one machine that can answer this and
+      # brought back nothing.
+      #
+      # In a script, and with a test over synthesised logs of each shape, for
+      # the two reasons engine-diagnostics.sh is a script: GitHub echoes a
+      # step's script into the log before running it, so a long one buries the
+      # failure under its own source -- and the thing being got right here
+      # (that the compiler's words are at the TOP of the report, not a hundred
+      # lines of spinner from the end of the log) is exactly the thing an
+      # inline `tail` got wrong in engine.yml.
+      - name: What the probe found
+        if: ${{ always() }}
+        run: .github/scripts/engine-drm-probe-report.sh "$PROBE.log"
+
+      # The verdict, asked out here rather than trusted from in there, and
+      # asked of two files rather than one: whether Chromium's shell ran the
+      # probe at all is a different failure from whether the tree built, and a
+      # single sentinel cannot tell them apart. The first has happened twice.
+      - name: The verdict
+        run: |
+          set -euo pipefail
+          [ -e "$PROBE-ran" ] || {
+            echo "::error::Chromium's shell did not run the probe; its last words are above" >&2
+            exit 1
+          }
+          [ -e "$PROBE-built" ] || {
+            echo "::error::the probe ran and //ui/ozone did not build with ozone_platform_drm = true; the first failure is above" >&2
+            exit 1
+          }
+          echo "ozone_platform_drm = true configures and //ui/ozone compiles at this pin"
+
+      # Before the lock is dropped, so the tree is still ours while a ~15G
+      # directory comes off it, and `always()` so a failed probe does not leave
+      # it there. It is a cache of a question already answered -- unlike
+      # out/Domicile and out/Release, nothing reads it after this job ends.
+      - name: Take out/DrmProbe off the disk again
+        if: ${{ always() }}
+        run: |
+          rm -rf "${CHROMIUM:?}/${OUT:?}"
+          df -BG --output=avail /build | tail -1 | sed 's/^/ free on \/build:/'
+
+      # Even when something above failed, and *only* if it is still ours: the
+      # step that fails because the lock is held by somebody else reaches here
+      # too, and an unconditional `rm` there would release their tree in the
+      # middle of their build.
+      - name: Drop the tree
+        if: ${{ always() }}
+        run: .github/scripts/engine-tree-lock.sh drop "$CHROMIUM" "$LOCK_OWNER"
