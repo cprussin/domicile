@@ -4,14 +4,24 @@
 // the chrome assigns, plus `none` for a client that hides the cursor. Mirrors
 // `domicile_protocol::CursorShape`.
 //
-// **A schema rather than a union, because this is the one thing on the typed
-// surface that is still a string the engine can get wrong.** WebIDL has enums,
-// and `DomicileAppEvent.cursor` is not one — it is a `DOMString` the browser
-// process copies out of the compositor's JSON without looking at it. So the
-// value that reaches the page can be anything, and a keyword CSS does not know
-// is not an error anywhere: `element.style.cursor = "pointr"` is a no-op, and
-// the symptom is an arrow where a hand should be, on one client, with nothing
-// said. Parsing it here is what turns that into a stack.
+// **A schema rather than a union, because `DomicileAppEvent.cursor` is a
+// `DOMString` and the DOM is a boundary.** The engine no longer copies a name
+// through unread — `components/domicile/common/cursor_shape.h` is the same
+// closed set, and the browser process refuses a name that is not one of these
+// when it reads the compositor's socket — so what reaches the page is a member
+// of this set by construction. What that does not make true is that *this*
+// value came from there: an event is constructible by anything in the page,
+// and `cursorShapeSchema.parse` is where it is read rather than trusted.
+//
+// It matters because a keyword CSS does not know is not an error anywhere:
+// `element.style.cursor = "pointr"` is a no-op, and the symptom is an arrow
+// where a hand should be, on one client, with nothing said. Parsing it here is
+// what turns that into a stack.
+//
+// The one step left is the WebIDL `enum`, which would make the closed set
+// visible to the page's own type system rather than only to the two ends of
+// the wire. It needs a new .idl file registered in two files Chromium owns,
+// which is a change to the patch series rather than to the fork's own sources.
 //
 // Its own module rather than a member of `protocol.ts` because both halves of
 // the SDK need it and only one of them is the wire: `protocol.ts` parses the

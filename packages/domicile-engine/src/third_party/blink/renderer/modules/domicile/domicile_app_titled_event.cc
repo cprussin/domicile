@@ -21,14 +21,17 @@ DomicileAppTitledEvent::DomicileAppTitledEvent(
     const DomicileAppTitledEventInit* initializer)
     : Event(type, initializer),
       app_id_(initializer->appId()),
-      title_(initializer->title()) {}
+      title_(initializer->title()),
+      arrival_(initializer->arrival()) {}
 
 DomicileAppTitledEvent::DomicileAppTitledEvent(const AtomicString& type,
                                                const String& app_id,
-                                               const String& title)
+                                               const String& title,
+                                               DOMHighResTimeStamp arrival)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
       app_id_(app_id),
-      title_(title) {}
+      title_(title),
+      arrival_(arrival) {}
 
 DomicileAppTitledEvent::~DomicileAppTitledEvent() = default;
 

@@ -40,6 +40,21 @@ source_set("common") {
   sources = [ "common/domicile_scheme.h" ]
 }
 
+# The cursors a client can ask for, and the codec between their wire names and
+# the enum.
+#
+# Its own target rather than part of :common, which is the scheme and nothing
+# else -- and this is wanted by two places that share nothing else: the browser
+# reading the compositor's socket, and Blink handing a name to the page. Header
+# only, and templated over the enum so the same list serves
+# `mojom::CursorShape` and its `-blink` variant without this depending on
+# either.
+source_set("cursor_shape") {
+  sources = [ "common/cursor_shape.h" ]
+
+  public_deps = [ "//base" ]
+}
+
 # Serving the shell over domicile://.
 #
 # A target of its own rather than part of :browser, because this depends on
@@ -119,6 +134,7 @@ source_set("control_channel") {
 
   public_deps = [
     ":common",
+    ":cursor_shape",
     ":shortcut_registry",
     "//base",
     "//components/domicile/mojom",
@@ -134,13 +150,16 @@ source_set("unit_tests") {
     "browser/frame_sink_broker_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
+    "common/cursor_shape_unittest.cc",
     "spike/window_diff_unittest.cc",
   ]
 
   deps = [
     ":browser",
+    ":cursor_shape",
     ":shell_scheme",
     ":shortcut_registry",
+    "//components/domicile/mojom",
     "//components/domicile/engine:event_queue_unit_tests",
     "//base",
     "//base/test:test_support",

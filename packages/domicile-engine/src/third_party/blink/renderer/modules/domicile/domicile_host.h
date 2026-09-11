@@ -5,7 +5,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_HOST_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_HOST_H_
 
+#include "base/time/time.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
+#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -111,19 +113,37 @@ class MODULES_EXPORT DomicileHost final
   ExecutionContext* GetExecutionContext() const override;
 
   // domicile::mojom::blink::ControlChannelClient:
-  void AppTitled(const String& app_id, const String& title) override;
+  //
+  // EVERY ONE OF THESE CARRIES AN `arrival`, and it is the browser process's
+  // `base::TimeTicks` rather than anything this renderer measured: when that
+  // process took the message off the compositor's socket. `Arrival` below is
+  // what puts it on the clock the page reads.
+  void AppTitled(const String& app_id,
+                 const String& title,
+                 base::TimeTicks arrival) override;
   void AppAppeared(const String& app_id,
                    const String& title,
                    bool has_size,
                    double width,
-                   double height) override;
-  void AppResized(const String& app_id, double width, double height) override;
-  void AppClosed(const String& app_id) override;
-  void AppCursor(const String& app_id, const String& cursor) override;
-  void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
-  void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
-  void FocusChanged(const String& app_id) override;
-  void FocusRequested(const String& app_id) override;
+                   double height,
+                   base::TimeTicks arrival) override;
+  void AppResized(const String& app_id,
+                  double width,
+                  double height,
+                  base::TimeTicks arrival) override;
+  void AppClosed(const String& app_id, base::TimeTicks arrival) override;
+  void AppCursor(const String& app_id,
+                 domicile::mojom::blink::CursorShape cursor,
+                 base::TimeTicks arrival) override;
+  void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut,
+                       base::TimeTicks arrival) override;
+  void Modifiers(bool alt,
+                 bool ctrl,
+                 bool shift,
+                 bool meta,
+                 base::TimeTicks arrival) override;
+  void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
+  void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
   void Displays(
       Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;
 
@@ -153,6 +173,12 @@ class MODULES_EXPORT DomicileHost final
   bool EnsureBound();
   bool Ready(ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
+
+  // The browser's monotonic stamp, on the clock `performance.now()` and
+  // `Event.timeStamp` are on. This document's time origin is what makes the
+  // two comparable, which is why it is asked of the window rather than
+  // computed from `base::TimeTicks` here.
+  DOMHighResTimeStamp Arrival(base::TimeTicks arrival) const;
 
   Member<LocalDOMWindow> window_;
   // Replaced wholesale on every description rather than edited: the compositor

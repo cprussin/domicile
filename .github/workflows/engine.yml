@@ -356,7 +356,7 @@ jobs:
           # below exists to catch, arriving by the other door. Between them
           # they are what refuses a path traversal out of the shell root and
           # what pins the one document every desktop is.
-          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*'
+          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:CursorShapeTest.*'
           # `--gtest_filter` matching nothing exits 0, so a suite that was
           # renamed or never linked would be a silent pass. Test names are the
           # indented lines of --gtest_list_tests; suite names are not.
@@ -365,9 +365,9 @@ jobs:
             grep -cE '^  ' || true)
           echo "$count tests match $filter"
           # 11 in FrameSinkBrokerTest alone at the time of writing, 7 in
-          # ShortcutRegistryTest, 11 in ShellURLLoaderFactoryTest and 11 in
-          # ShellDocumentTest.
-          [ "$count" -ge 40 ] || {
+          # ShortcutRegistryTest, 11 in ShellURLLoaderFactoryTest, 11 in
+          # ShellDocumentTest and 3 in CursorShapeTest.
+          [ "$count" -ge 43 ] || {
             echo "::error::only $count tests matched; the suites were renamed or did not link" >&2
             exit 1
           }
@@ -689,6 +689,26 @@ jobs:
             fi
             exit 1
           }
+
+      # The hop from the compositor's socket into a page, priced by the page.
+      #
+      # Cheap, and deliberately: no Wayland, no client, no GPU and no window --
+      # a socket with a stand-in on the far end and a document that listens.
+      # What it measures is the stage `ENGINE-FORK.md` phase 2 asked for a
+      # stamp for, and it reads the stamp's SHAPE as well as its value, because
+      # an attribute that is never filled in reports a plausible hop and the
+      # instrument this replaces was deleted for exactly that.
+      #
+      # NO NEGATIVE STEP, because its control is inside the run. The stand-in
+      # sends a cursor the engine knows, one it does not, and another it does,
+      # in that order: the middle one must not reach the page and the third one
+      # must, which is what tells a refusal apart from a channel that died. A
+      # separate run could not establish the pair.
+      - name: The hop into a page, and the cursor set that crosses it
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-control-arrival.sh "$CHROMIUM"
 
       # The one requirement nothing measured until now. Last of the guards
       # because it is the longest: sixty rounds, each a keystroke and a wait

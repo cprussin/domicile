@@ -4,11 +4,16 @@
 
 #include "third_party/blink/renderer/modules/domicile/domicile_host.h"
 
+#include <string_view>
+
+#include "components/domicile/common/cursor_shape.h"
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/timing/dom_window_performance.h"
+#include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_modifiers_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
@@ -207,42 +212,55 @@ void DomicileHost::pointerAxis(ScriptState*, const String& app_id, double dx,
 }
 
 void DomicileHost::AppAppeared(const String& app_id, const String& title,
-                               bool has_size, double width, double height) {
+                               bool has_size, double width, double height,
+                               base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       event_type_names::kAppappeared, app_id, title, String(),
       has_size ? std::make_optional(width) : std::nullopt,
-      has_size ? std::make_optional(height) : std::nullopt));
+      has_size ? std::make_optional(height) : std::nullopt, Arrival(arrival)));
 }
 
-void DomicileHost::AppResized(const String& app_id, double width,
-                              double height) {
+void DomicileHost::AppResized(const String& app_id, double width, double height,
+                              base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
-      event_type_names::kAppresized, app_id, String(), String(), width,
-      height));
+      event_type_names::kAppresized, app_id, String(), String(), width, height,
+      Arrival(arrival)));
 }
 
-void DomicileHost::AppClosed(const String& app_id) {
+void DomicileHost::AppClosed(const String& app_id, base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       event_type_names::kAppclosed, app_id, String(), String(), std::nullopt,
-      std::nullopt));
+      std::nullopt, Arrival(arrival)));
 }
 
-void DomicileHost::AppCursor(const String& app_id, const String& cursor) {
+void DomicileHost::AppCursor(const String& app_id,
+                             domicile::mojom::blink::CursorShape cursor,
+                             base::TimeTicks arrival) {
+  // BACK TO A STRING, IN ONE PLACE, FROM THE SAME LIST THE BROWSER PARSED IT
+  // WITH. `DomicileAppEvent.cursor` is a `DOMString` because what a page does
+  // with it is assign it to `style.cursor`, and a WebIDL enum would need a new
+  // .idl file registered in two files Chromium owns. What the enum bought is
+  // upstream of here: nothing between the compositor's socket and this line can
+  // be holding a name that is not one of the shapes, so the string handed to
+  // the page is a member of the closed set by construction rather than by
+  // hope. See components/domicile/common/cursor_shape.h.
+  const std::string_view name = domicile::CursorShapeToWire(cursor);
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
-      event_type_names::kAppcursor, app_id, String(), cursor, std::nullopt,
-      std::nullopt));
+      event_type_names::kAppcursor, app_id, String(),
+      String::FromUtf8(name), std::nullopt, std::nullopt, Arrival(arrival)));
 }
 
-void DomicileHost::ShortcutPressed(
-    domicile::mojom::blink::ShortcutPtr shortcut) {
+void DomicileHost::ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut,
+                                   base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileShortcutEvent>(
       event_type_names::kShortcut, shortcut->keycode, shortcut->alt,
-      shortcut->ctrl, shortcut->shift, shortcut->meta));
+      shortcut->ctrl, shortcut->shift, shortcut->meta, Arrival(arrival)));
 }
 
-void DomicileHost::Modifiers(bool alt, bool ctrl, bool shift, bool meta) {
+void DomicileHost::Modifiers(bool alt, bool ctrl, bool shift, bool meta,
+                             base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileModifiersEvent>(
-      event_type_names::kModifiers, alt, ctrl, shift, meta));
+      event_type_names::kModifiers, alt, ctrl, shift, meta, Arrival(arrival)));
 }
 
 void DomicileHost::Displays(
@@ -262,26 +280,41 @@ void DomicileHost::Displays(
   DispatchEvent(*Event::Create(event_type_names::kDisplayschanged));
 }
 
-void DomicileHost::FocusChanged(const String& app_id) {
+void DomicileHost::FocusChanged(const String& app_id,
+                                base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
-      event_type_names::kFocuschanged, app_id, String(), String(),
-      std::nullopt, std::nullopt));
+      event_type_names::kFocuschanged, app_id, String(), String(), std::nullopt,
+      std::nullopt, Arrival(arrival)));
 }
 
 // The same event shape as FocusChanged and deliberately a different event: one
 // says where the keyboard went and this one says a client would like it. A
 // page that conflated them would grant every request by drawing it as granted.
-void DomicileHost::FocusRequested(const String& app_id) {
+void DomicileHost::FocusRequested(const String& app_id,
+                                  base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       event_type_names::kFocusrequested, app_id, String(), String(),
-      std::nullopt, std::nullopt));
+      std::nullopt, std::nullopt, Arrival(arrival)));
 }
 
-
-void DomicileHost::AppTitled(const String& app_id,
-                             const String& title) {
+void DomicileHost::AppTitled(const String& app_id, const String& title,
+                             base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppTitledEvent>(
-      event_type_names::kApptitled, app_id, title));
+      event_type_names::kApptitled, app_id, title, Arrival(arrival)));
+}
+
+// THE BROWSER'S CLOCK, READ ON THIS DOCUMENT'S. `base::TimeTicks` is monotonic
+// and process-agnostic -- the same tick means the same instant in the browser
+// and here -- but it is not what a page can subtract from: `Event.timeStamp`
+// and `performance.now()` are milliseconds since this document's time origin.
+// `WindowPerformance` is what holds that origin, so it is what converts.
+//
+// It also applies the same resolution clamp every other timestamp the page can
+// read goes through, which matters: an unclamped one would be a higher
+// resolution timer than the platform means a page to have.
+DOMHighResTimeStamp DomicileHost::Arrival(base::TimeTicks arrival) const {
+  return DOMWindowPerformance::performance(*window_)
+      ->MonotonicTimeToDOMHighResTimeStamp(arrival);
 }
 
 const AtomicString& DomicileHost::InterfaceName() const {

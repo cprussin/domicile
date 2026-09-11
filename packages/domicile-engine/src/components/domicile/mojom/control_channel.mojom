@@ -4,6 +4,8 @@
 
 module domicile.mojom;
 
+import "mojo/public/mojom/base/time.mojom";
+
 // The shell's control channel to the compositor, as a renderer-to-browser
 // interface rather than a socket the page opens.
 //
@@ -46,6 +48,54 @@ struct Shortcut {
   bool ctrl;
   bool shift;
   bool meta;
+};
+
+// What a client asked the chrome to show over its own surface.
+//
+// An enum rather than the string it arrives as. `wp_cursor_shape_v1`'s shapes
+// are a closed set, the compositor already has them as one
+// (`domicile_protocol::CursorShape`), and carrying them across here as text
+// meant nothing between the socket and the page ever asked whether a name
+// named anything -- and an unknown CSS keyword is a no-op rather than an
+// error, so the symptom was an arrow where a hand should be with nothing said.
+// The wire names live in components/domicile/common/cursor_shape.h, which is
+// the codec both ends of this go through.
+enum CursorShape {
+  kNone,
+  kDefault,
+  kContextMenu,
+  kHelp,
+  kPointer,
+  kProgress,
+  kWait,
+  kCell,
+  kCrosshair,
+  kText,
+  kVerticalText,
+  kAlias,
+  kCopy,
+  kMove,
+  kNoDrop,
+  kNotAllowed,
+  kGrab,
+  kGrabbing,
+  kEResize,
+  kNResize,
+  kNeResize,
+  kNwResize,
+  kSResize,
+  kSeResize,
+  kSwResize,
+  kWResize,
+  kEwResize,
+  kNsResize,
+  kNeswResize,
+  kNwseResize,
+  kColResize,
+  kRowResize,
+  kAllScroll,
+  kZoomIn,
+  kZoomOut,
 };
 
 // One screen of the desktop.
@@ -116,26 +166,53 @@ interface ControlChannel {
 
 // Compositor -> browser -> page. One method, not a callback on Spawn: these
 // arrive because a client did something, not because the page asked.
+//
+// EVERY METHOD HERE CARRIES AN `arrival`, AND IT IS NOT DECORATION. Between
+// the compositor's socket and a listener in the page there is a real stage --
+// a read in the browser process, a mojo message, a hop into the renderer, a
+// dispatch -- and until this parameter existed nothing in a page could price
+// it. `Event.timeStamp` is when the event was *constructed*, in the renderer,
+// at dispatch, so measuring against it reports a few microseconds of Blink and
+// calls it the IPC; that is exactly how the deleted instrument came to print
+// `ipc_ms=0` every interval. `arrival` is `base::TimeTicks::Now()` taken in
+// `ControlChannel::OnRead`, the moment the browser process had the bytes, and
+// Blink turns it into a `DOMHighResTimeStamp` on the same clock as
+// `performance.now()` -- so `event.timeStamp - event.arrival` is the stage.
+// See docs/architecture/ENGINE-FORK.md, phase 2.
+//
+// `Displays` is the one method without one, because there is nothing to put it
+// on: it dispatches a bare `Event` and the desktop is read off
+// `navigator.domicile.displays` rather than carried. A parameter no event
+// class can hold would be a field nothing reads.
 interface ControlChannelClient {
   // A window's title changed. `app_id` is the same id an <app> element names.
-  AppTitled(string app_id, string title);
+  AppTitled(string app_id, string title, mojo_base.mojom.TimeTicks arrival);
 
   // A window exists. Size is absent until the client has committed a buffer --
   // a toplevel maps before it draws, and how big a Wayland client wants to be
   // is something it says by drawing. Believing a zero here is what opened
   // windows at nothing at all.
   AppAppeared(string app_id, string title, bool has_size,
-              double width, double height);
+              double width, double height,
+              mojo_base.mojom.TimeTicks arrival);
 
-  AppResized(string app_id, double width, double height);
-  AppClosed(string app_id);
+  AppResized(string app_id, double width, double height,
+             mojo_base.mojom.TimeTicks arrival);
+  AppClosed(string app_id, mojo_base.mojom.TimeTicks arrival);
 
   // The cursor a client asked for over its own surface.
-  AppCursor(string app_id, string cursor);
+  AppCursor(string app_id, CursorShape cursor,
+            mojo_base.mojom.TimeTicks arrival);
 
   // A grabbed shortcut fired. Named for the event rather than the struct,
   // which would shadow the type inside the generated class.
-  ShortcutPressed(Shortcut shortcut);
+  //
+  // Its `arrival` is the one stamp here that is not always a socket read: a
+  // chord claimed by the shell is matched in the browser process by
+  // ShortcutRegistry and never crosses the compositor's socket at all. It is
+  // taken when the match is made, which is the same quantity -- the moment
+  // this process had the message -- measured against the same clock.
+  ShortcutPressed(Shortcut shortcut, mojo_base.mojom.TimeTicks arrival);
 
   // The seat's modifier state. One seat, outliving every window, which is why
   // a dropped key release latches modifiers into clients that never saw it.
@@ -143,7 +220,8 @@ interface ControlChannelClient {
   // Which modifiers are held, not xkb's four masks: the compositor has already
   // resolved depressed/latched/locked against the keymap, and a shell asking
   // "is control down" cannot answer that from a mask without the keymap too.
-  Modifiers(bool alt, bool ctrl, bool shift, bool meta);
+  Modifiers(bool alt, bool ctrl, bool shift, bool meta,
+            mojo_base.mojom.TimeTicks arrival);
 
   // The whole desktop, whenever any of it changes.
   //
@@ -156,12 +234,12 @@ interface ControlChannelClient {
   Displays(array<DisplayInfo> displays);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
-  FocusChanged(string app_id);
+  FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);
 
   // A client asked for the keyboard and has not been given it. The shell
   // decides: the compositor forwards the request with the seat where it was,
   // so a page that ignores this is a desktop where a background window cannot
   // take what its user is typing into. Never empty -- a request comes from a
   // client, and the chrome asking itself for focus does not cross the wire.
-  FocusRequested(string app_id);
+  FocusRequested(string app_id, mojo_base.mojom.TimeTicks arrival);
 };

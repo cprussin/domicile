@@ -22,5 +22,11 @@ blink_modules_sources("domicile") {
     "navigator_domicile.h",
   ]
 
-  deps = [ "//components/domicile/mojom:mojom_blink" ]
+  deps = [
+    # The wire names of the cursor shapes, so that turning a `CursorShape` back
+    # into the string `DomicileAppEvent.cursor` hands the page reads the same
+    # list the browser parsed the compositor's JSON with.
+    "//components/domicile:cursor_shape",
+    "//components/domicile/mojom:mojom_blink",
+  ]
 }

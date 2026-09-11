@@ -21,8 +21,8 @@ type AppEventFields = Partial<Omit<DomicileAppEvent, keyof Event>>;
 
 /**
  * A `DomicileAppEvent`, with the fields that event does not carry left as what
- * the engine fills them with: the empty string, and a zero behind a false
- * `hasSize`.
+ * the engine fills them with: the empty string, a zero behind a false
+ * `hasSize`, and a zero `arrival` for the tests that are not about the hop.
  *
  * `Object.assign` onto an `Event` rather than a subclass per event type: what
  * these functions read is the fields, and five classes saying that would be a
@@ -31,6 +31,7 @@ type AppEventFields = Partial<Omit<DomicileAppEvent, keyof Event>>;
 const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
   Object.assign(new Event(type), {
     appId: "",
+    arrival: 0,
     cursor: "",
     hasSize: false,
     height: 0,
@@ -122,11 +123,13 @@ describe("focus moving", () => {
 
 describe("a cursor a client asked for", () => {
   it("refuses a keyword CSS does not know", () => {
-    // The one value on the typed surface that is still a string the engine
-    // does not check — WebIDL has enums and `DomicileAppEvent.cursor` is not
-    // declared as one. Assigning an unknown keyword to `style.cursor` is a
-    // silent no-op, so without this the symptom is an arrow where a hand
-    // should be, on one client, with nothing said anywhere.
+    // The page's half of a closed set the engine now also holds: the browser
+    // refuses a name that is not a shape when it reads the compositor's
+    // socket, so this parse is a second reading rather than the only one. It
+    // stays because the DOM is a boundary — an event can be constructed by
+    // anything in the page — and because assigning an unknown keyword to
+    // `style.cursor` is a silent no-op, so the symptom of a value that got
+    // through would be an arrow where a hand should be with nothing said.
     expect(() => {
       appCursor(appEvent("appcursor", { appId: "term", cursor: "pointr" }));
     }).toThrow();
@@ -181,6 +184,11 @@ describe("the modifiers the seat holds", () => {
 });
 
 /** A `DomicileAppTitledEvent`, which carries only the window and its name. */
+// `arrival` defaulted rather than asked of every caller: the three tests that
+// use this are about a window's name, and a hop each of them would have to
+// spell out is a field that makes them harder to read without asserting
+// anything.
 const titledEvent = (
-  fields: Omit<DomicileAppTitledEvent, keyof Event>,
-): DomicileAppTitledEvent => Object.assign(new Event("apptitled"), fields);
+  fields: Omit<DomicileAppTitledEvent, keyof Event | "arrival">,
+): DomicileAppTitledEvent =>
+  Object.assign(new Event("apptitled"), { arrival: 0, ...fields });

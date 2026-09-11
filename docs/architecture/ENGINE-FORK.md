@@ -1014,18 +1014,18 @@ copy path before the compositor can submit leaves nothing drawing at all.
       that silently shows no window is still the defect ERRORS.md is about.
       `publish_frame` refuses a non-dmabuf buffer once per client and says so.
       The box closes when the upload exists, not when the message does.
-- [ ] **an arrival stamp on the control channel's events.** One
-      `DOMHighResTimeStamp` on the mojo struct and one attribute on the event
-      classes, saying when the browser process took the message off the
-      compositor's socket. **Nothing in a page can price that hop without it:**
-      the events carry no arrival member, and `Event.timeStamp` is when the
-      event was *constructed* — in the renderer, at dispatch — so pricing
-      against it reports a few microseconds of Blink and calls it the IPC. The
-      stage is real, and was Electron's at 79ms a frame, which is why it was
-      ever reported apart from a total that would have hidden it. The SDK's
-      window for it, `hop`, is deleted rather than kept empty: nothing ever
-      recorded into it and the shell printed `ipc_ms=0` every interval, which
-      is a measurement to whoever reads the log.
+- [x] **an arrival stamp on the control channel's events.** Every
+      `ControlChannelClient` method carries a `mojo_base.mojom.TimeTicks
+      arrival`, taken in `ControlChannel::OnRead` — once per read, not per
+      line — and `DomicileHost::Arrival` puts it on the document's clock, so
+      `event.timeStamp - event.arrival` is the stage. `Displays` is the one
+      without one: it dispatches a bare `Event` and there is nothing to hang it
+      on. **Measured:** `guard-control-arrival.sh` drives three lines down a
+      real control socket and has the page print the subtraction, reading the
+      stamp's shape as well as its value — a stamp nobody fills in reports a
+      plausible hop, which is how the deleted instrument printed `ipc_ms=0`
+      every interval. The SDK's window for it is still gone; rebuilding an
+      instrument is the item below, and this is the number it was missing.
 - [ ] **rebuild the latency measurement** in the compositor. It is the one
       process that both puts the key into the client's seat and holds the
       engine connection that knows when viz presented; a page can see the

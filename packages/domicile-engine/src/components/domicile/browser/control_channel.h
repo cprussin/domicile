@@ -105,15 +105,31 @@ class ControlChannel : public mojom::ControlChannel {
   // The registry's two deliveries, on this channel's own sequence. Both are
   // registered wrapped in base::BindPostTask, because a press is matched on the
   // UI thread and `client_` is a mojo remote bound to the IO thread.
-  void DeliverShortcut(Chord chord);
-  void DeliverModifiers(Modifiers modifiers);
+  // `arrival` is when this process had the press, which for these two is not
+  // always a socket read: a chord the shell claimed is matched here by
+  // ShortcutRegistry and never crosses the compositor's socket. The socket
+  // arms pass the read's stamp; the registry's callbacks take one at the match.
+  // Same clock either way, which is what makes the page's subtraction mean
+  // something.
+  void DeliverShortcut(Chord chord, base::TimeTicks arrival);
+  void DeliverModifiers(Modifiers modifiers, base::TimeTicks arrival);
+  void DeliverShortcutNow(Chord chord);
+  void DeliverModifiersNow(Modifiers modifiers);
 
   void ReadLoop();
   void OnRead(int result);
-  // One complete line off the socket. Anything unparseable is dropped with a
-  // log rather than closing the channel: a message this build does not know
-  // about is a compositor newer than it, not a broken stream.
-  void DispatchLine(const std::string& line);
+  // One complete line off the socket, with the moment the bytes arrived.
+  // Anything unparseable is dropped with a log rather than closing the channel:
+  // a message this build does not know about is a compositor newer than it, not
+  // a broken stream.
+  //
+  // THE STAMP IS TAKEN ONCE PER READ, NOT ONCE PER LINE. A read can carry
+  // several messages, and stamping each as it is parsed would price this
+  // function's own JSON parse into the second and later ones -- so a batch
+  // would read as a hop that grew with its position in the batch. What the
+  // page is being told is when the browser process had the bytes, which is one
+  // moment for all of them.
+  void DispatchLine(const std::string& line, base::TimeTicks arrival);
 
   const std::string socket_path_;
   mojo::Receiver<mojom::ControlChannel> receiver_;

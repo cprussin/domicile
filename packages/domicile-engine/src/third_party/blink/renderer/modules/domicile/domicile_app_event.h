@@ -7,6 +7,7 @@
 
 #include <optional>
 
+#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 
@@ -36,12 +37,18 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
                    const String& title,
                    const String& cursor,
                    std::optional<double> width,
-                   std::optional<double> height);
+                   std::optional<double> height,
+                   DOMHighResTimeStamp arrival);
   ~DomicileAppEvent() override;
 
   const String& appId() const { return app_id_; }
   const String& title() const { return title_; }
   const String& cursor() const { return cursor_; }
+
+  // When the browser process had this, on `performance.now()`'s clock.
+  // `timeStamp` is when this object was constructed at dispatch; the
+  // difference is the stage between the compositor's socket and this page.
+  DOMHighResTimeStamp arrival() const { return arrival_; }
 
   bool hasSize() const { return width_.has_value(); }
   double width() const { return width_.value_or(0); }
@@ -56,6 +63,7 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
   String cursor_;
   std::optional<double> width_;
   std::optional<double> height_;
+  DOMHighResTimeStamp arrival_ = 0;
 };
 
 }  // namespace blink
