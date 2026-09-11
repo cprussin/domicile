@@ -90,6 +90,14 @@ decides whether an item is waiting or workable.
    frames and no stage of its own. What is left is a machine with a screen: the
    runs are in a nested compositor with nothing presenting, and the probe's own
    round trip is inside every figure.
+
+   The chrome-side instruments are gone rather than empty. `roundTrip`, `hop`
+   and manganese's `drawTiming` were deleted with the diagnostic line they fed,
+   because a shell reading an instrument nothing records into printed
+   `rt_ms=0` every interval anyone typed — and a zero is a measurement to
+   whoever reads the log. `latency.rs` is where the measurement lives now; the
+   engine stamp the browser-to-renderer hop would need is a phase 2 item in
+   `ENGINE-FORK.md`.
 3. **A control socket, and `domicile load-shell <path>`.** Switching the
    running shell without restarting the desktop, so a watcher outside Domicile
    can trigger a reload. **Unblocked** — it was waiting on `domicile://`, and
@@ -218,7 +226,7 @@ Nothing in the suite needs a display.
 ```sh
 # A desktop, on a machine that has a screen.
 nix run 'github:cprussin/domicile#manganese'    # the reference shell
-nix run 'github:cprussin/domicile' -- ./dist    # a shell of your own
+nix run 'github:cprussin/domicile' -- ./dist/shell.js   # a shell of your own
 ./scripts/dev-shell.sh manganese               # …and rebuilt as you edit
 ```
 
@@ -313,7 +321,7 @@ Clients, for testing:
 | `packages/domicile-launch` | `domicile` itself: which page, which platform, where the components are, and the supervisor that starts them | core |
 | `packages/domicile-compositor` | **the running compositor**: Smithay server, imports, input, the engine seam | `.#full` |
 | `packages/domicile-engine` | the Chromium fork: the patch series, the pin, the published engine | — |
-| `packages/chrome-sdk` | the shell-facing API: elements, `BridgeClient`, measurement, input | bun |
+| `packages/chrome-sdk` | the shell-facing API: elements, `DomicileClient`, measurement, input | bun |
 | `packages/component-library` | shared React components, the Panda preset, `shellBuild` | bun |
 | `packages/shell-manganese` | the reference desktop: tabs, stage, rail, address bar | bun |
 | `packages/shell-simple` | the minimal desktop: floating windows | bun |
