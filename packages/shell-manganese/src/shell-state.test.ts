@@ -180,6 +180,58 @@ describe("reduceShell", () => {
       expect(state.focusedId).toBeUndefined();
     });
 
+    it("gives the keyboard to a client that asked for it", () => {
+      // Manganese's focus policy, and the whole of it: a client that asks is
+      // reached exactly as if the user had picked its tab. It is one line
+      // because it is a decision rather than a mechanism — a shell that would
+      // rather refuse a window the user is not in writes a different one here,
+      // and nothing below the shell has an opinion either way.
+      const state = after(
+        ShellAction.AppAppeared("term", "Terminal"),
+        ShellAction.AppAppeared("editor", "Editor"),
+        ShellAction.WindowSelected("app:editor"),
+        ShellAction.FocusRequested("term"),
+      );
+
+      expect(state.activeId).toBe("app:term");
+      expect(state.shownId).toBe("app:term");
+    });
+
+    it("ignores a request from a window it does not have", () => {
+      // The host gates these on a client it knows about, and the shell's own
+      // list is the narrower one: a window whose `app_closed` has been reduced
+      // but whose request was already in flight names nothing this can reach.
+      const open = after(ShellAction.AppAppeared("term", "Terminal"));
+
+      expect(reduceShell(open, ShellAction.FocusRequested("ghost"))).toBe(open);
+    });
+
+    it("keeps the window it moved to when the compositor hands the keyboard back", () => {
+      // A client that dies takes the keyboard with it, and the compositor
+      // gives it to the chrome — which it has to, because a keyboard pointed
+      // at a surface that is gone is a desktop that has stopped listening. But
+      // that is a fallback and not a decision: the shell has already named the
+      // window the user is now in, and the `focus_changed` that follows says
+      // where the seat *is* rather than where it belongs.
+      //
+      // Reduced the other way round, the shell would answer every close by
+      // marking no window active and then moving the keyboard back a render
+      // later — a flicker on the rail, and a keystroke in between going
+      // nowhere.
+      const state = after(
+        ShellAction.AppAppeared("term", "Terminal"),
+        ShellAction.AppAppeared("editor", "Editor"),
+        ShellAction.FocusChanged("editor"),
+        ShellAction.AppClosed("editor"),
+        ShellAction.FocusChanged(undefined),
+      );
+
+      expect(state.activeId).toBe("app:term");
+      // And it is honest about where the seat actually is meanwhile: what
+      // moves it is the window that is now active asking for it.
+      expect(state.focusedId).toBeUndefined();
+    });
+
     it("does not re-render for focus that did not move", () => {
       // A chrome that has just connected is told the current holder, which is
       // usually what it already knew. Returning a fresh object there would

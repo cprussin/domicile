@@ -334,6 +334,9 @@ const Desktop = ({ appElements, bridge }: DesktopProps) => {
                       floating={floating}
                       focused={window.id === activeId}
                       key={window.id}
+                      onReach={() => {
+                        select(window.id);
+                      }}
                       onScreen={onScreen}
                     />
                   );

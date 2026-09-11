@@ -268,6 +268,15 @@ void DomicileHost::FocusChanged(const String& app_id) {
       std::nullopt, std::nullopt));
 }
 
+// The same event shape as FocusChanged and deliberately a different event: one
+// says where the keyboard went and this one says a client would like it. A
+// page that conflated them would grant every request by drawing it as granted.
+void DomicileHost::FocusRequested(const String& app_id) {
+  DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
+      event_type_names::kFocusrequested, app_id, String(), String(),
+      std::nullopt, std::nullopt));
+}
+
 
 void DomicileHost::AppTitled(const String& app_id,
                              const String& title) {

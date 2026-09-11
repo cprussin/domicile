@@ -120,7 +120,7 @@ diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/thi
 index 37929c05d7a78..932e5ecb4cdec 100644
 --- a/third_party/blink/renderer/core/events/event_type_names.json5
 +++ b/third_party/blink/renderer/core/events/event_type_names.json5
-@@ -25,6 +25,14 @@
+@@ -25,6 +25,15 @@
      "appinstalled",
      // Domicile's engine fork: navigator.domicile.onapptitled.
      "apptitled",
@@ -131,6 +131,7 @@ index 37929c05d7a78..932e5ecb4cdec 100644
 +    "shortcut",
 +    "modifiers",
 +    "focuschanged",
++    "focusrequested",
 +    "displayschanged",
      "audioend",
      "audioprocess",

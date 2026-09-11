@@ -361,6 +361,13 @@ fn broadcast_focus_request(hub: &ChromeHub, app_id: &str) {
 /// Two things, in this order: that the app is gone, and — if it was the one
 /// being typed into — that the keyboard came back. A chrome told only the
 /// first would go on marking a window that no longer exists as active.
+///
+/// The order is also what lets a shell get in front of the second. Handing the
+/// keyboard to the chrome is a fallback rather than a decision — the shell
+/// usually asks for it back, but it does not have to, and a client that
+/// crashed never got the chance — so a shell that would rather move to the
+/// next window has already been told which window went by the time the
+/// fallback arrives, and its answer is the last word.
 fn broadcast_closed(hub: &ChromeHub, app_id: &str) {
     let (closed, focus) = {
         let mut host = hub.host.lock().unwrap();

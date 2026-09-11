@@ -86,6 +86,10 @@
   // Focus moved. `appId` is empty when the chrome itself has it.
   attribute EventHandler onfocuschanged;
 
+  // A client asked for the keyboard; nothing has moved. The shell answers by
+  // calling focusApp(), or does not, which refuses it.
+  attribute EventHandler onfocusrequested;
+
   // The screens of the desktop.
   //
   // An attribute rather than an event payload, because the desktop is a fact
