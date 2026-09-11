@@ -167,7 +167,8 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 
 # 1. The page a browser window shows. Its own server rather than a real site,
 #    for the reason the framing guard has one: `crux` reaches no arbitrary host.
-python3 "$SCRIPTS/guard-webview-keyboard-page.py" --port "$PORT" \
+#    Shared with guard-webview-click.sh, which needs the same thing of it.
+python3 "$SCRIPTS/guard-webview-guest-page.py" --port "$PORT" \
   >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
 wait_for_line 240 "serving" "$HTTP_LOG" || {
@@ -176,7 +177,7 @@ wait_for_line 240 "serving" "$HTTP_LOG" || {
   tail -20 "$HTTP_LOG" >&2
   exit 1
 }
-SUBJECT="http://127.0.0.1:$PORT/keys"
+SUBJECT="http://127.0.0.1:$PORT/page"
 echo "serving a browser window's page at $SUBJECT"
 
 # 2. The compositor's end of the control channel, which here is a stand-in.

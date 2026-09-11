@@ -1,6 +1,9 @@
 import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import type { DomicileWebviewElement } from "@domicile/chrome-sdk/webview-element";
-import { WEBVIEW_NAVIGATE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  WEBVIEW_GUEST_FOCUS_EVENT,
+  WEBVIEW_NAVIGATE_EVENT,
+} from "@domicile/chrome-sdk/webview-element";
 import { Button } from "@domicile/component-library/Button";
 import { Input } from "@domicile/component-library/Input";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
@@ -56,10 +59,15 @@ type Props = {
    * A click inside the *page* is one the shell never sees: the view hosts a
    * browsing context of its own, so no pointer event crosses back out of it —
    * which is why a browser window could be clicked into while the rail went on
-   * highlighting the window before it and the keyboard stayed there too. What
-   * does cross is the focus that click takes: the engine focuses the element
-   * the guest hangs off, in this document. So the window reports both, and the
-   * one they arrive in is the window the user is now working in.
+   * highlighting the window before it and the keyboard stayed there too. Nor
+   * does the focus that click takes: a guest is a remote frame, upstream Blink
+   * dispatches no focus event across that boundary, and even with the fork
+   * focusing the element (patch 0011) there is still no `focusin` — those are
+   * dispatched only while the page is focused, and a guest taking focus is the
+   * moment this page loses it. So the engine's element says so in an event of
+   * its own, {@link WEBVIEW_GUEST_FOCUS_EVENT}, and the window listens for
+   * that as well as for its own chrome's pointer events. Whichever arrives,
+   * this is the window the user is now working in.
    */
   onReach: () => void;
   /**
@@ -115,6 +123,30 @@ export const BrowserWindow = ({
       };
     }
   }, [onNavigate, view]);
+
+  // THE CLICK IN THE PAGE, which is the half of this window the shell cannot
+  // see. The element dispatches this when its guest takes focus, because
+  // nothing else about that click leaves the guest — see `onReach`. It bubbles,
+  // so the handler could hang on the window below; it hangs here because that
+  // is where the element is, and a listener on an element this component owns
+  // cannot be reached by anything else in the page.
+  useEffect(() => {
+    if (view === null) {
+      return undefined;
+    } else {
+      const reached = () => {
+        // The window the user is already in has nothing to report: it is the
+        // focus the shell put there itself when the window became theirs.
+        if (!focused) {
+          onReach();
+        }
+      };
+      view.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, reached);
+      return () => {
+        view.removeEventListener(WEBVIEW_GUEST_FOCUS_EVENT, reached);
+      };
+    }
+  }, [focused, onReach, view]);
 
   // The window the user is working in takes the keyboard, and a browser
   // window's belongs to its page rather than to the chrome around it.
@@ -182,10 +214,10 @@ export const BrowserWindow = ({
         floating !== undefined && noTopEdgeStyles,
       )}
       hidden={!onScreen}
-      // Focus as well as the press, because a click inside the page is not an
-      // event this document is given at all — see `onReach`. What arrives from
-      // there is the focus, on the element the guest hangs off, and it bubbles
-      // to here like any other.
+      // Focus as well as the press, for the chrome's own controls: pressing
+      // the address bar is a pointer event, and reaching it with the keyboard
+      // is not. What happens in the page arrives on the element instead — see
+      // `onReach`, and the effect above.
       onFocus={reach}
       onPointerDown={reach}
       // Inline because the box is a runtime number and Panda reads literals;

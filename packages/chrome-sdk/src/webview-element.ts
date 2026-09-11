@@ -11,6 +11,23 @@ import { z } from "zod";
  */
 export const WEBVIEW_NAVIGATE_EVENT = "domicile-navigate";
 
+/**
+ * Fired when the page inside the view takes focus — a click in it, anywhere.
+ *
+ * THE ENGINE DISPATCHES THIS, not the SDK, and the name is the contract
+ * between them: the page in the view is a guest with a browsing context of its
+ * own, so no pointer event inside it crosses back out, and the focus it takes
+ * cannot cross either — `Document::SetFocusedElement` dispatches `focus` and
+ * `focusin` only while the page is focused, and a guest taking focus is the
+ * moment the embedder's page loses it. So the fork's element says so in an
+ * event that is not a focus event. It bubbles, so a chrome can listen on the
+ * window it drew rather than on the view.
+ *
+ * A shell reads it as "the user is working in this window now". See
+ * `HTMLWebViewElement::GuestTookFocus` in the engine.
+ */
+export const WEBVIEW_GUEST_FOCUS_EVENT = "domicile-guest-focus";
+
 // The navigation surface Electron adds to its `<webview>` tag. The eventual
 // engine gives a CEF browsing context the same shape.
 type WebviewFrame = HTMLElement & {

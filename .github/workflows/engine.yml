@@ -562,6 +562,35 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/guard-webview-history.sh "$CHROMIUM"
 
+      # And the pointer's half of the same boundary: a click inside a browser
+      # window, which a shell has to hear about because clicking a window is
+      # what raises it. Upstream dispatches no focus event across a remote
+      # frame's process boundary, and focusing the element across it dispatches
+      # none either — patch 0011 says why, and has the element speak for itself
+      # instead. Same headless, software-composited configuration as the guards
+      # above, and the press goes in over the debugging port, which is the only
+      # pointer this machine has.
+      - name: A click inside a browser window, and the shell hearing it
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-click.sh "$CHROMIUM"
+
+      # Its control, which is neither of the other two's: an <iframe> in the
+      # element's place would be same-process and about:blank, and a
+      # same-process frame's focus DOES reach its owner — so a control built
+      # that way would fire every time and decide nothing. This one clicks the
+      # shell's own chrome instead of the window below it. A run where the
+      # element is reached anyway is a run where the positive reading was the
+      # attach, the load, or the configuration, and not the click.
+      - name: The click guard is looking at the press in the guest
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-click.sh "$CHROMIUM"
+
       # REQUIREMENT 2, WHICH NOTHING HAS RUN SINCE IT WAS WRITTEN. An <app> has
       # to behave like any other replaced element, and `guard-css-and-resize.sh` is what
       # measures that: six CSS properties applied to an <app> and to an
