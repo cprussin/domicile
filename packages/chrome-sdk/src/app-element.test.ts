@@ -699,6 +699,71 @@ describe("<domicile-app>", () => {
     expect(bridge.calls).toContainEqual(["focusChrome"]);
   });
 
+  describe("the facts a shell renders", () => {
+    // Everything a shell knows about a window that this element has to be told
+    // — how big the client drew, what cursor it asked for, whether it holds the
+    // keyboard — reachable as a property rather than only as a call. A shell
+    // that keeps those in state renders them like any other prop and is done;
+    // reaching for the element to call a method is what a side registry is made
+    // of. The methods stay for a chrome that has no state to render from.
+    it("scales the pointer by a surface size set as a property", () => {
+      // The element measures 10x20 here, so a client that drew at 100x200 puts
+      // the pointer ten times further into its surface than into the box.
+      const element = mountApp("term");
+      element.surfaceSize = [100, 200];
+
+      element.dispatchEvent(
+        new MouseEvent("pointermove", {
+          bubbles: true,
+          clientX: 5,
+          clientY: 10,
+        }),
+      );
+
+      expect(bridge.calls).toContainEqual(["motion", "term", 50, 100]);
+    });
+
+    it("has nothing behind it again when the size goes away", () => {
+      // A shell that points one element at another client renders the new
+      // client's facts, and a client that has not committed a buffer has no
+      // size to render. `has-surface` says this element has something behind
+      // it, and after that it does not — a shell hanging its placeholder off
+      // the class's absence should be showing that placeholder.
+      const element = mountApp("term");
+      element.surfaceSize = [100, 200];
+      expect(element.classList.contains("has-surface")).toBe(true);
+
+      element.surfaceSize = undefined;
+
+      expect(element.classList.contains("has-surface")).toBe(false);
+    });
+
+    it("shows the cursor set as a property, and clears it when there is none", () => {
+      const element = mountApp("term");
+      element.cursor = "text";
+      expect(element.style.cursor).toBe("text");
+
+      element.cursor = undefined;
+
+      expect(element.style.cursor).toBe("");
+    });
+
+    it("takes the keyboard when it is rendered focused", () => {
+      // Only that way round. Which client holds the keyboard is one seat's
+      // answer and one client is always in it, so "focused" is an instruction
+      // the compositor has and "not focused" is not: the keyboard leaves this
+      // window when another takes it or when a click lands on the chrome.
+      const element = mountApp("term");
+
+      element.focused = false;
+      expect(bridge.calls).not.toContainEqual(["focusApp", "term"]);
+
+      element.focused = true;
+
+      expect(bridge.calls).toContainEqual(["focusApp", "term"]);
+    });
+  });
+
   describe("showing the client's window", () => {
     it("embeds the surface the app id names", () => {
       // The whole of how a client's pixels reach the page. The compositor

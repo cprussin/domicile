@@ -219,6 +219,32 @@ The title is Domicile's until you say otherwise with `document.title`. It does
 not guess — the directory a module came out of is as likely to be `dist` as
 anything a person would recognise.
 
+## What a window has to be told
+
+Two facts reach your shell as messages and have to reach the element, because
+nothing else carries them: the size the client drew at (`app_resized`, and on
+`app_appeared` for a client that has already drawn), which is what the pointer
+is scaled by, and the cursor the client asked for (`app_cursor`).
+
+Each is a method and a property, and they do the same thing:
+
+```ts
+element.setSurfaceSize(width, height); // or: element.surfaceSize = [width, height]
+element.applyCursor(cursor); //           or: element.cursor = cursor
+element.focusApp(); //                    or: element.focused = true
+```
+
+Reach for the methods when your shell holds the elements and calls them as the
+messages arrive, as the example does. Reach for the properties when your shell
+*renders* — React, or any template that writes props onto an element it owns —
+because then these are props like any other, and nothing has to keep a registry
+of live elements to call a method on. `undefined` means the client has asked
+for nothing: no size is one that has not drawn, no cursor is the page's own.
+
+`focused` goes one way only. Which client holds the keyboard is one seat's
+answer, so "this window has it" is an instruction and "this window does not" is
+not one; see below for where the keyboard goes instead.
+
 ## Who gets the keyboard
 
 The compositor holds it — it is the only thing that can deliver a key — but

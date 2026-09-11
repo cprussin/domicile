@@ -44,6 +44,15 @@ export type AppFocusRequest = {
 };
 
 /**
+ * How big a client has drawn, in its own pixels.
+ *
+ * `undefined` wherever one appears is a client that has not committed a buffer:
+ * a toplevel maps before it draws, and how big a Wayland client wants to be is
+ * something it says by drawing.
+ */
+export type SurfaceSize = readonly [width: number, height: number];
+
+/**
  * What a `<domicile-app>` is, to everything holding one.
  *
  * Written out rather than derived from the class with `InstanceType` — which is
@@ -65,6 +74,18 @@ export type DomicileAppElement = HTMLElement & {
   focusApp(): void;
   /** Show the cursor the client under this element asked for. */
   applyCursor(cursor: CursorShape): void;
+  /**
+   * The same three facts, written rather than called.
+   *
+   * A shell that holds what it knows about a window in state renders these the
+   * way it renders any other prop, and needs no registry of live elements to
+   * call the methods above on. Write-only on purpose: what this element shows
+   * is whatever was last rendered to it, and a reader that wanted these back
+   * would be asking the DOM for a copy of state it already holds.
+   */
+  set surfaceSize(value: SurfaceSize | undefined);
+  set cursor(value: CursorShape | undefined);
+  set focused(value: boolean);
 };
 
 /**
@@ -188,6 +209,24 @@ export const createAppElement = (
     }
 
     /**
+     * The same size, as a property a shell renders.
+     *
+     * `undefined` is a client that has not drawn, which is where this element
+     * starts and where it returns when a shell points it at another client:
+     * the pointer goes back to 1:1 against the element's own box, and
+     * `has-surface` comes off, because there is once again nothing behind it.
+     */
+    set surfaceSize(size: SurfaceSize | undefined) {
+      if (size === undefined) {
+        this.#surfaceWidth = 0;
+        this.#surfaceHeight = 0;
+        this.classList.remove(HAS_SURFACE_CLASS);
+      } else {
+        this.setSurfaceSize(size[0], size[1]);
+      }
+    }
+
+    /**
      * Route the keyboard to this app's client. Clicking the element does this
      * too; a chrome calls it directly when it puts the window on screen without
      * a click — opening it, or switching to its tab.
@@ -197,6 +236,21 @@ export const createAppElement = (
         setFocusedApp(appId);
         context.bridge.focusApp(appId);
       });
+    }
+
+    /**
+     * The same, as a property a shell renders — and only in the one direction.
+     *
+     * Which client holds the keyboard is one seat's answer, and something is
+     * always in it: "this window has it" is an instruction the compositor can
+     * carry out, and "this window does not" is not one. The keyboard leaves
+     * here when another window takes it or when a click lands on the chrome,
+     * both of which say where it went. So rendering `false` says nothing.
+     */
+    set focused(focused: boolean) {
+      if (focused) {
+        this.focusApp();
+      }
     }
 
     /**
@@ -275,7 +329,16 @@ export const createAppElement = (
 
     /** Show the cursor a client asked for while the pointer is over this app. */
     applyCursor(cursor: CursorShape): void {
-      this.style.cursor = cursor;
+      this.cursor = cursor;
+    }
+
+    /**
+     * The same, as a property a shell renders. `undefined` is a client that has
+     * asked for nothing, which leaves the cursor to whatever the page's own
+     * styling says — where it was before any client asked.
+     */
+    set cursor(cursor: CursorShape | undefined) {
+      this.style.cursor = cursor ?? "";
     }
 
     // Tell the host what resolution to configure this element's client at.
