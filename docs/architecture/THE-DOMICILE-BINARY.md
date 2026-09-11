@@ -44,10 +44,10 @@ Three modules, and the split is by what each needs to be tested:
 | Module | Pure? | What |
 |---|---|---|
 | `cli` | yes | the arguments, and every refusal a bad one earns |
-| `components` | yes | the engine, the compositor and the bridge, from the binary's own path or the environment |
+| `components` | yes | the engine and the compositor, from the binary's own path or the environment |
 | `shell_path` | yes | a name or a path to a module → the module to load, and the directory it is served out of |
 | `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` → the ozone platform, or the refusal that names what to do instead |
-| `supervise` | no | temp dirs, three children in order, the bridge's URL, the broker socket, teardown |
+| `supervise` | no | temp dirs, two children in order, the broker socket, teardown |
 
 The first three are the ones with the subtle rules, and they become ordinary
 unit tests against strings and a temp directory. `supervise` is the part that
@@ -59,7 +59,7 @@ genuinely spawns, and it stays thin enough to read.
   `DOMICILE_COMPOSITOR` as "build it with cargo" and an unset `DOMICILE_PAGE`
   as "build a workspace shell with turbo". That is a developer's convenience
   sitting in the entry point every user runs, and it is why the script needs a
-  checkout to make sense of itself. The binary requires its three components
+  checkout to make sense of itself. The binary requires both its components
   and names the missing one. Whatever built them ran first.
 
 - **There is no watch mode.** A bundler in the supervisor is the same mistake
@@ -76,16 +76,15 @@ genuinely spawns, and it stays thin enough to read.
   `manganese` without stopping the desktop, and the windows survive either way
   because the compositor never hears about it.
 
-  **It is strictly less machinery than what it replaces**, when it lands.
-  Dev reload today is a token endpoint on the bridge plus a poller written into
-  every served document, asking twice a second, for the life of the desktop,
-  whether the bundle changed. `DEV_RELOAD_PATH`, `buildToken` and
-  `shellDocument`'s injected script all go with it.
+  **It is strictly less machinery than what it replaces.** Dev reload was a
+  token endpoint on the bridge plus a poller written into every served
+  document, asking twice a second, for the life of the desktop, whether the
+  bundle changed. `DEV_RELOAD_PATH`, `buildToken` and `shellDocument`'s
+  injected script went with the bridge; the C++ that writes the document now
+  has nothing in their place, so there is no reload in a dev desktop until this
+  lands. See *The transport exists now* below.
 
-  **But it lands after `domicile://`, not before.** See *When the transport
-  exists* below.
-
-- **The three components ship beside the binary and are found there.** Not
+- **The two components ship beside the binary and are found there.** Not
   passed, and not wrapped in: `domicile` resolves them from its own location,
   the way a multi-binary program like postfix does.
 
@@ -93,7 +92,6 @@ genuinely spawns, and it stays thin enough to read.
   <prefix>/bin/domicile
   <prefix>/bin/domicile-compositor
   <prefix>/libexec/domicile/engine/     the Chromium tree, `chrome` inside it
-  <prefix>/libexec/domicile/bridge      the page server
   ```
 
   `current_exe()` on Linux reads `/proc/self/exe`, which resolves symlinks —
@@ -101,10 +99,10 @@ genuinely spawns, and it stays thin enough to read.
   in the same store output, which is exactly where they are. A distribution
   packaging this into `/usr` gets the same answer for the same reason.
 
-  `DOMICILE_ENGINE`, `DOMICILE_COMPOSITOR` and `DOMICILE_BRIDGE` still override,
-  one each, for a checkout pointing at things it just built. **That is the whole
-  of the flake's remaining job**: place three files and let the binary find
-  them. No `wrapProgram`, no exported paths, no `writeShellApplication`.
+  `DOMICILE_ENGINE` and `DOMICILE_COMPOSITOR` still override, one each, for a
+  checkout pointing at things it just built. **That is the whole of the flake's
+  remaining job**: place two files and let the binary find them. No
+  `wrapProgram`, no exported paths, no `writeShellApplication`.
 
   `OUT` goes with it. `run-engine.sh` takes a Chromium *checkout* and appends
   `out/Domicile` or `.` depending on whether the engine was built or published;
@@ -131,27 +129,21 @@ answer the first command is a socket that moves when the second one lands.
 domicile load-shell ─▶ domicile.sock ─▶ the supervisor ─▶ the engine ─▶ the page
 ```
 
-### When the transport exists
+### The transport exists now
 
-**Not until `domicile://` lands**, and the reason is that the obvious way to
-build it now is scheduled for deletion.
+**It was waiting on `domicile://`, and `domicile://` landed.** The page used to
+be reached through the bridge, whose WebSocket was a byte pipe to the
+compositor's control socket, so telling the page to load a different shell
+meant either a second bridge-owned socket or making the bridge a *speaker* of a
+protocol it only carried. That choice is gone with the bridge: the engine
+serves the shell over `domicile://`, writes the document in C++, and the
+control channel is an IDL binding on the unix socket the engine process already
+holds.
 
-Today the page is reached through the bridge, whose WebSocket is a byte pipe to
-the compositor's control socket. Telling the page to load a different shell
-means either a second bridge-owned socket, or making the bridge a *speaker* of
-a protocol it currently only carries. `ENGINE-FORK.md` deletes the choice
-outright: `domicile://` takes "the HTTP server, the WebSocket, the port, and
-the origin check that guards it — not by hardening them but by leaving nothing
-to harden", moves `shellDocument` into the fork as C++, and makes the control
-channel an IDL binding on the unix socket the engine process already holds.
-
-After that there is no bridge to own a socket, and the hop is the one the
-engine already has. Building the bridge-side version first is building
-something with a known deletion date, and it is the *only* part of this plan
-that has one.
-
-So the poller stays until then. It works, it is dev-only, and replacing it
-twice costs more than leaving it once.
+So the hop is the engine's, there is no process in the middle with a deletion
+date, and nothing blocks this but the work itself. The poller did not survive
+the move — see the dev-reload note under *Key decisions* — so a dev desktop has
+no reload until `load-shell` is what provides it.
 
 ## Plan
 
@@ -163,21 +155,18 @@ twice costs more than leaving it once.
 - [x] `flake.nix`: the three components go where the binary looks, and
       `domicileCli` — the `writeShellApplication` — goes
 - [x] delete `run-engine.sh` and the three `test-run-engine-*.sh`
-- [ ] the control socket, and `domicile load-shell` — **after `domicile://`**,
-      when the hop to the page is the engine's rather than a bridge's
+- [ ] the control socket, and `domicile load-shell` — unblocked: the hop to
+      the page is the engine's now, and it is what a dev reload would use
 - [ ] `guard-shell.sh` calls the binary rather than repeating the launch
 
 ## Open questions
 
-- **Whether the bridge survives long enough to be worth compiling.**
-  `domicile://` deletes it, and until then a packaged desktop needs `bun` at
-  run time — which today the flake's `writeShellApplication` supplies through
-  `runtimeInputs`. Removing that wrapper without replacing it ships a desktop
-  that works only where a build chain happens to be installed. **Settled:
-  compile it** — `bun build --compile` makes `libexec/domicile/bridge` a thing
-  that runs, which is what a sibling has to be, and it is right on any machine
-  rather than only under nix. Short-lived, and worth it: the alternative is
-  keeping a wrapper for one `PATH` entry after everything else it did is gone.
+- **~~Whether the bridge survives long enough to be worth compiling.~~**
+  Answered by events: it did not. The question was whether to spend
+  `bun build --compile` on `libexec/domicile/bridge` so a packaged desktop
+  would not need `bun` on its `PATH` at run time. `domicile://` landed first,
+  the bridge was deleted rather than compiled, and a packaged desktop needs no
+  JavaScript runtime at all.
 
 - **Whether `load-shell` restarts anything.** It switches the shell; the
   desktop underneath it does not move. `announce_open_apps` already tells a

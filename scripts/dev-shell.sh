@@ -105,13 +105,14 @@ cargo build -p domicile-launch --bin domicile \
 # so that something other than the shell can say it — so this is the one place
 # in the dev loop that has to know the convention, and it says so.
 #
-# `DOMICILE_DEV_RELOAD` is the only thing that separates this from an installed
-# desktop: the bridge serves the reload token and writes the poller into the
-# page, and nothing else in the repository sets it. It goes when `load-shell`
-# arrives — see docs/architecture/THE-DOMICILE-BINARY.md.
+# NOTHING SEPARATES THIS FROM AN INSTALLED DESKTOP ANY MORE.
+# `DOMICILE_DEV_RELOAD` used to: the bridge read it, served a reload token and
+# wrote a poller into the page. The bridge is gone and the C++ that writes the
+# document has nothing in their place, so the variable switches nothing on and
+# is not set here. A rebuilt shell needs the desktop restarted until `domicile
+# load-shell` lands — see docs/architecture/THE-DOMICILE-BINARY.md.
 echo "starting $SHELL_NAME"
 DOMICILE_ENGINE="$ENGINE" \
 DOMICILE_COMPOSITOR="$ROOT/target/debug/domicile-compositor" \
 DOMICILE_PAGE="$PAGE_DIR/shell.js" \
-DOMICILE_DEV_RELOAD=1 \
   "$ROOT/target/debug/domicile" "$SHELL_NAME"

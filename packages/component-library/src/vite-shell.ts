@@ -6,8 +6,8 @@
 //
 //   the entry     a `.ts` file rather than an HTML file, so nothing emits a
 //                 document for Domicile to have to ignore
-//   its name      fixed, not hashed. `DOMICILE_MODULE` is a path somebody
-//                 types or a package computes, and neither can know
+//   its name      fixed, not hashed. The module Domicile is given is a path
+//                 somebody types or a package computes, and neither can know
 //                 `index-D6oz2ygI.js`
 //   the CSS       *inside* the JavaScript, because the document Domicile
 //                 writes carries no `<link>` — see below
@@ -95,11 +95,11 @@ export type ShellBuild = {
  */
 export const shellBuild = ({ entry }: ShellBuild) => ({
   build: {
-    // No hash. `DOMICILE_MODULE` is a path, and a path with a content hash in
-    // it changes every time the shell does — so nothing could name it: not a
-    // person typing it, not the flake computing it, not a shell's own README.
-    // The directory is served, so one predictable name in it is all Domicile
-    // needs.
+    // No hash. The module Domicile is given is a path, and a path with a
+    // content hash in it changes every time the shell does — so nothing could
+    // name it: not a person typing it, not the flake computing it, not a
+    // shell's own README. The directory is served, so one predictable name in
+    // it is all Domicile needs.
     rollupOptions: { input: entry, output: { entryFileNames: "shell.js" } },
     sourcemap: true,
   },

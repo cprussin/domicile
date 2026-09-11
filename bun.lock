@@ -67,19 +67,6 @@
         "typescript": "catalog:",
       },
     },
-    "packages/engine-chrome-host": {
-      "name": "@domicile/engine-chrome-host",
-      "version": "0.0.0",
-      "dependencies": {
-        "@domicile/chrome-sdk": "workspace:*",
-        "zod": "catalog:",
-      },
-      "devDependencies": {
-        "@cprussin/tsconfig": "catalog:",
-        "@types/bun": "catalog:",
-        "typescript": "catalog:",
-      },
-    },
     "packages/shell-manganese": {
       "name": "@domicile/shell-manganese",
       "version": "0.0.0",
@@ -251,8 +238,6 @@
     "@domicile/component-library": ["@domicile/component-library@workspace:packages/component-library"],
 
     "@domicile/e2e-harness": ["@domicile/e2e-harness@workspace:packages/e2e-harness"],
-
-    "@domicile/engine-chrome-host": ["@domicile/engine-chrome-host@workspace:packages/engine-chrome-host"],
 
     "@domicile/shell-manganese": ["@domicile/shell-manganese@workspace:packages/shell-manganese"],
 
