@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Measure } from "@domicile/chrome-sdk/measure";
 import {
   registerElements,
@@ -16,20 +16,20 @@ import userEvent from "@testing-library/user-event";
 
 import { BrowserWindow } from "./BrowserWindow";
 
-const silentBridge = {
+const silentDomicile = {
   focusApp: () => undefined,
   focusChrome: () => undefined,
   resizeApp: () => undefined,
-} as unknown as BridgeClient;
+} as unknown as DomicileClient;
 
-/** A bridge that keeps what the window told the host, in order. */
-const recordingBridge = (calls: string[]): BridgeClient =>
+/** A domicile client that keeps what the window told the host, in order. */
+const recordingDomicile = (calls: string[]): DomicileClient =>
   ({
-    ...silentBridge,
+    ...silentDomicile,
     focusChrome: () => {
       calls.push("focusChrome");
     },
-  }) as unknown as BridgeClient;
+  }) as unknown as DomicileClient;
 
 const stubMeasure: Measure = () => ({
   size: [100, 100],
@@ -81,7 +81,7 @@ stylesheet.textContent = readFileSync(
 document.head.append(stylesheet);
 
 beforeEach(() => {
-  registerElements(silentBridge, {
+  registerElements(silentDomicile, {
     measure: stubMeasure,
     // Otherwise these suites run the SDK's own animation loop, which happy-dom
     // serves as fast as it can: every mounted window re-measured tens of
@@ -96,8 +96,8 @@ describe("BrowserWindow", () => {
   it("points its view at the address it opened with", () => {
     const { container } = render(
       <BrowserWindow
-        bridge={silentBridge}
         clickThrough={false}
+        domicile={silentDomicile}
         dragging={false}
         floating={undefined}
         focused
@@ -115,8 +115,8 @@ describe("BrowserWindow", () => {
     it("loads what was typed, filling in a missing scheme", async () => {
       const { container } = render(
         <BrowserWindow
-          bridge={silentBridge}
           clickThrough={false}
+          domicile={silentDomicile}
           dragging={false}
           floating={undefined}
           focused
@@ -136,8 +136,8 @@ describe("BrowserWindow", () => {
     it("follows the page wherever it goes", () => {
       const { container } = render(
         <BrowserWindow
-          bridge={silentBridge}
           clickThrough={false}
+          domicile={silentDomicile}
           dragging={false}
           floating={undefined}
           focused
@@ -155,8 +155,8 @@ describe("BrowserWindow", () => {
       const seen: string[] = [];
       const { container } = render(
         <BrowserWindow
-          bridge={silentBridge}
           clickThrough={false}
+          domicile={silentDomicile}
           dragging={false}
           floating={undefined}
           focused
@@ -177,8 +177,8 @@ describe("BrowserWindow", () => {
     it("takes the whole stage under the address bar", () => {
       const { container } = render(
         <BrowserWindow
-          bridge={silentBridge}
           clickThrough={false}
+          domicile={silentDomicile}
           dragging={false}
           floating={undefined}
           focused
@@ -211,8 +211,8 @@ describe("BrowserWindow", () => {
       const calls: string[] = [];
       render(
         <BrowserWindow
-          bridge={recordingBridge(calls)}
           clickThrough={false}
+          domicile={recordingDomicile(calls)}
           dragging={false}
           floating={undefined}
           focused
@@ -229,8 +229,8 @@ describe("BrowserWindow", () => {
       const calls: string[] = [];
       render(
         <BrowserWindow
-          bridge={recordingBridge(calls)}
           clickThrough={false}
+          domicile={recordingDomicile(calls)}
           dragging={false}
           floating={undefined}
           focused={false}
@@ -260,8 +260,8 @@ describe("BrowserWindow", () => {
       await new Promise<void>((resolve) => {
         const { container } = render(
           <BrowserWindow
-            bridge={silentBridge}
             clickThrough={false}
+            domicile={silentDomicile}
             dragging={false}
             floating={undefined}
             focused={false}
@@ -281,8 +281,8 @@ describe("BrowserWindow", () => {
       await new Promise<void>((resolve) => {
         const { container } = render(
           <BrowserWindow
-            bridge={silentBridge}
             clickThrough={false}
+            domicile={silentDomicile}
             dragging={false}
             floating={undefined}
             focused={false}
@@ -305,8 +305,8 @@ describe("BrowserWindow", () => {
       await new Promise<void>((resolve) => {
         render(
           <BrowserWindow
-            bridge={silentBridge}
             clickThrough={false}
+            domicile={silentDomicile}
             dragging={false}
             floating={undefined}
             focused={false}
@@ -330,8 +330,8 @@ describe("BrowserWindow", () => {
       const reaches: string[] = [];
       const { container } = render(
         <BrowserWindow
-          bridge={silentBridge}
           clickThrough={false}
+          domicile={silentDomicile}
           dragging={false}
           floating={undefined}
           focused
@@ -351,8 +351,8 @@ describe("BrowserWindow", () => {
   it("hides the window when it is not on the stage", () => {
     render(
       <BrowserWindow
-        bridge={silentBridge}
         clickThrough={false}
+        domicile={silentDomicile}
         dragging={false}
         floating={undefined}
         focused={false}

@@ -1,4 +1,4 @@
-import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import type {
   Display,
@@ -9,7 +9,7 @@ import type {
  * The desktop, as the component library wants to be told about it.
  *
  * The whole of the adapter between the control channel and the design system,
- * and the reason `DisplaySource` is a port rather than the `BridgeClient`
+ * and the reason `DisplaySource` is a port rather than the `DomicileClient`
  * itself: `@domicile/component-library` has no protocol dependency, so the
  * shell — which has both — is where the two meet.
  *
@@ -20,21 +20,22 @@ import type {
  * where `<Screen>` lays out against a `position` and a `size`. {@link asDisplay}
  * is that reshaping, and it is now what this module is for.
  *
- * Built once per bridge and not per render. `BridgeClient.on` is a single slot
- * and `DisplayProvider` re-registers whenever its source's identity changes, so
+ * Built once per client and not per render. `DomicileClient.on` is a single
+ * slot and `DisplayProvider` re-registers whenever its source's identity
+ * changes, so
  * a source rebuilt each render would re-register each render — see
  * {@link DisplaySource}.
  */
-export const displaysFrom = (bridge: BridgeClient): DisplaySource => ({
+export const displaysFrom = (domicile: DomicileClient): DisplaySource => ({
   get displays() {
     // A getter, not a snapshot: the provider reads this when it mounts and
-    // again when the source changes, and the bridge may have been told a new
+    // again when the source changes, and the client may have been told a new
     // desktop in between. Copying the list at construction would hand a
     // provider mounted later the desktop as of *this* call.
-    return bridge.displays?.map(asDisplay);
+    return domicile.displays?.map(asDisplay);
   },
   onDisplays: (handler) => {
-    // Held, because `off` is given the handler the bridge actually registered
+    // Held, because `off` is given the handler the client actually registered
     // rather than the caller's: it removes one only if it is still the
     // registered one, which is what stops a teardown silencing a handler that
     // displaced it. Reshaping here is what makes the two different functions.
@@ -45,9 +46,9 @@ export const displaysFrom = (bridge: BridgeClient): DisplaySource => ({
     }) => {
       handler(displays.map(asDisplay));
     };
-    bridge.on("displays", registered);
+    domicile.on("displays", registered);
     return () => {
-      bridge.off("displays", registered);
+      domicile.off("displays", registered);
     };
   },
 });

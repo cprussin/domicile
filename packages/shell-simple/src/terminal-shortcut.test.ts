@@ -1,14 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
-import type { TerminalBridge } from "./terminal-shortcut";
+import type { TerminalDomicile } from "./terminal-shortcut";
 import { openTerminalOnAltEnter } from "./terminal-shortcut";
 
-/** A bridge that records what the shell asked of it. */
-const fakeBridge = () => {
+/** A domicile client that records what the shell asked of it. */
+const fakeDomicile = () => {
   const grabbed: unknown[] = [];
   const spawned: readonly string[][] = [];
   let heard: (() => void) | undefined;
-  const bridge: TerminalBridge = {
+  const domicile: TerminalDomicile = {
     grabShortcut: (shortcut) => {
       grabbed.push(shortcut);
     },
@@ -20,7 +20,6 @@ const fakeBridge = () => {
     },
   };
   return {
-    bridge,
     /** The compositor delivering a claimed press, which is not a DOM event. */
     compositorPress: () => {
       if (heard === undefined) {
@@ -29,6 +28,7 @@ const fakeBridge = () => {
         heard();
       }
     },
+    domicile,
     grabbed,
     spawned,
   };
@@ -48,8 +48,8 @@ describe("openTerminalOnAltEnter", () => {
     // Once a client holds the keyboard the page hears nothing, which is
     // exactly when another window is wanted. A claim takes the combination
     // out of the stream before the client is given it.
-    const fake = fakeBridge();
-    openTerminalOnAltEnter(fake.bridge, document.createElement("div"));
+    const fake = fakeDomicile();
+    openTerminalOnAltEnter(fake.domicile, document.createElement("div"));
     expect(fake.grabbed).toStrictEqual([
       {
         altKey: true,
@@ -62,8 +62,8 @@ describe("openTerminalOnAltEnter", () => {
   });
 
   it("opens a terminal when the compositor delivers the press", () => {
-    const fake = fakeBridge();
-    openTerminalOnAltEnter(fake.bridge, document.createElement("div"));
+    const fake = fakeDomicile();
+    openTerminalOnAltEnter(fake.domicile, document.createElement("div"));
     fake.compositorPress();
     expect(fake.spawned).toStrictEqual([["kitty"]]);
   });
@@ -71,9 +71,9 @@ describe("openTerminalOnAltEnter", () => {
   it("opens a terminal when the page hears the press itself", () => {
     // Before the first window there is nothing holding the keyboard, so the
     // claim never fires and the page is the only path.
-    const fake = fakeBridge();
+    const fake = fakeDomicile();
     const keys = document.createElement("div");
-    openTerminalOnAltEnter(fake.bridge, keys);
+    openTerminalOnAltEnter(fake.domicile, keys);
     keys.dispatchEvent(press());
     expect(fake.spawned).toStrictEqual([["kitty"]]);
   });
@@ -81,9 +81,9 @@ describe("openTerminalOnAltEnter", () => {
   it("opens one terminal for a held key, not tens", () => {
     // A held combination repeats at the keyboard's rate; only the first of
     // them is a request to open something.
-    const fake = fakeBridge();
+    const fake = fakeDomicile();
     const keys = document.createElement("div");
-    openTerminalOnAltEnter(fake.bridge, keys);
+    openTerminalOnAltEnter(fake.domicile, keys);
     keys.dispatchEvent(press());
     keys.dispatchEvent(press({ repeat: true }));
     keys.dispatchEvent(press({ repeat: true }));
@@ -93,9 +93,9 @@ describe("openTerminalOnAltEnter", () => {
   it("leaves every other combination alone", () => {
     // Each modifier is part of the chord: Ctrl+Alt+Enter is one nobody
     // claimed, and the client that holds focus should still get it.
-    const fake = fakeBridge();
+    const fake = fakeDomicile();
     const keys = document.createElement("div");
-    openTerminalOnAltEnter(fake.bridge, keys);
+    openTerminalOnAltEnter(fake.domicile, keys);
     keys.dispatchEvent(press({ altKey: false }));
     keys.dispatchEvent(press({ ctrlKey: true }));
     keys.dispatchEvent(press({ metaKey: true }));
@@ -108,9 +108,9 @@ describe("openTerminalOnAltEnter", () => {
     // has `shiftKey: false`. A page that answered the shift variant anyway would
     // make one combination do two different things depending on whether a
     // client happened to hold the keyboard.
-    const fake = fakeBridge();
+    const fake = fakeDomicile();
     const keys = document.createElement("div");
-    openTerminalOnAltEnter(fake.bridge, keys);
+    openTerminalOnAltEnter(fake.domicile, keys);
 
     const shifted = press({ shiftKey: true });
     keys.dispatchEvent(shifted);
@@ -127,7 +127,7 @@ describe("openTerminalOnAltEnter", () => {
     // capture is for and the only arrangement that proves it: a listener on an
     // ancestor is stopped either way, so putting it there would leave the
     // capture flag free to be wrong.
-    const fake = fakeBridge();
+    const fake = fakeDomicile();
     const keys = document.createElement("div");
     const window_ = document.createElement("div");
     keys.append(window_);
@@ -135,7 +135,7 @@ describe("openTerminalOnAltEnter", () => {
     window_.addEventListener("keydown", (event) => {
       forwarded.push(event);
     });
-    openTerminalOnAltEnter(fake.bridge, keys);
+    openTerminalOnAltEnter(fake.domicile, keys);
 
     const taken = press();
     window_.dispatchEvent(taken);

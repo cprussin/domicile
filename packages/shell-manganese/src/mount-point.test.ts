@@ -5,8 +5,8 @@ import { mountPoint } from "./mount-point";
 // THE DOCUMENT DOMICILE WRITES, which is the whole of what this has to work
 // against. Copied rather than imported because it comes from another package
 // and this is a shell — every shell is in this position, and one that reached
-// into the bridge's source to find out what it was mounting into would be
-// asserting a coupling that is not supposed to exist.
+// into the source of whatever writes it to find out what it was mounting
+// into would be asserting a coupling that is not supposed to exist.
 //
 // What matters about it is the absence: a `<body>` with a script in it and
 // nothing else. `shell-document.ts` says so in prose ("what is in it is only

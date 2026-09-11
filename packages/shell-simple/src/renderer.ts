@@ -8,10 +8,10 @@
 // go on the background behind them; what a window paints of its own is
 // `desktop.ts`'s.
 
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDesktopSize } from "@domicile/chrome-sdk/desktop-size";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
+import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
 import { endCatchUpOnFocusChange } from "./catch-up";
@@ -27,8 +27,8 @@ import "./global.css";
 // there is none, and `connectToHost` says so on the console and hands back a
 // stand-in that does nothing — so the desktop still opens and the gestures
 // still work against windows that will never arrive.
-const bridge = new BridgeClient(connectToHost(navigator));
-registerElements(bridge);
+const domicile = new DomicileClient(connectToHost(navigator));
+registerElements(domicile);
 
 // The one thing an empty desktop has to say — this shell is Alt and nothing
 // else. Before the windows rather than anywhere: what unpaints it over one is
@@ -40,23 +40,23 @@ const desktop = new Desktop(document.body);
 installWindowGestures(document.body, desktop);
 // The one thing this shell claims the keyboard for: without a way to start a
 // terminal, nothing can reach the desktop except from outside Domicile.
-openTerminalOnAltEnter(bridge, document.body);
+openTerminalOnAltEnter(domicile, document.body);
 
-bridge.on("app_appeared", ({ app_id, size }) => {
+domicile.on("app_appeared", ({ app_id, size }) => {
   desktop.open(app_id, size);
 });
-bridge.on("app_closed", ({ app_id }) => {
+domicile.on("app_closed", ({ app_id }) => {
   desktop.close(app_id);
 });
-bridge.on("app_resized", (message) => {
+domicile.on("app_resized", (message) => {
   desktop.resizeSurface(message);
 });
-bridge.on("app_cursor", (message) => {
+domicile.on("app_cursor", (message) => {
   desktop.applyCursor(message);
 });
 // And when the host has finished describing what was already running, which is
 // what makes the next window to appear one someone opened.
-endCatchUpOnFocusChange(bridge, desktop);
+endCatchUpOnFocusChange(domicile, desktop);
 
 // Both halves of the desktop's mode, sent as soon as there is anything to send
 // them to. There is no handshake to wait for any more — a shell used to defer
@@ -67,5 +67,5 @@ endCatchUpOnFocusChange(bridge, desktop);
 // *is*, and under the forked engine the compositor cannot see the window this
 // page is in — without the second call the desktop stays at the compositor's
 // configured `nested_size` however large the window really is.
-reportDevicePixelRatio(bridge, window);
-reportDesktopSize(bridge, window);
+reportDevicePixelRatio(domicile, window);
+reportDesktopSize(domicile, window);

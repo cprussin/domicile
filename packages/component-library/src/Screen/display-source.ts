@@ -25,18 +25,18 @@ export type Display = {
  * `onDisplays` is every description after that — the desktop is described on
  * connecting and again whenever it changes, latest wins.
  *
- * The two overlap rather than partition: `BridgeClient` replays anything it is
- * holding for a type to the first handler that registers, so an adapter over
+ * The two overlap rather than partition: `DomicileClient` replays anything it
+ * is holding for a type to the first handler that registers, so an adapter over
  * one may call the handler synchronously, inside registration, with the same
  * desktop `displays` just gave. A handler has to be safe to call with a
  * description it has already seen.
  *
- * A port rather than the `BridgeClient` itself: the component library has no
+ * A port rather than the `DomicileClient` itself: the component library has no
  * protocol dependency, and a source is a few lines to write over one.
  *
  * **A source is the connection, so it has to be as stable as one.** The
- * provider registers on it whenever its identity changes, and `BridgeClient.on`
- * is a single slot — a source rebuilt every render would re-register on every
+ * provider registers on it whenever its identity changes, and
+ * `DomicileClient.on` is a single slot — a source rebuilt every render would re-register on every
  * render. Build it once, with `useMemo` or outside the component.
  */
 export type DisplaySource = {
@@ -48,8 +48,8 @@ export type DisplaySource = {
    * would otherwise keep being told, and would set state on a tree that is
    * gone — the source is the connection, so it is the longer-lived of the two.
    *
-   * A source over a `BridgeClient` implements the teardown with
-   * `bridge.off("displays", handler)`, which removes the handler only if it is
+   * A source over a `DomicileClient` implements the teardown with
+   * `off("displays", handler)` on it, which removes the handler only if it is
    * still the registered one — `on` is a single slot, so a teardown that
    * removed whatever it found could silence a handler that had displaced it.
    * React does not produce that order on its own (a cleanup runs before the

@@ -253,7 +253,7 @@ impl Host {
         })
     }
 
-    /// Apply a message received from the chrome bridge.
+    /// Apply a message received from the chrome.
     pub fn handle_chrome_message(&mut self, message: ChromeMessage) -> Result<(), HostError> {
         match message {
             ChromeMessage::Hello { .. } => {

@@ -1,4 +1,4 @@
-import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileWebviewElement } from "@domicile/chrome-sdk/webview-element";
 import {
   WEBVIEW_GUEST_FOCUS_EVENT,
@@ -35,7 +35,7 @@ type Props = {
    * one — so taking focus here is a client somewhere losing it, and there is
    * nothing else in the tree that knows.
    */
-  bridge: BridgeClient;
+  domicile: DomicileClient;
   /**
    * Whether the pointer goes through this window to the page behind it.
    *
@@ -91,7 +91,7 @@ type Props = {
  * itself; this is the chrome the user drives it with.
  */
 export const BrowserWindow = ({
-  bridge,
+  domicile,
   clickThrough,
   dragging,
   floating,
@@ -161,10 +161,10 @@ export const BrowserWindow = ({
   // same call `<domicile-app>` makes when it stops standing for a window.
   useEffect(() => {
     if (focused && view !== null) {
-      bridge.focusChrome();
+      domicile.focusChrome();
       view.focus();
     }
-  }, [bridge, focused, view]);
+  }, [domicile, focused, view]);
 
   // Every control here drives the view element, which is rendered by this
   // component and so is attached by the time anyone can press one. A press

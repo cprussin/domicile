@@ -132,8 +132,8 @@ fn a_chrome_that_has_not_said_hello_is_not_broadcast_to() {
 /// The list is walked per broadcast and written to per entry, so a duplicate
 /// makes the compositor send every message down that socket twice — including
 /// `app_frame`, which is the largest thing it sends. A page reloading its own
-/// bundle without dropping the socket is all it takes, and `Bridge.connect()`
-/// sends a `hello` with nothing forbidding a second call.
+/// bundle without dropping the socket is all it takes, and the in-page client
+/// used to send a `hello` on connect with nothing forbidding a second call.
 #[test]
 fn a_chrome_that_says_hello_twice_is_only_in_the_list_once() {
     let compositor = Compositor::started_with(ONE_DISPLAY);

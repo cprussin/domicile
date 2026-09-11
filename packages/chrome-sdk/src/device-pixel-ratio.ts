@@ -1,6 +1,6 @@
 // Telling the host what the page is drawing at, and keeping it told.
 
-import type { BridgeClient } from "./bridge";
+import type { DomicileClient } from "./domicile-client";
 
 /**
  * The page's own view of the display: how dense it is, and how to hear that
@@ -39,15 +39,15 @@ export type DisplayView = {
  * Send it after the handshake: the host ignores everything before it.
  */
 export const reportDevicePixelRatio = (
-  bridge: Pick<BridgeClient, "setDevicePixelRatio">,
+  domicile: Pick<DomicileClient, "setDevicePixelRatio">,
   view: DisplayView,
 ): void => {
   const ratio = view.devicePixelRatio;
-  bridge.setDevicePixelRatio(ratio);
+  domicile.setDevicePixelRatio(ratio);
   view.matchMedia(`(resolution: ${ratio.toString()}dppx)`).addEventListener(
     "change",
     () => {
-      reportDevicePixelRatio(bridge, view);
+      reportDevicePixelRatio(domicile, view);
     },
     { once: true },
   );

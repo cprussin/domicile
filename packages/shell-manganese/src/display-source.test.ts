@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type {
   DomicileDisplay,
   DomicileHost,
@@ -18,7 +18,7 @@ const ignored = (): undefined => undefined;
  * The adapter reads `displays` and registers through `on`, and neither of those
  * is a call *out* — so every method here is a no-op and only the attribute and
  * the one event do anything. Written out rather than cast from a partial,
- * because `BridgeClient` registers a listener for every event type in its
+ * because `DomicileClient` registers a listener for every event type in its
  * constructor and a double missing `addEventListener` would throw there.
  */
 class Host implements DomicileHost {
@@ -83,10 +83,10 @@ const RIGHT_LAID_OUT: Display = {
   position: [1920, 0],
 };
 
-/** A bridge and the compositor that describes desktops to it. */
-const connected = (): [BridgeClient, Host] => {
+/** A domicile client and the compositor that describes desktops to it. */
+const connected = (): [DomicileClient, Host] => {
   const host = new Host();
-  return [new BridgeClient(host), host];
+  return [new DomicileClient(host), host];
 };
 
 describe("the desktop a shell lays out against", () => {
@@ -103,7 +103,7 @@ describe("the desktop a shell lays out against", () => {
     expect(displaysFrom(client).displays).toStrictEqual([LEFT_LAID_OUT]);
   });
 
-  it("reads the bridge when asked, not when built", () => {
+  it("reads the domicile when asked, not when built", () => {
     // A snapshot taken at construction would hand a provider that mounts later
     // the desktop as of the moment the source was made, which on a desktop
     // that changed in between is the one that is gone.
@@ -146,7 +146,7 @@ describe("the desktop a shell lays out against", () => {
   });
 
   it("does not silence a handler that displaced it", () => {
-    // `bridge.on` is a single slot, so a second source over one bridge
+    // `DomicileClient.on` is a single slot, so a second source over one client
     // replaces the first. A teardown that removed whatever it found would
     // then silence the live handler — which is a desktop that stops updating
     // with nothing anywhere to say why.

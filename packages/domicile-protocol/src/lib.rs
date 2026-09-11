@@ -1,6 +1,6 @@
-//! The wire contract between the Domicile host and the in-page bridge client.
+//! The wire contract between the Domicile host and the in-page client.
 //!
-//! The chrome runs a small JS bridge that mirrors these types. Messages are
+//! The chrome runs a small JS client that mirrors these types. Messages are
 //! exchanged as JSON. Keep this crate dependency-light (serde only) so it stays
 //! a clean, portable description of the protocol; the host maps these onto its
 //! internal scene model, and the JS side mirrors them by hand.
@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// outside shell, or a released binary someone upgrades one half of. That is
 /// when to start bumping this and writing down why. The rule to loosen then is
 /// written out three times, once per peer that has to apply it: [`negotiate`]
-/// here, `BridgeClient`'s welcome check in `@domicile/chrome-sdk`, and `greet`
+/// here, `DomicileClient`'s welcome check in `@domicile/chrome-sdk`, and `greet`
 /// in `domicile-test-chrome`.
 ///
 /// Meanwhile the `#[serde(default)]` on the newer fields below stays, and is
@@ -45,7 +45,7 @@ pub struct Shortcut {
     pub logo: bool,
 }
 
-/// Messages sent from the chrome (in-page bridge) to the host.
+/// Messages sent from the chrome (in-page client) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChromeMessage {
@@ -137,7 +137,7 @@ pub enum ChromeMessage {
     },
 }
 
-/// Messages sent from the host to the chrome (in-page bridge).
+/// Messages sent from the host to the chrome (in-page client).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HostMessage {

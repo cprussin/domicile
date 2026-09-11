@@ -3,10 +3,10 @@
 // desktop at all — and this wires the SDK to it and mounts the React chrome on
 // top.
 
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
 import { connectToHost, hasHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDesktopSize } from "@domicile/chrome-sdk/desktop-size";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
+import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { placementTiming } from "@domicile/chrome-sdk/placement-timing";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
@@ -14,11 +14,9 @@ import {
   loadPreference,
 } from "@domicile/component-library/ThemeProvider";
 import { createRoot } from "react-dom/client";
-
-import { diagnosticLines } from "./diagnostic-lines";
 import { displaysFrom } from "./display-source";
-import { drawTiming } from "./draw-timing";
 import { mountPoint } from "./mount-point";
+import { placementLine } from "./placement-line";
 import { Shell } from "./Shell";
 import { viewportDisplays } from "./viewport-display";
 
@@ -40,7 +38,7 @@ applyPreference(loadPreference());
 // there is none, and `connectToHost` says so on the console and hands back a
 // stand-in that does nothing — so the shell still opens for styling work
 // against a desktop that will never arrive.
-const bridge = new BridgeClient(connectToHost(navigator));
+const domicile = new DomicileClient(connectToHost(navigator));
 
 // And where the desktop comes from, which is the same question one answer
 // later: a host describes one, and with no host nothing ever will, so the
@@ -48,9 +46,9 @@ const bridge = new BridgeClient(connectToHost(navigator));
 // because this is where the host's absence is already known, and once rather
 // than per render because a source is the connection.
 const displays = hasHost(navigator)
-  ? displaysFrom(bridge)
+  ? displaysFrom(domicile)
   : viewportDisplays(window);
-registerElements(bridge);
+registerElements(domicile);
 
 // The markup this mounts into is made rather than found — see
 // `mount-point.ts`. This used to look up an id that came from an `index.html`
@@ -58,24 +56,20 @@ registerElements(bridge);
 // writes the document and writes no such element, so every launch threw here
 // before React was reached and the desktop was a white window.
 createRoot(mountPoint(document)).render(
-  <Shell bridge={bridge} displays={displays} />,
+  <Shell displays={displays} domicile={domicile} />,
 );
 
-// The compositor logs its own half of the frame path every 5s; this is the
-// other half, on the same cadence and in the same shape, so the two lines can
-// be read side by side. It is the number behind "sluggish": everything between
-// pressing a key and seeing it, including the client's own redraw and
-// `putImageData`. That line is silent when nothing was typed — so is the
-// compositor's for an idle desktop.
+// What this chrome costs a desktop that is doing nothing: every window is
+// measured on every animation frame to keep its client configured at the box
+// the page gives it, and nothing else here is paid per frame. Reported on the
+// compositor's own cadence so the two logs can be read side by side, and
+// silent on an interval that measured nothing — so is the compositor's for an
+// idle desktop.
 //
-// The round trip is reported alongside the two stages inside it that the
-// compositor cannot see, so a large total can be attributed rather than just
-// observed: `ipc` is what the host's bytes cost between arriving in this
-// process and reaching this page, and `draw` is putting them on the canvas.
-//
-// Measuring is reported on a line of its own, because it is not part of the
-// round trip at all: it is the one cost that grows with the number of windows
-// rather than with what any of them is doing. See `diagnostic-lines`.
+// **The keystroke line that used to print beside it is gone.** Keystroke to
+// pixel is measured in `domicile-compositor`'s `latency.rs` now, and the three
+// instruments this line read it off had stopped recording when a client's
+// buffer stopped passing through this page — see `placement-line.ts`.
 //
 // Straight to the console, where it used to cross an IPC channel to an
 // Electron main process: the page could not reach a terminal from inside the
@@ -83,20 +77,12 @@ createRoot(mountPoint(document)).render(
 // The engine has no world boundary, and what a page logs reaches the terminal
 // it was started from.
 setInterval(() => {
-  // Every window is drained on every interval, whether or not anything is
-  // printed: a window left undrained accumulates across the whole session,
-  // and the next line to include it would report an average since startup
-  // rather than since the last line.
-  const lines = diagnosticLines({
-    draw: drawTiming.take(),
-    ipc: bridge.hop.take(),
-    place: placementTiming.take(),
-    // Not drained: the round trip is reported for the whole run, so the
-    // last line printed is the answer rather than whichever few seconds a
-    // reader's `tail` happened to catch.
-    trip: bridge.roundTrip.report(performance.now()),
-  });
-  for (const line of lines) {
+  // Drained on every interval, whether or not anything is printed: a window
+  // left undrained accumulates across the whole session, and the next line to
+  // include it would report an average since startup rather than since the
+  // last line.
+  const line = placementLine(placementTiming.take());
+  if (line !== undefined) {
     // biome-ignore lint/suspicious/noConsole: this line *is* the report
     console.log(line);
   }
@@ -116,5 +102,5 @@ setInterval(() => {
 // *is*, and under the forked engine the compositor cannot see the window this
 // page is in — without the second call the desktop stays at the compositor's
 // configured `nested_size` however large the window really is.
-reportDevicePixelRatio(bridge, window);
-reportDesktopSize(bridge, window);
+reportDevicePixelRatio(domicile, window);
+reportDesktopSize(domicile, window);

@@ -15,8 +15,8 @@
 //
 // Its own module rather than a member of `protocol.ts` because both halves of
 // the SDK need it and only one of them is the wire: `protocol.ts` parses the
-// compositor's JSON for the headless harness, and `bridge.ts` parses this same
-// keyword off a DOM event. One list, two readers.
+// compositor's JSON for the headless harness, and `domicile-client.ts` parses
+// this same keyword off a DOM event. One list, two readers.
 
 import { z } from "zod";
 

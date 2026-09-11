@@ -2,10 +2,12 @@
 //!
 //! Requirement 1 is that a client's window costs the user nothing a plain
 //! Wayland compositor would not have cost them. Nothing measured it. The two
-//! instruments that used to — `BridgeClient.roundTrip` and
-//! `AppElements.drawTiming` — could only do it because the bridge drew the
-//! frame, and the bridge does not draw any more; they were kept and emptied
-//! against this. See ENGINE-FORK.md, *rebuild the latency measurement*.
+//! instruments that used to — the chrome SDK's `roundTrip` and the shell's
+//! `drawTiming` — could only do it because the page drew the frame, and the
+//! page does not draw any more. They were kept and emptied against this, and
+//! are deleted now that this exists: an empty instrument that a shell still
+//! reads reports `rt_ms=0`, which is a measurement to whoever reads the log.
+//! See ENGINE-FORK.md, *rebuild the latency measurement*.
 //!
 //! **The compositor is the only place it can be rebuilt.** It is the one
 //! process that both puts the key into the client's seat and holds the engine

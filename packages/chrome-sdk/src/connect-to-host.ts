@@ -17,8 +17,8 @@
 // anything — which was the point of moving it into the browser process.
 //
 // WRITING-A-SHELL.md used to have every shell branching on the host by hand.
-// This is that branch, once, so a shell is `new BridgeClient(connectToHost())`
-// and the requirement that a React developer gets a desktop out of a few lines
+// This is that branch, once, so a shell is
+// `new DomicileClient(connectToHost())` and the requirement that a React developer gets a desktop out of a few lines
 // around `ReactDOM.render` survives.
 
 import type { DomicileHost } from "./domicile-host";
@@ -99,7 +99,7 @@ const compositorOn = (navigator: HostNavigator): DomicileHost | undefined =>
 /**
  * A `DomicileHost` that answers every question with nothing.
  *
- * Every member, not only the ones a shell is likely to reach for: the bridge
+ * Every member, not only the ones a shell is likely to reach for: the client
  * registers a listener for every event type in its constructor, so a stand-in
  * missing `addEventListener` would throw before the shell had rendered a
  * single element. It is not an `EventTarget` behind that listener and does not

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Measure } from "@domicile/chrome-sdk/measure";
 import {
   APP_TAG_NAME,
@@ -8,13 +8,13 @@ import {
 
 import { Desktop } from "./desktop";
 
-// The elements report their size to a bridge as they mount; nothing here reads
-// what they say, so a recorder that answers every call is enough.
-const silentBridge = {
+// The elements report their size to the domicile client as they mount; nothing
+// here reads what they say, so a recorder that answers every call is enough.
+const silentDomicile = {
   focusApp: () => undefined,
   focusChrome: () => undefined,
   resizeApp: () => undefined,
-} as unknown as BridgeClient;
+} as unknown as DomicileClient;
 
 // The test DOM performs no layout, so measurement is injected.
 const stubMeasure: Measure = () => ({
@@ -23,14 +23,14 @@ const stubMeasure: Measure = () => ({
   visible: true,
 });
 
-/** A desktop whose elements report to a bridge that keeps who was focused. */
+/** A desktop whose elements report to a client that keeps who was focused. */
 const recordingDesktop = () => {
   const acted: string[] = [];
-  const bridge = {
-    ...silentBridge,
+  const domicile = {
+    ...silentDomicile,
     focusApp: (appId: string) => acted.push(`focus:${appId}`),
-  } as unknown as BridgeClient;
-  registerElements(bridge, {
+  } as unknown as DomicileClient;
+  registerElements(domicile, {
     measure: stubMeasure,
     observePlacement: () => () => {
       // Never turned: nothing here tests what happens when a window resizes.
@@ -56,7 +56,7 @@ const freshRoot = (): HTMLElement => {
 
 beforeEach(() => {
   document.body.replaceChildren();
-  registerElements(silentBridge, {
+  registerElements(silentDomicile, {
     measure: stubMeasure,
     // Otherwise these suites run the SDK's own animation loop, which happy-dom
     // serves as fast as it can: every mounted window re-measured tens of
@@ -131,8 +131,8 @@ describe("Desktop", () => {
     });
 
     it("refuses to touch a window that is not on the desktop", () => {
-      // Every caller has heard the host announce the client first — the bridge
-      // holds `app_appeared` until this shell is listening — so an app id it
+      // Every caller has heard the host announce the client first — the
+      // domicile client holds `app_appeared` until this shell is listening — so an app id it
       // has never seen is the two having gone out of step, not a case to
       // absorb.
       expect(() => new Desktop(freshRoot()).close("term")).toThrow(

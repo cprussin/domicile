@@ -2,7 +2,7 @@
   "dependencies": {
     "zod": "catalog:"
   },
-  "description": "Domicile chrome SDK: <domicile-app>/<domicile-webview> custom elements and the host bridge client",
+  "description": "Domicile chrome SDK: <domicile-app>/<domicile-webview> custom elements and the client for navigator.domicile",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile/test-support": "workspace:*",
@@ -17,10 +17,6 @@
     "./app-element": {
       "types": "./dist/app-element.d.ts",
       "default": "./dist/app-element.js"
-    },
-    "./bridge": {
-      "types": "./dist/bridge.d.ts",
-      "default": "./dist/bridge.js"
     },
     "./chrome-message": {
       "types": "./dist/chrome-message.d.ts",
@@ -41,6 +37,10 @@
     "./device-pixel-ratio": {
       "types": "./dist/device-pixel-ratio.d.ts",
       "default": "./dist/device-pixel-ratio.js"
+    },
+    "./domicile-client": {
+      "types": "./dist/domicile-client.d.ts",
+      "default": "./dist/domicile-client.js"
     },
     "./domicile-host": {
       "types": "./dist/domicile-host.d.ts",
@@ -89,10 +89,6 @@
     "./register-elements": {
       "types": "./dist/register-elements.d.ts",
       "default": "./dist/register-elements.js"
-    },
-    "./round-trip": {
-      "types": "./dist/round-trip.d.ts",
-      "default": "./dist/round-trip.js"
     },
     "./sample-window": {
       "types": "./dist/sample-window.d.ts",

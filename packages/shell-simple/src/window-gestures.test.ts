@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Measure } from "@domicile/chrome-sdk/measure";
 import {
   APP_TAG_NAME,
@@ -60,7 +60,7 @@ const desktopWith = (
   ...appIds: readonly string[]
 ): { desktop: Desktop; forwarded: Forwarded; root: HTMLElement } => {
   const forwarded: Forwarded = { buttons: [], motions: [] };
-  registerElements(recordingBridge(forwarded), {
+  registerElements(recordingDomicile(forwarded), {
     measure: stubMeasure,
     // Otherwise these suites run the SDK's own animation loop, which happy-dom
     // serves as fast as it can.
@@ -80,15 +80,15 @@ const desktopWith = (
 };
 
 // The elements report their size, and forward the pointer events the desktop
-// does *not* take, to a bridge. Only the forwards are read back.
-const recordingBridge = (forwarded: Forwarded): BridgeClient =>
+// does *not* take, to the domicile client. Only the forwards are read back.
+const recordingDomicile = (forwarded: Forwarded): DomicileClient =>
   ({
     focusApp: () => undefined,
     focusChrome: () => undefined,
     pointerButton: (...call: unknown[]) => forwarded.buttons.push(call),
     pointerMotion: (...call: unknown[]) => forwarded.motions.push(call),
     resizeApp: () => undefined,
-  }) as unknown as BridgeClient;
+  }) as unknown as DomicileClient;
 
 const windowFor = (root: HTMLElement, appId: string): HTMLElement => {
   const element = root.querySelector(`${APP_TAG_NAME}[app-id="${appId}"]`);

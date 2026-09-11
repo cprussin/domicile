@@ -40,14 +40,14 @@ where that window goes, and deciding that is the whole job.
 
 ```js
 // shell.js
-import { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-const bridge = new BridgeClient(connectToHost(navigator));
-registerElements(bridge);
+const domicile = new DomicileClient(connectToHost(navigator));
+registerElements(domicile);
 
-bridge.on("app_appeared", ({ app_id }) => {
+domicile.on("app_appeared", ({ app_id }) => {
   const app = document.createElement("domicile-app");
   app.setAttribute("app-id", app_id);
   document.body.append(app);

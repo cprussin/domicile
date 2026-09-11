@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 
-import type { BridgeClient } from "./bridge";
+import type { DomicileClient } from "./domicile-client";
 import { registerElements, WEBVIEW_TAG_NAME } from "./register-elements";
 import type { DomicileWebviewElement } from "./webview-element";
 import { WEBVIEW_NAVIGATE_EVENT } from "./webview-element";
@@ -32,9 +32,9 @@ const navigateEmbed = (view: Element, url: string): void => {
 describe("<domicile-webview>", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
-    // The webview element ignores the bridge, but registration is what defines
+    // The webview element ignores the client, but registration is what defines
     // the custom element.
-    registerElements({} as BridgeClient);
+    registerElements({} as DomicileClient);
   });
 
   it("reflects src and embeds an inner view when connected", () => {

@@ -27,7 +27,7 @@ twelve hundred lines of it. Two neighbours mark the ends it sits between:
 
 | Path | What |
 |---|---|
-| `src/renderer.ts` | Renderer entry, and the whole of the wiring: build the `BridgeClient`, register the SDK's elements, open a window per client, draw the background, install the gestures and the shortcut. |
+| `src/renderer.ts` | Renderer entry, and the whole of the wiring: build the `DomicileClient`, register the SDK's elements, open a window per client, draw the background, install the gestures and the shortcut. |
 | `src/desktop.ts` | The windows on screen: one `<domicile-app>` per client, each at a box this module owns. All of the shell's state. |
 | `src/window-gestures.ts` | Alt and the pointer: what a press, a drag and a release do to the window under them. |
 | `src/keybinding-background.ts` | The keys, on an empty desktop and unpainted while a window is on it: the desktop's own paint, and all of it when there is no window. |
@@ -125,17 +125,18 @@ bun run turbo build:vite --filter @domicile/shell-simple
 
 emits the page to `.vite/renderer/main_window/`, and that is the whole of what
 a shell builds — there is no main process, no preload and no launcher. A shell
-is a built web page: the bridge serves it, the engine loads it, and the
-compositor is a producer to that engine.
+is a built web page: the engine serves it over `domicile://` and loads it, and
+the compositor is a producer to that engine.
 
 Configuration is this shell's own, at `$XDG_CONFIG_HOME/domicile/simple.json`.
 Nothing of Domicile's is configured directly — what the compositor reads is
 generated from that file. A first run with no file takes the defaults.
 
 `bun run --filter @domicile/shell-simple start:dev` runs this shell in a real
-desktop and rebuilds it as you edit — the engine the flake pins, the compositor
-and the bridge out of this checkout, and the page reloading itself when a build
-finishes.
+desktop and rebuilds it as you edit — the engine the flake pins and the
+compositor out of this checkout. A rebuilt shell needs the desktop restarted —
+nothing reloads the page for you until `domicile load-shell` lands, see
+`scripts/dev-shell.sh`.
 
 `styled-system/` is Panda's generated output, produced by `bun run prepare` (run
 automatically as a turbo dependency of the build, type check, and tests) and not

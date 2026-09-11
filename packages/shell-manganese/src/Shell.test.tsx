@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import {
   APP_TAG_NAME,
@@ -43,11 +43,11 @@ type Call = readonly [kind: string, ...args: unknown[]];
 
 // A double that both records what the chrome asks of the host and emits the
 // host events the chrome reacts to.
-class FakeBridge {
+class FakeDomicile {
   readonly calls: Call[] = [];
 
   /**
-   * The desktop, retained the way the real bridge retains it: a description is
+   * The desktop, retained the way the real client retains it: a description is
    * a fact rather than an event, and the chrome reads it as often as it is
    * told it.
    */
@@ -116,7 +116,7 @@ const shownWindowIds = (container: HTMLElement): (string | null)[] =>
     .filter((element) => !element.hasAttribute("hidden"))
     .map((element) => element.getAttribute("app-id") ?? element.tagName);
 
-let bridge: FakeBridge;
+let domicile: FakeDomicile;
 
 /**
  * Renders the chrome on a desktop of `desktop`.
@@ -127,9 +127,9 @@ let bridge: FakeBridge;
  * describe one themselves.
  */
 const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
-  bridge = new FakeBridge();
-  bridge.displays = desktop;
-  const client = bridge as unknown as BridgeClient;
+  domicile = new FakeDomicile();
+  domicile.displays = desktop;
+  const client = domicile as unknown as DomicileClient;
   registerElements(client, {
     // Otherwise these suites run the SDK's own animation loop, which happy-dom
     // serves as fast as it can: every mounted window re-measured tens of
@@ -138,7 +138,7 @@ const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
       // Never turned: nothing here tests what happens when a window moves.
     },
   });
-  return render(<Shell bridge={client} displays={displaysFrom(client)} />);
+  return render(<Shell displays={displaysFrom(client)} domicile={client} />);
 };
 
 /** The chrome on a desktop the host has already described. */
@@ -224,9 +224,9 @@ describe("Shell", () => {
       // as a `remove_portal` the host was sent, and there is no such message
       // any more.
       const { container } = renderUndescribedShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
 
-      bridge.describes([LEFT]);
+      domicile.describes([LEFT]);
 
       expect(
         screenNamed(container, "left")?.querySelector(APP_TAG_NAME),
@@ -240,7 +240,7 @@ describe("Shell", () => {
       const { container } = renderShell([LEFT, RIGHT]);
 
       const stage = screenNamed(container, "left")?.querySelector("main");
-      bridge.describes([RIGHT]);
+      domicile.describes([RIGHT]);
 
       expect(
         screenNamed(container, "right")?.querySelector("main"),
@@ -315,7 +315,7 @@ describe("Shell", () => {
       // the element happened to get — which for an empty replaced element is
       // nothing at all.
       renderShell([LEFT]);
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
 
       // One declaration per assertion: `css` with two of them returns two
       // space-joined class names, and Panda emits them in the source object's
@@ -353,7 +353,7 @@ describe("Shell", () => {
   describe("app portals", () => {
     it("mounts a portal when the host announces an app", () => {
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       expect(
         container.querySelector(APP_TAG_NAME)?.getAttribute("app-id"),
       ).toBe("term");
@@ -362,8 +362,8 @@ describe("Shell", () => {
 
     it("takes the portal down when the app closes", () => {
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      bridge.emit("app_closed", { app_id: "term" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_closed", { app_id: "term" });
       expect(container.querySelector(APP_TAG_NAME)).toBeNull();
     });
 
@@ -375,7 +375,7 @@ describe("Shell", () => {
       // the message, which is why the size is state the window is rendered
       // from rather than something applied to an element on the spot.
       const { container } = renderShell();
-      bridge.emit("app_appeared", {
+      domicile.emit("app_appeared", {
         app_id: "term",
         size: [640, 480],
         title: "Terminal",
@@ -392,13 +392,13 @@ describe("Shell", () => {
       // which the host will not do (its ids only count up); what is pinned is
       // that the drop happens on the close rather than on the unmount.
       const { container } = renderShell();
-      bridge.emit("app_appeared", {
+      domicile.emit("app_appeared", {
         app_id: "term",
         size: [640, 480],
         title: "Terminal",
       });
-      bridge.emit("app_closed", { app_id: "term" });
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_closed", { app_id: "term" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       expect(container.querySelector(APP_TAG_NAME)?.classList).not.toContain(
         "has-surface",
       );
@@ -406,7 +406,7 @@ describe("Shell", () => {
 
     it("gives no size to a client that has not drawn yet", () => {
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       expect(container.querySelector(APP_TAG_NAME)?.classList).not.toContain(
         "has-surface",
       );
@@ -417,18 +417,18 @@ describe("Shell", () => {
       // announced when the client creates it, which is before `set_title`, so
       // the tab opens showing the app id and is renamed afterwards.
       renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: undefined });
+      domicile.emit("app_appeared", { app_id: "term", title: undefined });
       expect(tabNames()).toStrictEqual(["term"]);
 
-      bridge.emit("app_titled", { app_id: "term", title: "~/domicile" });
+      domicile.emit("app_titled", { app_id: "term", title: "~/domicile" });
 
       expect(tabNames()).toStrictEqual(["~/domicile"]);
     });
 
     it("shows one window at a time, the newest of them", () => {
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "a", title: "A" });
-      bridge.emit("app_appeared", { app_id: "b", title: "B" });
+      domicile.emit("app_appeared", { app_id: "a", title: "A" });
+      domicile.emit("app_appeared", { app_id: "b", title: "B" });
       expect(shownWindowIds(container)).toStrictEqual(["b"]);
     });
   });
@@ -436,8 +436,8 @@ describe("Shell", () => {
   describe("the tab rail", () => {
     it("puts the window whose tab was clicked on the stage", async () => {
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "a", title: "A" });
-      bridge.emit("app_appeared", { app_id: "b", title: "B" });
+      domicile.emit("app_appeared", { app_id: "a", title: "A" });
+      domicile.emit("app_appeared", { app_id: "b", title: "B" });
       await userEvent.click(screen.getByRole("button", { name: "A" }));
       expect(shownWindowIds(container)).toStrictEqual(["a"]);
     });
@@ -448,14 +448,14 @@ describe("Shell", () => {
       // vanished on the click would take an editor's unsaved-work dialog off
       // the stage with nothing that ever puts it back.
       renderShell();
-      bridge.emit("app_appeared", { app_id: "a", title: "A" });
+      domicile.emit("app_appeared", { app_id: "a", title: "A" });
 
       await userEvent.click(screen.getByRole("button", { name: "Close A" }));
 
-      expect(bridge.calls).toContainEqual(["closeApp", "a"]);
+      expect(domicile.calls).toContainEqual(["closeApp", "a"]);
       expect(tabNames()).toStrictEqual(["A"]);
 
-      bridge.emit("app_closed", { app_id: "a" });
+      domicile.emit("app_closed", { app_id: "a" });
       expect(screen.queryAllByRole("listitem")).toStrictEqual([]);
     });
   });
@@ -464,7 +464,7 @@ describe("Shell", () => {
     it("asks the compositor for a terminal", async () => {
       renderShell();
       await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
-      expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
+      expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
     });
 
     it("opens a browser window on the stage, with a tab that closes it", async () => {
@@ -482,7 +482,7 @@ describe("Shell", () => {
     it("opens a terminal on Alt+Enter", async () => {
       renderShell();
       await userEvent.keyboard("{Alt>}{Enter}{/Alt}");
-      expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
+      expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
     });
 
     it("claims Alt+Enter from the compositor, with and without Shift", () => {
@@ -492,7 +492,7 @@ describe("Shell", () => {
       // asked to take these before the window is given them.
       renderShell();
 
-      expect(bridge.calls).toContainEqual([
+      expect(domicile.calls).toContainEqual([
         "grabShortcut",
         {
           altKey: true,
@@ -502,7 +502,7 @@ describe("Shell", () => {
           shiftKey: false,
         },
       ]);
-      expect(bridge.calls).toContainEqual([
+      expect(domicile.calls).toContainEqual([
         "grabShortcut",
         {
           altKey: true,
@@ -517,7 +517,7 @@ describe("Shell", () => {
     it("opens a terminal when the compositor hands back a claimed Alt+Enter", () => {
       renderShell();
 
-      bridge.emit("shortcut", {
+      domicile.emit("shortcut", {
         altKey: true,
         ctrlKey: false,
         keycode: 28,
@@ -525,7 +525,7 @@ describe("Shell", () => {
         shiftKey: false,
       });
 
-      expect(bridge.calls).toContainEqual(["spawn", ["kitty"]]);
+      expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
     });
 
     // There were three tests here for a third claim, on an Electron host: a
@@ -552,7 +552,9 @@ describe("Shell", () => {
         document.dispatchEvent(repeat);
       });
 
-      expect(bridge.calls.filter(([kind]) => kind === "spawn")).toHaveLength(1);
+      expect(domicile.calls.filter(([kind]) => kind === "spawn")).toHaveLength(
+        1,
+      );
       // Answered by nobody, but still not passed on: the chord belongs to the
       // desktop for as long as it is held, which is what the other two paths
       // do with a repeat.
@@ -567,7 +569,7 @@ describe("Shell", () => {
       await userEvent.keyboard("{Control>}{Alt>}{Enter}{/Alt}{/Control}");
       await userEvent.keyboard("{Meta>}{Alt>}{Enter}{/Alt}{/Meta}");
 
-      expect(bridge.calls).not.toContainEqual(["spawn", ["kitty"]]);
+      expect(domicile.calls).not.toContainEqual(["spawn", ["kitty"]]);
     });
 
     it("opens a browser on Alt+Shift+Enter", async () => {
@@ -588,7 +590,7 @@ describe("Shell", () => {
       // one holding the keyboard, so the page hears nothing.
       renderShell();
 
-      expect(bridge.calls).toContainEqual([
+      expect(domicile.calls).toContainEqual([
         "grabShortcut",
         {
           altKey: true,
@@ -604,9 +606,9 @@ describe("Shell", () => {
       // The path that matters most: once a window has the keyboard the page
       // hears nothing, so this is the only one that fires in a real desktop.
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       act(() => {
-        bridge.emit("shortcut", {
+        domicile.emit("shortcut", {
           altKey: true,
           ctrlKey: false,
           keycode: 15,
@@ -620,7 +622,7 @@ describe("Shell", () => {
 
     it("takes the window the user is working in out of the rail", async () => {
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
 
       const portal = portalFor(container, "term");
@@ -636,7 +638,7 @@ describe("Shell", () => {
 
     it("puts a floating window back on the stage", async () => {
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
 
@@ -648,12 +650,12 @@ describe("Shell", () => {
 
     it("stacks each float above the one before it", async () => {
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "one", title: "One" });
-      bridge.emit("app_appeared", { app_id: "two", title: "Two" });
+      domicile.emit("app_appeared", { app_id: "one", title: "One" });
+      domicile.emit("app_appeared", { app_id: "two", title: "Two" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
       // A click on the other window is what the compositor reports, and it is
       // what says which window the next Alt+Tab is about.
-      bridge.emit("focus_changed", { app_id: "one" });
+      domicile.emit("focus_changed", { app_id: "one" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
 
       expect(portalFor(container, "two")?.style.zIndex).toBe("1");
@@ -747,14 +749,14 @@ describe("Shell", () => {
 
     const floated = async () => {
       const rendered = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
       return rendered;
     };
 
     it("gives a window in the rail no bar at all", () => {
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
 
       expect(barIn(container)).toBeNull();
     });
@@ -783,7 +785,7 @@ describe("Shell", () => {
       await floated();
       await userEvent.click(screen.getByRole("button", { name: "Close" }));
 
-      expect(bridge.calls).toContainEqual(["closeApp", "term"]);
+      expect(domicile.calls).toContainEqual(["closeApp", "term"]);
     });
 
     it("moves the window when the bar is dragged, with no modifier held", async () => {
@@ -830,9 +832,9 @@ describe("Shell", () => {
     /** A floating terminal, with the host saying which modifiers are held. */
     const floated = async (held: { alt: boolean; shift: boolean }) => {
       const rendered = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
-      bridge.emit("modifiers", {
+      domicile.emit("modifiers", {
         altKey: held.alt,
         ctrlKey: false,
         metaKey: false,
@@ -860,7 +862,7 @@ describe("Shell", () => {
       // A window is an ordinary window the rest of the time: the pointer over
       // it belongs to the client behind it, which is the whole point.
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
 
       expect(sheetIn(container)).toBeNull();
     });
@@ -912,7 +914,7 @@ describe("Shell", () => {
       const sheet = grabbing(container);
       sheet.setPointerCapture = () => undefined;
       fireEvent.pointerDown(sheet, { clientX: 0, clientY: 0, pointerId: 1 });
-      bridge.emit("modifiers", {
+      domicile.emit("modifiers", {
         altKey: true,
         ctrlKey: false,
         metaKey: false,
@@ -980,11 +982,11 @@ describe("Shell", () => {
      */
     const twoFloats = async (held = { alt: true, shift: false }) => {
       const rendered = renderShell();
-      bridge.emit("app_appeared", { app_id: "one", title: "One" });
+      domicile.emit("app_appeared", { app_id: "one", title: "One" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
-      bridge.emit("app_appeared", { app_id: "two", title: "Two" });
+      domicile.emit("app_appeared", { app_id: "two", title: "Two" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
-      bridge.emit("modifiers", {
+      domicile.emit("modifiers", {
         altKey: held.alt,
         ctrlKey: false,
         metaKey: false,
@@ -1108,7 +1110,7 @@ describe("Shell", () => {
       // secondary button is the resize.
       const { container } = await twoFloats({ alt: false, shift: false });
       act(() => {
-        bridge.emit("modifiers", {
+        domicile.emit("modifiers", {
           altKey: false,
           ctrlKey: true,
           metaKey: false,
@@ -1130,11 +1132,11 @@ describe("Shell", () => {
       // window is then left grabbed with the mouse already let go, which is
       // what dragging quickly across the desktop produces.
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "stage", title: "Stage" });
-      bridge.emit("app_appeared", { app_id: "float", title: "Float" });
+      domicile.emit("app_appeared", { app_id: "stage", title: "Stage" });
+      domicile.emit("app_appeared", { app_id: "float", title: "Float" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
       act(() => {
-        bridge.emit("modifiers", {
+        domicile.emit("modifiers", {
           altKey: true,
           ctrlKey: false,
           metaKey: false,
@@ -1153,13 +1155,13 @@ describe("Shell", () => {
       // Only for the length of the drag: a window on the stage is there to be
       // used, and a click that fell through it would cost the user that click.
       const { container } = renderShell();
-      bridge.emit("app_appeared", { app_id: "stage", title: "Stage" });
-      bridge.emit("app_appeared", { app_id: "float", title: "Float" });
+      domicile.emit("app_appeared", { app_id: "stage", title: "Stage" });
+      domicile.emit("app_appeared", { app_id: "float", title: "Float" });
       await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
       // Alt stays held, so the float keeps its sheet and only the drag can be
       // what makes the *stage* window let the pointer through.
       act(() => {
-        bridge.emit("modifiers", {
+        domicile.emit("modifiers", {
           altKey: true,
           ctrlKey: false,
           metaKey: false,
@@ -1186,7 +1188,7 @@ describe("Shell", () => {
       press(sheetOver(container, "one"), 0, 0);
 
       act(() => {
-        bridge.emit("modifiers", {
+        domicile.emit("modifiers", {
           altKey: false,
           ctrlKey: false,
           metaKey: false,
@@ -1204,7 +1206,7 @@ describe("Shell", () => {
       const dragged = sheetOver(container, "one");
       press(dragged, 0, 0);
       act(() => {
-        bridge.emit("modifiers", {
+        domicile.emit("modifiers", {
           altKey: false,
           ctrlKey: false,
           metaKey: false,

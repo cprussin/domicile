@@ -1,4 +1,4 @@
-// What `BridgeClient.on` hands a shell, and what it is called.
+// What `DomicileClient.on` hands a shell, and what it is called.
 //
 // One layer below this is `navigator.domicile`, whose events are typed but are
 // shaped for WebIDL: a `DOMString` that is empty rather than absent, a
@@ -6,7 +6,7 @@
 // jobs. One layer above it is a shell, which wants the thing that happened and
 // only the fields that happened with it. This is the vocabulary in between —
 // the names, and the translators that turn one of the engine's events into
-// one of them. `bridge.ts` is what calls them, once per listener.
+// one of them. `domicile-client.ts` is what calls them, once per listener.
 //
 // # Why these names and not the IDL's
 //
@@ -158,16 +158,16 @@ export type ModifiersMessage = {
  * The desktop, as it is now.
  *
  * The event that carries this is bare — `displayschanged` says the desktop
- * moved and `navigator.domicile.displays` says what it is. The bridge reads
+ * moved and `navigator.domicile.displays` says what it is. The client reads
  * the attribute and puts it here so a shell that wants to *react* to a change
  * gets the change and the desktop in one call, and one that wants to *read*
- * the desktop uses {@link BridgeClient.displays} instead.
+ * the desktop uses {@link DomicileClient.displays} instead.
  */
 export type DisplaysMessage = {
   displays: readonly DomicileDisplay[];
 };
 
-/** Every message the bridge delivers, and what each one carries. */
+/** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
   app_titled: AppTitledMessage;
@@ -192,8 +192,8 @@ export type HostMessageOf<T extends HostMessageType> = HostMessageMap[T];
  *
  * The translators below are the whole of the seam between WebIDL's shapes and
  * a shell's. They are pure functions over one event rather than statements
- * inside `bridge.ts`'s listeners because that is where the decisions are — a
- * zero that must not be read as a size, an empty string that means two
+ * inside `domicile-client.ts`'s listeners because that is where the decisions
+ * are — a zero that must not be read as a size, an empty string that means two
  * different nothings, a keyword the engine does not check — and a decision
  * inside a DOM listener cannot be asserted on: a throw there is reported to
  * the page's error handler rather than raised to whatever dispatched.

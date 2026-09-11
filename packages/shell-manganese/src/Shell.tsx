@@ -1,4 +1,4 @@
-import type { BridgeClient } from "@domicile/chrome-sdk/bridge";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileShortcut } from "@domicile/chrome-sdk/domicile-host";
 import { Button } from "@domicile/component-library/Button";
 import { Card } from "@domicile/component-library/Card";
@@ -51,16 +51,16 @@ const ALT_ENTER: DomicileShortcut = {
 const ALT_TAB: DomicileShortcut = { ...ALT_ENTER, keycode: 15 };
 
 type ChromeProps = {
-  bridge: BridgeClient;
+  domicile: DomicileClient;
 };
 
 type Props = ChromeProps & {
   /**
-   * Where the desktop comes from — the host over the bridge, or the window
-   * itself where there is no host. Passed in rather than built here because the
+   * Where the desktop comes from — the host over the control channel, or the
+   * window itself where there is no host. Passed in rather than built here because the
    * entry point is what knows which of those this is, and because a source is
    * the connection: the provider re-registers whenever its identity changes and
-   * `BridgeClient.on` is a single slot, so one built per render would
+   * `DomicileClient.on` is a single slot, so one built per render would
    * re-register per render.
    */
   displays: DisplaySource;
@@ -74,10 +74,10 @@ type Props = ChromeProps & {
  * its screens from. `on` is a single slot, so there is exactly one listener for
  * the host's descriptions and every `<Screen>` below fans out from it.
  */
-export const Shell = ({ bridge, displays }: Props) => (
+export const Shell = ({ domicile, displays }: Props) => (
   <Provider>
     <DisplayProvider source={displays}>
-      <Desktop bridge={bridge} />
+      <Desktop domicile={domicile} />
     </DisplayProvider>
   </Provider>
 );
@@ -97,7 +97,7 @@ export const Shell = ({ bridge, displays }: Props) => (
  * between screens is moving where its `<domicile-app>` is laid out, not handing
  * it to another shell.
  */
-const Desktop = ({ bridge }: ChromeProps) => {
+const Desktop = ({ domicile }: ChromeProps) => {
   const {
     activeId,
     close,
@@ -115,13 +115,13 @@ const Desktop = ({ bridge }: ChromeProps) => {
     shownId,
     toggleFloat,
     windows,
-  } = useShellWindows(bridge);
+  } = useShellWindows(domicile);
 
   // Alt is what hands the pointer back to the page, and Shift is what makes
   // the drag a resize. Neither can be read off a DOM event here: while a
   // window holds the keyboard the page is told nothing, which is exactly when
   // the user is holding Alt over one. See `useModifiers`.
-  const { alt, ctrl, shift } = useModifiers(bridge);
+  const { alt, ctrl, shift } = useModifiers(domicile);
 
   // Alt+Enter -> a terminal; add Shift for a browser.
   const launch = useCallback(
@@ -153,23 +153,23 @@ const Desktop = ({ bridge }: ChromeProps) => {
   // instead. Exactly one of the two paths fires per keystroke: either the
   // claim caught the key, or the page received it.
   useEffect(() => {
-    bridge.grabShortcut(ALT_ENTER);
-    bridge.grabShortcut({ ...ALT_ENTER, shiftKey: true });
-    bridge.grabShortcut(ALT_TAB);
-    // `on` returns the bridge for chaining, so it is deliberately not returned
+    domicile.grabShortcut(ALT_ENTER);
+    domicile.grabShortcut({ ...ALT_ENTER, shiftKey: true });
+    domicile.grabShortcut(ALT_TAB);
+    // `on` returns the client for chaining, so it is deliberately not returned
     // as a cleanup — there is one handler per message type and re-registering
     // replaces it.
     // Flat rather than nested under a `shortcut` key: the press arrives as the
     // same dictionary that claimed it, so this compares the two field for
     // field without parsing anything.
-    bridge.on("shortcut", ({ keycode, shiftKey }) => {
+    domicile.on("shortcut", ({ keycode, shiftKey }) => {
       if (keycode === ALT_TAB.keycode) {
         float();
       } else {
         launch(shiftKey);
       }
     });
-  }, [bridge, float, launch]);
+  }, [domicile, float, launch]);
 
   // WHO ACTUALLY CATCHES THE CLAIM DEPENDS ON WHICH WINDOW HAS THE KEYBOARD,
   // and the claim above is one call because the shell should not have to care.
@@ -340,8 +340,8 @@ const Desktop = ({ bridge }: ChromeProps) => {
                 case WindowKind.Browser: {
                   return (
                     <BrowserWindow
-                      bridge={bridge}
                       clickThrough={clickThrough}
+                      domicile={domicile}
                       dragging={dragging}
                       floating={floating}
                       focused={window.id === activeId}

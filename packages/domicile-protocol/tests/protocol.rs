@@ -1,7 +1,7 @@
 //! Behaviour tests for `domicile-protocol`, written before the implementation.
 //!
 //! This crate defines the wire contract between the Rust host and the in-page
-//! bridge client (JS). Two things matter and are tested here:
+//! client (JS). Two things matter and are tested here:
 //!  1. Every message round-trips through JSON unchanged.
 //!  2. The on-the-wire shape is stable (the JS side hard-codes these strings),
 //!     so we pin the tag/field names explicitly.
@@ -185,7 +185,7 @@ fn a_desktop_of_no_displays_is_a_message_rather_than_a_silence() {
 
 #[test]
 fn wire_shape_is_pinned() {
-    // The JS bridge depends on these exact strings — lock them.
+    // The JS client depends on these exact strings — lock them.
     // A size the client has not said is `null` on the wire rather than an
     // absent key, which is the shape the chrome's schema parses: it reads
     // `size` the way it already reads `title`, and both arrive as JSON null.
