@@ -72,6 +72,50 @@ class CORE_EXPORT HTMLWebViewElement final : public HTMLFrameElementBase {
   void Trace(Visitor*) const override;
 
  private:
+  /**
+   * Say, in an event, that this element has been focused.
+   *
+   * WHY AN EVENT OF ITS OWN, RATHER THAN THE FOCUS EVENT THAT WOULD NORMALLY
+   * FOLLOW. Document::SetFocusedElement dispatches `focus` and `focusin` only
+   * while the page is focused -- "if page lost focus, event will be dispatched
+   * on page focus, don't duplicate" -- and a guest taking focus is exactly the
+   * moment the embedder's page has lost it: WebContentsImpl::
+   * SetFocusedFrameTree sends the old tree's widget SetPageFocus(false) BEFORE
+   * FocusOuterFrameTrees tells this renderer anything. So the element becomes
+   * document.activeElement and not one event is dispatched, which is a shell
+   * being told nothing at all in the case it most needs telling: a click in a
+   * browser window's page, which is what raises the window.
+   *
+   * Measured rather than reasoned. guard-webview-click.sh drove a real press
+   * into a guest and read `activeElement=webview hasFocus=false` out of the
+   * embedder's document with no event of any kind beside it.
+   *
+   * HUNG OFF SetFocused RATHER THAN OFF THE FOCUS CONTROLLER'S CALL, and that
+   * is the same measurement read a second time. Document::SetFocusedElement
+   * calls SetFocused on whatever it focuses, unconditionally, so an element
+   * that is activeElement has had this run -- whichever route the focus came
+   * by. A call from the patched branch would fire only if that branch is the
+   * route, which is an inference and not a reading.
+   *
+   * Patch 0011 moves HTMLFrameElementBase::SetFocused out of that class's
+   * private section for this: a subclass may override a private virtual, and
+   * may not call one, and the base's own work -- handing the content frame the
+   * focus -- still has to happen.
+   */
+  void SetFocused(bool received, mojom::blink::FocusType) override;
+
+  /**
+   * The dispatch itself, and it is synchronous. Two earlier shapes deferred it
+   * -- a ScopedEventQueue, then a posted task -- to keep a handler out of focus
+   * bookkeeping that is halfway through, and neither event ever arrived
+   * (engine runs 186 and 192). Document::SetFocusedElement expects this: its
+   * own comment beside the SetFocused call is "Element::setFocused for frames
+   * can dispatch events", and the branch under it handles a handler that moved
+   * focus again. It also writes two lines to the engine log around the
+   * dispatch, which is how a run says whether this ran at all.
+   */
+  void DispatchGuestFocus();
+
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
 
   // `src` never reaches HTMLFrameElementBase, which would navigate the

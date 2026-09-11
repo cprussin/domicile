@@ -94,10 +94,19 @@ chrome sends the shell a pointer event like any other page furniture. The page
 does not: it is a guest with a browsing context of its own, so nothing about a
 pointer inside it ever crosses back out — a click there used to leave the
 window under whatever was covering it, while the rail went on highlighting the
-window before it and the keyboard stayed there too. What does cross is the
-focus that click takes, on the element the guest hangs off in the chrome's own
-document. So the window listens for both, and either one brings it to the front
-and makes it the window everything keyed acts on.
+window before it and the keyboard stayed there too.
+
+Nor does the focus that click takes, which was the obvious way for it to
+cross and is not available: upstream Blink dispatches no focus event across a
+remote frame's process boundary, and even with the fork focusing the element
+(patch 0011, the way upstream already does for a fenced frame) there is still
+no `focusin` — Blink dispatches focus events only while the page is focused,
+and a guest taking focus is the moment the chrome's page loses it. So **the
+element says so itself**, in an event that is not a focus event, and the window
+listens for that as well as for its own chrome's pointer events. Either one
+brings it to the front and makes it the window everything keyed acts on.
+`guard-webview-click.sh` is what says a real click in a real guest arrives
+here — it is also what found that the focus alone did not.
 
 A client's window arrives at the same place by a different road. The SDK would
 focus a clicked client by itself, and the shell stops it: `<domicile-app>` asks

@@ -7,7 +7,10 @@ import {
   WEBVIEW_TAG_NAME,
 } from "@domicile/chrome-sdk/register-elements";
 import type { DomicileWebviewElement } from "@domicile/chrome-sdk/webview-element";
-import { WEBVIEW_NAVIGATE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  WEBVIEW_GUEST_FOCUS_EVENT,
+  WEBVIEW_NAVIGATE_EVENT,
+} from "@domicile/chrome-sdk/webview-element";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -247,6 +250,33 @@ describe("BrowserWindow", () => {
   // hosts a browsing context of its own and the guest keeps them — so what
   // comes back from there is the focus the click took.
   describe("reaching the window", () => {
+    // THE ONE THE ENGINE ACTUALLY SENDS. A guest takes focus at the moment the
+    // embedder's page loses it, and `Document::SetFocusedElement` dispatches
+    // `focus` and `focusin` only while the page is focused — so the element
+    // becomes `activeElement` and no focus event is dispatched at all. The
+    // fork's element says so in an event of its own instead; this is the
+    // window hearing it.
+    it("reports a reach when the guest in the page takes focus", async () => {
+      await new Promise<void>((resolve) => {
+        const { container } = render(
+          <BrowserWindow
+            bridge={silentBridge}
+            clickThrough={false}
+            dragging={false}
+            floating={undefined}
+            focused={false}
+            onNavigate={() => undefined}
+            onReach={() => {
+              resolve();
+            }}
+            onScreen
+            src="https://example.com"
+          />,
+        );
+        view(container).dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
+      });
+    });
+
     it("reports a reach when focus lands in the page", async () => {
       await new Promise<void>((resolve) => {
         const { container } = render(

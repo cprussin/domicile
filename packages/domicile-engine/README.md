@@ -35,6 +35,10 @@ same reason.
 | `scripts/guard-shell.sh` | a real shell, built by its own vite config and joined by the SDK, with a client's window in it |
 | `scripts/guard-webview-framing.sh`, `guard-webview-framing.js`, `guard-webview-framing-server.py` | a site that refuses framing, shown in a `<webview>`. The one guard here that runs headless and needs no compositor: what it measures is a page against itself, so there is no client and nothing to import |
 | `scripts/guard-webview-history.sh`, `guard-webview-history.js`, `guard-webview-history-server.py` | the four history controls of a `<webview>`, driven at the guest behind it: two pages, then back, forward, reload and a stop, read as the order the guest showed them in. Headless too, and its control drives none of the four |
+| `scripts/guard-webview-keyboard.sh`, `guard-webview-keyboard.js`, `guard-webview-keyboard-socket.py`, `guard-webview-keyboard-key.py` | a desktop chord pressed while a browser window holds the keyboard, caught in the guest's own delegate. Headless, like the framing guard above |
+| `scripts/guard-webview-click.sh`, `guard-webview-click.js`, `guard-webview-click-mouse.py` | a click inside a browser window, and the event it must leave in the shell's document — which is how a shell knows to raise the window |
+| `scripts/guard-webview-guest-page.py` | the page a browser window shows for the keyboard and click guards, saying what it was given |
+| `scripts/guard_webview_devtools.py` | driving a key or a press at a running engine over the debugging port, which is the only keyboard and pointer `crux` has. Imported, which is why it is the one file here with underscores |
 | `scripts/guard-css-and-resize.sh` | the measurement: seven CSS properties, the resize, and the latency |
 | `scripts/spike.sh` | run one step of the spike end to end; the producer's exit code is the verdict. What `guard-css-and-resize.sh` runs twice |
 | `scripts/spike-page.html` | steps 2 and 3's page: a `<canvas>` that embeds instead of drawing |
@@ -208,6 +212,15 @@ git -C /build/chromium/src config user.email "..."
 `extract.sh` regenerates `patches/` from the commits on top of the pin. It
 cannot tell a new source file from build output, so **new files are copied into
 `src/` by hand** — that is the one manual step and it is deliberate.
+
+**A patch is made against the series, never against the pin.** Patch 0011 lands
+on a tree that already has 0001–0010 on it, so a hunk regenerated in a scratch
+tree holding only the pinned file has the right content and the wrong context —
+and `git apply --check` in that same scratch tree says it is fine. On the runner
+it is not: `git am` fails with *patch does not apply*, after the tree lock, the
+reset and the whole series ahead of it. `scripts/test-patch-series-chain.sh`
+catches exactly that without a checkout, by chaining the `index <pre>..<post>`
+blobs of every file two patches both touch, and it runs in `check.sh`.
 
 The rule the whole arrangement exists to enforce: work that is only in the
 checkout does not exist. Extract and push, or it is lost with the machine.

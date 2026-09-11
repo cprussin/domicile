@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# The keystroke driver's wire, checked without an engine.
+# The input drivers' wire, checked without an engine.
 #
-# `guard-webview-keyboard-key.py` carries a WebSocket client, because `crux`
-# runs it out of a nix shell with python3 and no wheels and one text frame on
-# one connection is not worth a dependency. That client is the one piece of this
-# guard that is neither exercised by anything else nor visible when it is wrong:
-# a frame this encodes badly is a connection Chromium closes, the guard reports
-# that no chord fired, and the reading is about the harness while the sentence
-# is about the hook. Each of those costs a run on the shared tree.
+# `guard_webview_devtools.py` carries a WebSocket client, because `crux` runs
+# these out of a nix shell with python3 and no wheels and one text frame on one
+# connection is not worth a dependency. That client is the one piece of the
+# guards that use it which is neither exercised by anything else nor visible
+# when it is wrong: a frame it encodes badly is a connection Chromium closes,
+# the guard reports that nothing fired, and the reading is about the harness
+# while the sentence is about the layer under test. Each of those costs a run on
+# the shared tree.
 #
 # So the framing is asserted here, in the check suite that runs on every commit:
 # what `send` writes is decoded back by an independent reader, and what
@@ -16,41 +17,40 @@
 # frame MUST NOT be, and getting that backwards is the classic way to write a
 # WebSocket client that never works.
 #
-# `pick_target` is here for a different reason. It decides which page the
-# keystroke is dispatched at, and the wrong answer is not an error: a browser
-# window is a page target of its own, and dispatching at *it* would deliver the
-# key straight to the guest and pass the guard with the shell still holding the
-# keyboard.
+# `pick_target` is here for a different reason. It decides which page the input
+# is dispatched at, and the wrong answer is not an error: a browser window is a
+# page target of its own, and dispatching at *it* would deliver a key straight
+# to the guest with the shell still holding the keyboard, and hit-test a press
+# against the guest's own viewport rather than the desktop the shell laid out.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DRIVER="$ROOT/packages/domicile-engine/scripts/guard-webview-keyboard-key.py"
-[ -f "$DRIVER" ] || {
-  echo "no driver at $DRIVER" >&2
+WIRE="$ROOT/packages/domicile-engine/scripts/guard_webview_devtools.py"
+[ -f "$WIRE" ] || {
+  echo "no wire at $WIRE" >&2
   exit 1
 }
 
 command -v python3 >/dev/null || {
-  echo "SKIP: no python3, which is what the keystroke driver is written in"
+  echo "SKIP: no python3, which is what the input drivers are written in"
   exit 77
 }
 
-python3 - "$DRIVER" <<'PYTHON'
-import importlib.util
+python3 - "$(dirname "$WIRE")" <<'PYTHON'
 import json
 import socket
 import struct
 import sys
 
-# The driver is a script rather than a package, so loading it as a module is
-# how its two pure functions are reachable at all. No .pyc beside it: this runs
-# out of the working tree on every check, and a __pycache__ that appears when
-# the suite is run is a dirty tree nobody asked for.
+# No .pyc beside it: this runs out of the working tree on every check, and a
+# __pycache__ that appears when the suite is run is a dirty tree nobody asked
+# for.
 sys.dont_write_bytecode = True
 
-specification = importlib.util.spec_from_file_location("driver", sys.argv[1])
-driver = importlib.util.module_from_spec(specification)
-specification.loader.exec_module(driver)
+# The drivers find this module the same way, by being run out of the directory
+# it is in.
+sys.path.insert(0, sys.argv[1])
+import guard_webview_devtools as driver
 
 failed = 0
 
@@ -100,7 +100,7 @@ def server_frame(payload):
     return bytes(header) + payload
 
 
-print("what the driver writes")
+print("what the wire writes")
 client, server = socket.socketpair()
 driver.send(client, {"id": 1, "method": "Input.dispatchKeyEvent"})
 frame = read_client_frame(server)
@@ -122,7 +122,7 @@ frame = read_client_frame(server)
 expect("a payload over 125 bytes survives", long_message, json.loads(frame["payload"]))
 
 print()
-print("what the driver reads")
+print("what the wire reads")
 server.sendall(server_frame(json.dumps({"id": 7, "result": {}}).encode("utf-8")))
 expect("a short server frame", {"id": 7, "result": {}}, driver.receive(client))
 padded = {"id": 8, "result": {"note": "y" * 400}}
@@ -130,13 +130,13 @@ server.sendall(server_frame(json.dumps(padded).encode("utf-8")))
 expect("a server frame over 125 bytes", padded, driver.receive(client))
 
 print()
-print("which page the keystroke is dispatched at")
+print("which page the input is dispatched at")
 expect(
     "the shell, not the browser window in it",
     "ws://shell",
     driver.pick_target(
         [
-            {"url": "http://127.0.0.1:8732/keys", "webSocketDebuggerUrl": "ws://guest"},
+            {"url": "http://127.0.0.1:8732/page", "webSocketDebuggerUrl": "ws://guest"},
             {"url": "domicile://shell/?kind=webview", "webSocketDebuggerUrl": "ws://shell"},
         ]
     ),
@@ -152,7 +152,7 @@ server.close()
 
 print()
 if failed == 0:
-    print("the keystroke driver's frames are the ones Chromium accepts")
+    print("the drivers' frames are the ones Chromium accepts")
     sys.exit(0)
 print("%d case(s) wrong" % failed, file=sys.stderr)
 sys.exit(1)

@@ -4,9 +4,12 @@
 
 #include "third_party/blink/renderer/core/html/domicile/html_web_view_element.h"
 
+#include "base/logging.h"
+#include "base/task/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
@@ -16,6 +19,14 @@
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
 namespace blink {
+
+// What this element says when the page inside it takes focus. Not a `focus`
+// event: see GuestTookFocus in the header for why there cannot be one, and
+// packages/chrome-sdk/src/webview-element.ts for the other end of the name.
+//
+// A char array rather than an AtomicString: the atom table does not exist at
+// static-initialisation time, so the string is made where it is used.
+constexpr char kGuestFocusEvent[] = "domicile-guest-focus";
 
 HTMLWebViewElement::HTMLWebViewElement(Document& document)
     : HTMLFrameElementBase(html_names::kWebviewTag, document),
@@ -100,6 +111,54 @@ void HTMLWebViewElement::NavigateGuest() {
   // bar looking like it had worked.
   guest_->Navigate(
       GetDocument().CompleteURL(StripLeadingAndTrailingHtmlSpaces(source)));
+}
+
+void HTMLWebViewElement::SetFocused(bool received,
+                                   mojom::blink::FocusType type) {
+  // UNCONDITIONAL, AND BEFORE ANYTHING ELSE. Three engine runs have now ended
+  // with this element as document.activeElement and no announcement, and the
+  // only way to tell "this override never ran" from "it ran with received
+  // false" is a line that does not depend on either. The pair of lines in
+  // DispatchGuestFocus cannot: they are inside the case being asked about.
+  LOG(INFO) << "domicile: <webview> SetFocused received=" << received;
+
+  HTMLFrameElementBase::SetFocused(received, type);
+  if (received) {
+    DispatchGuestFocus();
+  }
+}
+
+void HTMLWebViewElement::DispatchGuestFocus() {
+  // TWO LINES IN THE ENGINE'S OWN LOG, because a shell that hears nothing
+  // cannot say which half was missing and a guard reading only the page
+  // cannot either. Engine runs 186 and 192 both ended with the element as
+  // document.activeElement and no event anywhere -- which says
+  // Document::SetFocusedElement ran and reached SetFocused, and says nothing
+  // at all about what happened next. With these, a run separates "this never
+  // ran" from "it ran and the page heard nothing", which are faults in two
+  // different layers. guard-webview-click.sh reads them.
+  LOG(INFO) << "domicile: a <webview>'s guest took focus; announcing it";
+
+  // DISPATCHED HERE, AND THAT IS THE CHANGE RUN 192 ARGUES FOR. Both earlier
+  // attempts deferred it -- one through a ScopedEventQueue, one through a
+  // posted task -- out of a worry about re-entering focus bookkeeping that is
+  // halfway through. Neither ever arrived. What upstream does from this exact
+  // call is dispatch: Document::SetFocusedElement's own comment two lines past
+  // the SetFocused call reads "Element::setFocused for frames can dispatch
+  // events", and the branch under it handles a handler that moved focus again.
+  // So the re-entrancy this was avoiding is one the caller already expects,
+  // and avoiding it cost the event entirely.
+  //
+  // Bubbling, because that is what a chrome is written against: a shell hangs
+  // one handler on the window it drew and hears both halves of it -- the
+  // chrome's own pointer events and this -- through the same listener. See
+  // BrowserWindow.tsx in the Domicile repository.
+  DispatchEvent(*Event::CreateBubble(AtomicString(kGuestFocusEvent)));
+
+  // After, so the pair brackets the dispatch: a run with the first line and
+  // not the second is a handler that never returned, which reads identically
+  // to a dispatch that never happened from anywhere but here.
+  LOG(INFO) << "domicile: announced a <webview>'s guest focus";
 }
 
 LayoutObject* HTMLWebViewElement::CreateLayoutObject(
