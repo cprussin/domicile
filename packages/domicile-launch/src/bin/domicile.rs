@@ -16,7 +16,7 @@ use domicile_launch::cli::{invocation, Invocation};
 use domicile_launch::components::components;
 use domicile_launch::control::{answer, Request, Response};
 use domicile_launch::control_socket::{
-    address, answer_one, ask, take, Control, PATIENCE as ANSWER_WITHIN,
+    address, advertised, answer_one, ask, take, Control, PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::platform::platform;
@@ -48,7 +48,8 @@ fn run() -> Result<ExitCode, String> {
 /// Put one command to the desktop that is already running, and say what it
 /// said.
 fn asked(request: &Request) -> Result<ExitCode, String> {
-    let socket = address(std::env::var("XDG_RUNTIME_DIR").ok().as_deref());
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
     let answer = ask(&socket, request, ANSWER_WITHIN).map_err(|why| why.to_string())?;
     match answer {
         Response::Shell { module } => {
@@ -89,6 +90,7 @@ fn desktop(shell: &str) -> Result<ExitCode, String> {
     let places = Runtime {
         broker: runtime.join("broker"),
         chrome_socket: runtime.join("chrome.sock"),
+        control: address(env("XDG_RUNTIME_DIR").as_deref(), std::process::id()),
         profile: runtime.join("profile"),
         session: runtime.join("session.json"),
     };
@@ -101,13 +103,16 @@ fn desktop(shell: &str) -> Result<ExitCode, String> {
     let module = page.root.join(&page.module);
     println!("shell: {}", module.display());
 
-    // Taken before anything is started, so that a second desktop on this
-    // session is refused while there is still nothing to clean up — and taken
-    // by this process rather than by a component, because the commands after
-    // the first one are not all answered in the same place.
-    let control =
-        take(&address(env("XDG_RUNTIME_DIR").as_deref())).map_err(|why| why.to_string())?;
+    // Taken before anything is started, because the compositor is started with
+    // this path in its environment and there is nothing to hand on if the bind
+    // has not happened. Taken by this process rather than by a component,
+    // because the commands after the first one are not all answered in the
+    // same place — and named after this process for the same reason: the
+    // display the compositor will bind does not exist yet, and a desktop
+    // cannot be named after something that has not happened.
+    let control = take(&places.control).map_err(|why| why.to_string())?;
     answering(&control, module_of(&module)?)?;
+    println!("{VARIABLE}={}", places.control.display());
 
     let mut running = Running::new();
 

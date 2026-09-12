@@ -25,6 +25,7 @@ fn runtime() -> Runtime {
     Runtime {
         broker: PathBuf::from("/run/d/broker"),
         chrome_socket: PathBuf::from("/run/d/chrome.sock"),
+        control: PathBuf::from("/run/d/domicile-ipc.4242.sock"),
         profile: PathBuf::from("/run/d/profile"),
         session: PathBuf::from("/run/d/session.json"),
     }
@@ -207,6 +208,28 @@ fn the_compositor_is_a_producer_to_the_engine() {
             .unwrap()
             .starts_with("/l/engine"),
         "{spawned:?}"
+    );
+}
+
+#[test]
+fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts() {
+    // How a terminal opened inside this desktop finds *this* desktop. The
+    // compositor spawns every app a shell asks for, and a child inherits its
+    // environment — so putting the path here is putting it in front of every
+    // `domicile which-shell` anybody types inside the desktop.
+    //
+    // Set on the compositor rather than exported from the supervisor's own
+    // process, because a supervisor started from inside another desktop has
+    // that desktop's socket in its environment and would otherwise hand it on.
+    let spawned = compositor(
+        Path::new("/b/domicile-compositor"),
+        Path::new("/l/engine"),
+        &runtime(),
+        &|_| None,
+    );
+    assert_eq!(
+        env_of(&spawned, "DOMICILE_SOCK").unwrap(),
+        "/run/d/domicile-ipc.4242.sock"
     );
 }
 

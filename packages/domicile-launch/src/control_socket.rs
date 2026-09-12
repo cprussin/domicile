@@ -1,13 +1,21 @@
 //! Where a running desktop answers, and how a command reaches it.
 //!
-//! `$XDG_RUNTIME_DIR/domicile.sock`, discovered rather than passed: a client
-//! that has to be told where the desktop is has to be told by something that
-//! already knew, and the watcher this exists for was not started by the
-//! desktop and inherits nothing from it.
+//! `$XDG_RUNTIME_DIR/domicile-ipc.<pid>.sock`, and the desktop puts that path
+//! in [`VARIABLE`] for everything it starts. That is the shape every other
+//! Wayland compositor's control channel has: sway keys
+//! `sway-ipc.<uid>.<pid>.sock` and exports `SWAYSOCK`, Hyprland puts its
+//! socket under a per-instance signature directory and exports
+//! `HYPRLAND_INSTANCE_SIGNATURE`, river rides a Wayland protocol and is
+//! per-display by construction. All three say the same thing: name the socket
+//! after the instance, let the client read the name out of its environment,
+//! and never refuse a second instance.
 //!
-//! One path is one desktop, and that is a rule rather than an accident — see
-//! [`take`]. What goes over the socket is [`crate::control`]'s and is pure;
-//! what is here is the part that needs a filesystem.
+//! ONE NAME PER SESSION WAS THE FIRST ANSWER HERE and it was wrong: it made a
+//! second `domicile` on one login refuse to start, which is not something
+//! `wayland-1` existing lets a compositor do.
+//!
+//! What goes over the socket is [`crate::control`]'s and is pure; what is here
+//! is the part that needs a filesystem.
 
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::fs::{FileTypeExt as _, PermissionsExt as _};
@@ -26,15 +34,51 @@ use crate::control::{parse_response, to_line, Request, Response};
 /// about a process that has stopped rather than about a slow one.
 pub const PATIENCE: Duration = Duration::from_secs(5);
 
-/// The socket a desktop started with this runtime directory answers on.
+/// The variable a desktop publishes its control socket in, and the only way a
+/// client finds one.
+///
+/// `SWAYSOCK`'s job, under this program's name.
+pub const VARIABLE: &str = "DOMICILE_SOCK";
+
+/// The socket the desktop supervised by `pid` answers on.
+///
+/// KEYED ON THE PID, like sway's, and not on the Wayland display name — which
+/// is the obvious alternative and cannot work: the supervisor takes this
+/// socket before it starts the engine, so at the moment the name is needed
+/// there is no compositor yet and no display for it to be named after.
+///
+/// The uid sway also puts in the name buys nothing here. It is there so two
+/// users' sockets do not collide in a shared `/tmp`, and a pid is already
+/// unique across the machine that allocated it.
 ///
 /// `None` falls back to the temporary directory, which is the same fallback
 /// the run's own directory takes — one rule for where this user's runtime
 /// files go, rather than a desktop whose sockets and whose control socket are
 /// in different places.
-pub fn address(runtime_dir: Option<&str>) -> PathBuf {
+pub fn address(runtime_dir: Option<&str>, pid: u32) -> PathBuf {
     let base = runtime_dir.map_or_else(std::env::temp_dir, PathBuf::from);
-    base.join(SOCKET)
+    base.join(format!("domicile-ipc.{pid}.sock"))
+}
+
+/// A command typed somewhere no desktop put [`VARIABLE`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "{VARIABLE} is not set, so there is no desktop here to ask. A desktop \
+     puts it in the environment of everything it starts — run this from a \
+     terminal inside the desktop you mean, or set {VARIABLE} to its socket."
+)]
+pub struct NotInADesktop;
+
+/// The socket the desktop around this client answers on, as it said so.
+///
+/// REFUSED RATHER THAN SEARCHED FOR when nothing said. A session can hold
+/// several desktops now, so there is no longer a path that "the" desktop is
+/// at; the runtime directory could be scanned, but a scan that finds two
+/// sockets has to guess which desktop the person meant, and a command that
+/// goes to the wrong desktop is worse than one that does not go. `swaymsg`
+/// draws the same line and requires `SWAYSOCK`.
+pub fn advertised(said: Option<&str>) -> Result<PathBuf, NotInADesktop> {
+    said.map(PathBuf::from).ok_or(NotInADesktop)
 }
 
 /// A control socket taken for the life of one run.
@@ -69,9 +113,9 @@ impl Drop for Control {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TakeError {
     #[error(
-        "a desktop is already running on this session: something is answering \
-         at {path}. One socket is one desktop — stop that one first, or start \
-         this one with an XDG_RUNTIME_DIR of its own."
+        "something is already answering at {path}, and that name belongs to \
+         this process. Nothing here will take a socket away from whatever is \
+         serving on it; find out what that is."
     )]
     AlreadyRunning { path: String },
 
@@ -90,11 +134,11 @@ pub enum TakeError {
 
 /// Take the control socket at `path` for this run.
 ///
-/// A DESKTOP THAT CANNOT HAVE THE SOCKET DOES NOT START. The alternative was
-/// a second desktop running without one, and every `domicile load-shell` on
-/// that machine going to the first desktop with neither of them saying so —
-/// the wrong window reloading is exactly the kind of quiet wrong answer this
-/// repository refuses elsewhere.
+/// A DESKTOP THAT CANNOT HAVE THE SOCKET DOES NOT START, and with a pid in
+/// the name the only way that happens is that something which is not this
+/// desktop is serving on this desktop's name. A second Domicile is not that
+/// case and never reaches here — it has a pid of its own and therefore a
+/// socket of its own.
 ///
 /// Told apart by asking rather than by looking: a socket file outlives the
 /// process that bound it, so its being there says nothing about whether a
@@ -144,7 +188,12 @@ pub fn answer_one(
 /// A command that did not reach a desktop, or an answer that made no sense.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AskError {
-    #[error("no desktop is running here — nothing is answering at {path}.")]
+    #[error(
+        "no desktop is running here — nothing is answering at {path}. A \
+         desktop that was killed outright leaves its socket behind and leaves \
+         {VARIABLE} pointing at it, so this is also what the terminals that \
+         outlived one see."
+    )]
     NoDesktop { path: String },
 
     #[error(
@@ -210,10 +259,6 @@ pub fn ask(path: &Path, request: &Request, patience: Duration) -> Result<Respons
         }),
     }
 }
-
-/// The name of the socket inside the runtime directory. One name, because it
-/// is what a client looks for and nothing tells it another.
-const SOCKET: &str = "domicile.sock";
 
 /// Make `path` a place a socket can be bound, or say why it is not one.
 fn clear(path: &Path) -> Result<(), TakeError> {

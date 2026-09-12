@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_launch::control::{Request, Response};
-use domicile_launch::control_socket::{address, answer_one, ask, take, AskError, TakeError};
+use domicile_launch::control_socket::{
+    address, advertised, answer_one, ask, take, AskError, NotInADesktop, TakeError,
+};
 
 /// Long enough that a machine under load does not report a client that never
 /// wrote as one that did, short enough that a test which waits it out is not
@@ -15,13 +17,13 @@ use domicile_launch::control_socket::{address, answer_one, ask, take, AskError, 
 const BRIEFLY: Duration = Duration::from_millis(200);
 
 #[test]
-fn the_socket_is_in_the_runtime_directory() {
-    // Discovered rather than passed: a client that has to be told where the
-    // desktop is has to be told by something that already knew, and a watcher
-    // outside Domicile was not started by it.
+fn the_socket_is_named_after_the_desktop_that_answers_on_it() {
+    // One name per desktop rather than one name per session, the way sway
+    // keys `sway-ipc.<uid>.<pid>.sock`. A compositor that refuses to start
+    // beside another compositor is not a compositor.
     assert_eq!(
-        address(Some("/run/user/1000")),
-        PathBuf::from("/run/user/1000/domicile.sock")
+        address(Some("/run/user/1000"), 4242),
+        PathBuf::from("/run/user/1000/domicile-ipc.4242.sock")
     );
 }
 
@@ -31,7 +33,27 @@ fn with_no_runtime_directory_it_goes_where_the_runs_own_files_do() {
     // question: where do this user's runtime files go. Two answers would mean
     // a desktop whose sockets and whose control socket are in different
     // places, and a client that has to guess which rule ran.
-    assert_eq!(address(None), std::env::temp_dir().join("domicile.sock"));
+    assert_eq!(
+        address(None, 4242),
+        std::env::temp_dir().join("domicile-ipc.4242.sock")
+    );
+}
+
+#[test]
+fn a_client_is_told_which_desktop_it_is_inside() {
+    // The variable and nothing else. There is no rule that turns a runtime
+    // directory back into one socket now that a session can hold several, and
+    // scanning for them would leave the client guessing which desktop the
+    // person meant.
+    assert_eq!(
+        advertised(Some("/run/user/1000/domicile-ipc.4242.sock")),
+        Ok(PathBuf::from("/run/user/1000/domicile-ipc.4242.sock"))
+    );
+}
+
+#[test]
+fn a_client_outside_every_desktop_is_told_so_rather_than_guessed_for() {
+    assert_eq!(advertised(None), Err(NotInADesktop));
 }
 
 #[test]
@@ -64,10 +86,29 @@ fn a_desktop_takes_the_socket_and_keeps_it_to_itself() {
 }
 
 #[test]
-fn a_second_desktop_is_refused_rather_than_started_beside_the_first() {
-    // One socket at one path is one desktop. A second run that started anyway
-    // would be a desktop no `domicile load-shell` could ever reach, and the
-    // command would go to the other one without either of them saying so.
+fn two_desktops_on_one_session_each_answer_a_socket_of_their_own() {
+    // The whole point of keying the name on the pid. Wayland itself counts
+    // `wayland-0` up rather than refusing a second display, and a desktop
+    // that would not start because another one was running would be the only
+    // compositor on the machine that behaved that way.
+    let scratch = tempfile::tempdir().expect("a scratch directory");
+    let session = scratch.path().to_str().expect("a utf-8 scratch directory");
+    let mine = address(Some(session), 4242);
+    let theirs = address(Some(session), 4243);
+
+    let _first = take(&mine).expect("nothing was there");
+    let _second = take(&theirs).expect("and the first desktop is not in the way");
+
+    assert!(UnixStream::connect(&mine).is_ok(), "both are answering");
+    assert!(UnixStream::connect(&theirs).is_ok(), "both are answering");
+}
+
+#[test]
+fn a_socket_that_is_already_answering_is_not_taken_from_whoever_has_it() {
+    // Out of a second desktop's reach now that the name carries this
+    // process's own pid, and kept because what is at stake is deleting a
+    // socket something else is serving on. Whatever answers there, it is not
+    // this run's to replace.
     let (_scratch, path) = scratch();
     let _first = take(&path).expect("nothing was there");
 
@@ -132,6 +173,24 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
 #[test]
 fn asking_where_no_desktop_is_running_says_so() {
     let (_scratch, path) = scratch();
+
+    assert_eq!(
+        ask(&path, &Request::WhichShell, BRIEFLY).unwrap_err(),
+        AskError::NoDesktop {
+            path: path.display().to_string()
+        }
+    );
+}
+
+#[test]
+fn the_socket_a_dead_desktop_left_behind_is_a_failure_rather_than_a_wait() {
+    // A desktop killed with SIGKILL never unlinks its socket, and every
+    // terminal that outlived it still has that path in `DOMICILE_SOCK`. The
+    // file is there and nothing is behind it, which the kernel refuses rather
+    // than accepts — so this is a sentence rather than a client sitting out
+    // the patience timeout.
+    let (_scratch, path) = scratch();
+    drop(UnixListener::bind(&path).expect("a desktop that is no longer running"));
 
     assert_eq!(
         ask(&path, &Request::WhichShell, BRIEFLY).unwrap_err(),
@@ -235,6 +294,6 @@ fn a_desktop_that_hangs_up_without_answering_is_the_same_answer() {
 /// that is already gone.
 fn scratch() -> (tempfile::TempDir, PathBuf) {
     let scratch = tempfile::tempdir().expect("a scratch directory");
-    let path = scratch.path().join("domicile.sock");
+    let path = scratch.path().join("domicile-ipc.4242.sock");
     (scratch, path)
 }
