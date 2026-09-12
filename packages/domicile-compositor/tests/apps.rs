@@ -66,8 +66,8 @@ fn a_close_from_the_chrome_reaches_the_client_and_comes_back() {
 /// A chrome that connects after a client mapped still comes up to that window.
 ///
 /// Ported from `e2e-late-chrome.sh`, which drove a real Electron and asserted
-/// on `place_portal` — the shell's page saying it had mounted a
-/// `<domicile-app>`. That is the page's half; what the compositor owes is the
+/// on `place_portal` — the shell's page saying it had mounted the element a
+/// window hangs off (`<domicile-app>` then; the fork's own `<app>` now). That is the page's half; what the compositor owes is the
 /// announcement the page mounts *from*, and this asks for that directly.
 ///
 /// The ordering is the whole test. `app_appeared` goes out once, when the

@@ -467,10 +467,12 @@ known and it is a build-system cost, not a language one.
 |---|---|
 | **Latency parity** | The client's dmabuf becomes a `SharedImage` and rides in a texture quad. Viz aggregates it into the display frame — the same single composite any Wayland compositor does — and its `OverlayProcessor` can promote the quad to direct scanout. No readback, no socket, no `putImageData`. **Measured** as far as `crux` allows: one display frame, indistinguishable from the probe's own floor. See *What it costs* |
 | **CSS parity** | The window is a `cc::Layer`. Whatever CSS works on a hardware-composited `<video>` works, because it is the same layer type through the same property trees. This is the requirement's own wording — "just like a `<webview>` or `<iframe>` or `<video>`" — met by using literally that mechanism. **Measured on a GPU: seven properties, every one bit-exact against an ordinary element**, and an `<app>` is closer to a `<div>` than an out-of-process `<iframe>` is. See *What CSS does to an `<app>`* and *Whether an `<app>` is an out-of-process `<iframe>`* |
-| **Shell simplicity** | `<app>` stays a custom element wrapping a `<canvas>`, which is what `<domicile-app>` already is. What changes is what fills the canvas, not what a shell author writes |
+| **Shell simplicity** | `<app>` is a tag the fork defines, and a shell writes it. It began as a custom element wrapping a `<canvas>` — the SDK's `<domicile-app>` — and that wrapper is gone: patch 0007's `HTMLAppElement` owns the embed, so a shell writes `<app app-id="…">` and the SDK supplies the tag-name map rather than a class |
 
-The third row is the surprise: the shell-side API barely moved. The SDK kept
-its custom element; what went was the frame plumbing behind it.
+The third row moved twice. The shell-side API barely changed when the frame
+plumbing went; it changed again when the tag became the engine's, and that
+second move DELETED the SDK's element rather than rewriting it. What a shell
+writes is now a tag, not a component.
 
 ## Key decisions
 
@@ -1000,6 +1002,15 @@ copy path before the compositor can submit leaves nothing drawing at all.
       `canvas.embedExternalSurface(appId)`. **The app id is the change under
       it** — a broker that hands every embedder the sink it made most recently
       is right for one window and silently wrong for two
+- [ ] **a real client's window shown through the native `<app>`.** The line
+      above is the canvas path, and the SDK no longer takes it: the shells write
+      the fork's own tag, so the embed runs through `HTMLAppElement::Embed`.
+      That code compiles and **nothing has ever shown a window through it** —
+      patch 0007's evidence is `constructor.name` and attribute reflection, not
+      pixels. Until a guard on `crux` puts a client's window on a page through
+      the native tag, the proven embed and the shipped embed are not the same
+      one, and the placement machinery cannot be deleted on the strength of
+      measurements taken through the canvas
 - [ ] **an shm→dmabuf upload.** `publish_frame` submits only
       `CommittedBuffer::Gpu`, so a client that draws into shared memory — most
       toolkits that do not render with GL — has no window.
