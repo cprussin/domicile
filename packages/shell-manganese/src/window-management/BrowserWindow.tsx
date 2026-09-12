@@ -134,8 +134,8 @@ export const BrowserWindow = ({
   // The window the user is working in takes the keyboard, and a browser
   // window's belongs to its page rather than to the chrome around it.
   //
-  // The host has to be told as well, which `<domicile-app>` does for itself and
-  // this element cannot. There is one seat: the compositor holds `wl_keyboard`
+  // The host has to be told as well, which the SDK does for an `<app>` and
+  // cannot do for this element. There is one seat: the compositor holds `wl_keyboard`
   // focus on whichever client the chrome last named, and a browser window names
   // none — its page is inside the chrome's own window. Without `focusChrome`
   // the focus a terminal was given stays with it while the user types into a
