@@ -4,7 +4,6 @@ import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import {
   APP_TAG_NAME,
   registerElements,
-  WEBVIEW_TAG_NAME,
 } from "@domicile/chrome-sdk/register-elements";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -682,7 +681,7 @@ describe("Shell", () => {
 
     /** The page inside the browser window `window` takes the focus. */
     const focusPageIn = (window: HTMLElement): void => {
-      const view = window.querySelector(WEBVIEW_TAG_NAME);
+      const view = window.querySelector("webview");
       if (view === null) {
         throw new Error("the browser window rendered no view");
       } else {

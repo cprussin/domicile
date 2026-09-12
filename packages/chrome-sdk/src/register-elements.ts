@@ -1,5 +1,5 @@
 // Wiring the SDK to a domicile client: bind the element context, install the
-// document-level input listeners, and define the custom elements.
+// document-level input listeners, and define the custom element.
 
 import { createAppElement } from "./app-element";
 import type { DomicileClient } from "./domicile-client";
@@ -12,10 +12,8 @@ import {
 import { evdevFromCode } from "./input";
 import type { Measure } from "./measure";
 import type { ObservePlacement } from "./observe-placement";
-import { DomicileWebviewElement } from "./webview-element";
 
 export const APP_TAG_NAME = "domicile-app";
-export const WEBVIEW_TAG_NAME = "domicile-webview";
 
 export type RegisterOptions = {
   /** Injected by tests, whose DOM implementation performs no layout. */
@@ -28,7 +26,7 @@ export type RegisterOptions = {
 let globalInputInstalled = false;
 
 /**
- * Wire the SDK to a domicile client and define the custom elements.
+ * Wire the SDK to a domicile client and define the custom element.
  * Idempotent: safe to call once at chrome startup, and safe to call again with
  * a different client (which is how tests rebind between cases).
  */
@@ -38,7 +36,7 @@ export const registerElements = (
 ): void => {
   const context = bindElementContext(domicile, measure, observePlacement);
   installGlobalInput(context);
-  defineElements(context);
+  defineAppElement(context);
 };
 
 // Keyboard events land on the document, not on an element, so they are routed
@@ -138,20 +136,18 @@ const releaseFocusOffApp =
 
 // `customElements` is absent when the SDK is loaded outside a browsing context
 // (a unit test of the message layer, say); binding the client is still useful
-// there, defining the elements is not.
+// there, defining the element is not.
 //
 // The app element is built here, against the context, because that is what
 // lets it hold a client it cannot doubt. A second call with a different client
 // does not build it again — a tag name can only be defined once — and does not
 // need to: the context is one cell, and rebinding writes through it to the
 // class already registered.
-const defineElements = (context: ElementContext): void => {
-  if (typeof customElements !== "undefined") {
-    if (customElements.get(APP_TAG_NAME) === undefined) {
-      customElements.define(APP_TAG_NAME, createAppElement(context));
-    }
-    if (customElements.get(WEBVIEW_TAG_NAME) === undefined) {
-      customElements.define(WEBVIEW_TAG_NAME, DomicileWebviewElement);
-    }
+const defineAppElement = (context: ElementContext): void => {
+  if (
+    typeof customElements !== "undefined" &&
+    customElements.get(APP_TAG_NAME) === undefined
+  ) {
+    customElements.define(APP_TAG_NAME, createAppElement(context));
   }
 };

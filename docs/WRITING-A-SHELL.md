@@ -142,7 +142,7 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the `<domicile-app>` and `<domicile-webview>` custom elements), and the pure helpers around them. |
+| `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the `<domicile-app>` custom element), and the pure helpers around them. `<webview>` is the engine's own tag: the SDK types it and names its events, and registers nothing. |
 
 It is not required. A shell may drive `navigator.domicile` itself — it is a
 typed surface rather than a wire, described in

@@ -1,27 +1,29 @@
-// The `<domicile-webview>` custom element: web content the engine renders
-// directly (a nested browsing context), so the element is a typed facade over
-// the embed — the address it shows, the history controls a chrome's address bar
-// drives, and the navigations the content performs on its own.
-
-import { z } from "zod";
-
-/**
- * Fired on the element when the embedded view lands on a page, however it got
- * there. `detail.url` is the address now showing.
- */
-export const WEBVIEW_NAVIGATE_EVENT = "domicile-navigate";
+// The fork's `<webview>`: web content in a browsing context of its own.
+//
+// There is no code here, and that is the point. The element belongs to the
+// engine — `src`, the four history controls and the two availability
+// properties are all `HTMLWebViewElement`'s, and the events below are
+// dispatched by the browser process rather than by anything in this package.
+// What is left for the SDK to say is the part TypeScript cannot read off the
+// fork: what the tag is, and what the engine calls the two events it fires on
+// it.
+//
+// It used to be a `<domicile-webview>` custom element wrapping one of these,
+// because a custom element's name must contain a hyphen and the SDK predates
+// the fork. The wrapper forwarded every call above straight through, so
+// nothing is lost by writing the tag itself.
 
 /**
  * Fired when the page inside the view takes focus — a click in it, anywhere.
  *
- * THE ENGINE DISPATCHES THIS, not the SDK, and the name is the contract
- * between them: the page in the view is a guest with a browsing context of its
- * own, so no pointer event inside it crosses back out, and the focus it takes
- * cannot cross either — `Document::SetFocusedElement` dispatches `focus` and
- * `focusin` only while the page is focused, and a guest taking focus is the
- * moment the embedder's page loses it. So the fork's element says so in an
- * event that is not a focus event. It bubbles, so a chrome can listen on the
- * window it drew rather than on the view.
+ * THE ENGINE DISPATCHES THIS, and the name is the contract between it and a
+ * shell: the page in the view is a guest with a browsing context of its own, so
+ * no pointer event inside it crosses back out, and the focus it takes cannot
+ * cross either — `Document::SetFocusedElement` dispatches `focus` and `focusin`
+ * only while the page is focused, and a guest taking focus is the moment the
+ * embedder's page loses it. So the fork's element says so in an event that is
+ * not a focus event. It bubbles, so a chrome can listen on the window it drew
+ * rather than on the view.
  *
  * A shell reads it as "the user is working in this window now". See
  * `HTMLWebViewElement::GuestTookFocus` in the engine.
@@ -33,11 +35,11 @@ export const WEBVIEW_GUEST_FOCUS_EVENT = "domicile-guest-focus";
  * committed, a back taken, a forward spent.
  *
  * THE ENGINE DISPATCHES THIS, and it carries nothing. What changed is readable
- * on the element as {@link DomicileWebviewElement.canGoBack} and
- * {@link DomicileWebviewElement.canGoForward}, and those are the values a
- * chrome renders from; this only says "read them again". A payload here would
- * be a second copy of the same state, correct at the instant it was made and
- * stale for a chrome that read it later.
+ * on the element as {@link HTMLWebViewElement.canGoBack} and
+ * {@link HTMLWebViewElement.canGoForward}, and those are the values a chrome
+ * renders from; this only says "read them again". A payload here would be a
+ * second copy of the same state, correct at the instant it was made and stale
+ * for a chrome that read it later.
  *
  * WHICH IS ALSO WHY THE STATE IS NOT THIS EVENT. A shell that mounts after the
  * guest's first commit hears nothing — a React shell registers its listeners
@@ -51,138 +53,42 @@ export const WEBVIEW_GUEST_FOCUS_EVENT = "domicile-guest-focus";
  */
 export const WEBVIEW_HISTORY_CHANGE_EVENT = "domicile-history-change";
 
-// The navigation surface Electron adds to its `<webview>` tag. The eventual
-// engine gives a CEF browsing context the same shape.
-type WebviewFrame = HTMLElement & {
-  canGoBack: boolean;
-  canGoForward: boolean;
-  goBack: () => void;
-  goForward: () => void;
-  stop: () => void;
-  reload: () => void;
-};
-
-// The events Electron's `<webview>` fires once a navigation has committed:
-// a load the chrome asked for, a link the user followed, a redirect, or a
-// same-document push.
-const NAVIGATION_EVENTS = ["did-navigate", "did-navigate-in-page"] as const;
-
-// Those events carry the address as a property on the DOM event. It comes from
-// a nested browsing context, so it is parsed rather than cast.
-const navigationEventSchema = z.looseObject({ url: z.string() });
-
-export class DomicileWebviewElement extends HTMLElement {
-  static observedAttributes = ["src"];
-
-  #view: WebviewFrame | undefined;
-  #loaded: string | undefined;
-
-  get src(): string | undefined {
-    return this.getAttribute("src") ?? undefined;
+/**
+ * What a `<webview>` is, to everything holding one.
+ *
+ * Global rather than exported, and merged rather than defined, because the name
+ * is already taken twice over: `@types/react` declares an empty
+ * `HTMLWebViewElement` and a `webview` entry in `JSX.IntrinsicElements` — left
+ * over from Electron — so a shell writing the tag in JSX gets React's element
+ * type for its `ref` whatever this module exports. An exported interface of the
+ * same shape is a *different* type to that one, and a shell holding the ref
+ * cannot assign it anywhere. So this fills in the empty one instead, and the
+ * tag-name map beside it is what `document.querySelector("webview")` reads.
+ *
+ * Written out rather than imported because there is nothing to import from: the
+ * interface is the fork's, and the engine ships no `.d.ts`. A shell that runs
+ * on stock Chromium gets an `HTMLUnknownElement` with none of it — the same
+ * trade `<app>` makes.
+ */
+declare global {
+  // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in (or another package's) type is what `interface` is for and what a type alias cannot do
+  interface HTMLWebViewElement extends HTMLElement {
+    /** The address to show. Reflected, so the attribute and the property are
+     * one value, the way `<img src>` is. */
+    src: string;
+    /** Whether {@link HTMLWebViewElement.goBack} would move the page, so an
+     * address bar can grey out a button that would do nothing. */
+    readonly canGoBack: boolean;
+    /** Whether {@link HTMLWebViewElement.goForward} would move the page. */
+    readonly canGoForward: boolean;
+    goBack(): void;
+    goForward(): void;
+    stop(): void;
+    reload(): void;
   }
 
-  set src(value: string) {
-    this.setAttribute("src", value);
-  }
-
-  connectedCallback(): void {
-    this.#load();
-  }
-
-  attributeChangedCallback(name: string): void {
-    if (name === "src") {
-      this.#load();
-    }
-  }
-
-  /**
-   * Keyboard focus belongs to the page, not to this wrapper: the embed is the
-   * browsing context that renders it, so a chrome showing this window focuses
-   * it the way it would any other control.
-   */
-  override focus(): void {
-    this.#ensureView().focus();
-  }
-
-  /**
-   * Whether {@link goBack} would move the page, so an address bar can grey out
-   * a button that would do nothing.
-   *
-   * READ THROUGH TO THE EMBED, every time, rather than remembered here. The
-   * answer lives in the browser process — a guest's history is a
-   * NavigationController there — and the engine pushes it onto the embed as it
-   * changes, so the embed is where the current value is. A copy kept here would
-   * be one more thing to miss a push with.
-   */
-  get canGoBack(): boolean {
-    return this.#ensureView().canGoBack;
-  }
-
-  /** Whether {@link goForward} would move the page. See {@link canGoBack}. */
-  get canGoForward(): boolean {
-    return this.#ensureView().canGoForward;
-  }
-
-  goBack(): void {
-    this.#ensureView().goBack();
-  }
-
-  goForward(): void {
-    this.#ensureView().goForward();
-  }
-
-  stop(): void {
-    this.#ensureView().stop();
-  }
-
-  reload(): void {
-    this.#ensureView().reload();
-  }
-
-  // Navigate the embed to whatever `src` now says. The address the embed
-  // reached on its own is already loaded there, so pushing it back would
-  // restart the load it just finished.
-  #load(): void {
-    const view = this.#ensureView();
-    const src = this.src;
-    if (src !== undefined && src !== this.#loaded) {
-      this.#loaded = src;
-      view.setAttribute("src", src);
-    }
-  }
-
-  // In the Electron host this is a real `<webview>` (a separate browsing
-  // context, so it can load sites that forbid `<iframe>` embedding); the
-  // eventual engine maps `<domicile-webview>` to a native CEF browsing context.
-  #ensureView(): WebviewFrame {
-    this.#view ??= this.#embedView();
-    return this.#view;
-  }
-
-  #embedView(): WebviewFrame {
-    const view = this.appendChild(createWebviewFrame());
-    for (const type of NAVIGATION_EVENTS) {
-      view.addEventListener(type, (event) => {
-        this.#followNavigation(event);
-      });
-    }
-    return view;
-  }
-
-  // The embed moved: follow it, so `src` is always the address on screen and a
-  // chrome's address bar has one place to read it from.
-  #followNavigation(event: Event): void {
-    const { url } = navigationEventSchema.parse(event);
-    this.#loaded = url;
-    this.src = url;
-    this.dispatchEvent(
-      new CustomEvent(WEBVIEW_NAVIGATE_EVENT, { detail: { url } }),
-    );
+  // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
+  interface HTMLElementTagNameMap {
+    webview: HTMLWebViewElement;
   }
 }
-
-const createWebviewFrame = (): WebviewFrame => {
-  const view = document.createElement("webview") as WebviewFrame;
-  view.className = "domicile-webview-frame";
-  return view;
-};
