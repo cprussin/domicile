@@ -74,14 +74,38 @@ decides whether an item is waiting or workable.
    the shells write the tag. `WRITING-A-SHELL.md` moved in the same change,
    because it is the contract that breaks.
 
-   **`<app>` is the harder half and is what remains.** The element does more
-   than forward: pointer mapping, keyboard routing, size reporting and the
-   surface embed all hang off it, and none of that can stay on a custom-element
-   class once the tag is the engine's. It becomes document-level delegation over
-   `closest("app")` plus an app-id-keyed registry — and that registry is the
-   part to think hardest about, because the SDK already holds the client, so
-   `app_resized` and `app_cursor` could be the SDK's business rather than every
-   shell's.
+   **`<app>` has landed too, and it is currently BROKEN — read this before
+   building on it.** The shells write the fork's tag and the embed runs through
+   `HTMLAppElement::Embed`. The design held up: there is no registry, because
+   `DomicileClient` already sees every size message pass its own listener, so
+   `surfaceSizeOf(appId)` answers on demand; only `app_resized` became the
+   SDK's business, and `app_cursor` deliberately stayed the shell's, because a
+   cursor needs a push and a size is only ever input to the SDK's own
+   arithmetic.
+
+   What did not hold up is the embed. **No client's window reaches the page any
+   more.** Engine run 34699945195, step 16 — "A shell on the fork, showing a
+   real client's window" — fails: `appeared=1 brokered=1 configured=1 drew=0`
+   for the shell, no embed line in its engine log at all, and `engine has not
+   drawn #FF19B36B anywhere`. Everything upstream passes, including a client's
+   window on the page via the canvas path and its negative control.
+
+   **It merged green because nothing tested it.** `engine.yml` triggers on
+   `packages/domicile-engine/**`, the change touched none of it, and the five
+   checks that ran contain nothing that puts a window on a screen. Every guard
+   that passes uses `canvas.embedExternalSurface`; the layout-driven embed on
+   `HTMLAppElement` had never run, which `ENGINE-FORK.md`'s phase-2 list now
+   says in as many words.
+
+   Ruled out from the repo side: stale `domicile-app` CSS (none), the shell
+   failing to size the element (`applyBox` sets all four edges), a missing UA
+   style (patch 0007 gives `app { display: inline-block }`). The live
+   candidates need a Chromium tree to separate: the `inline-block` box against
+   the shell's absolute positioning, the `RuntimeEnabled=DomicileExternalSurface`
+   gate, and `desktop.ts` setting `app-id` before appending — which makes
+   `ParseAttribute` call `Embed()` on a detached element, where it returns for
+   want of a frame and a box, and the question is what re-drives it after
+   layout.
 
    Then the subtraction it exists for: delete the placement machinery —
    `measure.ts`, `observe-placement.ts`, `element-transform.ts`, `matrix.ts`,
@@ -92,8 +116,13 @@ decides whether an item is waiting or workable.
    on the `<app>` is the engine answering the other half of `measure`'s job with
    the real transform. That step is the one with the measurements behind it.
 
-   Worth doing in that order, and possibly as one change: the registry step 1
-   builds is a thing step 2 then removes.
+   **The placement deletion is blocked on the embed working, not on review.**
+   Every measurement behind it — CSS parity, latency, the bands — was taken
+   through the canvas path the shells no longer take, so deleting the chrome's
+   own size report now would leave two untried halves and nothing to tell them
+   apart. That is why `report-app-sizes.ts` was rebuilt document-level rather
+   than dropped, with a header saying it is redundant and why. It comes out
+   when a guard shows a window through the native tag.
 2. **Keystroke-to-pixel latency** (#206). The requirement is that a client's
    window costs the user nothing a plain Wayland compositor would not.
    `guard-latency.sh` has run on `crux` now — it reads `commit to pixel` at
