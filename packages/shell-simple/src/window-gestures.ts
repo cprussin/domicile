@@ -6,8 +6,8 @@
 // title bars, no borders and no widgets, so the desktop can be nothing but the
 // windows on it.
 //
-// The listeners run in the capture phase and stop what they take, because a
-// `<domicile-app>` forwards every pointer event over it straight to the client
+// The listeners run in the capture phase and stop what they take, because
+// an `<app>` forwards every pointer event over it straight to the client
 // underneath. Without that a moved window would also have been clicked and
 // dragged in, and the client would be left holding a button that never came up.
 

@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
-import {
-  APP_TAG_NAME,
-  registerElements,
-} from "@domicile/chrome-sdk/register-elements";
+import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -101,6 +99,12 @@ class FakeDomicile {
   }
   focusChrome(): void {
     this.calls.push(["focusChrome"]);
+  }
+  // What each client has drawn is the SDK's to remember, and the SDK reads it
+  // back off the client rather than off any element. Nothing here is about the
+  // pointer mapping that uses it, so every window maps its own box 1:1.
+  surfaceSizeOf(): undefined {
+    return undefined;
   }
   closeApp(appId: string): void {
     this.calls.push(["closeApp", appId]);
@@ -364,51 +368,6 @@ describe("Shell", () => {
       domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       domicile.emit("app_closed", { app_id: "term" });
       expect(container.querySelector(APP_TAG_NAME)).toBeNull();
-    });
-
-    it("gives a window that arrived already drawn the size it drew at", () => {
-      // A size on the announcement is the replay a reloading chrome gets, and
-      // the portal it mounts is never sent a frame or a resize where the
-      // compositor draws the client itself — so a live window would scale its
-      // pointer coordinates against nothing. The portal mounts a render after
-      // the message, which is why the size is state the window is rendered
-      // from rather than something applied to an element on the spot.
-      const { container } = renderShell();
-      domicile.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: "Terminal",
-      });
-      expect(container.querySelector(APP_TAG_NAME)?.classList).toContain(
-        "has-surface",
-      );
-    });
-
-    it("forgets what a client had drawn once it is gone", () => {
-      // The size is the client's, so it ends with the client rather than with
-      // the portal — a portal comes and goes for reasons the client knows
-      // nothing about. Observed by announcing the id a second time,
-      // which the host will not do (its ids only count up); what is pinned is
-      // that the drop happens on the close rather than on the unmount.
-      const { container } = renderShell();
-      domicile.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: "Terminal",
-      });
-      domicile.emit("app_closed", { app_id: "term" });
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      expect(container.querySelector(APP_TAG_NAME)?.classList).not.toContain(
-        "has-surface",
-      );
-    });
-
-    it("gives no size to a client that has not drawn yet", () => {
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      expect(container.querySelector(APP_TAG_NAME)?.classList).not.toContain(
-        "has-surface",
-      );
     });
 
     it("renames the tab when the client says what its window is called", () => {

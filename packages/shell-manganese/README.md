@@ -4,7 +4,7 @@ The bundled reference chrome: a rail carrying a tab per open window, the
 launchers, the theme toggle and a clock, beside a stage that shows one window at
 a time. It is the app Domicile ships to prove the model end to end — every pixel
 of it is ordinary web content, and each Wayland client on the stage is a real
-`<domicile-app>` element that takes ordinary CSS.
+`<app>` element that takes ordinary CSS.
 
 The chrome is a React tree built entirely from
 [`@domicile/component-library`](../component-library/README.md): the
@@ -36,7 +36,7 @@ client's keyboard goes to the host, a browser window's to its page.
 
 | Path | What |
 |---|---|
-| `src/index.tsx` | Entry point: applies the theme, builds the `DomicileClient`, registers the SDK's custom elements, mounts `<Shell>`, prints the diagnostics line. |
+| `src/index.tsx` | Entry point: applies the theme, builds the `DomicileClient`, binds the SDK to it, mounts `<Shell>`, prints the diagnostics line. |
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | What is on the desktop: the window state, the keybindings, the rail beside the stage, and which screen each of them is on. |
 | `src/Clock.tsx` | The live clock: in the rail's footer, and alone on every display the rail is not on. |
@@ -53,7 +53,7 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/window-management/useWindows.ts` | Wires host events and user actions into that reduction. |
 | `src/window-management/WindowRail.tsx` | A tab per window, the launchers, the theme toggle and the clock. |
 | `src/window-management/Stage.tsx` | The windows on screen: the one the rail selected, and every float over it. |
-| `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<domicile-app>` portal. |
+| `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<webview>`. |
 | `src/window-management/useHistoryAvailability.ts` | Where that window's page can be sent, read off the view's own properties rather than learned from the event that says to read them. |
 | `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
@@ -65,16 +65,20 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/wallpaper/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
 | `src/wallpaper/photos.ts` | Which photographs those are, and where they come from. |
 | `src/global.css`, `src/css.d.ts` | The document-level styling, and the type for importing it. |
-| `src/domicile-elements.d.ts` | The SDK's custom elements, as JSX. |
+| `src/domicile-elements.d.ts` | The engine's `<app>`, as JSX. `<webview>` needs no entry — React has had one since Electron. |
 
 There is no main process and no preload. The engine is the display compositor
 and serves this page over `domicile://`, and the channel to it is
 `navigator.domicile`, so what is here is the chrome and nothing else.
 
-React owns this DOM, so the chrome writes the tags in JSX: `<domicile-app>`,
-which is the SDK's custom element, and `<webview>`, which is the engine's own —
-React has had a `webview` tag and an `HTMLWebViewElement` to go with it since
-Electron, and the SDK fills that element in with what the fork puts on it.
+React owns this DOM, so the chrome writes the tags in JSX: `<app>` and
+`<webview>`, both the engine's own. React has had a `webview` tag and an
+`HTMLWebViewElement` to go with it since Electron, which the SDK fills in with
+what the fork puts on it; `app` it has never heard of, so `domicile-elements.d.ts`
+declares it. Neither has a hyphen in its name, so React treats both as ordinary
+HTML elements — it writes no property it does not recognise and binds no `on…`
+prop for their events, which is why `AppWindow` and `BrowserWindow` both bind
+theirs with `addEventListener` on a ref.
 
 ## Launching windows
 
@@ -117,7 +121,7 @@ brings it to the front and makes it the window everything keyed acts on.
 here — it is also what found that the focus alone did not.
 
 A client's window arrives at the same place by a different road. The SDK would
-focus a clicked client by itself, and the shell stops it: `<domicile-app>` asks
+focus a clicked client by itself, and the shell stops it: the SDK asks
 first, with a cancellable `domicile-focus-requested`, and this shell answers
 every one of them. So both kinds of window are reached the same way — the shell
 decides, and `focus_changed` comes back afterwards to say where the keyboard
@@ -147,7 +151,7 @@ it.
 
 **And the press on the bar is the bar's**, because the page is what hit-tests
 it: a bar lies across whatever the window it names cascades over, the DOM gives
-the press to the bar, and the `<domicile-app>` under it never hears one — so
+the press to the bar, and the `<app>` under it never hears one — so
 nothing about the window below is focused or raised. That is the browser's own
 hit-testing rather than a rectangle the compositor was told about, which is why
 it sees corner radius, transforms and stacking.
@@ -195,7 +199,7 @@ than putting it back on the stage. Alt+Tab is what changes the mode.
 Both combinations are claimed twice over, because two different things can be
 holding the keyboard when the user presses one. The page listens for its own
 `keydown`, which is what answers when the shell itself has focus — including
-over a `<domicile-app>`, whose pixels are a portal element in this document.
+over an `<app>`, whose pixels are a hole in this document.
 And `grabShortcut` claims the combination for the desktop, which is what
 answers when a window has it: the compositor takes it before a Wayland client
 is given it, and the browser process takes it before a browser window's page

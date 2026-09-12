@@ -1,7 +1,7 @@
 # @domicile/shell-simple
 
 A desktop with nothing in it but windows. Every Wayland client the
-host announces gets a `<domicile-app>` element on the page; hold **Alt** and
+host announces gets an `<app>` element on the page; hold **Alt** and
 drag one to move it, hold Alt and drag with the **right button** to resize it,
 and either way it comes to the front. **Alt+Enter** opens a terminal. That is
 the whole user interface — no tabs, no panel, no title bars — and an empty
@@ -27,15 +27,14 @@ twelve hundred lines of it. Two neighbours mark the ends it sits between:
 
 | Path | What |
 |---|---|
-| `src/renderer.ts` | Renderer entry, and the whole of the wiring: build the `DomicileClient`, register the SDK's elements, open a window per client, draw the background, install the gestures and the shortcut. |
-| `src/desktop.ts` | The windows on screen: one `<domicile-app>` per client, each at a box this module owns. All of the shell's state. |
+| `src/renderer.ts` | Renderer entry, and the whole of the wiring: build the `DomicileClient`, bind the SDK, open a window per client, draw the background, install the gestures and the shortcut. |
+| `src/desktop.ts` | The windows on screen: one `<app>` per client, each at a box this module owns. All of the shell's state. |
 | `src/window-gestures.ts` | Alt and the pointer: what a press, a drag and a release do to the window under them. |
 | `src/keybinding-background.ts` | The keys, on an empty desktop and unpainted while a window is on it: the desktop's own paint, and all of it when there is no window. |
 | `src/catch-up.ts` | The one line that decides whether reloading the desktop moves the user's keyboard: when the host has finished describing what was already running, so the next window to appear is one someone opened. |
 | `src/terminal-shortcut.ts` | Alt+Enter: the one combination this shell claims, and the terminal it opens. |
 | `src/drag.ts` | Where a dragged window lands, as arithmetic — no DOM, so it is testable on its own. |
 | `src/window-box.ts` | A window's box, and where a newly-appeared client's window opens. |
-| `src/domicile-elements.d.ts` | `<domicile-app>` in the DOM's tag-name map, so `createElement` returns the SDK's class. |
 
 ## What it deliberately does not do
 
@@ -104,7 +103,7 @@ only puts `weston-flower` on `PATH`.
 - **No XWayland.** An X11-only client will not connect — it falls back to your
   own session's display, which looks like Domicile ignoring it.
 
-Each window a client maps becomes one `<domicile-app>`, so a client that maps
+Each window a client maps becomes one `<app>`, so a client that maps
 two gets two. New windows cascade rather than stack. A window leaves when its
 client exits; there is no close button, so quit apps from inside them.
 

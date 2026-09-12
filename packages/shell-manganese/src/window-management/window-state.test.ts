@@ -81,33 +81,6 @@ describe("reduceWindows", () => {
       expect(titles(state)).toStrictEqual(["Terminal"]);
     });
 
-    it("records the size the client drew at", () => {
-      // What the portal scales pointer coordinates by. It arrives twice over —
-      // on the announcement for a client that has already drawn, which is the
-      // replay a reloading chrome is given, and on every redraw at a new
-      // resolution after that — and it is one fact either way.
-      const state = after(
-        WindowAction.AppAppeared("term", "Terminal"),
-        WindowAction.AppDrewAt("term", [640, 480]),
-      );
-      expect(appOf(state, "term")?.surfaceSize).toStrictEqual([640, 480]);
-    });
-
-    it("forgets what the client drew when it goes", () => {
-      // App ids come off a counter that only goes up, so this is housekeeping
-      // rather than correctness — but the size has to go *with* the window
-      // rather than with the portal showing it: the shell stops rendering a
-      // window for reasons the client knows nothing about, and one that is
-      // still running is still drawn at the size it last reported.
-      const state = after(
-        WindowAction.AppAppeared("term", "Terminal"),
-        WindowAction.AppDrewAt("term", [640, 480]),
-        WindowAction.AppClosed("term"),
-        WindowAction.AppAppeared("term", "Terminal"),
-      );
-      expect(appOf(state, "term")?.surfaceSize).toBeUndefined();
-    });
-
     it("records the cursor the client asked for", () => {
       const state = after(
         WindowAction.AppAppeared("term", "Terminal"),
@@ -118,12 +91,9 @@ describe("reduceWindows", () => {
 
     it("says nothing about a client it has no window for", () => {
       // The host drains its events for a window whose close has already been
-      // reduced here, so a size or a cursor can name one that is gone.
+      // reduced here, so a cursor can name one that is gone.
       expect(() =>
-        after(
-          WindowAction.AppDrewAt("ghost", [640, 480]),
-          WindowAction.AppCursorChanged("ghost", "text"),
-        ),
+        after(WindowAction.AppCursorChanged("ghost", "text")),
       ).not.toThrow();
     });
   });

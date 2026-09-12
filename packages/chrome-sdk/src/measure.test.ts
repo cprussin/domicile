@@ -75,7 +75,7 @@ const warningsFrom = (...styles: Partial<CSSStyleDeclaration>[]): string[] => {
 };
 
 /**
- * A `<domicile-app>` inside a chain of ancestors, each with its own computed
+ * An `<app>` inside a chain of ancestors, each with its own computed
  * style. The shared helper above answers every element with one style, which
  * is what the single-element cases want and the opposite of what these do.
  *
@@ -306,8 +306,8 @@ describe("where an element is painted, rather than where it is written", () => {
   it("crosses a shadow boundary to the element that holds it", () => {
     // `parentElement` is null at a shadow root, so a walk that used it stopped
     // there and mapped the pointer as if nothing above had turned.
-    // `<domicile-app>` is a custom element, so a chrome that puts one in a
-    // shadow tree is not exotic.
+    // A chrome that renders its windows from a component library puts them in
+    // a shadow tree without thinking about it.
     const turned = document.createElement("div");
     const host = document.createElement("div");
     turned.append(host);

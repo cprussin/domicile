@@ -35,7 +35,7 @@ emit to `.d.ts`, or a `catalog:` that survived into a published manifest.
 
 | File | What |
 |---|---|
-| `src/renderer.ts` | The page: mount a `<domicile-app>` per announced app. The whole of this shell's behaviour — and the whole shell. |
+| `src/renderer.ts` | The page: mount an `<app>` per announced app. The whole of this shell's behaviour — and the whole shell. |
 
 One file, and that is the point. The engine is the display compositor,
 Domicile starts it and writes the document, so a shell is a module.

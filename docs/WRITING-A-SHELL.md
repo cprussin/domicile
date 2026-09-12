@@ -18,10 +18,15 @@ disagree, the example is right — it is the one that is checked.
 ## What a shell is
 
 A built web page. Domicile serves it, loads it in the engine, and runs the
-compositor underneath; a Wayland client that maps a window becomes a
-`<domicile-app>` element in your page, and where you put that element is where
-the window is. Deciding that — and nothing else — is a shell's whole job. The
-compositor keeps the clients, the input, the outputs and the pixels.
+compositor underneath; a Wayland client that maps a window becomes an `<app>`
+element in your page, and where you put that element is where the window is.
+Deciding that — and nothing else — is a shell's whole job. The compositor keeps
+the clients, the input, the outputs and the pixels.
+
+`<app>` and `<webview>` are the **engine's own tags**, not the SDK's. Nothing
+registers them and nothing can: a custom element's name must contain a hyphen,
+per spec, which is exactly why the fork defines these two as real HTML elements.
+Write them as you write a `<div>`.
 
 ```sh
 nix run github:cprussin/domicile -- ./my-desktop/dist/shell.js
@@ -69,10 +74,14 @@ to pass: it is a property of the page, so no query string carries a socket path
 and no two things can disagree about where the compositor is.
 
 A page with no compositor gets a stand-in that does nothing, so the layout
-still lays out and `<domicile-app>` says once that it cannot show a window —
-and `connectToHost` says once, on the console, that there was no compositor to
-find. Ask `hasHost(navigator)` if you need the question answered in your own
-code; do not reconstruct it.
+still lays out, and `connectToHost` says once, on the console, that there was no
+compositor to find and so no window will ever appear. That one line covers the
+elements as well: the thing that defines `<app>` is the thing that binds
+`navigator.domicile`, so a page with an `<app>` that can never show a window is
+exactly the page this warned about. There an `<app>` is an
+`HTMLUnknownElement` — it takes a box and shows nothing, and the SDK routes
+pointers over it as usual. Ask `hasHost(navigator)` if you need the question
+answered in your own code; do not reconstruct it.
 
 Do not develop against that, though: it is the chrome with every window in it
 missing, and a desktop's interesting behaviour is all on the other side of the
@@ -142,7 +151,7 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the `<domicile-app>` custom element), and the pure helpers around them. `<webview>` is the engine's own tag: the SDK types it and names its events, and registers nothing. |
+| `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input and size routing over your `<app>` elements), `focusApp`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
 
 It is not required. A shell may drive `navigator.domicile` itself — it is a
 typed surface rather than a wire, described in
@@ -174,7 +183,7 @@ registerElements(domicile);
 const mounted = new Map<string, HTMLElement>();
 
 domicile.on("app_appeared", ({ app_id }) => {
-  const element = document.createElement("domicile-app");
+  const element = document.createElement("app");
   element.setAttribute("app-id", app_id);
   document.body.append(element);
   mounted.set(app_id, element);
@@ -211,8 +220,8 @@ rendered anything. Under `--app` there is no console to read, so the whole
 failure was a white window.
 
 What is left to you is the background: make it transparent wherever an app
-shows through, because a `<domicile-app>` is a hole in your page and a
-background painted over it hides the very window it is meant to show.
+shows through, because an `<app>` is a hole in your page and a background
+painted over it hides the very window it is meant to show.
 
 The title is Domicile's until you say otherwise with `document.title`. It does
 not guess — the directory a module came out of is as likely to be `dist` as
@@ -220,29 +229,36 @@ anything a person would recognise.
 
 ## What a window has to be told
 
-Two facts reach your shell as messages and have to reach the element, because
-nothing else carries them: the size the client drew at (`app_resized`, and on
-`app_appeared` for a client that has already drawn), which is what the pointer
-is scaled by, and the cursor the client asked for (`app_cursor`).
-
-Each is a method and a property, and they do the same thing:
+**One thing, and it is CSS.** A client can ask for a cursor to be shown while
+the pointer is over its window, and that reaches you as `app_cursor`:
 
 ```ts
-element.setSurfaceSize(width, height); // or: element.surfaceSize = [width, height]
-element.applyCursor(cursor); //           or: element.cursor = cursor
-element.focusApp(); //                    or: element.focused = true
+domicile.on("app_cursor", ({ app_id, cursor }) => {
+  const element = mounted.get(app_id);
+  if (element !== undefined) {
+    element.style.cursor = cursor;
+  }
+});
 ```
 
-Reach for the methods when your shell holds the elements and calls them as the
-messages arrive, as the example does. Reach for the properties when your shell
-*renders* — React, or any template that writes props onto an element it owns —
-because then these are props like any other, and nothing has to keep a registry
-of live elements to call a method on. `undefined` means the client has asked
-for nothing: no size is one that has not drawn, no cursor is the page's own.
+A window that is not there is not a mistake here, unlike on `app_closed` above:
+the host drains what it was already sending for a client whose close you have
+acted on.
 
-`focused` goes one way only. Which client holds the keyboard is one seat's
-answer, so "this window has it" is an instruction and "this window does not" is
-not one; see below for where the keyboard goes instead.
+That is all of it. The element is yours — you position it, size it, round it and
+blur it — and its cursor is the same kind of act. A React shell writes
+`<app style={{ cursor }}>` and is done.
+
+**The size the client drew at is not yours to carry.** `app_resized` still
+arrives, and you are welcome to it — `shell-simple` uses it to take a "nothing
+here yet" placeholder down — but you do not have to route it anywhere: the SDK
+records it off the channel as the message goes past, because scaling a pointer
+position into the client's own pixels is the only use anyone has for it. A shell
+that used to hold that size was a courier.
+
+This used to be `element.setSurfaceSize(…)` and `element.applyCursor(…)`, on a
+`<domicile-app>` the SDK registered. The element is the engine's now and has no
+such methods; nothing replaced them because nothing needed to.
 
 ## Who gets the keyboard
 
@@ -251,23 +267,42 @@ every move of it starts with your shell. Two questions reach you, and a shell
 that answers neither is the desktop the smallest one above already is: a click
 focuses the window under it, and a client that asks for focus is ignored.
 
-**A click on a window** is the first. `<domicile-app>` fires a cancellable
-`domicile-focus-requested` on itself (`APP_FOCUS_REQUESTED_EVENT` from
-`@domicile/chrome-sdk/app-element`) and, left alone, focuses the client — which
-is what you want when your shell has no opinion. Call `preventDefault()` on it
-and nothing moves until you say so:
+**A click on a window** is the first. The SDK fires a cancellable
+`domicile-focus-requested` on the `<app>` that was clicked
+(`APP_FOCUS_REQUESTED_EVENT` from `@domicile/chrome-sdk/app-element`) and, left
+alone, focuses the client — which is what you want when your shell has no
+opinion. Call `preventDefault()` on it and nothing moves until you say so:
 
 ```ts
+import { focusApp } from "@domicile/chrome-sdk/focus-app";
+
 document.addEventListener(APP_FOCUS_REQUESTED_EVENT, (event) => {
   const { appId } = (event as CustomEvent<AppFocusRequest>).detail;
   event.preventDefault();
   if (myPolicySays(appId)) {
-    mounted.get(appId)?.focusApp();
+    focusApp(domicile, appId);
   }
 });
 ```
 
 It bubbles, so one listener covers every window.
+
+**`focusApp` rather than `domicile.focusApp`**, and the difference matters: the
+client's method asks the compositor and stops there, while this also tells the
+SDK where the page's keystrokes go. A key event is delivered to `document` and
+never to an element — a Wayland client is a surface, with nowhere for the browser
+to put focus — so both halves are needed, and calling only the first gives the
+window the seat while every keystroke stays in the page.
+
+It goes one way only. Which client holds the keyboard is one seat's answer and
+something is always in it, so "this window has it" is an instruction the
+compositor can carry out and "this window does not" is not one. The keyboard
+leaves a window when another takes it or when a click lands on the chrome.
+
+**If you write JSX**, note that `<app>` has no hyphen in its name, so React
+treats the tag as an ordinary HTML element: it writes neither a property it does
+not recognise nor an `on…` prop for an event it has never heard of. Bind this
+event with `addEventListener` on a ref. `<webview>`'s two events are the same.
 
 **A client asking for focus** is the second, and it arrives as a message rather
 than an event: `domicile.on("focus_requested", ({ app_id }) => …)`. This is

@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Measure } from "@domicile/chrome-sdk/measure";
-import {
-  APP_TAG_NAME,
-  registerElements,
-} from "@domicile/chrome-sdk/register-elements";
+import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
 import { Desktop } from "./desktop";
 import { installWindowGestures } from "./window-gestures";
@@ -60,7 +58,8 @@ const desktopWith = (
   ...appIds: readonly string[]
 ): { desktop: Desktop; forwarded: Forwarded; root: HTMLElement } => {
   const forwarded: Forwarded = { buttons: [], motions: [] };
-  registerElements(recordingDomicile(forwarded), {
+  const domicile = recordingDomicile(forwarded);
+  registerElements(domicile, {
     measure: stubMeasure,
     // Otherwise these suites run the SDK's own animation loop, which happy-dom
     // serves as fast as it can.
@@ -71,7 +70,7 @@ const desktopWith = (
   });
   const root = document.createElement("div");
   document.body.append(root);
-  const desktop = new Desktop(root);
+  const desktop = new Desktop(root, domicile);
   installWindowGestures(root, desktop);
   for (const appId of appIds) {
     desktop.open(appId, [640, 480]);
@@ -79,8 +78,9 @@ const desktopWith = (
   return { desktop, forwarded, root };
 };
 
-// The elements report their size, and forward the pointer events the desktop
-// does *not* take, to the domicile client. Only the forwards are read back.
+// The SDK reports each window's size, and forwards the pointer events the
+// desktop does *not* take, to the domicile client. Only the forwards are read
+// back.
 const recordingDomicile = (forwarded: Forwarded): DomicileClient =>
   ({
     focusApp: () => undefined,
@@ -88,6 +88,7 @@ const recordingDomicile = (forwarded: Forwarded): DomicileClient =>
     pointerButton: (...call: unknown[]) => forwarded.buttons.push(call),
     pointerMotion: (...call: unknown[]) => forwarded.motions.push(call),
     resizeApp: () => undefined,
+    surfaceSizeOf: () => undefined,
   }) as unknown as DomicileClient;
 
 const windowFor = (root: HTMLElement, appId: string): HTMLElement => {
@@ -147,7 +148,7 @@ describe("installWindowGestures", () => {
   });
 
   it("tells the client nothing about a drag the desktop took", () => {
-    // A `<domicile-app>` forwards every pointer event over it straight to the
+    // An `<app>` forwards every pointer event over it straight to the
     // client underneath. Alt is the desktop's, so a client whose window is
     // being dragged must hear none of it — a press it is told about and never
     // told the end of leaves it drawing a selection for the rest of the

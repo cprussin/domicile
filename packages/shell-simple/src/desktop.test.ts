@@ -1,42 +1,23 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { Measure } from "@domicile/chrome-sdk/measure";
-import {
-  APP_TAG_NAME,
-  registerElements,
-} from "@domicile/chrome-sdk/register-elements";
 
 import { Desktop } from "./desktop";
 
-// The elements report their size to the domicile client as they mount; nothing
-// here reads what they say, so a recorder that answers every call is enough.
+// This desktop asks the client for one thing — the keyboard, for a window it
+// just opened — and nothing here reads the rest, so a double that answers every
+// call is enough.
 const silentDomicile = {
   focusApp: () => undefined,
-  focusChrome: () => undefined,
-  resizeApp: () => undefined,
 } as unknown as DomicileClient;
 
-// The test DOM performs no layout, so measurement is injected.
-const stubMeasure: Measure = () => ({
-  size: [100, 100],
-  transform: [1, 0, 0, 1, 0, 0],
-  visible: true,
-});
-
-/** A desktop whose elements report to a client that keeps who was focused. */
+/** A desktop on a client that keeps a note of who was focused. */
 const recordingDesktop = () => {
   const acted: string[] = [];
   const domicile = {
-    ...silentDomicile,
     focusApp: (appId: string) => acted.push(`focus:${appId}`),
   } as unknown as DomicileClient;
-  registerElements(domicile, {
-    measure: stubMeasure,
-    observePlacement: () => () => {
-      // Never turned: nothing here tests what happens when a window resizes.
-    },
-  });
-  return { acted, desktop: new Desktop(freshRoot()) };
+  return { acted, desktop: new Desktop(freshRoot(), domicile) };
 };
 
 const windowFor = (root: HTMLElement, appId: string): HTMLElement => {
@@ -56,22 +37,13 @@ const freshRoot = (): HTMLElement => {
 
 beforeEach(() => {
   document.body.replaceChildren();
-  registerElements(silentDomicile, {
-    measure: stubMeasure,
-    // Otherwise these suites run the SDK's own animation loop, which happy-dom
-    // serves as fast as it can: every mounted window re-measured tens of
-    // thousands of times a second, for the length of every `await`.
-    observePlacement: () => () => {
-      // Never turned: nothing here tests what happens when a window resizes.
-    },
-  });
 });
 
 describe("Desktop", () => {
   describe("the window list", () => {
     it("mounts a portal for a client the host announced, at the size it asked for", () => {
       const root = freshRoot();
-      new Desktop(root).open("term", [640, 480]);
+      new Desktop(root, silentDomicile).open("term", [640, 480]);
       const term = windowFor(root, "term");
       expect(term.style.width).toBe("640px");
       expect(term.style.height).toBe("480px");
@@ -85,7 +57,7 @@ describe("Desktop", () => {
       // never sends one. Without this the placeholder is painted over a live
       // window until the user happens to resize it.
       const root = freshRoot();
-      new Desktop(root).open("term", [640, 480]);
+      new Desktop(root, silentDomicile).open("term", [640, 480]);
       expect(windowFor(root, "term").classList).toContain("has-surface");
     });
 
@@ -94,13 +66,13 @@ describe("Desktop", () => {
       // the moment it maps. That window really has nothing behind it, and the
       // placeholder is what says so until its first frame or resize.
       const root = freshRoot();
-      new Desktop(root).open("term", undefined);
+      new Desktop(root, silentDomicile).open("term", undefined);
       expect(windowFor(root, "term").classList).not.toContain("has-surface");
     });
 
     it("opens each window clear of the last", () => {
       const root = freshRoot();
-      const desktop = new Desktop(root);
+      const desktop = new Desktop(root, silentDomicile);
       desktop.open("term", [640, 480]);
       desktop.open("editor", [640, 480]);
       expect(windowFor(root, "editor").style.top).not.toBe(
@@ -114,7 +86,7 @@ describe("Desktop", () => {
       // "a chrome that already holds the window ignores a second announcement
       // — the shell keys its windows by app id".
       const root = freshRoot();
-      const desktop = new Desktop(root);
+      const desktop = new Desktop(root, silentDomicile);
       desktop.open("term", [640, 480]);
       const moved = { height: 300, left: 10, top: 20, width: 400 };
       desktop.place("term", moved);
@@ -135,14 +107,14 @@ describe("Desktop", () => {
       // domicile client holds `app_appeared` until this shell is listening — so an app id it
       // has never seen is the two having gone out of step, not a case to
       // absorb.
-      expect(() => new Desktop(freshRoot()).close("term")).toThrow(
-        "no window for term",
-      );
+      expect(() =>
+        new Desktop(freshRoot(), silentDomicile).close("term"),
+      ).toThrow("no window for term");
     });
 
     it("takes the window down when the client goes", () => {
       const root = freshRoot();
-      const desktop = new Desktop(root);
+      const desktop = new Desktop(root, silentDomicile);
       desktop.open("term", [640, 480]);
       desktop.close("term");
       expect(root.querySelector(APP_TAG_NAME)).toBeNull();
@@ -177,7 +149,7 @@ describe("Desktop", () => {
   describe("placement", () => {
     it("moves and resizes the window it is given a box for", () => {
       const root = freshRoot();
-      const desktop = new Desktop(root);
+      const desktop = new Desktop(root, silentDomicile);
       desktop.open("term", [640, 480]);
       desktop.place("term", { height: 300, left: 10, top: 20, width: 400 });
       const term = windowFor(root, "term");
@@ -188,7 +160,7 @@ describe("Desktop", () => {
     });
 
     it("reports where a window is, so a drag can be measured from it", () => {
-      const desktop = new Desktop(freshRoot());
+      const desktop = new Desktop(freshRoot(), silentDomicile);
       desktop.open("term", [640, 480]);
       const box = { height: 300, left: 10, top: 20, width: 400 };
       desktop.place("term", box);
@@ -200,7 +172,7 @@ describe("Desktop", () => {
       // asked for and cannot see. The stack is `z-index` on the element, which
       // is what the compositor draws by, so the element is what says so.
       const root = freshRoot();
-      const desktop = new Desktop(root);
+      const desktop = new Desktop(root, silentDomicile);
       desktop.open("term", [640, 480]);
       desktop.open("editor", [640, 480]);
       expect(Number(windowFor(root, "editor").style.zIndex)).toBeGreaterThan(
@@ -210,7 +182,7 @@ describe("Desktop", () => {
 
     it("puts a raised window above the others", () => {
       const root = freshRoot();
-      const desktop = new Desktop(root);
+      const desktop = new Desktop(root, silentDomicile);
       desktop.open("term", [640, 480]);
       desktop.open("editor", [640, 480]);
       desktop.raise("term");
@@ -222,7 +194,7 @@ describe("Desktop", () => {
 
   describe("what leaves", () => {
     it("tells a listener which window went, so nothing holds its id", () => {
-      const desktop = new Desktop(freshRoot());
+      const desktop = new Desktop(freshRoot(), silentDomicile);
       const gone: string[] = [];
       desktop.onWindowClosed((appId) => gone.push(appId));
       desktop.open("term", [640, 480]);
@@ -234,14 +206,14 @@ describe("Desktop", () => {
   describe("hit testing", () => {
     it("names the window an event landed in", () => {
       const root = freshRoot();
-      const desktop = new Desktop(root);
+      const desktop = new Desktop(root, silentDomicile);
       desktop.open("term", [640, 480]);
       expect(desktop.appIdAt(windowFor(root, "term"))).toBe("term");
     });
 
     it("names nothing for the desktop itself", () => {
       const root = freshRoot();
-      const desktop = new Desktop(root);
+      const desktop = new Desktop(root, silentDomicile);
       desktop.open("term", [640, 480]);
       expect(desktop.appIdAt(root)).toBeUndefined();
     });
@@ -256,16 +228,21 @@ describe("Desktop", () => {
       // Opened undrawn, and that is the whole test: a window opened at a size
       // already has the class before this line runs, so passing one here would
       // assert nothing about `resizeSurface`.
+      //
+      // The size the message carries is not among what this reads. The SDK
+      // records it as the message goes past, because scaling the pointer by it
+      // is the only thing anyone does with it; what reaches here is that the
+      // window has stopped being empty.
       const root = freshRoot();
-      const desktop = new Desktop(root);
+      const desktop = new Desktop(root, silentDomicile);
       desktop.open("term", undefined);
-      desktop.resizeSurface({ app_id: "term", size: [640, 480] });
+      desktop.resizeSurface({ app_id: "term" });
       expect(windowFor(root, "term").classList).toContain("has-surface");
     });
 
     it("shows the cursor the client asked for", () => {
       const root = freshRoot();
-      const desktop = new Desktop(root);
+      const desktop = new Desktop(root, silentDomicile);
       desktop.open("term", [640, 480]);
       desktop.applyCursor({ app_id: "term", cursor: "text" });
       expect(windowFor(root, "term").style.cursor).toBe("text");

@@ -1,10 +1,10 @@
 // The page, and the whole of this shell's behaviour.
 //
-// A shell is a web page that mounts `<domicile-app>` elements. Where they are
-// and how big they are is the shell's entire job — this one puts every app
-// full-screen with the newest on top, which is the least a shell can do and
-// still be one. Everything else a desktop has is CSS and event handlers on top
-// of exactly this.
+// A shell is a web page that mounts `<app>` elements. Where they are and how big
+// they are is the shell's entire job — this one puts every app full-screen with
+// the newest on top, which is the least a shell can do and still be one.
+// Everything else a desktop has is CSS and event handlers on top of exactly
+// this.
 
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
@@ -17,15 +17,16 @@ import { registerElements } from "@domicile/chrome-sdk/register-elements";
 // stand-in — which is worth keeping possible, because the layout can be worked
 // on without a compositor, against apps that will never arrive.
 const domicile = new DomicileClient(connectToHost(navigator));
-// Defines `<domicile-app>`, bound to this client.
-// Until this runs the tags are unknown elements and mount nothing.
+// Binds the SDK to this client: `<app>` is the engine's tag and needs no
+// defining, but the pointer and keyboard over one are the page's to forward, and
+// until this runs nothing does.
 registerElements(domicile);
 
 /** Every app the host has announced, by the id it announced it under. */
 const mounted = new Map<string, HTMLElement>();
 
 domicile.on("app_appeared", ({ app_id }) => {
-  const element = document.createElement("domicile-app");
+  const element = document.createElement("app");
   element.setAttribute("app-id", app_id);
   // Appending is what puts it on top: the elements are absolutely positioned
   // and share a stacking context, so document order is the stack.

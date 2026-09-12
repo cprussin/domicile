@@ -1,28 +1,41 @@
-// The windows on screen: one `<domicile-app>` per client the host announced,
-// each absolutely positioned at a box this module owns.
+// The windows on screen: one `<app>` per client the host announced, each
+// absolutely positioned at a box this module owns.
 //
 // This is the whole of the shell's state. There is no tab list, no stage and no
 // reducer — a window is where it is, and the only things that move it are the
-// cascade it opened at and a drag. The host's per-app events are applied to the
-// elements directly, because a client's frames arrive many times a second and
-// carry a window of pixels each.
+// cascade it opened at and a drag. What the host says about one client is
+// applied to that client's element on the spot, because this shell has nowhere
+// else to hold it and nothing that re-renders from what it held.
 
-import type { DomicileAppElement } from "@domicile/chrome-sdk/app-element";
+import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import { focusApp } from "@domicile/chrome-sdk/focus-app";
 import type {
   AppCursorMessage,
   AppResizedMessage,
 } from "@domicile/chrome-sdk/host-message";
-import { APP_TAG_NAME } from "@domicile/chrome-sdk/register-elements";
 
 import { css } from "../styled-system/css";
 import type { WindowBox } from "./window-box";
 import { openingBox } from "./window-box";
 
+/**
+ * The class this shell's stylesheet hangs its placeholder off the absence of.
+ *
+ * The shell's rather than the SDK's, and that is the change the engine's `<app>`
+ * brought: whether a window with nothing behind it yet shows a label is a
+ * question about what this desktop looks like, and the element is this shell's
+ * to put a class on. What the SDK used to do here it could only do because it
+ * owned the element class.
+ */
+const HAS_SURFACE_CLASS = "has-surface";
+
 /** A window on the desktop: the element, and where this shell has put it. */
-type OpenWindow = { box: WindowBox; element: DomicileAppElement };
+type OpenWindow = { box: WindowBox; element: HTMLElement };
 
 export class Desktop {
   readonly #root: HTMLElement;
+  readonly #domicile: DomicileClient;
   readonly #windows = new Map<string, OpenWindow>();
   readonly #closeListeners: ((appId: string) => void)[] = [];
 
@@ -46,8 +59,9 @@ export class Desktop {
    */
   #caughtUp = false;
 
-  constructor(root: HTMLElement) {
+  constructor(root: HTMLElement, domicile: DomicileClient) {
     this.#root = root;
+    this.#domicile = domicile;
   }
 
   /**
@@ -109,7 +123,12 @@ export class Desktop {
       // is, and it reads its own box to say what resolution the client should
       // draw at — so an element appended bare is a window drawn at nothing,
       // behind everything, for the frame before the styles land.
-      element.appId = appId;
+      //
+      // As an attribute rather than through the reflected `appId` property, so
+      // this shell runs on a stock browser as well: there `<app>` is an
+      // `HTMLUnknownElement` with no such property, and the assignment would be
+      // a window that never names a client.
+      element.setAttribute("app-id", appId);
       // A size means the client has drawn at least once, which makes this the
       // replay a reloading chrome gets rather than a window that has just
       // mapped — so the element has a surface behind it already and must not
@@ -119,7 +138,7 @@ export class Desktop {
       // only on a size that *changed*, so an idle client never sends one. The
       // label would stay over the live window until the user resized it.
       if (size !== undefined) {
-        element.setSurfaceSize(size[0], size[1]);
+        element.classList.add(HAS_SURFACE_CLASS);
       }
       this.#windows.set(appId, { box, element });
       this.#opened += 1;
@@ -131,7 +150,7 @@ export class Desktop {
       // it knows nothing about positions now, and `Host` refuses a focus for
       // an app it does not know regardless of what this element has sent.
       if (this.#caughtUp) {
-        element.focusApp();
+        focusApp(this.#domicile, appId);
       }
     }
   }
@@ -211,21 +230,34 @@ export class Desktop {
   // not here, unlike the methods above: the host may still be draining frames
   // for a client whose `app_closed` this desktop has already acted on.
 
-  // The client redrew at a new resolution. The element needs it to scale
-  // pointer coordinates before the first frame at that size arrives — and
-  // where the compositor draws the client's own surface, no frame ever does.
-  resizeSurface({
-    app_id,
-    size,
-  }: Pick<AppResizedMessage, "app_id" | "size">): void {
-    this.#windows.get(app_id)?.element.setSurfaceSize(size[0], size[1]);
+  /**
+   * The client drew, so there is something behind that window now.
+   *
+   * The size itself is not wanted here — the SDK records it as the message goes
+   * past, because scaling the pointer by it is the only thing anyone does with
+   * it. What this desktop takes from the message is that the window has stopped
+   * being empty, which is when its placeholder comes down. Nothing else would
+   * say so: where the compositor draws the client's own surface no frame ever
+   * reaches the page.
+   */
+  resizeSurface({ app_id }: Pick<AppResizedMessage, "app_id">): void {
+    this.#windows.get(app_id)?.element.classList.add(HAS_SURFACE_CLASS);
   }
 
+  /**
+   * Show the cursor the client asked for while the pointer is over its window.
+   *
+   * Plain CSS on an element this shell owns, which is what a cursor always was:
+   * the SDK used to write it only because it owned the element class.
+   */
   applyCursor({
     app_id,
     cursor,
   }: Pick<AppCursorMessage, "app_id" | "cursor">): void {
-    this.#windows.get(app_id)?.element.applyCursor(cursor);
+    const open = this.#windows.get(app_id);
+    if (open !== undefined) {
+      open.element.style.cursor = cursor;
+    }
   }
 
   #windowFor(appId: string): OpenWindow {
@@ -239,7 +271,7 @@ export class Desktop {
 }
 
 /** Put the element where its box says, in the page's own coordinates. */
-const applyBox = (element: DomicileAppElement, box: WindowBox): void => {
+const applyBox = (element: HTMLElement, box: WindowBox): void => {
   element.style.left = pixels(box.left);
   element.style.top = pixels(box.top);
   element.style.width = pixels(box.width);

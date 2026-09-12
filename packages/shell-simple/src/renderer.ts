@@ -36,7 +36,7 @@ registerElements(domicile);
 // it.
 installKeybindingBackground(document.body);
 
-const desktop = new Desktop(document.body);
+const desktop = new Desktop(document.body, domicile);
 installWindowGestures(document.body, desktop);
 // The one thing this shell claims the keyboard for: without a way to start a
 // terminal, nothing can reach the desktop except from outside Domicile.

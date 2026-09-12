@@ -2,7 +2,6 @@
 // browser window the shell opened itself. Both get a tab, and the tab rail is
 // what switches between them, so they share one id space and one title.
 
-import type { SurfaceSize } from "@domicile/chrome-sdk/app-element";
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 
 /** The prefix {@link appWindowId} namespaces a client's window with. */
@@ -18,14 +17,18 @@ export enum WindowKind {
  * A Wayland client's window, as the shell holds it.
  *
  * Two kinds of fact on one record: the shell's own — a tab, a title — and the
- * client's, which arrive as host messages and are rendered onto the portal.
- * The client's are here for the reason state is anywhere: the portal for a
- * window is unmounted and mounted again whenever the shell stops rendering it
- * and starts again, and what it is told on the way back has to be current.
+ * cursor, which is the client's and arrives as a host message. The cursor is
+ * here for the reason state is anywhere: the element for a window is unmounted
+ * and mounted again whenever the shell stops rendering it and starts again, and
+ * the style it is given on the way back has to be current.
+ *
+ * The size the client drew at used to be here too, and is not: the SDK records
+ * it as the message goes past, because scaling the pointer by it is the only
+ * thing anyone does with it. This shell was a courier.
  *
  * Written out rather than left to the constructor's inferred shape because a
- * field the client has not reported yet still has a type — a window that has
- * not drawn is `undefined`, not absent.
+ * field the client has not reported yet still has a type — a client that has
+ * asked for no cursor is `undefined`, not absent.
  */
 export type ClientWindow = {
   appId: string;
@@ -33,12 +36,6 @@ export type ClientWindow = {
   cursor: CursorShape | undefined;
   id: string;
   kind: WindowKind.App;
-  /**
-   * The size the client is last known to have drawn at, or `undefined` for one
-   * that has not: a toplevel maps before it draws, and how big a Wayland client
-   * wants to be is something it says by drawing.
-   */
-  surfaceSize: SurfaceSize | undefined;
   title: string;
 };
 
@@ -52,7 +49,6 @@ export const ShellWindow = {
     cursor: undefined,
     id: appWindowId(appId),
     kind: WindowKind.App,
-    surfaceSize: undefined,
     title,
   }),
 

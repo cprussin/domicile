@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { APP_TAG_NAME } from "@domicile/chrome-sdk/register-elements";
+import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 
 import { installKeybindingBackground } from "./keybinding-background";
 
@@ -30,13 +30,13 @@ describe("installKeybindingBackground", () => {
     ]);
   });
 
-  it("hides against the tag the SDK actually registers", () => {
+  it("hides against the tag a window actually is", () => {
     // The rule that unpaints the legend over a window is a selector, and Panda
     // extracts a selector key as a build-time literal — so the module spells
     // the tag out rather than reading it from here. Nothing else would notice
-    // the SDK renaming it: no type error, no failing test, and a legend
+    // the two going out of step: no type error, no failing test, and a legend
     // composited over a live client.
-    expect(APP_TAG_NAME).toBe("domicile-app");
+    expect(APP_TAG_NAME).toBe("app");
   });
 
   it("goes on the desktop itself, not in a wrapper of its own", () => {
