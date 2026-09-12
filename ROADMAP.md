@@ -363,9 +363,12 @@ after itself.
 to a chrome from the Wayland loop — a chrome that reads slowly fills the socket
 buffer and a blocking write stops frame callbacks for *every* client. Never
 *wait* on one either: that stalls the thread that injects input, past the 200ms
-repeat delay, so a key the user tapped starts repeating. `outbound.rs` gives
-frames and lifecycle messages opposite policies, and `tests/backpressure.rs`
-holds both halves.
+repeat delay, so a key the user tapped starts repeating. `outbound.rs` is the
+queue that keeps both, and `message()` never waits and never drops. It no
+longer gives frames a policy of their own, because no frame comes down it: a
+client's buffer goes to the display compositor, so what is left is messages.
+The freeze itself is written down in `tests/input.rs`, where a chrome that
+stopped draining once cost the compositor twenty seconds.
 
 ---
 
