@@ -55,6 +55,7 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/window-management/Stage.tsx` | The windows on screen: the one the rail selected, and every float over it. |
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<domicile-app>` portal. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<webview>`. |
+| `src/window-management/useHistoryAvailability.ts` | Where that window's page can be sent, read off the view's own properties rather than learned from the event that says to read them. |
 | `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
 | `src/window-management/window-styles.ts` | What every window on the stage shares, and where a floating one is placed. |
 | `src/window-management/floating/float.ts` | A window that has left the rail: where it sits on the stage and how big. Its own module because floating is not a kind of window. |
@@ -82,7 +83,8 @@ Electron, and the SDK fills that element in with what the fork puts on it.
 - **+** in the rail header, or **Alt+Shift+Enter** — open a browser window on
   the stage. Its address bar navigates on Enter (an address typed without a
   scheme is loaded over https) and follows the page wherever it goes; the
-  window's tab is labelled with the site it is showing.
+  window's tab is labelled with the site it is showing. Back and forward are
+  live only while the page's history reaches that way.
 - **Alt+Tab** — float the window you are working in, or put it back.
   **Alt+drag** moves a floating window; **Alt+Shift+drag** resizes it. See
   below.
