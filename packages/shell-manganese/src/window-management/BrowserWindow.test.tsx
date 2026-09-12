@@ -1,17 +1,8 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { Measure } from "@domicile/chrome-sdk/measure";
-import {
-  registerElements,
-  WEBVIEW_TAG_NAME,
-} from "@domicile/chrome-sdk/register-elements";
-import type { DomicileWebviewElement } from "@domicile/chrome-sdk/webview-element";
-import {
-  WEBVIEW_GUEST_FOCUS_EVENT,
-  WEBVIEW_NAVIGATE_EVENT,
-} from "@domicile/chrome-sdk/webview-element";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { BrowserWindow } from "./BrowserWindow";
@@ -31,27 +22,13 @@ const recordingDomicile = (calls: string[]): DomicileClient =>
     },
   }) as unknown as DomicileClient;
 
-const stubMeasure: Measure = () => ({
-  size: [100, 100],
-  transform: [1, 0, 0, 1, 0, 0],
-  visible: true,
-});
-
-const view = (container: HTMLElement): DomicileWebviewElement => {
-  const element = container.querySelector(WEBVIEW_TAG_NAME);
+const view = (container: HTMLElement): HTMLWebViewElement => {
+  const element = container.querySelector("webview");
   if (element === null) {
     throw new Error("test: the browser window rendered no view");
   } else {
-    return element as DomicileWebviewElement;
+    return element;
   }
-};
-
-const navigateTo = (element: DomicileWebviewElement, url: string): void => {
-  act(() => {
-    element.dispatchEvent(
-      new CustomEvent(WEBVIEW_NAVIGATE_EVENT, { detail: { url } }),
-    );
-  });
 };
 
 const address = (): HTMLInputElement =>
@@ -79,18 +56,6 @@ stylesheet.textContent = readFileSync(
   .replaceAll(/@layer [^;{]+;/g, "")
   .replaceAll(/@layer [^{]+\{/g, "@media all{");
 document.head.append(stylesheet);
-
-beforeEach(() => {
-  registerElements(silentDomicile, {
-    measure: stubMeasure,
-    // Otherwise these suites run the SDK's own animation loop, which happy-dom
-    // serves as fast as it can: every mounted window re-measured tens of
-    // thousands of times a second, for the length of every `await`.
-    observePlacement: () => () => {
-      // Never turned: nothing here tests what happens when a window moves.
-    },
-  });
-});
 
 describe("BrowserWindow", () => {
   it("points its view at the address it opened with", () => {
@@ -133,27 +98,13 @@ describe("BrowserWindow", () => {
       );
     });
 
-    it("follows the page wherever it goes", () => {
-      const { container } = render(
-        <BrowserWindow
-          clickThrough={false}
-          domicile={silentDomicile}
-          dragging={false}
-          floating={undefined}
-          focused
-          onNavigate={() => undefined}
-          onReach={() => undefined}
-          onScreen
-          src="https://example.com"
-        />,
-      );
-      navigateTo(view(container), "https://example.com/deep/link");
-      expect(address()).toHaveValue("https://example.com/deep/link");
-    });
-
-    it("reports each navigation so the window's tab can be retitled", () => {
+    // WHERE THE SHELL SENT IT, which is every navigation the shell can see. A
+    // page that follows a link or a redirect goes somewhere this window is
+    // never told about: the guest's page is the browser process's, and the
+    // engine reports its history availability but not its address.
+    it("reports where it sent the page so the window's tab can be retitled", async () => {
       const seen: string[] = [];
-      const { container } = render(
+      render(
         <BrowserWindow
           clickThrough={false}
           domicile={silentDomicile}
@@ -168,8 +119,9 @@ describe("BrowserWindow", () => {
           src="https://example.com"
         />,
       );
-      navigateTo(view(container), "https://docs.example.com/");
-      expect(seen).toStrictEqual(["https://docs.example.com/"]);
+      await userEvent.clear(address());
+      await userEvent.type(address(), "docs.example.com{Enter}");
+      expect(seen).toStrictEqual(["https://docs.example.com"]);
     });
   });
 
@@ -194,11 +146,10 @@ describe("BrowserWindow", () => {
       expect(globalThis.getComputedStyle(browser()).flexDirection).toBe(
         "column",
       );
-      // ...and the view passes that height straight through to the embed
-      // inside it, which has no height of its own to fall back on.
-      const embed = globalThis.getComputedStyle(view(container));
-      expect(embed.display).toBe("flex");
-      expect(embed.flexDirection).toBe("column");
+      // ...and the view takes it, which it has to be told to do: a `<webview>`
+      // is a replaced element and an unstretched one is 300x150 whatever it is
+      // put inside.
+      expect(globalThis.getComputedStyle(view(container)).flexGrow).toBe("1");
     });
   });
 

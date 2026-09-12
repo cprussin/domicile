@@ -2,7 +2,7 @@
   "dependencies": {
     "zod": "catalog:"
   },
-  "description": "Domicile chrome SDK: <domicile-app>/<domicile-webview> custom elements and the client for navigator.domicile",
+  "description": "Domicile chrome SDK: the <domicile-app> custom element and the client for navigator.domicile",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile/test-support": "workspace:*",
@@ -10,10 +10,6 @@
     "typescript": "catalog:"
   },
   "exports": {
-    "./alias-tags": {
-      "types": "./dist/alias-tags.d.ts",
-      "default": "./dist/alias-tags.js"
-    },
     "./app-element": {
       "types": "./dist/app-element.d.ts",
       "default": "./dist/app-element.js"

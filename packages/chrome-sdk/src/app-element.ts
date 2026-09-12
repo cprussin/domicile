@@ -6,8 +6,9 @@
 // client has to be configured at, and only the page knows it.
 //
 // Custom element tag names must contain a hyphen, so the SDK registers
-// `domicile-app`. A chrome that prefers the bare `<app>` the compositor exposes
-// gets it from `aliasTag` until the engine makes the short name real.
+// `domicile-app`. The fork defines a bare `<app>` of its own — see
+// `docs/architecture/ENGINE-FORK.md` — and this element has not moved onto it
+// yet; ROADMAP.md carries that as its own item.
 
 import type { CursorShape } from "./cursor-shape";
 import type { ElementContext } from "./element-context";

@@ -5,15 +5,17 @@ import type {
   SurfaceSize,
 } from "@domicile/chrome-sdk/app-element";
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
-import type { DomicileWebviewElement } from "@domicile/chrome-sdk/webview-element";
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
-// The SDK's custom elements, as JSX. React passes an unknown prop on a
+// The SDK's custom element, as JSX. React passes an unknown prop on a
 // hyphenated tag straight through as an attribute unless the element declares a
 // property of that name, in which case it writes the property instead — which
-// is exactly the contract `DomicileAppElement`/`DomicileWebviewElement`
-// observe, so the tags need no wrapper component, only the types that say what
-// they take.
+// is exactly the contract `DomicileAppElement` observes, so the tag needs no
+// wrapper component, only the types that say what it takes.
+//
+// `<webview>` needs nothing here: React has declared the tag and an
+// `HTMLWebViewElement` to go with it since Electron, and the SDK fills that
+// element in with what the fork actually puts on it.
 
 type CustomElementProps<E extends HTMLElement, A> = DetailedHTMLProps<
   HTMLAttributes<E>,
@@ -52,11 +54,6 @@ declare module "react" {
           focused?: boolean;
           surfaceSize?: SurfaceSize | undefined;
         }
-      >;
-      /** An embedded browsing context. `src` is the address it loads. */
-      "domicile-webview": CustomElementProps<
-        DomicileWebviewElement,
-        { src: string }
       >;
     }
   }

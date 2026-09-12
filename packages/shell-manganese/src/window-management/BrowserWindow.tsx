@@ -1,9 +1,5 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { DomicileWebviewElement } from "@domicile/chrome-sdk/webview-element";
-import {
-  WEBVIEW_GUEST_FOCUS_EVENT,
-  WEBVIEW_NAVIGATE_EVENT,
-} from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { Button } from "@domicile/component-library/Button";
 import { Input } from "@domicile/component-library/Input";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
@@ -50,7 +46,17 @@ type Props = {
   floating: Floating | undefined;
   /** Whether the user is working in this window, so it takes the keyboard. */
   focused: boolean;
-  /** Called with the address on show whenever the page navigates. */
+  /**
+   * Called with the address this window was sent to, whenever the shell sends
+   * it somewhere.
+   *
+   * Every navigation the shell can see, which is not every navigation: the
+   * page inside is a guest in the browser process, and where a link or a
+   * redirect takes it is not reported back — the engine pushes the guest's
+   * history *availability* onto the element and nothing else about it. So a
+   * tab named from this says where the user asked to go rather than where they
+   * ended up.
+   */
   onNavigate: (url: string) => void;
   /**
    * Called when the user clicks into this window — the page, the address bar,
@@ -79,7 +85,7 @@ type Props = {
 };
 
 /**
- * A browser window on the stage: an address bar over a `<domicile-webview>`.
+ * A browser window on the stage: an address bar over a `<webview>`.
  *
  * The window is ordinary chrome, built from the same component library as the
  * rest of it — so the controls a browser needs cost nothing to style and match
@@ -99,26 +105,8 @@ export const BrowserWindow = ({
 }: Props) => {
   // `null` rather than `undefined` because that is what React's ref API hands
   // a callback ref on unmount.
-  const [view, setView] = useState<DomicileWebviewElement | null>(null);
+  const [view, setView] = useState<HTMLWebViewElement | null>(null);
   const [address, setAddress] = useState(src);
-
-  // The page navigates on its own too — a link, a redirect — and the address
-  // bar shows wherever it ended up, the way a browser's does.
-  useEffect(() => {
-    if (view === null) {
-      return undefined;
-    } else {
-      const follow = (event: Event) => {
-        const { url } = (event as CustomEvent<{ url: string }>).detail;
-        setAddress(url);
-        onNavigate(url);
-      };
-      view.addEventListener(WEBVIEW_NAVIGATE_EVENT, follow);
-      return () => {
-        view.removeEventListener(WEBVIEW_NAVIGATE_EVENT, follow);
-      };
-    }
-  }, [onNavigate, view]);
 
   // The click in the page, which is the half of this window the shell cannot
   // see: the element dispatches this when its guest takes focus, because
@@ -161,7 +149,7 @@ export const BrowserWindow = ({
   // Every control here drives the view element, which is rendered by this
   // component and so is attached by the time anyone can press one. A press
   // that finds no view is a wiring bug, not a case to absorb quietly.
-  const withView = (command: (view: DomicileWebviewElement) => void): void => {
+  const withView = (command: (view: HTMLWebViewElement) => void): void => {
     if (view === null) {
       throw new Error("browser window: no view to drive");
     } else {
@@ -169,7 +157,7 @@ export const BrowserWindow = ({
     }
   };
 
-  const drive = (command: (view: DomicileWebviewElement) => void) => () => {
+  const drive = (command: (view: HTMLWebViewElement) => void) => () => {
     withView(command);
   };
 
@@ -188,7 +176,14 @@ export const BrowserWindow = ({
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     withView((loaded) => {
-      loaded.src = withScheme(address);
+      const url = withScheme(address);
+      // The attribute rather than the property: `src` is reflected, so on the
+      // engine the two are one operation, and the attribute is the half that
+      // exists whatever this page is running on. On a browser with no
+      // `<webview>` the property would be a value hung off an unknown element
+      // and the DOM would go on saying the address the window opened at.
+      loaded.setAttribute("src", url);
+      onNavigate(url);
     });
   };
 
@@ -275,7 +270,7 @@ export const BrowserWindow = ({
           />
         </div>
       </form>
-      <domicile-webview className={viewStyles} ref={setView} src={src} />
+      <webview className={viewStyles} ref={setView} src={src} />
     </section>
   );
 };
@@ -303,24 +298,21 @@ const addressFieldStyles = css({
   minInlineSize: 0,
 });
 
-// The page takes the height the address bar leaves and gives it to the frame
-// inside it rather than making that frame resolve a percentage against it — so
-// the view is a column the frame's `flex` below grows into. The frame has no
-// height of its own: it is an iframe, and an iframe left to itself is 150px
-// tall.
+// The view takes whatever height the address bar leaves, which it has to be
+// told to do: a `<webview>` is a replaced element with an intrinsic size, so
+// one left to itself is 300x150 inside however tall a window it is put in.
 //
-// The element's own `display` is left alone on purpose: it is set so the
-// browsing context inside fills the tag, and overriding it collapses the page
-// to nothing.
-const viewStyles = flex({
-  "& .domicile-webview-frame": {
-    borderStyle: "none",
-    flex: 1,
-    minInlineSize: 0,
-  },
-  direction: "column",
+// `min-block-size: 0` because `auto` on a flex item refuses to shrink below
+// that intrinsic size, which is what would put the bottom of the page under the
+// bottom of the window.
+//
+// The element's own `display` is left alone on purpose: the engine gives it
+// one, and a flex item is blockified whatever it says.
+const viewStyles = css({
+  borderStyle: "none",
   flex: 1,
   minBlockSize: 0,
+  minInlineSize: 0,
 });
 
 // A floating browser window meets its title bar at the top, and the seam

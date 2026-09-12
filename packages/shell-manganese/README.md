@@ -54,7 +54,7 @@ client's keyboard goes to the host, a browser window's to its page.
 | `src/window-management/WindowRail.tsx` | A tab per window, the launchers, the theme toggle and the clock. |
 | `src/window-management/Stage.tsx` | The windows on screen: the one the rail selected, and every float over it. |
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<domicile-app>` portal. |
-| `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<domicile-webview>`. |
+| `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<webview>`. |
 | `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
 | `src/window-management/window-styles.ts` | What every window on the stage shares, and where a floating one is placed. |
 | `src/window-management/floating/float.ts` | A window that has left the rail: where it sits on the stage and how big. Its own module because floating is not a kind of window. |
@@ -70,10 +70,10 @@ There is no main process and no preload. The engine is the display compositor
 and serves this page over `domicile://`, and the channel to it is
 `navigator.domicile`, so what is here is the chrome and nothing else.
 
-React owns this DOM, so the chrome writes `<domicile-app>` in JSX rather than
-letting the SDK's `aliasTag` upgrade a short `<app>` tag — a MutationObserver
-that swaps nodes out from under the reconciler is not something React tolerates.
-`aliasTag` remains in the SDK for chromes that build their DOM themselves.
+React owns this DOM, so the chrome writes the tags in JSX: `<domicile-app>`,
+which is the SDK's custom element, and `<webview>`, which is the engine's own —
+React has had a `webview` tag and an `HTMLWebViewElement` to go with it since
+Electron, and the SDK fills that element in with what the fork puts on it.
 
 ## Launching windows
 
@@ -197,7 +197,7 @@ over a `<domicile-app>`, whose pixels are a portal element in this document.
 And `grabShortcut` claims the combination for the desktop, which is what
 answers when a window has it: the compositor takes it before a Wayland client
 is given it, and the browser process takes it before a browser window's page
-is — a `<domicile-webview>` is a browsing context of its own, so a key pressed
+is — a `<webview>` is a browsing context of its own, so a key pressed
 on a site the shell is showing reaches neither this page nor the compositor,
 and the layer inside the engine is the only one above it. One ask, honoured
 wherever the keyboard happens to be; exactly one path fires for any press.

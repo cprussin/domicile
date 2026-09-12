@@ -17,7 +17,7 @@ import { registerElements } from "@domicile/chrome-sdk/register-elements";
 // stand-in — which is worth keeping possible, because the layout can be worked
 // on without a compositor, against apps that will never arrive.
 const domicile = new DomicileClient(connectToHost(navigator));
-// Defines `<domicile-app>` and `<domicile-webview>`, bound to this client.
+// Defines `<domicile-app>`, bound to this client.
 // Until this runs the tags are unknown elements and mount nothing.
 registerElements(domicile);
 

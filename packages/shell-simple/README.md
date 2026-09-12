@@ -49,7 +49,7 @@ twelve hundred lines of it. Two neighbours mark the ends it sits between:
   a terminal is a demo, not a desktop.
 - **No window list, no stacking policy beyond raise-on-Alt-press, no close
   button.** A window leaves when its client does.
-- **No `<domicile-webview>`.** The SDK's embedded-browser element is what a
+- **No `<webview>`.** The engine's embedded-browser element is what a
   chrome with an address bar wants; this one has no address bar.
 
 Everything it *does* do is what the model requires of any chrome: place a

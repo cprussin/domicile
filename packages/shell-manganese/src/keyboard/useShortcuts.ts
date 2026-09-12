@@ -37,7 +37,7 @@ type Options = {
  * `grabShortcut` claims the combination for the desktop, which is what answers
  * when a window has the keyboard: the compositor takes it before a Wayland
  * client is given it, and the browser process takes it before a browser
- * window's page is — a `<domicile-webview>` is a browsing context of its own,
+ * window's page is — a `<webview>` is a browsing context of its own,
  * so a key pressed on a site the shell is showing reaches neither this page nor
  * the compositor. The page's own `keydown` is what answers when the shell
  * itself has focus. Exactly one of the two paths fires for any press.

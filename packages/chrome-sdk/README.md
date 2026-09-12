@@ -23,19 +23,21 @@ It provides four things:
   tens of milliseconds after the compositor has announced every window already
   running. For the same reason a page must never call `addEventListener` on
   `navigator.domicile` itself.
-- **Custom elements** (`./register-elements`) — `<domicile-app>` and
-  `<domicile-webview>`. An `<domicile-app>` reports its on-screen box to the
-  host, embeds that client's surface, and forwards pointer and keyboard input
-  to it; `focusApp` routes the keyboard to it without a click, for a chrome
-  that shows a window the user did not click. A click on one fires a
-  cancellable `domicile-focus-requested` and then focuses the client, so a
-  shell that wants focus to be its own decision calls `preventDefault()` and a
-  shell with no opinion needs to know nothing about it.
-  A `<domicile-webview>` embeds a nested browsing context the engine renders
-  directly: its `src` is the address on screen (it follows the page wherever the
-  content navigates, and fires `domicile-navigate` when it lands), `goBack` /
+- **The `<domicile-app>` custom element** (`./register-elements`). It reports
+  its on-screen box to the host, embeds that client's surface, and forwards
+  pointer and keyboard input to it; `focusApp` routes the keyboard to it
+  without a click, for a chrome that shows a window the user did not click. A
+  click on one fires a cancellable `domicile-focus-requested` and then focuses
+  the client, so a shell that wants focus to be its own decision calls
+  `preventDefault()` and a shell with no opinion needs to know nothing about it.
+- **`<webview>`** (`./webview-element`) — types and event names only. The
+  element is the engine's: `src` is the address it loads, `goBack` /
   `goForward` / `stop` / `reload` are what a chrome's address bar drives it
-  with, and `focus` puts the keyboard on the embedded page.
+  with, `canGoBack` / `canGoForward` say whether the first two would do
+  anything, and `focus` puts the keyboard on the embedded page. What this
+  module adds is the TypeScript for all of that plus the names of the two
+  events the browser process dispatches on it,
+  `domicile-guest-focus` and `domicile-history-change`.
 - **`reportDevicePixelRatio`** (`./device-pixel-ratio`) — tell the host what
   density the page is drawing at, and keep telling it. The ratio changes when
   the window moves to another display or the page is zoomed, and the page is
@@ -71,14 +73,14 @@ Opened in an ordinary browser there is no `navigator.domicile` at all —
 back a stand-in that does nothing and says so once on the console. Ask
 `hasHost(navigator)` if your own code needs the answer.
 
-Then render `<domicile-app app-id="…">` / `<domicile-webview src="…">` as
-normal DOM and style them with ordinary CSS — rounding, blur, transforms, and
-z-index all apply to the live client surface. That is the whole point of
-Domicile.
+Then render `<domicile-app app-id="…">` / `<webview src="…">` as normal DOM
+and style them with ordinary CSS — rounding, blur, transforms, and z-index all
+apply to the live client surface. That is the whole point of Domicile.
 
-Custom element tag names must contain a hyphen, so the SDK registers
-`domicile-app` and `domicile-webview`. The engine integration layer aliases the
-bare `<app>` / `<webview>` names the compositor exposes.
+A custom element's name must contain a hyphen, which is why the app element is
+still `domicile-app`: the SDK registers it. `<webview>` is not one — the fork
+defines it as a real HTML tag, so there is nothing to register and nothing here
+to wrap it in.
 
 ### Knowing which modifiers are held
 
