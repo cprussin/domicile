@@ -11,7 +11,7 @@ The in-page half of Domicile. A Domicile chrome is ordinary web content; this
 package is what lets that content talk to the compositor and mount real Wayland
 clients as DOM elements.
 
-It provides four things:
+It provides these:
 
 - **`DomicileClient`** (`./domicile-client`) — the client for `navigator.domicile`, the
   typed control channel the forked engine puts on a document it served. It
@@ -23,13 +23,24 @@ It provides four things:
   tens of milliseconds after the compositor has announced every window already
   running. For the same reason a page must never call `addEventListener` on
   `navigator.domicile` itself.
-- **The `<domicile-app>` custom element** (`./register-elements`). It reports
-  its on-screen box to the host, embeds that client's surface, and forwards
-  pointer and keyboard input to it; `focusApp` routes the keyboard to it
-  without a click, for a chrome that shows a window the user did not click. A
-  click on one fires a cancellable `domicile-focus-requested` and then focuses
-  the client, so a shell that wants focus to be its own decision calls
-  `preventDefault()` and a shell with no opinion needs to know nothing about it.
+- **`registerElements`** (`./register-elements`) — the input and size routing
+  behind the engine's `<app>` tag. It reports each window's on-screen box to the
+  host, forwards the pointer over one to the client underneath in that client's
+  own surface coordinates, and routes the page's keystrokes to whichever window
+  was last reached for. All of it is delegated from `document` over
+  `closest("app")`: the tag is the engine's, so there is no element class to hang
+  any of it on, and nothing here is registered. A click on a window fires a
+  cancellable `domicile-focus-requested` and then focuses the client, so a shell
+  that wants focus to be its own decision calls `preventDefault()` and a shell
+  with no opinion needs to know nothing about it.
+- **`<app>`** (`./app-element`) — the tag name, the focus-request event, and the
+  TypeScript for the element, which is the fork's. The surface embed and the size
+  a client is configured at are both the layout box's and the engine reports
+  them; there is nothing to call.
+- **`focusApp`** (`./focus-app`) — put the keyboard on a client without a click.
+  Not the same as `DomicileClient.focusApp`, which asks the compositor and stops:
+  keyboard events reach `document` rather than an element, so the SDK has to be
+  told too.
 - **`<webview>`** (`./webview-element`) — types and event names only. The
   element is the engine's: `src` is the address it loads, `goBack` /
   `goForward` / `stop` / `reload` are what a chrome's address bar drives it
@@ -73,14 +84,16 @@ Opened in an ordinary browser there is no `navigator.domicile` at all —
 back a stand-in that does nothing and says so once on the console. Ask
 `hasHost(navigator)` if your own code needs the answer.
 
-Then render `<domicile-app app-id="…">` / `<webview src="…">` as normal DOM
-and style them with ordinary CSS — rounding, blur, transforms, and z-index all
-apply to the live client surface. That is the whole point of Domicile.
+Then render `<app app-id="…">` / `<webview src="…">` as normal DOM and style
+them with ordinary CSS — rounding, blur, transforms, and z-index all apply to the
+live client surface. That is the whole point of Domicile.
 
-A custom element's name must contain a hyphen, which is why the app element is
-still `domicile-app`: the SDK registers it. `<webview>` is not one — the fork
-defines it as a real HTML tag, so there is nothing to register and nothing here
-to wrap it in.
+Both tags are the fork's own HTML elements, so there is nothing to register and
+nothing here to wrap them in — a custom element's name must contain a hyphen, per
+spec, which is exactly why they are the engine's. Note what that costs in a React
+chrome: a tag without a hyphen is an ordinary HTML element to React, so it writes
+no unrecognised property and binds no `on…` prop for an event it has not heard
+of. Bind the events on a ref.
 
 ### Knowing which modifiers are held
 
@@ -128,6 +141,13 @@ bun run --filter @domicile/chrome-sdk test
 
 DOM-dependent suites run against happy-dom via
 [`@domicile/test-support`](../test-support/README.md). That DOM performs no
-layout, so element tests inject a `measure` stub through
-`registerElements(domicile, { measure })` rather than relying on
-`getBoundingClientRect`.
+layout, so the routing tests inject a `measure` stub — and a frame source —
+through `registerElements(domicile, { measure, observePlacement })` rather than
+relying on `getBoundingClientRect` and on however fast happy-dom serves an
+animation frame.
+
+happy-dom has never heard of `<app>`, so it creates one as an
+`HTMLUnknownElement`, which React's development build reports on the console as
+an unrecognised tag. It cannot happen on the fork, where the tag is
+`HTMLAppElement`; React exempts `dialog` and `webview` from that report by name
+and there is no way to add a third.

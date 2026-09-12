@@ -2,7 +2,7 @@
   "dependencies": {
     "zod": "catalog:"
   },
-  "description": "Domicile chrome SDK: the <domicile-app> custom element and the client for navigator.domicile",
+  "description": "Domicile chrome SDK: the input and size routing behind the engine's <app> tag, and the client for navigator.domicile",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile/test-support": "workspace:*",
@@ -45,6 +45,10 @@
     "./element-transform": {
       "types": "./dist/element-transform.d.ts",
       "default": "./dist/element-transform.js"
+    },
+    "./focus-app": {
+      "types": "./dist/focus-app.d.ts",
+      "default": "./dist/focus-app.js"
     },
     "./host-message": {
       "types": "./dist/host-message.d.ts",

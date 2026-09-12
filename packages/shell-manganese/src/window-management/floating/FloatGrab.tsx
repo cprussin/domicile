@@ -17,7 +17,7 @@ type Props = {
 /**
  * The sheet the pointer lands on while Alt is held, over one floating window.
  *
- * A window is a `<domicile-app>` portal, and the pointer over one belongs to
+ * A window is an `<app>`, and the pointer over one belongs to
  * the client behind it — that is the whole point of Domicile. So a drag cannot
  * be handled on the window: the shell has to take the mouse back first, which
  * it does by making the window click-through (see `clickThroughStyles`) and

@@ -71,7 +71,9 @@ export const WEBVIEW_HISTORY_CHANGE_EVENT = "domicile-history-change";
  * trade `<app>` makes.
  */
 declare global {
-  // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in (or another package's) type is what `interface` is for and what a type alias cannot do
+  // An `interface` rather than a type alias because it is filling in a name
+  // the DOM's own lib either declares or will be asked for: a type alias cannot
+  // merge, and `extends HTMLElement` is how the shape says what it already is.
   interface HTMLWebViewElement extends HTMLElement {
     /** The address to show. Reflected, so the attribute and the property are
      * one value, the way `<img src>` is. */

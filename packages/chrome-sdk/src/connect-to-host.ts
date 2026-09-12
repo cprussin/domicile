@@ -52,9 +52,10 @@ export const hasHost = (navigator: HostNavigator): boolean =>
  * **The stand-in is not a failure and must not throw.** A shell's page opened
  * in an ordinary browser has no compositor and should still render: that is
  * how a shell is styled, and how its layout is worked on, without a desktop
- * running. It is the same recovery `<domicile-app>` already makes one layer
- * up, where a canvas with no `embedExternalSurface` lays out, reports its box
- * and routes pointers exactly as it does under the fork, and shows nothing.
+ * running. An `<app>` in such a page is an `HTMLUnknownElement` that takes a
+ * box and shows nothing, and the SDK routes pointers over it exactly as it does
+ * under the fork, so the seam a shell is written against is the same either way
+ * and only the pixels are missing.
  *
  * **It is also not silent, which is the half that used to be missing.** The
  * old no-op transport said nothing at all, and a page whose windows never
@@ -62,6 +63,13 @@ export const hasHost = (navigator: HostNavigator): boolean =>
  * a shell with a layout bug, and from a client that never drew. This layer is
  * the only one that knows which, so it says so — once, at startup, naming the
  * property it looked for and what will and will not work without it.
+ *
+ * **And it says it for the elements too, which is why they no longer do.** The
+ * `<app>` element used to warn on its own account, when the `<canvas>` it made
+ * had no `embedExternalSurface` on it; the tag is the engine's now, and the one
+ * thing that defines it is the one thing that binds `navigator.domicile` — so a
+ * page with an `<app>` that cannot show a window is exactly a page this warned
+ * about already.
  *
  * @param warn - Where the absence is reported. Injected so a test can read it
  *   without a console.

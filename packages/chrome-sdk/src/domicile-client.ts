@@ -88,6 +88,15 @@ import type { AxisDelta } from "./wheel-axis";
 type Handler = (message: never) => void;
 
 /**
+ * How big a client has drawn, in its own pixels.
+ *
+ * `undefined` wherever one appears is a client that has not committed a buffer:
+ * a toplevel maps before it draws, and how big a Wayland client wants to be is
+ * something it says by drawing.
+ */
+export type SurfaceSize = readonly [width: number, height: number];
+
+/**
  * The chrome's half of the control channel: a handler table for what the
  * compositor says, and a typed call per thing the chrome asks of it.
  */
@@ -131,6 +140,20 @@ export class DomicileClient {
    */
   readonly #released = new Set<HostMessageType>();
 
+  /**
+   * The size each running client last drew at, recorded as the message goes
+   * past.
+   *
+   * Here rather than in the page because nothing but the SDK's own pointer
+   * arithmetic wants it: a surface-local coordinate is an element position
+   * scaled by this, and a shell that routed the size to an element was
+   * carrying a fact it had no other use for. Read through
+   * {@link surfaceSizeOf} on demand, the way {@link displays} is read, so this
+   * costs no handler slot — {@link on} is one per type, and a shell still
+   * registers `app_resized` for whatever it wants to draw from it.
+   */
+  readonly #surfaceSizes = new Map<string, SurfaceSize>();
+
   constructor(host: DomicileHost) {
     this.#host = host;
 
@@ -139,16 +162,29 @@ export class DomicileClient {
     // class, and why registering them all before the constructor returns is
     // what makes the ordering safe.
     host.addEventListener("appappeared", (event) => {
-      this.#deliver("app_appeared", appAppeared(event));
+      const message = appAppeared(event);
+      // A size here is the replay a reconnecting chrome is given, and no
+      // `app_resized` follows it — that fires on a size that *changed*, so an
+      // idle client sends none.
+      if (message.size !== undefined) {
+        this.#surfaceSizes.set(message.app_id, message.size);
+      }
+      this.#deliver("app_appeared", message);
     });
     host.addEventListener("apptitled", (event) => {
       this.#deliver("app_titled", appTitled(event));
     });
     host.addEventListener("appresized", (event) => {
-      this.#deliver("app_resized", appResized(event));
+      const message = appResized(event);
+      this.#surfaceSizes.set(message.app_id, message.size);
+      this.#deliver("app_resized", message);
     });
     host.addEventListener("appclosed", (event) => {
-      this.#deliver("app_closed", appClosed(event));
+      const message = appClosed(event);
+      // The size is the client's, so it ends with the client rather than with
+      // whatever element happened to be showing it.
+      this.#surfaceSizes.delete(message.app_id);
+      this.#deliver("app_closed", message);
     });
     host.addEventListener("appcursor", (event) => {
       this.#deliver("app_cursor", appCursor(event));
@@ -216,6 +252,19 @@ export class DomicileClient {
    */
   get displays(): readonly DomicileDisplay[] | undefined {
     return this.#host.displays ?? undefined;
+  }
+
+  /**
+   * How big the client `appId` last drew, or `undefined` while it has not.
+   *
+   * What a pointer position over that window is scaled by: the element's box is
+   * whatever CSS made it and the client's surface is whatever the client chose,
+   * so the two only agree by accident. `undefined` maps the element's own
+   * pixels through 1:1, which is the best guess there is for a window with
+   * nothing behind it yet.
+   */
+  surfaceSizeOf(appId: string): SurfaceSize | undefined {
+    return this.#surfaceSizes.get(appId);
   }
 
   /**
@@ -297,6 +346,16 @@ export class DomicileClient {
     this.#host.setDesktopSize(size[0], size[1]);
   }
 
+  /**
+   * Ask the compositor to put the keyboard on `appId`'s client, and nothing
+   * else.
+   *
+   * **A shell wants `focusApp` from `./focus-app` instead**, which calls this
+   * and also tells the SDK where the page's keystrokes go. Keyboard events are
+   * delivered to `document` rather than to any element, so moving the seat
+   * without moving that leaves the window focused in the compositor and every
+   * key still landing in the page.
+   */
   focusApp(appId: string): void {
     this.#host.focusApp(appId);
   }

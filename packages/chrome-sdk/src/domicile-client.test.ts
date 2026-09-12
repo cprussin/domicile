@@ -258,6 +258,76 @@ describe("DomicileClient", () => {
     });
   });
 
+  describe("what a client has said about its own window", () => {
+    // The size a client drew at is recorded as the message goes past, because
+    // it is only ever an input to the SDK's own pointer arithmetic: a shell
+    // that carried it to an element was a courier for a fact it had no other
+    // use for. Read on demand rather than pushed, the way `displays` is, so
+    // nothing subscribes and no handler slot is taken from the page.
+    it("remembers the size a client drew at", () => {
+      host.dispatch(
+        "appresized",
+        appEvent("appresized", {
+          appId: "term",
+          hasSize: true,
+          height: 480,
+          width: 640,
+        }),
+      );
+
+      expect(domicile.surfaceSizeOf("term")).toStrictEqual([640, 480]);
+    });
+
+    it("knows nothing about a client that has not drawn", () => {
+      // A toplevel maps before it draws, so the announcement carries no size —
+      // and the pointer over such a window maps against the element's own box
+      // rather than against a size invented for it.
+      host.dispatch(
+        "appappeared",
+        appEvent("appappeared", { appId: "term", title: "Terminal" }),
+      );
+
+      expect(domicile.surfaceSizeOf("term")).toBeUndefined();
+    });
+
+    it("remembers the size a replayed window had already drawn at", () => {
+      // The replay a reconnecting chrome is given carries whatever the client
+      // has committed since it mapped, and no `app_resized` follows it: that
+      // fires on a size that *changed*, so an idle client sends none. Without
+      // this the pointer over every window that was already running would be
+      // scaled against nothing.
+      host.dispatch(
+        "appappeared",
+        appEvent("appappeared", {
+          appId: "term",
+          hasSize: true,
+          height: 480,
+          title: "Terminal",
+          width: 640,
+        }),
+      );
+
+      expect(domicile.surfaceSizeOf("term")).toStrictEqual([640, 480]);
+    });
+
+    it("forgets a client that has gone", () => {
+      // The size is the client's, so it ends with the client rather than with
+      // whatever element happened to be showing it.
+      host.dispatch(
+        "appresized",
+        appEvent("appresized", {
+          appId: "term",
+          hasSize: true,
+          height: 480,
+          width: 640,
+        }),
+      );
+      host.dispatch("appclosed", appEvent("appclosed", { appId: "term" }));
+
+      expect(domicile.surfaceSizeOf("term")).toBeUndefined();
+    });
+  });
+
   describe("asking the host for something", () => {
     it("calls the host's methods rather than building a message", () => {
       domicile.focusApp("term");

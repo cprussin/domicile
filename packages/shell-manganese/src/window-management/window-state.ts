@@ -6,7 +6,6 @@
 // DOM or domicile client in sight. `useWindows` is what feeds host events into
 // it.
 
-import type { SurfaceSize } from "@domicile/chrome-sdk/app-element";
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 import type { DropPosition } from "@domicile/component-library/TabRail";
 
@@ -112,7 +111,6 @@ export enum WindowActionKind {
   AppAppeared,
   AppClosed,
   AppCursorChanged,
-  AppDrewAt,
   AppTitled,
   BrowserOpened,
   FocusChanged,
@@ -149,21 +147,6 @@ export const WindowAction = {
     appId,
     cursor,
     kind: WindowActionKind.AppCursorChanged as const,
-  }),
-
-  /**
-   * The client is now known to have drawn, at this size.
-   *
-   * One action for two messages, because they say the same thing: a size on
-   * `app_appeared` is a client that has committed a buffer already — the replay
-   * a reloading chrome is given — and `app_resized` is one that has just
-   * committed another at a new resolution. What reads it is the portal, which
-   * scales the pointer by the client's own pixels rather than by its CSS box.
-   */
-  AppDrewAt: (appId: string, size: SurfaceSize) => ({
-    appId,
-    kind: WindowActionKind.AppDrewAt as const,
-    size,
   }),
 
   /**
@@ -310,12 +293,6 @@ export const reduceWindows = (
       return reshapeApp(state, action.appId, (window) => ({
         ...window,
         cursor: action.cursor,
-      }));
-    }
-    case WindowActionKind.AppDrewAt: {
-      return reshapeApp(state, action.appId, (window) => ({
-        ...window,
-        surfaceSize: action.size,
       }));
     }
     case WindowActionKind.AppTitled: {

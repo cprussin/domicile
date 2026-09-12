@@ -89,6 +89,7 @@ export const Stage = ({
               appId={window.appId}
               clickThrough={clickThrough}
               cursor={window.cursor}
+              domicile={domicile}
               dragging={window.id === draggingId}
               floating={floating}
               focused={window.id === activeId}
@@ -97,7 +98,6 @@ export const Stage = ({
                 onSelect(window.id);
               }}
               onScreen={onScreen}
-              surfaceSize={window.surfaceSize}
             />
           );
         }

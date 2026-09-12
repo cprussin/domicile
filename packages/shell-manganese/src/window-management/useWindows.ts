@@ -59,34 +59,32 @@ export type Windows = WindowState & {
  *
  * The host's lifecycle events (a client appeared, a client is gone) are the
  * other half of the user's own actions, so both go through one reducer and the
- * chrome renders a single list — and so does everything a client says about its
- * own window, because a window's size and its cursor are facts about it in
- * exactly the way its title is. A client's *pixels* are the one thing that does
- * not come through here, and they do not come through the page at all: the
- * compositor submits the client's buffer and the portal embeds the surface.
+ * chrome renders a single list — and so does the cursor a client asks for,
+ * because that is a fact about its window in exactly the way its title is, and
+ * because a cursor is CSS on an element this shell owns.
+ *
+ * Two things a client says about itself do not come through here. Its *pixels*
+ * do not come through the page at all: the compositor submits its buffer and the
+ * `<app>` element embeds the surface. And the size it drew at is the SDK's,
+ * because scaling the pointer by it is the only use anyone has for it.
  */
 export const useWindows = (domicile: DomicileClient): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
 
   useEffect(() => {
-    domicile.on("app_appeared", ({ app_id, size, title }) => {
+    // The size an announcement can carry is not read here, and there is no
+    // `app_resized` handler below either. What a client drew at is only ever an
+    // input to the SDK's pointer arithmetic, and the SDK records it as the
+    // message goes past `DomicileClient` — this shell was carrying a fact it had
+    // no other use for.
+    domicile.on("app_appeared", ({ app_id, title }) => {
       dispatch(WindowAction.AppAppeared(app_id, title));
-      // A size here is a client that has committed a buffer already — the
-      // replay a reloading chrome is given — and it says the same thing
-      // `app_resized` does, so it is reduced the same way. A window that has
-      // only just mapped carries none, and there is nothing to record.
-      if (size !== undefined) {
-        dispatch(WindowAction.AppDrewAt(app_id, size));
-      }
     });
     domicile.on("app_titled", ({ app_id, title }) => {
       dispatch(WindowAction.AppTitled(app_id, title));
     });
     domicile.on("app_closed", ({ app_id }) => {
       dispatch(WindowAction.AppClosed(app_id));
-    });
-    domicile.on("app_resized", ({ app_id, size }) => {
-      dispatch(WindowAction.AppDrewAt(app_id, size));
     });
     domicile.on("app_cursor", ({ app_id, cursor }) => {
       dispatch(WindowAction.AppCursorChanged(app_id, cursor));

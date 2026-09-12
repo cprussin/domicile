@@ -1,4 +1,4 @@
-// What the chrome has to read off an `<domicile-app>`'s box.
+// What the chrome has to read off an `<app>`'s box.
 //
 // Two things need it, and neither is where the window goes: the size is the
 // resolution the client is configured at, and the element->screen affine is
@@ -123,8 +123,9 @@ const chainToScreen = (
  *
  * `parentElement` is null at a shadow boundary and points at the *written*
  * parent for slotted content, so both stop or mislead a walk that is asking
- * where something ends up on screen. A `<domicile-app>` is a custom element,
- * so a chrome that puts one in a shadow tree — or slots one — is not exotic.
+ * where something ends up on screen. A chrome that renders its windows from a
+ * component library puts one in a shadow tree — or slots one — without thinking
+ * about it.
  */
 const paintedInside = (element: Element): HTMLElement | undefined => {
   // Absent rather than null in some DOM implementations, so both are "no slot"

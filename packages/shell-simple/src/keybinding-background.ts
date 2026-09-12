@@ -67,7 +67,7 @@ const backgroundStyles = center({
   // `APP_TAG_NAME`, spelled out because a selector is a
   // literal Panda extracts at build time, and the windows are the siblings
   // appended after this.
-  "&:has(~ domicile-app)": {
+  "&:has(~ app)": {
     display: "none",
   },
   color: "muted",

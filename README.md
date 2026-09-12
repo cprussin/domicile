@@ -35,7 +35,7 @@ nix run github:cprussin/domicile#simple      # floating windows only
 
 ## Write your own
 
-A shell is one built JavaScript module. Where you put a `<domicile-app>` is
+A shell is one built JavaScript module. Where you put an `<app>` is
 where that window goes, and deciding that is the whole job.
 
 ```js
@@ -48,7 +48,7 @@ const domicile = new DomicileClient(connectToHost(navigator));
 registerElements(domicile);
 
 domicile.on("app_appeared", ({ app_id }) => {
-  const app = document.createElement("domicile-app");
+  const app = document.createElement("app");
   app.setAttribute("app-id", app_id);
   document.body.append(app);
 });

@@ -22,7 +22,7 @@ type Props = {
  * them, on the screen the config names first, and a clock on the rest.
  *
  * One page, so one copy of this state across every display: moving a window
- * between screens is moving where its `<domicile-app>` is laid out, not handing
+ * between screens is moving where its `<app>` is laid out, not handing
  * it to another shell. The state lives here rather than in the chrome because
  * the chrome is not mounted until a desktop has been described, and the windows
  * the host announces before then are already the shell's.
