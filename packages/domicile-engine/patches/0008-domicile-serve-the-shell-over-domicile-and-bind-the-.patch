@@ -83,7 +83,7 @@ protocol members, and shellDocument still lives in TypeScript.
  .../core/events/event_target_names.json5      |  2 +
  .../core/events/event_type_names.json5        |  2 +
  third_party/blink/renderer/modules/BUILD.gn   |  1 +
- .../platform/runtime_enabled_features.json5   |  9 +++
+ .../platform/runtime_enabled_features.json5   | 18 ++++++
  14 files changed, 188 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
@@ -279,7 +279,7 @@ index 080e9b0e43c70..b51364906c241 100644
      BUILDFLAG(IS_CHROMEOS)
        webapps::kIsolatedAppScheme,
 diff --git a/chrome/browser/ui/startup/startup_browser_creator.cc b/chrome/browser/ui/startup/startup_browser_creator.cc
-index 0b8d0aabf04ed..644b8d0d10c3e 100644
+index 0b8d0aabf04ed..644b8d08de7e3 100644
 --- a/chrome/browser/ui/startup/startup_browser_creator.cc
 +++ b/chrome/browser/ui/startup/startup_browser_creator.cc
 @@ -4,6 +4,8 @@
@@ -472,7 +472,7 @@ index 5119717a184ea..cf0a73af72c52 100644
      "//third_party/blink/renderer/modules/document_metadata",
      "//third_party/blink/renderer/modules/document_picture_in_picture",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index a000b4980b36a..9daf657d922d3 100644
+index a000b4980b36a..971c5533f50bd 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
 @@ -2484,6 +2484,24 @@

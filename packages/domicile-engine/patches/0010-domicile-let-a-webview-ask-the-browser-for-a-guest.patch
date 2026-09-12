@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: domicile CI <ci@domicile.invalid>
-Date: Wed, 10 Sep 2026 09:12:41 -0700
+Date: Thu, 10 Sep 2026 09:12:41 -0700
 Subject: [PATCH] domicile: let a <webview> ask the browser for a guest
 
 Patch 0007 shipped <webview> as a frame owner and said what that cost: "a site
@@ -52,7 +52,7 @@ See components/domicile/browser/web_view_guest.h in the Domicile repository.
  5 files changed, 39 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 5380296..59917c3 100644
+index 5380296102cc3..59917c3dfb6b5 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
 @@ -2377,6 +2377,7 @@ source_set("browser") {
@@ -64,7 +64,7 @@ index 5380296..59917c3 100644
      "//components/download/content/factory",
      "//components/embedder_support:user_agent",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index d55fad9..6c80e94 100644
+index d55fad9fefd13..6c80e940fba07 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -107,7 +107,7 @@ index d55fad9..6c80e94 100644
  
    map->Add<blink::mojom::ScriptToolHost>(
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index 3422559..8864335 100644
+index 34225593922a6..8864335aa1e32 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
 @@ -408,6 +408,11 @@ component("core") {
@@ -123,7 +123,7 @@ index 3422559..8864335 100644
      "//components/performance_manager/public/mojom:mojom_blink",
      "//components/shared_highlighting/core/common",
 diff --git a/third_party/blink/renderer/core/DEPS b/third_party/blink/renderer/core/DEPS
-index db7a924..0ac2815 100644
+index db7a924b957e9..0ac2815adb58d 100644
 --- a/third_party/blink/renderer/core/DEPS
 +++ b/third_party/blink/renderer/core/DEPS
 @@ -69,6 +69,8 @@ include_rules = [
@@ -136,7 +136,7 @@ index db7a924..0ac2815 100644
      "+components/performance_manager/public/mojom/web_memory.mojom-blink.h",
      "+components/viz/common/frame_timing_details.h",
 diff --git a/third_party/blink/renderer/core/html/html_frame_element_base.h b/third_party/blink/renderer/core/html/html_frame_element_base.h
-index 292b880..8828fbd 100644
+index 292b88006b434..8828fbd9d7f84 100644
 --- a/third_party/blink/renderer/core/html/html_frame_element_base.h
 +++ b/third_party/blink/renderer/core/html/html_frame_element_base.h
 @@ -52,7 +52,12 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {

@@ -67,45 +67,62 @@ decides whether an item is waiting or workable.
 
 ### In this repository
 
-1. **`<app>`, not `domicile-app`.** Half done: **`<webview>` has landed.**
+1. **`<app>`, not `domicile-app`.** **Both tags have landed**, and what is
+   left is the subtraction at the bottom of this item. `<webview>` went first:
    `DomicileWebviewElement` forwarded every call to a native `<webview>` patch
    0007 already owns — `src`, the four history controls, both availability
    properties and both events — so it went, `alias-tags.ts` went with it, and
    the shells write the tag. `WRITING-A-SHELL.md` moved in the same change,
    because it is the contract that breaks.
 
-   **`<app>` has landed too, and it is currently BROKEN — read this before
-   building on it.** The shells write the fork's tag and the embed runs through
-   `HTMLAppElement::Embed`. The design held up: there is no registry, because
-   `DomicileClient` already sees every size message pass its own listener, so
-   `surfaceSizeOf(appId)` answers on demand; only `app_resized` became the
-   SDK's business, and `app_cursor` deliberately stayed the shell's, because a
-   cursor needs a push and a size is only ever input to the SDK's own
+   **`<app>` has landed too, and it works — but it did not when it merged, and
+   what was wrong is worth knowing.** The shells write the fork's tag and the
+   embed runs through `HTMLAppElement::Embed`. The design held up: there is no
+   registry, because `DomicileClient` already sees every size message pass its
+   own listener, so `surfaceSizeOf(appId)` answers on demand; only `app_resized`
+   became the SDK's business, and `app_cursor` deliberately stayed the shell's,
+   because a cursor needs a push and a size is only ever input to the SDK's own
    arithmetic.
 
-   What did not hold up is the embed. **No client's window reaches the page any
-   more.** Engine run 34699945195, step 16 — "A shell on the fork, showing a
-   real client's window" — fails: `appeared=1 brokered=1 configured=1 drew=0`
-   for the shell, no embed line in its engine log at all, and `engine has not
-   drawn #FF19B36B anywhere`. Everything upstream passes, including a client's
-   window on the page via the canvas path and its negative control.
+   **The embed did not, and the cause was a line neither element had.** Engine
+   run 34699945195, step 16 — "A shell on the fork, showing a real client's
+   window" — failed with `appeared=1 brokered=1 configured=1 drew=0` for the
+   shell, no embed line in its engine log at all, and `engine has not drawn
+   #FF19B36B anywhere`. Everything upstream passed, including a client's window
+   on the page via the canvas path and its negative control.
 
-   **It merged green because nothing tested it.** `engine.yml` triggers on
-   `packages/domicile-engine/**`, the change touched none of it, and the five
-   checks that ran contain nothing that puts a window on a screen. Every guard
-   that passes uses `canvas.embedExternalSurface`; the layout-driven embed on
-   `HTMLAppElement` had never run, which `ENGINE-FORK.md`'s phase-2 list now
-   says in as many words.
+   Neither `HTMLAppElement` nor `HTMLWebViewElement` overrode
+   `Node::GetElementType`. `HTMLElement`'s base answers `kHTMLElement`, and the
+   `DowncastTraits` Blink generates for a tag in `html_tag_names.json5` is
+   `node.GetElementType() == ElementType::kHTMLAppElement` — so every
+   `DynamicTo<HTMLAppElement>` returned null. `LayoutAppSurface` casts the node
+   back to hand the element the box layout gave it; the cast said no,
+   `SurfaceBoxChanged` was never called, `configured_size_` stayed empty, and
+   `Embed()` returned at its empty-size guard on every layout. **A window that
+   is never asked for is a window that never arrives**, and nothing anywhere
+   logged a failure, because nothing failed. `node.h` states the rule — "every
+   HTMLElement must override this so that callers can ask for the type" — and
+   nothing enforced it.
 
-   Ruled out from the repo side: stale `domicile-app` CSS (none), the shell
-   failing to size the element (`applyBox` sets all four edges), a missing UA
-   style (patch 0007 gives `app { display: inline-block }`). The live
-   candidates need a Chromium tree to separate: the `inline-block` box against
-   the shell's absolute positioning, the `RuntimeEnabled=DomicileExternalSurface`
-   gate, and `desktop.ts` setting `app-id` before appending — which makes
-   `ParseAttribute` call `Embed()` on a detached element, where it returns for
-   want of a frame and a box, and the question is what re-drives it after
-   layout.
+   **`<webview>` was bitten first and the diagnosis was missed.** Patch 0011
+   read `DynamicTo<HTMLWebViewElement>` returning null out of a real click,
+   wrote the anomaly into a comment, worked around it with `HasTagName` — which
+   was right for its own reasons — and concluded the traits "work for `<app>`".
+   They never had. One missing line, two elements, two separate days spent
+   somewhere else.
+
+   **It merged green because nothing tested it, and something does now.**
+   `engine.yml` triggers on `packages/domicile-engine/**`, the change touched
+   none of it, and the five checks that ran contain nothing that puts a window
+   on a screen. Every guard that passed uses `canvas.embedExternalSurface` —
+   `spike-page.html`, `spike-css-page.html`, `spike-resize-page.html` and
+   `guard-two-windows.html` all do, so the resize guard patch 0011 cited as
+   proof of the cast measures the canvas path too. `guard-shell.sh` is the only
+   thing that drives the native tag, and it is green on both shells now.
+   `scripts/test-fork-elements-know-their-type.sh` is the cheap half: it reads
+   the elements the series adds to `html_tag_names.json5` out of the patch and
+   fails if a header does not say its own type. No Chromium tree, so it runs in
+   the shell group on every push rather than only when the fork is touched.
 
    Then the subtraction it exists for: delete the placement machinery —
    `measure.ts`, `observe-placement.ts`, `element-transform.ts`, `matrix.ts`,
@@ -116,13 +133,14 @@ decides whether an item is waiting or workable.
    on the `<app>` is the engine answering the other half of `measure`'s job with
    the real transform. That step is the one with the measurements behind it.
 
-   **The placement deletion is blocked on the embed working, not on review.**
-   Every measurement behind it — CSS parity, latency, the bands — was taken
-   through the canvas path the shells no longer take, so deleting the chrome's
-   own size report now would leave two untried halves and nothing to tell them
-   apart. That is why `report-app-sizes.ts` was rebuilt document-level rather
-   than dropped, with a header saying it is redundant and why. It comes out
-   when a guard shows a window through the native tag.
+   **The placement deletion is unblocked.** It was waiting on the embed
+   working, and a guard now shows a client's window through the native tag on
+   both shells. What has not moved is the rest of the evidence: CSS parity,
+   latency and the bands were all measured through the canvas path, so those
+   numbers still describe a path the shells no longer take, and re-measuring
+   them through `<app>` is its own piece of work. `report-app-sizes.ts` was
+   rebuilt document-level rather than dropped for exactly this moment, with a
+   header saying it is redundant and why; it comes out with the rest.
 2. **Keystroke-to-pixel latency** (#206). The requirement is that a client's
    window costs the user nothing a plain Wayland compositor would not.
    `guard-latency.sh` has run on `crux` now — it reads `commit to pixel` at

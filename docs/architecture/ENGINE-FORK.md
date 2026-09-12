@@ -1002,15 +1002,22 @@ copy path before the compositor can submit leaves nothing drawing at all.
       `canvas.embedExternalSurface(appId)`. **The app id is the change under
       it** — a broker that hands every embedder the sink it made most recently
       is right for one window and silently wrong for two
-- [ ] **a real client's window shown through the native `<app>`.** The line
-      above is the canvas path, and the SDK no longer takes it: the shells write
-      the fork's own tag, so the embed runs through `HTMLAppElement::Embed`.
-      That code compiles and **nothing has ever shown a window through it** —
-      patch 0007's evidence is `constructor.name` and attribute reflection, not
-      pixels. Until a guard on `crux` puts a client's window on a page through
-      the native tag, the proven embed and the shipped embed are not the same
-      one, and the placement machinery cannot be deleted on the strength of
-      measurements taken through the canvas
+- [x] **a real client's window shown through the native `<app>`.**
+      `guard-shell.sh` on `crux`, with both shells: `engine found #FF19B36B
+      over (0,63) 640x473 of the browser's 1600x1200 window`. The line above is
+      the canvas path and the SDK no longer takes it — the shells write the
+      fork's own tag, so the embed runs through `HTMLAppElement::Embed`.
+
+      **It took a fix to get there, and the fix was one line per element.**
+      Neither `HTMLAppElement` nor `HTMLWebViewElement` overrode
+      `Node::GetElementType`, so both answered `kHTMLElement` and the generated
+      `DowncastTraits` — which compares against `kHTMLAppElement` — refused
+      every cast. `LayoutAppSurface::UpdateAfterLayout` casts the node back to
+      hand the element its box; the cast returned null, `SurfaceBoxChanged` was
+      never called, and `Embed()` returned at its empty-size guard on every
+      layout. Everything a page can see was right: the element parsed, took a
+      box at the right size, and reflected `app-id`. Nothing in any log said
+      otherwise, because nothing had failed
 - [ ] **an shm→dmabuf upload.** `publish_frame` submits only
       `CommittedBuffer::Gpu`, so a client that draws into shared memory — most
       toolkits that do not render with GL — has no window.
