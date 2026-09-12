@@ -139,6 +139,40 @@ members added one at a time cost nineteen. This is the standing cost of the
 protocol living in the browser process, and it is the reason to arrive with a
 list rather than with one message at a time.
 
+## The command socket, which is how the shell is replaced
+
+`--domicile-command-socket` is a unix stream this engine binds and the
+supervisor dials. One line of JSON in, one out, and the connection is over:
+
+```
+{"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
+{"type":"loaded"}   |   {"type":"refused","why":"…"}
+```
+
+An engine given no such switch binds nothing and listens on nothing, which is
+every engine until `domicile load-shell` starts one.
+
+**It is not the control channel, and that is the layering rather than a second
+transport for its own sake.** Which shell to serve is supervisor-to-engine
+information — the supervisor already says it once at launch, as
+`--domicile-shell-root` and `--domicile-shell-module`. Routing it through the
+compositor instead would put a message on the host↔chrome contract that the
+page neither sends nor reads, and would make the compositor carry mail it has
+no stake in. `docs/architecture/THE-DOMICILE-BINARY.md` has the record.
+
+**This contract carries a version and the other two do not**, which is
+`DATA.md`'s rule and not an inconsistency: the supervisor and the engine are
+separately published, so the two ends of this socket are routinely built from
+different revisions. `PROTOCOL_VERSION` is pinned at 1 because nothing ships
+the compositor and a chrome apart, and the supervisor's own `domicile.sock`
+carries no number because both of its ends are one binary.
+
+| | |
+|---|---|
+| `components/domicile/browser/command_protocol.{h,cc}` | the wire. A line in, a line out, the applying injected — which is what makes it eight unit tests rather than a browser |
+| `chrome/browser/domicile/domicile_command_socket.{h,cc}` | the socket, and the shell's window. In `//chrome` because reloading the shell needs `GlobalBrowserCollection`, which belongs to `//chrome/browser/ui` |
+| `components/domicile/browser/shell_source.{h,cc}` | which shell this process is serving. Seeded from the two switches, replaced by a `load_shell` |
+
 ### The dev-reload poller does not survive the scheme
 
 `shellDocument` used to inject a poller in dev mode: a `fetch` of a token from
@@ -148,11 +182,12 @@ so there is no reload in it — without something in the page, a one-character
 change to a shell means killing the desktop and starting it again.
 
 It polled the HTTP server that this work deletes, so it is not in the C++ port
-and there is nothing in its place. Whatever replaces it must not be a TCP port,
-which is the whole point; the obvious shape is a control-channel message the
-compositor sends when a shell is rebuilt, since the page already has that
-channel and it is not reachable from outside. `DOMICILE_DEV_RELOAD` is read
-outside this package, so the two halves have to agree before either moves.
+and there is nothing in its place. **What replaces it is the command socket
+above**, once the supervisor dials it: a watch script that runs
+`domicile load-shell` after each build is the whole of dev reload, and it lives
+outside the runtime rather than inside every served document.
+`DOMICILE_DEV_RELOAD` is read outside this package, so the two halves have to
+agree before either moves.
 
 ## Working on it
 

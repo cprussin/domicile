@@ -152,21 +152,10 @@ declines. A socket whose desktop was killed refuses on connect and says so;
 anything at that path that is not a socket is somebody else's file and is left
 alone.
 
-### What `load-shell` still needs, and it is in the engine
+### The engine's half, which is in
 
-The page is the engine's, and **the engine cannot presently be told anything
-about which shell it serves**:
-
-- `ShellURLLoaderFactory` takes `--domicile-shell-root` at construction and
-  `ServeDocument` reads `--domicile-shell-module` off
-  `base::CommandLine::ForCurrentProcess()` per request. Both are the command
-  line the browser process was started with, and a process's command line
-  cannot be changed from outside it.
-- `ControlChannel` is the only thing the browser process reads from, and it is
-  a *client* of the compositor's `--chrome-socket`. Nothing on it reloads or
-  navigates the shell's own window; `WebViewGuest::Reload` reloads a guest.
-
-So `load-shell` is one engine-side change, and there were two shapes for it:
+The page is the engine's, so `load-shell` is an engine-side change, and there
+were two shapes for it:
 
 | | Route | What it does to the layering |
 |---|---|---|
@@ -181,10 +170,34 @@ message the page neither sends nor reads, and makes the compositor carry mail
 it has no stake in. A also keeps the windows by construction rather than by
 care — the compositor is not in the path, so it never hears the shell change.
 
-A's socket joins two *separately published* deploy units: `engine-release.nix`
-pins an engine built from an older commit than `main`. So
+The wire is one line each way:
+
+```
+{"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
+{"type":"loaded"}   |   {"type":"refused","why":"…"}
+```
+
+**The version is in the request, and the refusal is the check.** This socket
+joins two *separately published* deploy units — `engine-release.nix` pins an
+engine built from an older commit than `main` — so
 [`DATA.md`](/docs/guidelines/DATA.md)'s versioning rule applies to it, unlike
-the control socket in `domicile-launch`, whose two ends are one binary.
+the control socket above, whose two ends are one binary. Path versioning does
+not fit a socket the supervisor names and the engine binds, and every
+connection is exactly one request, so there is no handshake to negotiate it in
+either.
+
+| | |
+|---|---|
+| `components/domicile/browser/shell_source.{h,cc}` | which shell this process serves. Seeded from the two switches, replaceable after |
+| `components/domicile/browser/command_protocol.{h,cc}` | the wire: a line in, a line out, the applying injected. Where the tests are |
+| `chrome/browser/domicile/domicile_command_socket.{h,cc}` | the socket, and the shell's window. `//chrome` because reloading needs `GlobalBrowserCollection`, which a `//components/domicile` target may not depend on |
+
+**What is left is the supervisor's half**: `--domicile-command-socket` on the
+engine's command line in `spawn`, a `load-shell` verb in `cli` and `control`,
+and `answer` dialing the engine rather than holding the answer itself. Nothing
+of this reaches a desktop before an engine release carrying it is cut and
+`engine-release.nix` is moved onto it — until then the running engine is one
+that has never heard of the switch.
 
 Either way the poller did not survive the bridge — see the dev-reload note
 under *Key decisions* — so a dev desktop has no reload until this lands.
@@ -202,9 +215,13 @@ under *Key decisions* — so a dev desktop has no reload until this lands.
 - [x] the control socket: taken by the supervisor, answered on a thread of its
       own, and `domicile which-shell` over it — the command whose whole answer
       the supervisor holds, so the transport ships before anything has to route
-- [ ] `domicile load-shell <path>` — blocked on the engine being tellable at
-      all; see *What `load-shell` still needs*. It is what a dev reload would
-      use
+- [x] the engine's command socket: `--domicile-command-socket`, the
+      `load_shell` wire and its version, and the reload that carries it out.
+      The half that is a patch to the fork, and the half nothing in this
+      repository can build
+- [ ] `domicile load-shell <path>` — the supervisor's half of it: the switch
+      on the engine's command line, the verb, and the dial. It is what a dev
+      reload would use
 - [ ] `guard-shell.sh` calls the binary rather than repeating the launch
 
 ## Open questions
