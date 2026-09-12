@@ -127,7 +127,7 @@ decides whether an item is waiting or workable.
    shell's own window. Restarting the engine is not the way out either: it kills
    the broker socket the compositor produces into, which is the windows. See the
    engine-fork list below, and `docs/architecture/THE-DOMICILE-BINARY.md` for
-   the two routes and why route A is recommended.
+   the two routes and why the decided one was decided.
 
    **Dev reload comes back with `load-shell` and not before.** The poller the
    bridge wrote into every served document went with the bridge, the C++ that
@@ -162,13 +162,18 @@ decides whether an item is waiting or workable.
    carries nothing that reloads or navigates the shell's window
    (`WebViewGuest::Reload` reloads a guest, which is a different window).
 
-   Two routes, costed in `docs/architecture/THE-DOMICILE-BINARY.md`.
-   **Route A is recommended**: the engine takes a `--domicile-command-socket`
-   of its own and the supervisor dials it. No host↔chrome protocol change, no
-   mojom member — so no near-full Blink rebuild — and the compositor is
-   uninvolved, which is what makes the windows survive by construction. Route B
-   relays a new `HostMessage` through the compositor, which puts
-   supervisor-to-engine mail on the page's contract.
+   **Decided: the engine takes a `--domicile-command-socket` of its own and
+   the supervisor dials it**, on layering alone. Which shell to serve is
+   supervisor-to-engine information — the supervisor already says it once, at
+   launch, as `--domicile-shell-root` and `--domicile-shell-module` — and the
+   alternative relays a new `HostMessage` through the compositor, which puts
+   that mail on the host↔chrome contract, where the page neither sends nor
+   reads it. The compositor staying out of the path is also what keeps the
+   windows, by construction rather than by care. Note this socket joins the
+   supervisor to the *engine*, which is a separately published deploy unit, so
+   `DATA.md`'s versioning rule applies to it — unlike the control socket, whose
+   two ends are one binary. `docs/architecture/THE-DOMICILE-BINARY.md` has the
+   full record, including the argument that was struck.
 
    **Dev reload is downstream of this**, not of anything in the Rust.
 

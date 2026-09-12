@@ -157,16 +157,25 @@ about which shell it serves**:
   a *client* of the compositor's `--chrome-socket`. Nothing on it reloads or
   navigates the shell's own window; `WebViewGuest::Reload` reloads a guest.
 
-So `load-shell` is one engine-side change, and there are two shapes for it:
+So `load-shell` is one engine-side change, and there were two shapes for it:
 
-| | Route | Cost |
+| | Route | What it does to the layering |
 |---|---|---|
-| **A** | the engine takes a `--domicile-command-socket` of its own and the supervisor dials it | a listener in the browser process; no protocol change, no Blink rebuild, and the arrow above is literal |
+| **A** | the engine takes a `--domicile-command-socket` of its own and the supervisor dials it | a listener in the browser process, on a supervisor-to-engine link that already exists in another form; the arrow above is literal |
 | **B** | a new `HostMessage` the compositor sends down the channel the engine already reads | `PROTOCOL_VERSION`'s contract grows a message that is not the chrome's, and the compositor is put in a hop it has no business in |
 
-**A.** The host↔chrome protocol is the page's, and supervisor-to-engine traffic
-on it is the compositor relaying mail. A is also what keeps the windows: the
-compositor is not involved, so it never hears that the shell changed.
+**A, on the layering.** Which shell to serve is supervisor-to-engine
+information: the supervisor already says it once at launch, as
+`--domicile-shell-root` and `--domicile-shell-module`, and a command socket is
+that relationship still running. B widens the host↔chrome contract with a
+message the page neither sends nor reads, and makes the compositor carry mail
+it has no stake in. A also keeps the windows by construction rather than by
+care — the compositor is not in the path, so it never hears the shell change.
+
+A's socket joins two *separately published* deploy units: `engine-release.nix`
+pins an engine built from an older commit than `main`. So
+[`DATA.md`](/docs/guidelines/DATA.md)'s versioning rule applies to it, unlike
+the control socket in `domicile-launch`, whose two ends are one binary.
 
 Either way the poller did not survive the bridge — see the dev-reload note
 under *Key decisions* — so a dev desktop has no reload until this lands.
