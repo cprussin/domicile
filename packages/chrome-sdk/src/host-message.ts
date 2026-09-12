@@ -29,6 +29,7 @@
 import type { CursorShape } from "./cursor-shape";
 import { cursorShapeSchema } from "./cursor-shape";
 import type {
+  DomicileAppCursorEvent,
   DomicileAppEvent,
   DomicileAppTitledEvent,
   DomicileDisplay,
@@ -228,11 +229,16 @@ export const appClosed = (event: DomicileAppEvent): AppClosedMessage => ({
 /**
  * What a client asked the chrome to show over its window.
  *
- * Parsed rather than passed through — see `cursor-shape.ts`. This is the last
- * value on the typed surface that is still a string the engine does not check,
- * and an unknown CSS keyword fails silently everywhere downstream.
+ * Parsed rather than passed through, even though `event.cursor` is now a
+ * `DomicileCursorShape` and the bindings hold it to the same closed set. The
+ * DOM is a boundary, and this SDK ships apart from the engine it runs
+ * against — `engine-release.nix` pins a tarball a shell's `bun install` knows
+ * nothing about — so a shape added to this list before the engine that has it
+ * is deployed arrives as a string no `DomicileCursorShape` names. An unknown
+ * CSS keyword fails silently everywhere downstream, so the parse is what turns
+ * that skew into a stack.
  */
-export const appCursor = (event: DomicileAppEvent): AppCursorMessage => ({
+export const appCursor = (event: DomicileAppCursorEvent): AppCursorMessage => ({
   app_id: event.appId,
   cursor: cursorShapeSchema.parse(event.cursor),
 });

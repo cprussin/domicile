@@ -122,9 +122,11 @@ could ever use.
 
 `zod`, in two places and both of them boundaries. `./protocol` parses the
 compositor's JSON for the headless harness rather than casting it. And
-`./cursor-shape` parses one field off the typed channel — `DomicileAppEvent`
-declares `cursor` as a `DOMString` rather than a WebIDL enum, so it is the last
-value here that the engine does not check, and an unknown keyword assigned to
+`./cursor-shape` parses one field off the typed channel — not because the
+engine fails to check it, since `DomicileAppCursorEvent.cursor` is a WebIDL
+`enum` over the same closed set, but because this package and the engine are
+published apart. A shape this list has and the running engine does not arrives
+as a keyword no `DomicileCursorShape` names, and an unknown keyword assigned to
 `style.cursor` fails silently.
 
 Nothing else. `@cprussin/option-result` was a dependency for exactly one

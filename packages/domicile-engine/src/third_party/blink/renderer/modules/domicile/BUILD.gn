@@ -6,6 +6,8 @@ import("//third_party/blink/renderer/modules/modules.gni")
 
 blink_modules_sources("domicile") {
   sources = [
+    "domicile_app_cursor_event.cc",
+    "domicile_app_cursor_event.h",
     "domicile_app_event.cc",
     "domicile_app_event.h",
     "domicile_app_titled_event.cc",
@@ -23,9 +25,10 @@ blink_modules_sources("domicile") {
   ]
 
   deps = [
-    # The wire names of the cursor shapes, so that turning a `CursorShape` back
-    # into the string `DomicileAppEvent.cursor` hands the page reads the same
-    # list the browser parsed the compositor's JSON with.
+    # The wire names of the cursor shapes. `DomicileAppCursorEvent.cursor` is a
+    # `DomicileCursorShape` and the compositor's is a `mojom::CursorShape`, and
+    # the wire name is how one becomes the other -- so the same list the
+    # browser parsed the compositor's JSON with is the one that names it here.
     "//components/domicile:cursor_shape",
     "//components/domicile/mojom:mojom_blink",
   ]

@@ -1,0 +1,69 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// The cursors a client can ask the chrome to show over its window.
+//
+// `wp_cursor_shape_v1`'s shapes, named as the CSS `cursor` keyword the chrome
+// assigns, plus `none` for a client that hides the cursor. The fourth writing
+// of one closed set: `domicile_protocol::CursorShape` is what the compositor
+// serialises, `components/domicile/common/cursor_shape.h` is what the browser
+// process parses that against, this is what the page's own type system knows,
+// and `cursorShapeSchema` in `@domicile/chrome-sdk` is what a shell reads.
+//
+// WHAT A WEBIDL ENUM BUYS OVER THE `DOMString` THIS REPLACED. The closed set
+// already held at both ends of the wire, and the string handed to the page was
+// a member of it by construction. What it was not was a TYPE: `event.cursor`
+// was a `DOMString`, so the bindings would hand the page any string a bug
+// upstream produced and the page had nowhere to notice. An enum moves the
+// refusal into the bindings themselves -- a value outside the set cannot be
+// constructed, assigned or returned across them -- which matters precisely
+// because the symptom is silent: a keyword CSS does not know is a no-op, so
+// `element.style.cursor = "pointr"` shows an arrow where a hand should be,
+// over one client, with nothing said anywhere.
+//
+// ORDER. WebIDL attaches no meaning to the order of an enum's values, unlike
+// the three lists either side of this one -- `mojom::CursorShape` is an
+// `enum class : int32_t` numbered by position. It is written in the X-macro's
+// order anyway, because `scripts/test-cursor-shapes-agree.sh` compares all
+// four as sequences: two lists that agree on membership and disagree on order
+// fail nowhere and show the wrong cursor, so the cheapest guard against that
+// is to make every one of them the same diff.
+
+enum DomicileCursorShape {
+  "none",
+  "default",
+  "context-menu",
+  "help",
+  "pointer",
+  "progress",
+  "wait",
+  "cell",
+  "crosshair",
+  "text",
+  "vertical-text",
+  "alias",
+  "copy",
+  "move",
+  "no-drop",
+  "not-allowed",
+  "grab",
+  "grabbing",
+  "e-resize",
+  "n-resize",
+  "ne-resize",
+  "nw-resize",
+  "s-resize",
+  "se-resize",
+  "sw-resize",
+  "w-resize",
+  "ew-resize",
+  "ns-resize",
+  "nesw-resize",
+  "nwse-resize",
+  "col-resize",
+  "row-resize",
+  "all-scroll",
+  "zoom-in",
+  "zoom-out",
+};

@@ -28,7 +28,6 @@ const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
   Object.assign(new Event(type), {
     appId: "",
     arrival: 0,
-    cursor: "",
     hasSize: false,
     height: 0,
     title: "",

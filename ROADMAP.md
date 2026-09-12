@@ -188,23 +188,7 @@ decides whether an item is waiting or workable.
 
 ### In the engine fork — the agent on `crux`
 
-1. **`cursor` is closed on the wire but not in the page's type system.**
-   The shape a client asks for was a bare `DOMString` over a closed set, which
-   is the quietest kind of wrong: an unknown CSS keyword is a no-op, so
-   `element.style.cursor = "pointr"` does nothing and the user sees an arrow
-   where a hand should be, on one client, with no error anywhere. It is
-   `mojom::CursorShape` now, with codecs at the socket and IDL edges generated
-   from one X-macro list and the Zod codec at the DOM — so every boundary the
-   change could reach refuses a name that is not in the set.
-
-   What is left is the WebIDL `enum`, which would put the closed set in the
-   page's own type system rather than only on the wire. It needs a new `.idl`
-   registered in `bindings/idl_in_modules.gni` and
-   `bindings/generated_in_modules.gni`, both Chromium-owned, so it is a change
-   to patch `0009` and wants whoever owns the series.
-   `packages/chrome-sdk/src/cursor-shape.ts` records it as the step left
-   rather than dropping it silently.
-2. **The engine cannot be told which shell to serve.** `domicile load-shell`
+1. **The engine cannot be told which shell to serve.** `domicile load-shell`
    stops here. `--domicile-shell-root` is captured when `ShellURLLoaderFactory`
    is constructed and `--domicile-shell-module` is read per request, both off
    `base::CommandLine::ForCurrentProcess()`, so neither can be changed from
@@ -228,7 +212,7 @@ decides whether an item is waiting or workable.
 
    **Dev reload is downstream of this**, not of anything in the Rust.
 
-3. **A desktop on a tty.** Audited against the pin in
+2. **A desktop on a tty.** Audited against the pin in
    `docs/architecture/A-DESKTOP-ON-A-TTY.md`. Getting `gn gen` to accept
    `ozone_platform_drm = true` is a **patch**: eight edits, not one of them
    inside the DRM platform's own logic, because its 49 `.cc` files hold two
@@ -256,7 +240,7 @@ decides whether an item is waiting or workable.
    Until both halves land, a desktop is a window inside an existing Wayland
    session, or headless.
 
-4. **What the engine ships that a desktop never runs.** Chrome carries a tab
+3. **What the engine ships that a desktop never runs.** Chrome carries a tab
    strip, a New Tab page, a settings UI, sign-in and sync. A desktop can reach
    none of it, all of it is built, and all of it is in the ~216 MB release
    tarball and in the attack surface. **Measure before patching**: nobody knows

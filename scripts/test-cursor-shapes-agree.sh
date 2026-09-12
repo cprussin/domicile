@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# One closed set, written down in three languages, compared.
+# One closed set, written down in four languages, compared.
 #
 # A client asks for a cursor and the name crosses two boundaries to reach CSS:
 # the compositor serialises `domicile_protocol::CursorShape`, the browser
-# process parses it against `components/domicile/common/cursor_shape.h`, and
-# the page reads it through `cursorShapeSchema` in `@domicile/chrome-sdk`.
-# Three enumerations of the same set, in Rust, C++ and TypeScript, and until
+# process parses it against `components/domicile/common/cursor_shape.h`, the
+# engine hands the page a `DomicileCursorShape` declared in WebIDL, and the SDK
+# reads it through `cursorShapeSchema` in `@domicile/chrome-sdk`. Four
+# enumerations of the same set, in Rust, C++, WebIDL and TypeScript, and until
 # this script existed NOTHING COMPARED THEM.
 #
 # What drift costs is the whole reason the set was closed in the first place.
@@ -32,9 +33,10 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUST="$ROOT/packages/domicile-protocol/src/lib.rs"
 CPP="$ROOT/packages/domicile-engine/src/components/domicile/common/cursor_shape.h"
+IDL="$ROOT/packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/domicile_cursor_shape.idl"
 TS="$ROOT/packages/chrome-sdk/src/cursor-shape.ts"
 
-for f in "$RUST" "$CPP" "$TS"; do
+for f in "$RUST" "$CPP" "$IDL" "$TS"; do
   [ -f "$f" ] || { echo "no $f" >&2; exit 1; }
 done
 
@@ -63,12 +65,19 @@ awk '/^pub enum CursorShape \{/ { inside = 1; next }
 # C++: the second argument of each X-macro entry, which IS the wire name.
 sed -n 's/^  X([A-Za-z]*, "\([^"]*\)").*/\1/p' "$CPP" >"$WORK/cpp"
 
+# WebIDL: the quoted members of `enum DomicileCursorShape`. The enum's own
+# order carries no meaning to the bindings generator, unlike the three lists
+# either side of it -- it is written in the same order so that the comparison
+# below is one diff rather than a set difference that has to be read.
+sed -n '/^enum DomicileCursorShape {$/,/^};$/p' "$IDL" |
+  sed -n 's/^  "\([^"]*\)",$/\1/p' >"$WORK/idl"
+
 # TypeScript: the members of the Zod enum.
 sed -n '/cursorShapeSchema = z.enum(\[/,/\]);/p' "$TS" |
   sed -n 's/^  "\([^"]*\)",$/\1/p' >"$WORK/ts"
 
 FAILED=0
-for f in rust cpp ts; do
+for f in rust cpp idl ts; do
   n="$(wc -l <"$WORK/$f" | tr -d ' ')"
   # A pattern that stops matching reads as an empty list, and an empty list
   # compares equal to another empty list. That is this script failing open --
@@ -95,8 +104,10 @@ compare() { # what, file a, file b
 echo "  ($(wc -l <"$WORK/cpp" | tr -d ' ') shapes)"
 compare "the compositor's shapes are the browser's, in the same order" \
   "$WORK/rust" "$WORK/cpp"
-compare "the browser's shapes are the page's, in the same order" \
-  "$WORK/cpp" "$WORK/ts"
+compare "the browser's shapes are the engine's, in the same order" \
+  "$WORK/cpp" "$WORK/idl"
+compare "the engine's shapes are the page's, in the same order" \
+  "$WORK/idl" "$WORK/ts"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

@@ -1,0 +1,40 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// The event behind navigator.domicile.onappcursor.
+//
+// ITS OWN INTERFACE BECAUSE THE CURSOR IS AN ENUM. `DomicileAppEvent` carries
+// the five events that differ only in which window they name, and it carried
+// this one too while `cursor` was a `DOMString`: the other five passed the
+// empty string and a shell read `""` as "not a cursor event". A
+// `DomicileCursorShape` cannot hold `""` -- that is the whole point of a
+// closed set -- so keeping one interface would have meant a nullable
+// attribute, which is the `""` sentinel again in a shape that reads as
+// deliberate. Splitting says the same thing in the type system: an event that
+// carries a cursor is a different event from one that does not.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileAppCursorEvent : Event {
+  constructor(DOMString type, optional DomicileAppCursorEventInit eventInitDict = {});
+
+  // Which window. The same id an <app> element's app-id names.
+  readonly attribute DOMString appId;
+
+  // What the client asked to be shown over it, as the CSS `cursor` keyword to
+  // assign. See domicile_cursor_shape.idl for why this is an enum.
+  readonly attribute DomicileCursorShape cursor;
+
+  // When the browser process had this message, on `performance.now()`'s
+  // clock.
+  //
+  // NOT `timeStamp`, which is when this object was constructed -- in this
+  // renderer, at dispatch -- so subtracting it from itself reports a few
+  // microseconds of Blink and calls it the IPC. The difference between the two
+  // IS the stage: the read off the compositor's socket, the mojo message, the
+  // hop into this process and the dispatch. See
+  // components/domicile/mojom/control_channel.mojom.
+  readonly attribute DOMHighResTimeStamp arrival;
+};
