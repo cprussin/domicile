@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  WEBVIEW_GUEST_FOCUS_EVENT,
+  WEBVIEW_HISTORY_CHANGE_EVENT,
+} from "@domicile/chrome-sdk/webview-element";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -36,6 +39,29 @@ const address = (): HTMLInputElement =>
 
 const browser = (): HTMLElement =>
   screen.getByRole("region", { name: "Browser" });
+
+const control = (name: string): HTMLElement =>
+  screen.getByRole("button", { name });
+
+/**
+ * The engine moving the guest's history and saying so, which is the only way a
+ * chrome hears about one: the properties are the state and the event carries
+ * nothing.
+ *
+ * `defineProperties` rather than assignment because they are readonly on the
+ * real element — where the guest can go is the browser process's to say.
+ */
+const historyReaches = (
+  element: HTMLWebViewElement,
+  canGoBack: boolean,
+  canGoForward: boolean,
+): void => {
+  Object.defineProperties(element, {
+    canGoBack: { configurable: true, value: canGoBack },
+    canGoForward: { configurable: true, value: canGoForward },
+  });
+  fireEvent(element, new Event(WEBVIEW_HISTORY_CHANGE_EVENT));
+};
 
 // What a window's box resolves to is decided by the emitted stylesheet, not by
 // any one `css(...)` call: Panda's atomic classes all carry the same
@@ -296,6 +322,54 @@ describe("BrowserWindow", () => {
       );
       fireEvent.focusIn(view(container));
       expect(reaches).toStrictEqual([]);
+    });
+  });
+
+  // A CONTROL THAT WOULD DO NOTHING SAYS SO BEFORE IT IS PRESSED. `goBack()`
+  // on a history with nothing behind it is a no-op in the browser process, so
+  // a live-looking button is the window telling the user something it cannot
+  // do.
+  describe("the history controls", () => {
+    it("greys Back out until the page has somewhere to go back to", () => {
+      const { container } = render(
+        <BrowserWindow
+          clickThrough={false}
+          domicile={silentDomicile}
+          dragging={false}
+          floating={undefined}
+          focused
+          onNavigate={() => undefined}
+          onReach={() => undefined}
+          onScreen
+          src="https://example.com"
+        />,
+      );
+      expect(control("Back")).toBeDisabled();
+      historyReaches(view(container), true, false);
+      expect(control("Back")).not.toBeDisabled();
+      // Its own property, not the other one: a page that has been back once
+      // can go back again without being able to go forward.
+      expect(control("Forward")).toBeDisabled();
+    });
+
+    it("greys Forward out until the page has somewhere to go forward to", () => {
+      const { container } = render(
+        <BrowserWindow
+          clickThrough={false}
+          domicile={silentDomicile}
+          dragging={false}
+          floating={undefined}
+          focused
+          onNavigate={() => undefined}
+          onReach={() => undefined}
+          onScreen
+          src="https://example.com"
+        />,
+      );
+      expect(control("Forward")).toBeDisabled();
+      historyReaches(view(container), false, true);
+      expect(control("Forward")).not.toBeDisabled();
+      expect(control("Back")).toBeDisabled();
     });
   });
 

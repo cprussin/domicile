@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { css, cx } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import { surfaceBox } from "./floating/float";
+import { useHistoryAvailability } from "./useHistoryAvailability";
 import type { Floating } from "./window-state";
 import {
   clickThroughStyles,
@@ -107,6 +108,7 @@ export const BrowserWindow = ({
   // a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
   const [address, setAddress] = useState(src);
+  const { canGoBack, canGoForward } = useHistoryAvailability(view);
 
   // The click in the page, which is the half of this window the shell cannot
   // see: the element dispatches this when its guest takes focus, because
@@ -218,6 +220,11 @@ export const BrowserWindow = ({
     >
       <form className={addressBarStyles} onSubmit={handleSubmit}>
         <Button
+          // A control that would do nothing says so before it is pressed:
+          // `goBack()` on a history with nothing behind it is a no-op in the
+          // browser process, and a live-looking button is this window offering
+          // the user something it cannot do.
+          disabled={!canGoBack}
           label="Back"
           onClick={drive((loaded) => {
             loaded.goBack();
@@ -228,6 +235,7 @@ export const BrowserWindow = ({
           <CaretLeftIcon size={16} />
         </Button>
         <Button
+          disabled={!canGoForward}
           label="Forward"
           onClick={drive((loaded) => {
             loaded.goForward();
