@@ -49,6 +49,18 @@ class CORE_EXPORT HTMLWebViewElement final
   explicit HTMLWebViewElement(Document&);
   ~HTMLWebViewElement() override;
 
+  // Which element this is, for `DynamicTo` and `IsA`. NOT boilerplate, and
+  // nothing in a build says so if it is missing: `DowncastTraits<HTMLWebViewElement>`
+  // is generated as a comparison against this value, and HTMLElement's base
+  // answers `kHTMLElement` for anything that does not override it. So an
+  // element without this parses, lays out and reflects its attributes exactly
+  // as it should, and every cast back to its own class returns null. See
+  // node.h -- "every HTMLElement must override this" -- and
+  // scripts/test-fork-elements-know-their-type.sh, which is what now says so.
+  ElementType GetElementType() const final {
+    return ElementType::kHTMLWebViewElement;
+  }
+
   // The navigation surface a chrome's address bar drives. Each is the
   // corresponding operation on the GUEST's own history, sent to the browser
   // over the same pipe `src` goes down.

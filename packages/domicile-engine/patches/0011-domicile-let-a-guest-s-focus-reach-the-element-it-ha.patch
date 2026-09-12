@@ -75,12 +75,12 @@ which is how the shell shipped a handler for an event nothing sent.
 See packages/shell-manganese/src/window-management/BrowserWindow.tsx in the Domicile repository
 for the other end of it.
 ---
- .../core/html/html_frame_element_base.h       |  7 ++++-
- .../renderer/core/page/focus_controller.cc    | 58 ++++++++++++++++++++
- 2 files changed, 64 insertions(+), 1 deletion(-)
+ .../core/html/html_frame_element_base.h       |  7 +-
+ .../renderer/core/page/focus_controller.cc    | 68 +++++++++++++++++++
+ 2 files changed, 74 insertions(+), 1 deletion(-)
 
 diff --git a/third_party/blink/renderer/core/html/html_frame_element_base.h b/third_party/blink/renderer/core/html/html_frame_element_base.h
-index 8828fbd..8f3eeb5 100644
+index 8828fbd9d7f84..8f3eeb569ac30 100644
 --- a/third_party/blink/renderer/core/html/html_frame_element_base.h
 +++ b/third_party/blink/renderer/core/html/html_frame_element_base.h
 @@ -60,6 +60,12 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {
@@ -105,7 +105,7 @@ index 8828fbd..8f3eeb5 100644
    bool IsURLAttribute(const Attribute&) const final;
    bool HasLegalLinkAttribute(const QualifiedName&) const final;
 diff --git a/third_party/blink/renderer/core/page/focus_controller.cc b/third_party/blink/renderer/core/page/focus_controller.cc
-index 864c2c8..33bb6bf 100644
+index 864c2c8ebc7d4..2594cf8291dd6 100644
 --- a/third_party/blink/renderer/core/page/focus_controller.cc
 +++ b/third_party/blink/renderer/core/page/focus_controller.cc
 @@ -31,6 +31,7 @@
@@ -124,7 +124,7 @@ index 864c2c8..33bb6bf 100644
  #include "third_party/blink/renderer/core/html/fenced_frame/html_fenced_frame_element.h"
  #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
  #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
-@@ -1803,6 +1805,62 @@ void FocusController::SetFocusedFrame(Frame* frame, bool notify_embedder) {
+@@ -1803,6 +1805,72 @@ void FocusController::SetFocusedFrame(Frame* frame, bool notify_embedder) {
        // invocation of the function to run.
        SetFocusedElement(fenced_frame, frame);
      }
@@ -158,19 +158,29 @@ index 864c2c8..33bb6bf 100644
 +    // The owner IS the element -- it is an HTMLFrameOwnerElement whose tag is
 +    // `webview`, and an HTMLUnknownElement is not a frame owner, so nothing
 +    // else it could be -- and DynamicTo<HTMLWebViewElement> said no anyway.
-+    // The generated DowncastTraits works for <app> (see
-+    // core/html/domicile/layout_app_surface.cc, which casts that way and is
-+    // measured by the resize guard), so something about this tag's generated
-+    // traits is wrong, and that is worth chasing on its own. It is not worth
-+    // blocking on: the cast is not needed here. What this branch has to know
-+    // is whether the owner is a <webview> rather than an ordinary <iframe>,
-+    // because focusing an <iframe>'s owner would change upstream's behaviour
-+    // for every frame; the tag answers exactly that. SetFocusedElement takes
-+    // an Element*, and the announcement is a virtual call on whatever the
-+    // element really is, so no HTMLWebViewElement* is wanted anywhere.
 +    //
-+    // The cast stays in the log, and only in the log, so the anomaly is on the
-+    // record rather than silently worked around.
++    // THE ANOMALY THAT LEFT HERE HAS A NAME NOW, and this comment used to get
++    // it wrong in the one way that mattered: it said the generated
++    // DowncastTraits "works for <app>". It did not. Neither element overrode
++    // Node::GetElementType, so both answered `kHTMLElement`, and the generated
++    // AllowFrom compares against `kHTMLAppElement` / `kHTMLWebViewElement` --
++    // so every DynamicTo onto either class returned null. It cost `<app>` its
++    // window: LayoutAppSurface cast the node back to hand it the box, got
++    // null, and the element was never told a size to embed at. Both headers
++    // say their type now, and scripts/test-fork-elements-know-their-type.sh is
++    // what keeps them saying it.
++    //
++    // The tag check stays regardless, because it was never the workaround it
++    // looked like: what this branch has to know is whether the owner is a
++    // <webview> rather than an ordinary <iframe>, since focusing an
++    // <iframe>'s owner would change upstream's behaviour for every frame, and
++    // the tag answers exactly that. SetFocusedElement takes an Element*, and
++    // the announcement is a virtual call on whatever the element really is, so
++    // no HTMLWebViewElement* is wanted anywhere.
++    //
++    // The cast stays in the log beside the tag, for the opposite reason it was
++    // put there: it read 0 against a `webview` tag once, and the day the two
++    // disagree again this line is where it shows.
 +    auto* owner = To<HTMLFrameOwnerElement>(frame->Owner());
 +    const bool is_web_view = owner->HasTagName(html_names::kWebviewTag);
 +    LOG(INFO) << "domicile: focus reached a frame owned by <"

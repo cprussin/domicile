@@ -53,13 +53,13 @@ Adding a member costs a near-full Blink rebuild, because a new inbound message
 needs a new event type and that invalidates the generated bindings. These were
 added together for that reason.
 ---
- .../blink/renderer/bindings/generated_in_modules.gni      | 16 ++++++++++
- third_party/blink/renderer/bindings/idl_in_modules.gni    | 8 ++++++++++
- .../blink/renderer/core/events/event_type_names.json5     | 8 ++++++++
- 3 files changed, 32 insertions(+)
+ .../renderer/bindings/generated_in_modules.gni   | 16 ++++++++++++++++
+ .../blink/renderer/bindings/idl_in_modules.gni   |  8 ++++++++
+ .../renderer/core/events/event_type_names.json5  |  9 +++++++++
+ 3 files changed, 33 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 838a9c4f8883a..0b9cf29a32d1d 100644
+index 838a9c4f8883a..4b84930995984 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -312,7 +312,15 @@ generated_dictionary_sources_in_modules = [
@@ -95,7 +95,7 @@ index 838a9c4f8883a..0b9cf29a32d1d 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 06bc263861259..8aa2e839a64f0 100644
+index 06bc263861259..3ea00d129697c 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -274,9 +274,17 @@ static_idl_files_in_modules = [
@@ -117,7 +117,7 @@ index 06bc263861259..8aa2e839a64f0 100644
    "//third_party/blink/renderer/modules/eyedropper/color_selection_options.idl",
    "//third_party/blink/renderer/modules/eyedropper/color_selection_result.idl",
 diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/third_party/blink/renderer/core/events/event_type_names.json5
-index 37929c05d7a78..932e5ecb4cdec 100644
+index 37929c05d7a78..98cbababfe5aa 100644
 --- a/third_party/blink/renderer/core/events/event_type_names.json5
 +++ b/third_party/blink/renderer/core/events/event_type_names.json5
 @@ -25,6 +25,15 @@
