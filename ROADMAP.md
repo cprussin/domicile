@@ -35,9 +35,10 @@ socket the compositor connects to as a producer. It builds nothing and wraps
 nothing: both components ship beside it, the way a multi-binary program like
 postfix does, and it finds them from its own path. There were three, and the
 bridge that served the page over a loopback HTTP port is gone with the port.
-It also answers a control socket at `$XDG_RUNTIME_DIR/domicile.sock` for as
-long as it runs, which is how a desktop is asked a question rather than
-restarted.
+It also answers a control socket of its own — `domicile-ipc.<pid>.sock` under
+`$XDG_RUNTIME_DIR`, announced to its apps as `DOMICILE_SOCK` — which is how a
+desktop is asked a question rather than restarted, and how one of several is
+asked rather than another.
 
 The wire protocol is at `PROTOCOL_VERSION = 1`.
 
@@ -110,11 +111,14 @@ decides whether an item is waiting or workable.
    since landed, so that hop is a number rather than an assertion — see *What
    is proven* above for which of the three paths it actually covers.
 3. **`domicile load-shell <path>`.** **The socket is in.** A running desktop
-   takes `$XDG_RUNTIME_DIR/domicile.sock` before it starts anything, answers
-   newline-delimited JSON on it, and unlinks it when the run ends;
-   `domicile which-shell` works end to end. One socket is one desktop, so a
-   second `domicile <shell>` against the same `XDG_RUNTIME_DIR` is now refused
-   rather than starting a desktop no command could reach.
+   takes `$XDG_RUNTIME_DIR/domicile-ipc.<pid>.sock` before it starts anything,
+   answers newline-delimited JSON on it, and unlinks it when the run ends;
+   `domicile which-shell` works end to end. The path is exported as
+   `DOMICILE_SOCK` onto the compositor, so an app inherits the way back to the
+   desktop it is running in — sway's `SWAYSOCK` arrangement, and per-instance
+   for the same reason `WAYLAND_DISPLAY` is. **A session may hold any number of
+   desktops**, each answering its own socket; a client with no `DOMICILE_SOCK`
+   is refused by name rather than sent to guess between them.
 
    **What is left is `load-shell` itself, and it is blocked in the engine** —
    which is a correction to `THE-DOMICILE-BINARY.md`'s "nothing blocks this but
