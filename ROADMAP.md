@@ -35,6 +35,9 @@ socket the compositor connects to as a producer. It builds nothing and wraps
 nothing: both components ship beside it, the way a multi-binary program like
 postfix does, and it finds them from its own path. There were three, and the
 bridge that served the page over a loopback HTTP port is gone with the port.
+It also answers a control socket at `$XDG_RUNTIME_DIR/domicile.sock` for as
+long as it runs, which is how a desktop is asked a question rather than
+restarted.
 
 The wire protocol is at `PROTOCOL_VERSION = 1`.
 
@@ -63,28 +66,33 @@ decides whether an item is waiting or workable.
 
 ### In this repository
 
-1. **`<app>` and `<webview>`, not `domicile-app` and `domicile-webview`.** The
-   fork defines both as real HTML tags — `document.createElement("app")` is an
-   `HTMLAppElement`, `app-id` reflects both ways — and the SDK still registers
-   hyphenated custom elements beside them, because a custom element's name must
-   contain a hyphen and the SDK predates the fork. `alias-tags.ts` offers a
-   chrome the short spelling by upgrading every `<app>` in the document to
-   `<domicile-app>`; nothing in this repository calls it, and it could never
-   have done the same for `<webview>`, since aliasing a name the host engine
-   claims would recurse.
+1. **`<app>`, not `domicile-app`.** Half done: **`<webview>` has landed.**
+   `DomicileWebviewElement` forwarded every call to a native `<webview>` patch
+   0007 already owns — `src`, the four history controls, both availability
+   properties and both events — so it went, `alias-tags.ts` went with it, and
+   the shells write the tag. `WRITING-A-SHELL.md` moved in the same change,
+   because it is the contract that breaks.
 
-   The work is subtraction, in this order: stop registering the two custom
-   elements; delete `alias-tags.ts` with them; write `<app>` and `<webview>` in
-   the shells directly; then delete the placement machinery the elements exist
-   to drive — `measure.ts`, `observe-placement.ts`, `element-transform.ts`,
-   `matrix.ts`, `placement-timing.ts` — because an `<app>`'s layout box *is* the
-   `xdg_toplevel.configure` and patch 0007 reports it natively. Each step is
-   separately shippable and the last one is the one with the measurements behind
-   it. `WRITING-A-SHELL.md` is the contract this breaks, so it moves in the same
-   change as the tags.
+   **`<app>` is the harder half and is what remains.** The element does more
+   than forward: pointer mapping, keyboard routing, size reporting and the
+   surface embed all hang off it, and none of that can stay on a custom-element
+   class once the tag is the engine's. It becomes document-level delegation over
+   `closest("app")` plus an app-id-keyed registry — and that registry is the
+   part to think hardest about, because the SDK already holds the client, so
+   `app_resized` and `app_cursor` could be the SDK's business rather than every
+   shell's.
 
-   **Unblocked.** It was parked in case the `domicile://` work deleted the SDK's
-   runtime; it did not.
+   Then the subtraction it exists for: delete the placement machinery —
+   `measure.ts`, `observe-placement.ts`, `element-transform.ts`, `matrix.ts`,
+   `placement-timing.ts` — because an `<app>`'s layout box *is* the
+   `xdg_toplevel.configure` and patch 0007 reports it natively.
+   `ExternalSurfaceProvider::Embed` already carries the size, so `resizeApp`
+   from the chrome is redundant once the tag is native, and `offsetX`/`offsetY`
+   on the `<app>` is the engine answering the other half of `measure`'s job with
+   the real transform. That step is the one with the measurements behind it.
+
+   Worth doing in that order, and possibly as one change: the registry step 1
+   builds is a thing step 2 then removes.
 2. **Keystroke-to-pixel latency** (#206). The requirement is that a client's
    window costs the user nothing a plain Wayland compositor would not.
    `guard-latency.sh` has run on `crux` now — it reads `commit to pixel` at
@@ -101,14 +109,31 @@ decides whether an item is waiting or workable.
    measurement lives. The engine stamp the browser-to-renderer hop needed has
    since landed, so that hop is a number rather than an assertion — see *What
    is proven* above for which of the three paths it actually covers.
-3. **A control socket, and `domicile load-shell <path>`.** Switching the
-   running shell without restarting the desktop, so a watcher outside Domicile
-   can trigger a reload. **Unblocked** — it was waiting on `domicile://`, and
-   the hop to the page is the engine's now. It is also where dev reload comes
-   back from: the poller the bridge wrote into every served document went with
-   the bridge, the C++ that writes the document has nothing in its place, and
-   `DOMICILE_DEV_RELOAD` is gone rather than left switching nothing on.
-   `docs/architecture/THE-DOMICILE-BINARY.md`
+3. **`domicile load-shell <path>`.** **The socket is in.** A running desktop
+   takes `$XDG_RUNTIME_DIR/domicile.sock` before it starts anything, answers
+   newline-delimited JSON on it, and unlinks it when the run ends;
+   `domicile which-shell` works end to end. One socket is one desktop, so a
+   second `domicile <shell>` against the same `XDG_RUNTIME_DIR` is now refused
+   rather than starting a desktop no command could reach.
+
+   **What is left is `load-shell` itself, and it is blocked in the engine** —
+   which is a correction to `THE-DOMICILE-BINARY.md`'s "nothing blocks this but
+   the work itself". That was true of the transport and false of the command.
+   The engine reads both `--domicile-shell-root` (captured when
+   `ShellURLLoaderFactory` is constructed) and `--domicile-shell-module` (read
+   per request) off `base::CommandLine::ForCurrentProcess()`, which nothing
+   outside the browser process can change; and `ControlChannel`, the only thing
+   that process reads from, carries nothing that reloads or navigates the
+   shell's own window. Restarting the engine is not the way out either: it kills
+   the broker socket the compositor produces into, which is the windows. See the
+   engine-fork list below, and `docs/architecture/THE-DOMICILE-BINARY.md` for
+   the two routes and why route A is recommended.
+
+   **Dev reload comes back with `load-shell` and not before.** The poller the
+   bridge wrote into every served document went with the bridge, the C++ that
+   writes the document has nothing in its place, and `DOMICILE_DEV_RELOAD` is
+   gone rather than left switching nothing on — so `scripts/dev-shell.sh` is
+   still right that a rebuilt shell needs the desktop restarted.
 
 ### In the engine fork — the agent on `crux`
 
@@ -128,7 +153,26 @@ decides whether an item is waiting or workable.
    to patch `0009` and wants whoever owns the series.
    `packages/chrome-sdk/src/cursor-shape.ts` records it as the step left
    rather than dropping it silently.
-2. **A desktop on a tty.** Audited against the pin in
+2. **The engine cannot be told which shell to serve.** `domicile load-shell`
+   stops here. `--domicile-shell-root` is captured when `ShellURLLoaderFactory`
+   is constructed and `--domicile-shell-module` is read per request, both off
+   `base::CommandLine::ForCurrentProcess()`, so neither can be changed from
+   outside the browser process; and `ControlChannel` — the only thing that
+   process reads from, and a *client* of the compositor's `--chrome-socket` —
+   carries nothing that reloads or navigates the shell's window
+   (`WebViewGuest::Reload` reloads a guest, which is a different window).
+
+   Two routes, costed in `docs/architecture/THE-DOMICILE-BINARY.md`.
+   **Route A is recommended**: the engine takes a `--domicile-command-socket`
+   of its own and the supervisor dials it. No host↔chrome protocol change, no
+   mojom member — so no near-full Blink rebuild — and the compositor is
+   uninvolved, which is what makes the windows survive by construction. Route B
+   relays a new `HostMessage` through the compositor, which puts
+   supervisor-to-engine mail on the page's contract.
+
+   **Dev reload is downstream of this**, not of anything in the Rust.
+
+3. **A desktop on a tty.** Audited against the pin in
    `docs/architecture/A-DESKTOP-ON-A-TTY.md`. Getting `gn gen` to accept
    `ozone_platform_drm = true` is a **patch**: eight edits, not one of them
    inside the DRM platform's own logic, because its 49 `.cc` files hold two
@@ -156,7 +200,7 @@ decides whether an item is waiting or workable.
    Until both halves land, a desktop is a window inside an existing Wayland
    session, or headless.
 
-3. **What the engine ships that a desktop never runs.** Chrome carries a tab
+4. **What the engine ships that a desktop never runs.** Chrome carries a tab
    strip, a New Tab page, a settings UI, sign-in and sync. A desktop can reach
    none of it, all of it is built, and all of it is in the ~216 MB release
    tarball and in the attack surface. **Measure before patching**: nobody knows
@@ -213,6 +257,14 @@ costs nothing.
   `WebViewGuest`'s `WebContentsDelegate` and are answered by the default. A
   refusal is the answer that has a guard behind it; opening them is one piece of
   work each, and `CreateCustomWebContents` logs when one is refused.
+- **A browser window's address bar cannot follow its page.** Where the guest
+  actually went is the browser process's, `WebViewGuestClient` carries only
+  `HistoryChanged(can_go_back, can_go_forward)`, and `src` is the author's
+  attribute rather than a report — so a chrome can show where it *sent* a
+  window and not where the page then went. `domicile-navigate` used to look
+  like the answer and was not: the SDK synthesised it from Electron's
+  `did-navigate` and it had fired for nothing since the fork landed, so it is
+  deleted rather than left looking available.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
 - **Hot-swapping the chrome page** is a page reload on the engine, and
   `announce_open_apps` is what makes one survivable. `scripts/dev-shell.sh` is
