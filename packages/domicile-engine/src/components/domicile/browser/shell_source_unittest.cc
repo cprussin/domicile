@@ -40,7 +40,13 @@ TEST(ShellSourceTest, HoldsNothingWhenTheCommandLineSaidNothing) {
   // must say: an empty root makes ShellURLLoaderFactory refuse everything and
   // an empty module makes it fail the document out loud. A default invented
   // here would turn both of those into a shell nobody asked for.
-  const ShellSource source(base::CommandLine(base::CommandLine::NO_PROGRAM));
+  // Braces, not parentheses: `ShellSource source(base::CommandLine(...))` is a
+  // function declaration, because the inner name is a TYPE and C++ resolves the
+  // ambiguity that way. It cost this suite a build -- clang says "parentheses
+  // were disambiguated as a function declaration" and then three more errors
+  // about a member reference on a function type. The two tests either side pass
+  // `WithShell(...)`, whose name is not a type, so neither is affected.
+  const ShellSource source{base::CommandLine(base::CommandLine::NO_PROGRAM)};
   EXPECT_TRUE(source.Root().empty());
   EXPECT_TRUE(source.Module().empty());
 }
