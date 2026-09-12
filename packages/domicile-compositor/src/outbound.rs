@@ -6,11 +6,13 @@
 //! a few hundred milliseconds of frozen input for every client — long enough
 //! for a held key to start repeating.
 //!
-//! Frames and lifecycle messages want opposite things when the chrome falls
-//! behind, so they get opposite policies. A frame is superseded by the next one,
-//! so queueing them adds latency and nothing else: past a shallow cap they are
-//! dropped. A lifecycle message *is* the chrome's model of the world and cannot
-//! be dropped, so the queue simply accepts it — they are small and arrive at the
+//! Frames and lifecycle messages wanted opposite things when the chrome fell
+//! behind, and once got opposite policies: a frame is superseded by the next
+//! one, so past a shallow cap they were dropped. THAT CAP IS GONE WITH THE
+//! FRAMES — a client's buffer goes to the display compositor now and no pixels
+//! come down here, as `Outbound` says below. What is left is lifecycle
+//! messages, which *are* the chrome's model of the world and cannot be
+//! dropped, so the queue simply accepts them: they are small and arrive at the
 //! rate a person opens and closes windows.
 
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
