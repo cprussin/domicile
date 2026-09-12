@@ -120,11 +120,15 @@ command. One binary, told apart by whether the first argument names a page or
 a verb — sway does the same thing with two names, and one is enough here
 because the desktop is the only thing either form talks about.
 
-The socket goes at `$XDG_RUNTIME_DIR/domicile.sock`, discovered rather than
-passed, because a client that has to be told where the desktop is has to be
-told by something that already knew. One line of JSON in, one back, and the
-connection is over — `domicile_launch::control` is the wire and
-`domicile_launch::control_socket` is the socket.
+The socket goes at `$XDG_RUNTIME_DIR/domicile-ipc.<pid>.sock`, named after the
+supervisor that owns it, and its path is exported as `DOMICILE_SOCK` onto the
+compositor — so every app the desktop spawns inherits the way back to the
+desktop it is running in. That is sway's arrangement (`SWAYSOCK`), and
+Hyprland's (`HYPRLAND_INSTANCE_SIGNATURE`), for the reason `WAYLAND_DISPLAY`
+itself is per-instance: a compositor is a thing you can run more than one of.
+One line of JSON in, one back, and the connection is over —
+`domicile_launch::control` is the wire and `domicile_launch::control_socket` is
+the socket.
 
 **The supervisor answers it, and routes.** `load-shell` is carried out by
 whatever serves the page, but the next commands are not: asking which windows
@@ -132,16 +136,21 @@ are open is the compositor's. A socket owned by whichever process happens to
 answer the first command is a socket that moves when the second one lands.
 
 ```
-domicile which-shell ─▶ domicile.sock ─▶ the supervisor
-domicile load-shell  ─▶ domicile.sock ─▶ the supervisor ─▶ the engine ─▶ the page
+domicile which-shell ─▶ $DOMICILE_SOCK ─▶ the supervisor
+domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ the supervisor ─▶ the engine ─▶ the page
 ```
 
-**One socket is one desktop.** A second `domicile <shell>` on the same
-`XDG_RUNTIME_DIR` is refused rather than started beside the first: it would be
-a desktop no command could reach, and every `load-shell` on that machine would
-go to the other one with nothing saying so. A socket nothing answers on is a
-dead desktop's and is replaced; anything at that path that is not a socket is
-somebody else's file and is left alone.
+**A session holds as many desktops as it likes.** Each answers its own socket
+and each tells its own apps where that is, so a command reaches the desktop it
+was typed inside rather than whichever one started first.
+
+A client with no `DOMICILE_SOCK` is refused, by name, and told what to set. It
+would be reachable to scan the runtime directory instead and it is deliberately
+not done: with several desktops per session a scan has to guess which one was
+meant, and a command that silently picks a desktop is worse than one that
+declines. A socket whose desktop was killed refuses on connect and says so;
+anything at that path that is not a socket is somebody else's file and is left
+alone.
 
 ### What `load-shell` still needs, and it is in the engine
 
