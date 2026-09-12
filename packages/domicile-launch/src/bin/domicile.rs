@@ -1,17 +1,23 @@
-//! `domicile ./my-desktop/dist/shell.js` — a desktop, in one command.
+//! `domicile ./my-desktop/dist/shell.js` — a desktop, in one command. And
+//! `domicile which-shell` — a command for the desktop already running.
 //!
 //! Everything with a decision in it is a module of `domicile_launch` with
 //! tests of its own; this is the part that reads the world and starts things.
 //! It is deliberately short, because it is the part nothing can test: no CI
 //! runner has a display, and the shell script it replaces was not run by
-//! anything either.
+//! anything either. `scripts/test-the-control-socket.sh` is what covers the
+//! wiring below that the unit tests cannot reach.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use domicile_launch::cli::{invocation, Invocation};
 use domicile_launch::components::components;
+use domicile_launch::control::{answer, Request, Response};
+use domicile_launch::control_socket::{
+    address, answer_one, ask, take, Control, PATIENCE as ANSWER_WITHIN,
+};
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::platform::platform;
 use domicile_launch::shell_path::shell_module;
@@ -33,9 +39,35 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<ExitCode, String> {
+    match invocation(std::env::args().skip(1)).map_err(|why| why.to_string())? {
+        Invocation::Run { shell } => desktop(&shell),
+        Invocation::Ask { request } => asked(&request),
+    }
+}
+
+/// Put one command to the desktop that is already running, and say what it
+/// said.
+fn asked(request: &Request) -> Result<ExitCode, String> {
+    let socket = address(std::env::var("XDG_RUNTIME_DIR").ok().as_deref());
+    let answer = ask(&socket, request, ANSWER_WITHIN).map_err(|why| why.to_string())?;
+    match answer {
+        Response::Shell { module } => {
+            println!("{}", module.display());
+            Ok(ExitCode::SUCCESS)
+        }
+        // The desktop refused. It is a desktop of another build, or something
+        // else is answering at that path — either way the asker gets the
+        // sentence the desktop wrote rather than one invented here.
+        Response::Refused { why } => {
+            eprintln!("domicile: {why}");
+            Ok(ExitCode::FAILURE)
+        }
+    }
+}
+
+/// Run a desktop on `shell` until one of its components stops.
+fn desktop(shell: &str) -> Result<ExitCode, String> {
     let env = |name: &str| std::env::var(name).ok();
-    let Invocation::Run { shell } =
-        invocation(std::env::args().skip(1)).map_err(|why| why.to_string())?;
 
     let binary = std::env::current_exe().map_err(|why| format!("cannot find myself: {why}"))?;
     let components =
@@ -45,7 +77,7 @@ fn run() -> Result<ExitCode, String> {
     // packaged desktop is a wrapper that types the command line so its user
     // does not have to, and a second spelling of "which shell" would only be
     // a second thing to get wrong.
-    let page = shell_module(&shell, env("DOMICILE_PAGE").as_deref(), &|path| {
+    let page = shell_module(shell, env("DOMICILE_PAGE").as_deref(), &|path| {
         path.metadata().ok().map(|found| found.is_dir())
     })
     .map_err(|why| why.to_string())?;
@@ -66,7 +98,17 @@ fn run() -> Result<ExitCode, String> {
     // module rather than its directory, because the directory is what this
     // used to print and it agreed with the wrong file as readily as the right
     // one — the whole of the bug `shell_path` describes was invisible in it.
-    println!("shell: {}", page.root.join(&page.module).display());
+    let module = page.root.join(&page.module);
+    println!("shell: {}", module.display());
+
+    // Taken before anything is started, so that a second desktop on this
+    // session is refused while there is still nothing to clean up — and taken
+    // by this process rather than by a component, because the commands after
+    // the first one are not all answered in the same place.
+    let control =
+        take(&address(env("XDG_RUNTIME_DIR").as_deref())).map_err(|why| why.to_string())?;
+    answering(&control, module_of(&module)?)?;
+
     let mut running = Running::new();
 
     let platform = platform(
@@ -126,6 +168,52 @@ fn run() -> Result<ExitCode, String> {
 /// carries: the status is kept the way a shell would say it so that a desktop
 /// killed by a signal and one that returned 11 do not read the same.
 const CLEANLY: &str = "exit status: 0";
+
+/// The module this desktop is running, as a path that means the same thing
+/// wherever it is read.
+///
+/// The command line's is relative to wherever the desktop was started from,
+/// and the answer goes to a process that was started somewhere else — a
+/// watcher with a working directory of its own, most of the time. `join`
+/// rather than a concatenation because an argument that was already absolute
+/// replaces the working directory rather than being appended to it.
+fn module_of(module: &Path) -> Result<PathBuf, String> {
+    let here = std::env::current_dir()
+        .map_err(|why| format!("cannot tell where this was started from: {why}"))?;
+    Ok(here.join(module))
+}
+
+/// Answer the control socket for as long as the desktop is up.
+///
+/// On a thread of its own because the rest of this program is a supervisor
+/// that blocks: it waits on a file, then on a pair of children, and a command
+/// arriving in the middle of either is not a command that should wait for
+/// them.
+///
+/// A connection that fails is logged and the next one is taken. There is
+/// nothing to recover from — the asker is gone, or said nothing — and a
+/// desktop that stopped answering because one client hung up would be a
+/// control socket that goes away at the first misbehaving caller.
+fn answering(control: &Control, module: PathBuf) -> Result<(), String> {
+    let listener = control
+        .listener()
+        .map_err(|why| format!("cannot answer the control socket: {why}"))?;
+    std::thread::spawn(move || {
+        for connection in listener.incoming() {
+            match connection {
+                Ok(stream) => {
+                    if let Err(why) =
+                        answer_one(stream, ANSWER_WITHIN, &|line| answer(line, &module))
+                    {
+                        eprintln!("domicile: a command went unanswered: {why}");
+                    }
+                }
+                Err(why) => eprintln!("domicile: a command did not arrive: {why}"),
+            }
+        }
+    });
+    Ok(())
+}
 
 /// Wait for one milestone against the real world: the filesystem for whether
 /// it happened, the components for whether one of them stopped, and the clock

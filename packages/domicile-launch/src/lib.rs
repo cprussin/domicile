@@ -7,6 +7,11 @@
 //! components are ([`components`]), what each is started with ([`spawn`]),
 //! and the order they go up in ([`supervise`]).
 //!
+//! `domicile which-shell` puts a command to a desktop that is already
+//! running. That is the same binary read the other way, and two more modules:
+//! what a desktop can be asked and what it answers ([`control`]), and where it
+//! answers ([`control_socket`]).
+//!
 //! The other boundary is the compositor's own: the command line it is started
 //! with ([`arguments`]), the session document it
 //! publishes once it is up ([`session`]), and whether a page ever reached it
@@ -22,6 +27,8 @@
 pub mod arguments;
 pub mod cli;
 pub mod components;
+pub mod control;
+pub mod control_socket;
 pub mod handshake;
 pub mod milestones;
 pub mod platform;

@@ -37,9 +37,10 @@ the crate stays in `default-members` and its tests stay cheap.
 
 ```
 domicile <shell>       # the built JavaScript module the shell is
+domicile <command>     # ...or a command for the desktop already running
 ```
 
-Three modules, and the split is by what each needs to be tested:
+The modules, and the split is by what each needs to be tested:
 
 | Module | Pure? | What |
 |---|---|---|
@@ -47,11 +48,14 @@ Three modules, and the split is by what each needs to be tested:
 | `components` | yes | the engine and the compositor, from the binary's own path or the environment |
 | `shell_path` | yes | a name or a path to a module → the module to load, and the directory it is served out of |
 | `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` → the ozone platform, or the refusal that names what to do instead |
+| `control` | yes | what a running desktop can be asked, and what it answers |
 | `supervise` | no | temp dirs, two children in order, the broker socket, teardown |
+| `control_socket` | no | where a desktop answers, taking it from whatever is there, and carrying a line each way |
 
-The first three are the ones with the subtle rules, and they become ordinary
-unit tests against strings and a temp directory. `supervise` is the part that
-genuinely spawns, and it stays thin enough to read.
+The pure ones are where the subtle rules are, and they become ordinary unit
+tests against strings and a temp directory. `supervise` is the part that
+genuinely spawns and `control_socket` the part that genuinely binds; both stay
+thin enough to read.
 
 ## Key decisions
 
@@ -82,7 +86,7 @@ genuinely spawns, and it stays thin enough to read.
   bundle changed. `DEV_RELOAD_PATH`, `buildToken` and `shellDocument`'s
   injected script went with the bridge; the C++ that writes the document now
   has nothing in their place, so there is no reload in a dev desktop until this
-  lands. See *The transport exists now* below.
+  lands. See *What `load-shell` still needs* below.
 
 - **The two components ship beside the binary and are found there.** Not
   passed, and not wrapped in: `domicile` resolves them from its own location,
@@ -118,7 +122,9 @@ because the desktop is the only thing either form talks about.
 
 The socket goes at `$XDG_RUNTIME_DIR/domicile.sock`, discovered rather than
 passed, because a client that has to be told where the desktop is has to be
-told by something that already knew.
+told by something that already knew. One line of JSON in, one back, and the
+connection is over — `domicile_launch::control` is the wire and
+`domicile_launch::control_socket` is the socket.
 
 **The supervisor answers it, and routes.** `load-shell` is carried out by
 whatever serves the page, but the next commands are not: asking which windows
@@ -126,24 +132,44 @@ are open is the compositor's. A socket owned by whichever process happens to
 answer the first command is a socket that moves when the second one lands.
 
 ```
-domicile load-shell ─▶ domicile.sock ─▶ the supervisor ─▶ the engine ─▶ the page
+domicile which-shell ─▶ domicile.sock ─▶ the supervisor
+domicile load-shell  ─▶ domicile.sock ─▶ the supervisor ─▶ the engine ─▶ the page
 ```
 
-### The transport exists now
+**One socket is one desktop.** A second `domicile <shell>` on the same
+`XDG_RUNTIME_DIR` is refused rather than started beside the first: it would be
+a desktop no command could reach, and every `load-shell` on that machine would
+go to the other one with nothing saying so. A socket nothing answers on is a
+dead desktop's and is replaced; anything at that path that is not a socket is
+somebody else's file and is left alone.
 
-**It was waiting on `domicile://`, and `domicile://` landed.** The page used to
-be reached through the bridge, whose WebSocket was a byte pipe to the
-compositor's control socket, so telling the page to load a different shell
-meant either a second bridge-owned socket or making the bridge a *speaker* of a
-protocol it only carried. That choice is gone with the bridge: the engine
-serves the shell over `domicile://`, writes the document in C++, and the
-control channel is an IDL binding on the unix socket the engine process already
-holds.
+### What `load-shell` still needs, and it is in the engine
 
-So the hop is the engine's, there is no process in the middle with a deletion
-date, and nothing blocks this but the work itself. The poller did not survive
-the move — see the dev-reload note under *Key decisions* — so a dev desktop has
-no reload until `load-shell` is what provides it.
+The page is the engine's, and **the engine cannot presently be told anything
+about which shell it serves**:
+
+- `ShellURLLoaderFactory` takes `--domicile-shell-root` at construction and
+  `ServeDocument` reads `--domicile-shell-module` off
+  `base::CommandLine::ForCurrentProcess()` per request. Both are the command
+  line the browser process was started with, and a process's command line
+  cannot be changed from outside it.
+- `ControlChannel` is the only thing the browser process reads from, and it is
+  a *client* of the compositor's `--chrome-socket`. Nothing on it reloads or
+  navigates the shell's own window; `WebViewGuest::Reload` reloads a guest.
+
+So `load-shell` is one engine-side change, and there are two shapes for it:
+
+| | Route | Cost |
+|---|---|---|
+| **A** | the engine takes a `--domicile-command-socket` of its own and the supervisor dials it | a listener in the browser process; no protocol change, no Blink rebuild, and the arrow above is literal |
+| **B** | a new `HostMessage` the compositor sends down the channel the engine already reads | `PROTOCOL_VERSION`'s contract grows a message that is not the chrome's, and the compositor is put in a hop it has no business in |
+
+**A.** The host↔chrome protocol is the page's, and supervisor-to-engine traffic
+on it is the compositor relaying mail. A is also what keeps the windows: the
+compositor is not involved, so it never hears that the shell changed.
+
+Either way the poller did not survive the bridge — see the dev-reload note
+under *Key decisions* — so a dev desktop has no reload until this lands.
 
 ## Plan
 
@@ -155,8 +181,12 @@ no reload until `load-shell` is what provides it.
 - [x] `flake.nix`: the three components go where the binary looks, and
       `domicileCli` — the `writeShellApplication` — goes
 - [x] delete `run-engine.sh` and the three `test-run-engine-*.sh`
-- [ ] the control socket, and `domicile load-shell` — unblocked: the hop to
-      the page is the engine's now, and it is what a dev reload would use
+- [x] the control socket: taken by the supervisor, answered on a thread of its
+      own, and `domicile which-shell` over it — the command whose whole answer
+      the supervisor holds, so the transport ships before anything has to route
+- [ ] `domicile load-shell <path>` — blocked on the engine being tellable at
+      all; see *What `load-shell` still needs*. It is what a dev reload would
+      use
 - [ ] `guard-shell.sh` calls the binary rather than repeating the launch
 
 ## Open questions
