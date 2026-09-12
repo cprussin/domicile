@@ -356,7 +356,7 @@ jobs:
           # below exists to catch, arriving by the other door. Between them
           # they are what refuses a path traversal out of the shell root and
           # what pins the one document every desktop is.
-          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:CursorShapeTest.*'
+          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*'
           # `--gtest_filter` matching nothing exits 0, so a suite that was
           # renamed or never linked would be a silent pass. Test names are the
           # indented lines of --gtest_list_tests; suite names are not.
@@ -366,8 +366,8 @@ jobs:
           echo "$count tests match $filter"
           # 11 in FrameSinkBrokerTest alone at the time of writing, 7 in
           # ShortcutRegistryTest, 11 in ShellURLLoaderFactoryTest, 11 in
-          # ShellDocumentTest and 3 in CursorShapeTest.
-          [ "$count" -ge 43 ] || {
+          # ShellDocumentTest, 3 in ShellSourceTest and 3 in CursorShapeTest.
+          [ "$count" -ge 46 ] || {
             echo "::error::only $count tests matched; the suites were renamed or did not link" >&2
             exit 1
           }
