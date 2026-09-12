@@ -321,7 +321,7 @@ answered while the ones a build cannot are not.
 Step 1 — make the tree accept the argument (the patch):
 
 All eight edits are one patch,
-`packages/domicile-engine/patches/0011-domicile-let-gn-gen-accept-ozone_platform_drm-off-Ch.patch`,
+`packages/domicile-engine/patches/0012-domicile-let-gn-gen-accept-ozone_platform_drm-off-Ch.patch`,
 and it compiles nothing that ships: `scripts/build.sh` and
 `.github/scripts/engine-release-build.sh` both set `ozone_auto_platforms =
 false` and name only wayland and headless, so `//ui/ozone/BUILD.gn` never adds
