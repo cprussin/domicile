@@ -8,6 +8,7 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use crate::control_socket::VARIABLE;
 use crate::shell_path::Shell;
 
 /// The document the fork generates, and what a desktop is started on. One
@@ -41,6 +42,14 @@ pub struct Runtime {
     /// The host protocol: the compositor listens, and the engine dials it for
     /// the page's control channel.
     pub chrome_socket: PathBuf,
+    /// Where this desktop answers `domicile which-shell`.
+    ///
+    /// The one socket of the run that is not under the run's own directory:
+    /// the others are dialled by something this launcher started and told, and
+    /// this one is dialled by whoever types a command, so it goes where
+    /// [`crate::control_socket::address`] says and is named in the
+    /// environment.
+    pub control: PathBuf,
     /// The engine's own profile, thrown away with the run.
     pub profile: PathBuf,
     /// Where the compositor publishes what it bound, once it is serving.
@@ -123,6 +132,16 @@ pub fn engine(
 
 /// The compositor, as a producer to the engine.
 ///
+/// `DOMICILE_SOCK` is set here rather than on this process, and that is what
+/// puts it in front of a person. The compositor is what starts the apps a
+/// shell asks for, and a child inherits the environment it was spawned from —
+/// so a terminal opened inside this desktop has this desktop's socket, and
+/// `domicile which-shell` typed into it reaches the desktop it is running in
+/// rather than some other one. Exporting it from the supervisor's own process
+/// instead would be inherited by nothing that matters, and a supervisor
+/// started from inside another desktop would still be carrying that desktop's
+/// path.
+///
 /// `LD_LIBRARY_PATH` carries the engine's own directory because that is where
 /// `libdomicile_engine.so` is: the compositor `dlopen`s it rather than linking
 /// it, so that `cargo build` does not need a Chromium checkout. Prepended
@@ -150,6 +169,7 @@ pub fn compositor(
             runtime.broker.clone().into(),
         ],
         env: vec![
+            (VARIABLE.to_string(), runtime.control.clone().into()),
             ("LD_LIBRARY_PATH".to_string(), libraries),
             (
                 "RUST_LOG".to_string(),

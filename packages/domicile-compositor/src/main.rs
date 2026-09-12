@@ -3550,6 +3550,13 @@ fn spawn_client(command: &[String], wayland_display: &OsStr) {
 /// `WAYLAND_DISPLAY` to reach it — and a client that inherited it would open on
 /// the host desktop instead of on Domicile. `DISPLAY` is removed so a toolkit
 /// with both backends prefers Wayland over any outer X server.
+///
+/// `DOMICILE_SOCK` is the other way round and is deliberately *not* named
+/// here: the launcher puts this desktop's control socket in the compositor's
+/// environment (`domicile_launch::spawn::compositor`), which is the desktop
+/// the compositor belongs to, so inheriting it is inheriting the right one. It
+/// is `WAYLAND_DISPLAY` that is the special case — the compositor's own is the
+/// host's rather than this desktop's, and nothing else it was started with is.
 fn client_command(command: &[String], wayland_display: &OsStr) -> Option<Command> {
     let (program, args) = command.split_first()?;
     let mut child = Command::new(program);
