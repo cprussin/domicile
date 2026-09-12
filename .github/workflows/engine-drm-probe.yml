@@ -105,7 +105,7 @@ jobs:
       GIT_COMMITTER_EMAIL: ci@domicile.invalid
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # /tmp belongs to the runner unit, not to this job: PrivateTmp is
       # per-service and the service outlives every job it runs. So last run's
