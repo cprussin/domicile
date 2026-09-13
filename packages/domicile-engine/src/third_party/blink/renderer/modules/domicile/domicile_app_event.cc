@@ -20,7 +20,6 @@ DomicileAppEvent::DomicileAppEvent(const AtomicString& type,
     : Event(type, initializer),
       app_id_(initializer->appId()),
       title_(initializer->title()),
-      cursor_(initializer->cursor()),
       arrival_(initializer->arrival()) {
   if (initializer->hasWidth() && initializer->hasHeight()) {
     width_ = initializer->width();
@@ -31,14 +30,12 @@ DomicileAppEvent::DomicileAppEvent(const AtomicString& type,
 DomicileAppEvent::DomicileAppEvent(const AtomicString& type,
                                    const String& app_id,
                                    const String& title,
-                                   const String& cursor,
                                    std::optional<double> width,
                                    std::optional<double> height,
                                    DOMHighResTimeStamp arrival)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
       app_id_(app_id),
       title_(title),
-      cursor_(cursor),
       width_(width),
       height_(height),
       arrival_(arrival) {}

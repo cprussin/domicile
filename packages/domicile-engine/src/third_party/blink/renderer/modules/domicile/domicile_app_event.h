@@ -15,9 +15,14 @@ namespace blink {
 
 class DomicileAppEventInit;
 
-// Something happened to a window: it appeared, resized, closed, or asked for a
-// cursor. One type for the four because they carry the same thing -- which
-// window -- and differ only in what else they carry.
+// Something happened to a window: it appeared, resized or closed, or the
+// keyboard moved to it or was asked for by it. One type for the five because
+// they carry the same thing -- which window -- and differ only in what else
+// they carry.
+//
+// A cursor is NOT one of them, and used to be. See DomicileAppCursorEvent:
+// what a client asks to be shown is a `DomicileCursorShape`, and a closed set
+// has no member to mean "this event is not about a cursor".
 //
 // `size` is genuinely optional rather than zero-when-absent. A toplevel maps
 // before it draws, so a window that has appeared may not yet have said how big
@@ -35,7 +40,6 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
   DomicileAppEvent(const AtomicString& type,
                    const String& app_id,
                    const String& title,
-                   const String& cursor,
                    std::optional<double> width,
                    std::optional<double> height,
                    DOMHighResTimeStamp arrival);
@@ -43,7 +47,6 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
 
   const String& appId() const { return app_id_; }
   const String& title() const { return title_; }
-  const String& cursor() const { return cursor_; }
 
   // When the browser process had this, on `performance.now()`'s clock.
   // `timeStamp` is when this object was constructed at dispatch; the
@@ -60,7 +63,6 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
  private:
   String app_id_;
   String title_;
-  String cursor_;
   std::optional<double> width_;
   std::optional<double> height_;
   DOMHighResTimeStamp arrival_ = 0;

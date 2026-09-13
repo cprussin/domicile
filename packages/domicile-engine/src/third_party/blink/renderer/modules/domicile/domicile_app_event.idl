@@ -10,7 +10,6 @@
 
   readonly attribute DOMString appId;
   readonly attribute DOMString title;
-  readonly attribute DOMString cursor;
 
   // When the browser process had this message, on `performance.now()`'s
   // clock.
