@@ -213,9 +213,9 @@ decides whether an item is waiting or workable.
    ChromeOS references between them and no `BUILDFLAG(IS_CHROMEOS)` at all — the
    assert is conservative about the platform. Getting a lit screen out of it is
    a **port**, of the embedder ozone/drm has never had off ChromeOS: no
-   `PlatformScreen` (`CreateScreen()` is `NOTREACHED()`), nothing that modesets
-   without `//ui/display/manager`, no VT handling or input revocation, and no
-   route by which a display list reaches the compositor. It is **not a fork**.
+   `PlatformScreen` (`CreateScreen()` is `NOTREACHED()`), nothing that calls the
+   modeset seam, no VT handling or input revocation, and no route by which a
+   display list reaches the compositor. It is **not a fork**.
 
    That the patched tree configures **and compiles and links** is now
    **measured, not reasoned**: `.github/workflows/engine-drm-probe.yml` builds
@@ -230,6 +230,23 @@ decides whether an item is waiting or workable.
    What has *not* been measured is a lit screen. The probe builds `//ui/ozone`,
    not `chrome`, and `crux` has no card node, so nothing here says a display
    comes up -- only that the tree the display would come out of builds.
+
+   **Step 2 is costed, and it is two files rather than a port of
+   `//ui/display/manager`.** Only that target's *caller* is ChromeOS-only:
+   `DrmNativeDisplayDelegate` already implements `GetDisplays`, `Configure`,
+   `TakeDisplayControl`/`RelinquishDisplayControl` and a two-method observer,
+   and every one of those seams is ungated. `PlatformScreen` has nine pure
+   virtuals of which six are delegations to `display::DisplayList` and
+   `display_finder.h`; the model is `HeadlessScreen` at 306 lines, not
+   `WaylandScreen` at 737. `A-DESKTOP-ON-A-TTY.md` has the tables, read at the
+   pin.
+
+   **The next measurable step needs a card node, not a reading.** In order:
+   `chrome` builds with the argument, then `chrome --ozone-platform=drm`
+   *starts* without hitting a `NOTREACHED()`, then a CRTC lights. `crux` can do
+   the first and neither of the others, which is the whole of why a machine with
+   a screen is the bottleneck now. Treat the costing as a floor: the last audit
+   read five edits and the compiler found eight.
 
    Until both halves land, a desktop is a window inside an existing Wayland
    session, or headless.
