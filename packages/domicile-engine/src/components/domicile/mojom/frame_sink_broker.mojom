@@ -90,7 +90,7 @@ interface FrameSinkBroker {
   // `client` and `receiver` are how a producer that assembles its own
   // CompositorFrames talks to viz directly: the receiver is forwarded on and
   // the two never meet the browser again. That is what the spike's submitters
-  // do, and they can, because a solid colour needs no GPU resource.
+  // do, and they can, because a solid color needs no GPU resource.
   //
   // **Pass neither to have the browser own the sink.** A producer with a
   // dmabuf cannot assemble its own frame — a TransferableResource names a

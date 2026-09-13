@@ -22,7 +22,7 @@ jobs:
   #    and nothing in a checkout build reads it. Without this job the first
   #    person to find out is whoever ran `nix profile install`.
   #  - `bun install` is not deterministic, which is why that derivation
-  #    normalises its tree before hashing. A regression there is a hash that is
+  #    normalizes its tree before hashing. A regression there is a hash that is
   #    right most of the time — exactly the shape that reaches a user rather
   #    than a reviewer.
   #
@@ -54,7 +54,7 @@ jobs:
       # The one derivation whose output is not a function of its inputs, so
       # the only one where "it built" is not evidence it builds. `bun install`
       # is not deterministic — it was measured at about one differing run in
-      # six before its tree was normalised — and one build per push would
+      # six before its tree was normalized — and one build per push would
       # notice a regression one time in six. `--check` rebuilds it and
       # compares, which is the thing that actually fails.
       - name: The dependency tree is reproducible

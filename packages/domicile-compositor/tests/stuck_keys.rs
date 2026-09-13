@@ -14,7 +14,7 @@
 //! press is a refcount on the lock already held rather than a new toggle. The
 //! desktop's own default keymap is what makes this the bug it is —
 //! `caps:swapescape` puts `Caps_Lock` on evdev 1, so one lost release is every
-//! window typing in capitals, including the windows opened afterwards, until
+//! window typing in capitals, including the windows opened afterward, until
 //! Domicile is restarted.
 //!
 //! # What this adds over `tests/modifiers.rs`

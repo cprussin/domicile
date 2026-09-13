@@ -246,7 +246,7 @@ const firstNonZero = (preferred: number, fallback: number): number =>
  * `translate` is deliberately absent. It is a pure translation, so it cannot
  * change the linear part, and the position it does contribute is already in the
  * `getBoundingClientRect` that `elementToScreen` derives the offset from — the
- * two cancel exactly. Including it would also break the commonest centring
+ * two cancel exactly. Including it would also break the commonest centering
  * idiom in CSS: computed `translate` keeps its percentages where `transform`
  * resolves them, and a matrix cannot be built from a relative length, so
  * `translate: -50% -50%` threw out of every measurement.
@@ -273,7 +273,7 @@ const readElementTransform = (style: CSSStyleDeclaration): Matrix => {
   // run against — lets a `matrix(...)` reset the accumulator, so `scale(2)
   // matrix(...)` silently loses the scale. Chromium composes the list
   // correctly, so this is not a production bug; it is what stops the unit
-  // tests measuring a happy-dom artefact instead of the real arithmetic.
+  // tests measuring a happy-dom artifact instead of the real arithmetic.
   const matrix = parts.reduce(
     (composed, part) => composed.multiply(new DOMMatrix(part)),
     new DOMMatrix(),

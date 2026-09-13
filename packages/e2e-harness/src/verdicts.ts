@@ -77,7 +77,7 @@
 // with tests rather than exports someone calls — `TESTING.md`'s "never widen
 // exports for tests" is about a module that has other callers to widen for.
 //
-// Whether the bail *behaves* is a behaviour, so the test drives the real
+// Whether the bail *behaves* is a behavior, so the test drives the real
 // `scripts/lib/harness.sh` rather than reading it. `turbo.json` puts
 // `scripts/**` in `test:unit`'s inputs, because a check on those files that
 // does not re-run when they change is a check that has already failed once.
@@ -97,7 +97,7 @@ const BAILS = ["harness_fault", "compositor_verdict"] as const;
  *
  * Held to the copy and source rules but not to the `exit 99` one, which is
  * about bails. A local `every_check_ran() { :; }` is the same failure as a
- * local `harness_fault`: a copy the behaviour test does not drive, in the one
+ * local `harness_fault`: a copy the behavior test does not drive, in the one
  * function whose whole job is to catch the others having gone quiet.
  */
 const SOURCED = ["after", "passed", "every_check_ran"] as const;
@@ -159,7 +159,7 @@ const defines = (bail: string): RegExp =>
  * `includes` was the rule until a reviewer commented the source line out and
  * the scan stayed green — and until this repo grew a `# shellcheck source=`
  * comment directly above one, which satisfies a substring test on its own and
- * is therefore a licence to delete the line below it.
+ * is therefore a license to delete the line below it.
  */
 const SOURCES = /^\s*(\.|source)\s+\S*scripts\/lib\/harness\.sh/m;
 

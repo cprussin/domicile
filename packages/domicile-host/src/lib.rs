@@ -199,7 +199,7 @@ impl Host {
     /// Asked after anything that could move it rather than returned from each
     /// of those, because the things that move focus do not look alike — a
     /// chrome message, a click the compositor routed, a client going away —
-    /// and the one thing they have in common is that afterwards the answer to
+    /// and the one thing they have in common is that afterward the answer to
     /// this question may have changed.
     pub fn focus_change(&mut self) -> Option<HostMessage> {
         let holder = self.focus_holder();

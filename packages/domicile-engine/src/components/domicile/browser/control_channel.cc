@@ -485,7 +485,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     const std::optional<mojom::CursorShape> shape =
         CursorShapeFromWire<mojom::CursorShape>(*cursor);
     if (!shape) {
-      // Dropped with a name, like every other unrecognised message on this
+      // Dropped with a name, like every other unrecognized message on this
       // channel: a cursor this build does not know is a compositor newer than
       // it rather than a broken stream, and the one thing that must not happen
       // is a shape being invented for it.

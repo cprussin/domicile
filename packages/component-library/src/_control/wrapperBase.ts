@@ -11,7 +11,7 @@ import { css } from "../../styled-system/css";
  * `:has(:disabled)` / `:has(:focus-visible)` / etc.) so that buttons or
  * other interactive descendants — most notably the trailing-group's
  * `suffixButtons` — don't bleed their own state into the wrapper. A
- * disabled Send button must not grey out the textarea.
+ * disabled Send button must not gray out the textarea.
  *
  * The control coordinates with three companion data-attributes that
  * `PrefixIconStack` sets:

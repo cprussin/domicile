@@ -27,7 +27,7 @@ Four shapes are decisions rather than convenience:
     could not read it without the keymap too.
   - shortcut has its own event and its own dictionary, DomicileShortcut, in
     both directions. A shortcut is not a window's name, and the compositor's
-    protocol carries a combination rather than a string: serialising it as text
+    protocol carries a combination rather than a string: serializing it as text
     would mean the browser inventing a syntax for the compositor to parse back.
   - Every size crossing the channel is a double. The compositor's sizes are
     f64, so 800.0 goes over the wire with the decimal point, and a JSON reader
@@ -36,7 +36,7 @@ Four shapes are decisions rather than convenience:
     size above exists to prevent, arriving through the type instead.
 
   - The cursor a client asks for is a WebIDL enum, DomicileCursorShape, and it
-    gets its own event. The shape was closed on the wire -- serialised from
+    gets its own event. The shape was closed on the wire -- serialized from
     domicile_protocol::CursorShape, parsed in the browser against the X-macro
     in components/domicile/common/cursor_shape.h -- but reached the page as a
     DOMString, so the closed set was a fact about the wire and not a type the

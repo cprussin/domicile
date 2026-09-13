@@ -17,7 +17,7 @@ import { CaretRightIcon, XIcon } from "@phosphor-icons/react";
 Always import the `*Icon`-suffixed name (e.g. `XIcon`, `CaretRightIcon`,
 `WarningCircleIcon`). The unsuffixed names (`X`, `CaretRight`,
 `WarningCircle`) are **deprecated** aliases — they still exist for
-backwards compatibility but will be removed in a future major version.
+backward compatibility but will be removed in a future major version.
 TypeScript won't flag them, so it's on you to use the suffixed form:
 
 ```ts

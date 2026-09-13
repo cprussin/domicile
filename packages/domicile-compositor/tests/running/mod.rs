@@ -28,7 +28,7 @@ use domicile_test_chrome::Chrome;
 /// How long a compositor gets to publish its session.
 ///
 /// Generous: this covers an EGL probe on a machine with no GPU, which falls
-/// back through software rasterisation and is the slowest thing a headless
+/// back through software rasterization and is the slowest thing a headless
 /// start does.
 const PATIENCE: Duration = Duration::from_secs(20);
 
@@ -159,7 +159,7 @@ impl Compositor {
     /// iteration, including for the whole input path, which answers with
     /// nothing. So a chrome that only ever spoke — the ordinary case — parked
     /// the reader behind a socket it was not draining, and everything it said
-    /// afterwards was silently never processed. That was a real flake:
+    /// afterward was silently never processed. That was a real flake:
     /// `tests/input.rs` failed one run in twenty-four of the whole workspace,
     /// with the compositor's last `chrome -> host` line being the
     /// `place_portal` and `chrome is behind; dropped a frame` repeating to the

@@ -1,4 +1,4 @@
-// The page, and the whole of this shell's behaviour.
+// The page, and the whole of this shell's behavior.
 //
 // A shell is a web page that mounts `<app>` elements. Where they are and how big
 // they are is the shell's entire job — this one puts every app full-screen with

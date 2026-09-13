@@ -159,7 +159,7 @@ describe("defaultMeasure", () => {
       ).toStrictEqual([2, 0, 0, 3]);
     });
 
-    it("survives the centring idiom, which resolves to a percentage", () => {
+    it("survives the centering idiom, which resolves to a percentage", () => {
       // `translate` keeps its percentages in the computed value, where
       // `transform` does not — and a matrix cannot be built from a relative
       // length. Measuring runs on every frame and every pointer move, so a
@@ -192,7 +192,7 @@ describe("defaultMeasure", () => {
       // CSS applies translate, then rotate, then scale, then `transform`. The
       // order is not a detail: a quarter turn and a stretch compose to
       // different matrices each way round, so a window using both lands
-      // somewhere else entirely if they are multiplied backwards.
+      // somewhere else entirely if they are multiplied backward.
       const { transform } = measuredWith({ rotate: "90deg", scale: "2 1" });
 
       // Turn-then-stretch. The other order would give [0, 1, -2, 0].

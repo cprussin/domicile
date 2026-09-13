@@ -41,7 +41,7 @@ PATCHES="$ROOT/packages/domicile-engine/patches"
 
 # Every (patch, file, pre, post), in series order. `index` is the line after
 # the `diff --git` that names the file, so the two are read as a pair rather
-# than matched up afterwards.
+# than matched up afterward.
 READINGS="$(
   for patch in "$PATCHES"/*.patch; do
     awk -v name="$(basename "$patch")" '

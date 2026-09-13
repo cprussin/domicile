@@ -21,7 +21,7 @@
 //! it to the client to draw into, then reports viz for holding "a dmabuf it
 //! has finished with", which viz has not.
 //!
-//! That was the behaviour, and the latency guard found it: three of those
+//! That was the behavior, and the latency guard found it: three of those
 //! errors and two abandoned rounds on each of two runs, identical figures,
 //! because the guard's floor phase holds the screen still for sixty samples on
 //! purpose. Deterministic, so not a race.

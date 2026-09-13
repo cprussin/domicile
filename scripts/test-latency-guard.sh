@@ -10,7 +10,7 @@
 # It exists because that block is nine branches deep and every one of them can
 # only be reached by building Chromium, starting a browser and waiting several
 # minutes. This branch has already shipped a box assertion that compared digits
-# out of a colour string and a stability check that measured an idle client; a
+# out of a color string and a stability check that measured an idle client; a
 # guard that reads its own measurement wrongly is the same class of defect, and
 # the negative control is where it would hide, because a control that passes for
 # the wrong reason looks exactly like one that works.
@@ -162,8 +162,8 @@ expect "and says which two numbers disagree" \
 ABANDONED="$(run_log 16.67 16.68 4 completed)"
 expect "an unanswered round fails even with a good number" \
   "1" "$(verdict_code "$ABANDONED" 0)"
-expect "and blames the client not changing colour" \
-  "::error::guard-latency: 4 round(s) went unanswered — the client did not change colour when a key was pressed, so what was measured is not a keystroke reaching a pixel" \
+expect "and blames the client not changing color" \
+  "::error::guard-latency: 4 round(s) went unanswered — the client did not change color when a key was pressed, so what was measured is not a keystroke reaching a pixel" \
   "$(verdict "$ABANDONED" 0)"
 
 # The two give-up endings point at different things and must say so.
@@ -207,7 +207,7 @@ expect "an undelivered key fails, and is not the client's fault" \
 # terminal that does not take OSC 11 for its background lands here, and the
 # message has to name that rather than blaming the seam.
 # Empty, so the title stands alone and can be compared whole: `annotate_from`
-# appends the log's tail, which is the right behaviour and not what is being
+# appends the log's tail, which is the right behavior and not what is being
 # asserted here.
 NOTHING="$(mktemp "$FIXTURES/XXXXXX")"
 expect "a run that never reported fails" "1" "$(verdict_code "$NOTHING" 0)"

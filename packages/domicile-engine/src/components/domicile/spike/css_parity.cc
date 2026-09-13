@@ -10,8 +10,8 @@
 // a viz surface a process outside the renderer submits to — the way it treats
 // any other element?
 //
-// The answer is not a judgement. The page lays each property out twice, once
-// on an <app> and once on an ordinary <div> filled with the colour the producer
+// The answer is not a judgment. The page lays each property out twice, once
+// on an <app> and once on an ordinary <div> filled with the color the producer
 // submits, so a property behaves "like a <div>" exactly when one half of a cell
 // is a pixel-for-pixel copy of the other. This captures the browser's window
 // out of the display compositor's own draw and does that comparison.
@@ -89,7 +89,7 @@ enum class Check {
   kIframe,
 };
 
-// The colour the producer submits, and the colour the page fills every control
+// The color the producer submits, and the color the page fills every control
 // element with. One value reaches both halves through the harness — there is no
 // channel from the page to the producer, so the harness is what makes them
 // agree, and guard-css-and-resize.sh derives one from the other.
@@ -103,20 +103,20 @@ constexpr base::TimeDelta kEmbedTimeout = base::Seconds(60);
 constexpr base::TimeDelta kSettleDelay = base::Seconds(2);
 
 // How different two pixels may be before they count as different. Bigger than
-// the tolerance steps 2 and 3 compare one flat colour with, because a scaled or
-// blurred surface is resampled from a texture while a <div> is rasterised from
+// the tolerance steps 2 and 3 compare one flat color with, because a scaled or
+// blurred surface is resampled from a texture while a <div> is rasterized from
 // a vector, and the two round differently in the last bit or two.
 constexpr int kPixelTolerance = 4;
 
-// A mismatching pixel every one of whose neighbours within this radius also
+// A mismatching pixel every one of whose neighbors within this radius also
 // mismatches is inside a region that differs, rather than on the boundary of
 // one. That distinction is the whole verdict: a composited surface resamples
-// its edges where a <div> rasterises them, exactly as a hardware-composited
+// its edges where a <div> rasterizes them, exactly as a hardware-composited
 // <video> does, so a one-or-two-pixel outline is parity and a filled region is
 // not.
 constexpr int kEdgeRadius = 2;
 
-// Latency: how many times to change the colour and time how long it takes to
+// Latency: how many times to change the color and time how long it takes to
 // appear, and the floor to measure it against.
 constexpr int kLatencySamples = 60;
 constexpr int kLatencyFloorSamples = 60;
@@ -285,7 +285,7 @@ class Measurement {
                                              kPixelTolerance);
     if (viewport_top_ < 0) {
       printf("no row of the %s window is the page's background %s: the page "
-             "did not load, or its colours are not what this expects\n",
+             "did not load, or its colors are not what this expects\n",
              size.ToString().c_str(), ToHex(domicile::spike::kPageBackground).c_str());
       Finish(false);
       return;
@@ -308,7 +308,7 @@ class Measurement {
 
   void ReportCss() {
     // Nothing else in this run means anything if no surface reached the page,
-    // and the diff alone cannot tell "both halves are the producer's colour"
+    // and the diff alone cannot tell "both halves are the producer's color"
     // from "both halves are missing". One absolute check fixes that.
     const gfx::Point baseline = AppCenter(0, viewport_top_);
     if (!capture_.Contains(gfx::Rect(baseline, gfx::Size(1, 1)))) {
@@ -320,7 +320,7 @@ class Measurement {
     const SkColor at_baseline = capture_.At(baseline.x(), baseline.y());
     const bool app_present =
         ColorsMatch(at_baseline, producer_.color(), kPixelTolerance);
-    printf("\n<app> centre of the baseline cell: %s, producer submitted %s "
+    printf("\n<app> center of the baseline cell: %s, producer submitted %s "
            "— %s\n\n", ToHex(at_baseline).c_str(),
            ToHex(producer_.color()).c_str(),
            app_present ? "embedded" : "NOT EMBEDDED");
@@ -429,8 +429,8 @@ class Measurement {
       ReportLatency();
       return;
     }
-    // A colour nothing else on the page is, and a different one each time so
-    // that "it was already that colour" cannot be mistaken for "it arrived
+    // A color nothing else on the page is, and a different one each time so
+    // that "it was already that color" cannot be mistaken for "it arrived
     // instantly".
     const uint8_t step = static_cast<uint8_t>(20 + latency_iteration_ * 7);
     latency_target_ = SkColorSetARGB(0xFF, step, 0x40, 0xC0);
@@ -470,10 +470,10 @@ class Measurement {
     std::sort(polls_.begin(), polls_.end());
 
     // Both spreads, not one median each. The two overlap, and that overlap is
-    // the finding: what a submitted colour costs to reach the display
+    // the finding: what a submitted color costs to reach the display
     // compositor's output is not separable from what asking the question costs,
     // which is a forced full-window software composite and a readback.
-    printf("latency over %d samples, producer submit to the colour appearing "
+    printf("latency over %d samples, producer submit to the color appearing "
            "in the display compositor's own output:\n", kLatencySamples);
     const base::TimeDelta interval = producer_.frame_interval();
     printf("  %-34s %.2f ms\n", "display frame interval, per viz",
@@ -482,7 +482,7 @@ class Measurement {
            Spread(floor_).c_str(), InIntervals(floor_, interval).c_str());
     printf("  %-34s %s%s\n", "submit to drawn", Spread(latencies_).c_str(),
            InIntervals(latencies_, interval).c_str());
-    printf("  %-34s %d (min %d, max %d)\n", "draws the colour took to appear",
+    printf("  %-34s %d (min %d, max %d)\n", "draws the color took to appear",
            polls_[polls_.size() / 2], polls_.front(), polls_.back());
     printf("\n");
     Finish(css_passed_);

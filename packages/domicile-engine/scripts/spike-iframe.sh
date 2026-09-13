@@ -19,7 +19,7 @@
 #                    different sites; two ports of one host are not, so a
 #                    second port would not have done
 #   a renderer count the pixels cannot tell "not out of process" from "out of
-#                    process but re-rasterised". Counting renderers can, so the
+#                    process but re-rasterized". Counting renderers can, so the
 #                    run fails if the iframe did not get one of its own
 set -u
 
@@ -35,7 +35,7 @@ WINDOW="${WINDOW:-1200,1000}"
 PORT="${PORT:-8730}"
 
 # On by default here, unlike every other check. This one asks whether an <app>
-# is pixel-identical to an ordinary element, and software rasterisation is not
+# is pixel-identical to an ordinary element, and software rasterization is not
 # pixel-identical to itself across two layers: run it with GPU=0 and the first
 # row differs on a one-pixel outline that the same run on hardware does not
 # have. The requirement is about what a user sees, so the GPU is the honest
@@ -66,7 +66,7 @@ fi
 
 # Counted while the engine is up, and sampled rather than snapshotted: the
 # pixels below cannot tell "the iframe is not out of process" from "it is, and
-# it re-rasterised", and only one of those makes the comparison meaningful. A
+# it re-rasterized", and only one of those makes the comparison meaningful. A
 # cross-site <iframe> gets a renderer of its own, so the floor is the main
 # frame plus one for 127.0.0.1 — two. Chromium reuses one process per site, so
 # framing it twice does not make it three.

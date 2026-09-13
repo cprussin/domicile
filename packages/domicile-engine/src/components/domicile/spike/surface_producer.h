@@ -35,7 +35,7 @@ namespace domicile::spike {
 // A viz client in a process the browser did not launch, does not sandbox, and
 // has no RenderProcessHost for. It joins the browser's mojo graph over a named
 // socket, asks domicile::FrameSinkBroker for a frame sink, waits to be told
-// which surface a page embedded it at, and submits solid-colour
+// which surface a page embedded it at, and submits solid-color
 // CompositorFrames to that surface until told another.
 //
 // Note what it does not do. It does not ask to be embedded, and it does not
@@ -44,7 +44,7 @@ namespace domicile::spike {
 // telling a client to resize has to run in.
 //
 // What each of the spike's steps asserts about the result is the caller's:
-// step 3's is one pixel at the centre of the window, step 4's is a diff of an
+// step 3's is one pixel at the center of the window, step 4's is a diff of an
 // <app> against an ordinary element beside it.
 class SurfaceProducer : public viz::mojom::CompositorFrameSinkClient,
                         public mojom::SurfaceObserver {
@@ -84,7 +84,7 @@ class SurfaceProducer : public viz::mojom::CompositorFrameSinkClient,
   using BrokeredCallback = base::OnceCallback<void(const viz::FrameSinkId&)>;
   void Start(BrokeredCallback on_brokered);
 
-  // The colour every frame from now on is filled with, submitted at once so
+  // The color every frame from now on is filled with, submitted at once so
   // that a caller timing "submitted" against "drawn" has a submit to time from.
   // Does nothing before an embedder has named a surface.
   void SetColor(SkColor color);
@@ -111,7 +111,7 @@ class SurfaceProducer : public viz::mojom::CompositorFrameSinkClient,
                          const gfx::Size& size) override;
   // Never sent to this producer, and could not be acted on if it were: it
   // holds its own CompositorFrameSink, so it is viz's client and hears
-  // BeginFrames directly, and it submits solid colours rather than importing
+  // BeginFrames directly, and it submits solid colors rather than importing
   // buffers. Both are for a producer whose sink the browser owns — the engine
   // library — which is why they are empty here rather than absent.
   void OnFrame(int64_t deadline_us) override;

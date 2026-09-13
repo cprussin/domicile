@@ -82,7 +82,7 @@ class ControlChannel : public mojom::ControlChannel {
   //
   // Bounded, because a page that will never have a compositor should find out
   // rather than sit there. These are the deleted bridge's numbers, kept so the
-  // behaviour a shell sees does not change with the transport under it.
+  // behavior a shell sees does not change with the transport under it.
   static constexpr base::TimeDelta kReachFor = base::Seconds(30);
   static constexpr base::TimeDelta kRetryEvery = base::Milliseconds(50);
 
@@ -94,7 +94,7 @@ class ControlChannel : public mojom::ControlChannel {
   void OnConnect(int result);
   void OnConnectFailed();
 
-  // Serialise a dict and queue it. Every outbound member funnels through here,
+  // Serialize a dict and queue it. Every outbound member funnels through here,
   // so the framing and the queueing exist once rather than seventeen times.
   void SendMessage(base::DictValue message);
   void Send(const std::string& json_line);

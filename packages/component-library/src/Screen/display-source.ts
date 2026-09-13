@@ -9,7 +9,7 @@
 export type Display = {
   /** What a `<Screen name>` matches. Unique across the desktop. */
   name: string;
-  /** Top-left corner, logical, in normalised desktop coordinates. */
+  /** Top-left corner, logical, in normalized desktop coordinates. */
   position: readonly [number, number];
   /** What clients on this display draw at. */
   scale: number;

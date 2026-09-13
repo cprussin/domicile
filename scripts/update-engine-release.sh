@@ -6,7 +6,7 @@
 # `engine-nightly` is a rolling tag, and a fixed-output derivation needs a
 # hash. So which engine a flake revision runs is written down in
 # `packages/domicile-engine/engine-release.nix`, and moving to a newer one is
-# a commit rather than a silent change of behaviour under an unchanged
+# a commit rather than a silent change of behavior under an unchanged
 # revision. This regenerates that file; the diff is the review.
 #
 # `nix store prefetch-file` does the download and the hash in the format the

@@ -6,7 +6,7 @@
 //
 // **A schema rather than a union, because the DOM is a boundary.** The set is
 // closed at every point it passes through now: `domicile_protocol::CursorShape`
-// is what the compositor serialises, `components/domicile/common/cursor_shape.h`
+// is what the compositor serializes, `components/domicile/common/cursor_shape.h`
 // is what the browser process refuses an unknown name against when it reads the
 // socket, and `domicile_cursor_shape.idl` is a WebIDL `enum`, so
 // `DomicileAppCursorEvent.cursor` is a member of it by construction rather than

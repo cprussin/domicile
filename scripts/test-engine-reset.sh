@@ -191,7 +191,7 @@ contains "and warns against the tool a reader would reach for" \
 # THE ASSERTION THAT MATTERS MOST HERE. The refusal is an inconvenience; a
 # reset that resolved it by deleting the file would be hours of somebody's
 # uncommitted work, silently, on a machine where the only copy of it was.
-expect "the work is still there afterwards" \
+expect "the work is still there afterward" \
   "in progress" \
   "$(cat "$TREE/components/domicile/browser/shell_url_loader_factory.cc")"
 

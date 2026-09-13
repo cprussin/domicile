@@ -16,7 +16,7 @@
 # Being wrong about which list something belongs in is caught downstream: the
 # workflow unpacks this tarball and runs the pixel guard against it. That is
 # the check that a packaged tree actually works, and it is why the lists below
-# are allowed to be a judgement rather than a proof.
+# are allowed to be a judgment rather than a proof.
 set -euo pipefail
 
 CHROMIUM="${1:-}"

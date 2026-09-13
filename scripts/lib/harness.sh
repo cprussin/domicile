@@ -1,6 +1,6 @@
 # Verdict machinery for the e2e scripts.
 #
-# Sourced rather than copied, so the one behaviour that matters here — a
+# Sourced rather than copied, so the one behavior that matters here — a
 # compositor that died is never reported as this suite's own fault — is defined
 # once and tested once. `packages/e2e-harness/src/verdicts.test.ts` drives this
 # file directly; a copy in a script would be a copy the test does not cover.

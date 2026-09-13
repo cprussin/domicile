@@ -2,7 +2,7 @@
 # What a guard says when it stops, as a whole sentence.
 #
 # The unit is `lib-annotate.sh`, which is how a spike guard reports where it
-# gave up. That report is the behaviour: it becomes a GitHub annotation, and
+# gave up. That report is the behavior: it becomes a GitHub annotation, and
 # the annotation is the only account of a failed run anyone can reach — the job
 # log is a thousand lines of Chromium's startup noise with a byte budget on
 # top. So the whole `::error::` line is compared, not a substring.

@@ -11,7 +11,7 @@
 //! was no page.
 //!
 //! So the compositor is the one that knows: it binds the control socket, and
-//! it is the only end that can tell "nobody has dialled this" from "nobody is
+//! it is the only end that can tell "nobody has dialed this" from "nobody is
 //! coming". [`Handshake`] is what it counts on that socket and [`silence`] is
 //! what it says about a count that is too low. Both live here, in a crate with
 //! no Smithay in it, so the sentence a user reads is a unit test rather than
@@ -39,7 +39,7 @@ pub const WAIT_FOR_A_PAGE: Duration = Duration::from_secs(30);
 pub enum Heard {
     /// A page connected and agreed the protocol. This is a desktop.
     APage,
-    /// Something dialled the socket, and no page has agreed the protocol on
+    /// Something dialed the socket, and no page has agreed the protocol on
     /// it.
     AConnection,
     /// Nothing at all.
@@ -63,7 +63,7 @@ impl Handshake {
         Handshake::default()
     }
 
-    /// Something dialled the socket.
+    /// Something dialed the socket.
     pub fn connected(&self) {
         self.connections.fetch_add(1, Ordering::Relaxed);
     }

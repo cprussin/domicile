@@ -8,7 +8,7 @@
 # Naming one of those as another is the same class of defect as a guard that
 # measures the wrong pixel, and it costs a CI cycle each time.
 #
-# It matters most in the control, where the probe FINDING the framed colour is
+# It matters most in the control, where the probe FINDING the framed color is
 # the failure and NOT finding it is the pass — so a verdict written by symmetry
 # with the positive run passes the control on a broken engine and fails it on a
 # working one.
@@ -57,7 +57,7 @@ expect() {
 # Runs the real block against one run's measurement, and says which of the two
 # outcomes it chose. Not the sentence: the sentences are prose and will be
 # reworded, and a test that pinned them would fail for edits that changed no
-# behaviour. Which end is blamed is asserted separately, by the word that names
+# behavior. Which end is blamed is asserted separately, by the word that names
 # it.
 #
 # `MEASURED` is what a run comes to: the mode, and then a probe status for each
@@ -104,9 +104,9 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 }
 
 echo "the positive run — a <webview>, which must show the refused site"
-# 0: the framed page's colour is on screen. That is the whole claim.
+# 0: the framed page's color is on screen. That is the whole claim.
 expect "found is a pass" "pass" "$(verdict "webview 0")"
-# 1: the page drew, the framed colour did not. The guest is what failed.
+# 1: the page drew, the framed color did not. The guest is what failed.
 expect "absent is a failure" "fail" "$(verdict "webview 1")"
 expect "absent blames the element, not the harness" "yes" \
   "$(says "webview 1" "<webview> showed nothing")"
@@ -129,7 +129,7 @@ expect "and says what the difference between the two legs was" "yes" \
   "$(case "$(claim "control 0 1")" in *"header"*) echo yes ;; *) echo no ;; esac)"
 
 # THE INVERTED ONE. A verdict written by symmetry with the positive run gets
-# this backwards.
+# this backward.
 expect "a refusing page that renders anyway is a failure" "fail" \
   "$(verdict "control 0 0")"
 expect "and says the site is not refusing anything" "yes" \

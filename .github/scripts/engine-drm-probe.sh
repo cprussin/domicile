@@ -41,7 +41,7 @@ touch "$PREFIX-ran"
 # "python3_bin_reldir.txt not found".
 #
 # COPIED FROM engine-build.sh RATHER THAN SHARED WITH IT, deliberately and for
-# one run's worth of reasons: engine-build.sh is what produces the artefact
+# one run's worth of reasons: engine-build.sh is what produces the artifact
 # every guard and every release loads, this is a workflow_dispatch-only probe,
 # and refactoring the first to serve the second would put a change to the
 # shipped build in a change that is meant to compile nothing that ships. If a

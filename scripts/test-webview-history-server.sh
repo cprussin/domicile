@@ -117,7 +117,7 @@ expect "a request is recorded when it arrives" "yes" \
   "$(case "$(cat "$LOG")" in *"asked /one"*) echo yes ;; *) echo no ;; esac)"
 
 # THE ONE THE WHOLE READING OF stop() RESTS ON. Timed rather than read out of
-# the source: a wait that was configured and not honoured looks identical from
+# the source: a wait that was configured and not honored looks identical from
 # the guard, which only ever sees a page that did not arrive.
 BEFORE="$(date +%s)"
 curl -sS -o /dev/null "http://127.0.0.1:$PORT/slow"

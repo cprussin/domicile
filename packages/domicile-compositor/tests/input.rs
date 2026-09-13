@@ -200,7 +200,7 @@ fn a_key_and_a_click_the_chrome_forwarded_reach_the_client() {
 /// A separate test rather than another assertion above, because it fails for a
 /// different reason than a key that never arrived: this one is the compositor
 /// not telling the chrome what it did, and a desktop whose active-window
-/// marker is right until the first click and wrong afterwards.
+/// marker is right until the first click and wrong afterward.
 #[test]
 fn a_focus_the_chrome_asked_for_comes_back_over_the_socket() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -212,7 +212,7 @@ fn a_focus_the_chrome_asked_for_comes_back_over_the_socket() {
     // nothing focused yet that catch-up is `None`; and a compositor that names
     // a window which does not exist is the failure this test is about — an
     // active-window marker that is right until the first click and wrong
-    // afterwards — which `Some(_)` accepts.
+    // afterward — which `Some(_)` accepts.
     chrome
         .wait_for(|message| {
             matches!(message, HostMessage::FocusChanged { app_id: Some(id) } if *id == app)

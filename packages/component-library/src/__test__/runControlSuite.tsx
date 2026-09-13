@@ -19,7 +19,7 @@ type Options = {
 };
 
 /**
- * Shared behavioural test suite for `Input` and `Textarea`. Both components
+ * Shared behavioral test suite for `Input` and `Textarea`. Both components
  * wrap the same `_control/` machinery, so the rendering / value-handling /
  * prop-forwarding / interactions / clearable assertions are identical apart
  * from the wrapped component itself.

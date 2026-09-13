@@ -68,7 +68,7 @@ disagreeing with the others, plus portal ownership per app, unicast frames,
 display identity on every request, and shortcuts delivered once rather than
 fired N times.
 
-What one page costs is mixed density: it rasterises at a single
+What one page costs is mixed density: it rasterizes at a single
 `devicePixelRatio`, the maximum of the outputs its toplevel entered, so on a
 desktop of unequal scales one screen is drawn for the other's. `<Screen>` is the
 seam — a shell written against it compiles unchanged if this is revisited — so
@@ -123,7 +123,7 @@ a GPU, an engine or Smithay:
   binary that reads the world is ninety lines; everything with a decision in it
   is a module here.
 - `domicile-test-chrome`, `domicile-test-client` — a chrome and a Wayland
-  client the integration tests drive, as libraries so their own behaviour is
+  client the integration tests drive, as libraries so their own behavior is
   testable without Smithay.
 
 Outside the default set, because it pulls Smithay and the native Wayland

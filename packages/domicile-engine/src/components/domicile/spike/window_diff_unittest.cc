@@ -70,7 +70,7 @@ TEST(WindowDiffTest, TwoHalvesPaintedTheSameDoNotDiffer) {
 }
 
 // The reason a tolerance exists: a surface is resampled from a texture where
-// an ordinary element is rasterised from a vector, and the two round
+// an ordinary element is rasterized from a vector, and the two round
 // differently in the last bit or two.
 TEST(WindowDiffTest, ChannelsWithinToleranceDoNotCountAsDiffering) {
   Painter painter(60, 20, kBackground);
@@ -114,7 +114,7 @@ TEST(WindowDiffTest, AFilledRegionOfDifferencesHasAnInterior) {
 
   EXPECT_EQ(diff.mismatched, 100);
   // A 10x10 block of mismatches, minus the two-pixel border of it that has a
-  // matching neighbour within kEdgeRadius.
+  // matching neighbor within kEdgeRadius.
   EXPECT_EQ(diff.interior_mismatched, 36);
 }
 
@@ -142,7 +142,7 @@ TEST(WindowDiffTest, TheViewportStartsAtTheFirstFullyBackgroundRow) {
   EXPECT_EQ(painter.Capture().FindViewportTop(kBackground, kTolerance), 4);
 }
 
-// A page that never loaded, or whose colours are not what the measurement
+// A page that never loaded, or whose colors are not what the measurement
 // expects. Reporting a row that is not the page's would misalign every cell,
 // so there is no nearest-match answer to give.
 TEST(WindowDiffTest, NoBackgroundRowIsNotAViewport) {

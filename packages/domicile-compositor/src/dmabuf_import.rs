@@ -57,7 +57,7 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
     // the load has to be attempted here — where it is an error value —
     // before any Smithay EGL call can panic on it.
     // SAFETY: this opens the very library Smithay opens a moment later,
-    // running the same initialisers it would have run itself.
+    // running the same initializers it would have run itself.
     unsafe { libloading::Library::new(EGL_LIBRARY) }?;
     let devices = EGLDevice::enumerate()?;
     let device = preferred_device(devices, EGLDevice::is_software).ok_or(ImportError::NoDevice)?;
@@ -102,7 +102,7 @@ impl DmabufImporter {
     }
 }
 
-/// The `dev_t` of the DRM node a device renders on. A software rasteriser has
+/// The `dev_t` of the DRM node a device renders on. A software rasterizer has
 /// none, which is the only reason this is optional.
 fn drm_node(device: &EGLDevice) -> Option<u64> {
     match device
@@ -121,7 +121,7 @@ fn drm_node(device: &EGLDevice) -> Option<u64> {
 }
 
 /// Pick the device to render on: real hardware when there is any, otherwise
-/// whatever software rasteriser EGL offers.
+/// whatever software rasterizer EGL offers.
 ///
 /// A software device is a poor compositor but a complete one, and it is what
 /// makes the dmabuf path exercisable on a machine with no GPU at all, so it is

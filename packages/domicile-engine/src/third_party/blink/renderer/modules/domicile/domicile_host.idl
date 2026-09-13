@@ -102,7 +102,7 @@
   // renders them differently: nothing at all is what an unknown screen shows,
   // which is the right answer for "there is no such screen" and the wrong one
   // for "wait". `domicile-protocol` carries that distinction deliberately --
-  // an empty `Vec` that serialises to nothing and one that serialises to `[]`
+  // an empty `Vec` that serializes to nothing and one that serializes to `[]`
   // both come back empty, and only the second is a desktop a shell can parse
   // -- and an attribute that started empty threw it away again here.
   //

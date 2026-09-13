@@ -1,4 +1,4 @@
-//! Behaviour tests for the host orchestrator, written before the implementation.
+//! Behavior tests for the host orchestrator, written before the implementation.
 //!
 //! `Host` is the compositor's brain: it tracks connected Wayland apps, applies
 //! the placement/focus decisions the chrome makes, and routes input. It sits
@@ -130,7 +130,7 @@ fn focus_is_reported_when_it_moves_and_not_when_it_does_not() {
     // The chrome asks for focus, but it is not the only thing that moves it —
     // a click on a window focuses it in the compositor. Without a message the
     // chrome's idea of the active window is right until the first click and
-    // wrong afterwards, which is every focus affordance a desktop has.
+    // wrong afterward, which is every focus affordance a desktop has.
     //
     // And silent when nothing moved: this is asked after *every* chrome
     // message, so a report per ask would be a message per mouse move.

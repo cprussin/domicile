@@ -3,8 +3,8 @@
 #
 # Its own file, sourced by `guard-latency.sh` and by
 # `scripts/test-latency-report.sh`, for the reason `lib-annotate.sh` is its own
-# file: what a guard concludes from a log is the guard's actual behaviour, and
-# behaviour that can only be exercised by starting a browser is behaviour
+# file: what a guard concludes from a log is the guard's actual behavior, and
+# behavior that can only be exercised by starting a browser is behavior
 # nobody exercises. Everything here is a string in and a string out.
 #
 # The lines these read are built by `Spread::line` in the compositor's
@@ -37,10 +37,10 @@ latency_median() {
 #
 # THIS IS WHAT THE GUARD'S ASSERTION IS A MULTIPLE OF, and the floor is not.
 # Both are the same quantity -- a probe round trip is one display frame,
-# because asking what colour a pixel is forces the draw it then reads -- but
+# because asking what color a pixel is forces the draw it then reads -- but
 # only one of them is measured while the browser is busy starting. `floor` has
 # come back at 48.71 ms on a run whose own `commit to pixel` was 29.18, and a
-# denominator larger than a number quantised to it is not that number's floor.
+# denominator larger than a number quantized to it is not that number's floor.
 #
 # It is the interval `Spread::line` divides by for its `(median N frames)`
 # column, so the guard's ratio and the compositor's own frame counts are the

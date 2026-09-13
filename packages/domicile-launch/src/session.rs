@@ -48,7 +48,7 @@ pub struct PublishError {
 /// second chance to notice — a session is published once.
 pub fn publish(session: &Session, path: &Path) -> Result<(), PublishError> {
     let document = serde_json::to_string_pretty(session)
-        .expect("a session is plain data and always serialises");
+        .expect("a session is plain data and always serializes");
     let staging = staging_path(path)?;
     // Both steps behind the same cleanup, not only the rename. `fs::write`
     // creates and truncates before it writes, so a failure part way through —

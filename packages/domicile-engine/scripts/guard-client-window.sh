@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Phase 1's deliverable: a real Wayland client's window on the page, and the
-# colour it drew coming back out of the display compositor.
+# color it drew coming back out of the display compositor.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
@@ -14,8 +14,8 @@
 # Every pixel check before this one was the weak form — "the buffer's own zeroed
 # content rather than the fallback" — because no harness had a GL context to
 # draw known content with. A real client does. kitty is a real GL client and its
-# background colour is settable, so the assertion here is the strong one: the
-# colour the client drew.
+# background color is settable, so the assertion here is the strong one: the
+# color the client drew.
 #
 # FOUR PROCESSES, AND THE ORDER MATTERS.
 #
@@ -27,7 +27,7 @@
 #   compositor  domicile-compositor with --engine-socket pointing at that
 #               socket. It is the producer now, so it holds the browser's
 #               invitation and nothing else can
-#   kitty       a GL client of the compositor, drawing one known colour
+#   kitty       a GL client of the compositor, drawing one known color
 #
 # The compositor is the only process that can ask what viz drew — one producer
 # per socket — so it logs the pixel and this greps for it. That log line is
@@ -47,7 +47,7 @@ fi
 ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
 
 # What the client draws and what the page must therefore show. Not the page's
-# background and not a colour any other spike producer submits.
+# background and not a color any other spike producer submits.
 COLOR="${COLOR:-3366CC}"
 # The app id the client announces, which the page must ask for by name: the
 # broker dispatches embeds on it so that two windows are two surfaces.
@@ -77,7 +77,7 @@ CLI_LOG=$(mktemp)
 # client — and `kill ""` is an error rather than a no-op.
 STARTED=()
 # Kept rather than discarded: when the page shows its own background instead of
-# the client's colour, the compositor's log is the only place that says which
+# the client's color, the compositor's log is the only place that says which
 # app id it brokered — and that is now the thing an embed is dispatched on.
 # A run and its own negative control are two different measurements, so they
 # get two different files. Sharing one meant the control's logs overwrote the
@@ -199,7 +199,7 @@ else
   # long as the guard is watching.
   #
   # The dots are foreground pixels and the box is the background
-  # colour's extent, so they cost nothing the measurement cares
+  # color's extent, so they cost nothing the measurement cares
   # about.
   NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
     "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
@@ -229,14 +229,14 @@ fi
 
 echo "the engine drew #$DRAWN; the client drew #$COLOR"
 # kitty's background is opaque, so the alpha is FF and the low 24 bits are the
-# colour. Compared as a string because the colour is exact: a client's own
+# color. Compared as a string because the color is exact: a client's own
 # buffer is not resampled on the way to the page.
 if [ "${DRAWN#FF}" = "$COLOR" ]; then
   if [ "$NEGATIVE" = "1" ]; then
     annotate "guard-client-window negative control: something drew when nothing should have"
     exit 1
   fi
-  echo "PASS: a Wayland client's own window is on the page, in its own colour"
+  echo "PASS: a Wayland client's own window is on the page, in its own color"
   exit 0
 fi
 annotate "guard-client-window: the page is showing #$DRAWN, which is not the client's #$COLOR"

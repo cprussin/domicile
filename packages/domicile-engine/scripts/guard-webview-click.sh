@@ -261,7 +261,7 @@ fi
 
 # The press is answered before it is handled: `Input.dispatchMouseEvent` comes
 # back when the event has been forwarded, and what this reads is what the pages
-# logged afterwards. A fixed wait rather than a poll on the line that must
+# logged afterward. A fixed wait rather than a poll on the line that must
 # appear, because the control's readings are ABSENCES, and an absence cannot be
 # waited for — it can only be given time.
 sleep 5
@@ -326,7 +326,7 @@ echo "where focus went, as this document saw it:"
 grep -F "GUARD shell-focus-state" "$ENGINE_LOG" 2>/dev/null | tail -6 | sed 's/^/  /'
 echo
 
-# WHICH END TO BLAME, and it is the whole of this script's judgement. Six
+# WHICH END TO BLAME, and it is the whole of this script's judgment. Six
 # readings and two modes make more answers than a person reading an annotation
 # can be expected to reconstruct, and most of the failures read alike and mean
 # different things — so they are decided here, in a block

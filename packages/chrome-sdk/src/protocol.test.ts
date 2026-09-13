@@ -32,7 +32,7 @@ describe("parseHostMessage", () => {
     ).toThrow();
   });
 
-  it("normalises a missing app title to undefined", () => {
+  it("normalizes a missing app title to undefined", () => {
     const message = parseHostMessage(
       '{"type":"app_appeared","app_id":"term","title":null,"size":[640,480]}',
     );
@@ -44,7 +44,7 @@ describe("parseHostMessage", () => {
     });
   });
 
-  it("normalises the size of a client that has not committed to undefined", () => {
+  it("normalizes the size of a client that has not committed to undefined", () => {
     // A toplevel maps before it draws, and how big a Wayland client wants to
     // be is something it says by drawing — so the size is absent on the
     // message that announces it, and arrives on the `app_resized` that

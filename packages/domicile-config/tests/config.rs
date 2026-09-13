@@ -1,4 +1,4 @@
-//! Behaviour tests for `domicile-config`, written before the implementation.
+//! Behavior tests for `domicile-config`, written before the implementation.
 //!
 //! The load-bearing requirement is hot-reload safety: a bad edit to the config
 //! file on disk must NEVER take down the compositor — the last known-good
@@ -166,14 +166,14 @@ fn rejects_a_key_nothing_reads() {
         "the message should name the key: {err}"
     );
 
-    // And at the top level, where a whole section could be misspelt.
+    // And at the top level, where a whole section could be misspelled.
     let err = Config::parse(r#"{ "outputs": {} }"#).unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 
     // Every section that carries the attribute, not only the two above. The
     // ones a shell writes keys into are `output` and `input.keyboard`, and a
     // guard that covered `Config` and `CompositorConfig` alone would have let
-    // a misspelt `xkb_optoins` through while reading as though it did not.
+    // a misspelled `xkb_optoins` through while reading as though it did not.
     for section in [
         r#"{ "input": { "keyboard": { "xkb_optoins": [] } } }"#,
         r#"{ "input": { "keyboardd": {} } }"#,
@@ -381,7 +381,7 @@ fn max_scale_must_leave_a_usable_scale() {
 
 #[test]
 fn no_displays_configured_means_the_output_follows_domiciles_window() {
-    // The nested backend's original behaviour, and the only thing it can do
+    // The nested backend's original behavior, and the only thing it can do
     // without being told: one output, sized by whatever window Domicile got.
     assert_eq!(Config::parse("{}").unwrap().output.displays, vec![]);
 }
@@ -721,7 +721,7 @@ fn displays_that_only_touch_are_a_desktop_rather_than_a_collision() {
 fn a_desktop_may_reach_exactly_as_far_as_a_position_can_and_no_further() {
     // The boundary the check is written against, pinned because it is where a
     // future tightening would land: a far corner at exactly `i32::MAX`
-    // normalises to a position of exactly `i32::MAX`, which is a position.
+    // normalizes to a position of exactly `i32::MAX`, which is a position.
     //
     // Both axes, and each sized so that reading the *other* axis's length
     // would tip it over — which is the only way a test can tell a vertical
@@ -1006,7 +1006,7 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
     //
     // This is also what bounds the logical size on its own: the scale is at
     // least 1, so a mode that fits means a size that fits, which is the
-    // invariant `Desktop` asserts when it normalises. There is no separate
+    // invariant `Desktop` asserts when it normalizes. There is no separate
     // size check to test — it was unreachable, and every input that would
     // have reached it arrives here instead.
     let err = Config::parse(
@@ -1285,7 +1285,7 @@ fn the_nested_desktops_mode_must_fit_the_coordinate_space() {
 
     // Rejected even when displays are described, where neither setting is
     // read: a config is checked for what it says, not for which of it this run
-    // happens to use, so adding a display must not quietly legalise a nested
+    // happens to use, so adding a display must not quietly legalize a nested
     // size that was rejected a moment ago. Scoping the check to the
     // no-displays case passes every other test here.
     Config::parse(

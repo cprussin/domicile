@@ -9,17 +9,17 @@
   display compositor then resolves two SurfaceDrawQuads in one aggregation is a
   different question, and until this page existed nothing had ever asked it.
 
-  Two canvases side by side, each naming its own app id. The fallback colours
+  Two canvases side by side, each naming its own app id. The fallback colors
   differ from each other and from either client's, so a half-failure reads
   correctly: one window drawn and one not is the interesting outcome, and it
-  would look identical to total failure if both fell back to the same colour.
+  would look identical to total failure if both fell back to the same color.
 -->
 <meta charset="utf-8">
 <title>domicile: two windows on one page</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; }
   /* Side by side and exactly half each, because the harness computes its probe
-     points from the window size and this layout: the left canvas's centre is
+     points from the window size and this layout: the left canvas's center is
      at a quarter of the width, the right one's at three quarters. */
   body { display: flex; }
   canvas { display: block; width: 50vw; height: 100vh; }

@@ -76,7 +76,7 @@ React owns this DOM, so the chrome writes the tags in JSX: `<app>` and
 `HTMLWebViewElement` to go with it since Electron, which the SDK fills in with
 what the fork puts on it; `app` it has never heard of, so `domicile-elements.d.ts`
 declares it. Neither has a hyphen in its name, so React treats both as ordinary
-HTML elements — it writes no property it does not recognise and binds no `on…`
+HTML elements — it writes no property it does not recognize and binds no `on…`
 prop for their events, which is why `AppWindow` and `BrowserWindow` both bind
 theirs with `addEventListener` on a ref.
 
@@ -87,7 +87,7 @@ theirs with `addEventListener` on a ref.
 - **+** in the rail header, or **Alt+Shift+Enter** — open a browser window on
   the stage. Its address bar navigates on Enter (an address typed without a
   scheme is loaded over https) and follows the page wherever it goes; the
-  window's tab is labelled with the site it is showing. Back and forward are
+  window's tab is labeled with the site it is showing. Back and forward are
   live only while the page's history reaches that way.
 - **Alt+Tab** — float the window you are working in, or put it back.
   **Alt+drag** moves a floating window; **Alt+Shift+drag** resizes it. See
@@ -122,9 +122,9 @@ here — it is also what found that the focus alone did not.
 
 A client's window arrives at the same place by a different road. The SDK would
 focus a clicked client by itself, and the shell stops it: the SDK asks
-first, with a cancellable `domicile-focus-requested`, and this shell answers
+first, with a cancelable `domicile-focus-requested`, and this shell answers
 every one of them. So both kinds of window are reached the same way — the shell
-decides, and `focus_changed` comes back afterwards to say where the keyboard
+decides, and `focus_changed` comes back afterward to say where the keyboard
 actually is.
 
 That is also what `focus_requested` is for: a client asking for the keyboard
@@ -205,7 +205,7 @@ answers when a window has it: the compositor takes it before a Wayland client
 is given it, and the browser process takes it before a browser window's page
 is — a `<webview>` is a browsing context of its own, so a key pressed
 on a site the shell is showing reaches neither this page nor the compositor,
-and the layer inside the engine is the only one above it. One ask, honoured
+and the layer inside the engine is the only one above it. One ask, honored
 wherever the keyboard happens to be; exactly one path fires for any press.
 
 A tab reorders by drag, or by Alt+Up / Alt+Shift+Up (and their Down

@@ -191,7 +191,7 @@ describe("installWindowGestures", () => {
     expect(root.hasPointerCapture(POINTER)).toBe(false);
   });
 
-  it("lets the window go when the drag is cancelled", () => {
+  it("lets the window go when the drag is canceled", () => {
     // A `pointercancel` is the release that never comes: the browser has taken
     // the pointer away mid-gesture. Without this the window follows the bare
     // cursor around the desktop — no button held, no Alt down — until the user

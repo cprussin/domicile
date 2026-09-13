@@ -34,7 +34,7 @@ const FIXTURE: &str = "wire/host-messages.jsonl";
 #[test]
 fn every_fixture_line_is_what_this_crate_writes() {
     for (number, message, line) in messages() {
-        let written = serde_json::to_string(&message).expect("it serialises");
+        let written = serde_json::to_string(&message).expect("it serializes");
         // Byte-for-byte rather than value-for-value. Not for the field order —
         // the reader is `JSON.parse` and a Zod schema, and neither cares — but
         // for what a value-level comparison cannot see: `800.0` where a hand
@@ -90,7 +90,7 @@ fn the_fixture_covers_every_host_message() {
     );
 }
 
-/// Every tag [`HostMessage`] can serialise to, from `serde` itself.
+/// Every tag [`HostMessage`] can serialize to, from `serde` itself.
 ///
 /// Asked for by handing it a `type` no variant has: the error it raises to say
 /// so enumerates them, and it is derived from the enum rather than written

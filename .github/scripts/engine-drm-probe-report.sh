@@ -24,7 +24,7 @@
 # engine-diagnostics.sh is one: GitHub echoes a step's script into the log
 # before running it, so a long one buries the failure under its own source.
 #
-# scripts/test-engine-drm-probe-report.sh drives this over synthesised logs of
+# scripts/test-engine-drm-probe-report.sh drives this over synthesized logs of
 # each shape -- a gn assertion, a compiler error, a link error, a failure that
 # uses none of those markers, a log with nothing of the probe's in it, and a
 # clean one.

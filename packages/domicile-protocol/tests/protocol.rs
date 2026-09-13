@@ -1,4 +1,4 @@
-//! Behaviour tests for `domicile-protocol`, written before the implementation.
+//! Behavior tests for `domicile-protocol`, written before the implementation.
 //!
 //! This crate defines the wire contract between the Rust host and the in-page
 //! client (JS). Two things matter and are tested here:
@@ -120,7 +120,7 @@ fn host_messages_round_trip() {
 }
 
 /// The chrome assigns the cursor straight to CSS `cursor`, so every shape must
-/// serialise to a valid CSS keyword.
+/// serialize to a valid CSS keyword.
 #[test]
 fn cursor_shapes_are_css_keywords() {
     let shape = |shape: CursorShape| serde_json::to_value(shape).unwrap();
@@ -175,8 +175,8 @@ fn a_desktop_of_no_displays_is_a_message_rather_than_a_silence() {
     // one. "Told nothing" and "not told" are different states, and the shape
     // has to survive the wire for a chrome to tell them apart.
     // Asserted on the wire rather than through a round trip, which cannot see
-    // the difference: an empty `Vec` that serialises to nothing at all and one
-    // that serialises to `[]` both come back empty, and only the second is a
+    // the difference: an empty `Vec` that serializes to nothing at all and one
+    // that serializes to `[]` both come back empty, and only the second is a
     // desktop the chrome can parse.
     let v = serde_json::to_value(HostMessage::Displays { displays: vec![] }).unwrap();
     assert_eq!(v["type"], "displays");

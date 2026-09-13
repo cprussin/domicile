@@ -13,7 +13,7 @@
 # cycle on it.
 #
 # It matters most for the three readings a verdict written by symmetry gets
-# backwards:
+# backward:
 #
 #   in the control run, the element being REACHED is the failure, and so is a
 #     press that landed in the guest it was aimed away from
@@ -94,7 +94,7 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
 
 # The failing sentence, for the cases where WHICH end it names is the point. Not
 # the whole wording: sentences are prose and will be reworded, and a test that
-# pinned them would fail for edits that changed no behaviour.
+# pinned them would fail for edits that changed no behavior.
 reason() { # $1 NEGATIVE, then NAME=value overrides
   (
     SAW_SHELL=1
@@ -236,7 +236,7 @@ expect "no blur and no announcement still blames the browser process" "yes" \
 
 echo
 echo "which step of the fork's own path stopped, once nothing was announced"
-# THREE STEPS, ASKED OUTWARDS IN. Run 193 read activeElement=webview with
+# THREE STEPS, ASKED OUTWARD IN. Run 193 read activeElement=webview with
 # nothing announced, which four different faults produce and which no reading
 # taken in the page can separate: the branch not running, the owner not
 # casting, the focus being refused, and the override not being on the path.
@@ -250,7 +250,7 @@ expect "a branch that ran and was refused names the refusal" "yes" \
   "$(silent "FOCUS WAS REFUSED" SAW_FOCUSED_IT=0 SAW_SET_FOCUSED=0)"
 expect "a focus that took, with no override, names the override" "yes" \
   "$(silent "OVERRIDE DID NOT RUN" SAW_SET_FOCUSED=0)"
-# AND THE ORDER, which is the point of asking them outwards in: a run with none
+# AND THE ORDER, which is the point of asking them outward in: a run with none
 # of the three is the first arm, not the last, because a branch that never ran
 # explains the two readings after it and they do not explain it.
 expect "a branch that never ran does not blame the override" "no" \

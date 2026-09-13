@@ -373,7 +373,7 @@ describe("Shell", () => {
     it("renames the tab when the client says what its window is called", () => {
       // The one place the wire message meets the reducer. A toplevel is
       // announced when the client creates it, which is before `set_title`, so
-      // the tab opens showing the app id and is renamed afterwards.
+      // the tab opens showing the app id and is renamed afterward.
       renderShell();
       domicile.emit("app_appeared", { app_id: "term", title: undefined });
       expect(tabNames()).toStrictEqual(["term"]);

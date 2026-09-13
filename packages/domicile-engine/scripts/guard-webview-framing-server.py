@@ -6,7 +6,7 @@ CI has no route to one: `crux` reaches no arbitrary host, and a guard that
 depended on a real site would fail on the day that site changed its headers. So
 the guard brings its own.
 
-`/refuses` is the subject: one flat colour, and both headers, because that is
+`/refuses` is the subject: one flat color, and both headers, because that is
 what a site sending either one actually does and because they are enforced
 differently. ancestor_throttle.cc skips X-Frame-Options entirely when the
 response also carries a frame-ancestors directive, which is the spec's
@@ -32,15 +32,15 @@ both headers deleted.
 So the control frames the subject from a page that *can* frame it. `/frames` is
 an ordinary http document with an <iframe> in it, and the guard loads it twice:
 once framing `/permits` and once framing `/refuses`. The two framed pages are
-the same bytes in the same colour and differ only in the two headers, which is
+the same bytes in the same color and differ only in the two headers, which is
 what makes the difference between the runs a reading of the headers rather than
 of the harness. Without the first run there is no such reading: "the frame is
 empty" and "nothing here can draw" are the same picture.
 
-A framed page is one flat colour and nothing else. It is what the probe looks
+A framed page is one flat color and nothing else. It is what the probe looks
 for, so anything else in it -- a margin, a font, an anti-aliased glyph -- is a
-pixel that is not the colour and is not wanted. `/frames` paints the witness
-colour around its frame for the opposite reason: the probe has to find *some*
+pixel that is not the color and is not wanted. `/frames` paints the witness
+color around its frame for the opposite reason: the probe has to find *some*
 page to be able to report that the framed one is absent.
 """
 
@@ -65,7 +65,7 @@ FRAMED = """<!doctype html>
     <style>
       html,
       body {{
-        background: #{colour};
+        background: #{color};
         block-size: 100%;
         inline-size: 100%;
         margin: 0;
@@ -80,7 +80,7 @@ FRAMED = """<!doctype html>
 # The frame is inset the way the shell module insets its <webview>, and in
 # whole percentages of a window whose size the harness chose: the framed page
 # lands in the same place on the screen in both runs, on integer pixels, so the
-# flat colour inside it is not resampled onto a half-pixel edge.
+# flat color inside it is not resampled onto a half-pixel edge.
 FRAMER = """<!doctype html>
 <html lang="en">
   <head>
@@ -117,7 +117,7 @@ class RefusesFraming(BaseHTTPRequestHandler):
 
     # Set by main(), because BaseHTTPRequestHandler is instantiated per request
     # and there is nowhere else to put it.
-    colour = "000000"
+    color = "000000"
     witness = "000000"
 
     def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
@@ -126,7 +126,7 @@ class RefusesFraming(BaseHTTPRequestHandler):
             # The whole point of this server. Both headers, always: the guard's
             # subject is a page refused by the stronger of the two.
             self.send_page(
-                FRAMED.format(colour=self.colour),
+                FRAMED.format(color=self.color),
                 {
                     "X-Frame-Options": "DENY",
                     "Content-Security-Policy": "frame-ancestors 'none'",
@@ -135,7 +135,7 @@ class RefusesFraming(BaseHTTPRequestHandler):
         elif split.path == PERMITS:
             # The same bytes, minus the headers. Everything the control reads
             # rests on that being the only difference between them.
-            self.send_page(FRAMED.format(colour=self.colour), {})
+            self.send_page(FRAMED.format(color=self.color), {})
         elif split.path == FRAMES:
             self.send_framer(parse_qs(split.query).get("src", []))
         else:
@@ -183,9 +183,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument(
-        "--colour",
+        "--color",
         required=True,
-        help="RRGGBB, no leading #; the flat colour a framed page is",
+        help="RRGGBB, no leading #; the flat color a framed page is",
     )
     parser.add_argument(
         "--witness",
@@ -194,7 +194,7 @@ def main():
     )
     arguments = parser.parse_args()
 
-    RefusesFraming.colour = arguments.colour
+    RefusesFraming.color = arguments.color
     RefusesFraming.witness = arguments.witness
     # 127.0.0.1, not 0.0.0.0: nothing outside this machine has any business
     # reaching a guard's fixture.

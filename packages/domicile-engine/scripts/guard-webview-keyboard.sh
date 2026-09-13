@@ -265,7 +265,7 @@ python3 "$SCRIPTS/guard-webview-keyboard-key.py" \
 
 # The press is answered before it is handled: `Input.dispatchKeyEvent` comes
 # back when the event has been forwarded, and what this reads is what the page
-# logged afterwards. A fixed wait rather than a poll on the line that must
+# logged afterward. A fixed wait rather than a poll on the line that must
 # appear, because two of the four readings below are ABSENCES, and an absence
 # cannot be waited for — it can only be given time.
 sleep 5
@@ -295,7 +295,7 @@ echo "the shell's document saw: before=$SAW_SHELL_KEY after=$SAW_DOCUMENT_KEY"
 echo "the page in the window saw: after=$SAW_GUEST_KEY"
 echo
 
-# WHICH END TO BLAME, and it is the whole of this script's judgement. Nine
+# WHICH END TO BLAME, and it is the whole of this script's judgment. Nine
 # readings and two modes make far more answers than a person reading an
 # annotation can be expected to reconstruct, and most of the failures read alike
 # and mean different things — so they are decided here, in a block

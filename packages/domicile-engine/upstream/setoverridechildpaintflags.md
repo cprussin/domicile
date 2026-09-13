@@ -31,7 +31,7 @@ void SurfaceLayer::SetOverrideChildPaintFlags(bool override_child_paint_flags) {
 The parameter is unused. The member is unconditionally set to `true`, so the
 property can be turned on but never off, and passing `false` turns it on.
 
-There is no `SetNeedsPushProperties()` either, unlike every neighbouring setter,
+There is no `SetNeedsPushProperties()` either, unlike every neighboring setter,
 so a change does not schedule the push that would carry it to the impl side.
 
 ## Why it matters
@@ -42,7 +42,7 @@ Two callers, and one of them passes a runtime value:
   ```cpp
   layer.SetOverrideChildPaintFlags(extra->override_child_paint_flags);
   ```
-  This deserialises the flag from a layer-context client. A client that sends
+  This deserializes the flag from a layer-context client. A client that sends
   `false` gets `true`. That is a silent protocol mismatch rather than a
   cosmetic one.
 - `third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc:143`
@@ -81,5 +81,5 @@ void SurfaceLayer::SetOverrideChildPaintFlags(bool override_child_paint_flags) {
 ```
 
 Worth checking whether any existing caller depends on the current
-always-true behaviour before landing — `layer_context_impl.cc` is the one that
-would change behaviour, and arguably that change is the point.
+always-true behavior before landing — `layer_context_impl.cc` is the one that
+would change behavior, and arguably that change is the point.

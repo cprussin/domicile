@@ -20,7 +20,7 @@ fn a_page_that_agreed_the_protocol_is_not_worth_a_word() {
 }
 
 #[test]
-fn a_socket_nothing_ever_dialled_says_so_and_names_itself() {
+fn a_socket_nothing_ever_dialed_says_so_and_names_itself() {
     let said = silence(Heard::Nothing, socket(), after()).expect("there is nothing to draw with");
 
     assert_eq!(
@@ -36,7 +36,7 @@ fn a_socket_nothing_ever_dialled_says_so_and_names_itself() {
 
 #[test]
 fn a_connection_that_never_spoke_is_a_different_sentence() {
-    // Worth telling apart from nothing at all: something dialled the socket, so
+    // Worth telling apart from nothing at all: something dialed the socket, so
     // the engine knows where it is and the shell's document ran far enough to
     // ask for the channel. What did not happen is the `hello`.
     let said = silence(Heard::AConnection, socket(), after()).expect("no page agreed anything");
@@ -51,7 +51,7 @@ fn a_connection_that_never_spoke_is_a_different_sentence() {
 }
 
 #[test]
-fn a_socket_nobody_has_dialled_has_heard_nothing() {
+fn a_socket_nobody_has_dialed_has_heard_nothing() {
     assert_eq!(Handshake::new().heard(), Heard::Nothing);
 }
 

@@ -3,7 +3,7 @@
 //! Two answers, and which one applies is the whole of it. With displays
 //! described in the config, the desktop is what the config says and Domicile's
 //! own window only shows it. With none, the window *is* the desktop — the
-//! original behaviour, and all a nested compositor can manage without being
+//! original behavior, and all a nested compositor can manage without being
 //! told otherwise.
 //!
 //! Kept apart from the Smithay wiring so it can be tested: everything here is
@@ -151,7 +151,7 @@ pub struct Screens {
 impl Screens {
     /// The outputs a configured desktop describes, one per display.
     ///
-    /// Sizes and scales are the config's; positions are already normalised
+    /// Sizes and scales are the config's; positions are already normalized
     /// about the desktop's own corner, which is what `Desktop` is for.
     pub fn described(desktop: &Desktop) -> Screens {
         Screens {
@@ -468,7 +468,7 @@ mod tests {
         // size is how big that region is, and the scale is what clients on it
         // draw at. A pair swapped here is a shell that puts the dock on the
         // wrong screen with nothing to say so.
-        // Two, because a lone display normalises to the origin, and `[0, 0]` is
+        // Two, because a lone display normalizes to the origin, and `[0, 0]` is
         // what a `described` that dropped the position would produce anyway.
         let screens = Screens::described(&desktop(
             r#"{
@@ -654,7 +654,7 @@ mod tests {
     fn a_window_ending_on_the_seam_is_on_one_of_them() {
         // Displays abut exactly, so a window whose right edge is the boundary
         // touches the second without being on it. Counted as an overlap, every
-        // maximised window on the left-hand screen would be on both.
+        // maximized window on the left-hand screen would be on both.
         let screens = side_by_side();
 
         assert_eq!(
@@ -751,7 +751,7 @@ mod tests {
 
     #[test]
     fn an_undescribed_desktop_is_whatever_window_domicile_got() {
-        // The original behaviour, and all a nested compositor can manage
+        // The original behavior, and all a nested compositor can manage
         // without being told: one output, sized and scaled by the window.
         let screens = Screens::following_the_window((1280, 800), 2);
         assert_eq!(

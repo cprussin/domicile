@@ -322,7 +322,7 @@ export const NoLabelOrHint = {
     docs: {
       description: {
         story:
-          "Field with no label and no hint — just the control. Useful for compact forms where the labelling is implicit (e.g. a search box with a prefix icon and placeholder).",
+          "Field with no label and no hint — just the control. Useful for compact forms where the labeling is implicit (e.g. a search box with a prefix icon and placeholder).",
       },
     },
   },

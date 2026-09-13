@@ -200,7 +200,7 @@ pub enum HostMessage {
     ///
     /// Separate from [`HostMessage::AppAppeared`] because the announcement
     /// comes first: a toplevel is announced when the client creates it, and
-    /// `set_title` is a request it makes afterwards, so the announcement
+    /// `set_title` is a request it makes afterward, so the announcement
     /// carries whatever was known then — which is nothing.
     ///
     /// `title` is optional to match [`HostMessage::AppAppeared`]'s, not
@@ -256,7 +256,7 @@ pub enum HostMessage {
     /// thing that moves it — a click on a window focuses it in the compositor,
     /// and a focused client going away hands the keyboard back. Without this
     /// the chrome's idea of which window is active is right until the first
-    /// click and wrong afterwards, which is every focus affordance a desktop
+    /// click and wrong afterward, which is every focus affordance a desktop
     /// has: the active title bar, the highlighted taskbar entry, the border.
     ///
     /// Sent when it *changes*, to every chrome — focus is the desktop's, and a
@@ -275,7 +275,7 @@ pub enum HostMessage {
     /// the same message: that one reports a decision, this one is a request,
     /// and the shell is what turns the second into the first by answering with
     /// `focus_app` — or by ignoring it, which is the point. A compositor that
-    /// honoured the request itself would be deciding the shell's policy for
+    /// honored the request itself would be deciding the shell's policy for
     /// it, and there would be no way to write a desktop where a window cannot
     /// steal what the user is typing into.
     ///
@@ -298,7 +298,7 @@ pub enum HostMessage {
 /// All of it logical — the CSS pixels the chrome lays out in — and all of it in
 /// one desktop-wide coordinate space whose origin is the top-left corner of the
 /// displays' bounding box. The config may place a display anywhere, negative
-/// included; what reaches here is normalised, because the page it describes
+/// included; what reaches here is normalized, because the page it describes
 /// starts at zero.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DisplayInfo {

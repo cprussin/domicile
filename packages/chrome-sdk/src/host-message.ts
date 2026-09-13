@@ -95,7 +95,7 @@ export type AppCursorMessage = {
  * The chrome asks for focus with `focusApp`, but it is not the only thing that
  * moves it — a click on a window focuses it in the compositor, and a focused
  * client going away hands the keyboard back — so a chrome that tracked only
- * its own requests would be right until the first click and wrong afterwards.
+ * its own requests would be right until the first click and wrong afterward.
  *
  * `undefined` is the chrome itself, which is an answer a desktop draws
  * differently from any window being active.

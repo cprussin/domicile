@@ -13,7 +13,7 @@ What we use, and the workflow rules that go with it.
   in every icon and breaks SSR/RSC. **Always import the `*Icon`-suffixed
   name** (e.g. `XIcon`, `WarningCircleIcon`, `CaretRightIcon`) — the
   unsuffixed names (`X`, `WarningCircle`, `CaretRight`) are deprecated
-  backwards-compat aliases that will be removed in a future Phosphor major.
+  backward-compat aliases that will be removed in a future Phosphor major.
   TypeScript won't flag the deprecated form; it's on you to use the suffixed
   one:
 

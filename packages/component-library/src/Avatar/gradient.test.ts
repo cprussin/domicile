@@ -12,7 +12,7 @@ describe(getGradient, () => {
     expect(getGradient("Ada Lovelace")).toBe(getGradient("Ada Lovelace"));
   });
 
-  it("normalises case and whitespace before hashing", () => {
+  it("normalizes case and whitespace before hashing", () => {
     expect(getGradient("Ada Lovelace")).toBe(getGradient("  ada lovelace  "));
   });
 

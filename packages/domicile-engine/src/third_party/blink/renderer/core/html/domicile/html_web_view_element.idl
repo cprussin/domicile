@@ -24,14 +24,14 @@
   // there is nothing here for a ScriptState to be needed for and nothing a
   // caller could do about a message it cannot fail to send. A back with
   // nowhere to go is answered by not navigating, which is what an address bar
-  // that cannot yet grey out its buttons asks for constantly.
+  // that cannot yet gray out its buttons asks for constantly.
   [CEReactions] undefined goBack();
   [CEReactions] undefined goForward();
   [CEReactions] undefined stop();
   [CEReactions] undefined reload();
 
   // Whether either of the first two would move the page, so an address bar can
-  // grey out a button that would do nothing.
+  // gray out a button that would do nothing.
   //
   // READONLY PROPERTIES rather than a `domicile-history-change` event's detail,
   // and that is the whole design decision: a shell renders from state, so what

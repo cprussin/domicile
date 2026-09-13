@@ -162,7 +162,7 @@ describe("registerElements", () => {
       ]);
     });
 
-    it("normalises a line-mode wheel before forwarding it", () => {
+    it("normalizes a line-mode wheel before forwarding it", () => {
       const element = mountApp("term");
 
       element.dispatchEvent(
@@ -288,7 +288,7 @@ describe("registerElements", () => {
     });
 
     it("ignores the browser's auto-repeat while a key is held", () => {
-      // Wayland sends one press and one release; the client synthesises repeat
+      // Wayland sends one press and one release; the client synthesizes repeat
       // itself from `wl_keyboard.repeat_info`. Forwarding the browser's repeats
       // as fresh presses gives the client two repeat sources at once, which it
       // renders as the same character over and over.

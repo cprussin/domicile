@@ -25,7 +25,7 @@ pub struct Arguments {
     /// Whether to take the size the compositor configures rather than keeping
     /// the one this client asked for.
     ///
-    /// Off by default, and that default is the older behaviour on purpose:
+    /// Off by default, and that default is the older behavior on purpose:
     /// almost every check states a size and wants *that* size, so a client
     /// that quietly grew to whatever a configure said would make those checks
     /// about the compositor's arithmetic instead of about their own subject.

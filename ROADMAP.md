@@ -53,7 +53,7 @@ The wire protocol is at `PROTOCOL_VERSION = 1`.
 | A `<webview>` is a guest, so a site that refuses framing loads in one | `guard-webview-framing.sh`. The element shows a page sending `X-Frame-Options: DENY` and `frame-ancestors 'none'`; its control frames that page and a copy differing only in those two headers from an ordinary http page, and shows the copy and not the original. So the site is refused where it has an ancestor, and the element is not giving it one |
 | A desktop chord reaches the shell while a browser window has the keyboard | `guard-webview-keyboard.sh`. A key pressed before focus moves reaches the shell's `document`; the chord after it comes back as `shortcut` and the window never sees it; an ungrabbed key reaches the window's page and not the shell |
 | A click inside a browser window reaches the shell that has to raise it | `guard-webview-click.sh`. A press driven at the engine lands in the guest's own page and arrives in the shell's `document` as an event on the element the guest hangs off, which is what a shell raises the window on; its control clicks the shell's own chrome instead and nothing reaches the element. Patch 0011 is both halves of why it crosses: upstream dispatches no focus event across a remote frame's process boundary, and focusing the element across it dispatches none either — Blink suppresses focus events while the page is unfocused, which a guest taking focus always makes it — so the element says so in an event of its own. The first run of the guard, with only the focus, is what found the second half |
-| A browser window can say whether back and forward are available | `guard-webview-history.sh`. `CanGoBack()`/`CanGoForward()` are answers only the browser process has, and they reach the page as `canGoBack`/`canGoForward` properties on the element plus a payload-free `domicile-history-change` event. Properties rather than event payload on purpose: a DOM event dispatched before a React shell's first effect flush is gone, so a late-mounting chrome reads the state it missed instead of having had to be listening. Note `ShouldEnableBackButton()` is not the same question — it is true when only skippable entries remain, because Chrome uses it for the long-press menu, and a button greyed in from it does nothing |
+| A browser window can say whether back and forward are available | `guard-webview-history.sh`. `CanGoBack()`/`CanGoForward()` are answers only the browser process has, and they reach the page as `canGoBack`/`canGoForward` properties on the element plus a payload-free `domicile-history-change` event. Properties rather than event payload on purpose: a DOM event dispatched before a React shell's first effect flush is gone, so a late-mounting chrome reads the state it missed instead of having had to be listening. Note `ShouldEnableBackButton()` is not the same question — it is true when only skippable entries remain, because Chrome uses it for the long-press menu, and a button grayed in from it does nothing |
 | What the browser-to-renderer hop costs | Every `ControlChannelClient` method carries a `mojo_base.mojom.TimeTicks arrival`, stamped once per socket read rather than per parsed message — a read can carry several, and stamping at parse time would price the JSON parse into the second and later ones, so a batch read would report a hop that grows with position in the batch. Converted through `WindowPerformance`, so `event.timeStamp - event.arrival` is the stage and not arithmetic in the renderer. Measured at 0.300 ms and 0.200 ms. **On the socket path only**: `ShortcutPressed` and `Modifiers` also have a registry path stamped elsewhere that nothing measures, and `Displays` dispatches a bare `Event` and is deliberately unstamped |
 | A client's dmabuf imports on AMD | Patch 0005, confirmed on a Radeon 890M on 2026-09-08: kitty survives being floated and resized, on the DCC modifier that used to be refused, with no `gbm_bo_import` failure in the run |
 | The desktop a user runs contains all of it | `packages/domicile-engine/engine-release.nix` pins the published engine; `nix run github:cprussin/domicile#manganese` runs it |
@@ -196,7 +196,7 @@ decides whether an item is waiting or workable.
    instead of holding the answer itself. **None of it works before an engine
    release carries the socket** — `engine-release.nix` pins an engine built
    from an older commit than `main`, and the running one has never heard of the
-   switch, so a supervisor that dialled it now would find nothing listening.
+   switch, so a supervisor that dialed it now would find nothing listening.
 
    **Dev reload comes back with `load-shell` and not before.** The poller the
    bridge wrote into every served document went with the bridge, the C++ that
@@ -313,7 +313,7 @@ costs nothing.
   `HistoryChanged(can_go_back, can_go_forward)`, and `src` is the author's
   attribute rather than a report — so a chrome can show where it *sent* a
   window and not where the page then went. `domicile-navigate` used to look
-  like the answer and was not: the SDK synthesised it from Electron's
+  like the answer and was not: the SDK synthesized it from Electron's
   `did-navigate` and it had fired for nothing since the fork landed, so it is
   deleted rather than left looking available.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
@@ -389,7 +389,7 @@ submit_ms submit_worst_ms idle_ms response_ms response_worst_ms chromes
 - **Which way up an output is drawn cannot be tested without a screen.** Reading
   a buffer back is consistent either way, so the offscreen tests pass under
   both. It was settled on hardware; do not "simplify" it.
-- **A solid-colour texture cannot test a texture matrix** — it looks the same
+- **A solid-color texture cannot test a texture matrix** — it looks the same
   however it is mapped. Fixtures are patterned for this reason: a y-inversion
   bug passed a solid-texture comparison unchanged.
 - **A client's buffer may be upside down and the types do not say so.** A client

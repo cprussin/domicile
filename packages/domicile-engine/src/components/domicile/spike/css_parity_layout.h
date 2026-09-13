@@ -22,10 +22,10 @@ namespace domicile::spike {
 // The page is a column-pair of cells. Each cell is one CSS property, applied
 // identically to the two halves of it: an <app> — a <canvas> showing the
 // producer's surface — on the left, and an ordinary <div> filled with the
-// colour the producer submits on the right. "Does CSS treat an <app> like a
+// color the producer submits on the right. "Does CSS treat an <app> like a
 // <div>" is then the question of whether one half of a cell is the other half
 // translated by kCellHalfWidth, which is a pixel comparison rather than a
-// judgement.
+// judgment.
 
 // Page-wide.
 inline constexpr SkColor kPageBackground = SkColorSetARGB(0xFF, 0x10, 0x14, 0x18);
@@ -52,7 +52,7 @@ struct Cell {
   const char* name;
   // Whether the two halves are supposed to match. The last cell exists to be
   // different: a measurement that cannot fail has not measured anything, so one
-  // cell paints its control a colour the producer never submits and the run
+  // cell paints its control a color the producer never submits and the run
   // fails if the diff does not notice.
   bool halves_should_match;
   // Whether this cell's <app> is supposed to look different from the baseline

@@ -116,7 +116,7 @@ export const installWindowGestures = (
   // The release that never comes. The browser takes a pointer away mid-gesture
   // — a touch turning into a scroll, a device going away — and sends this
   // instead of a `pointerup`, which is the one case pointer capture cannot
-  // cover because capture is what it is cancelling.
+  // cover because capture is what it is canceling.
   root.addEventListener("pointercancel", release, { capture: true });
 };
 

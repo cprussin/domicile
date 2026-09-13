@@ -1,4 +1,4 @@
-//! Behaviour tests for the desktop a configured layout makes up, written
+//! Behavior tests for the desktop a configured layout makes up, written
 //! before the implementation.
 //!
 //! The load-bearing requirement is the coordinate space: the config may place
@@ -137,7 +137,7 @@ fn the_desktop_starts_at_the_origin_however_the_config_placed_it() {
 }
 
 #[test]
-fn normalising_moves_the_desktop_without_reshaping_it() {
+fn normalizing_moves_the_desktop_without_reshaping_it() {
     // The same layout written about a different origin is the same desktop.
     let here = desktop(
         r#"{
@@ -304,7 +304,7 @@ fn an_unvalidated_layout_says_so_rather_than_wrapping() {
 
 #[test]
 fn an_unvalidated_display_says_so_rather_than_wrapping() {
-    // The other unchecked operation. `normalised` subtracts and `reach` adds,
+    // The other unchecked operation. `normalized` subtracts and `reach` adds,
     // and both are only safe because something validated the layout — so both
     // assert it. This one is what `DisplayConfig::validate` guarantees: a
     // display no wider than a position can reach.

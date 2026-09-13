@@ -18,9 +18,9 @@ namespace domicile::spike {
 // THROWAWAY, with the rest of the spike. Comparing what viz drew against what
 // was submitted, which every step of the spike ends in.
 
-// Per-channel with slack: the display's colour space is not necessarily the one
+// Per-channel with slack: the display's color space is not necessarily the one
 // the quad was authored in, and SkiaRenderer may round through it. An exact
-// match is not the claim; "the colour we submitted, not the page's background"
+// match is not the claim; "the color we submitted, not the page's background"
 // is.
 inline constexpr int kChannelTolerance = 4;
 

@@ -7,7 +7,7 @@ about without either being able to check the other at build time.
 writes it, and it is read from both languages:
 
 - `packages/domicile-protocol/tests/wire.rs` asserts Rust *writes* these bytes —
-  serialising each parsed line back and comparing. Byte-for-byte rather than
+  serializing each parsed line back and comparing. Byte-for-byte rather than
   value-for-value, for what a round-trip through Rust's own types cannot see:
   `800.0` where a hand-written fixture would say `800`, and an `Option` written
   as `null` rather than left out — a size the client has not reported is

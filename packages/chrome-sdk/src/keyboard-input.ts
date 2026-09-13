@@ -19,7 +19,7 @@ import { evdevFromCode } from "./input";
 // A lock key is where that is fatal rather than untidy: xkb unlocks one only
 // on the release of the press that locked it, so under `caps:swapescape` —
 // where the physical Escape key *is* Caps_Lock — a dropped release latches
-// capitals into every Wayland client, the ones opened afterwards included,
+// capitals into every Wayland client, the ones opened afterward included,
 // and no later press of that key can clear it. The chrome's own webviews
 // never touch that state, so they keep typing normally, which is what makes
 // the failure look like it belongs to the terminals.
@@ -51,7 +51,7 @@ const forwardPress =
     const keycode = evdevFromCode(event.code);
     if (appId !== undefined && keycode !== undefined) {
       event.preventDefault();
-      // The browser repeats a held key; Wayland does not. A client synthesises
+      // The browser repeats a held key; Wayland does not. A client synthesizes
       // repeat itself from `wl_keyboard.repeat_info`, so forwarding these as
       // fresh presses would give it two repeat sources at once — which it
       // draws as the same character over and over.

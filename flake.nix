@@ -46,7 +46,7 @@
         # release tagged engine-nightly", the least true message available.
         #
         # This package alone is what fixes it: its setup hook exports
-        # `NIX_SSL_CERT_FILE`, which nixpkgs' OpenSSL honours. Setting
+        # `NIX_SSL_CERT_FILE`, which nixpkgs' OpenSSL honors. Setting
         # `SSL_CERT_FILE` on the shells instead does nothing at all — it is in
         # nix's own ignore list and never reaches the shell, which is worth
         # writing down because it looks like it would.

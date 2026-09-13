@@ -46,5 +46,5 @@ export const placementLine = (
 // clamps `performance.now()` to 100µs in a renderer that is not cross-origin
 // isolated, which this one is not — so the *worst* case really has nothing
 // past the first decimal, though an average over a thousand samples recovers
-// more, their quantisation phases being independent.
+// more, their quantization phases being independent.
 const precise = (ms: number): string => ms.toFixed(2);

@@ -8,7 +8,7 @@ import type { DetailedHTMLProps, HTMLAttributes } from "react";
 // `HTMLAttributes`' already, and the element's own event is deliberately not
 // here: `<app>` has no hyphen in its name, so React treats the tag as an
 // ordinary HTML element rather than as a custom element, and writes neither a
-// property it does not recognise nor an `on…` listener for an event it has never
+// property it does not recognize nor an `on…` listener for an event it has never
 // heard of. `AppWindow` binds that one with `addEventListener`, the way
 // `BrowserWindow` binds `<webview>`'s. It was five props when the element was
 // the SDK's, because a custom element — which needs the hyphen — does get

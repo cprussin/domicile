@@ -30,7 +30,7 @@ It provides these:
   was last reached for. All of it is delegated from `document` over
   `closest("app")`: the tag is the engine's, so there is no element class to hang
   any of it on, and nothing here is registered. A click on a window fires a
-  cancellable `domicile-focus-requested` and then focuses the client, so a shell
+  cancelable `domicile-focus-requested` and then focuses the client, so a shell
   that wants focus to be its own decision calls `preventDefault()` and a shell
   with no opinion needs to know nothing about it.
 - **`<app>`** (`./app-element`) — the tag name, the focus-request event, and the
@@ -92,7 +92,7 @@ Both tags are the fork's own HTML elements, so there is nothing to register and
 nothing here to wrap them in — a custom element's name must contain a hyphen, per
 spec, which is exactly why they are the engine's. Note what that costs in a React
 chrome: a tag without a hyphen is an ordinary HTML element to React, so it writes
-no unrecognised property and binds no `on…` prop for an event it has not heard
+no unrecognized property and binds no `on…` prop for an event it has not heard
 of. Bind the events on a ref.
 
 ### Knowing which modifiers are held
@@ -150,6 +150,6 @@ animation frame.
 
 happy-dom has never heard of `<app>`, so it creates one as an
 `HTMLUnknownElement`, which React's development build reports on the console as
-an unrecognised tag. It cannot happen on the fork, where the tag is
+an unrecognized tag. It cannot happen on the fork, where the tag is
 `HTMLAppElement`; React exempts `dialog` and `webview` from that report by name
 and there is no way to add a third.

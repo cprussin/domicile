@@ -198,7 +198,7 @@ void WebViewGuest::GoBack() {
 
   // NOT GUARDED WITH CanGoBack(), which would be a guard on a condition the
   // callee already answers: GoBack returns without navigating when there is
-  // nowhere to go. An address bar whose buttons cannot yet be greyed out
+  // nowhere to go. An address bar whose buttons cannot yet be grayed out
   // presses this with an empty history as a matter of course, so a back with
   // nowhere to go is the ordinary case rather than a bad message.
   guest_contents_->GetController().GoBack();
@@ -212,7 +212,7 @@ void WebViewGuest::GoForward() {
 void WebViewGuest::Stop() {
   CHECK(guest_contents_);
   // The WebContents rather than its controller, which has no Stop: a pending
-  // navigation is the WebContents', and cancelling it is what an address bar's
+  // navigation is the WebContents', and canceling it is what an address bar's
   // stop button means.
   guest_contents_->Stop();
 }

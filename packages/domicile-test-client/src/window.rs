@@ -51,11 +51,11 @@ pub enum ClientError {
 /// whole life. See [`crate::arguments::Arguments::follow_configure`].
 const SIZE: (u32, u32) = (320, 240);
 
-/// The two colours a frame alternates between.
+/// The two colors a frame alternates between.
 ///
 /// Alternating, so that "is it still drawing" can be answered by looking at
 /// the window rather than by trusting a counter this process prints.
-const COLOURS: [u32; 2] = [0x00_20_30_50, 0x00_30_50_80];
+const COLORS: [u32; 2] = [0x00_20_30_50, 0x00_30_50_80];
 
 /// How opaque a `--translucent` window is.
 ///
@@ -76,29 +76,29 @@ const _: () = assert!(
      has to tell a background apart from",
 );
 
-/// [`COLOURS`] at [`TRANSLUCENT_ALPHA`], which is what a `--translucent`
+/// [`COLORS`] at [`TRANSLUCENT_ALPHA`], which is what a `--translucent`
 /// window draws.
 ///
 /// Public for the same reason [`TRANSLUCENT_ALPHA`] is:
-/// `e2e-window-shows-through.sh` asserted on these exact colours in the
+/// `e2e-window-shows-through.sh` asserted on these exact colors in the
 /// compositor's log — they are what says the texel over the window is the
 /// window rather than something else at the same alpha — and
 /// `the_grepped_log_messages_are_what_the_scripts_expect` pins the two
 /// together.
-pub const TRANSLUCENT_COLOURS: [u32; 2] = [translucent(COLOURS[0]), translucent(COLOURS[1])];
+pub const TRANSLUCENT_COLORS: [u32; 2] = [translucent(COLORS[0]), translucent(COLORS[1])];
 
-/// One colour at [`TRANSLUCENT_ALPHA`], **premultiplied**.
+/// One color at [`TRANSLUCENT_ALPHA`], **premultiplied**.
 ///
 /// Premultiplied because that is what `Argb8888` means: a channel above the
-/// alpha is a colour brighter than it is opaque, and no compositor owes an
-/// answer for one. Computed rather than written out, so the two colours cannot
+/// alpha is a color brighter than it is opaque, and no compositor owes an
+/// answer for one. Computed rather than written out, so the two colors cannot
 /// drift from the opaque ones they are supposed to be — a hand-scaled table is
 /// four multiplications nobody checks.
-const fn translucent(colour: u32) -> u32 {
+const fn translucent(color: u32) -> u32 {
     let alpha = TRANSLUCENT_ALPHA as u32;
-    let red = ((colour >> 16) & 0xff) * alpha / 0xff;
-    let green = ((colour >> 8) & 0xff) * alpha / 0xff;
-    let blue = (colour & 0xff) * alpha / 0xff;
+    let red = ((color >> 16) & 0xff) * alpha / 0xff;
+    let green = ((color >> 8) & 0xff) * alpha / 0xff;
+    let blue = (color & 0xff) * alpha / 0xff;
     (alpha << 24) | (red << 16) | (green << 8) | blue
 }
 
@@ -186,7 +186,7 @@ struct Client {
     /// Held between the two halves of one configure. `xdg_toplevel.configure`
     /// carries the size and `xdg_surface.configure` carries the serial that
     /// makes it current, in that order and on the same queue — so the size
-    /// arrives with nothing to acknowledge it and the acknowledgement arrives
+    /// arrives with nothing to acknowledge it and the acknowledgment arrives
     /// with no size in it. Applying the size when it lands would redraw at a
     /// geometry the compositor has not yet said is in force.
     ///
@@ -201,12 +201,12 @@ struct Client {
     /// then a buffer must not be attached — the surface has no agreed size to
     /// attach one *at*.
     configured: bool,
-    /// Which of the two colours the next frame draws.
+    /// Which of the two colors the next frame draws.
     frame: u32,
     /// How this client asks for a cursor, made with the pointer it names.
     ///
     /// A shape rather than a surface of our own: `wp_cursor_shape_v1` is
-    /// modelled on the CSS keywords, which is what the compositor passes
+    /// modeled on the CSS keywords, which is what the compositor passes
     /// through to the chrome — so a check can read the name the client asked
     /// for rather than a picture nobody here can see.
     cursor: Option<wp_cursor_shape_device_v1::WpCursorShapeDeviceV1>,
@@ -276,14 +276,14 @@ struct Pixels {
     held: [bool; 2],
     /// Bytes in one buffer, which is also the second one's offset.
     each: usize,
-    /// Each colour laid out as a whole buffer, once.
+    /// Each color laid out as a whole buffer, once.
     ///
     /// A frame is then one `pwrite` of one of these, rather than the row loop
     /// this started as — one syscall per scanline, measured at 240 a frame
     /// against 264 commits, inside checks whose subject is timing. It is now
     /// one per frame. Held rather than built per frame so a frame allocates
     /// nothing.
-    colours: [Vec<u8>; 2],
+    colors: [Vec<u8>; 2],
 }
 
 /// What the registry advertised, before any of it is bound.
@@ -564,7 +564,7 @@ impl Client {
 
     /// Draw one frame and ask to be woken for the next.
     fn draw(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
-        let colour = (self.frame % 2) as usize;
+        let color = (self.frame % 2) as usize;
         let window = self
             .window
             .as_mut()
@@ -589,7 +589,7 @@ impl Client {
         // case nothing here reaches, but it is a trap if one ever does.
         let drew = match window.pixels.free() {
             Some(index) => {
-                window.pixels.fill(index, colour)?;
+                window.pixels.fill(index, color)?;
                 window
                     .surface
                     .attach(Some(&window.pixels.buffers[index]), 0, 0);
@@ -602,7 +602,7 @@ impl Client {
         window.surface.commit();
         // Advanced per frame *drawn*, not per buffer used: which of the two
         // buffers is free depends on when the compositor gets round to
-        // releasing one, and a colour that tracked that would stop alternating
+        // releasing one, and a color that tracked that would stop alternating
         // against a compositor that always released the same one first.
         if drew {
             self.frame = self.frame.wrapping_add(1);
@@ -639,12 +639,12 @@ impl Pixels {
         // again.
         pool.destroy();
         let painted = if translucent {
-            TRANSLUCENT_COLOURS
+            TRANSLUCENT_COLORS
         } else {
-            COLOURS
+            COLORS
         };
-        let colours = painted.map(|colour| {
-            colour
+        let colors = painted.map(|color| {
+            color
                 .to_ne_bytes()
                 .iter()
                 .copied()
@@ -657,7 +657,7 @@ impl Pixels {
             buffers,
             held: [false, false],
             each,
-            colours,
+            colors,
         })
     }
 
@@ -666,10 +666,10 @@ impl Pixels {
         self.held.iter().position(|held| !held)
     }
 
-    /// Fill one buffer with one of the two flat colours.
-    fn fill(&self, index: usize, colour: usize) -> Result<(), ClientError> {
+    /// Fill one buffer with one of the two flat colors.
+    fn fill(&self, index: usize, color: usize) -> Result<(), ClientError> {
         self.file
-            .write_all_at(&self.colours[colour], (index * self.each) as u64)
+            .write_all_at(&self.colors[color], (index * self.each) as u64)
             .map_err(|err| ClientError::NoBuffer(format!("could not fill the buffer: {err}")))
     }
 }
@@ -955,7 +955,7 @@ impl Dispatch<wl_buffer::WlBuffer, usize> for Client {
             // Checked, not assumed. `index` is baked into the udata of the
             // buffer this event is *about*, which after a rescale may be one
             // from the pool before it: `follow` destroys those, but a release
-            // the compositor had already sent still arrives afterwards.
+            // the compositor had already sent still arrives afterward.
             // Clearing on the index alone then marks a live buffer free while
             // the compositor is displaying it, and the next frame draws over
             // the picture.
@@ -1310,15 +1310,15 @@ fn number<T: Into<u32>>(stated: WEnum<T>) -> u32 {
 mod tests {
     use wayland_client::protocol::wl_shm;
 
-    use super::{shm_format, COLOURS, TRANSLUCENT_ALPHA, TRANSLUCENT_COLOURS};
+    use super::{shm_format, COLORS, TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS};
 
     #[test]
     fn a_see_through_window_is_premultiplied_and_actually_see_through() {
         // `Argb8888` is premultiplied alpha. A channel above the alpha is a
-        // colour brighter than it is opaque, which no compositor owes an
+        // color brighter than it is opaque, which no compositor owes an
         // answer for — and the answer this one gives is what
         // `e2e-window-shows-through.sh` read.
-        for (translucent, opaque) in TRANSLUCENT_COLOURS.iter().zip(COLOURS) {
+        for (translucent, opaque) in TRANSLUCENT_COLORS.iter().zip(COLORS) {
             let [alpha, red, green, blue] = translucent.to_be_bytes();
             assert_eq!(alpha, TRANSLUCENT_ALPHA, "{translucent:#010x}");
             for (channel, of) in [red, green, blue]
@@ -1329,10 +1329,10 @@ mod tests {
                     *channel <= alpha,
                     "{translucent:#010x}: {channel} over {alpha}",
                 );
-                // And it is *that* colour at that alpha rather than some other
+                // And it is *that* color at that alpha rather than some other
                 // one: premultiplying is what the compositor undoes, so a
                 // window drawn from an unrelated table would come back a
-                // colour nothing expected.
+                // color nothing expected.
                 assert_eq!(
                     u32::from(*channel),
                     u32::from(*of) * u32::from(alpha) / 0xff,

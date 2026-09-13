@@ -27,9 +27,9 @@
 # WHAT IT ASSERTS, AND WHY NOT A PIXEL. The shell decides where its windows go.
 # A guard that named a coordinate would be asserting shell-simple's CSS, and
 # would fail the day someone moved a window — which is not this guard's
-# question. So it asks the engine where the client's colour *is*, over the
+# question. So it asks the engine where the client's color *is*, over the
 # whole window, and asserts only that it is somewhere. See
-# `domicile_engine_spike_find_colour`.
+# `domicile_engine_spike_find_color`.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -50,7 +50,7 @@ SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
   exit 1
 }
 
-# Not either spike canvas's fallback and not either two-window colour, so a log
+# Not either spike canvas's fallback and not either two-window color, so a log
 # left over from another guard cannot be mistaken for this one's answer.
 COLOR="${COLOR:-19B36B}"
 
@@ -58,7 +58,7 @@ COLOR="${COLOR:-19B36B}"
 # all would prove nothing here: the probe only runs when a client commits, so a
 # run with nothing to submit never measures anything and "did not find it"
 # would be true of a completely broken pipeline. A client drawing the *wrong*
-# colour exercises every step and still fails if the guard matches whatever
+# color exercises every step and still fails if the guard matches whatever
 # happens to be on screen.
 OTHER_COLOR="${OTHER_COLOR:-B3196B}"
 
@@ -67,7 +67,7 @@ NEGATIVE="${NEGATIVE:-0}"
 
 # How long a client is given. Longer than everything that can happen after it
 # starts — 60s waiting for the page to embed it, then 90s looking for its
-# colour — because the search runs on the submit path, so a client reaped
+# color — because the search runs on the submit path, so a client reaped
 # mid-poll stops the measurement dead and the guard would report "not found",
 # which points at the wrong thing entirely. 150s against 420s, and the
 # compositor's own FIND_FOR budget is clocked from the first submit rather than
@@ -193,7 +193,7 @@ PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 # `test-out-of-tree-shell.sh` were both updated in that change and this, the
 # third caller, was not — and nothing said so, because `engine.yml` runs only
 # on `packages/domicile-engine/**` and that change touched none of it. The
-# first thing to run this guard afterwards was an unrelated pull request.
+# first thing to run this guard afterward was an unrelated pull request.
 #
 # `shell.js` by the name `shellBuild` pins, as `domicile` does it and for its
 # reasons.
@@ -258,7 +258,7 @@ for _ in $(seq 1 240); do [ -S "$BROKER" ] && break; sleep 0.5; done
   exit 1
 }
 
-# 3. The compositor, as a producer to it, looking for one colour anywhere in
+# 3. The compositor, as a producer to it, looking for one color anywhere in
 #    the browser's window.
 LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
@@ -283,7 +283,7 @@ if ! kill -0 $COMP 2>/dev/null; then
 fi
 # No fallback: `wayland-1` is as likely to be the compositor this whole guard
 # is running inside as it is to be ours, and a client that connected to sway
-# instead would draw a window nobody is measuring and fail as "the colour is
+# instead would draw a window nobody is measuring and fail as "the color is
 # not on screen".
 CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
 [ -n "$CLIENT_DISPLAY" ] || {
@@ -338,7 +338,7 @@ echo "driving kitty, drawing #$DRAWN"
 # long as the guard is watching.
 #
 # The dots are foreground pixels and the box is the background
-# colour's extent, so they cost nothing the measurement cares
+# color's extent, so they cost nothing the measurement cares
 # about.
 NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
   "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
@@ -349,8 +349,8 @@ STARTED+=($!)
 
 # Before the pixels, the seam: the page has to hear about the client at all.
 #
-# Split out because "the colour is not on screen" is the same sentence for a
-# window in the wrong place, a window drawn the wrong colour, and a page that
+# Split out because "the color is not on screen" is the same sentence for a
+# window in the wrong place, a window drawn the wrong color, and a page that
 # was never told a client exists — and the third is the one this guard exists
 # to find. It is also the one with no other evidence anywhere: the page joins,
 # its handshake reaches the compositor, a frame sink is brokered for the
@@ -456,20 +456,20 @@ if [ "$NEGATIVE" = "1" ]; then
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
   fi
-  echo "negative control: correct, the guard does not match a colour no client drew"
+  echo "negative control: correct, the guard does not match a color no client drew"
   exit 0
 fi
 
 # WHICH FAILURE IT WAS, not whether there was one. The probe runs inside
-# `publish_frame`, so a colour is only ever searched for on a client submit and
+# `publish_frame`, so a color is only ever searched for on a client submit and
 # `engine found` therefore implies this line — it cannot make the pass stricter
 # and does not claim to. What it does is split the failure: "the client never
 # got a frame to the engine" and "the client drew and its window is not on the
 # page" are different ends, and the guard used to print the second about both.
 #
 # The vacuity this does NOT close is the shell's own chrome painting the search
-# colour. Nothing on this side can: the engine reports one bounding box over
-# the whole browser window, and a page painting that colour anywhere satisfies
+# color. Nothing on this side can: the engine reports one bounding box over
+# the whole browser window, and a page painting that color anywhere satisfies
 # it. `NEGATIVE=1` is what closes it, which is why manganese has one too.
 if ! grep -aq "first frame" "$COMP_LOG" 2>/dev/null; then
   annotate "guard-shell: the engine never took a frame from $SHELL_NAME's" \

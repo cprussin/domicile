@@ -6,7 +6,7 @@
 // that is not Chromium, reaches the screen through a page.
 //
 // It stands in for domicile-compositor with a client attached. It allocates a
-// buffer on the render node, fills it with a colour nothing else in the run
+// buffer on the render node, fills it with a color nothing else in the run
 // uses, hands the fds to libdomicile_engine.so, submits it, and then asks the
 // browser what the display compositor actually drew where the page put the
 // <app>. Exits 0 only if that pixel is the buffer's own content — and only if
@@ -91,8 +91,8 @@ constexpr Usage kUsages[] = {
     {"linear", kUseLinear | kUseWrite},
 };
 
-// The colour the buffer is filled with, and nothing else in the run is. Not the
-// page's background and not a colour any other spike producer submits, so a
+// The color the buffer is filled with, and nothing else in the run is. Not the
+// page's background and not a color any other spike producer submits, so a
 // pixel that matches it came from this dmabuf and from nowhere else.
 constexpr uint32_t kDefaultColor = 0xFF3366CC;
 
@@ -138,7 +138,7 @@ void OnReleased(void* user_data,
          surface, static_cast<unsigned long long>(buffer));
 }
 
-// Fills the buffer with one colour through the SkSurface gbm hands out for a
+// Fills the buffer with one color through the SkSurface gbm hands out for a
 // linear buffer, which is the least machinery that puts known bytes in a
 // dmabuf.
 bool Paint(ui::GbmBuffer* buffer, uint32_t argb) {
@@ -341,7 +341,7 @@ int main(int argc, char** argv) {
   printf("submitted the first\n");
 
   // The pixel is the point. The page puts the <app> where spike-dmabuf-page
-  // says, and the centre of the window is inside it.
+  // says, and the center of the window is inside it.
   uint32_t drawn = 0;
   bool matched = false;
   for (int i = 0; i < kSampleTries && !matched; ++i) {
@@ -365,7 +365,7 @@ int main(int argc, char** argv) {
 
   printf("\n");
   if (renderable) {
-    // Nothing filled it, so any colour but the embedder's fallback means the
+    // Nothing filled it, so any color but the embedder's fallback means the
     // texture was sampled.
     matched = drawn != 0xFF000000u;
     printf("drew #%08X from an unfilled renderable dmabuf — %s\n", drawn,

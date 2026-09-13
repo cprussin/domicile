@@ -162,7 +162,7 @@ const readState = (at) => {
 // The schedule, as what happens rather than as nested timeouts: each step is
 // `after` milliseconds past the one before it, and the order is the experiment.
 //
-// `/slow` and then stop() is the last pair for a reason — a cancelled
+// `/slow` and then stop() is the last pair for a reason — a canceled
 // navigation leaves the guest showing whatever it showed before, so anything
 // driven after it would be read against a page that never changed.
 //

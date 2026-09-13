@@ -14,7 +14,7 @@
 # what `send` writes is decoded back by an independent reader, and what
 # `receive` reads is written by hand. Both directions, because they are
 # different halves of RFC 6455 — a client frame MUST be masked and a server
-# frame MUST NOT be, and getting that backwards is the classic way to write a
+# frame MUST NOT be, and getting that backward is the classic way to write a
 # WebSocket client that never works.
 #
 # `pick_target` is here for a different reason. It decides which page the input

@@ -72,7 +72,7 @@ type Props = {
  *
  * Two things are not props, and for the same reason — `<app>` has no hyphen in
  * its name, so React treats the tag as an ordinary HTML element rather than as a
- * custom element, and neither a property it does not recognise nor an `on…`
+ * custom element, and neither a property it does not recognize nor an `on…`
  * listener for an event it has never heard of is written at all. So the focus
  * request is bound with `addEventListener` — the way `BrowserWindow` binds
  * `<webview>`'s events, for the same reason — and the keyboard is asked for in

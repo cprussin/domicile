@@ -16,7 +16,7 @@
 # which carries the same scar.
 #
 # Synthetic logs, because the real ones cost four hours and a runner with a 97G
-# checkout. What is synthesised here is only the SHAPE — gn's `ERROR at` block,
+# checkout. What is synthesized here is only the SHAPE — gn's `ERROR at` block,
 # siso's `stderr:` block, ninja's `FAILED:` line — and the shape is the whole of
 # what the script keys on.
 set -u
@@ -149,7 +149,7 @@ expect_within "and that too is at the top" 25 \
 #
 # The shell around the build has swallowed a command's output before in this
 # repository — twice, in engine.yml's own history — and a report that prints
-# nothing when it recognises nothing is indistinguishable from a build that
+# nothing when it recognizes nothing is indistinguishable from a build that
 # passed. It has to say so in its own words and show the log's last lines.
 #
 # THIS FIXTURE IS THE ONE SHAPE WITH NO `drm probe:` LINE IN IT, and that is
@@ -171,7 +171,7 @@ contains "and shows the last thing that was said" "filler_30.o" "$out"
 # engine-drm-probe.sh that can fail has already printed `drm probe:
 # configuring out/DrmProbe` by the time it does, so on any run that started at
 # all the verdict is non-empty — and the tail that is supposed to catch a
-# failure none of the markers recognise sat behind exactly that test. The
+# failure none of the markers recognize sat behind exactly that test. The
 # result was a report that brought back neither the error nor a tail nor an
 # alarm, which is the one thing its own header says it exists to prevent.
 #
@@ -195,7 +195,7 @@ RAW="$WORK/raw.log"
   echo "drm probe: gn gen accepted the arguments and autoninja could not build ui/ozone"
 } >"$RAW"
 out="$("$REPORT" "$RAW" 2>&1)"
-contains "an unrecognised failure comes back in the tail" "MemoryError" "$out"
+contains "an unrecognized failure comes back in the tail" "MemoryError" "$out"
 contains "with the action that raised it" "gcc_solink_wrapper.py" "$out"
 contains "and the probe's own account of how far it got" \
   "drm probe: building ui/ozone" "$out"

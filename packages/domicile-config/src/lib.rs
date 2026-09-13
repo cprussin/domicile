@@ -154,7 +154,7 @@ pub struct DisplayConfig {
     ///
     /// Wherever the user finds it natural to put it — negative included, since
     /// "to the left of that one" is the obvious way to describe a second
-    /// monitor. Not the desktop's space, which [`Desktop`] normalises this
+    /// monitor. Not the desktop's space, which [`Desktop`] normalizes this
     /// into and which is what the compositor advertises and the chrome is
     /// told; these numbers do not leave this crate.
     #[serde(default)]
@@ -239,7 +239,7 @@ impl DisplayConfig {
         //
         // This subsumes bounding the logical size on its own: the scale is at
         // least 1 by the check above, so a mode that fits means a size that
-        // fits, which is the invariant `Desktop` asserts when it normalises.
+        // fits, which is the invariant `Desktop` asserts when it normalizes.
         let mode = (
             u64::from(width) * u64::from(self.scale),
             u64::from(height) * u64::from(self.scale),
@@ -378,7 +378,7 @@ impl OutputConfig {
     ///
     /// Each entry's own far corner fitting an `i32` is not enough: two that
     /// each fit can still be four billion apart. The desktop is placed about
-    /// its own top-left corner, so a display's normalised position is the
+    /// its own top-left corner, so a display's normalized position is the
     /// distance between two of those corners — and `i32` is what a position
     /// is. Checked here rather than left to `Desktop::of`, which does that
     /// subtraction and would overflow doing it.
@@ -492,7 +492,7 @@ impl Config {
         // Unconditional, though a config that describes displays never reaches
         // either setting: a config is checked for what it says, not for which
         // of it this run happens to use, so adding a display does not quietly
-        // legalise a nested size that was rejected a moment ago.
+        // legalize a nested size that was rejected a moment ago.
         // `u64` for the same reason as a display's: two `u32`s multiply past
         // `i64::MAX`, so an `i64` product panics in debug and wraps in
         // release — and a wrapped one lands back under the bound, which turns

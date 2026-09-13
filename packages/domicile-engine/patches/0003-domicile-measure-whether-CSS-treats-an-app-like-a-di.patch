@@ -13,7 +13,7 @@ a blocker; this is the one that decides whether any of it was worth carrying.
 Seven properties, each applied to an <app> — a <canvas> showing a viz surface a
 process outside the renderer submits to — and to an ordinary <div> laid out
 identically beside it, so "behaves like a <div>" is a pixel comparison rather
-than a judgement. All seven pass, bit-identically across runs. z-index, the
+than a judgment. All seven pass, bit-identically across runs. z-index, the
 property bands failed at and the whole reason for the fork, is exact.
 
 Two changes to the files Chromium owns make the measurement possible, both in

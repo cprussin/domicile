@@ -94,7 +94,7 @@ inside the parent.
 The rule encodes a real invariant — the dep array must exactly mirror the
 reactive values the hook reads — and once the React Compiler is enabled,
 lying to it via a suppression *will* miscompile your hook (the compiler
-optimises around the stated deps; a "phantom" dep doesn't make the body
+optimizes around the stated deps; a "phantom" dep doesn't make the body
 re-read the value, and a missing dep won't trip a refresh).
 
 When the rule complains, restructure the hook so the dep array tells the

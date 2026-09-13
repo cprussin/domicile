@@ -413,9 +413,9 @@ struct DomicileEngine {
   }
 
   // THROWAWAY. See domicile_engine_spike.h.
-  int32_t FindColour(uint32_t argb, DomicileSpikeCapture* out) {
+  int32_t FindColor(uint32_t argb, DomicileSpikeCapture* out) {
     int32_t found = -1;
-    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::FindColourOnThread,
+    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::FindColorOnThread,
                                       base::Unretained(this), argb, &found,
                                       out));
     return found;
@@ -550,9 +550,9 @@ struct DomicileEngine {
     probe_->SampleWindowCenter(
         base::BindOnce(
             [](base::RunLoop* loop, bool* sampled, uint32_t* argb, bool ok,
-               uint32_t colour) {
+               uint32_t color) {
               *sampled = ok;
-              *argb = colour;
+              *argb = color;
               loop->Quit();
             },
             &loop, sampled, argb));
@@ -571,18 +571,18 @@ struct DomicileEngine {
         gfx::Point(x, y),
         base::BindOnce(
             [](base::RunLoop* loop, bool* sampled, uint32_t* argb, bool ok,
-               uint32_t colour) {
+               uint32_t color) {
               *sampled = ok;
-              *argb = colour;
+              *argb = color;
               loop->Quit();
             },
             &loop, sampled, argb));
     loop.Run();
   }
 
-  void FindColourOnThread(uint32_t argb,
-                          int32_t* found,
-                          DomicileSpikeCapture* out) {
+  void FindColorOnThread(uint32_t argb,
+                         int32_t* found,
+                         DomicileSpikeCapture* out) {
     if (!probe_) {
       return;
     }
@@ -775,13 +775,13 @@ bool domicile_engine_spike_sample_pixel(DomicileEngine* engine,
   return engine->SamplePixel(x, y, argb);
 }
 
-int32_t domicile_engine_spike_find_colour(DomicileEngine* engine,
-                                          uint32_t argb,
-                                          DomicileSpikeCapture* out) {
+int32_t domicile_engine_spike_find_color(DomicileEngine* engine,
+                                         uint32_t argb,
+                                         DomicileSpikeCapture* out) {
   if (!engine || !out) {
     return -1;
   }
-  return engine->FindColour(argb, out);
+  return engine->FindColor(argb, out);
 }
 
 }  // extern "C"

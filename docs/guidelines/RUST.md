@@ -81,7 +81,7 @@ are pure logic precisely so this stays cheap — keep new
 logic on that side of the line and out of the Smithay backend wherever the
 choice exists.
 
-Unit tests live in the crate they test; cross-module behaviour goes in
+Unit tests live in the crate they test; cross-module behavior goes in
 `tests/`. The end-to-end scripts in `/scripts` cover what unit tests cannot —
 a real Wayland client talking to a real compositor — and are not a substitute
 for either.
