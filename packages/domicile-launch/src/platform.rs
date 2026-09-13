@@ -5,13 +5,23 @@
 //! desktop is a window inside an existing Wayland session, and the two other
 //! ways to start one are refused rather than attempted.
 //!
-//! `ozone_platform_drm` is what would make a tty the whole screen, and it
-//! cannot be set at this Chromium pin: `ui/ozone/platform/drm/BUILD.gn` opens
-//! with `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`, and
-//! `//ui/ozone` depends on it the moment the argument is true, so `gn gen`
-//! refuses before anything compiles. Handing `--ozone-platform=drm` to a
-//! binary with no drm platform in it is a black screen and a Chromium fatal,
-//! so this says the true thing instead.
+//! `ozone_platform_drm` is what would make a tty the whole screen, and the
+//! reason it is refused has moved. It used to be the pin: `gn gen` would not
+//! accept the argument at all, because `ui/ozone/platform/drm/BUILD.gn` opened
+//! with `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`. Patch
+//! `0012` relaxed that assert and `engine-drm-probe.yml` measured the result --
+//! the argument configures and `//ui/ozone` compiles and links at this pin.
+//!
+//! What refuses a tty now is two things further along. The engine that ships
+//! does not carry the platform: `scripts/build.sh` and
+//! `engine-release-build.sh` both set `ozone_auto_platforms = false` and name
+//! only wayland and headless. And behind the platform there is no embedder --
+//! `OzonePlatformDrm::CreateScreen` is `NOTREACHED()` and nothing in the tree
+//! modesets without `//ui/display/manager`, which is ChromeOS-only.
+//!
+//! Handing `--ozone-platform=drm` to a binary with no drm platform in it is a
+//! black screen and a Chromium fatal, so this says the true thing instead.
+//! `docs/architecture/A-DESKTOP-ON-A-TTY.md` is where that work is tracked.
 
 /// A machine this engine cannot draw on, and what the person does about it.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -24,9 +34,10 @@ pub enum PlatformError {
     X11Session,
     #[error(
         "there is no display server here, and a tty needs the drm ozone \
-         platform, which cannot be built at this Chromium pin — see \
-         docs/architecture/ENGINE-FORK.md. Start this from a Wayland session \
-         for a window; OZONE=headless runs it with no display."
+         platform, which is not in this engine build — the release names only \
+         wayland and headless, and nothing behind the platform drives a screen \
+         yet. See docs/architecture/A-DESKTOP-ON-A-TTY.md. Start this from a \
+         Wayland session for a window; OZONE=headless runs it with no display."
     )]
     NoDisplayServer,
 }

@@ -6,14 +6,21 @@
 # Small and fast rather than shippable: a component build with no symbols and
 # every Ozone platform off but the three this needs.
 #
-# Wayland and headless, and NOT drm. `ozone_platform_drm` is what would make a
-# tty a display, and it cannot be set here: at this Chromium pin
-# `ui/ozone/platform/drm/BUILD.gn` opens with
-# `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`, and
+# Wayland and headless, and NOT drm -- now by choice rather than by refusal.
+# `ozone_platform_drm` is what would make a tty a display, and it USED to be
+# unsettable here: at this Chromium pin `ui/ozone/platform/drm/BUILD.gn` opened
+# with `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`, and
 # `//ui/ozone/BUILD.gn` makes `platform/drm:gbm` a dependency the moment the
-# argument is true, so `gn gen` refuses before anything is compiled. Measured,
-# not read: run 34152521286. A tty needs a patch in the series or a different
-# `target_os`, and either is its own piece of work.
+# argument is true, so `gn gen` refused before anything was compiled. Measured,
+# not read: run 34152521286.
+#
+# Patch `0012` relaxed that assert, and run 34623575435 measured the result --
+# `gn gen` accepts the argument and `//ui/ozone` compiles and links with it. So
+# what keeps drm out of this build is no longer the tree. It is that there is
+# nothing behind the platform yet: `OzonePlatformDrm::CreateScreen` is
+# `NOTREACHED()` and nothing modesets without `//ui/display/manager`. Building
+# the platform in before that embedder exists trades a clear refusal for a
+# crash. `docs/architecture/A-DESKTOP-ON-A-TTY.md` tracks that work.
 #
 #   wayland   nested in an existing session — a window, like running sway
 #             inside sway. What a developer has, and what CI drives
