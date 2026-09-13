@@ -99,6 +99,25 @@ source_set("shell_source") {
   ]
 }
 
+# What a running engine can be told about the shell it serves.
+#
+# Its own target beside :shell_source rather than part of it, because a line of
+# JSON and the state it names are two different things -- and because this is
+# the half of the command socket that can be tested with a string. What cannot
+# is in //chrome/browser/domicile, which is where the socket and the shell's
+# window are. //base and the switch names; no //content and no socket.
+source_set("command_protocol") {
+  sources = [
+    "browser/command_protocol.cc",
+    "browser/command_protocol.h",
+  ]
+
+  public_deps = [
+    ":common",
+    "//base",
+  ]
+}
+
 # The chords the shell claimed for the desktop, and who to tell when one fires.
 #
 # Its own target between :control_channel and :web_view_guest because it is the
@@ -168,6 +187,7 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "browser/command_protocol_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
@@ -178,6 +198,7 @@ source_set("unit_tests") {
 
   deps = [
     ":browser",
+    ":command_protocol",
     ":cursor_shape",
     ":shell_scheme",
     ":shell_source",
@@ -191,6 +212,7 @@ source_set("unit_tests") {
     "//components/viz/test:test_support",
     "//mojo/public/cpp/bindings",
     "//skia",
+    "//testing/gmock",
     "//testing/gtest",
     "//ui/gfx/geometry",
   ]

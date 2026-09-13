@@ -1,0 +1,33 @@
+# Copyright 2026 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# The socket a running engine answers commands about its shell on.
+#
+# A target of its own rather than sources on //chrome/browser:browser, because
+# that target has none any more -- "Do NOT add sources here; new code belongs
+# in a dedicated, properly-scoped target" -- and because the whole of the fork
+# in this directory is then one added dependency in a file Chromium owns.
+#
+# //chrome and not //components/domicile for one reason: carrying a
+# `load_shell` out navigates the shell's window, and finding that window is
+# //chrome/browser/ui's GlobalBrowserCollection. Everything about this that
+# does not need a window is next door in //components/domicile:command_protocol,
+# which is what has the tests.
+source_set("domicile") {
+  sources = [
+    "domicile_command_socket.cc",
+    "domicile_command_socket.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/browser/ui/browser_window",
+    "//components/domicile:command_protocol",
+    "//components/domicile:common",
+    "//components/domicile:shell_source",
+    "//components/tabs:public",
+    "//content/public/browser",
+    "//net",
+  ]
+}
