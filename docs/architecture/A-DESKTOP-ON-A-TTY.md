@@ -375,8 +375,8 @@ links with it, at this pin, with this patch. The eight edits are the whole of
 what the assert was standing in front of.
 
 What that sentence does **not** say is worth as much as what it does. It builds
-`//ui/ozone`, not `chrome`, and `crux` has no card node. Nothing here has run a
-binary, opened a DRM device, or lit a display. Step 2 is still the port
+`//ui/ozone`, not `chrome`. Nothing here has run a binary, opened a DRM device,
+or lit a display. Step 2 is still the port
 described below, and the first Open question that a build could answer is now
 answered while the ones a build cannot are not.
 
@@ -420,9 +420,20 @@ false` and name only wayland and headless, so `//ui/ozone/BUILD.gn` never adds
 
 Step 2 — the embedder (the port):
 
-- [ ] `DrmScreen : PlatformScreen` over the snapshots `DrmDisplayHostManager`
+- [x] `DrmScreen : PlatformScreen` over the snapshots `DrmDisplayHostManager`
       already holds, replacing the two `NOTREACHED()`s at
-      `ozone_platform_drm.cc:86-87`
+      `ozone_platform_drm.cc:86-87` — patch `0013`. It came in at the size this
+      section costed: six of the nine pure virtuals are the delegations the
+      table above names, the conversion is three free functions, and the only
+      edit to a file Chromium owns beyond the two `NOTREACHED()`s is
+      `DrmWindowHostManager::HasWindow` — the non-fatal lookup beside a
+      `GetWindow` that is `NOTREACHED()` on a widget it does not hold. 12 tests
+      in `ozone_unittests`. Two members are stubs a unit test cannot reach:
+      `GetCursorScreenPoint` (the position is in `DrmCursor`, which the screen
+      is not given — it comes with input, below) and the window-present half of
+      the two widget lookups, which needs a `DrmWindowHost` and so a GPU thread
+      adapter. The `chrome --ozone-platform=drm` run below is what exercises
+      those
 - [ ] a minimal modeset driver: snapshots → `DisplayConfigurationParams` →
       `DrmNativeDisplayDelegate::Configure`, and the same again on a udev
       hotplug event, without `//ui/display/manager`
@@ -457,11 +468,14 @@ Step 2 — the embedder (the port):
   `ui/events/ozone/BUILD.gn:44` — which ships its header on every platform, so
   it defeated the grep and the compiler both and surfaced only at the link.
 - **Does the engine's `chrome` target start at all under ozone/drm with no
-  ash?** Beyond `CreateScreen()`, browser startup touches display state in
-  places this audit did not trace. *Recommendation:* the same job cannot answer
-  this — `crux` has no card node — so it belongs in `ROADMAP.md`'s "Needs a
-  machine with a screen", phrased as one run of the built binary with
-  `--ozone-platform=drm`.
+  ash?** Beyond `CreateScreen()`, which `DrmScreen` now answers, browser
+  startup touches display state in places this audit did not trace.
+  *Recommendation:* run it — `crux` has a card node after all. `/dev/dri/card0`
+  is **vkms**, `Virtual-1` reads `connected` at a preferred 1024x768@60, and
+  GBM allocates a scanout bo on it. A vkms CRTC presents to nobody, so the run
+  answers whether the modeset path executes and not whether a desktop appears,
+  which is the half this question was actually about. `card1` is the nvidia GPU
+  with four disconnected connectors.
 - **libseat/seatd, logind ACLs, or root.** ACLs on an active VT make the
   unmodified `open()` calls work and need no code; libseat would need an
   fd-passing seam ozone does not have. *Recommendation:* ship on logind ACLs,

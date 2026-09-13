@@ -228,11 +228,20 @@ decides whether an item is waiting or workable.
    argument for owning a runner.
 
    What has *not* been measured is a lit screen. The probe builds `//ui/ozone`,
-   not `chrome`, and `crux` has no card node, so nothing here says a display
-   comes up -- only that the tree the display would come out of builds.
+   not `chrome`, so nothing here says a display comes up -- only that the tree
+   the display would come out of builds.
 
-   **Step 2 is costed, and it is two files rather than a port of
-   `//ui/display/manager`.** Only that target's *caller* is ChromeOS-only:
+   **`DrmScreen` has landed -- patch `0013`, 12 unit tests in
+   `ozone_unittests`, all 733 of that suite green.** It answers
+   `CreateScreen()` and `InitScreen()`, which were both `NOTREACHED()`, over
+   `display::DisplayList` and `display_finder.h`, and none of
+   `//ui/display/manager` was ported. What is **not** measured is any of it
+   running: nothing has started `chrome` under the platform, so the screen is
+   correct against its tests and unexercised against a browser. The modeset
+   driver beside it is the next item.
+
+   **Step 2 was costed as two files rather than a port of
+   `//ui/display/manager`, and the first of them came in at that size.** Only that target's *caller* is ChromeOS-only:
    `DrmNativeDisplayDelegate` already implements `GetDisplays`, `Configure`,
    `TakeDisplayControl`/`RelinquishDisplayControl` and a two-method observer,
    and every one of those seams is ungated. `PlatformScreen` has nine pure
@@ -241,12 +250,21 @@ decides whether an item is waiting or workable.
    `WaylandScreen` at 737. `A-DESKTOP-ON-A-TTY.md` has the tables, read at the
    pin.
 
-   **The next measurable step needs a card node, not a reading.** In order:
-   `chrome` builds with the argument, then `chrome --ozone-platform=drm`
-   *starts* without hitting a `NOTREACHED()`, then a CRTC lights. `crux` can do
-   the first and neither of the others, which is the whole of why a machine with
-   a screen is the bottleneck now. Treat the costing as a floor: the last audit
-   read five edits and the compiler found eight.
+   **The next measurable step is a run, not a reading -- and `crux` can now
+   make it.** In order: `chrome` builds with the argument, then `chrome
+   --ozone-platform=drm` *starts* without hitting a `NOTREACHED()`, then a CRTC
+   lights. The first is done: `out/Agent/chrome` is linked with
+   `ozone_platform_drm = true`. The other two were blocked on a card node, and
+   `crux` has one -- `/dev/dri/card0` is **vkms**, whose `Virtual-1` connector
+   reads `connected` at a preferred 1024x768@60, with GBM up and a 256x256
+   XRGB8888 scanout bo allocated on it (`drmprobe/probe`, read-only: it calls
+   neither `drmModeSetCrtc` nor `drmSetMaster`). `card1` is the nvidia GPU and
+   all four of its connectors read `disconnected`.
+
+   A vkms CRTC presents to nobody, so it answers "does the modeset path run"
+   and not "does a desktop appear". That is the question standing next, and it
+   needs no new hardware. Treat the costing as a floor: the last audit read
+   five edits and the compiler found eight.
 
    Until both halves land, a desktop is a window inside an existing Wayland
    session, or headless.
