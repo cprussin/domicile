@@ -7,10 +7,15 @@
 #include <string>
 #include <utility>
 
-#include "base/command_line.h"
+// `LOG` and `as_byte_span` are used below and had never been asked for by name;
+// they arrived through base/command_line.h, which the shell source replaces. An
+// include this file does not use is not allowed to be what keeps it compiling.
+#include "base/containers/span.h"
+#include "base/logging.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "mojo/public/cpp/system/data_pipe.h"
+#include "components/domicile/browser/shell_source.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "content/public/browser/file_url_loader.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -231,9 +236,14 @@ void ShellURLLoaderFactory::ServeDocument(
   mojo::Remote<network::mojom::URLLoaderClient> client_remote(
       std::move(client));
 
-  const std::string module =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          kDomicileShellModuleSwitch);
+  // READ PER REQUEST, AND OUT OF THE SHELL SOURCE RATHER THAN THE COMMAND LINE.
+  // Per request is what makes a reload able to serve a different shell than the
+  // one this window loaded a moment ago, which is the whole of `domicile
+  // load-shell` on this side: the module is whatever the source holds when the
+  // document is asked for. The command line is still where it starts out --
+  // ShellSource is seeded from it -- so an engine nobody has told anything
+  // serves exactly what it was launched with.
+  const std::string module = ShellSource::Get().Module();
   if (module.empty()) {
     // No module is no shell. Failing is the honest answer; a document with an
     // empty src would load, paint nothing, and look like a broken shell rather
