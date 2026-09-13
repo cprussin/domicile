@@ -30,10 +30,33 @@ fn an_x11_session_is_refused_as_itself() {
 }
 
 #[test]
-fn a_tty_is_refused_because_drm_cannot_be_built_yet() {
+fn a_tty_is_refused_by_the_build_and_not_by_the_pin() {
     assert_eq!(
         platform(None, None, None),
         Err(PlatformError::NoDisplayServer)
+    );
+}
+
+#[test]
+fn the_tty_refusal_blames_the_engine_build_rather_than_the_pin() {
+    // The reason a tty is refused moved, and an error that names a blocker
+    // which has been removed sends the reader to argue with a settled
+    // question. `ozone_platform_drm = true` configures and links at this pin
+    // -- patch 0012 and the drm probe job establish that. What is missing is
+    // that the release build names only wayland and headless, and that there
+    // is no embedder behind the platform even when it is built.
+    let said = PlatformError::NoDisplayServer.to_string();
+    assert!(
+        !said.contains("cannot be built at this Chromium pin"),
+        "the refusal still blames the pin: {said}"
+    );
+    assert!(
+        said.contains("is not in this engine build"),
+        "the refusal does not name the build as the blocker: {said}"
+    );
+    assert!(
+        said.contains("A-DESKTOP-ON-A-TTY.md"),
+        "the refusal does not point at the doc that tracks the work: {said}"
     );
 }
 
