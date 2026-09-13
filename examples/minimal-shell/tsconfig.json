@@ -9,5 +9,5 @@
     "target": "esnext",
     "verbatimModuleSyntax": true
   },
-  "include": ["src", "vite.renderer.config.ts"]
+  "include": ["src", "vite.config.ts"]
 }

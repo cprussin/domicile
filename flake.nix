@@ -261,7 +261,7 @@
             --filter "@domicile/shell-${name}" --no-daemon
           runHook postBuild
         '';
-        # `main_window` is what the shell's own `vite.renderer.config.ts` calls
+        # `main_window` is what the shell's own `vite.config.ts` calls
         # the one window it opens, and it stays that here: this installs the
         # shell's build rather than rearranging it.
         installPhase = ''

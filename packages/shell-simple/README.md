@@ -27,7 +27,7 @@ twelve hundred lines of it. Two neighbors mark the ends it sits between:
 
 | Path | What |
 |---|---|
-| `src/renderer.ts` | Renderer entry, and the whole of the wiring: build the `DomicileClient`, bind the SDK, open a window per client, draw the background, install the gestures and the shortcut. |
+| `src/index.ts` | The entry, and the whole of the wiring: build the `DomicileClient`, bind the SDK, open a window per client, draw the background, install the gestures and the shortcut. |
 | `src/desktop.ts` | The windows on screen: one `<app>` per client, each at a box this module owns. All of the shell's state. |
 | `src/window-gestures.ts` | Alt and the pointer: what a press, a drag and a release do to the window under them. |
 | `src/keybinding-background.ts` | The keys, on an empty desktop and unpainted while a window is on it: the desktop's own paint, and all of it when there is no window. |

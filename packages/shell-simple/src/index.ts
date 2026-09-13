@@ -1,4 +1,4 @@
-// Entry point for the simple shell's renderer, and the whole of its wiring.
+// Entry point for the simple shell, and the whole of its wiring.
 //
 // `connectToHost` finds the compositor whichever way this page was opened —
 // the fork, or a plain browser with no desktop at all — and this joins the SDK

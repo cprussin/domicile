@@ -8,7 +8,7 @@ import { useTheme } from "./ThemeProvider";
 import type { ThemePreference } from "./theme-core";
 
 // Pre-paint helpers: apps apply the persisted theme to `<html>` before React
-// mounts (see the app's renderer entry), then mount a `Provider` for runtime.
+// mounts (see the app's entry point), then mount a `Provider` for runtime.
 export { applyPreference, loadPreference } from "./ThemeProvider";
 
 const LABELS: Record<ThemePreference, string> = {

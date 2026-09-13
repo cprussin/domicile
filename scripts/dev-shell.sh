@@ -36,7 +36,7 @@ SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
   echo "no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME." >&2
   exit 1
 }
-# Where the shell's own renderer config puts it: this runs the shell's own
+# Where the shell's own vite config puts it: this runs the shell's own
 # build rather than a second one of ours.
 PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 
@@ -68,7 +68,7 @@ trap cleanup EXIT INT TERM
 # change to one of them is a restart — this is the loop for working on a shell,
 # not on the SDK underneath it.
 echo "watching $SHELL_DIR"
-(cd "$SHELL_DIR" && exec bunx vite build -c vite.renderer.config.ts --watch) &
+(cd "$SHELL_DIR" && exec bunx vite build --watch) &
 WATCHING+=($!)
 
 # The engine: the published one, fetched and pinned by the flake, because the
