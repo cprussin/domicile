@@ -253,8 +253,13 @@ decides whether an item is waiting or workable.
    **The next measurable step is a run, not a reading -- and `crux` can now
    make it.** In order: `chrome` builds with the argument, then `chrome
    --ozone-platform=drm` *starts* without hitting a `NOTREACHED()`, then a CRTC
-   lights. The first is done: `out/Agent/chrome` is linked with
-   `ozone_platform_drm = true`. The other two were blocked on a card node, and
+   lights. **None of the three is done yet.** `out/Agent/args.gn` took
+   `ozone_platform_drm = true` on 2026-09-13; the `chrome` beside it was linked
+   the day before, and running that binary aborts in `PreSandboxStartup` with
+   `Invalid ozone platform: drm` -- before `CreateScreen()` is reached, so it
+   says nothing about `DrmScreen` either way. **An `args.gn` carrying an
+   argument is not a binary built with it**, and comparing the two timestamps
+   is what says which. The other two were blocked on a card node, and
    `crux` has one -- `/dev/dri/card0` is **vkms**, whose `Virtual-1` connector
    reads `connected` at a preferred 1024x768@60, with GBM up and a 256x256
    XRGB8888 scanout bo allocated on it (`drmprobe/probe`, read-only: it calls
