@@ -8,7 +8,7 @@ import "ui/gfx/geometry/mojom/geometry.mojom";
 
 // THROWAWAY. The spike's proof, and nothing else.
 //
-// The producer knows what colour it submitted. What it cannot see is what the
+// The producer knows what color it submitted. What it cannot see is what the
 // display compositor drew, and that is the only thing worth knowing: whether
 // viz aggregated a frame from a process that is not a renderer into a page's
 // layer tree, because a <canvas> in that page named its SurfaceId.
@@ -16,12 +16,12 @@ import "ui/gfx/geometry/mojom/geometry.mojom";
 // Every method here answers that out of a CopyOutputRequest on the browser
 // window's root layer, which viz serves from the display compositor's draw
 // after the aggregator has resolved every SurfaceDrawQuad in the tree. So a
-// colour that comes back is a colour viz aggregated, and if it is the
+// color that comes back is a color viz aggregated, and if it is the
 // producer's then the aggregation happened through the page.
 //
 // Deleted when domicile-compositor submits real buffers.
 interface SpikeProbe {
-  // Steps 2 and 3: the colour at the centre of the browser's window.
+  // Steps 2 and 3: the color at the center of the browser's window.
   //
   // Fails if there is no window yet, or nothing has been drawn — retry.
   SampleWindowCenter() => (bool sampled, uint32 argb);
@@ -36,7 +36,7 @@ interface SpikeProbe {
   // above and below exist rather than this being the only one.
   CaptureWindow() => (bool captured, gfx.mojom.Size size, array<uint32> argb);
 
-  // Step 4's latency measurement: one pixel, so that polling for a colour to
+  // Step 4's latency measurement: one pixel, so that polling for a color to
   // appear costs a draw and a round trip rather than a draw, a round trip and
   // 3 MB.
   //

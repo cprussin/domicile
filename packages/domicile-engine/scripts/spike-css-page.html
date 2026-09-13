@@ -6,7 +6,7 @@
   Every cell is one CSS property, applied identically to the two halves of it.
   The left half holds the fork's native <app> — a cc::SurfaceLayer embedding a
   viz surface a process outside the renderer submits to — and the right half
-  holds an ordinary <div> filled with the colour that producer submits. Both
+  holds an ordinary <div> filled with the color that producer submits. Both
   halves are otherwise the same markup at the same offsets, so "does this
   property treat an <app> like a <div>" becomes "is the left half of this cell
   a pixel-for-pixel copy of the right half", which domicile_css_parity answers
@@ -21,7 +21,7 @@
   scripts/test-parity-page-uses-the-native-tag.sh is what keeps it that way.
 
   The last cell is there to be different. A measurement that cannot fail has
-  not measured anything, so its control is a colour the producer never submits
+  not measured anything, so its control is a color the producer never submits
   and the run fails if the diff does not notice.
 
   THE GEOMETRY HERE MUST MATCH components/domicile/spike/css_parity_layout.h.
@@ -33,7 +33,7 @@
 <title>domicile: does CSS treat an &lt;app&gt; like a &lt;div&gt;?</title>
 <style>
   /* Must match kPageBackground. The producer finds the top of the viewport by
-     looking for the first row of the window that is this colour all the way
+     looking for the first row of the window that is this color all the way
      across, which is how the measurement locates the page without needing to
      know how tall the browser's own furniture is. kGridTop of margin above the
      first cell is what guarantees such a row exists. */
@@ -63,7 +63,7 @@
   .control-half { left: 280px; }
 
   /* Something with structure to composite against, so that opacity, blur and
-     blend have more to show than one flat colour over another. */
+     blend have more to show than one flat color over another. */
   .backdrop {
     background: linear-gradient(135deg, #ff9800 0%, #3f51b5 50%, #4caf50 100%);
     height: 130px;
@@ -139,11 +139,11 @@
   ];
 
   /**
-   * The colour the producer submits, which every control element is filled
+   * The color the producer submits, which every control element is filled
    * with. There is no channel from this page to the producer, so the harness
    * is what makes the two agree.
    *
-   * A value this cannot read would compare an <app> against the wrong colour
+   * A value this cannot read would compare an <app> against the wrong color
    * and report every cell as a failure, so it throws instead of carrying on
    * with a default.
    */
@@ -179,7 +179,7 @@
    *
    * The stacking cell puts the element under test FIRST in document order, so
    * that the two ordinary elements it has to interleave with come after it.
-   * That is what makes the cell discriminating: with z-index honoured the
+   * That is what makes the cell discriminating: with z-index honored the
    * element paints above `under` and below `over`, and with z-index ignored it
    * would fall back to document order and `under` would cover it. Building it
    * the other way round — the way that reads more naturally — passes whether
@@ -199,9 +199,9 @@
     half.append(box);
     if (spec.stack) {
       for (const name of ['under', 'over']) {
-        const neighbour = document.createElement('div');
-        neighbour.className = name;
-        half.append(neighbour);
+        const neighbor = document.createElement('div');
+        neighbor.className = name;
+        half.append(neighbor);
       }
     }
     return half;

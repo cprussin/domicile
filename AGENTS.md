@@ -165,7 +165,7 @@ Three things this cannot reach, so do not read a green run as covering them:
 - **Presentation.** The pixel tests read an offscreen buffer back; no check
   puts a window on a screen.
 - **Hardware timing.** `composite_ms`, `submit_ms` and the rest come off a
-  software rasteriser here, which flatters some stages and punishes others.
+  software rasterizer here, which flatters some stages and punishes others.
   Numbers from this container are directional, not results.
 
 ## Per-package addenda

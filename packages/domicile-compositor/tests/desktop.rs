@@ -4,7 +4,7 @@
 //! `scripts/e2e-desktop-changed.sh`, both deleted in the change that added
 //! this file — so those paths are history rather than somewhere to look. Each
 //! half of this is unit-tested already —
-//! the config normalises the positions, `Host` answers `hello` with the list,
+//! the config normalizes the positions, `Host` answers `hello` with the list,
 //! the SDK's schema decodes it — and none of that proves a compositor *started
 //! on a two-display config* describes two displays to a real chrome over a real
 //! socket.
@@ -183,7 +183,7 @@ fn a_density_one_chrome_reports_is_described_to_the_others() {
 }
 
 /// A desktop edited on disk reaches both a chrome already connected and one
-/// that arrives afterwards.
+/// that arrives afterward.
 ///
 /// The chrome-socket half of `scripts/e2e-reload-displays.sh`, deleted in the
 /// change that finished porting it. The other half — a real window open across

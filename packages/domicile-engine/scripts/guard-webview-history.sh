@@ -33,7 +33,7 @@
 #
 #   /one /two /one /two /two          and no /slow
 #    │    │    │    │    │                  │
-#    │    │    │    │    │                  stop() cancelled the pending one
+#    │    │    │    │    │                  stop() canceled the pending one
 #    │    │    │    │    reload() fetched the page again
 #    │    │    │    goForward() returned to it
 #    │    │    goBack() — THE CLAIM
@@ -272,7 +272,7 @@ SAW_MODULE=$(grep -qF "GUARD driving" "$ENGINE_LOG" && echo 1 || echo 0)
 SAW_SLOW_SHOWN=$(printf '%s\n' "$SEQUENCE" | grep -qx "/slow" && echo 1 || echo 0)
 # Asked for, which is not the same as answered: the fixture records a request
 # when it ARRIVES, so this is true in the positive run too — the navigation
-# started and was cancelled. Without it, "the slow page never appeared" and
+# started and was canceled. Without it, "the slow page never appeared" and
 # "the element never went there" are the same reading.
 SAW_SLOW_ASKED=$(grep -qF "asked /slow" "$HTTP_LOG" && echo 1 || echo 0)
 
@@ -283,7 +283,7 @@ echo "the element said: start=$START_CAN two-pages=$TWO_CAN after-back=$BACK_CAN
 echo "history events: at two-pages=$TWO_EVENTS at after-forward=$FORWARD_EVENTS"
 echo
 
-# WHICH END TO BLAME, and it is the whole of this script's judgement. Six
+# WHICH END TO BLAME, and it is the whole of this script's judgment. Six
 # readings and two modes make far more answers than a person reading an
 # annotation can be expected to reconstruct, and most of the failures read
 # alike and mean different things — so they are decided here, in a block
@@ -324,7 +324,7 @@ BOTH runs and the positive run's reading of stop() rests on nothing"
 positive run reads stop() as that page's absence, so without it here that \
 absence measures the fixture rather than stop(). Check --slow-seconds against \
 the schedule: a page still in flight when the run ends looks exactly like a \
-cancelled one"
+canceled one"
   elif [ "$COUNT" != "3" ]; then
     FAILURE="the guest showed $COUNT pages where the control drove two and \
 then the slow one. Every reading in the positive run is a position in that \
@@ -404,7 +404,7 @@ elif [ "$SAW_SLOW_ASKED" != "1" ]; then
 pending load for stop() to cancel and its reading below is about a navigation \
 that never started. This is the harness"
 elif [ "$SAW_SLOW_SHOWN" = "1" ]; then
-  FAILURE="the slow page arrived anyway, so stop() cancelled nothing. The \
+  FAILURE="the slow page arrived anyway, so stop() canceled nothing. The \
 fixture sits on that navigation for ${SLOW_SECONDS}s and stop() was driven \
 inside it, which is the only window in which a stop is a stop"
 elif [ "$COUNT" != "5" ]; then
@@ -415,7 +415,7 @@ worse than them not"
 else
   PASSED="a <webview>'s four history controls drive the guest: it went back \
 to the page before, forward to the one after, reloaded it into a fresh load, \
-and stop() cancelled a navigation that would otherwise have landed. And the \
+and stop() canceled a navigation that would otherwise have landed. And the \
 element says what back and forward can do at each step — read at two pages \
 with no listener on it, which is what a chrome mounting late would read — \
 with an event behind every change for one to re-read on"

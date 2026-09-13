@@ -12,7 +12,7 @@ use crate::DisplayConfig;
 /// One display, placed in the desktop's own coordinate space.
 ///
 /// The same fields [`DisplayConfig`] carries, except that `position` has been
-/// normalised — so this is what the compositor advertises and what the chrome
+/// normalized — so this is what the compositor advertises and what the chrome
 /// is told, and the config's own numbers never leave this crate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Display {
@@ -58,7 +58,7 @@ impl Desktop {
     ///
     /// # Panics
     ///
-    /// If `configured` describes a layout whose normalised extent does not fit
+    /// If `configured` describes a layout whose normalized extent does not fit
     /// an `i32`, or a display whose own size does not — not merely if it
     /// skipped [`Config::parse`](crate::Config::parse), since most unvalidated
     /// layouts are perfectly representable.
@@ -85,8 +85,8 @@ impl Desktop {
             .map(|display| Display {
                 name: display.name.clone(),
                 position: (
-                    normalised(display.position.0, left),
-                    normalised(display.position.1, top),
+                    normalized(display.position.0, left),
+                    normalized(display.position.1, top),
                 ),
                 scale: display.scale,
                 size: display.size,
@@ -106,7 +106,7 @@ impl Desktop {
 /// `near` is the smallest of these, so the difference is non-negative; that it
 /// also *fits* is `OutputConfig::validate_extent`'s guarantee, and this is
 /// where that guarantee is checked rather than trusted.
-fn normalised(coordinate: i32, near: i32) -> i32 {
+fn normalized(coordinate: i32, near: i32) -> i32 {
     coordinate
         .checked_sub(near)
         .expect("the layout's extent is validated before a desktop is built")
@@ -115,7 +115,7 @@ fn normalised(coordinate: i32, near: i32) -> i32 {
 /// How far the furthest display's far edge reaches along one axis.
 ///
 /// The desktop's near edge is zero, so the furthest reach *is* the extent.
-/// Each display's own near edge is not — it is wherever normalising put it —
+/// Each display's own near edge is not — it is wherever normalizing put it —
 /// which is why the length is added to the position rather than taken alone.
 fn reach(displays: &[Display], edge: impl Fn(&Display) -> (i32, u32)) -> u32 {
     displays
@@ -123,9 +123,9 @@ fn reach(displays: &[Display], edge: impl Fn(&Display) -> (i32, u32)) -> u32 {
         .map(|display| {
             let (start, length) = edge(display);
             // Not `unsigned_abs`: that would turn a negative position — which
-            // `normalised` has already ruled out — into a plausible positive
+            // `normalized` has already ruled out — into a plausible positive
             // one, and hand back a desktop of the wrong size with no signal.
-            let start = u32::try_from(start).expect("normalised positions are non-negative");
+            let start = u32::try_from(start).expect("normalized positions are non-negative");
             // Checked for the same reason the subtraction is, and not because
             // it is reachable: `checked_*` is what makes the invariant hold in
             // release, where a plain `+` wraps silently into a desktop of

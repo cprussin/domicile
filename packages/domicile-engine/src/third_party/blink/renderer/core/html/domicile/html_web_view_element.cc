@@ -25,7 +25,7 @@ namespace blink {
 // packages/chrome-sdk/src/webview-element.ts for the other end of the name.
 //
 // A char array rather than an AtomicString: the atom table does not exist at
-// static-initialisation time, so the string is made where it is used.
+// static-initialization time, so the string is made where it is used.
 constexpr char kGuestFocusEvent[] = "domicile-guest-focus";
 
 // And what it says when the guest's history changes what it can do. It carries
@@ -99,7 +99,7 @@ void HTMLWebViewElement::RequestGuest() {
   context->GetBrowserInterfaceBroker().GetInterface(
       host.BindNewPipeAndPassReceiver());
   // BOTH ENDS IN ONE MESSAGE. The browser creates the guest from this call, so
-  // a client handed over afterwards would leave a window in which the guest
+  // a client handed over afterward would leave a window in which the guest
   // could commit a page and have nothing to tell about it -- and the first
   // thing a guest does is commit a page.
   //

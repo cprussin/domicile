@@ -24,7 +24,7 @@
 //!
 //! # One check was written here and deleted for killing nothing
 //!
-//! `the_compositor_says_it_recognised_the_chrome` started a chrome-side client
+//! `the_compositor_says_it_recognized_the_chrome` started a chrome-side client
 //! and waited for `the chrome mapped its toplevel`, arguing that the check
 //! above reads what the *host was told* and this reads what the compositor
 //! *decided*. The second half is true and not of this check uniquely: its
@@ -145,7 +145,7 @@ fn a_client_on_the_chrome_display_is_the_desktop_rather_than_a_window_on_it() {
 ///
 /// The race a real chrome loses whenever a window closes while its own focus
 /// message is in flight. Handing the keyboard to nothing is what makes a
-/// desktop go permanently deaf, because nothing afterwards takes it back — and
+/// desktop go permanently deaf, because nothing afterward takes it back — and
 /// the compositor is what has to survive it, since the page cannot know its
 /// message was overtaken.
 ///

@@ -173,7 +173,7 @@ embedder's three jobs was switched off in turn
 | | | |
 |---|---|---|
 | | BeginFrames | aggregated |
-| hierarchy + `SurfaceLayer` | yes | **yes** — drew `#FFFF00FF`, the colour submitted |
+| hierarchy + `SurfaceLayer` | yes | **yes** — drew `#FFFF00FF`, the color submitted |
 | `SurfaceLayer` only | **no** | **yes** — the frame submitted with a manual `BeginFrameAck` was still drawn |
 | hierarchy only | yes | no — nothing named the `SurfaceId`, so there was nothing to draw |
 
@@ -185,7 +185,7 @@ page.
 
 The proof is a pixel, not a log line. The embedder issues a `CopyOutputRequest`
 on the embedding layer, which viz answers out of the display compositor's draw
-*after* the aggregator has resolved the `SurfaceDrawQuad`, and hands the centre
+*after* the aggregator has resolved the `SurfaceDrawQuad`, and hands the center
 pixel back to the producer over mojo; the producer compares it to what it
 submitted and sets its exit code. `--color=FF00C853` returns `#FF00C853`, so
 the pixel is the producer's rather than the fallback — which is black, and set
@@ -280,7 +280,7 @@ function. The cost is one more edited file, and it is not a spike's to pay.
 Nothing it does not do to a `<div>`. Each property is applied to an `<app>` and
 to an ordinary element laid out identically beside it, so the question is
 whether one half of a cell is a pixel-for-pixel copy of the other half —
-a comparison rather than a judgement. `scripts/guard-css-and-resize.sh`, 53,200 pixels
+a comparison rather than a judgment. `scripts/guard-css-and-resize.sh`, 53,200 pixels
 per cell, and the same numbers to the pixel on every run:
 
 | | differing | interior | worst Δ | |
@@ -300,7 +300,7 @@ element at `0` and below one at `2`, with both of them *after* it in document
 order so that document order alone would not have put it there. Bands failed
 exactly here.
 
-**`transform`'s 285 pixels were software rasterisation, not the mechanism.**
+**`transform`'s 285 pixels were software rasterization, not the mechanism.**
 The table above is `--disable-gpu`, which every measurement in this project was
 until phase 1 found that `crux` has a GPU. On the GPU, with nothing else
 changed, **every cell is 0** — `transform` included, and resize with it:
@@ -322,7 +322,7 @@ takes. `spike-css-page.html` and `spike-resize-page.html` write the fork's own
 tag now: `<app app-id="…">`, embedded from layout by
 `HTMLAppElement::Embed`. Re-run on `crux` against the same series, software and
 GPU, the two tables above reproduce cell for cell — 285 `transform` edge pixels
-and 0 interior ones under software rasterisation, every cell 0 on the GPU, and
+and 0 interior ones under software rasterization, every cell 0 on the GPU, and
 the negative control's 10,800 differing and 9,976 interior on both.
 
 A null result, which is the claim: the same layer through two call sites draws
@@ -350,7 +350,7 @@ Two things stop this from passing for the wrong reason. Each property cell is
 also compared against the baseline cell, and a cell whose property never took
 effect — a class that did not match, a stylesheet that did not load — leaves
 both halves plain, and two plain halves match; the run fails unless every
-property visibly changed its cell. And the last cell's control is a colour the
+property visibly changed its cell. And the last cell's control is a color the
 producer never submits, so a diff that cannot see a difference fails there.
 
 ### Whether an `<app>` is an out-of-process `<iframe>`
@@ -406,16 +406,16 @@ rather than a difference in a pixel.
 
 One display frame — which is what it costs to ask the question at all.
 
-The producer changes the colour it is submitting and then polls the browser for
-the pixel where the page put the `<app>`, until that pixel is the new colour.
+The producer changes the color it is submitting and then polls the browser for
+the pixel where the page put the `<app>`, until that pixel is the new color.
 Sixty rounds of it, against sixty rounds of the same poll with nothing changed:
 
 | | |
 |---|---|
 | display frame interval, from viz's own `BeginFrameArgs` | **16.67 ms** |
 | poll round trip, nothing changed | median 16.67 ms, **1.0 frames** |
-| submit to the new colour being in the display compositor's output | median 16.68 ms, **1.0 frames** |
-| draws the new colour took to appear | **1**, on 60 of 60 rounds |
+| submit to the new color being in the display compositor's output | median 16.68 ms, **1.0 frames** |
+| draws the new color took to appear | **1**, on 60 of 60 rounds |
 
 The two distributions are indistinguishable, and that is the result: a frame
 from a process outside the renderer is aggregated into the same display frame
@@ -435,7 +435,7 @@ idle `crux`:
 | `<app>`, software | 32.28 ms, 1.9 frames | 33.32 ms, 2.0 frames |
 | `<app>`, GPU | 33.31 ms, 2.0 frames | 33.36 ms, 2.0 frames |
 
-`draws the new colour took to appear` is **1, on 60 of 60 rounds, in all five**.
+`draws the new color took to appear` is **1, on 60 of 60 rounds, in all five**.
 So the figure swings between one display frame and two from run to run, on the
 same binary and the same page, and the two columns never disagree by more than
 a tenth of a frame — including in the two runs that landed on 2.0. **That is
@@ -517,9 +517,9 @@ known and it is a build-system cost, not a language one.
 | Wayland server, input, seat, outputs, session | `domicile-compositor` as it stands | **kept** |
 | dmabuf → `gpu::SharedImageInterface::CreateSharedImage` → `viz::TransferableResource` | ported from `components/exo/buffer.cc` | new |
 | Submitting `CompositorFrame`s for a sink | new external viz client | **proven** — step 2's throwaway submits from a process the browser never launched and viz aggregates it |
-| Brokering a `FrameSinkId` and sink to a non-renderer process | `components/domicile/`, modelled on `content/browser/renderer_host/embedded_frame_sink_provider_impl.cc` | **done** — new files + 4 lines across two `BUILD.gn`. Not `render_process_host_impl_receiver_bindings.cc` as first guessed: nothing about it hangs off a `RenderProcessHost` |
+| Brokering a `FrameSinkId` and sink to a non-renderer process | `components/domicile/`, modeled on `content/browser/renderer_host/embedded_frame_sink_provider_impl.cc` | **done** — new files + 4 lines across two `BUILD.gn`. Not `render_process_host_impl_receiver_bindings.cc` as first guessed: nothing about it hangs off a `RenderProcessHost` |
 | Getting the producer to the broker | `mojo::NamedPlatformChannel` + a real invitation | **done** — see *How the producer reaches the broker*. One edited file: the socket opens at browser startup, because a shell's page cannot embed until a window exists and no window exists until a producer has connected over it |
-| Pushing the `SurfaceId` to the page | `components/domicile/mojom/external_surface.mojom`, modelled on the `RemoteFrame` path | **done** — new files, plus one binder line in `render_process_host_impl_receiver_bindings.cc` |
+| Pushing the `SurfaceId` to the page | `components/domicile/mojom/external_surface.mojom`, modeled on the `RemoteFrame` path | **done** — new files, plus one binder line in `render_process_host_impl_receiver_bindings.cc` |
 | An element that embeds it | `HTMLCanvasElement`, which already owns a `SurfaceLayerBridge` and a `cc::SurfaceLayer` for `transferControlToOffscreen` | **done** — `canvas.embedExternalSurface()`, 2 files + IDL as guessed, plus the feature entry and one `BUILD.gn` |
 
 ## Why this meets the requirements
@@ -554,7 +554,7 @@ writes is now a tag, not a component.
   `HTMLCanvasElement` already creates a `cc::SurfaceLayer` and already handles
   its sizing, opacity and attachment; one method points it at a
   browser-brokered `SurfaceId` instead of an OffscreenCanvas placeholder.
-- **Minimise edited files, not added ones.** A fork's carrying cost is conflicts,
+- **Minimize edited files, not added ones.** A fork's carrying cost is conflicts,
   and new files do not conflict. "Roughly four places" was the estimate before
   the page half existed. Measured across the whole series it is **21 files, 15
   of them Blink's** — and where the other eleven went is the story:
@@ -681,7 +681,7 @@ measurement machine needs. `crux` has no display server and no Wayland
 compositor, so with Wayland alone the engine cannot be started at all and step
 2 has nothing to talk to. Two other flags are load-bearing for the same reason
 and are documented in `scripts/spike.sh`: `--disable-gpu`, which is half of why
-step 2 submits solid colours rather than textures, and `--password-store=basic`,
+step 2 submits solid colors rather than textures, and `--password-store=basic`,
 without which Chrome blocks on a keyring that is not there and never creates a
 window.
 
@@ -692,7 +692,7 @@ window.
       that is not a renderer — **not killed**, see *Who may create a frame sink*
       below. `components/domicile/browser/` in the
       series
-- [x] a throwaway external submitter pushing solid-colour `CompositorFrame`s to
+- [x] a throwaway external submitter pushing solid-color `CompositorFrame`s to
       it, over a real invitation on a named socket — **not killed**. Viz drew
       `#FFFF00FF` where the external process submitted `#FFFF00FF`. See *What
       it takes to get a surface on the screen*, which also separates what
@@ -783,7 +783,7 @@ toolchain shell does not carry it; NixOS keeps the vendor libraries in
 whole of step 4, and the iframe cell — runs on the hardware.
 
 That matters beyond convenience: **step 4's one imperfect cell was an artifact
-of software rasterisation**, and on the GPU there is no imperfect cell.
+of software rasterization**, and on the GPU there is no imperfect cell.
 
 ### What `domicile_surface_import` still needs, and it is not the GPU
 
@@ -818,7 +818,7 @@ Two things settle it beyond the recommendation. `exo::Buffer` takes its
 (`components/exo/buffer.cc:95`), so brokering the import ports it *into the
 environment it was written for* rather than adapting it to a new one — strictly
 less work and less risk. And `released` already exists, so the per-buffer hop is
-amortised by a mechanism that is built rather than hoped for.
+amortized by a mechanism that is built rather than hoped for.
 
 What this adds to the ABI is one call and one reply, not a new capability:
 `domicile_surface_import` sends the dmabuf's fds and description over the socket
@@ -857,7 +857,7 @@ into the library. The first is untouched: naming a mailbox is not authority to
 mint one. The second is partly incurred, and it is worth it, because
 `ClientSharedImage::ImportUnowned(ExportedSharedImage)`
 (`gpu/command_buffer/client/client_shared_image.h:279`) is Chromium's own
-first-class way to say *another client holds this*. Taking the serialisation
+first-class way to say *another client holds this*. Taking the serialization
 types for a supported handoff is not the same as taking a command buffer, and
 what it buys is a hop off the path of the one requirement that cannot be
 traded.
@@ -871,7 +871,7 @@ then it cannot assemble the `CompositorFrame` either, so `domicile_surface_submi
 names a `BufferId` and the browser builds the frame around the matching
 `TransferableResource`. That makes the per-frame path go through the browser,
 where the table above says only the import would. A producer that submits its
-own frames — the spike's solid-colour ones — still talks to viz directly, and
+own frames — the spike's solid-color ones — still talks to viz directly, and
 `CreateFrameSink` takes a null client and receiver to ask for the other shape.
 That is no longer the path the design takes — see *Whether the producer can
 submit its own frames*, directly above — and it is kept because it is what a
@@ -899,7 +899,7 @@ for answering this rather than a separate errand.
 **Phase 1's deliverable, and the first full-strength pixel assertion in this
 fork.** Every earlier check compared a surface against an ordinary element, or
 a buffer against the embedder's fallback. This one is a real Wayland client
-drawing a colour of its own choosing and that colour coming back out of the
+drawing a color of its own choosing and that color coming back out of the
 display compositor:
 
 ```
@@ -909,10 +909,10 @@ $ nix develop .#full --command \
 the engine is listening on /tmp/domicile-client-window-broker
 driving kitty, drawing #3366CC
 the engine drew #FF3366CC; the client drew #3366CC
-PASS: a Wayland client's own window is on the page, in its own colour
+PASS: a Wayland client's own window is on the page, in its own color
 ```
 
-Exact, twice, on two colours. And `NEGATIVE=1` — the same run with no client —
+Exact, twice, on two colors. And `NEGATIVE=1` — the same run with no client —
 reports `nothing drew` and would fail if anything had.
 
 Four processes: a headless wlroots compositor for the engine to be a client of,
@@ -958,7 +958,7 @@ gbm refuses `rendering|linear` outright. A linear buffer imports without error
 and then draws as the embedder's fallback; a tiled renderable one is sampled.
 Since the harness has no GL context it cannot put known content in the second,
 so the pixel assertion is "the buffer's own zeroed content rather than the
-fallback" — `#00000000` against an opaque `#FF000000` — rather than a colour
+fallback" — `#00000000` against an opaque `#FF000000` — rather than a color
 chosen in advance. `LINEAR=1` runs it the other way and fails, which is what
 documents the limitation. A real client renders with the GPU and lands on the
 working path; `domicile-compositor` submitting a real client's buffer is what
@@ -1002,7 +1002,7 @@ already in phase 3:
   master, and `crux`'s connectors are all disconnected, so a headless KMS setup
   is its own piece of work.
 - **`x11`** — Xvfb is already used elsewhere in this repo, but X11 plus the
-  NVIDIA proprietary driver plus dmabuf import is the least travelled of the
+  NVIDIA proprietary driver plus dmabuf import is the least traveled of the
   three.
 
 **Measured, and the answer is yes.** `scripts/under-wayland.sh` nests the
@@ -1016,7 +1016,7 @@ engine in a headless wlroots compositor and runs any other check under
 | host advertises `zwp_linux_dmabuf_v1` | **sway yes, weston no** — see below |
 | `EGL_EXT_image_dma_buf_import` | **yes**, on the NVIDIA display: `EGL vendor string: NVIDIA` lists it and `..._modifiers` |
 | a GBM backend for the device | **yes** — the proprietary driver ships `nvidia-drm_gbm.so` |
-| `gbm_create_device()` on the render node | **succeeds** — Chromium picks `/dev/dri/renderD128` ("picking nvidia-drm") and GL then initialises with `EGL_PLATFORM_GBM_KHR` as its native display, which only happens on that path |
+| `gbm_create_device()` on the render node | **succeeds** — Chromium picks `/dev/dri/renderD128` ("picking nvidia-drm") and GL then initializes with `EGL_PLATFORM_GBM_KHR` as its native display, which only happens on that path |
 
 **Chromium's GBM path does not assume Mesa.** That worry was unfounded: NVIDIA
 ships its own GBM backend and its EGL imports dmabufs.
@@ -1049,7 +1049,7 @@ what it does at run time.
 
 The compositor **`dlopen`s** that library rather than linking it, so `cargo
 build` does not need a Chromium checkout — CI has none and cannot get one. It
-is not a licence to degrade: the compositor loads the engine or refuses to
+is not a license to degrade: the compositor loads the engine or refuses to
 start, because a desktop that silently shows nothing is the defect ERRORS.md
 exists to prevent.
 
@@ -1059,7 +1059,7 @@ copy path before the compositor can submit leaves nothing drawing at all.
 - [x] the vendored exo protocols and `--experiment-augmenter`
 - [x] the copy path, `AppFrame`, the hand-over pass, the over-window pass and
       the measure loop's frame half — 5,238 lines
-- [x] bands, and the readback that labelled them
+- [x] bands, and the readback that labeled them
 - [x] `<domicile-app>` embeds a surface: the element creates a canvas and calls
       `canvas.embedExternalSurface(appId)`. **The app id is the change under
       it** — a broker that hands every embedder the sink it made most recently

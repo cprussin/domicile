@@ -38,14 +38,14 @@ export const DisplayProvider = ({
   useEffect(() => {
     // Seeded by `useState` on the first render, so the first paint already has
     // the desktop; assigned again here because a *changed* source is a new
-    // connection, and `useState`'s initialiser does not run twice.
+    // connection, and `useState`'s initializer does not run twice.
     setDisplays(source.displays);
     return source.onDisplays(setDisplays);
   }, [source]);
 
   // A fresh box per render, which re-renders every consumer whenever this
   // provider renders — the desktop is read during layout and changes about as
-  // often as a monitor is plugged in, so memoising it would buy nothing and
+  // often as a monitor is plugged in, so memoizing it would buy nothing and
   // cost a dependency array to keep honest.
   return (
     <DisplayContext.Provider value={{ displays }}>

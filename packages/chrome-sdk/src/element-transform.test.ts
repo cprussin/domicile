@@ -33,7 +33,7 @@ describe("elementToScreen", () => {
   });
 
   it("accounts for scale shrinking the on-screen box", () => {
-    // Scaled about its centre, a half-size 100x100 element keeps its centre and
+    // Scaled about its center, a half-size 100x100 element keeps its center and
     // reports a 50x50 box, so local (0,0) still maps to the box's top-left.
     expect(
       elementToScreen({

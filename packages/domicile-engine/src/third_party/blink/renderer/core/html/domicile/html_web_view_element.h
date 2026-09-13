@@ -78,14 +78,14 @@ class CORE_EXPORT HTMLWebViewElement final
   // the element's whole life, and a browser that has torn the guest down has
   // closed it. A back with nowhere to go is not an error either: the browser's
   // controller answers it by not navigating, which is what an address bar
-  // whose buttons cannot yet be greyed out asks for constantly.
+  // whose buttons cannot yet be grayed out asks for constantly.
   void goBack();
   void goForward();
   void stop();
   void reload();
 
   // WHETHER EITHER OF THE FIRST TWO WOULD DO ANYTHING, so an address bar can
-  // grey out a button that would not.
+  // gray out a button that would not.
   //
   // A PROPERTY, NOT AN EVENT'S PAYLOAD, and that is the decision this pair
   // records. A shell renders from state: it is handed a moment and asked what
@@ -99,7 +99,7 @@ class CORE_EXPORT HTMLWebViewElement final
   // again.
   //
   // NOT A CONTENT ATTRIBUTE either, which is the other shape a chrome could
-  // read: a content attribute is the author's, it serialises into innerHTML,
+  // read: a content attribute is the author's, it serializes into innerHTML,
   // and a shell or a devtools user writing one would make the DOM say something
   // the browser never did.
   //
@@ -183,7 +183,7 @@ class CORE_EXPORT HTMLWebViewElement final
   // owner type -- process allocation, the frame tree the browser keeps, devtools
   // -- wants to treat this exactly as it treats an <iframe>, and adding a case
   // to a mojom enum shared with //content would put the fork in every one of
-  // those switches for no behaviour it wants to differ.
+  // those switches for no behavior it wants to differ.
   FrameOwnerElementType OwnerType() const final {
     return FrameOwnerElementType::kIframe;
   }

@@ -56,7 +56,7 @@ TEST(ShellURLLoaderFactoryTest, RefusesAnotherScheme) {
 }
 
 TEST(ShellURLLoaderFactoryTest, PlainTraversalCannotEscape) {
-  // Not a refusal, and the difference is worth stating. GURL normalises `..`
+  // Not a refusal, and the difference is worth stating. GURL normalizes `..`
   // out of the path while parsing a standard scheme, so this never arrives as
   // traversal at all -- it arrives as "/etc/passwd" and resolves under the
   // shell root. The property that matters is containment, not rejection, so
@@ -69,7 +69,7 @@ TEST(ShellURLLoaderFactoryTest, PlainTraversalCannotEscape) {
 
 TEST(ShellURLLoaderFactoryTest, AnythingResolvedIsInsideTheRoot) {
   // The one property everything else is in service of. Whatever the path
-  // arithmetic and GURL's normalisation do between them, a path this function
+  // arithmetic and GURL's normalization do between them, a path this function
   // accepts is under the shell root -- so a case nobody thought to write is
   // still contained.
   for (const char* url : {

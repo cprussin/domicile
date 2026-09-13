@@ -1,7 +1,7 @@
 // Builders for the two chrome->host messages that still have a writer.
 //
 // **A page does not speak this wire any more.** Under the fork a shell calls
-// methods on `navigator.domicile` and the browser process serialises them, so
+// methods on `navigator.domicile` and the browser process serializes them, so
 // the eleven other builders that used to live here — resize, focus, close,
 // spawn, grab, and the five input forwards — had exactly one caller between
 // them and it was `DomicileClient.send`, which is gone. They went with it

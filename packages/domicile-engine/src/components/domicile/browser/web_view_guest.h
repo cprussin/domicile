@@ -201,7 +201,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   // such menu -- it has `goBack()`, which is `NavigationController::GoBack`,
   // which returns without navigating exactly when `CanGoBack()` is false. So
   // reporting ShouldEnableBackButton() would light the one button this whole
-  // interface exists to grey out.
+  // interface exists to gray out.
   void ReportHistory();
 
   // The second half of CreateAndAttach, once content has produced a frame that

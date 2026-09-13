@@ -86,7 +86,7 @@ class HasAHistory(BaseHTTPRequestHandler):
         # the guard's readings rather than a log line: BaseHTTPRequestHandler
         # logs a request as it sends the response, which for SLOW_PATH is after
         # the wait and after the browser may have given up. "The element never
-        # started the navigation" and "stop() cancelled it" read identically
+        # started the navigation" and "stop() canceled it" read identically
         # from the browser's log, and this is what separates them.
         sys.stderr.write("asked %s\n" % self.path)
 
@@ -115,7 +115,7 @@ class HasAHistory(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # To stderr, which the guard keeps -- and one of its readings: whether
-        # the slow page was ever REQUESTED is what tells "stop() cancelled the
+        # the slow page was ever REQUESTED is what tells "stop() canceled the
         # navigation" apart from "the element never started one", which read
         # identically from the browser's log.
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))

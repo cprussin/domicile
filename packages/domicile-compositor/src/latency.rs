@@ -32,7 +32,7 @@
 //! Small, and named rather than hidden. Folding the two together would let a
 //! slow client hide a regression in ours, or report one that is not.
 //!
-//! THE FLOOR IS NOT OPTIONAL. Asking what colour a pixel is costs a
+//! THE FLOOR IS NOT OPTIONAL. Asking what color a pixel is costs a
 //! `CopyOutputRequest`, which forces the draw it then reads, so a round trip
 //! that changed nothing still takes a display frame. Every number here is at
 //! least that, and a reading with no floor beside it cannot be told from one.
@@ -64,7 +64,7 @@ pub enum Step {
     /// delivery would drop that work out of the measurement altogether, which
     /// is worse than having it in a bucket that says so.
     Press,
-    /// Ask the engine what colour is at the probe point.
+    /// Ask the engine what color is at the probe point.
     Sample,
 }
 
@@ -143,10 +143,10 @@ pub struct Report {
     /// which drops that work out of every number instead of putting it in a
     /// declared one.
     pub key_to_commit: Option<Spread>,
-    /// That commit to the new colour being in the display compositor's
+    /// That commit to the new color being in the display compositor's
     /// output. **This is the number this design is answerable for.**
     ///
-    /// **Quantised to the floor, and it cannot not be.** The probe is only
+    /// **Quantized to the floor, and it cannot not be.** The probe is only
     /// asked after the commit and each ask costs a display frame, so this is
     /// the true value rounded up to the next probe boundary and is never below
     /// one floor even when the pixel was already on screen. Over sixty rounds
@@ -162,7 +162,7 @@ pub struct Report {
     /// The whole of it. Not what a user feels: it has the probe's round trip
     /// in it, and a user waits for no `CopyOutputRequest`.
     pub key_to_pixel: Option<Spread>,
-    /// Rounds that ran out of polls rather than seeing the colour change.
+    /// Rounds that ran out of polls rather than seeing the color change.
     ///
     /// The client was asked and did not answer — which is what a run against a
     /// client that ignores the keyboard looks like, and is the whole of what a
@@ -188,7 +188,7 @@ pub struct Report {
     /// It exists because it used to be unobservable, and its being
     /// unobservable was a bug. The run sampled in a loop inside the commit
     /// callback, holding the compositor's one thread, so a client could not
-    /// commit a second time even when that was the only way the colour was
+    /// commit a second time even when that was the only way the color was
     /// ever going to change: no buffer release reached it and no frame
     /// callback was flushed. Those rounds spent their whole poll budget and
     /// were reported as the client not answering. See `step_the_latency`.
@@ -246,7 +246,7 @@ enum Phase {
     /// construction a run of consecutive answers that all agreed. That is
     /// strictly more than "it settled" — which is why there is no separate
     /// settling phase to get out of step with this one — and it is what lets
-    /// the first round trust the colour it is watching for a change from.
+    /// the first round trust the color it is watching for a change from.
     Floor {
         taken: usize,
         since: Option<Instant>,
@@ -276,7 +276,7 @@ enum Phase {
     Ready,
     /// A key has gone in; waiting for the client to commit.
     Pressed { at: Instant, before: u32 },
-    /// The client committed; polling for the colour to reach the screen.
+    /// The client committed; polling for the color to reach the screen.
     Polling {
         keyed: Instant,
         committed: Instant,
@@ -424,7 +424,7 @@ pub struct Latency {
     budget: Budget,
     phase: Phase,
     round: usize,
-    /// The last colour the probe answered with, which is what the next round
+    /// The last color the probe answered with, which is what the next round
     /// watches for a change from. Read rather than assumed: what the client
     /// draws between rounds is the client's business.
     last: Option<u32>,
@@ -497,12 +497,12 @@ impl Latency {
                 self.phase = Phase::Pressed {
                     at: now,
                     // A completed floor is a run of answers that all agreed,
-                    // so this is a colour the probe really did report and one
+                    // so this is a color the probe really did report and one
                     // that was holding still when it did.
                     // `expect` rather than a fallback: `Ready` is only ever
                     // entered out of a completed floor, and a completed floor
                     // has answered. A default here would be a silent one, and
-                    // the round would watch for a change from a colour nobody
+                    // the round would watch for a change from a color nobody
                     // reported.
                     before: self.last.expect("a completed floor has answered"),
                 };
@@ -512,7 +512,7 @@ impl Latency {
         }
     }
 
-    /// The engine answered with the colour at the probe point.
+    /// The engine answered with the color at the probe point.
     pub fn sampled(&mut self, now: Instant, argb: u32) {
         self.last = Some(argb);
         match self.phase {
@@ -635,7 +635,7 @@ impl Latency {
 
     /// The probe could not read the window at all.
     ///
-    /// Distinct from "the colour has not changed": that is a reading, this is
+    /// Distinct from "the color has not changed": that is a reading, this is
     /// the absence of one. `spike_pixel` answers `None` for a missing symbol,
     /// a point outside the window, and a window the browser has not
     /// composited yet — and the driver funnels a browser it has no connection
@@ -755,7 +755,7 @@ mod tests {
     struct Driver {
         latency: Latency,
         now: Instant,
-        colour: u32,
+        color: u32,
         floor_samples: usize,
     }
 
@@ -774,7 +774,7 @@ mod tests {
             Self {
                 latency: Latency::new(budget),
                 now: Instant::now(),
-                colour: 0xFF00_0000,
+                color: 0xFF00_0000,
                 floor_samples,
             }
         }
@@ -786,11 +786,11 @@ mod tests {
 
         fn answer(&mut self, by: Duration) {
             self.now += by;
-            let colour = self.colour;
-            self.latency.sampled(self.now, colour);
+            let color = self.color;
+            self.latency.sampled(self.now, color);
         }
 
-        /// Take a whole floor at one colour, leaving the run one tick away
+        /// Take a whole floor at one color, leaving the run one tick away
         /// from its first press. Every test below starts from here because
         /// every real run does.
         ///
@@ -813,9 +813,9 @@ mod tests {
             self.latency.committed(self.now);
             assert_eq!(self.latency.next(self.now), Step::Sample);
             self.now += draw;
-            self.colour = self.colour.wrapping_add(0x0000_1000);
-            let colour = self.colour;
-            self.latency.sampled(self.now, colour);
+            self.color = self.color.wrapping_add(0x0000_1000);
+            let color = self.color;
+            self.latency.sampled(self.now, color);
         }
     }
 
@@ -908,7 +908,7 @@ mod tests {
 
     /// The floor waits out a page that is still painting itself, because it
     /// refuses to complete until its whole run of answers agreed. Without
-    /// that, round one would take its "before" colour from a screen that was
+    /// that, round one would take its "before" color from a screen that was
     /// going to change on its own — and would report the page's own settling
     /// as a keystroke's answer, fast and in the flattering direction.
     #[test]
@@ -933,7 +933,7 @@ mod tests {
         );
         assert_eq!(driver.latency.report(), None);
         // And then it settles, and the floor is the settled screen's.
-        driver.colour = 0xFF77_7777;
+        driver.color = 0xFF77_7777;
         driver.reach_first_press(ms(17));
         driver.round(ms(5), ms(16));
         let report = driver.latency.report().unwrap();
@@ -1029,14 +1029,14 @@ mod tests {
 
     /// Every round watches for a change from what the probe last answered, so
     /// the last answer has to be kept in every phase. Kept only during the
-    /// floor, round two would watch for a change from a stale colour and
+    /// floor, round two would watch for a change from a stale color and
     /// complete on its first poll — a fabricated fast number.
     #[test]
-    fn each_round_watches_for_a_change_from_the_previous_rounds_colour() {
+    fn each_round_watches_for_a_change_from_the_previous_rounds_color() {
         let mut driver = Driver::new(2, 3, 10);
         driver.reach_first_press(ms(17));
         driver.round(ms(5), ms(16));
-        // Round two's press, then a poll answering round one's colour: that is
+        // Round two's press, then a poll answering round one's color: that is
         // no change, and must be waited through rather than counted.
         assert_eq!(driver.tick(ms(0)), Step::Press);
         driver.now += ms(5);
@@ -1045,10 +1045,10 @@ mod tests {
         driver.answer(ms(17));
         assert_eq!(driver.latency.report(), None, "that was not a change");
 
-        driver.colour = driver.colour.wrapping_add(0x0000_1000);
-        let colour = driver.colour;
+        driver.color = driver.color.wrapping_add(0x0000_1000);
+        let color = driver.color;
         driver.now += ms(16);
-        driver.latency.sampled(driver.now, colour);
+        driver.latency.sampled(driver.now, color);
         let report = driver.latency.report().unwrap();
         assert_eq!(report.commit_to_pixel.unwrap().max, ms(33));
     }
@@ -1081,10 +1081,10 @@ mod tests {
         assert_eq!(report.commit_to_pixel.unwrap().count, 3);
     }
 
-    /// The colour not having changed yet is the normal answer for a poll or
+    /// The color not having changed yet is the normal answer for a poll or
     /// two — each one is a display frame — so it must not end the round.
     #[test]
-    fn a_colour_that_has_not_changed_yet_is_waited_through() {
+    fn a_color_that_has_not_changed_yet_is_waited_through() {
         let mut driver = Driver::new(1, 3, 10);
         driver.reach_first_press(ms(17));
 
@@ -1127,7 +1127,7 @@ mod tests {
         driver.now += ms(5);
         driver.latency.committed(driver.now);
 
-        driver.colour = 0xFF00_FF00;
+        driver.color = 0xFF00_FF00;
         driver.answer(ms(17));
 
         let report = driver.latency.report().unwrap();
@@ -1137,7 +1137,7 @@ mod tests {
         );
         assert_eq!(
             report.abandoned, 0,
-            "the colour changed, so nothing was abandoned"
+            "the color changed, so nothing was abandoned"
         );
         assert_eq!(
             report.key_to_commit.unwrap().count,
@@ -1165,7 +1165,7 @@ mod tests {
         assert_eq!(driver.tick(ms(0)), Step::Press);
         driver.now += ms(5);
         driver.latency.committed(driver.now);
-        driver.colour = 0xFF00_FF00;
+        driver.color = 0xFF00_FF00;
         driver.answer(ms(17));
 
         assert_eq!(driver.latency.report().unwrap().redrew_while_polling, 0);
@@ -1368,8 +1368,8 @@ mod tests {
         }
         assert_eq!(driver.tick(ms(0)), Step::Sample);
         driver.now += ms(99);
-        driver.colour = 0xFF44_4444;
-        let moved = driver.colour;
+        driver.color = 0xFF44_4444;
+        let moved = driver.color;
         driver.latency.sampled(driver.now, moved);
 
         // That move re-primed the floor, so a whole clean one is still owed —

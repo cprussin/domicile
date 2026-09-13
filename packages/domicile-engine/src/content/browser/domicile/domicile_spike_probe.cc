@@ -99,7 +99,7 @@ class DomicileSpikeProbe : public domicile::mojom::SpikeProbe {
   // A copy request on the window's root layer is answered out of the display
   // compositor's draw, after the aggregator has resolved every SurfaceDrawQuad
   // in the tree — including the one the page's cc::SurfaceLayer produces for
-  // the brokered surface. So a colour that comes back is a colour viz
+  // the brokered surface. So a color that comes back is a color viz
   // aggregated, and if it is the producer's then the aggregation happened
   // through the page.
   static void Capture(CapturedCallback callback) {

@@ -13,7 +13,7 @@ It is [TinyWM](http://incise.org/tinywm.html) for Domicile, and for TinyWM's
 reason: a window manager with no widgets in it shows what a shell is *made of*
 without a design on top of it. It is not, though, the least a shell can be —
 there is drag, resize, a terminal shortcut and a config schema in here, about
-twelve hundred lines of it. Two neighbours mark the ends it sits between:
+twelve hundred lines of it. Two neighbors mark the ends it sits between:
 
 - [`examples/minimal-shell`](/examples/minimal-shell) is the floor — every
   window full-screen, newest on top, and no more. It is also the only shell

@@ -6,7 +6,7 @@
 //! on a desktop the user never described, then correcting it a moment later.
 //!
 //! Here rather than inline on the watcher thread so it can be tested: the
-//! interesting behaviour is entirely about timing between two channel ends,
+//! interesting behavior is entirely about timing between two channel ends,
 //! which is a `Receiver` and two `Duration`s and nothing else.
 
 use std::sync::mpsc::Receiver;

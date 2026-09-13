@@ -91,8 +91,8 @@ export const TabRail = ({
   );
 
   // Keyboard tab management on a focused row: Alt+Up / Alt+Down switch to the
-  // neighbouring tab (moving focus with it), Alt+Shift+Up / Alt+Shift+Down
-  // rearrange the row past that neighbour — the counterparts to click and drag.
+  // neighboring tab (moving focus with it), Alt+Shift+Up / Alt+Shift+Down
+  // rearrange the row past that neighbor — the counterparts to click and drag.
   const handleKeyMove = useCallback(
     (event: KeyboardEvent<HTMLLIElement>, index: number) => {
       if (!event.altKey) {
@@ -103,15 +103,15 @@ export const TabRail = ({
       }
       const delta = event.key === "ArrowUp" ? -1 : 1;
       const current = tabs[index];
-      const neighbour = tabs[index + delta];
-      if (current === undefined || neighbour === undefined) {
+      const neighbor = tabs[index + delta];
+      if (current === undefined || neighbor === undefined) {
         return;
       }
       event.preventDefault();
       if (event.shiftKey) {
-        onReorder(current.id, neighbour.id, delta < 0 ? "before" : "after");
+        onReorder(current.id, neighbor.id, delta < 0 ? "before" : "after");
       } else {
-        onSelect(neighbour.id);
+        onSelect(neighbor.id);
         focusSiblingTab(event.currentTarget, delta);
       }
     },
@@ -256,7 +256,7 @@ const dropPosition = (event: DragEvent<HTMLLIElement>): DropPosition => {
   return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
 };
 
-/** After a keyboard switch, move focus to the neighbouring tab's button so a
+/** After a keyboard switch, move focus to the neighboring tab's button so a
  *  held Alt+Arrow keeps walking the rail. */
 const focusSiblingTab = (row: HTMLLIElement, delta: -1 | 1) => {
   const sibling =

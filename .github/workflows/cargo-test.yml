@@ -67,7 +67,7 @@ jobs:
       #
       # `--kill-after` because `timeout` alone does not guarantee its own
       # deadline: it sends TERM and then waits for the process to go, forever
-      # if the process does not. Real apt honours TERM, but a wedged one on
+      # if the process does not. Real apt honors TERM, but a wedged one on
       # dead network storage is the case this exists for.
       #
       # Three attempts at five minutes plus backoff is 15m15s, or 15m45s if

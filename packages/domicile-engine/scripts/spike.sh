@@ -49,7 +49,7 @@ shift
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 PAGE="${PAGE:-$SCRIPTS/spike-page.html}"
-# Appended to the page's URL. Step 4 uses it to tell the page which colour its
+# Appended to the page's URL. Step 4 uses it to tell the page which color its
 # control elements have to be, because there is no channel from the page to the
 # producer and the harness is what makes the two agree.
 PAGE_QUERY="${PAGE_QUERY:-}"

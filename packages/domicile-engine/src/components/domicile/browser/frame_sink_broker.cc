@@ -63,7 +63,7 @@ void FrameSinkBroker::Embed(const std::string& app_id,
   if (!frame_sink) {
     // The <app> element is in the page before the client window behind it
     // exists, which is the ordinary case on a reload: the shell lays out every
-    // window it remembers and the clients connect afterwards. Held against the
+    // window it remembers and the clients connect afterward. Held against the
     // app id rather than answered with whatever is brokered next, so an
     // element waiting for one window is not handed another.
     pending_embeds_.emplace_back(app_id, parent_frame_sink_id, local_surface_id,

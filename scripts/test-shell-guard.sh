@@ -10,7 +10,7 @@
 # establishing it. A kitty that failed to launch produced "was announced a
 # client and never embedded it", which sends whoever reads the annotation to
 # the page — and the page would be fine. This branch has already shipped a box
-# assertion that compared digits out of a colour string and a stability check
+# assertion that compared digits out of a color string and a stability check
 # that measured an idle client; a sentence that names the wrong end is the same
 # class of defect, and it costs a CI cycle each time.
 #
@@ -21,7 +21,7 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GUARD="$ROOT/packages/domicile-engine/scripts/guard-shell.sh"
-# The real one, as test-annotate.sh does: what a guard says is the behaviour,
+# The real one, as test-annotate.sh does: what a guard says is the behavior,
 # and a stub that spells `::error::` itself would not be it.
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$ROOT/packages/domicile-engine/scripts/lib-annotate.sh"
@@ -53,7 +53,7 @@ trap 'rm -rf "$FIXTURES"' EXIT
 # for all three and saying so is the point:
 #
 # - JOINED and EMBEDDING are verbatim from job 101725135992 — JOINED from that
-#   run's own compositor log with the ANSI colouring stripped, EMBEDDING from
+#   run's own compositor log with the ANSI coloring stripped, EMBEDDING from
 #   the client-window guard's engine log in the same job, because the run this
 #   stage was written for embedded nothing and therefore has no such line to
 #   take. Chromium's stderr stamps are the runner's local clock and the
@@ -184,7 +184,7 @@ $APPEARED" "$NOISE" "$EMBEDDING")"
 # between the loop's last read and the verdict would otherwise be missed and
 # the guard would blame the wrong end about a run that was fine. That window is
 # microseconds wide and no fixture can be scheduled into it, so this is pinned
-# by structure rather than by behaviour — and says so rather than implying a
+# by structure rather than by behavior — and says so rather than implying a
 # stronger test than it is. What it catches is a re-read being deleted, which
 # is the thing that actually happens: with complete fixture logs the loop's own
 # grep covers for it and every case above stays green.
@@ -203,7 +203,7 @@ FLAGS
 
 # The other stage this file now covers: the one that decides whether the pixel
 # search was looking at a client's window at all. `engine found` is satisfied by
-# a single pixel of the colour anywhere in the browser's window, so the pass has
+# a single pixel of the color anywhere in the browser's window, so the pass has
 # to establish separately that the client's buffer reached the engine. Run out
 # of the real script for the same reason as the block above.
 # Anchored on the comment rather than on the `grep` itself, deliberately: a

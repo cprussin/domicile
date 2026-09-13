@@ -9,7 +9,7 @@
 # about the wrong layer, and the next person spends a CI cycle on it.
 #
 # It matters most for the readings a verdict written by symmetry gets
-# backwards:
+# backward:
 #
 #   in the control, the third page appearing is the FAILURE — nothing drove a
 #     control there, so a page that moved anyway means the positive run's third
@@ -134,7 +134,7 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
 
 # The failing sentence, for the cases where WHICH end it names is the point. Not
 # the whole wording: sentences are prose and will be reworded, and a test that
-# pinned them would fail for edits that changed no behaviour.
+# pinned them would fail for edits that changed no behavior.
 reason() { # $1 NEGATIVE, then NAME=value overrides
   (
     baseline "$1"
@@ -201,7 +201,7 @@ expect "more pages than were driven is a failure" "fail" "$(verdict 0 COUNT=6)"
 echo
 echo "stop(), which is measured as an absence and so needs both halves"
 # An absence nobody caused. If the last navigation never left the element,
-# there is no pending load for stop() to have cancelled and the slow page's
+# there is no pending load for stop() to have canceled and the slow page's
 # absence is about the harness.
 expect "a slow page never asked for is a failure" "fail" \
   "$(verdict 0 SAW_SLOW_ASKED=0)"

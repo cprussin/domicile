@@ -45,8 +45,8 @@ pub struct Runtime {
     /// Where this desktop answers `domicile which-shell`.
     ///
     /// The one socket of the run that is not under the run's own directory:
-    /// the others are dialled by something this launcher started and told, and
-    /// this one is dialled by whoever types a command, so it goes where
+    /// the others are dialed by something this launcher started and told, and
+    /// this one is dialed by whoever types a command, so it goes where
     /// [`crate::control_socket::address`] says and is named in the
     /// environment.
     pub control: PathBuf,

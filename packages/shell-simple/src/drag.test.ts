@@ -6,7 +6,7 @@ const BOX = { height: 480, left: 100, top: 50, width: 640 };
 
 describe("dragTo", () => {
   describe("moving", () => {
-    it("carries the window the distance the pointer travelled", () => {
+    it("carries the window the distance the pointer traveled", () => {
       expect(
         dragTo(Drag.Move(BOX, { x: 200, y: 100 }), { x: 260, y: 130 }),
       ).toStrictEqual({ height: 480, left: 160, top: 80, width: 640 });

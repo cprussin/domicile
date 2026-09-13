@@ -3,7 +3,7 @@
 //! The engine first: it serves the shell itself over `domicile://` and creates
 //! the broker socket. Then the compositor, which connects to that socket as a
 //! producer. The compositor's own control socket is named to the engine up
-//! front and dialled later, when the page asks for `navigator.domicile`, so
+//! front and dialed later, when the page asks for `navigator.domicile`, so
 //! nothing here has to wait for it.
 //!
 //! There were three, and the first was a bridge serving the page over a

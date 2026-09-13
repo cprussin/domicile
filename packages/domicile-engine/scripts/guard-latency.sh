@@ -15,7 +15,7 @@
 # WHAT IT ASSERTS, AND WHY IT IS A RATIO. The number that matters is
 # `commit to pixel`, and it cannot be read as an absolute: the probe is a
 # `CopyOutputRequest` that forces the draw it then reads, so every reading is at
-# least one display frame and is quantised to it. So the assertion is that it is
+# least one display frame and is quantized to it. So the assertion is that it is
 # within a small number of display frames — this design must not add a stage of
 # its own — which is also the claim ENGINE-FORK.md makes for the producer's
 # half, in the same words, from the same shape of measurement.
@@ -38,7 +38,7 @@
 # by three times, and it was the number the bar was built from -- so the guard
 # was a coin toss between 0.60 and 1.71 against a threshold of 2, and it would
 # have flaked reading like a regression. The 48.71 sample is not merely noisy,
-# it is impossible: `commit to pixel` is quantised to probe round trips and can
+# it is impossible: `commit to pixel` is quantized to probe round trips and can
 # never be less than one, and that run's was 29.18. Whatever those samples
 # priced, it was not a probe round trip.
 #
@@ -113,7 +113,7 @@ MOST_FRAMES="${MOST_FRAMES:-2}"
 # Three numbers: rounds, floor samples, polls per round. The control runs short
 # because what it proves needs three rounds, and sixty rounds each spending
 # every poll is minutes of waiting: a poll costs a display frame, because asking
-# what colour a pixel is forces the draw it then reads.
+# what color a pixel is forces the draw it then reads.
 #
 # It is not a blocked desktop any more. The run used to sample in a loop inside
 # the commit callback, which held the compositor's one thread and starved the
@@ -169,7 +169,7 @@ fi
 rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
 # The engine, on the page with one <app> on it. One, because the probe watches
-# the window's centre and that is only the client's window if the client's
+# the window's center and that is only the client's window if the client's
 # window is what is under it.
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=wayland \
@@ -193,7 +193,7 @@ COMP_SOCK="$RUNTIME/domicile-latency.sock"
 rm -f "$COMP_SOCK" "$COMP_SOCK.session"
 LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
-DOMICILE_SPIKE_LATENCY=centre \
+DOMICILE_SPIKE_LATENCY=center \
 DOMICILE_SPIKE_LATENCY_BUDGET="$BUDGET" \
   "$COMPOSITOR" \
     --chrome-socket "$COMP_SOCK" \
@@ -223,7 +223,7 @@ CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
 # one pixel for a change, so what the client redraws has to cover that pixel —
 # a character printed somewhere might not, and a character printed *at* the
 # probe point would be a change the run counted without the background having
-# moved. Two colours alternating, because a round watches for a change from
+# moved. Two colors alternating, because a round watches for a change from
 # whatever the last one left.
 #
 # `cursor_blink_interval=0` is the difference between a measurement and
@@ -240,7 +240,7 @@ BLINK=(-o cursor_blink_interval=0)
 if [ "$NEGATIVE" = "1" ]; then
   # Ignores the keyboard, and redraws on its own so the run gets started and
   # can then find nothing. Its dots go to the top-left, which is not where the
-  # centre is.
+  # center is.
   CLIENT_CMD='while :; do printf .; sleep 0.2; done'
   echo "negative control: a client that answers no keys"
 else
@@ -343,7 +343,7 @@ fi
 
 if [ "${ABANDONED:-0}" -gt 0 ]; then
   annotate "guard-latency: $ABANDONED round(s) went unanswered — the client did" \
-       "not change colour when a key was pressed, so what was measured is not" \
+       "not change color when a key was pressed, so what was measured is not" \
        "a keystroke reaching a pixel"
   grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
   exit 1

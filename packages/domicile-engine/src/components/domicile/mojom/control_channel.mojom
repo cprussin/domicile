@@ -37,7 +37,7 @@ import "mojo/public/mojom/base/time.mojom";
 // A key combination the desktop claims for itself.
 //
 // A struct rather than a string, because the compositor's protocol takes one:
-// serialising this as text would mean the browser inventing a syntax and the
+// serializing this as text would mean the browser inventing a syntax and the
 // compositor parsing it back, and the two halves are built from one repository
 // with no reason to disagree about a keystroke. `keycode` is a Linux evdev
 // code -- the same numbering `Key` forwards in, not the X keycode the Wayland

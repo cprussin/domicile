@@ -431,7 +431,7 @@ describe("DomicileClient", () => {
 
     it("leaves a handler that replaced it alone", () => {
       // `on` is a single slot, so the second registration already displaced
-      // the first. A teardown that ran afterwards and removed whatever it
+      // the first. A teardown that ran afterward and removed whatever it
       // found would silence the live handler on behalf of a dead one. Which
       // caller does that is not this class's business to predict: taking the
       // handler is what makes letting one go safe in any order.

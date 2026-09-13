@@ -54,7 +54,7 @@ export const ShellWindow = {
 
   /**
    * A browser window the shell opened. `src` is the address it starts at and
-   * never changes afterwards — the embedded view owns navigation from there,
+   * never changes afterward — the embedded view owns navigation from there,
    * and rewriting `src` would reload the page out from under it.
    */
   Browser: (ordinal: number, src: string) => ({
@@ -85,5 +85,5 @@ export const appWindowId = (appId: string): string => `${APP_PREFIX}${appId}`;
 export const appIdOf = (id: string): string | undefined =>
   id.startsWith(APP_PREFIX) ? id.slice(APP_PREFIX.length) : undefined;
 
-/** A window is labelled by the site it is showing, the way a browser tab is. */
+/** A window is labeled by the site it is showing, the way a browser tab is. */
 export const siteOf = (url: string): string => new URL(url).hostname;

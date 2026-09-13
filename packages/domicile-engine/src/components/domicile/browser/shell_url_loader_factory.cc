@@ -114,7 +114,7 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
   // the themed-flash problem cannot happen.
   //
   // The title is not guessed. The directory a module came out of is as likely
-  // to be `dist` as anything a person would recognise, so it says Domicile
+  // to be `dist` as anything a person would recognize, so it says Domicile
   // until the shell says otherwise with document.title.
   //
   // EscapeAllExceptUnreserved on the module name is one escape doing two jobs.
@@ -162,7 +162,7 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
   // seconds while not one pixel of it was laid out. This document is the one
   // thing every shell is written against, so every name in it is a name in the
   // shell's namespace. `document.currentScript` names nothing, and the element
-  // takes itself back out afterwards so the body is the one `WRITING-A-SHELL.md`
+  // takes itself back out afterward so the body is the one `WRITING-A-SHELL.md`
   // describes: one script tag and nothing else.
   //
   // It must stay immediately after the module's tag for `previousElementSibling`

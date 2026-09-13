@@ -27,7 +27,7 @@ pub mod arguments;
 pub mod trace;
 mod window;
 
-pub use window::{TRANSLUCENT_ALPHA, TRANSLUCENT_COLOURS};
+pub use window::{TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS};
 
 /// Be the client: open a window on the compositor `WAYLAND_DISPLAY` names and
 /// keep drawing until something kills it.

@@ -52,7 +52,7 @@ on:
 # `main` -- and caught it on their first encounter. Its positive control goes
 # from two workflows to three here, which is a guard doing what a guard is for.
 #
-# Never cancelled mid-flight, for the reason engine.yml is not: a killed
+# Never canceled mid-flight, for the reason engine.yml is not: a killed
 # `autoninja` leaves a half-linked output directory that the next run inherits.
 concurrency:
   group: engine-drm-probe-${{ github.ref }}
@@ -206,7 +206,7 @@ jobs:
       # "exit 1" has spent a slot on the one machine that can answer this and
       # brought back nothing.
       #
-      # In a script, and with a test over synthesised logs of each shape, for
+      # In a script, and with a test over synthesized logs of each shape, for
       # the two reasons engine-diagnostics.sh is a script: GitHub echoes a
       # step's script into the log before running it, so a long one buries the
       # failure under its own source -- and the thing being got right here

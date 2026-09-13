@@ -24,7 +24,7 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GUARD="$ROOT/packages/domicile-engine/scripts/guard-shell.sh"
-# The real refusal, not a stub: what a guard says is the behaviour.
+# The real refusal, not a stub: what a guard says is the behavior.
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$ROOT/packages/domicile-engine/scripts/lib-annotate.sh"
 

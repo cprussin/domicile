@@ -5,8 +5,8 @@
 // THROWAWAY. Steps 2 and 3 of the spike in docs/architecture/ENGINE-FORK.md.
 //
 // Runs a domicile::spike::SurfaceProducer — a viz client in a process the
-// browser did not launch — and then asks the browser what colour it actually
-// drew at the centre of its window. Exits 0 only if that colour is the one the
+// browser did not launch — and then asks the browser what color it actually
+// drew at the center of its window. Exits 0 only if that color is the one the
 // producer submitted.
 //
 // In step 2 that answered "does viz aggregate frames from a producer that is

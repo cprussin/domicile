@@ -11,7 +11,7 @@
 //! which CI does not have. Loading it by name keeps the build working
 //! everywhere.
 //!
-//! It is *not* a licence to carry on without it. A caller that asked for the
+//! It is *not* a license to carry on without it. A caller that asked for the
 //! engine and cannot have it gets an error naming the library and why; nothing
 //! here degrades quietly, because a compositor that comes up and shows nothing
 //! is the defect `ERRORS.md` exists to prevent.
@@ -191,7 +191,7 @@ struct RawCapture {
     window_height: i32,
 }
 
-/// Where a colour is in the browser's window.
+/// Where a color is in the browser's window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bounds {
     pub x: i32,
@@ -205,7 +205,7 @@ pub struct Bounds {
 ///
 /// `window` is the captured bitmap's size, which is not obliged to be the size
 /// the browser was asked for — and a probe that could not say so is what makes
-/// a coordinate bug look like a missing surface. `bounds` is the colour's
+/// a coordinate bug look like a missing surface. `bounds` is the color's
 /// whole extent, or `None` if it is not in the window at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Capture {
@@ -215,13 +215,13 @@ pub struct Capture {
 
 impl Engine {
     /// Loads the library and joins the browser's mojo graph over `socket`.
-    /// Surfaces come afterwards, one per window, from [`Engine::create_surface`].
+    /// Surfaces come afterward, one per window, from [`Engine::create_surface`].
     ///
     /// `library` is a name or a path; a bare name is looked up the way `dlopen`
     /// looks one up.
     pub fn load(library: impl AsRef<Path>, socket: impl AsRef<Path>) -> Result<Self, EngineError> {
         let path = library.as_ref().to_path_buf();
-        // SAFETY: loading a library runs its initialisers, which is why this is
+        // SAFETY: loading a library runs its initializers, which is why this is
         // unsafe; there is no safe way to dlopen and the alternative is linking,
         // which is the thing this exists to avoid.
         let library = unsafe { Library::new(&path) }.map_err(|source| EngineError::Library {
@@ -340,13 +340,13 @@ impl Engine {
     }
 
     /// THROWAWAY, with the rest of the spike. What the display compositor drew
-    /// at the centre of the browser's window, which is where every spike page
+    /// at the center of the browser's window, which is where every spike page
     /// puts the `<app>`.
     ///
     /// Here because only one process may hold the browser's invitation and the
     /// compositor is now that process, so nothing else can ask. It goes when
     /// the spike's pages do.
-    pub fn spike_window_centre(&self) -> Option<u32> {
+    pub fn spike_window_center(&self) -> Option<u32> {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, *mut u32) -> bool> = self
             .symbol(
                 b"domicile_engine_spike_sample_window_center\0",
@@ -362,7 +362,7 @@ impl Engine {
     /// THROWAWAY, with the rest of the spike. What the display compositor drew
     /// at `x`, `y` in the browser's window.
     ///
-    /// The centre stops being enough the moment a page holds two `<app>`
+    /// The center stops being enough the moment a page holds two `<app>`
     /// elements: side by side, no pixel is inside both, and two windows on one
     /// page is the claim the broker's unit tests cannot make for themselves.
     pub fn spike_pixel(&self, x: i32, y: i32) -> Option<u32> {
@@ -398,21 +398,21 @@ impl Engine {
     /// browser's window, and how big that window is.
     ///
     /// `None` means nothing could be read — no window, nothing drawn, or no
-    /// probe. That is not the same as the colour being absent, and a guard's
-    /// negative control turns on the difference: "the colour is not there" is
+    /// probe. That is not the same as the color being absent, and a guard's
+    /// negative control turns on the difference: "the color is not there" is
     /// the control passing and "nothing was read" is the control having
     /// measured nothing while looking identical.
     pub fn spike_find(&self, argb: u32) -> Option<Capture> {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *mut RawCapture) -> i32> = match self
             .symbol(
-                b"domicile_engine_spike_find_colour\0",
-                "domicile_engine_spike_find_colour",
+                b"domicile_engine_spike_find_color\0",
+                "domicile_engine_spike_find_color",
             ) {
             Ok(symbol) => symbol,
             Err(err) => {
                 tracing::error!(
                     %err,
-                    "libdomicile_engine.so has no domicile_engine_spike_find_colour; it was \
+                    "libdomicile_engine.so has no domicile_engine_spike_find_color; it was \
                      built before the shell guard existed. Rebuild it: autoninja -C \
                      out/Domicile domicile_engine"
                 );
@@ -457,7 +457,7 @@ impl Drop for Engine {
             "domicile_engine_destroy",
         ) {
             // SAFETY: the handle is live until exactly here, and nothing uses
-            // it afterwards.
+            // it afterward.
             unsafe { f(self.handle) };
         }
     }

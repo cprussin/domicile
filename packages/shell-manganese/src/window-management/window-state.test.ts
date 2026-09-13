@@ -27,7 +27,7 @@ describe("reduceWindows", () => {
     it("renames the tab when the client says what its window is called", () => {
       // A toplevel is announced when the client creates it, which is before
       // `set_title`, so the tab opens showing the app id and the name arrives
-      // afterwards — and again every time it changes, which for a terminal is
+      // afterward — and again every time it changes, which for a terminal is
       // every command it runs.
       expect(
         titles(

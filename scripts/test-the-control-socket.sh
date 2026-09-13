@@ -225,7 +225,7 @@ fi
 
 echo "== the socket a killed desktop left behind fails rather than hangs =="
 # SIGKILL, so nothing unlinks the socket: this is what every terminal still
-# open inside that desktop has in its environment afterwards.
+# open inside that desktop has in its environment afterward.
 kill -9 "$SECOND_PID" 2>/dev/null
 wait "$SECOND_PID" 2>/dev/null
 GONE="$WORK/gone.log"

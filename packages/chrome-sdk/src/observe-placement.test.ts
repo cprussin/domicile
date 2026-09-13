@@ -167,7 +167,7 @@ describe("defaultObservePlacement", () => {
     // The loop is shared, so a throw that stopped it would stop the whole
     // desktop following — not just this window, and not just this frame:
     // nothing restarts a loop that never rescheduled itself, so every window
-    // mounted afterwards would be stranded too. `new DOMMatrix(…)` throws on a
+    // mounted afterward would be stranded too. `new DOMMatrix(…)` throws on a
     // computed value the SDK cannot parse, which has happened before.
     frames = new Frames();
     frames.follow(() => {

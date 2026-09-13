@@ -64,7 +64,7 @@ source_set("producer") {
   ]
 }
 
-# Steps 2 and 3: one pixel at the centre of the browser's window is the colour
+# Steps 2 and 3: one pixel at the center of the browser's window is the color
 # a process the browser did not launch submitted.
 executable("solid_color_submitter") {
   output_name = "domicile_solid_color_submitter"

@@ -124,11 +124,11 @@ const modifiersSchema = z.looseObject({
 // it is not the only thing that moves it — a click on a window focuses it in
 // the compositor, and a focused client going away hands the keyboard back — so
 // a chrome that tracked only its own requests would be right until the first
-// click and wrong afterwards.
+// click and wrong afterward.
 const focusChangedSchema = z.looseObject({
   // `null` on the wire, not absent: the chrome holding the keyboard is an
   // answer, and one a desktop draws differently from any window being active.
-  // Normalised here so no `null` reaches the SDK, the same way `app_appeared`
+  // Normalized here so no `null` reaches the SDK, the same way `app_appeared`
   // handles its optional title — the wire's shape is serde's business and the
   // page's is not.
   app_id: z
@@ -158,7 +158,7 @@ const displayInfoSchema = z.looseObject({
   // and renders an empty region rather than an error.
   name: z.string().min(1),
   // Signed, because it mirrors `xdg_output.logical_position` and the
-  // compositor's normalisation subtracts. Integer, because a display sits on a
+  // compositor's normalization subtracts. Integer, because a display sits on a
   // pixel.
   position: z.tuple([z.int(), z.int()]),
   // What clients on this display draw at. Not what the chrome renders at: the

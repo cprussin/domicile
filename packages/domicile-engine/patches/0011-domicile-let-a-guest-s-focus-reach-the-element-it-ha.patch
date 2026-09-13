@@ -69,7 +69,7 @@ MEASURED BY guard-webview-click.sh, which clicks in a running engine's browser
 window and reads what reaches the shell's document, with a control that clicks
 the shell's own chrome instead. Nothing below a real engine can make this
 claim: there is no nested browsing context in happy-dom, so the shell's unit
-test passes on a synthesised event whether or not a real one ever arrives --
+test passes on a synthesized event whether or not a real one ever arrives --
 which is how the shell shipped a handler for an event nothing sent.
 
 See packages/shell-manganese/src/window-management/BrowserWindow.tsx in the Domicile repository
@@ -173,7 +173,7 @@ index 864c2c8ebc7d4..2594cf8291dd6 100644
 +    // The tag check stays regardless, because it was never the workaround it
 +    // looked like: what this branch has to know is whether the owner is a
 +    // <webview> rather than an ordinary <iframe>, since focusing an
-+    // <iframe>'s owner would change upstream's behaviour for every frame, and
++    // <iframe>'s owner would change upstream's behavior for every frame, and
 +    // the tag answers exactly that. SetFocusedElement takes an Element*, and
 +    // the announcement is a virtual call on whatever the element really is, so
 +    // no HTMLWebViewElement* is wanted anywhere.

@@ -84,7 +84,7 @@ pointers over it as usual. Ask `hasHost(navigator)` if you need the question
 answered in your own code; do not reconstruct it.
 
 Do not develop against that, though: it is the chrome with every window in it
-missing, and a desktop's interesting behaviour is all on the other side of the
+missing, and a desktop's interesting behavior is all on the other side of the
 channel. Point `domicile` at your shell's module and let your own bundler watch
 it — `vite build --watch` beside `domicile ./dist/shell.js` is the whole dev
 loop, and
@@ -170,7 +170,7 @@ React at all.
 One source file and a build config. The full version, with the comments, is in
 [`examples/minimal-shell`](/examples/minimal-shell).
 
-**`src/renderer.ts`** — the page, and the whole of the shell's behaviour:
+**`src/renderer.ts`** — the page, and the whole of the shell's behavior:
 
 ```ts
 import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
@@ -225,7 +225,7 @@ painted over it hides the very window it is meant to show.
 
 The title is Domicile's until you say otherwise with `document.title`. It does
 not guess — the directory a module came out of is as likely to be `dist` as
-anything a person would recognise.
+anything a person would recognize.
 
 ## What a window has to be told
 
@@ -267,7 +267,7 @@ every move of it starts with your shell. Two questions reach you, and a shell
 that answers neither is the desktop the smallest one above already is: a click
 focuses the window under it, and a client that asks for focus is ignored.
 
-**A click on a window** is the first. The SDK fires a cancellable
+**A click on a window** is the first. The SDK fires a cancelable
 `domicile-focus-requested` on the `<app>` that was clicked
 (`APP_FOCUS_REQUESTED_EVENT` from `@domicile/chrome-sdk/app-element`) and, left
 alone, focuses the client — which is what you want when your shell has no
@@ -301,7 +301,7 @@ leaves a window when another takes it or when a click lands on the chrome.
 
 **If you write JSX**, note that `<app>` has no hyphen in its name, so React
 treats the tag as an ordinary HTML element: it writes neither a property it does
-not recognise nor an `on…` prop for an event it has never heard of. Bind this
+not recognize nor an `on…` prop for an event it has never heard of. Bind this
 event with `addEventListener` on a ref. `<webview>`'s two events are the same.
 
 **A client asking for focus** is the second, and it arrives as a message rather

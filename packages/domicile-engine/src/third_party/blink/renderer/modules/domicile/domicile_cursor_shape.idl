@@ -7,7 +7,7 @@
 // `wp_cursor_shape_v1`'s shapes, named as the CSS `cursor` keyword the chrome
 // assigns, plus `none` for a client that hides the cursor. The fourth writing
 // of one closed set: `domicile_protocol::CursorShape` is what the compositor
-// serialises, `components/domicile/common/cursor_shape.h` is what the browser
+// serializes, `components/domicile/common/cursor_shape.h` is what the browser
 // process parses that against, this is what the page's own type system knows,
 // and `cursorShapeSchema` in `@domicile/chrome-sdk` is what a shell reads.
 //

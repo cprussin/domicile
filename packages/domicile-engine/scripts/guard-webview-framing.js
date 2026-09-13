@@ -33,17 +33,17 @@ const required = (parameters, name) => {
 const parameters = new URLSearchParams(location.search);
 const view = document.createElement("webview");
 
-// Inset rather than filling the page, so the witness colour the body paints is
+// Inset rather than filling the page, so the witness color the body paints is
 // still visible around it. The probe needs to find the witness to be able to
-// say that anything was measured at all — see engine_colour_probe.cc.
+// say that anything was measured at all — see engine_color_probe.cc.
 //
 // Whole percentages of a window whose size the harness chose, so the box lands
-// on integer pixels and the flat colour inside it is not resampled onto a
+// on integer pixels and the flat color inside it is not resampled onto a
 // half-pixel edge. The control's framing page insets its <iframe> by the same
 // numbers, so the two runs put the framed page in the same place. No
 // transform, for the same reason: spike-iframe.sh measured a surface-backed
 // element under `transform` differing from a <div> on its outline, and this
-// assertion is an exact colour match.
+// assertion is an exact color match.
 view.style.position = "absolute";
 view.style.left = "10%";
 view.style.top = "10%";

@@ -28,10 +28,10 @@ export const APP_TAG_NAME = "app";
 
 /**
  * Fired on an `<app>` when something asks for the keyboard on its behalf — a
- * click, today — and cancellable, because who holds the keyboard is the
+ * click, today — and cancelable, because who holds the keyboard is the
  * shell's to decide rather than the SDK's.
  *
- * Left uncancelled it focuses the client, so a shell with no focus policy of
+ * Left uncanceled it focuses the client, so a shell with no focus policy of
  * its own needs to know nothing about this. A shell that has one — focus that
  * follows the pointer, a window that may not be interrupted, a click that
  * raises without focusing — calls `preventDefault()` and then does whatever it

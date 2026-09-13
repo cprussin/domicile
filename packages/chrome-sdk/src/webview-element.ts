@@ -44,7 +44,7 @@ export const WEBVIEW_GUEST_FOCUS_EVENT = "domicile-guest-focus";
  * WHICH IS ALSO WHY THE STATE IS NOT THIS EVENT. A shell that mounts after the
  * guest's first commit hears nothing — a React shell registers its listeners
  * in its first effect flush — and an address bar that learned only from events
- * would grey out the wrong button until the user navigated again. The
+ * would gray out the wrong button until the user navigated again. The
  * properties are always readable; this is the re-render trigger, not the
  * source of truth.
  *
@@ -79,7 +79,7 @@ declare global {
      * one value, the way `<img src>` is. */
     src: string;
     /** Whether {@link HTMLWebViewElement.goBack} would move the page, so an
-     * address bar can grey out a button that would do nothing. */
+     * address bar can gray out a button that would do nothing. */
     readonly canGoBack: boolean;
     /** Whether {@link HTMLWebViewElement.goForward} would move the page. */
     readonly canGoForward: boolean;

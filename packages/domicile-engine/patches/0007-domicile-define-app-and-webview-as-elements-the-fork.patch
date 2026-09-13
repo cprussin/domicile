@@ -23,7 +23,7 @@ creates and process allocation, site isolation and navigation are Chromium's.
 It reports FrameOwnerElementType::kIframe rather than a value of its own,
 because everything that switches on the type wants to treat it as an iframe and
 adding a case to a mojom enum shared with //content would put the fork in every
-one of those switches for no behaviour it wants to differ.
+one of those switches for no behavior it wants to differ.
 
 Two gaps in <webview>, both stated in the header rather than discovered later:
 X-Frame-Options and CSP frame-ancestors apply, because a frame owner is a

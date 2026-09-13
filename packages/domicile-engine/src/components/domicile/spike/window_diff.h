@@ -40,7 +40,7 @@ class WindowCapture {
   // `background` all the way across, or -1 if there is none.
   //
   // The page is laid out with a margin of nothing but background above its
-  // first cell, and no browser chrome is that colour across a whole row, so
+  // first cell, and no browser chrome is that color across a whole row, so
   // this locates the viewport without the page having to report anything and
   // without the caller having to know how tall the window's own furniture is.
   int FindViewportTop(SkColor background, int tolerance) const;
@@ -56,7 +56,7 @@ struct RectDiff {
   int mismatched = 0;
   // Mismatching pixels that are not on the boundary of a mismatching region.
   // This is the whole verdict: a composited surface resamples its edges where
-  // an ordinary element rasterises them, exactly as a hardware-composited
+  // an ordinary element rasterizes them, exactly as a hardware-composited
   // <video> does, so a one-or-two-pixel outline is parity and a filled region
   // is not.
   int interior_mismatched = 0;

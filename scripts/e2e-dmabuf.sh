@@ -43,7 +43,7 @@ disown "$COMP" 2>/dev/null || true   # so teardown's kill doesn't print "Killed"
 cleanup() { kill -9 "$COMP" $MOCK $CLI 2>/dev/null; rm -f "$CHROME" "$COMPLOG" "$CLILOG"; }
 trap cleanup EXIT
 
-# The compositor logs through `tracing`, which colours its field names; the
+# The compositor logs through `tracing`, which colors its field names; the
 # greps below read the log as plain text.
 plain() { sed 's/\x1b\[[0-9;]*m//g' "$COMPLOG"; }
 

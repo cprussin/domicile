@@ -15,7 +15,7 @@ const HARNESS = join(SCRIPTS, "lib", "harness.sh");
  * Runs `harness_fault` against `pid` and reports what the shell saw.
  *
  * Drives the real file rather than reasoning about its text: whether the bail
- * re-checks the compositor is a behaviour, and the previous version of this
+ * re-checks the compositor is a behavior, and the previous version of this
  * module tried to police it by reading and could be defeated by a rename.
  */
 const bail = (pid: string): { status: number; out: string } => {
@@ -212,7 +212,7 @@ describe("bailFaults", () => {
   it("is not satisfied by a source line that does not source", () => {
     // Each of these names the helper's path and reaches none of it. The
     // shellcheck directive is the sharp one: it belongs directly above a real
-    // source line, so a substring rule makes it a licence to delete that line.
+    // source line, so a substring rule makes it a license to delete that line.
     for (const script of [
       '# shellcheck source=scripts/lib/harness.sh\nharness_fault "$COMP" "x"',
       '# . "$ROOT/scripts/lib/harness.sh"\nharness_fault "$COMP" "x"',
@@ -261,7 +261,7 @@ describe("bailFaults", () => {
   });
 
   it("reports a script that spells the bail out for itself", () => {
-    // A copy is a copy the behaviour test does not drive, and a scan cannot
+    // A copy is a copy the behavior test does not drive, and a scan cannot
     // tell one that re-checks the compositor from one that does not. The
     // helper says so itself; nothing enforced it until this.
     expect(

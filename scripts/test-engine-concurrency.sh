@@ -10,7 +10,7 @@
 # A GitHub concurrency group is not that queue. It holds exactly ONE pending
 # run, and a newer run entering the group evicts whoever was pending. So a
 # group shared across refs is a queue of depth one that silently discards work:
-# runs 176 and 177 of `Engine` were each cancelled seconds after they were
+# runs 176 and 177 of `Engine` were each canceled seconds after they were
 # created, by a run on a different branch, and a release can be thrown away by
 # an unrelated push the same way.
 #

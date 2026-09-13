@@ -1,4 +1,4 @@
-//! Behaviour tests for `domicile-scene`, written before the implementation.
+//! Behavior tests for `domicile-scene`, written before the implementation.
 //!
 //! What is left of it is the affine transform type the compositor lays screens
 //! out with, the box it derives from one, and which app has the keyboard.

@@ -38,7 +38,7 @@ Served over HTTP rather than written as a `data:` URL, for the reason
 guard-webview-framing-server.py serves its own subject: `crux` reaches no
 arbitrary host, and a fixture the guard brings with it cannot change under it.
 
-The page has no colour and no layout worth the name. Nothing here is measured
+The page has no color and no layout worth the name. Nothing here is measured
 in pixels; the whole verdict is in the engine's log.
 """
 

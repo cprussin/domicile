@@ -17,7 +17,7 @@
 # which is why this guard reads its shape and not only its value.
 #
 # NO WAYLAND, NO CLIENT, NO GPU, NO WINDOW. Every other guard here needs a
-# compositor, a client drawing a colour, or a browser window with a guest in it.
+# compositor, a client drawing a color, or a browser window with a guest in it.
 # This one needs a socket with something on the far end and a page that can
 # hear it, and nothing else — which is what makes it cheap enough to run beside
 # the others and what keeps its failures about the control channel.

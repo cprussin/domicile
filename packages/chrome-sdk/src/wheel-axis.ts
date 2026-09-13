@@ -3,7 +3,7 @@
 // high-resolution step (`axis_value120`).
 //
 // The DOM reports scroll in one of three units depending on the device and the
-// browser, so both outputs are derived from a single normalised quantity — how
+// browser, so both outputs are derived from a single normalized quantity — how
 // much of a classic wheel detent the event represents.
 
 /** The subset of `WheelEvent` the conversion reads. */

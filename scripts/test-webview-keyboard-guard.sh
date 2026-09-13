@@ -12,7 +12,7 @@
 # spends a CI cycle on it.
 #
 # It matters most for the three readings a verdict written by symmetry gets
-# backwards:
+# backward:
 #
 #   in the negative run, the chord FIRING is the failure
 #   the shell's document seeing an ungrabbed key is a failure even though
@@ -92,7 +92,7 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
 
 # The failing sentence, for the cases where WHICH end it names is the point. Not
 # the whole wording: sentences are prose and will be reworded, and a test that
-# pinned them would fail for edits that changed no behaviour.
+# pinned them would fail for edits that changed no behavior.
 reason() { # $1 NEGATIVE, then NAME=value overrides
   (
     SAW_CLAIM=1

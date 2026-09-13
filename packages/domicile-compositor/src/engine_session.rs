@@ -162,9 +162,9 @@ impl EngineSession {
         })
     }
 
-    /// THROWAWAY. See [`crate::engine::Engine::spike_window_centre`].
-    pub fn spike_window_centre(&self) -> Option<u32> {
-        self.engine.spike_window_centre()
+    /// THROWAWAY. See [`crate::engine::Engine::spike_window_center`].
+    pub fn spike_window_center(&self) -> Option<u32> {
+        self.engine.spike_window_center()
     }
 
     /// THROWAWAY. See [`crate::engine::Engine::spike_pixel`].

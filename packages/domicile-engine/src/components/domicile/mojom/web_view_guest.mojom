@@ -66,7 +66,7 @@ interface WebViewGuestHost {
 // THE ANSWERS ONLY THE BROWSER HAS. A guest's history is a
 // NavigationController in the browser process, so `CanGoBack()` and
 // `CanGoForward()` cannot be read from the renderer at all -- and an address
-// bar that cannot read them cannot grey out a button that would do nothing.
+// bar that cannot read them cannot gray out a button that would do nothing.
 // This is how they arrive.
 //
 // PUSHED RATHER THAN ASKED FOR, and that is the decision the shape of this
@@ -110,7 +110,7 @@ interface WebViewGuest {
   // on about:blank since it was made and was swapped out by the attach. The
   // page the user is looking at is a WebContents in the browser process, whose
   // history is a NavigationController this process cannot see. So the four
-  // travel, and what they buy by travelling is the half that gets BETTER: a
+  // travel, and what they buy by traveling is the half that gets BETTER: a
   // guest has a history of its own, across process changes, where a frame
   // shared the whole session's.
   //
@@ -123,7 +123,7 @@ interface WebViewGuest {
   // have one: `NavigationControllerImpl::GoBack` returns without navigating
   // when `CanGoBack()` is false, and an address bar pressing a button the user
   // can see is the ordinary way that happens. WHETHER it can is now reportable:
-  // WebViewGuestClient above carries it, and a chrome that greys out a dead
+  // WebViewGuestClient above carries it, and a chrome that grays out a dead
   // button reads `canGoBack` on the element rather than pressing to find out.
   GoBack();
   GoForward();

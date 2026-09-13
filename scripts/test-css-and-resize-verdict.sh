@@ -58,13 +58,13 @@ ROW_FAIL_BARE='mix-blend-mode        53200      412        118       97       ye
 ROW_NOT_IN_EFFECT='opacity               53200        0          0        1        no  FAIL (the property is not in effect)'
 # `ReportResize` prints a bare FAIL in the verdict column (`css_parity.cc:601`);
 # the `FAIL — …` wording belongs to the iframe check (`:549-553`). Both are
-# here because both are strings this has to recognise.
+# here because both are strings this has to recognize.
 RESIZE_FAIL='resize                53200      900        740      255  FAIL'
 IFRAME_FAIL='transform             53200      900        740      255  FAIL — differs beyond its edges'
-LATENCY_OK='latency over 60 samples, producer submit to the colour appearing in the display compositor'"'"'s own output:'
+LATENCY_OK='latency over 60 samples, producer submit to the color appearing in the display compositor'"'"'s own output:'
 LATENCY_DEAD='latency: the probe stopped answering'
 # The OTHER `latency:` line, and the opposite end: the probe answered every
-# time and the colour never arrived. `css_parity.cc:459`.
+# time and the color never arrived. `css_parity.cc:459`.
 LATENCY_NEVER='latency: FF00C853 never appeared after 200 draws'
 RESIZE_BOXES='expected 180x130, the page and this disagree about its own boxes'
 RESIZE_PRODUCER='the producer is rendering at 120x90, not 180x130'
@@ -113,7 +113,7 @@ expect "a failed cell outranks a failed probe" \
   "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_FAIL" "$LATENCY_DEAD")")"
 
 # And the other end of the same pair.
-expect "a failed cell outranks a colour that never arrived" \
+expect "a failed cell outranks a color that never arrived" \
   "a cell is marked FAIL" \
   "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_FAIL" "$LATENCY_NEVER")")"
 
@@ -128,15 +128,15 @@ expect "a completed latency block is not a failed probe" \
 # THE TWO `latency:` LINES ARE OPPOSITE ENDS. One grep for the prefix called
 # both the instrument; `never appeared` is the producer's pixels not arriving,
 # which is the seam and the worst thing this script can find.
-expect "a colour that never arrived is the seam, not the instrument" \
-  "every cell passed and then a colour the producer submitted never reached the screen, which is the seam" \
+expect "a color that never arrived is the seam, not the instrument" \
+  "every cell passed and then a color the producer submitted never reached the screen, which is the seam" \
   "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$LATENCY_NEVER")")"
 
 expect "a clean table and a dead probe is the instrument" \
   "every cell passed and the probe then stopped answering, which is the instrument rather than the seam" \
   "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$ROW_EDGES" "$LATENCY_DEAD")")"
 
-# `pass (edges only)` is what `transform` gets under software rasterisation on
+# `pass (edges only)` is what `transform` gets under software rasterization on
 # every run. A pattern matching it as a failure would fail every green run.
 expect "edges-only is a pass, not a cell failure" \
   "neither a cell nor the probe; its own last words are above" \

@@ -100,7 +100,7 @@ contains "a corrupt timestamp is unknown, not nonsense" "unknown age" "$(lock wh
 rm -f "$WORK/lock/since"
 contains "a missing timestamp is unknown" "unknown age" "$(lock who)"
 echo "$(( $(date +%s) + 9000 ))" >"$WORK/lock/since"
-contains "a clock that moved backwards is unknown, not negative" \
+contains "a clock that moved backward is unknown, not negative" \
   "unknown age" "$(lock who)"
 
 rm -f "$WORK/lock/owner"

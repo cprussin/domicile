@@ -16,7 +16,7 @@ namespace {
 
 // Three properties, and the third is the one this class exists for: what the
 // browser serves can be replaced while it is running. The first two are the
-// startup behaviour it must not change, because every desktop that works today
+// startup behavior it must not change, because every desktop that works today
 // relies on it -- the command line is still where a shell comes from, and an
 // engine given no shell still holds nothing rather than a guess.
 

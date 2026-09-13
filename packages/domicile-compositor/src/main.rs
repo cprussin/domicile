@@ -424,7 +424,7 @@ fn write_responses(
     // `CloseApp` — answers with nothing. Taking the writer lock to write zero
     // bytes parks the reader behind `serve_outbound`, which is blocked in
     // `write_all` to a chrome that is not reading; the compositor then stops
-    // reading *that chrome* and everything it says afterwards is dropped on
+    // reading *that chrome* and everything it says afterward is dropped on
     // the floor. A chrome that only says things is the ordinary case, so this
     // was the ordinary case too.
     //
@@ -452,7 +452,7 @@ fn write_responses(
 /// `responses` is built under the `host` lock and written later under the
 /// writer lock, and `set_output` can land in between: it describes a new
 /// desktop and broadcasts it, and the broadcast goes out on the writer thread.
-/// Writing the handshake's own copy afterwards would put the desktop that is
+/// Writing the handshake's own copy afterward would put the desktop that is
 /// gone last on the socket, where latest-wins leaves it — and on a desktop
 /// nobody is resizing again there is no next message to correct it.
 ///
@@ -461,7 +461,7 @@ fn write_responses(
 /// and then broadcasts *that* desktop, on the one Wayland thread, into a queue
 /// one writer thread drains in order — so a line carrying a desktop that has
 /// since been replaced always has the newer one queued behind it. A broadcast
-/// is serialised before the writer lock is taken, so the writer lock is not
+/// is serialized before the writer lock is taken, so the writer lock is not
 /// what orders those; the FIFO is.
 ///
 /// Re-reading here closes the one case the FIFO does not: the answer, written
@@ -1029,7 +1029,7 @@ struct DomicileCompositor {
     /// Every advertised output, in the order [`Screens`] lists them.
     ///
     /// **In that order, and one for one.** Built from `screens.outputs()` at
-    /// startup. Two things change it afterwards and neither can break the
+    /// startup. Two things change it afterward and neither can break the
     /// pairing: `set_output` restates the one output it is asserted to have,
     /// in place, so the length cannot move; and
     /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) rebuilds
@@ -1155,37 +1155,37 @@ struct DomicileCompositor {
     /// costs one line rather than one per submit.
     probe_refused: HashSet<(i32, i32)>,
 
-    /// THROWAWAY. Colours already reported absent, so a guard that polls for
+    /// THROWAWAY. Colors already reported absent, so a guard that polls for
     /// ninety seconds gets one line rather than three hundred.
     probe_missing: HashSet<u32>,
 
-    /// THROWAWAY. Colours the probe could not answer for at all. Separate from
+    /// THROWAWAY. Colors the probe could not answer for at all. Separate from
     /// `probe_missing` because "not on screen" and "nothing was read" are the
     /// two answers the search exists to tell apart, and one set would let
     /// either silence the other.
     probe_unreadable: HashSet<u32>,
 
-    /// THROWAWAY. When the colour search last ran. Its own clock, because it
+    /// THROWAWAY. When the color search last ran. Its own clock, because it
     /// captures the whole window rather than a pixel and is throttled harder
     /// than the point probe beside it.
     last_find: Option<Instant>,
 
-    /// THROWAWAY. When the colour search first ran, which is what its budget
+    /// THROWAWAY. When the color search first ran, which is what its budget
     /// is measured from. Set on the first search rather than at startup: a
     /// desktop with no client yet is not searching for anything, and starting
     /// the clock then would spend the budget waiting.
     find_since: Option<Instant>,
 
-    /// THROWAWAY. The last box logged for each colour, so a box is written
+    /// THROWAWAY. The last box logged for each color, so a box is written
     /// down when it moves rather than once when it first appears. A window
     /// still painting is smaller than it will be, and how much of the page
     /// each one covers is what the two-window guard asserts — which is also
     /// why the guard waits for two consecutive readings that agree.
     ///
-    /// Presence is what "found" means; a colour that goes absent is removed.
+    /// Presence is what "found" means; a color that goes absent is removed.
     probe_boxes: HashMap<u32, Bounds>,
 
-    /// THROWAWAY. Whether the search is over — every colour found and none of
+    /// THROWAWAY. Whether the search is over — every color found and none of
     /// them moving, or the budget spent. A whole-window readback is a blocking
     /// one, so a finished search stops paying for them.
     find_settled: bool,
@@ -1617,7 +1617,7 @@ impl DomicileCompositor {
         run.committed(committed);
         self.latency = Some(run);
         // AND NOTHING ELSE. This used to drive the whole run from here, in a
-        // loop that sampled until the colour changed. See `step_the_latency`.
+        // loop that sampled until the color changed. See `step_the_latency`.
     }
 
     /// One step of the latency run, and then back to the event loop.
@@ -1631,12 +1631,12 @@ impl DomicileCompositor {
     /// reaches anybody, and `dispatch_clients` cannot run and no frame
     /// callback is flushed. The client is frozen.
     ///
-    /// Which makes the wait unwinnable whenever the colour needs a *second*
+    /// Which makes the wait unwinnable whenever the color needs a *second*
     /// commit — a toolkit that renders on `wl_surface.frame`, or one that
     /// needs its buffer back first, which is most of them. The run spent its
     /// whole poll budget and recorded the round as "abandoned by the client".
     /// The client had done nothing wrong: it was starved by the compositor
-    /// waiting on it, and the accusation was backwards.
+    /// waiting on it, and the accusation was backward.
     ///
     /// Four of sixty rounds on the run that found this, and two before #246 —
     /// which made it worse exactly as this predicts, by making a release
@@ -1660,7 +1660,7 @@ impl DomicileCompositor {
         let wants_more = match run.next(Instant::now()) {
             LatencyStep::Sample => {
                 match self.engine.as_mut().and_then(|engine| match point {
-                    LatencyPoint::Centre => engine.spike_window_centre(),
+                    LatencyPoint::Center => engine.spike_window_center(),
                     LatencyPoint::At(x, y) => engine.spike_pixel(x, y),
                 }) {
                     Some(argb) => run.sampled(Instant::now(), argb),
@@ -1868,12 +1868,12 @@ impl DomicileCompositor {
         let Some(session) = self.engine.as_ref() else {
             return true;
         };
-        // Colours to find anywhere in the window, for a guard that cannot name
+        // Colors to find anywhere in the window, for a guard that cannot name
         // a point because the shell decides where its windows go — and, as it
         // turned out, because the coordinate space a named point is in is not
         // the one the browser was asked for.
         //
-        // Searched until every wanted colour has been found AND none of their
+        // Searched until every wanted color has been found AND none of their
         // boxes moved between two rounds. A box logged at first sight is a box
         // measured mid-paint: a window that is still filling in is smaller
         // than it will be, and the guard's assertion is about how much of the
@@ -1894,7 +1894,7 @@ impl DomicileCompositor {
             None => true,
             Some(at) => at.elapsed() >= FIND_EVERY,
         };
-        if find_due && !spike_find_colours().is_empty() && !self.find_settled {
+        if find_due && !spike_find_colors().is_empty() && !self.find_settled {
             // The first search, which is the first frame a client committed
             // and the engine took: this whole block runs on the submit path.
             // So a desktop with no client yet is not searching for anything
@@ -1911,14 +1911,14 @@ impl DomicileCompositor {
                 warn!(
                     target: "domicile::engine::spike",
                     seconds = FIND_FOR.as_secs(),
-                    "giving up looking for the colours that have not turned up; a whole-window \
+                    "giving up looking for the colors that have not turned up; a whole-window \
                      readback is time this thread is not releasing the client's buffers, and it \
-                     is not worth paying for a colour that was going to appear long ago"
+                     is not worth paying for a color that was going to appear long ago"
                 );
             } else {
-                let mut every_colour_found = true;
+                let mut every_color_found = true;
                 let mut nothing_moved = true;
-                for &argb in spike_find_colours() {
+                for &argb in spike_find_colors() {
                     match session.spike_find(argb) {
                         Some(Capture {
                             window: (w, h),
@@ -1949,8 +1949,8 @@ impl DomicileCompositor {
                             window: (w, h),
                             bounds: None,
                         }) => {
-                            every_colour_found = false;
-                            // Forgotten, not kept. A colour that is found,
+                            every_color_found = false;
+                            // Forgotten, not kept. A color that is found,
                             // then absent, then found again would otherwise
                             // settle by matching a box measured two rounds
                             // earlier — which is not two consecutive readings
@@ -1972,14 +1972,14 @@ impl DomicileCompositor {
                         // exists to separate would be merged again by the
                         // thing meant to keep them apart.
                         None => {
-                            every_colour_found = false;
+                            every_color_found = false;
                             self.probe_boxes.remove(&argb);
                             if self.probe_unreadable.insert(argb) {
                                 warn!(
                                     target: "domicile::engine::spike",
                                     "engine could not read the window at all looking for \
                                      #{argb:08X}, so nothing was measured about it — which is \
-                                     not the same as the colour being absent"
+                                     not the same as the color being absent"
                                 );
                             }
                         }
@@ -1992,11 +1992,11 @@ impl DomicileCompositor {
                 // quiescence, not the page's. This is the compositor saying
                 // it looked again and nothing had moved, which is the claim
                 // a guard actually wants before it measures a width.
-                if every_colour_found && nothing_moved {
+                if every_color_found && nothing_moved {
                     self.find_settled = true;
                     tracing::info!(
                         target: "domicile::engine::spike",
-                        "engine settled: every colour it was looking for held still"
+                        "engine settled: every color it was looking for held still"
                     );
                 }
             }
@@ -2014,13 +2014,13 @@ impl DomicileCompositor {
         // asserts would sit on its own threshold and fail, blaming the product
         // for the instrument's own readback.
         if spike_probe_points().is_empty()
-            && spike_find_colours().is_empty()
+            && spike_find_colors().is_empty()
             && spike_latency_point().is_none()
         {
-            if let Some(drawn) = session.spike_window_centre() {
+            if let Some(drawn) = session.spike_window_center() {
                 tracing::info!(
                     target: "domicile::engine::spike",
-                    "engine drew #{drawn:08X} at the centre of the browser's window"
+                    "engine drew #{drawn:08X} at the center of the browser's window"
                 );
             }
         } else {
@@ -2039,29 +2039,29 @@ impl DomicileCompositor {
                     // submit path.
                     None => {
                         if self.probe_refused.insert((x, y)) {
-                            // Two things left, and the centre tells them
+                            // Two things left, and the center tells them
                             // apart. SamplePixel refuses both a point outside
                             // the window and a window that has not been drawn
                             // — the second returns an empty bitmap, which is
                             // "the browser is not compositing at all" and is a
-                            // completely different problem. The centre is
+                            // completely different problem. The center is
                             // always inside a window that exists, so an answer
                             // from it means the bitmap is fine and this point
                             // is not, and no answer means there is no bitmap.
-                            match session.spike_window_centre() {
-                                Some(centre) => warn!(
+                            match session.spike_window_center() {
+                                Some(center) => warn!(
                                     x,
                                     y,
-                                    centre = format!("#{centre:08X}"),
+                                    center = format!("#{center:08X}"),
                                     "the probe refused this point but answered for the \
-                                     window's centre, so the browser is drawing and this \
+                                     window's center, so the browser is drawing and this \
                                      point is outside its window"
                                 ),
                                 None => warn!(
                                     x,
                                     y,
                                     "the probe refused this point AND the window's \
-                                     centre, so the browser has drawn nothing at all — \
+                                     center, so the browser has drawn nothing at all — \
                                      which is not a probe fault and would also stop viz \
                                      ever releasing a client's buffer"
                                 ),
@@ -2503,7 +2503,7 @@ impl DomicileCompositor {
                         // one that closed while the message was in flight, or
                         // has not mapped yet. Handing the keyboard to nothing
                         // here is what makes a desktop go permanently deaf,
-                        // because nothing afterwards takes it back.
+                        // because nothing afterward takes it back.
                         info!(app_id = %id, "keyboard focus -> a window with no surface; the chrome keeps it");
                     }
                 }
@@ -2587,7 +2587,7 @@ impl DomicileCompositor {
     /// holding the lock rather than a new toggle. `caps:swapescape` — the
     /// desktop's own default — puts `Caps_Lock` on the physical Escape key, so
     /// one lost release is every window typing in capitals, including the
-    /// windows opened afterwards, until Domicile is restarted.
+    /// windows opened afterward, until Domicile is restarted.
     ///
     /// Releasing a key the user is still physically holding costs that key's
     /// repeat and nothing else: the release that eventually arrives finds
@@ -3203,7 +3203,7 @@ fn advertise_output(dh: &DisplayHandle, advertised: &Advertised) -> LiveOutput {
         advertised.name.clone(),
         PhysicalProperties {
             // Fiction, and knowingly the same fiction on every display:
-            // nothing tells a nested compositor how many millimetres a
+            // nothing tells a nested compositor how many millimeters a
             // described screen is. A client computing DPI from it gets a wrong
             // answer — now a differently wrong one per display, since they no
             // longer share a size. Whatever fixes that wants a real number in
@@ -3310,7 +3310,7 @@ impl XdgShellHandler for DomicileCompositor {
     ///
     /// Where the name has to come from: the announcement goes out when the
     /// client *creates* the toplevel, and `set_title` is a request it makes
-    /// afterwards, so there is never a name to announce. A terminal renames
+    /// afterward, so there is never a name to announce. A terminal renames
     /// itself on every command it runs, so this is not a once-per-window
     /// event either.
     ///
@@ -3630,7 +3630,7 @@ fn shm_buffer_size(buffer: &wl_buffer::WlBuffer) -> Option<(u32, u32)> {
 /// Translate a client's requested cursor into the CSS keyword the chrome
 /// assigns to its `<app>` element.
 ///
-/// `wp_cursor_shape_v1` is modelled on the CSS cursor keywords, so almost every
+/// `wp_cursor_shape_v1` is modeled on the CSS cursor keywords, so almost every
 /// shape maps across by name. The two that predate that alignment — and any
 /// shape a future revision of the protocol adds — resolve to the nearest
 /// keyword rather than something the chrome cannot use.
@@ -3704,7 +3704,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // per quad, but only to a compositor that advertises what it asks for.
     // `wl_subcompositor` comes with `CompositorState`; these are the rest that
     // are standard. See `docs/architecture/WINDOW-COMPOSITING.md`.
-    // Back, and only because it is honoured now. A global is a promise to
+    // Back, and only because it is honored now. A global is a promise to
     // act on what a client then says through it, and Chromium reads this one
     // as permission to stop calling `wl_surface.set_buffer_scale` and to put
     // its logical size in `wp_viewport.set_destination` instead. Advertising
@@ -3860,7 +3860,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // compositor told to use the engine and unable to load it must say which
     // library and why, because the alternative is a desktop that comes up with
     // no windows on it and no reason given. `dlopen` is build hygiene — it
-    // keeps `cargo build` from needing a Chromium checkout — and not a licence
+    // keeps `cargo build` from needing a Chromium checkout — and not a license
     // to carry on without the library.
     //
     // **Without the flag there is no path to a window at all**, now that the
@@ -4025,7 +4025,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // same shape `request_rx` uses and for the same reason.
     //
     // A watcher that cannot start is logged and left: it means the displays
-    // stay as they are, which is exactly the behaviour this replaces, and it is
+    // stay as they are, which is exactly the behavior this replaces, and it is
     // not a reason to refuse to run a desktop. A run with no config file has
     // nothing to watch at all, and says so rather than reporting a failure.
     match arguments.config.as_ref() {
@@ -4171,19 +4171,19 @@ const LATENCY_KEY: u32 = 28;
 /// THROWAWAY, with the rest of the spike. Where the latency run watches for
 /// the client's answer, from `DOMICILE_SPIKE_LATENCY`.
 ///
-/// `centre` — the browser window's middle, which is what a guard wants: a page
-/// with one `<app>` on it has the client's window under the centre, so nothing
+/// `center` — the browser window's middle, which is what a guard wants: a page
+/// with one `<app>` on it has the client's window under the center, so nothing
 /// has to name a coordinate that would go stale the moment the page's CSS
-/// changed. `guard-client-window.sh` reads the drawn colour the same way and
+/// changed. `guard-client-window.sh` reads the drawn color the same way and
 /// for the same reason.
 ///
-/// `x,y` — a point, for a page where the centre is not over the client.
+/// `x,y` — a point, for a page where the center is not over the client.
 ///
 /// Unset means no run, which is every guard but one: the measurement presses
 /// keys into whatever has focus and would be a strange thing to do by default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LatencyPoint {
-    Centre,
+    Center,
     At(i32, i32),
 }
 
@@ -4192,15 +4192,15 @@ fn spike_latency_point() -> Option<LatencyPoint> {
     *POINT.get_or_init(|| {
         let raw = std::env::var("DOMICILE_SPIKE_LATENCY").ok()?;
         let raw = raw.trim();
-        if raw.eq_ignore_ascii_case("centre") || raw.eq_ignore_ascii_case("center") {
-            return Some(LatencyPoint::Centre);
+        if raw.eq_ignore_ascii_case("center") {
+            return Some(LatencyPoint::Center);
         }
         match parse_point(raw) {
             Some((x, y)) => Some(LatencyPoint::At(x, y)),
             None => {
                 warn!(
                     raw,
-                    "DOMICILE_SPIKE_LATENCY: not `centre` or an `x,y` point; no latency run"
+                    "DOMICILE_SPIKE_LATENCY: not `center` or an `x,y` point; no latency run"
                 );
                 None
             }
@@ -4251,13 +4251,13 @@ fn parse_point(entry: &str) -> Option<(i32, i32)> {
 /// THROWAWAY, with the rest of the spike. Where in the browser's window to
 /// ask what viz drew, from `DOMICILE_SPIKE_PROBE` as `x,y;x,y`.
 ///
-/// Empty -- the ordinary case -- means the window's centre, which is where a
+/// Empty -- the ordinary case -- means the window's center, which is where a
 /// one-`<app>` page puts its canvas. A page with two of them has no pixel
 /// inside both, so the two-window guard names one point per canvas. Parsed
 /// once: this is called from the submit path, at the client's frame rate.
 ///
 /// A malformed entry is dropped with a warning rather than failing the run.
-/// The guard checks for the colours it expects and reports their absence, so
+/// The guard checks for the colors it expects and reports their absence, so
 /// a probe that silently sampled nothing still fails -- loudly, and in the
 /// place that knows what it was looking for.
 fn spike_probe_points() -> &'static [(i32, i32)] {
@@ -4279,7 +4279,7 @@ fn spike_probe_points() -> &'static [(i32, i32)] {
     })
 }
 
-/// THROWAWAY, with the rest of the spike. Colours to look for anywhere in the
+/// THROWAWAY, with the rest of the spike. Colors to look for anywhere in the
 /// browser's window, from `DOMICILE_SPIKE_FIND` as `RRGGBB;RRGGBB` or
 /// `AARRGGBB;AARRGGBB`.
 ///
@@ -4289,43 +4289,43 @@ fn spike_probe_points() -> &'static [(i32, i32)] {
 /// be asserting the shell's CSS. "This client's window is on the screen
 /// somewhere" is the claim that survives the shell being rewritten.
 ///
-/// Six hex digits are taken as fully opaque, because that is what a colour
+/// Six hex digits are taken as fully opaque, because that is what a color
 /// written down in a guard means and `FF` in front of it is noise.
-fn spike_find_colours() -> &'static [u32] {
-    static COLOURS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
-    COLOURS.get_or_init(|| {
+fn spike_find_colors() -> &'static [u32] {
+    static COLORS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
+    COLORS.get_or_init(|| {
         let Ok(raw) = std::env::var("DOMICILE_SPIKE_FIND") else {
             return Vec::new();
         };
-        parse_find_colours(&raw)
+        parse_find_colors(&raw)
     })
 }
 
-/// The parse [`spike_find_colours`] does, without the environment around it —
+/// The parse [`spike_find_colors`] does, without the environment around it —
 /// which is what makes it testable at all, since the variable is read once per
 /// process.
 ///
 /// A malformed entry is dropped with a warning rather than failing the run, on
 /// the same reasoning as `DOMICILE_SPIKE_PROBE`: the guard checks for the
-/// colour it expects and reports its absence, so a search that quietly looked
+/// color it expects and reports its absence, so a search that quietly looked
 /// for nothing still fails, loudly, where it is known what was wanted.
-fn parse_find_colours(raw: &str) -> Vec<u32> {
+fn parse_find_colors(raw: &str) -> Vec<u32> {
     raw.split(';')
         .map(str::trim)
         .filter(|entry| !entry.is_empty())
         .filter_map(|entry| {
             let digits = entry.strip_prefix('#').unwrap_or(entry);
             match (digits.len(), u32::from_str_radix(digits, 16)) {
-                // Six digits are fully opaque, because that is what a colour
+                // Six digits are fully opaque, because that is what a color
                 // written down in a guard means and `FF` in front of it is
-                // noise. The window's pixels are opaque, so a colour with no
+                // noise. The window's pixels are opaque, so a color with no
                 // alpha would match nothing at all.
                 (6, Ok(rgb)) => Some(0xFF00_0000 | rgb),
                 (8, Ok(argb)) => Some(argb),
                 _ => {
                     warn!(
                         entry,
-                        "DOMICILE_SPIKE_FIND: not an `RRGGBB` or `AARRGGBB` colour; ignored"
+                        "DOMICILE_SPIKE_FIND: not an `RRGGBB` or `AARRGGBB` color; ignored"
                     );
                     None
                 }
@@ -4351,7 +4351,7 @@ mod tests {
     use super::{
         announce_open_apps, answers_keystroke, broadcast_closed, broadcast_focus_decision,
         broadcast_focus_request, channel, chrome_connection, client_command, cursor_shape,
-        freshened, parse_find_colours, to_line, write_responses, ChromeHub, ClientRequest,
+        freshened, parse_find_colors, to_line, write_responses, ChromeHub, ClientRequest,
         Committer, Handshake, Outbound,
     };
 
@@ -4427,12 +4427,12 @@ mod tests {
         // The read loop calls this at the end of every iteration, and every
         // chrome message but `hello` answers with nothing — so waiting here
         // for a writer `serve_outbound` is holding stops the compositor
-        // reading that chrome at all, and everything it says afterwards is
+        // reading that chrome at all, and everything it says afterward is
         // dropped. That was a real flake before the early return: one run in
         // twenty-four of the whole workspace.
         //
         // A unit test rather than the integration one that found it: the
-        // behaviour is one sentence about this function, and the integration
+        // behavior is one sentence about this function, and the integration
         // failure needs a socket to fill up under parallel load to say it.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
@@ -4860,7 +4860,7 @@ mod tests {
     #[test]
     fn a_client_asking_for_the_keyboard_reaches_every_chrome_and_moves_nothing() {
         // `xdg-activation` is a client saying it wants the keyboard, and the
-        // compositor honouring that itself would be deciding a policy that
+        // compositor honoring that itself would be deciding a policy that
         // belongs to the shell — there would be no way to write a desktop
         // where a background window cannot take what its user is typing into.
         // So it is broadcast as a question and the seat stays where it is.
@@ -4991,41 +4991,41 @@ mod tests {
         assert_eq!(cursor_shape(CursorIcon::AllResize), CursorShape::Move);
     }
 
-    /// Six digits mean opaque, because the window's pixels are and a colour
+    /// Six digits mean opaque, because the window's pixels are and a color
     /// with no alpha would match none of them.
     #[test]
-    fn a_colour_with_no_alpha_is_opaque() {
-        assert_eq!(parse_find_colours("19B36B"), vec![0xFF19_B36B]);
+    fn a_color_with_no_alpha_is_opaque() {
+        assert_eq!(parse_find_colors("19B36B"), vec![0xFF19_B36B]);
     }
 
     #[test]
     fn an_alpha_that_is_written_down_is_kept() {
-        assert_eq!(parse_find_colours("8019B36B"), vec![0x8019_B36B]);
+        assert_eq!(parse_find_colors("8019B36B"), vec![0x8019_B36B]);
     }
 
-    /// A guard writes colours the way CSS does, and the harness that passes
+    /// A guard writes colors the way CSS does, and the harness that passes
     /// them along should not have to strip anything.
     #[test]
-    fn a_leading_hash_and_the_spaces_around_an_entry_are_not_part_of_the_colour() {
+    fn a_leading_hash_and_the_spaces_around_an_entry_are_not_part_of_the_color() {
         assert_eq!(
-            parse_find_colours(" #19B36B ; CC6633"),
+            parse_find_colors(" #19B36B ; CC6633"),
             vec![0xFF19_B36B, 0xFFCC_6633]
         );
     }
 
-    /// The run continues on a malformed entry, so a typo costs the colour that
+    /// The run continues on a malformed entry, so a typo costs the color that
     /// was mistyped and not the ones beside it.
     #[test]
-    fn an_entry_that_is_not_a_colour_is_dropped_and_the_rest_are_kept() {
+    fn an_entry_that_is_not_a_color_is_dropped_and_the_rest_are_kept() {
         assert_eq!(
-            parse_find_colours("19B36B;nonsense;CC6633"),
+            parse_find_colors("19B36B;nonsense;CC6633"),
             vec![0xFF19_B36B, 0xFFCC_6633]
         );
     }
 
     #[test]
     fn nothing_to_look_for_is_nothing_to_look_for() {
-        assert!(parse_find_colours("").is_empty());
-        assert!(parse_find_colours(";  ;").is_empty());
+        assert!(parse_find_colors("").is_empty());
+        assert!(parse_find_colors(";  ;").is_empty());
     }
 }

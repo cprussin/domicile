@@ -204,7 +204,7 @@ fn an_ordinary_key_pressed_while_a_modifier_is_held_says_nothing() {
 /// rather than the timing. Without it a compositor that released the keys on
 /// **every** chrome message passed this test and the whole workspace — it
 /// released them early, and the reload's own assertion still found the value
-/// it wanted. Pressing Ctrl afterwards and expecting *both* is what tells
+/// it wanted. Pressing Ctrl afterward and expecting *both* is what tells
 /// "still held" from "released and re-pressed".
 #[test]
 fn a_chrome_that_reloads_holding_a_modifier_has_it_released() {

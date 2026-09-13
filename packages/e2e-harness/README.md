@@ -54,7 +54,7 @@ rebase; a count in prose is only ever true of one commit.
 
 `verdicts.ts` is the backstop rather than the guarantee, and says so: it drives
 the real helpers and holds every `.sh` in `scripts/` to three rules — no
-`exit 99` it can recognise, no local copy of anything the file
+`exit 99` it can recognize, no local copy of anything the file
 defines, and no call to any of it without a line that actually sources the
 file. `after`, `passed` and `every_check_ran` are held to those two as well —
 a local `every_check_ran() { :; }` is the same failure as a local
@@ -112,7 +112,7 @@ DOMICILE_CHROME_SOCK=/tmp/domicile-rt/domicile-chrome.sock \
 bun run --filter @domicile/e2e-harness test
 ```
 
-The socket behaviour is covered by the e2e scripts themselves against a live
+The socket behavior is covered by the e2e scripts themselves against a live
 compositor, so what is tested here is the pure parts — plus `verdicts.test.ts`,
 which is not pure: it spawns `bash` against `scripts/lib/harness.sh` and reads
 `scripts/` off disk. It runs in `test:unit` anyway, and `turbo.json` names

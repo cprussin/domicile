@@ -34,7 +34,7 @@ type Props = Omit<
 
 /**
  * A tabbed container: a tab bar over one panel showing the active tab. Wraps the
- * `@base-ui/react` Tabs primitive, which owns the accessible behaviour — roving
+ * `@base-ui/react` Tabs primitive, which owns the accessible behavior — roving
  * tab focus, arrow-key navigation, `role="tab"`/`tabpanel"` wiring — so this
  * layer only supplies the domicile styling: a muted→accent active tab, a subtle
  * hover surface, and a soft accent `:focus-visible` fill (the global square
@@ -97,7 +97,7 @@ const tabStyles = cva({
     },
     // Keyboard focus fills the tab with a soft accent wash (rounded by the
     // tab's own radius) rather than a ring or outline — the editor-tab-bar
-    // idiom. The global square outline is hidden by forcing its colour
+    // idiom. The global square outline is hidden by forcing its color
     // transparent, which beats its longhand declarations without fighting them.
     _focusVisible: {
       backgroundColor: "color-mix(in oklab, {colors.accent} 16%, transparent)",
@@ -152,7 +152,7 @@ const indicatorStyles = css({
 const panelStyles = css({
   // A faint accent wash marks the focused panel rather than a ring or outline
   // around the whole content region; the global outline is hidden by forcing
-  // its colour transparent.
+  // its color transparent.
   _focusVisible: {
     backgroundColor: "color-mix(in oklab, {colors.accent} 6%, transparent)",
     outlineColor: "transparent",

@@ -16,7 +16,7 @@ The answer is no, and this is why.
 | WebGPU `importExternalTexture()` | Takes an `HTMLVideoElement`, so it reduces to the row above |
 | `OnAcceleratedPaint` as the layer tree | Emits **one** composited texture — the page as a flat raster, however many layers it has |
 | Delegated compositing (`WaylandOverlayDelegation`) | **Measured, negative.** With every protocol the engine asks for implemented, a 600x400 page arrives as a single 632x442 buffer whether it has 1 or 8 composited layers, and `place_above`/`place_below` are never called. A delegated *root*, not a delegated tree |
-| Colour management as the thing blocking promotion | **Exonerated.** With the engine's own `WaylandWpColorManagerV1` off, so `wp_color_management_surface_v1` is out of the question, the counts are unchanged |
+| Color management as the thing blocking promotion | **Exonerated.** With the engine's own `WaylandWpColorManagerV1` off, so `wp_color_management_surface_v1` is out of the question, the counts are unchanged |
 | `surface-augmenter` as the exo-shaped-compositor gate | **Declined.** Advertised, and the engine never binds it — a client binds what it wants at registry enumeration, before it renders. It is not looking for an augmenter |
 | Lift `components/exo` out of the tree | `assert(is_chromeos)` in its `BUILD.gn` is only the parse-time guard; the real gate is its dependency on `//ash`, `//ui/aura`, `//ui/views` and `//ui/wm`, reaching into `surface.cc` and `surface_tree_host.cc`. One `static_library("exo")` target, no core to split out. Worth taking: `buffer.cc`, whose only ChromeOS dependency is two calls to `aura::Env::GetInstance()->context_factory()` |
 
@@ -45,7 +45,7 @@ A full `--depth 1` clone would not fit comfortably; `--filter=blob:none
 
 ## One trap worth keeping
 
-**Advertising a Wayland global is a promise to honour what clients say through
+**Advertising a Wayland global is a promise to honor what clients say through
 it.** `wp_viewporter` advertised while the commit path ignored the destination
 made every surface twice its logical size at any scale above 1x — the desktop
 drawn at double, every portal and pointer coordinate out by the same factor. At

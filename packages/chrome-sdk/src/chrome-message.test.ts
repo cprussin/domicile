@@ -18,7 +18,7 @@ describe("the chrome->host messages the harness still writes", () => {
   it("shakes hands at this build's version unless told otherwise", () => {
     // `negotiate` requires the two numbers to be equal — a chrome that says 7
     // to a host speaking 8 gets no `welcome`, and everything it sends
-    // afterwards is dropped. A default that had drifted from the constant
+    // afterward is dropped. A default that had drifted from the constant
     // would make the harness fail in a way that reads as the compositor's bug.
     expect(helloMessage()).toEqual({
       protocol_version: PROTOCOL_VERSION,

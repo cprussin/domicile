@@ -330,7 +330,7 @@ describe("BrowserWindow", () => {
   // a live-looking button is the window telling the user something it cannot
   // do.
   describe("the history controls", () => {
-    it("greys Back out until the page has somewhere to go back to", () => {
+    it("grays Back out until the page has somewhere to go back to", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
@@ -352,7 +352,7 @@ describe("BrowserWindow", () => {
       expect(control("Forward")).toBeDisabled();
     });
 
-    it("greys Forward out until the page has somewhere to go forward to", () => {
+    it("grays Forward out until the page has somewhere to go forward to", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}

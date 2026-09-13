@@ -161,7 +161,7 @@ describe("useDisplays", () => {
 
   it("takes up the desktop of a source that replaces the one before it", () => {
     // A source is a connection. A new one is a new desktop, and it may have
-    // been described already — `useState`'s initialiser runs once, so nothing
+    // been described already — `useState`'s initializer runs once, so nothing
     // but re-reading it here would carry the old connection's screens over.
     const { source: first } = toldLater([LEFT]);
     const { source: second } = toldLater([RIGHT]);

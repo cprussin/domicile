@@ -30,7 +30,7 @@ same reason.
 | `scripts/extract.sh` | checkout → series. Run before every push |
 | `scripts/build.sh` | `gn gen` + `autoninja` with the args the spike is measured under |
 | `scripts/under-wayland.sh` | runs another script under a nested wlroots compositor on the GPU — the only platform that can import a dmabuf. Every guard below runs under it except the `guard-webview-*.sh` ones, which have no client to import from |
-| `scripts/guard-client-window.sh` | a real Wayland client's window on the page, and the colour it drew coming back out |
+| `scripts/guard-client-window.sh` | a real Wayland client's window on the page, and the color it drew coming back out |
 | `scripts/guard-two-windows.sh`, `guard-two-windows.html` | two clients, two windows, one page — two `SurfaceDrawQuad`s in one aggregation |
 | `scripts/guard-shell.sh` | a real shell, built by its own vite config and joined by the SDK, with a client's window in it |
 | `scripts/guard-webview-framing.sh`, `guard-webview-framing.js`, `guard-webview-framing-server.py` | a site that refuses framing, shown in a `<webview>`. The one guard here that runs headless and needs no compositor: what it measures is a page against itself, so there is no client and nothing to import |
@@ -128,7 +128,7 @@ translation is a choice rather than a mapping:
   evdev code and `KeyboardEvent.key` already means a string.
 
 If you are adding a message, add it in four places — the mojom, the IDL, the
-browser-side serialiser, and the Blink method — and add it to the list above,
+browser-side serializer, and the Blink method — and add it to the list above,
 because the list is how the next person knows whether a gap is deliberate.
 
 **Batch them.** A new inbound message means a new event type, and a new event
@@ -302,7 +302,7 @@ Two things that were assumed and are not true:
   than skipping.
 - **On the GPU, an `<app>` is bit-exact against an ordinary element for every
   property, `transform` included.** Step 4's one imperfect cell was software
-  rasterisation. An out-of-process `<iframe>` is the thing that is *not*
+  rasterization. An out-of-process `<iframe>` is the thing that is *not*
   pixel-identical to a `<div>`.
 - **A dmabuf can be imported on this machine**, under
   `scripts/under-wayland.sh` — `--ozone-platform=wayland` nested in a headless
@@ -333,7 +333,7 @@ And **it takes two frames to see a release**, because viz holds whatever is on
 screen — which is exactly why a Wayland client double-buffers.
 
 `under-wayland.sh` suits checks that do not have to find the page by scanning
-for a full-width row of its background colour, which is how the pixel checks
+for a full-width row of its background color, which is how the pixel checks
 locate the viewport: under Wayland the browser window carries client-side
 decorations and a shadow, so no row qualifies. The pixel checks stay on
 `--ozone-platform=headless`, where the window is undecorated.
@@ -364,7 +364,7 @@ negative control      53200    10800       9976      255        no  pass (differ
 ```
 
 **That run is `--disable-gpu`, and `transform`'s 285 pixels are the software
-rasteriser rather than the mechanism.** `GPU=1 scripts/guard-css-and-resize.sh` on this
+rasterizer rather than the mechanism.** `GPU=1 scripts/guard-css-and-resize.sh` on this
 machine's card puts every cell at 0, `transform` included — which is the number
 that describes what a user has. `z-index` is exact either way, and it is the
 property bands failed at and the reason the fork exists.
@@ -414,7 +414,7 @@ Phase 1's library, which is not throwaway — it is the seam:
 | | |
 |---|---|
 | `components/domicile/spike/surface_producer.{h,cc}` | the external producer. C++, in-tree, and that is a measured choice — see `ENGINE-FORK.md`'s *Rust: the bindings exist, the crate is not the seam* |
-| `components/domicile/spike/solid_color_submitter.cc` | steps 2 and 3's assertion over it: one pixel at the centre of the window |
+| `components/domicile/spike/solid_color_submitter.cc` | steps 2 and 3's assertion over it: one pixel at the center of the window |
 | `components/domicile/spike/css_parity.cc`, `css_parity_layout.h` | step 4's. The latency loop and the page's geometry, which has to stay in step with `scripts/spike-css-page.html` |
 | `components/domicile/spike/window_diff.{h,cc}` | the rule that turns a picture of the window into step 4's verdicts. Separate from the process that takes the picture because every "pass" in the measurement is this code's opinion, and it has six tests |
 | `components/domicile/spike/spike_color.{h,cc}` | comparing what viz drew with what was submitted, which every step ends in |
@@ -431,7 +431,7 @@ first `embedExternalSurface()` was a deadlock. The browser still holds an
 embed until a producer connects — an `<app>` element exists before the client
 window behind it does — which is what makes it safe for a page to ask early.
 
-The series edits nine files Chromium owns; `ENGINE-FORK.md`'s *Minimise edited
+The series edits nine files Chromium owns; `ENGINE-FORK.md`'s *Minimize edited
 files* has the list and what each is for.
 
 Run the tests with:

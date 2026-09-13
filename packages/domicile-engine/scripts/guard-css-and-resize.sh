@@ -29,7 +29,7 @@ fi
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 
-# One colour reaches both halves of the measurement: the producer submits it and
+# One color reaches both halves of the measurement: the producer submits it and
 # the page fills every control element with it. There is no channel from a page
 # to the producer, so this is what makes them agree.
 COLOR="${COLOR:-00C853}"
@@ -85,11 +85,11 @@ half_verdict() { # $1 that half's log
     echo "a cell is marked FAIL"
   # THE TWO `latency:` LINES ARE OPPOSITE ENDS, and one grep for the prefix
   # called both of them the instrument. `never appeared after N draws` means
-  # the probe answered every time and a colour the producer submitted never
+  # the probe answered every time and a color the producer submitted never
   # reached the display compositor's output — which is the seam, and the most
   # serious result this whole script can produce.
   elif grep -q '^latency: .* never appeared after ' "$1"; then
-    echo "every cell passed and then a colour the producer submitted never reached the screen, which is the seam"
+    echo "every cell passed and then a color the producer submitted never reached the screen, which is the seam"
   elif grep -q '^latency: ' "$1"; then
     echo "every cell passed and the probe then stopped answering, which is the instrument rather than the seam"
   else

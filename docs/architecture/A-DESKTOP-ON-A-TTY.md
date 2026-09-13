@@ -186,7 +186,7 @@ how to get one:
 
 ### The physical size is already in the snapshot
 
-`DisplaySnapshot::physical_size()` is millimetres, which is exactly what
+`DisplaySnapshot::physical_size()` is millimeters, which is exactly what
 `wl_output` wants and what the compositor fabricates as `size: (300, 200)`
 (`main.rs:3211`). The display-list event under [Outputs](#outputs) carries it
 rather than inventing it a second time.

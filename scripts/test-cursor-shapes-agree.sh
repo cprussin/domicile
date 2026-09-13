@@ -2,7 +2,7 @@
 # One closed set, written down in four languages, compared.
 #
 # A client asks for a cursor and the name crosses two boundaries to reach CSS:
-# the compositor serialises `domicile_protocol::CursorShape`, the browser
+# the compositor serializes `domicile_protocol::CursorShape`, the browser
 # process parses it against `components/domicile/common/cursor_shape.h`, the
 # engine hands the page a `DomicileCursorShape` declared in WebIDL, and the SDK
 # reads it through `cursorShapeSchema` in `@domicile/chrome-sdk`. Four

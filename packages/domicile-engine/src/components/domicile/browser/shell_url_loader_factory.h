@@ -19,7 +19,7 @@ namespace domicile {
 // Serves `domicile://shell/...` out of a directory on disk.
 //
 // This is the half of the scheme that reads bytes; registering the scheme so it
-// has an origin is the other half, and lives in the content client. Modelled on
+// has an origin is the other half, and lives in the content client. Modeled on
 // content::AboutURLLoaderFactory for its lifetime and on
 // content::CreateFileURLLoaderBypassingSecurityChecks for the reading, because
 // the reading is the same reading -- the file-handling in

@@ -175,7 +175,7 @@ fn a_chrome_that_takes_its_agreement_back_stops_getting_the_desktop() {
     // A chrome that stayed agreed, so a compositor that broadcast nothing at
     // all cannot pass this. Four of the five tests here carry one; the
     // exception is the double-`hello` test, which counts what arrived on its
-    // own socket and would fail at nought if nothing had.
+    // own socket and would fail at naught if nothing had.
     let mut accepted = compositor.chrome();
     accepted
         .wait_for(|message| matches!(message, HostMessage::Displays { .. }))

@@ -34,7 +34,7 @@ DomicileHost::DomicileHost(LocalDOMWindow& window)
       // desktop must be able to tell that apart from one told there are no
       // screens. See the attribute's note in the IDL.
       //
-      // Initialised in declaration order, which is not a style point here:
+      // Initialized in declaration order, which is not a style point here:
       // Chromium builds -Wreorder -Werror, so a list out of order is a build
       // failure rather than a warning.
       channel_(&window),

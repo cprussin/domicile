@@ -8,7 +8,7 @@ import type { Display } from "./display-source";
  * cannot ask for a name *and* everything and leave the answer to precedence.
  *
  * `everywhere` rather than the obvious `all`: Panda's extractor reads JSX
- * props on capitalised tags as style props, and `all` is a real CSS property,
+ * props on capitalized tags as style props, and `all` is a real CSS property,
  * so `<Screen all>` emitted `all: true` into the app's stylesheet and failed
  * the CSS minifier. A prop named for a CSS property is a trap in any component
  * this package exports.
@@ -31,7 +31,7 @@ type Selection =
  * the host has described the desktop.
  *
  * The page spans the whole desktop, so a screen is a region of it: the
- * rectangle comes straight from the display's normalised position and size.
+ * rectangle comes straight from the display's normalized position and size.
  *
  * **A region's identity is its position in the selection, not its display.**
  * The regions one `<Screen>` renders are the same children placed over

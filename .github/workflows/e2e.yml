@@ -26,7 +26,7 @@ env:
   DOMICILE_CHECK_ALLOW_SKIP: "e2e-dmabuf"
 
 jobs:
-  # The behavioural half. `cargo test` and `turbo test` have their own jobs and
+  # The behavioral half. `cargo test` and `turbo test` have their own jobs and
   # prove the units; this proves what only exists once the pieces are wired
   # together — pixels through a real GLES stack, and a real Wayland client
   # through the compositor to the chrome.

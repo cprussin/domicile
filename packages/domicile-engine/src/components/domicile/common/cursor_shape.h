@@ -39,7 +39,7 @@
 // `kMaxValue`, which is the one number here that this file cannot get wrong.
 
 // The closed set. Order matches `domicile_protocol::CursorShape` and
-// `mojom::CursorShape`; the wire names are what the compositor serialises and
+// `mojom::CursorShape`; the wire names are what the compositor serializes and
 // what CSS reads.
 #define DOMICILE_CURSOR_SHAPES(X) \
   X(kNone, "none")                \
@@ -112,7 +112,7 @@ inline std::string_view CursorShapeToWire(CursorShapeEnum shape) {
   // NOT a fallback to an arrow, which is the defect this file exists to stop
   // arriving silently. An `enum class : int32_t` can hold a value no case
   // names, but this one cannot get here holding one: mojo checks an enum on
-  // deserialisation and rejects the message, so a value reaching this line came
+  // deserialization and rejects the message, so a value reaching this line came
   // from a cast in this repository and is a bug rather than a peer's doing.
   NOTREACHED();
 }

@@ -22,7 +22,7 @@ const NOWHERE: HistoryAvailability = { canGoBack: false, canGoForward: false };
  * view says so. Reading on mount is the half that cannot be dropped: a React
  * shell registers its listeners in its first effect flush, and an event
  * dispatched before that is gone, so a window that only ever listened would
- * grey out a live control until the user navigated again.
+ * gray out a live control until the user navigated again.
  *
  * `null` rather than `undefined` for the missing view because that is what
  * React's ref API hands a callback ref, which is where the element comes from.

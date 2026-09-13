@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Is this colour on the browser's page? Asked from outside the browser, of the
+// Is this color on the browser's page? Asked from outside the browser, of the
 // pixels the display compositor actually drew.
 //
 // It exists because every other pixel guard in this series needs a Wayland
@@ -11,19 +11,19 @@
 // against itself: a <webview> that shows a site refusing to be framed, and an
 // <iframe> that must not.
 //
-// TWO COLOURS, and the second is what makes an answer of "no" mean anything.
-// `--witness` is a colour the page paints on its own; a run that cannot find
-// it has not measured the page, and reporting "the colour is absent" from such
+// TWO COLORS, and the second is what makes an answer of "no" mean anything.
+// `--witness` is a color the page paints on its own; a run that cannot find
+// it has not measured the page, and reporting "the color is absent" from such
 // a run would be a negative control that passes on a browser that never
 // started. So the exit status distinguishes them:
 //
-//   0  the subject colour is on the page
+//   0  the subject color is on the page
 //   1  the witness is, the subject is not -- a measurement, and a real "no"
 //   2  the witness never appeared, so nothing was measured
 //   3  this could not run at all
 //
 // Both are matched exactly, like every other assertion built on
-// domicile_engine_spike_find_colour: a page draws flat colours here and a near
+// domicile_engine_spike_find_color: a page draws flat colors here and a near
 // match would be an edge, a blend, or the browser's own background.
 
 #include <poll.h>
@@ -42,7 +42,7 @@ namespace {
 
 // Must match content/browser/domicile/domicile_frame_sink_broker.cc.
 constexpr char kSocketSwitch[] = "domicile-broker-socket";
-constexpr char kColourSwitch[] = "colour";
+constexpr char kColorSwitch[] = "color";
 constexpr char kWitnessSwitch[] = "witness";
 constexpr char kForSecondsSwitch[] = "for-seconds";
 
@@ -63,9 +63,9 @@ enum class Verdict {
   kUnusable = 3,
 };
 
-bool ParseColour(const base::CommandLine& command_line,
-                 const char* name,
-                 uint32_t* out) {
+bool ParseColor(const base::CommandLine& command_line,
+                const char* name,
+                uint32_t* out) {
   const std::string value = command_line.GetSwitchValueASCII(name);
   if (value.empty()) {
     return false;
@@ -106,11 +106,11 @@ int main(int argc, char** argv) {
   const std::string socket = command_line.GetSwitchValueASCII(kSocketSwitch);
   uint32_t subject = 0;
   uint32_t witness = 0;
-  if (socket.empty() || !ParseColour(command_line, kColourSwitch, &subject) ||
-      !ParseColour(command_line, kWitnessSwitch, &witness)) {
+  if (socket.empty() || !ParseColor(command_line, kColorSwitch, &subject) ||
+      !ParseColor(command_line, kWitnessSwitch, &witness)) {
     fprintf(stderr, "%s",
-            "usage: domicile_colour_probe --domicile-broker-socket=<path> "
-            "--colour=AARRGGBB --witness=AARRGGBB [--for-seconds=60]\n");
+            "usage: domicile_color_probe --domicile-broker-socket=<path> "
+            "--color=AARRGGBB --witness=AARRGGBB [--for-seconds=60]\n");
     return static_cast<int>(Verdict::kUnusable);
   }
   int seconds = kDefaultSeconds;
@@ -145,8 +145,8 @@ int main(int argc, char** argv) {
 
   while (base::TimeTicks::Now() < deadline) {
     DomicileSpikeCapture box = {};
-    const int32_t found = domicile_engine_spike_find_colour(engine, subject,
-                                                            &box);
+    const int32_t found = domicile_engine_spike_find_color(engine, subject,
+                                                           &box);
     if (found >= 0) {
       ++captures;
     }
@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
     // Only until it has been seen once. The witness is the page's own paint
     // and does not move, and each look is a full readback.
     if (!witnessed &&
-        domicile_engine_spike_find_colour(engine, witness, &witness_box) == 1) {
+        domicile_engine_spike_find_color(engine, witness, &witness_box) == 1) {
       witnessed = true;
       Describe("witness:", witness, witness_box);
     }

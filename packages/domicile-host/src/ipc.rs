@@ -63,7 +63,7 @@ impl Session {
 /// This is the reusable core behind [`Session::ingest`]. The compositor uses it
 /// directly so a single shared `Host` can be driven by both the Wayland side
 /// and any number of chrome connections. Before the handshake only `Hello` is
-/// honoured; a malformed line is ignored rather than tearing anything down, and
+/// honored; a malformed line is ignored rather than tearing anything down, and
 /// a version mismatch is refused *out loud* — see [`apply_chrome_message`].
 pub fn handle_chrome_line(host: &mut Host, ready: &mut bool, line: &str) -> Vec<HostMessage> {
     match parse_chrome(line.trim()) {

@@ -125,7 +125,7 @@ fn a_chrome_that_connects_late_is_told_about_a_window_already_open() {
     assert!(
         !app_id.to_string().is_empty(),
         "the late chrome was told about a window with no id, which is a window \
-         nothing can be said about afterwards"
+         nothing can be said about afterward"
     );
 
     // And who holds the keyboard, which `open_apps` chains after the windows
@@ -158,7 +158,7 @@ fn a_chrome_that_connects_late_is_told_about_a_window_already_open() {
 /// *Renames* are out of scope here and it is worth saying so rather than
 /// leaving it to be discovered: a terminal renames itself on every command it
 /// runs, but a compositor that forwards only the first `set_title` of the
-/// process and goes deaf afterwards passes this test and the whole suite —
+/// process and goes deaf afterward passes this test and the whole suite —
 /// measured. `e2e-chrome.sh` did not cover that either (it grepped once for
 /// `app_titled`), so nothing was lost in the move; covering it needs
 /// `domicile-test-client` to be able to rename, which it cannot today.
@@ -244,7 +244,7 @@ fn a_spawned_program_is_pointed_at_this_compositor() {
 ///
 /// The refusal itself is unit-tested (`an_empty_command_spawns_nothing`), so
 /// what this adds is the part no unit test can see: that the connection which
-/// sent it is still being *read* afterwards. An empty command is what a chrome
+/// sent it is still being *read* afterward. An empty command is what a chrome
 /// sends when someone presses enter on an empty box, and the failure it guards
 /// is an index into an empty argument list — which panics the thread serving
 /// that one socket while the compositor stays up.

@@ -12,7 +12,7 @@
 #
 # domicile_engine_dmabuf_smoke allocates two buffers on the render node, hands
 # the fds to libdomicile_engine.so, submits one and then the other, and asks the
-# browser what the display compositor drew at the centre of its window — where
+# browser what the display compositor drew at the center of its window — where
 # spike-page.html puts the <app>. It exits 0 only if that pixel came from the
 # buffer AND `released` fired for the first one: a buffer viz has not handed
 # back is one the compositor must not draw into again, so a run without it is a
@@ -28,7 +28,7 @@
 #
 # The cost is that nothing here can put *known* content in it without a GL
 # context, so the pixel assertion is "the buffer's own zeroed content rather
-# than the fallback" instead of "this exact colour". LINEAR=1 runs the other
+# than the fallback" instead of "this exact color". LINEAR=1 runs the other
 # way and fails on this driver, which is what documents the limitation.
 set -u
 

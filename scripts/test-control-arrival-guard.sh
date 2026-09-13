@@ -10,11 +10,11 @@
 # build.
 #
 # It matters most for the two orderings a chain written top-to-bottom gets
-# backwards:
+# backward:
 #
 #   a cursor the engine does not know reaching the page outranks a cursor it
 #     does NOT reaching it. Both can be true at once — that is a codec wired
-#     backwards — and "nothing reached the page" would then be a false
+#     backward — and "nothing reached the page" would then be a false
 #     sentence about a run where something did
 #   the cursor sent AFTER the unknown one is what separates "the bad name was
 #     refused" from "the channel died on it". Its absence is not the same
@@ -192,10 +192,10 @@ mentions "a known cursor that never arrived blames the path, not the page" \
 mentions "an unknown cursor that arrived is the closed set failing" \
   "closed set" "$(verdict 1 1 1 1)"
 
-# THE ORDERING. A codec wired backwards passes the bad name and drops the good
+# THE ORDERING. A codec wired backward passes the bad name and drops the good
 # one, so both readings are bad at once — and only one of the two sentences is
 # true about that run.
-mentions "a codec wired backwards is reported as the bad name getting through" \
+mentions "a codec wired backward is reported as the bad name getting through" \
   "does not know reached the page" "$(verdict 1 0 1 1)"
 
 # AND THE READING THAT MAKES THE ABSENCE MEAN ANYTHING. Without the cursor sent

@@ -46,12 +46,12 @@ of 9413 steps into //ui/ozone before stopping on this:
 there on Linux and the members are not, which is exactly the shape of thing a
 `git grep` for ChromeOS in this platform does not see: no ash, no chromeos/, no
 BUILDFLAG in the file, just a name that exists in one configuration. There are
-four such call sites -- three for CTM colour management across
+four such call sites -- three for CTM color management across
 hardware_display_plane_manager{,_atomic}.cc and one for the Rec709 default in
 drm_display.cc -- and each now takes the branch a disabled flag would take, in
 a `#if BUILDFLAG(IS_CHROMEOS)` beside the call. No flag is invented: a
 `base::Feature` that upstream declares only for ChromeOS is not something a
-fork should conjure a Linux twin of, and "off" is a behaviour upstream already
+fork should conjure a Linux twin of, and "off" is a behavior upstream already
 ships and tests on the same code path.
 
 `PlaneToOutputMatrix` goes under the same guard, because its only caller is one

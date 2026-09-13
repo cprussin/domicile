@@ -16,7 +16,7 @@
 //! the next step. `bin/domicile.rs` holds the two this run has.
 //!
 //! What cannot be a milestone here is anything only the far end knows — that
-//! nothing ever dialled the compositor's control socket, say. That one is
+//! nothing ever dialed the compositor's control socket, say. That one is
 //! observed where it happens and said there; see [`crate::handshake`].
 
 use std::time::Duration;

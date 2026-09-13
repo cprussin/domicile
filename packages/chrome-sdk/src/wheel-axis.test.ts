@@ -12,7 +12,7 @@ describe("axisFromWheel", () => {
     });
   });
 
-  it("normalises a line-mode wheel to the same detent", () => {
+  it("normalizes a line-mode wheel to the same detent", () => {
     expect(axisFromWheel({ deltaMode: 1, deltaX: 0, deltaY: -3 })).toEqual({
       dx: 0,
       dy: -100,
@@ -21,7 +21,7 @@ describe("axisFromWheel", () => {
     });
   });
 
-  it("normalises a page-mode wheel to the same detent", () => {
+  it("normalizes a page-mode wheel to the same detent", () => {
     expect(axisFromWheel({ deltaMode: 2, deltaX: 1, deltaY: 0 })).toEqual({
       dx: 100,
       dy: 0,

@@ -11,7 +11,7 @@
 //! `wl_output`, and it can take a reloaded desktop up for the chrome while
 //! leaving every window already open on the displays there used to be.
 //!
-//! Both halves are unit-tested already: the config normalises the positions
+//! Both halves are unit-tested already: the config normalizes the positions
 //! and `Screens` decides what to advertise. Neither says a compositor *started
 //! on a two-display config* advertises two outputs to a client that connects.
 //!

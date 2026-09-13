@@ -23,7 +23,7 @@
 # claim is "the page is on the screen", and the only thing that can say so is a
 # real engine drawing it.
 #
-# WHAT IT ASSERTS. That the framed page's flat colour is somewhere in the
+# WHAT IT ASSERTS. That the framed page's flat color is somewhere in the
 # browser's window. Not where: the element's box is this guard's own CSS and
 # asserting a coordinate would be asserting that, which is not the question.
 #
@@ -31,13 +31,13 @@
 # NEGATIVE=1 runs the control, and the control is two runs rather than one:
 #
 #   1. an <iframe> on an ordinary http page, framing `/permits`. It MUST show
-#      the colour. Nothing about the element is being tested here -- this is
+#      the color. Nothing about the element is being tested here -- this is
 #      the run that establishes that a framed page can reach the screen at all
 #      in this harness, in this position.
 #   2. the same frame on the same page, framing `/refuses`. It MUST show
 #      nothing.
 #
-# The two framed pages are the same bytes in the same colour and differ only in
+# The two framed pages are the same bytes in the same color and differ only in
 # X-Frame-Options and frame-ancestors, so the difference between the runs is a
 # reading of those headers and of nothing else. That is what the positive run
 # needs from a control and cannot get from inside itself: that the site really
@@ -55,9 +55,9 @@
 # the same reading -- so establish a presence first, and let the absence be the
 # difference between them.
 #
-# The witness colour is the same separation one layer down. The probe has to
-# find the page's own background before "the framed colour is absent" is a
-# measurement rather than a browser that never drew; see engine_colour_probe.cc.
+# The witness color is the same separation one layer down. The probe has to
+# find the page's own background before "the framed color is absent" is a
+# measurement rather than a browser that never drew; see engine_color_probe.cc.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -73,9 +73,9 @@ fi
 # NEGATIVE=1 runs the control's two legs instead of the claim. See the header.
 NEGATIVE="${NEGATIVE:-0}"
 
-# The framed page's colour, and the colour of whichever page is doing the
-# framing. Neither is any other guard's -- a colour two guards share is a
-# colour a stale log can answer for -- and neither is a browser background, so
+# The framed page's color, and the color of whichever page is doing the
+# framing. Neither is any other guard's -- a color two guards share is a
+# color a stale log can answer for -- and neither is a browser background, so
 # a pixel that matches came from the page it belongs to.
 COLOR="${COLOR:-D81B60}"
 WITNESS="${WITNESS:-20304A}"
@@ -115,8 +115,8 @@ trap cleanup EXIT
   annotate "guard-webview-framing: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
   exit 1
 }
-[ -x "$CHROMIUM/$OUT/domicile_colour_probe" ] || {
-  annotate "guard-webview-framing: no domicile_colour_probe in $CHROMIUM/$OUT; build it with ./packages/domicile-engine/scripts/build.sh"
+[ -x "$CHROMIUM/$OUT/domicile_color_probe" ] || {
+  annotate "guard-webview-framing: no domicile_color_probe in $CHROMIUM/$OUT; build it with ./packages/domicile-engine/scripts/build.sh"
   exit 1
 }
 command -v python3 >/dev/null || {
@@ -125,7 +125,7 @@ command -v python3 >/dev/null || {
 }
 
 # One browser, one page, one answer: starts the engine on `$2`, waits for it to
-# open the socket the probe reads pixels through, asks for the colour, and
+# open the socket the probe reads pixels through, asks for the color, and
 # returns the probe's own status. `$1` names the run, in the logs and in the
 # annotation, because three of these can happen in one invocation.
 #
@@ -177,12 +177,12 @@ measure() { # $1 which run, $2 the URL to open
   }
   echo "the engine is listening on $BROKER, showing $url"
 
-  # One process, two colours: there is one producer per socket --
+  # One process, two colors: there is one producer per socket --
   # OutgoingInvitation::Send consumes the server endpoint -- so asking twice is
   # not available and the witness travels with the subject.
-  "$CHROMIUM/$OUT/domicile_colour_probe" \
+  "$CHROMIUM/$OUT/domicile_color_probe" \
     --domicile-broker-socket="$BROKER" \
-    --colour="FF$COLOR" \
+    --color="FF$COLOR" \
     --witness="FF$WITNESS" \
     --for-seconds="$FOR_SECONDS" 2>&1 | tee "$probe_log"
   local status="${PIPESTATUS[0]}"
@@ -197,7 +197,7 @@ measure() { # $1 which run, $2 the URL to open
 #    arbitrary host, and a guard whose subject could change its headers is a
 #    guard that fails for reasons nobody chose.
 python3 "$SCRIPTS/guard-webview-framing-server.py" \
-  --port "$PORT" --colour "$COLOR" --witness "$WITNESS" >"$HTTP_LOG" 2>&1 &
+  --port "$PORT" --color "$COLOR" --witness "$WITNESS" >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
 
 for _ in $(seq 1 60); do
@@ -236,7 +236,7 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# WHICH END TO BLAME, and it is the whole of this script's judgement. Eleven
+# WHICH END TO BLAME, and it is the whole of this script's judgment. Eleven
 # answers, and most of them are failures that read alike and mean different
 # things -- so they are decided here, in a block
 # `scripts/test-webview-framing-guard.sh` runs directly, rather than inferred
@@ -255,7 +255,7 @@ page is a guest's main frame and not a subframe"
   ;;
 "webview 1")
   FAILURE="the <webview> showed nothing. The page was drawn -- the witness \
-colour is on it -- so this is the guest: either the element never asked for \
+color is on it -- so this is the guest: either the element never asked for \
 one, or the browser refused, or it was attached and the site refused framing \
 anyway. The engine log has the page's own console and any bad-message kill"
   ;;

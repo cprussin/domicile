@@ -19,7 +19,7 @@ class DomicileModifiersEventInit;
 // something else. The state matters because there is one seat and it outlives
 // every window: a press whose release the compositor never sees stays down in
 // it for good, and under caps:swapescape that latches capitals into every
-// Wayland client opened afterwards. A shell resyncing from this needs the four
+// Wayland client opened afterward. A shell resyncing from this needs the four
 // values to mean what xkb says they mean.
 class MODULES_EXPORT DomicileModifiersEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();

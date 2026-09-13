@@ -72,7 +72,7 @@ expect "a two-word label reads as one label" \
 expect "a completed run says so" "completed" "$(latency_ended "$RUN_LOG")"
 
 # THE DENOMINATOR, and the reason it is read off the run rather than written
-# here. `commit to pixel` is quantised to probe round trips and a probe round
+# here. `commit to pixel` is quantized to probe round trips and a probe round
 # trip is one display frame, so one display frame is what the assertion is a
 # multiple of. It is not the floor: the floor is that same frame sampled while
 # the browser is still starting, and it has come back at three times this on a
@@ -131,12 +131,12 @@ CONTROL="$(log_of "2026-09-07T14:00:00.6Z  INFO domicile::engine::spike: latency
 expect "a client that answered nothing is counted" \
   "3" "$(latency_abandoned "$CONTROL")"
 
-# The compositor's log is colourised: tracing wraps the timestamp, the level
+# The compositor's log is colorized: tracing wraps the timestamp, the level
 # and the target in escapes. The message after them is plain, which is what
 # these greps rely on — so one fixture carries the real escapes rather than
 # every fixture carrying none.
 ANSI="$(log_of "$(printf '\033[2m2026-09-07T14:00:00.4Z\033[0m \033[32m INFO\033[0m \033[2mdomicile::engine::spike\033[0m\033[2m:\033[0m latency commit to pixel: min 16.61, median 16.68, max 34.10 ms over 60 (median 1.0 frames)')")"
-expect "a colourised line reads the same as a plain one" \
+expect "a colorized line reads the same as a plain one" \
   "16.68" "$(latency_median "commit to pixel" "$ANSI")"
 
 FRAME_ANSI="$(log_of "$(printf '\033[2m2026-09-07T14:00:00.1Z\033[0m \033[32m INFO\033[0m \033[2mdomicile::engine::spike\033[0m\033[2m:\033[0m latency: the display frame is 16.67 ms')")"

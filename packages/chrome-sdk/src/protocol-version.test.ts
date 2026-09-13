@@ -8,7 +8,7 @@ import { PROTOCOL_VERSION } from "./protocol";
  * `packages/domicile-protocol` and this package are one protocol written
  * twice, and `negotiate` requires the two numbers to be *equal* — a chrome
  * that says 7 to a host speaking 8 gets no `welcome`, and every message it
- * sends afterwards is dropped on the floor. The desktop does not start.
+ * sends afterward is dropped on the floor. The desktop does not start.
  *
  * Nothing else catches that. Every Rust test reads the Rust constant and every
  * test here reads this one, so both suites stay green while the product is

@@ -39,7 +39,7 @@ for candidate in /build/depot_tools "$CHROMIUM/third_party/depot_tools"; do
 done
 [ -n "$TOOLS" ] || {
   echo "no bootstrapped depot_tools in /build/depot_tools or $CHROMIUM/third_party/depot_tools." >&2
-  echo "One is there but not initialised: run its ensure_bootstrap, or gclient once." >&2
+  echo "One is there but not initialized: run its ensure_bootstrap, or gclient once." >&2
   for candidate in /build/depot_tools "$CHROMIUM/third_party/depot_tools"; do
     printf '  %s: autoninja=%s bootstrapped=%s\n' "$candidate" \
       "$([ -x "$candidate/autoninja" ] && echo yes || echo no)" \

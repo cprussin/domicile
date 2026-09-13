@@ -24,11 +24,11 @@
 extern "C" {
 #endif
 
-// The colour the display compositor drew at the centre of the browser's
+// The color the display compositor drew at the center of the browser's
 // window, as SkColor (ARGB). False if there is no window yet or nothing has
 // been drawn.
 //
-// The centre rather than a coordinate because that is where every spike page
+// The center rather than a coordinate because that is where every spike page
 // puts the <app>, and because it is the same pixel steps 2 and 3 are recorded
 // on. Blocking: it is an assertion in a test, and a test that raced the thing
 // it asserts on would be worse than a slow one.
@@ -36,15 +36,15 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_window_center(
     DomicileEngine* engine,
     uint32_t* argb);
 
-// The colour at `x`, `y` in the browser's window, as SkColor (ARGB). False if
+// The color at `x`, `y` in the browser's window, as SkColor (ARGB). False if
 // there is no window yet, nothing has been drawn, or the point is outside it.
 //
-// The centre is not enough once a page holds more than one <app>: two windows
+// The center is not enough once a page holds more than one <app>: two windows
 // side by side have no pixel that is both, and "viz aggregated two surfaces
 // into one page" is exactly the claim the unit tests cannot make -- they
 // exercise the broker's bookkeeping, not the aggregator. So the two-window
 // guard names a point inside each canvas and asserts a different client's
-// colour at each.
+// color at each.
 //
 // Outside the window fails rather than clamps, the same way SpikeProbe's
 // SamplePixel does: a measurement that silently samples the wrong pixel is
@@ -56,7 +56,7 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
     uint32_t* argb);
 
 typedef struct DomicileSpikeCapture {
-  // The colour's bounding box in the captured bitmap.
+  // The color's bounding box in the captured bitmap.
   int32_t x;
   int32_t y;
   int32_t width;
@@ -79,12 +79,12 @@ static_assert(sizeof(DomicileSpikeCapture) == 6 * sizeof(int32_t),
 //
 //   -1  the window could not be captured — no window yet, nothing drawn, or
 //       no probe pipe. Nothing was measured and nothing follows about the
-//       colour.
-//    0  captured, and the colour is not in it. This is a measurement.
-//    1  captured, and the colour is in it.
+//       color.
+//    0  captured, and the color is not in it. This is a measurement.
+//    1  captured, and the color is in it.
 //
 // Three values rather than a bool, because a guard's negative control turns on
-// exactly this distinction: "the colour is not on screen" is the control
+// exactly this distinction: "the color is not on screen" is the control
 // passing, and "nothing could be read" is the control having measured nothing
 // while looking identical.
 //
@@ -98,7 +98,7 @@ static_assert(sizeof(DomicileSpikeCapture) == 6 * sizeof(int32_t),
 //
 // A BOX AND A SIZE RATHER THAN A POINT, because the first matching pixel
 // answers the wrong question. A guard that samples a named point and gets the
-// wrong colour needs to know whether the colour is elsewhere, *where* the
+// wrong color needs to know whether the color is elsewhere, *where* the
 // region it belongs to actually is, and what coordinate space the capture is
 // in — the window it was asked for and the bitmap it got back are not
 // obliged to be the same size, and a probe that cannot say so makes a
@@ -114,9 +114,9 @@ static_assert(sizeof(DomicileSpikeCapture) == 6 * sizeof(int32_t),
 // point probe is throttled in the first place.
 //
 // Exact match, like every other assertion in the spike: the clients draw one
-// flat colour and a near-match would mean the compositor's own background, an
+// flat color and a near-match would mean the compositor's own background, an
 // anti-aliased edge, or a blend, none of which is a client's window.
-DOMICILE_ENGINE_EXPORT int32_t domicile_engine_spike_find_colour(
+DOMICILE_ENGINE_EXPORT int32_t domicile_engine_spike_find_color(
     DomicileEngine* engine,
     uint32_t argb,
     DomicileSpikeCapture* out);
