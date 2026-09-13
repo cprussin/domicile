@@ -4,13 +4,21 @@
   docs/architecture/ENGINE-FORK.md: the measurement.
 
   Every cell is one CSS property, applied identically to the two halves of it.
-  The left half holds an <app> — a <canvas> showing a viz surface a process
-  outside the renderer submits to — and the right half holds an ordinary <div>
-  filled with the colour that producer submits. Both halves are otherwise the
-  same markup at the same offsets, so "does this property treat an <app> like a
-  <div>" becomes "is the left half of this cell a pixel-for-pixel copy of the
-  right half", which domicile_css_parity answers out of the display
-  compositor's own draw.
+  The left half holds the fork's native <app> — a cc::SurfaceLayer embedding a
+  viz surface a process outside the renderer submits to — and the right half
+  holds an ordinary <div> filled with the colour that producer submits. Both
+  halves are otherwise the same markup at the same offsets, so "does this
+  property treat an <app> like a <div>" becomes "is the left half of this cell
+  a pixel-for-pixel copy of the right half", which domicile_css_parity answers
+  out of the display compositor's own draw.
+
+  THE TAG IS THE POINT AND IT USED NOT TO BE. This page reached a window
+  through `canvas`'s own embed method until the table was re-taken, which
+  measured a path no shell takes any more: the SDK's <domicile-app> wrapped
+  exactly that call, and the wrapper is gone. The canvas path still works and
+  the other pages here still use it; this one cannot, because its numbers are
+  quoted as what CSS does to the element a shell writes.
+  scripts/test-parity-page-uses-the-native-tag.sh is what keeps it that way.
 
   The last cell is there to be different. A measurement that cannot fail has
   not measured anything, so its control is a colour the producer never submits
@@ -150,6 +158,21 @@
   const COLOR = parseColor(
     new URLSearchParams(location.search).get('color') ?? DEFAULT_COLOR);
 
+  // The one window this page measures against, and every element here names
+  // it on purpose: the measurement is several <app> elements against ONE
+  // producer, laid out beside ordinary elements, so they have to be the same
+  // window. Elements naming different apps get different surfaces — see
+  // ExternalSurfaceEmbedder's AllocatorForApp.
+  //
+  // `domicile-spike` is what surface_producer.cc registers, which is the
+  // producer every script that drives this page runs. The scripts pass it
+  // explicitly anyway: the default is a convenience for opening the page by
+  // hand, and a page whose app id is wrong does not fail, it waits — the
+  // browser holds an embed until that app has a producer, and an app that
+  // never turns up is an embed that never resolves.
+  const APP_ID =
+    new URLSearchParams(location.search).get('app') ?? 'domicile-spike';
+
   /**
    * Builds one half of a cell: the backdrop or the stack it composites
    * against, and the element under test.
@@ -193,9 +216,15 @@
     cell.style.top =
       GRID_TOP + Math.floor(index / COLUMNS) * (CELL_HEIGHT + ROW_GAP) + 'px';
 
-    const app = document.createElement('canvas');
-    app.width = BOX_WIDTH;
-    app.height = BOX_HEIGHT;
+    // The fork's own element, not a <canvas> with a method on it. `app-id` is
+    // a reflected content attribute, so this is the whole of pointing it at a
+    // window: there is nothing to call and nothing to await. The box comes
+    // from `.box` in the stylesheet, which is also what the producer is
+    // configured at — LayoutAppSurface reports the laid-out box and the
+    // element re-embeds at it, so BOX_WIDTH and BOX_HEIGHT are the
+    // stylesheet's to state and only css_parity_layout.h's to agree with.
+    const app = document.createElement('app');
+    app.setAttribute('app-id', APP_ID);
 
     const control = document.createElement('div');
     control.style.background = spec.controlColor ?? COLOR;
@@ -206,57 +235,48 @@
     return app;
   };
 
-  const canvases = CELLS.map(buildCell);
+  const apps = CELLS.map(buildCell);
 
-  // The one window this page measures against, and every element here names
-  // it on purpose: the measurement is several <app> elements against ONE
-  // producer, laid out beside ordinary elements, so they have to be the same
-  // window. Elements naming different apps get different surfaces — see
-  // ExternalSurfaceEmbedder's AllocatorForApp.
+  // WHAT A PAGE CAN AND CANNOT SEE THROUGH THE NATIVE TAG. Through the canvas
+  // this was a promise, and a rejected one named its own reason. `<app>` has
+  // neither: the element asks the browser from layout and the browser holds
+  // the reply until a producer has registered that app id, so "embedded",
+  // "refused" and "still waiting" are all the same silence from here.
   //
-  // `domicile-spike` is what surface_producer.cc registers, which is the
-  // producer every script that drives this page runs. The scripts pass it
-  // explicitly anyway: the default is a convenience for opening the page by
-  // hand, and a page whose app id is wrong does not fail, it waits — the
-  // browser holds an embed until that app has a producer, and an app that
-  // never turns up is an embed that never resolves.
-  const APP_ID =
-    new URLSearchParams(location.search).get('app') ?? 'domicile-spike';
-
-  // Which is why this exists. Without it a wrong app id is a blank page and a
-  // silent log, and that is indistinguishable from the seam being broken.
+  // Which does not make the diagnostic pointless, it moves it. A wrong app id
+  // and a page that never laid out look identical in the pixels — both are a
+  // cell with no window in it — and the box is what tells them apart. An <app>
+  // with no box never asks at all: `Embed()` returns at its empty-size guard,
+  // which is how a window that is never asked for became a window that never
+  // arrives, for two days, with nothing logged anywhere. So this reports the
+  // boxes and says plainly that the embed is not something it can report.
   const EMBED_DEADLINE_MS = 20_000;
-  // *Settled*, not embedded. A refusal is an answer and so is the runtime flag
-  // being off; saying "nothing embedded it" after either would be explaining a
-  // failure that already explained itself, with the wrong reason.
-  let settled = false;
-  setTimeout(() => {
-    if (!settled) {
-      console.log('domicile: nothing embedded "' + APP_ID + '" within ' +
-                  EMBED_DEADLINE_MS + 'ms. The browser holds an embed until ' +
-                  'that app has a producer, so either no producer connected ' +
-                  'or it registered a different app id.');
-    }
-  }, EMBED_DEADLINE_MS);
 
-  if (canvases[0].embedExternalSurface === undefined) {
-    settled = true;
-    console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
-                'flag is off');
+  /** Each <app>'s laid-out box, as `120x90`, in the order the cells are in. */
+  const boxes = () =>
+    apps
+      .map((app) => app.getBoundingClientRect())
+      .map((rect) => Math.round(rect.width) + 'x' + Math.round(rect.height))
+      .join(' ');
+
+  // `window.HTMLAppElement` rather than `instanceof`, which would throw on the
+  // name before it could answer. Outside the fork — or with the feature off —
+  // <app> parses as an HTMLUnknownElement that takes a box and shows nothing,
+  // so every cell would compare an empty box against a filled one and the
+  // whole table would read as a failure of CSS.
+  if (window.HTMLAppElement === undefined) {
+    console.log('domicile: <app> is not an element this engine knows, so ' +
+                'nothing here can embed. Either this is not the fork, or ' +
+                'DomicileExternalSurface is off.');
   } else {
-    // Every canvas embeds the same surface, because every one of them names
-    // the same app: one window, so one surface, and the renderer keeps one
-    // LocalSurfaceId per app. Each promise resolves only once a producer has
-    // been brokered a frame sink for it, which may be well after load.
-    Promise.all(canvases.map((canvas) => canvas.embedExternalSurface(APP_ID)))
-      .then(
-        () => {
-          settled = true;
-          console.log('domicile: embedded ' + canvases.length);
-        },
-        (error) => {
-          settled = true;
-          console.log('domicile: refused: ' + error.message);
-        });
+    setTimeout(() => {
+      console.log('domicile: ' + apps.length + ' <app> elements naming "' +
+                  APP_ID + '", boxes ' + boxes() + ', expected ' +
+                  BOX_WIDTH + 'x' + BOX_HEIGHT + ' each. Whether the browser ' +
+                  'answered any of them is not visible from this page: an ' +
+                  '<app> embeds from layout and the browser holds the reply ' +
+                  'until that app has a producer. A box of 0x0 is the one ' +
+                  'failure this can see — that element never asked.');
+    }, EMBED_DEADLINE_MS);
   }
 </script>

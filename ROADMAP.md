@@ -133,14 +133,28 @@ decides whether an item is waiting or workable.
    on the `<app>` is the engine answering the other half of `measure`'s job with
    the real transform. That step is the one with the measurements behind it.
 
-   **The placement deletion is unblocked.** It was waiting on the embed
-   working, and a guard now shows a client's window through the native tag on
-   both shells. What has not moved is the rest of the evidence: CSS parity,
-   latency and the bands were all measured through the canvas path, so those
-   numbers still describe a path the shells no longer take, and re-measuring
-   them through `<app>` is its own piece of work. `report-app-sizes.ts` was
-   rebuilt document-level rather than dropped for exactly this moment, with a
-   header saying it is redundant and why; it comes out with the rest.
+   **The placement deletion is unblocked, and the numbers under it are now
+   the right numbers.** It was waiting on the embed working, and a guard shows
+   a client's window through the native tag on both shells. The evidence has
+   caught up: `spike-css-page.html` and `spike-resize-page.html` write
+   `<app app-id="…">` rather than embedding through a `<canvas>`, and the
+   tables in `ENGINE-FORK.md` were re-taken on `crux` — software and GPU — with
+   **not one number moving**. The row that matters most to this deletion is
+   resize, and it changed in kind: the page now grows a CSS box and nothing
+   else, and the producer is reconfigured from `120x90` to `180x130` off
+   layout alone. That is "an `<app>`'s layout box *is* the
+   `xdg_toplevel.configure`" measured rather than argued, which is the sentence
+   `measure.ts` and `observe-placement.ts` are being deleted on the strength
+   of. `report-app-sizes.ts` was rebuilt document-level rather than dropped for
+   exactly this moment, with a header saying it is redundant and why; it comes
+   out with the rest.
+
+   Two things are deliberately still on the canvas path and neither blocks the
+   deletion. `scripts/spike-iframe.sh` compares an `<app>` against an
+   out-of-process `<iframe>`, and the re-take is what makes leaving it
+   tolerable — the two call sites agree to the pixel, so its `<app>` column is
+   the same column either way. The bands measurement is older than both and is
+   a record of a rejected design, not a claim about the current one.
 2. **Keystroke-to-pixel latency** (#206). The requirement is that a client's
    window costs the user nothing a plain Wayland compositor would not.
    `guard-latency.sh` has run on `crux` now — it reads `commit to pixel` at
