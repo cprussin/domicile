@@ -435,7 +435,7 @@ jobs:
       # page written for the guard; this one drives shell-simple, built by its
       # own vite config, joined to the compositor by the SDK's own
       # `connectToHost` over a WebSocket to the bridge serving it, and
-      # mounting a `<domicile-app>` for a window it learned about from the
+      # mounting an `<app>` for a window it learned about from the
       # host. Three things that have each failed on their own, and none of
       # which any other guard touches.
       #
