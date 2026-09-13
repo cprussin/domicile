@@ -4,6 +4,6 @@
     "moduleResolution": "bundler",
     "types": ["bun", "@domicile/test-support"]
   },
-  "extends": "@cprussin/tsconfig/dom.json",
-  "include": ["src", "panda.config.ts", "vite.config.ts"]
+  "extends": "@cprussin/tsconfig/react.json",
+  "include": ["src", "vite.config.ts"]
 }

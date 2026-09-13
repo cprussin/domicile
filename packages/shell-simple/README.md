@@ -11,14 +11,15 @@ is empty: gone while a window is open, back when the last one leaves.
 
 It is [TinyWM](http://incise.org/tinywm.html) for Domicile, and for TinyWM's
 reason: a window manager with no widgets in it shows what a shell is *made of*
-without a design on top of it. It is not, though, the least a shell can be —
-there is drag, resize, a terminal shortcut and a config schema in here, about
-twelve hundred lines of it. Two neighbors mark the ends it sits between:
+without a design on top of it. It is also the worked example of the *simplest
+usable React shell* — one component, one stylesheet of plain CSS, and no
+dependency on `@domicile/component-library` or Panda. Two neighbors mark the
+ends it sits between:
 
 - [`examples/minimal-shell`](/examples/minimal-shell) is the floor — every
-  window full-screen, newest on top, and no more. It is also the only shell
-  here built against the *published* SDK from outside the workspace, which is
-  what makes it the worked example in
+  window full-screen, newest on top, no React and no CSS at all. It is also the
+  only shell here built against the *published* SDK from outside the workspace,
+  which is what makes it the worked example in
   [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
 - [`@domicile/shell-manganese`](../shell-manganese/README.md) is the reference
   chrome, and shows what the model is *for*.
@@ -27,21 +28,17 @@ twelve hundred lines of it. Two neighbors mark the ends it sits between:
 
 | Path | What |
 |---|---|
-| `src/index.ts` | The entry, and the whole of the wiring: build the `DomicileClient`, bind the SDK, open a window per client, draw the background, install the gestures and the shortcut. |
-| `src/desktop.ts` | The windows on screen: one `<app>` per client, each at a box this module owns. All of the shell's state. |
-| `src/window-gestures.ts` | Alt and the pointer: what a press, a drag and a release do to the window under them. |
-| `src/keybinding-background.ts` | The keys, on an empty desktop and unpainted while a window is on it: the desktop's own paint, and all of it when there is no window. |
-| `src/catch-up.ts` | The one line that decides whether reloading the desktop moves the user's keyboard: when the host has finished describing what was already running, so the next window to appear is one someone opened. |
-| `src/terminal-shortcut.ts` | Alt+Enter: the one combination this shell claims, and the terminal it opens. |
-| `src/drag.ts` | Where a dragged window lands, as arithmetic — no DOM, so it is testable on its own. |
-| `src/window-box.ts` | A window's box, and where a newly-appeared client's window opens. |
+| `src/Shell.tsx` | The whole desktop: the windows, the Alt gestures, the terminal shortcut, and the legend on an empty screen. All of the shell's state is the window list in here. |
+| `src/index.tsx` | The entry: build the `DomicileClient`, bind the SDK, mount the React root, report the density and the desktop size. |
+| `src/shell.css` | Plain CSS — where a window sits, the placeholder over one with nothing behind it yet, and the legend. |
+| `vite.config.ts` | The module build, and the plugin that folds the stylesheet back into it. |
 
 ## What it deliberately does not do
 
-- **No chrome.** Nothing is drawn that a pointer can reach, and nothing that
-  is not a window's own once there are windows: the background naming the keys
-  takes no event and is not painted while any window is open, and the one thing
-  drawn over a window is its own placeholder label, until it has a surface.
+- **No chrome.** Nothing is drawn that a pointer can reach, and nothing at all
+  once there are windows: the legend naming the keys takes no event and is
+  rendered only on an empty desktop, and the one thing drawn over a window is
+  its own placeholder label, until it has a surface.
 - **No keyboard of its own beyond Alt+Enter.** Every other key goes to the
   window that has the keyboard: the one that opened most recently, or one
   clicked since. One combination is the minimum: a desktop with no way to start
@@ -125,11 +122,9 @@ bun run turbo build:vite --filter @domicile/shell-simple
 emits the page to `.vite/renderer/main_window/`, and that is the whole of what
 a shell builds — there is no main process, no preload and no launcher. A shell
 is a built web page: the engine serves it over `domicile://` and loads it, and
-the compositor is a producer to that engine.
-
-Configuration is this shell's own, at `$XDG_CONFIG_HOME/domicile/simple.json`.
-Nothing of Domicile's is configured directly — what the compositor reads is
-generated from that file. A first run with no file takes the defaults.
+the compositor is a producer to that engine. The stylesheet travels *inside*
+`shell.js`, because the document Domicile writes carries no `<link>` — see the
+plugin in `vite.config.ts`.
 
 `bun run --filter @domicile/shell-simple start:dev` runs this shell in a real
 desktop and rebuilds it as you edit — the engine the flake pins and the
@@ -137,19 +132,14 @@ compositor out of this checkout. A rebuilt shell needs the desktop restarted —
 nothing reloads the page for you until `domicile load-shell` lands, see
 `scripts/dev-shell.sh`.
 
-`styled-system/` is Panda's generated output, produced by `bun run prepare` (run
-automatically as a turbo dependency of the build, type check, and tests) and not
-checked in. This shell renders none of the component library's components; it
-takes its preset so the desktop is themed like the rest of Domicile.
-
 ## Test
 
 ```sh
 bun run --filter @domicile/shell-simple test
 ```
 
-runs the type check, the unit tests, and the Vite build. The DOM-dependent
-suites render against happy-dom via
-[`@domicile/test-support`](../test-support/README.md), which performs no layout
-— so they inject the SDK's `measure` rather than relying on
-`getBoundingClientRect`.
+runs the type check, the unit tests, and the Vite build. `Shell.test.tsx`
+renders the component against happy-dom via
+[`@domicile/test-support`](../test-support/README.md) and drives it with a fake
+domicile client, so every behavior here is exercised through the same messages
+and events the host and the pointer deliver.
