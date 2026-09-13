@@ -68,7 +68,7 @@ in this repo.
    });
    ```
 4. Add the layer declaration to the package's entry CSS file (and import
-   it from the renderer entry point):
+   it from the package's entry point):
    ```css
    @layer reset, base, tokens, recipes, utilities;
    ```

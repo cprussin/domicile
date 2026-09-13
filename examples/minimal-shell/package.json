@@ -11,7 +11,7 @@
   "name": "domicile-minimal-shell",
   "private": true,
   "scripts": {
-    "build": "vite build -c vite.renderer.config.ts"
+    "build": "vite build"
   },
   "type": "module",
   "version": "0.1.0"

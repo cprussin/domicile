@@ -170,7 +170,7 @@ React at all.
 One source file and a build config. The full version, with the comments, is in
 [`examples/minimal-shell`](/examples/minimal-shell).
 
-**`src/renderer.ts`** — the page, and the whole of the shell's behavior:
+**`src/index.ts`** — the page, and the whole of the shell's behavior:
 
 ```ts
 import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
@@ -329,13 +329,13 @@ One build, from your module rather than from a document, emitting one file
 with a name Domicile can find:
 
 ```ts
-// vite.renderer.config.ts
+// vite.config.ts
 export default defineConfig({
   base: "./",
   build: {
     outDir: "dist",
     rollupOptions: {
-      input: "src/renderer.ts",
+      input: "src/index.ts",
       output: { entryFileNames: "shell.js" },
     },
   },

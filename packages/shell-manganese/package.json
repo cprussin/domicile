@@ -27,7 +27,7 @@
   "private": true,
   "productName": "domicile-shell-manganese",
   "scripts": {
-    "build:vite": "vite build -c vite.renderer.config.ts",
+    "build:vite": "vite build",
     "prepare": "panda codegen --silent && panda cssgen --silent",
     "start:dev": "../../scripts/dev-shell.sh manganese",
     "test:types": "tsc --noEmit",

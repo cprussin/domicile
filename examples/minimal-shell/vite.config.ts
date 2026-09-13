@@ -22,7 +22,7 @@ export default defineConfig({
   build: {
     outDir: ".vite/renderer/main_window",
     rollupOptions: {
-      input: "src/renderer.ts",
+      input: "src/index.ts",
       output: { entryFileNames: "shell.js" },
     },
   },
