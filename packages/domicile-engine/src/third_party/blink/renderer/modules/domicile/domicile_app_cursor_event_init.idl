@@ -1,0 +1,14 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+dictionary DomicileAppCursorEventInit : EventInit {
+  DOMString appId = "";
+  // Defaulted rather than left absent, so this event always carries a shape
+  // and `cursor()` has no "no cursor" case to spell. `"default"` is the arrow,
+  // which is what a page constructing one of these without saying otherwise
+  // means. Nothing in the engine comes through here: the compositor's path
+  // uses DomicileAppCursorEvent's other constructor, which is handed a shape.
+  DomicileCursorShape cursor = "default";
+  DOMHighResTimeStamp arrival = 0;
+};

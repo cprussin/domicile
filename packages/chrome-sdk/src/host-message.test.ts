@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type {
+  DomicileAppCursorEvent,
   DomicileAppEvent,
   DomicileAppTitledEvent,
   DomicileModifiersEvent,
@@ -32,12 +33,30 @@ const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
   Object.assign(new Event(type), {
     appId: "",
     arrival: 0,
-    cursor: "",
     hasSize: false,
     height: 0,
     title: "",
     width: 0,
     ...fields,
+  });
+
+/**
+ * A `DomicileAppCursorEvent`. Its own builder because it is its own event: a
+ * `DomicileCursorShape` has no member meaning "not a cursor", so the shape is
+ * named at every call rather than defaulted to a sentinel the engine cannot
+ * send.
+ */
+const appCursorEvent = (
+  appId: string,
+  cursor: string,
+): DomicileAppCursorEvent =>
+  Object.assign(new Event("appcursor"), {
+    appId,
+    arrival: 0,
+    // Cast because the point of the test below is the value the engine's own
+    // type says cannot be here — which is what `appCursor` is being asked to
+    // refuse, and what a shell running against an older engine would see.
+    cursor: cursor as DomicileAppCursorEvent["cursor"],
   });
 
 describe("a window appearing", () => {
@@ -131,14 +150,15 @@ describe("a cursor a client asked for", () => {
     // `style.cursor` is a silent no-op, so the symptom of a value that got
     // through would be an arrow where a hand should be with nothing said.
     expect(() => {
-      appCursor(appEvent("appcursor", { appId: "term", cursor: "pointr" }));
+      appCursor(appCursorEvent("term", "pointr"));
     }).toThrow();
   });
 
   it("passes a keyword it does know", () => {
-    expect(
-      appCursor(appEvent("appcursor", { appId: "term", cursor: "grabbing" })),
-    ).toStrictEqual({ app_id: "term", cursor: "grabbing" });
+    expect(appCursor(appCursorEvent("term", "grabbing"))).toStrictEqual({
+      app_id: "term",
+      cursor: "grabbing",
+    });
   });
 });
 

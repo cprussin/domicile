@@ -32,6 +32,8 @@
 // Keycodes are Linux evdev codes, in both directions — `keycode` rather than
 // `key` because `KeyboardEvent.key` already means a string ("Enter").
 
+import type { CursorShape } from "./cursor-shape";
+
 /**
  * A key combination the desktop claims for itself, and the same shape the
  * press comes back as.
@@ -91,32 +93,23 @@ export type DomicileDisplay = {
 };
 
 /**
- * Something happened to a window: it appeared, resized, closed, or asked for a
- * cursor — and, with only `appId` filled in, focus moved.
+ * Something happened to a window: it appeared, resized or closed — and, with
+ * only `appId` filled in, focus moved to it or was asked for by it.
  *
  * One type for the five because they carry the same thing (which window) and
  * differ only in what else they carry. The fields a given type does not carry
  * are the empty string rather than absent, which is WebIDL's `DOMString` and
  * not a choice the SDK gets to make; `host-message.ts` is where each event
  * becomes a payload with only the fields that event means.
+ *
+ * A cursor is not one of them. {@link DomicileAppCursorEvent} carries that,
+ * because `DomicileCursorShape` is a closed set and a closed set has no
+ * spelling for "this event is not about a cursor".
  */
 export type DomicileAppEvent = Event & {
   /** The id an `<app>` element names. Empty on `focuschanged` means the chrome. */
   readonly appId: string;
   readonly title: string;
-  /**
-   * The CSS `cursor` keyword a client asked for, or the empty string on every
-   * event that is not `appcursor`.
-   *
-   * One of the shapes in `cursor-shape.ts` by construction: the browser
-   * process refuses a name that is not, at the socket, so this is a closed set
-   * arriving as a `DOMString` rather than an open one. `host-message.ts` still
-   * parses it — the DOM is a boundary and DATA.md is about boundaries, not
-   * about trust — but the parse is now a second reading of a value already
-   * checked rather than the only thing standing between a typo and an arrow
-   * where a hand should be.
-   */
-  readonly cursor: string;
   /**
    * False until the client has committed a buffer.
    *
@@ -129,6 +122,51 @@ export type DomicileAppEvent = Event & {
   readonly hasSize: boolean;
   readonly width: number;
   readonly height: number;
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds.
+   *
+   * **Not `timeStamp`**, which is when the event object was *constructed* — in
+   * the renderer, at dispatch — so a shell pricing the IPC against it measures
+   * a few microseconds of Blink and calls it the hop. The difference between
+   * the two is the stage: the compositor's line read off a socket in the
+   * browser process, turned into a mojo message, carried into this renderer
+   * and dispatched here.
+   *
+   * `shortcut` is the one event whose stamp is not a socket read — a chord the
+   * shell claimed is matched in the browser process and never reaches the
+   * compositor — but it is the same quantity on the same clock: when that
+   * process had it.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
+/**
+ * A client asked for a cursor to be shown over its window.
+ *
+ * Its own type rather than a {@link DomicileAppEvent}, and that is the engine's
+ * shape rather than the SDK's: `cursor` is a WebIDL `DomicileCursorShape`, a
+ * closed set with no member meaning "not a cursor event", so the five events
+ * that have nothing to say about a cursor cannot carry the attribute at all.
+ * While it was a `DOMString` they carried `""` and a shell had to know that
+ * `""` was not a shape.
+ */
+export type DomicileAppCursorEvent = Event & {
+  readonly appId: string;
+
+  /**
+   * The CSS `cursor` keyword the client asked for.
+   *
+   * Typed as the closed set because the engine's bindings now hold it to one:
+   * `domicile_cursor_shape.idl` is the same list, and a value outside it
+   * cannot cross the bindings in either direction. `host-message.ts` parses it
+   * anyway — the DOM is a boundary, and this SDK is versioned apart from the
+   * engine it runs against, so the parse is what makes a shell built against a
+   * newer list than the engine ships a throw rather than an arrow where a hand
+   * should be.
+   */
+  readonly cursor: CursorShape;
 
   /**
    * When the browser process had this message, in `performance.now()`'s
@@ -248,7 +286,7 @@ export type DomicileHostEventMap = {
   appappeared: DomicileAppEvent;
   appresized: DomicileAppEvent;
   appclosed: DomicileAppEvent;
-  appcursor: DomicileAppEvent;
+  appcursor: DomicileAppCursorEvent;
   focuschanged: DomicileAppEvent;
   /**
    * A client asked for the keyboard, and nothing has moved: the shell answers
