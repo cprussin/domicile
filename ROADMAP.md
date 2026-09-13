@@ -181,18 +181,22 @@ decides whether an item is waiting or workable.
    desktops**, each answering its own socket; a client with no `DOMICILE_SOCK`
    is refused by name rather than sent to guess between them.
 
-   **What is left is `load-shell` itself, and it is blocked in the engine** —
-   which is a correction to `THE-DOMICILE-BINARY.md`'s "nothing blocks this but
-   the work itself". That was true of the transport and false of the command.
-   The engine reads both `--domicile-shell-root` (captured when
-   `ShellURLLoaderFactory` is constructed) and `--domicile-shell-module` (read
-   per request) off `base::CommandLine::ForCurrentProcess()`, which nothing
-   outside the browser process can change; and `ControlChannel`, the only thing
-   that process reads from, carries nothing that reloads or navigates the
-   shell's own window. Restarting the engine is not the way out either: it kills
-   the broker socket the compositor produces into, which is the windows. See the
-   engine-fork list below, and `docs/architecture/THE-DOMICILE-BINARY.md` for
-   the two routes and why the decided one was decided.
+   **The engine's half is in and the supervisor's is not.** The engine takes a
+   `--domicile-command-socket` of its own, answers
+   `{"type":"load_shell","version":1,"root":…,"module":…}` on it with `loaded`
+   or `refused`, and carries one out by replacing what `ShellSource` holds and
+   reloading the shell's window — the windows survive it, because the
+   compositor is not in the path.
+   `docs/architecture/THE-DOMICILE-BINARY.md` has the route and why the other
+   one was refused.
+
+   What is left is three things in `domicile-launch`:
+   `--domicile-command-socket` on the engine's command line in `spawn`, a
+   `load-shell` verb in `cli` and `control`, and `answer` dialing the engine
+   instead of holding the answer itself. **None of it works before an engine
+   release carries the socket** — `engine-release.nix` pins an engine built
+   from an older commit than `main`, and the running one has never heard of the
+   switch, so a supervisor that dialled it now would find nothing listening.
 
    **Dev reload comes back with `load-shell` and not before.** The poller the
    bridge wrote into every served document went with the bridge, the C++ that
@@ -202,31 +206,7 @@ decides whether an item is waiting or workable.
 
 ### In the engine fork — the agent on `crux`
 
-1. **The engine cannot be told which shell to serve.** `domicile load-shell`
-   stops here. `--domicile-shell-root` is captured when `ShellURLLoaderFactory`
-   is constructed and `--domicile-shell-module` is read per request, both off
-   `base::CommandLine::ForCurrentProcess()`, so neither can be changed from
-   outside the browser process; and `ControlChannel` — the only thing that
-   process reads from, and a *client* of the compositor's `--chrome-socket` —
-   carries nothing that reloads or navigates the shell's window
-   (`WebViewGuest::Reload` reloads a guest, which is a different window).
-
-   **Decided: the engine takes a `--domicile-command-socket` of its own and
-   the supervisor dials it**, on layering alone. Which shell to serve is
-   supervisor-to-engine information — the supervisor already says it once, at
-   launch, as `--domicile-shell-root` and `--domicile-shell-module` — and the
-   alternative relays a new `HostMessage` through the compositor, which puts
-   that mail on the host↔chrome contract, where the page neither sends nor
-   reads it. The compositor staying out of the path is also what keeps the
-   windows, by construction rather than by care. Note this socket joins the
-   supervisor to the *engine*, which is a separately published deploy unit, so
-   `DATA.md`'s versioning rule applies to it — unlike the control socket, whose
-   two ends are one binary. `docs/architecture/THE-DOMICILE-BINARY.md` has the
-   full record, including the argument that was struck.
-
-   **Dev reload is downstream of this**, not of anything in the Rust.
-
-2. **A desktop on a tty.** Audited against the pin in
+1. **A desktop on a tty.** Audited against the pin in
    `docs/architecture/A-DESKTOP-ON-A-TTY.md`. Getting `gn gen` to accept
    `ozone_platform_drm = true` is a **patch**: eight edits, not one of them
    inside the DRM platform's own logic, because its 49 `.cc` files hold two
@@ -254,7 +234,7 @@ decides whether an item is waiting or workable.
    Until both halves land, a desktop is a window inside an existing Wayland
    session, or headless.
 
-3. **What the engine ships that a desktop never runs.** Chrome carries a tab
+2. **What the engine ships that a desktop never runs.** Chrome carries a tab
    strip, a New Tab page, a settings UI, sign-in and sync. A desktop can reach
    none of it, all of it is built, and all of it is in the ~216 MB release
    tarball and in the attack surface. **Measure before patching**: nobody knows

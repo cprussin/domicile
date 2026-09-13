@@ -41,6 +41,18 @@ inline constexpr char kDomicileShellRootSwitch[] = "domicile-shell-root";
 inline constexpr char kDomicileControlSocketSwitch[] =
     "domicile-control-socket";
 
+// Where this engine answers commands about the shell it serves -- a unix
+// stream the engine binds and the supervisor dials, one line of JSON in and
+// one out. `components/domicile/browser/command_protocol.h` is the contract.
+//
+// The supervisor's end, not the compositor's: which shell to serve is
+// supervisor-to-engine information, and routing it through the compositor
+// would put a message on the host<->chrome contract that the page neither
+// sends nor reads. Absent on an engine nobody intends to command, which is
+// every engine until `domicile load-shell` starts one.
+inline constexpr char kDomicileCommandSocketSwitch[] =
+    "domicile-command-socket";
+
 // The shell itself: one JavaScript module, a path and nothing else. There is no
 // manifest and there is not going to be one -- everything a manifest could
 // carry is an export the shell hands over once it is running, and the one

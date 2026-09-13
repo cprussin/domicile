@@ -70,33 +70,36 @@ So navigation, subresources, the origin, the binding, an outbound message and
 an unsolicited inbound one all work. What does not yet exist is the other 27
 protocol members, and shellDocument still lives in TypeScript.
 ---
- chrome/browser/BUILD.gn                       |  6 ++
- .../chrome_browser_interface_binders.cc       | 40 ++++++++++++++
- .../browser/chrome_content_browser_client.cc  | 55 +++++++++++++++++++
+ chrome/browser/BUILD.gn                       |  8 +++
+ .../chrome_browser_interface_binders.cc       | 40 ++++++++++++
+ chrome/browser/chrome_browser_main.cc         | 12 ++++
+ .../browser/chrome_content_browser_client.cc  | 64 +++++++++++++++++++
  chrome/browser/profiles/profile_io_data.cc    |  8 +++
  .../ui/startup/startup_browser_creator.cc     | 18 +++++-
- chrome/browser/ui/startup/url_util.cc         | 14 +++++
+ chrome/browser/ui/startup/url_util.cc         | 14 ++++
  chrome/common/BUILD.gn                        |  1 +
- chrome/common/chrome_content_client.cc        | 14 +++++
+ chrome/common/chrome_content_client.cc        | 14 ++++
  .../bindings/generated_in_modules.gni         |  6 ++
  .../renderer/bindings/idl_in_modules.gni      |  4 ++
  .../core/events/event_target_names.json5      |  2 +
  .../core/events/event_type_names.json5        |  2 +
  third_party/blink/renderer/modules/BUILD.gn   |  1 +
  .../platform/runtime_enabled_features.json5   | 18 ++++++
- 14 files changed, 188 insertions(+), 1 deletion(-)
+ 15 files changed, 211 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 2a3958f78ddb6..5380296102cc3 100644
+index 2a3958f78ddb6..d83f40402241f 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2372,6 +2372,12 @@ source_set("browser") {
+@@ -2372,6 +2372,14 @@ source_set("browser") {
      "//components/device_event_log",
      "//components/dom_distiller/content/browser",
      "//components/domain_reliability",
 +
-+    # Domicile's engine fork: serving the shell over domicile://, and the
-+    # shell's control channel to the compositor.
++    # Domicile's engine fork: serving the shell over domicile://, the
++    # shell's control channel to the compositor, and the socket a running
++    # engine is told which shell to serve on.
++    "//chrome/browser/domicile",
 +    "//components/domicile:control_channel",
 +    "//components/domicile:shell_scheme",
 +
@@ -161,21 +164,52 @@ index ae2d77825d359..d55fad9fefd13 100644
    map->Add<image_annotation::mojom::Annotator>(&BindImageAnnotator);
  
    map->Add<blink::mojom::ScriptToolHost>(
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index b8694873454c3..f520f2a99db79 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/chrome_browser_main.h"
+ 
++#include "chrome/browser/domicile/domicile_command_socket.h"
++
+ #include <memory>
+ #include <string>
+ #include <tuple>
+@@ -1706,6 +1708,16 @@ void ChromeBrowserMainParts::PreBrowserStart() {
+ 
+ void ChromeBrowserMainParts::PostBrowserStart() {
+   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PostBrowserStart");
++
++  // Domicile's engine fork: the socket a running desktop is told which shell
++  // to serve on. Here because this is the first point at which the shell's
++  // window exists -- `browser_creator_->Start` has run -- and because the
++  // listener is the browser process's rather than any page's. A shell whose
++  // module 404s is exactly when `load_shell` is wanted, and that shell never
++  // binds a control channel, so anything started off the page's own binder
++  // would be missing in the one case it exists for.
++  domicile::StartCommandSocket();
++
+   for (auto& chrome_extra_part : chrome_extra_parts_) {
+     chrome_extra_part->PostBrowserStart();
+   }
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 7a4cef2435e82..29a0f4d6bda01 100644
+index 7a4cef2435e82..15f3f54d4ef42 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -4,6 +4,9 @@
+@@ -4,6 +4,10 @@
  
  #include "chrome/browser/chrome_content_browser_client.h"
  
++#include "components/domicile/browser/shell_source.h"
 +#include "components/domicile/browser/shell_url_loader_factory.h"
 +#include "components/domicile/common/domicile_scheme.h"
 +
  #include <algorithm>
  #include <iterator>
  #include <map>
-@@ -2540,6 +2543,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
+@@ -2540,6 +2544,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
  
    const GURL& site_url =
        site_instance->GetSecurityPrincipal().GetDeprecatedSiteURL();
@@ -201,18 +235,26 @@ index 7a4cef2435e82..29a0f4d6bda01 100644
    if (search::IsNTPURL(site_url)) {
      site_instance->GetProcess()->SetUserData(search::kIsNTPProcessKey,
                                               std::make_unique<NTPUserData>());
-@@ -6051,10 +6073,31 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
+@@ -6051,10 +6074,39 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
    return result;
  }
  
 +namespace {
 +
 +// Where the shell's files are. Empty when the engine was started without
-+// --domicile-shell-root, and a factory on an empty root refuses everything --
-+// the honest answer when there is no shell, and better than guessing.
++// --domicile-shell-root and nothing has told it otherwise since, and a factory
++// on an empty root refuses everything -- the honest answer when there is no
++// shell, and better than guessing.
++//
++// OUT OF THE SHELL SOURCE RATHER THAN OFF THE COMMAND LINE, which is the whole
++// of `domicile load-shell` on this side of it. The embedder rebuilds this
++// factory per navigation and per commit, so a reload already asks again and
++// already gets whatever the source holds at that moment -- the root never
++// needed to become per-request. The one thing in the way was that its only
++// supplier read a command line, and a process's command line is fixed from
++// outside it.
 +base::FilePath DomicileShellRoot() {
-+  return base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
-+      domicile::kDomicileShellRootSwitch);
++  return domicile::ShellSource::Get().Root();
 +}
 +
 +}  // namespace
@@ -233,7 +275,7 @@ index 7a4cef2435e82..29a0f4d6bda01 100644
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE) || BUILDFLAG(IS_CHROMEOS) || \
      !BUILDFLAG(IS_ANDROID)
    content::WebContents* web_contents =
-@@ -6470,6 +6513,18 @@ void ChromeContentBrowserClient::
+@@ -6470,6 +6522,18 @@ void ChromeContentBrowserClient::
          int render_frame_id,
          const std::optional<url::Origin>& request_initiator_origin,
          NonNetworkURLLoaderFactoryMap* factories) {

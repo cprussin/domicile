@@ -356,7 +356,7 @@ jobs:
           # below exists to catch, arriving by the other door. Between them
           # they are what refuses a path traversal out of the shell root and
           # what pins the one document every desktop is.
-          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:CursorShapeTest.*'
+          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*'
           # `--gtest_filter` matching nothing exits 0, so a suite that was
           # renamed or never linked would be a silent pass. Test names are the
           # indented lines of --gtest_list_tests; suite names are not.
@@ -364,10 +364,17 @@ jobs:
             ./components_unittests --gtest_filter="$filter" --gtest_list_tests |
             grep -cE '^  ' || true)
           echo "$count tests match $filter"
-          # 11 in FrameSinkBrokerTest alone at the time of writing, 7 in
-          # ShortcutRegistryTest, 11 in ShellURLLoaderFactoryTest, 11 in
-          # ShellDocumentTest and 3 in CursorShapeTest.
-          [ "$count" -ge 43 ] || {
+          # Every suite in the filter, counted rather than estimated:
+          # FrameSinkBroker 11, WindowDiff 7, EngineEventQueue 5,
+          # ShortcutRegistry 7, ShellURLLoaderFactory 11, ShellDocument 11,
+          # ShellSource 3, CursorShape 3, CommandProtocol 8.
+          #
+          # 66, and it was 46 — which was not drift. WindowDiffTest and
+          # EngineEventQueueTest have always been in the filter and were never
+          # in the sum, so the floor sat 12 below the truth and a whole suite
+          # could have stopped linking with room to spare. That is the failure
+          # this check exists to catch, so the number is now the real one.
+          [ "$count" -ge 66 ] || {
             echo "::error::only $count tests matched; the suites were renamed or did not link" >&2
             exit 1
           }

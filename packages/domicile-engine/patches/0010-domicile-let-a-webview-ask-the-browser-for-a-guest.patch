@@ -52,11 +52,11 @@ See components/domicile/browser/web_view_guest.h in the Domicile repository.
  5 files changed, 39 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 5380296102cc3..59917c3dfb6b5 100644
+index d83f40402241f..425629d66e552 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2377,6 +2377,7 @@ source_set("browser") {
-     # shell's control channel to the compositor.
+@@ -2379,6 +2379,7 @@ source_set("browser") {
+     "//chrome/browser/domicile",
      "//components/domicile:control_channel",
      "//components/domicile:shell_scheme",
 +    "//components/domicile:web_view_guest",

@@ -68,6 +68,7 @@ source_set("shell_scheme") {
 
   public_deps = [
     ":common",
+    ":shell_source",
     "//base",
     "//content/public/browser",
     "//mojo/public/cpp/bindings",
@@ -75,6 +76,45 @@ source_set("shell_scheme") {
     "//services/network/public/cpp",
     "//services/network/public/mojom",
     "//url",
+  ]
+}
+
+# Which shell the browser is serving, for the life of the process.
+#
+# Its own target beside :shell_scheme rather than part of it, because it is the
+# half of serving a shell that needs neither //content nor a mojo pipe -- and
+# because it is what `domicile load-shell` writes to, so the thing that carries
+# that command in will want it without wanting a URLLoaderFactory. //base and
+# the switch names, which is all state about one directory and one filename can
+# need.
+source_set("shell_source") {
+  sources = [
+    "browser/shell_source.cc",
+    "browser/shell_source.h",
+  ]
+
+  public_deps = [
+    ":common",
+    "//base",
+  ]
+}
+
+# What a running engine can be told about the shell it serves.
+#
+# Its own target beside :shell_source rather than part of it, because a line of
+# JSON and the state it names are two different things -- and because this is
+# the half of the command socket that can be tested with a string. What cannot
+# is in //chrome/browser/domicile, which is where the socket and the shell's
+# window are. //base and the switch names; no //content and no socket.
+source_set("command_protocol") {
+  sources = [
+    "browser/command_protocol.cc",
+    "browser/command_protocol.h",
+  ]
+
+  public_deps = [
+    ":common",
+    "//base",
   ]
 }
 
@@ -147,7 +187,9 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "browser/command_protocol_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
+    "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
     "common/cursor_shape_unittest.cc",
@@ -156,8 +198,10 @@ source_set("unit_tests") {
 
   deps = [
     ":browser",
+    ":command_protocol",
     ":cursor_shape",
     ":shell_scheme",
+    ":shell_source",
     ":shortcut_registry",
     "//components/domicile/mojom",
     "//components/domicile/engine:event_queue_unit_tests",
@@ -168,6 +212,7 @@ source_set("unit_tests") {
     "//components/viz/test:test_support",
     "//mojo/public/cpp/bindings",
     "//skia",
+    "//testing/gmock",
     "//testing/gtest",
     "//ui/gfx/geometry",
   ]
