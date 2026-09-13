@@ -21,6 +21,14 @@ in this repo.
   primitive is missing from the library, add it to the library and consume
   it — don't fork.
 
+**One package is exempt, deliberately:
+[`@domicile/shell-simple`](/packages/shell-simple/README.md).** It exists to be
+the smallest usable React shell — the thing somebody writing a desktop outside
+this repo reads to see what a shell is made of — and a design system is exactly
+what that has to be legible without. It uses plain CSS in one stylesheet and
+takes no dependency on the component library. Nothing else may claim this
+exemption: a package with a product UI is not a worked example.
+
 ## Setup for a new package
 
 1. Add the catalog dependencies to the package's `devDependencies`

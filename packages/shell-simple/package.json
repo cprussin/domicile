@@ -1,17 +1,18 @@
 {
   "dependencies": {
     "@domicile/chrome-sdk": "workspace:*",
-    "@domicile/component-library": "workspace:*",
-    "zod": "catalog:"
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "description": "A Domicile desktop with nothing in it but windows: floating windows moved and resized with the Alt key, and Alt+Enter for a terminal.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile/test-support": "workspace:*",
-    "@pandacss/dev": "catalog:",
-    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
     "@types/bun": "catalog:",
-    "postcss": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
   },
@@ -20,7 +21,6 @@
   "productName": "domicile-shell-simple",
   "scripts": {
     "build:vite": "vite build",
-    "prepare": "panda codegen --silent && panda cssgen --silent",
     "start:dev": "../../scripts/dev-shell.sh simple",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
