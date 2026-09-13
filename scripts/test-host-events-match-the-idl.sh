@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # The engine's event interfaces and the SDK's types for them, compared.
 #
-# `navigator.domicile` fires four typed events. What they carry is declared
-# twice: once in WebIDL, where Blink generates the bindings from it, and once in
-# `@domicile/chrome-sdk`'s `domicile-host.ts`, where a shell reads it. Nothing
-# makes the two agree, and neither half can notice on its own:
+# `navigator.domicile` fires five typed event interfaces. What they carry is
+# declared twice: once in WebIDL, where Blink generates the bindings from it,
+# and once in `@domicile/chrome-sdk`'s `domicile-host.ts`, where a shell reads
+# it. Nothing makes the two agree, and neither half can notice on its own:
 #
 #   an attribute added to the IDL and not to the SDK is a value a shell cannot
 #     see without casting -- which is the thing DATA.md forbids, arrived at by
@@ -96,6 +96,7 @@ compare() { # interface, idl file
 }
 
 compare DomicileAppEvent domicile_app_event.idl
+compare DomicileAppCursorEvent domicile_app_cursor_event.idl
 compare DomicileAppTitledEvent domicile_app_titled_event.idl
 compare DomicileShortcutEvent domicile_shortcut_event.idl
 compare DomicileModifiersEvent domicile_modifiers_event.idl

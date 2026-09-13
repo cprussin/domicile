@@ -35,6 +35,30 @@ Four shapes are decisions rather than convenience:
     arrived at zero -- the same "opened at nothing at all" failure the optional
     size above exists to prevent, arriving through the type instead.
 
+  - The cursor a client asks for is a WebIDL enum, DomicileCursorShape, and it
+    gets its own event. The shape was closed on the wire -- serialised from
+    domicile_protocol::CursorShape, parsed in the browser against the X-macro
+    in components/domicile/common/cursor_shape.h -- but reached the page as a
+    DOMString, so the closed set was a fact about the wire and not a type the
+    page could hold. An unknown CSS keyword is a no-op, which makes this the
+    quietest kind of wrong: an arrow where a hand should be, over one client,
+    with nothing said anywhere. The enum registers in a third list,
+    generated_enumeration_sources_in_modules, beside the dictionary and
+    interface lists this patch already edits.
+
+    DomicileAppCursorEvent rather than a field on DomicileAppEvent, which is
+    what carried it. That type serves five other events and they passed the
+    empty string; an enumeration has no member to mean "not a cursor", and the
+    alternatives were a nullable attribute or a kNone that collides with the
+    shape a client sends to hide the cursor -- the "" sentinel again, wearing a
+    type. Splitting says it in the type system instead.
+
+    Blink converts through the wire name rather than switching mojom enum to
+    V8 enum, so the X-macro stays the only mapping in either direction and
+    scripts/test-cursor-shapes-agree.sh can compare all four writings of the
+    set -- Rust, C++, WebIDL, Zod -- for membership and order without building
+    anything.
+
 Also fixes a defect found reviewing this code rather than running it: on giving
 up after 30s of retries only the client remote was reset, which silences the
 inbound direction and leaves the page holding a channel that looks alive and
@@ -53,19 +77,21 @@ Adding a member costs a near-full Blink rebuild, because a new inbound message
 needs a new event type and that invalidates the generated bindings. These were
 added together for that reason.
 ---
- .../renderer/bindings/generated_in_modules.gni   | 16 ++++++++++++++++
- .../blink/renderer/bindings/idl_in_modules.gni   |  8 ++++++++
- .../renderer/core/events/event_type_names.json5  |  9 +++++++++
- 3 files changed, 33 insertions(+)
+ .../bindings/generated_in_modules.gni         | 22 +++++++++++++++++++
+ .../renderer/bindings/idl_in_modules.gni      | 11 ++++++++++
+ .../core/events/event_type_names.json5        |  9 ++++++++
+ 3 files changed, 42 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 838a9c4f8883a..4b84930995984 100644
+index 838a9c4f8883a..c9596041e5c57 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -312,7 +312,15 @@ generated_dictionary_sources_in_modules = [
+@@ -312,7 +312,17 @@ generated_dictionary_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_close_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_collected_client_data.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_collected_client_data.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_cursor_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_cursor_event_init.h",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event_init.cc",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.cc",
@@ -78,10 +104,21 @@ index 838a9c4f8883a..4b84930995984 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
-@@ -2353,7 +2361,15 @@ generated_interface_sources_in_modules = [
+@@ -1600,6 +1610,8 @@ generated_enumeration_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_device_posture_type.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_distance_model_type.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_distance_model_type.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_encoded_audio_chunk_type.cc",
+@@ -2353,7 +2365,17 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_cursor_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_cursor_event.h",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event.cc",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.cc",
@@ -95,17 +132,20 @@ index 838a9c4f8883a..4b84930995984 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 06bc263861259..3ea00d129697c 100644
+index 06bc263861259..6976e452af1bf 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -274,9 +274,17 @@ static_idl_files_in_modules = [
+@@ -274,9 +274,20 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/encryptedmedia/navigator_request_media_key_system_access.idl",
    "//third_party/blink/renderer/modules/eventsource/event_source.idl",
    "//third_party/blink/renderer/modules/eventsource/event_source_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_app_cursor_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_app_cursor_event_init.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_app_event.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_app_event_init.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_app_titled_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_app_titled_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_cursor_shape.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_host.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event_init.idl",

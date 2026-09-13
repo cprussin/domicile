@@ -133,14 +133,28 @@ decides whether an item is waiting or workable.
    on the `<app>` is the engine answering the other half of `measure`'s job with
    the real transform. That step is the one with the measurements behind it.
 
-   **The placement deletion is unblocked.** It was waiting on the embed
-   working, and a guard now shows a client's window through the native tag on
-   both shells. What has not moved is the rest of the evidence: CSS parity,
-   latency and the bands were all measured through the canvas path, so those
-   numbers still describe a path the shells no longer take, and re-measuring
-   them through `<app>` is its own piece of work. `report-app-sizes.ts` was
-   rebuilt document-level rather than dropped for exactly this moment, with a
-   header saying it is redundant and why; it comes out with the rest.
+   **The placement deletion is unblocked, and the numbers under it are now
+   the right numbers.** It was waiting on the embed working, and a guard shows
+   a client's window through the native tag on both shells. The evidence has
+   caught up: `spike-css-page.html` and `spike-resize-page.html` write
+   `<app app-id="…">` rather than embedding through a `<canvas>`, and the
+   tables in `ENGINE-FORK.md` were re-taken on `crux` — software and GPU — with
+   **not one number moving**. The row that matters most to this deletion is
+   resize, and it changed in kind: the page now grows a CSS box and nothing
+   else, and the producer is reconfigured from `120x90` to `180x130` off
+   layout alone. That is "an `<app>`'s layout box *is* the
+   `xdg_toplevel.configure`" measured rather than argued, which is the sentence
+   `measure.ts` and `observe-placement.ts` are being deleted on the strength
+   of. `report-app-sizes.ts` was rebuilt document-level rather than dropped for
+   exactly this moment, with a header saying it is redundant and why; it comes
+   out with the rest.
+
+   Two things are deliberately still on the canvas path and neither blocks the
+   deletion. `scripts/spike-iframe.sh` compares an `<app>` against an
+   out-of-process `<iframe>`, and the re-take is what makes leaving it
+   tolerable — the two call sites agree to the pixel, so its `<app>` column is
+   the same column either way. The bands measurement is older than both and is
+   a record of a rejected design, not a claim about the current one.
 2. **Keystroke-to-pixel latency** (#206). The requirement is that a client's
    window costs the user nothing a plain Wayland compositor would not.
    `guard-latency.sh` has run on `crux` now — it reads `commit to pixel` at
@@ -192,23 +206,7 @@ decides whether an item is waiting or workable.
 
 ### In the engine fork — the agent on `crux`
 
-1. **`cursor` is closed on the wire but not in the page's type system.**
-   The shape a client asks for was a bare `DOMString` over a closed set, which
-   is the quietest kind of wrong: an unknown CSS keyword is a no-op, so
-   `element.style.cursor = "pointr"` does nothing and the user sees an arrow
-   where a hand should be, on one client, with no error anywhere. It is
-   `mojom::CursorShape` now, with codecs at the socket and IDL edges generated
-   from one X-macro list and the Zod codec at the DOM — so every boundary the
-   change could reach refuses a name that is not in the set.
-
-   What is left is the WebIDL `enum`, which would put the closed set in the
-   page's own type system rather than only on the wire. It needs a new `.idl`
-   registered in `bindings/idl_in_modules.gni` and
-   `bindings/generated_in_modules.gni`, both Chromium-owned, so it is a change
-   to patch `0009` and wants whoever owns the series.
-   `packages/chrome-sdk/src/cursor-shape.ts` records it as the step left
-   rather than dropping it silently.
-2. **A desktop on a tty.** Audited against the pin in
+1. **A desktop on a tty.** Audited against the pin in
    `docs/architecture/A-DESKTOP-ON-A-TTY.md`. Getting `gn gen` to accept
    `ozone_platform_drm = true` is a **patch**: eight edits, not one of them
    inside the DRM platform's own logic, because its 49 `.cc` files hold two
@@ -236,7 +234,7 @@ decides whether an item is waiting or workable.
    Until both halves land, a desktop is a window inside an existing Wayland
    session, or headless.
 
-3. **What the engine ships that a desktop never runs.** Chrome carries a tab
+2. **What the engine ships that a desktop never runs.** Chrome carries a tab
    strip, a New Tab page, a settings UI, sign-in and sync. A desktop can reach
    none of it, all of it is built, and all of it is in the ~216 MB release
    tarball and in the attack surface. **Measure before patching**: nobody knows

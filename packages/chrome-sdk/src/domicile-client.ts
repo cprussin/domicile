@@ -63,8 +63,9 @@
 // translation as well as the names — the listeners below are one call each.
 // The translators live there rather than inline here because a decision made
 // inside a DOM listener cannot be asserted on: a throw in one is reported to
-// the page's error handler rather than raised to whatever dispatched, so the
-// cursor keyword the engine does not check would have no test at all.
+// the page's error handler rather than raised to whatever dispatched, so every
+// refusal those functions make — the cursor shape an engine older than this
+// SDK cannot name among them — would have no test at all.
 
 import type {
   DomicileDisplay,

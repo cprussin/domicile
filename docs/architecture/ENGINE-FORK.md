@@ -314,6 +314,38 @@ The outline was two software raster passes disagreeing in the last bit, and it
 is gone on the hardware a user would have. `GPU=1 scripts/guard-css-and-resize.sh` is
 that run.
 
+**Both tables were re-taken through the native `<app>`, and not one number
+moved.** Every figure above was first measured through
+`canvas.embedExternalSurface()` — the SDK's `<domicile-app>` wrapped exactly
+that call, and the wrapper is gone, so the table described a path no shell
+takes. `spike-css-page.html` and `spike-resize-page.html` write the fork's own
+tag now: `<app app-id="…">`, embedded from layout by
+`HTMLAppElement::Embed`. Re-run on `crux` against the same series, software and
+GPU, the two tables above reproduce cell for cell — 285 `transform` edge pixels
+and 0 interior ones under software rasterisation, every cell 0 on the GPU, and
+the negative control's 10,800 differing and 9,976 interior on both.
+
+A null result, which is the claim: the same layer through two call sites draws
+the same pixels. What it buys is a table that is evidence about the element a
+shell writes — which for two days it was not. See the `GetElementType` entry in
+phase 2.
+
+**The resize row changed in kind, though not in value.** Through the canvas
+that row was the page calling the embed method a second time after growing the
+box, which measures a method. The tag has no method: the page changes one CSS
+rule, `LayoutAppSurface::UpdateAfterLayout` reports the box layout gave it, and
+the element re-embeds at the new size on its own. The producer sees
+`LocalSurfaceId(1, 1, …) at 120x90` become `LocalSurfaceId(2, 1, …) at
+180x130` — a bumped parent sequence number, which is the `xdg_toplevel.configure`
+— with nothing in the page having asked for it. **That is the sentence the
+placement deletion rests on**, now measured rather than argued:
+an `<app>`'s layout box *is* the configure.
+
+`scripts/test-parity-page-uses-the-native-tag.sh` is what keeps it that way. It
+is a grep, it needs no Chromium tree, and it runs in the shell group on every
+push — because the drift it catches does not fail anything: a page quietly back
+on the canvas measures the wrong path and passes.
+
 Two things stop this from passing for the wrong reason. Each property cell is
 also compared against the baseline cell, and a cell whose property never took
 effect — a class that did not match, a stylesheet that did not load — leaves
@@ -346,6 +378,12 @@ behaves differently for an `<app>` than for any other element.
 The third row is what keeps the first honest. If an OOPIF ever matched a `<div>`
 exactly, the iframe would not be out of process, and all three rows would be
 comparing an `<app>` against `<div>`s.
+
+**This table is still on the canvas path.** `spike-iframe-page.html` has not
+been moved onto the tag, and the parity re-take is what makes that tolerable:
+the two call sites agree to the pixel, so the `<app>` column here is the same
+column either way. What would make moving it urgent is any number disagreeing
+between the paths, and none does.
 
 Two differences between the call sites were found and are *not* the cause,
 recorded so the next person does not re-derive them.
@@ -384,6 +422,29 @@ from a process outside the renderer is aggregated into the same display frame
 as the page around it, with no stage of its own. On a busy machine both numbers
 move together to 2.0 frames, which is the measurement's own noise rather than
 the producer's.
+
+**Re-taken through the native `<app>`, five runs, and the pair moves together
+every time.** Software and GPU, the same series, minutes apart on an otherwise
+idle `crux`:
+
+| | poll round trip | submit to drawn |
+|---|---|---|
+| canvas, software | 33.23 ms, 2.0 frames | 33.43 ms, 2.0 frames |
+| `<app>`, software | 16.57 ms, 1.0 frames | 16.66 ms, 1.0 frames |
+| `<app>`, GPU | 16.84 ms, 1.0 frames | 16.57 ms, 1.0 frames |
+| `<app>`, software | 32.28 ms, 1.9 frames | 33.32 ms, 2.0 frames |
+| `<app>`, GPU | 33.31 ms, 2.0 frames | 33.36 ms, 2.0 frames |
+
+`draws the new colour took to appear` is **1, on 60 of 60 rounds, in all five**.
+So the figure swings between one display frame and two from run to run, on the
+same binary and the same page, and the two columns never disagree by more than
+a tenth of a frame — including in the two runs that landed on 2.0. **That is
+the shape of the result, and it is worth more than the median.** The absolute
+number is the probe's own round trip plus whatever else the machine is doing;
+what the design claims is that a client's frame costs no stage of its own, and
+what says so is the two columns moving as one, not either of them landing on
+16.67 ms. A future reading of 2.0 here is the machine, and the way to tell is
+whether the control moved with it.
 
 **This is not latency parity with a plain Wayland compositor, and it cannot be
 measured on `crux`.** There is no display server, no GPU and no compositor to
@@ -466,7 +527,7 @@ known and it is a build-system cost, not a language one.
 | Requirement | How |
 |---|---|
 | **Latency parity** | The client's dmabuf becomes a `SharedImage` and rides in a texture quad. Viz aggregates it into the display frame — the same single composite any Wayland compositor does — and its `OverlayProcessor` can promote the quad to direct scanout. No readback, no socket, no `putImageData`. **Measured** as far as `crux` allows: one display frame, indistinguishable from the probe's own floor. See *What it costs* |
-| **CSS parity** | The window is a `cc::Layer`. Whatever CSS works on a hardware-composited `<video>` works, because it is the same layer type through the same property trees. This is the requirement's own wording — "just like a `<webview>` or `<iframe>` or `<video>`" — met by using literally that mechanism. **Measured on a GPU: seven properties, every one bit-exact against an ordinary element**, and an `<app>` is closer to a `<div>` than an out-of-process `<iframe>` is. See *What CSS does to an `<app>`* and *Whether an `<app>` is an out-of-process `<iframe>`* |
+| **CSS parity** | The window is a `cc::Layer`. Whatever CSS works on a hardware-composited `<video>` works, because it is the same layer type through the same property trees. This is the requirement's own wording — "just like a `<webview>` or `<iframe>` or `<video>`" — met by using literally that mechanism. **Measured on a GPU through the fork's own tag: seven properties, every one bit-exact against an ordinary element**, and an `<app>` is closer to a `<div>` than an out-of-process `<iframe>` is. See *What CSS does to an `<app>`* and *Whether an `<app>` is an out-of-process `<iframe>`* |
 | **Shell simplicity** | `<app>` is a tag the fork defines, and a shell writes it. It began as a custom element wrapping a `<canvas>` — the SDK's `<domicile-app>` — and that wrapper is gone: patch 0007's `HTMLAppElement` owns the embed, so a shell writes `<app app-id="…">` and the SDK supplies the tag-name map rather than a class |
 
 The third row moved twice. The shell-side API barely changed when the frame
@@ -649,8 +710,9 @@ window.
       `border-radius`, `opacity`, `filter: blur()`, `mix-blend-mode`, resize,
       and the latency — **passed**, every property bit-exact on the GPU, and a
       submitted frame reaching the display compositor's output in one display
-      frame. See *What CSS does to an `<app>`* and *What it costs*.
-      `components/domicile/spike/css_parity.cc` in the series, run with
+      frame. Taken through the canvas, **re-taken through the native `<app>`
+      with no number moving**. See *What CSS does to an `<app>`* and *What it
+      costs*. `components/domicile/spike/css_parity.cc` in the series, run with
       `scripts/guard-css-and-resize.sh`
 
 The last one was the whole point. The three before it were plumbing that either
@@ -1018,6 +1080,13 @@ copy path before the compositor can submit leaves nothing drawing at all.
       layout. Everything a page can see was right: the element parsed, took a
       box at the right size, and reflected `app-id`. Nothing in any log said
       otherwise, because nothing had failed
+- [x] **the parity table re-taken through that tag.** The line above closed the
+      element; this closes the evidence, which was the same gap one level up.
+      `spike-css-page.html` and `spike-resize-page.html` write
+      `<app app-id="…">` now and call nothing. Not one number moved, and the
+      resize row became layout-driven. See *What CSS does to an `<app>`*.
+      `scripts/test-parity-page-uses-the-native-tag.sh` is the guard, in the
+      shell group because drift here fails nothing on its own
 - [ ] **an shm→dmabuf upload.** `publish_frame` submits only
       `CommittedBuffer::Gpu`, so a client that draws into shared memory — most
       toolkits that do not render with GL — has no window.

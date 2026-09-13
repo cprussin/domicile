@@ -127,6 +127,70 @@ opened, snapshots read, and every CRTC still off.
 touch transforms, content protection, layout stores. Domicile needs the
 `DisplaySnapshot` → modeset slice of it and none of the rest.
 
+## How big the embedder is
+
+**Two files and no port of `ui/display/manager`.** What is ChromeOS-only is the
+*caller*; every seam it calls is ungated and already implemented by the DRM
+platform.
+
+### `DrmScreen`
+
+`PlatformScreen` has **nine** pure virtuals (`ui/ozone/public/platform_screen.h`)
+and seven more with defaults. `HeadlessScreen` — 63 + 243 lines — is the
+reference, not `WaylandScreen`'s 151 + 586: headless has no window-system output
+protocol either, so it builds its display list from nothing, and DRM is that
+shape with real snapshots in place of the fiction.
+
+Six of the nine are delegations, because two ungated helpers already exist:
+
+| Pure virtual | Supplied by |
+|---|---|
+| `GetAllDisplays` | `DisplayList::displays()` |
+| `GetPrimaryDisplay` | `DisplayList::GetPrimaryDisplayIterator()` |
+| `AddObserver` / `RemoveObserver` | `DisplayList::Add/RemoveObserver` — it notifies on `AddDisplay`/`UpdateDisplay`/`RemoveDisplay`, so hotplug needs no observer code of its own |
+| `GetDisplayNearestPoint` | `display::FindDisplayNearestPoint` (`ui/display/display_finder.h`) |
+| `GetDisplayMatching` | `display::FindDisplayWithBiggestIntersection` (same) |
+
+The three that are real work are the widget ones, and `DrmWindowHostManager`
+already holds the map (`std::map<AcceleratedWidget, DrmWindowHost*>`). Two
+details there cost a build round each if they are found by compiling:
+
+- `GetWindowAt` matches on `GetBoundsInPixels()`, and
+  `GetAcceleratedWidgetAtScreenPoint` is handed a point in **DIP**. The lookup
+  is free; converting is the work.
+- `GetWindow` is `NOTREACHED()` on a widget it does not hold, so
+  `GetDisplayForAcceleratedWidget` cannot pass one through unchecked.
+
+### The modeset driver
+
+`DrmNativeDisplayDelegate` implements the whole seam, and
+`OzonePlatform::CreateNativeDisplayDelegate()` (`ozone_platform_drm.cc:166`) is
+how to get one:
+
+| Need | Call |
+|---|---|
+| the display list | `GetDisplays(GetDisplaysCallback)` → `DisplaySnapshot`s |
+| light a CRTC | `Configure(std::vector<DisplayConfigurationParams>, callback)` |
+| hotplug | `AddObserver(NativeDisplayObserver*)` — two methods, `OnConfigurationChanged` and `OnDisplaySnapshotsInvalidated` |
+| DRM master, for VT | `TakeDisplayControl` / `RelinquishDisplayControl` |
+
+`DisplayConfigurationParams` is `{id, origin, mode, enable_vrr}`
+(`ui/display/types/display_configuration_params.h`), and a snapshot's
+`native_mode()` fills `mode`. So "snapshots → modeset" is a loop over
+`GetDisplays`' result.
+
+**What `ui/display/manager` holds that Domicile skips** is
+`DisplayChangeObserver` — 478 lines converting snapshots into
+`ManagedDisplayInfo`, which is ChromeOS product surface. Domicile wants
+`DisplaySnapshot` → `display::Display` directly.
+
+### The physical size is already in the snapshot
+
+`DisplaySnapshot::physical_size()` is millimetres, which is exactly what
+`wl_output` wants and what the compositor fabricates as `size: (300, 200)`
+(`main.rs:3211`). The display-list event under [Outputs](#outputs) carries it
+rather than inventing it a second time.
+
 ## The session and DRM master
 
 **There is no session abstraction to plug into.** ozone/drm opens the card
@@ -366,8 +430,14 @@ Step 2 — the embedder (the port):
       and `TakeDisplayControl` on switch back
 - [ ] `EVIOCREVOKE` (or a libseat-shaped equivalent) on the evdev fds at those
       same two moments
-- [ ] a `drm` arm in `domicile-launch`'s `platform()`, replacing the refusal
-      `PlatformError::NoDisplayServer` gives today
+- [ ] name `ozone_platform_drm = true` in `scripts/build.sh` and
+      `engine-release-build.sh`, which today name only wayland and headless —
+      after `DrmScreen` and the modeset driver, because a platform with no
+      embedder behind it turns a clear refusal into a crash
+- [ ] a `drm` arm in `domicile-launch`'s `platform()`, so a machine with no
+      `WAYLAND_DISPLAY` gets a tty rather than `PlatformError::NoDisplayServer`.
+      Auto-detection only, and last: `OZONE=drm` already overrides outright, so
+      nothing is blocked on this
 - [ ] a display-list event on the engine C ABI, and `Screens::from_the_engine`
       beside `described` and `following_the_window`
 - [ ] drive `adopt_the_desktop` from that event, so a hotplug rearranges rather
@@ -392,10 +462,6 @@ Step 2 — the embedder (the port):
   this — `crux` has no card node — so it belongs in `ROADMAP.md`'s "Needs a
   machine with a screen", phrased as one run of the built binary with
   `--ozone-platform=drm`.
-- **How wide `DrmScreen` has to be.** `display::Screen` is a broad interface
-  and neither `WaylandScreen` nor `X11Screen` is small. *Recommendation:* cost
-  it by reading `ui/ozone/platform/wayland/host/wayland_screen.h` when step 2
-  starts; do not put a number of weeks on step 2 before that.
 - **libseat/seatd, logind ACLs, or root.** ACLs on an active VT make the
   unmodified `open()` calls work and need no code; libseat would need an
   fd-passing seam ozone does not have. *Recommendation:* ship on logind ACLs,

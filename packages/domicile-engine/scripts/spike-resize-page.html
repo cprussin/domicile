@@ -13,6 +13,16 @@
 
   The geometry matches the first cell of spike-css-page.html, so the same
   half-against-half comparison in domicile_css_parity reads it.
+
+  NOTHING HERE ASKS TO BE RE-EMBEDDED, AND THAT IS THE CLAIM. Through the
+  canvas this page called the embed method a second time after growing the
+  box, which measured a method rather than the thing the method was standing in
+  for. The fork's <app> has no such method: LayoutAppSurface reports the box
+  layout gave it, HTMLAppElement re-embeds at that size, and the only thing
+  this page does is change one CSS rule. Which is the sentence the placement
+  deletion in ROADMAP.md rests on — an <app>'s layout box *is* the
+  xdg_toplevel.configure — now said by the page as well as by the header.
+  scripts/test-parity-page-uses-the-native-tag.sh is what keeps it said.
 -->
 <meta charset="utf-8">
 <title>domicile: does an &lt;app&gt; reconfigure when its box does?</title>
@@ -62,7 +72,7 @@
   <div class="cell">
     <div class="half app-half">
       <div class="backdrop"></div>
-      <canvas class="box" height="90" id="app" width="120"></canvas>
+      <app app-id="domicile-spike" class="box" id="app"></app>
     </div>
     <div class="half control-half">
       <div class="backdrop"></div>
@@ -109,67 +119,47 @@
     }
   };
 
-  // The window this page resizes. The re-embed below names the same one: a
-  // reconfigure is the same surface at a new box, and naming another app would
-  // be embedding a different window rather than resizing this one.
+  // The window this page resizes. The markup names the default so that opening
+  // the page by hand shows something; this reflects ?app= onto the element for
+  // the scripts, because two producers drive this page —
+  // `domicile_css_parity` from guard-css-and-resize.sh and
+  // `domicile_engine_smoke` from spike-engine.sh — and they register different
+  // app ids. `app-id` is a reflected content attribute, so setting it here and
+  // writing it above are one operation, and setting it to what it already is
+  // costs a re-embed that returns at its own in-flight guard.
   //
-  // Two producers drive this page — `domicile_css_parity` from guard-css-and-resize.sh
-  // and `domicile_engine_smoke` from spike-engine.sh — and they register
-  // different app ids, so each script passes its own. The default here is only
-  // for opening the page by hand. A wrong id does not fail: the browser holds
-  // an embed until that app has a producer, so it waits forever.
+  // A wrong id still does not fail: the browser holds an embed until that app
+  // has a producer, so it waits forever.
   const APP_ID =
     new URLSearchParams(location.search).get('app') ?? 'domicile-spike';
+  app.setAttribute('app-id', APP_ID);
 
-  // Which is why this exists. Without it a wrong app id is a blank page and a
-  // silent log, and that is indistinguishable from the seam being broken.
+  // WHAT THIS PAGE CAN SEE, WHICH IS NOT THE EMBED. Through the canvas the
+  // embed was a promise and a rejection named its own reason. The tag has
+  // neither: it asks the browser from layout and the browser holds the reply
+  // until a producer registers that app id, so embedded, refused and still
+  // waiting are one silence from here.
+  //
+  // The box is what is left, and it is the more useful half anyway. An <app>
+  // with no box never asks at all — `Embed()` returns at its empty-size guard,
+  // which is how a window that is never asked for became a window that never
+  // arrives, for two days, with nothing logged anywhere.
   const EMBED_DEADLINE_MS = 20_000;
-  // *Settled*, not embedded. A refusal is an answer and so is the runtime flag
-  // being off; saying "nothing embedded it" after either would be explaining a
-  // failure that already explained itself, with the wrong reason.
-  let settled = false;
   setTimeout(() => {
-    if (!settled) {
-      console.log('domicile: nothing embedded "' + APP_ID + '" within ' +
-                  EMBED_DEADLINE_MS + 'ms. The browser holds an embed until ' +
-                  'that app has a producer, so either no producer connected ' +
-                  'or it registered a different app id.');
-    }
+    const rect = app.getBoundingClientRect();
+    console.log('domicile: <app app-id="' + APP_ID + '"> is laid out at ' +
+                Math.round(rect.width) + 'x' + Math.round(rect.height) +
+                '. Whether the browser answered is not visible from this ' +
+                'page; a box of 0x0 is the one failure that is — that ' +
+                'element never asked.');
   }, EMBED_DEADLINE_MS);
 
-  /**
-   * Grows the box and asks to be re-embedded at it. Only the CSS box changes:
-   * the canvas keeps its width and height attributes, so what the producer is
-   * reconfigured to is the layout box and nothing else — which is the claim,
-   * that an <app> element's layout box is its xdg_toplevel.configure.
-   */
-  const reconfigure = () => {
-    setSize(TO);
-    app.embedExternalSurface(APP_ID).then(
-      () => {
-        console.log('domicile: reconfigured to ' + TO.width + 'x' + TO.height);
-      },
-      (error) => {
-        console.log('domicile: reconfigure refused: ' + error.message);
-      });
-  };
-
+  // The whole of the reconfigure. Growing the box is the entire operation:
+  // layout reports the new box, the element re-embeds at it, and the producer
+  // is told. Nothing is called, which is the difference between this page and
+  // the one it replaced.
   setSize(FROM);
-
-  if (app.embedExternalSurface === undefined) {
-    settled = true;
-    console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
-                'flag is off');
-  } else {
-    app.embedExternalSurface(APP_ID).then(
-      () => {
-        settled = true;
-        console.log('domicile: embedded at ' + FROM.width + 'x' + FROM.height);
-        setTimeout(reconfigure, HOLD_MS);
-      },
-      (error) => {
-        settled = true;
-        console.log('domicile: refused: ' + error.message);
-      });
-  }
+  setTimeout(() => {
+    setSize(TO);
+  }, HOLD_MS);
 </script>
