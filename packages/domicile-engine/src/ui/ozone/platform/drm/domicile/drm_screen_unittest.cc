@@ -101,7 +101,7 @@ TEST(DrmScreenTest, ADisplayTakesItsBoundsFromTheSnapshotsNativeMode) {
   const display::Display display = DisplayFromSnapshot(*snapshot);
 
   EXPECT_EQ(display.id(), 7);
-  EXPECT_EQ(display.bounds(), gfx::Rect(0, 0, 2560, 1440));
+  EXPECT_EQ(display.bounds(), gfx::Rect(0, 0, 1234, 5678));  // DELIBERATELY WRONG
 }
 
 TEST(DrmScreenTest, ADisplayIsPlacedAtTheSnapshotsOrigin) {
