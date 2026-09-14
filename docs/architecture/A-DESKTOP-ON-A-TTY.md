@@ -501,11 +501,36 @@ Step 2 — the embedder (the port):
         kernel command line**, so without it the nvidia card is not merely
         unpreferred, it is filtered out and vkms is the only candidate left
 
-      Two cheap checks on the host settle which of those is biting: whether
+      Two cheap checks on the host say which of those is biting: whether
       `nvidia_drm.modeset=1` is set, and whether the nvidia card node reports
-      CRTCs. If both are already true, the remaining question is ordering, and
-      not loading vkms is a smaller experiment than teaching
-      `GetPreferredDrmDrivers()` about a driver upstream has never listed
+      CRTCs.
+
+      But "make the nvidia card win the selection" is **not** the fix here, and
+      the ROADMAP already holds the reason: on `crux` all four of `card1`'s
+      connectors read `disconnected`, while `card0`'s `Virtual-1` reads
+      connected at a preferred 1024x768@60. Preferring the nvidia card, or
+      unloading vkms so it enumerates first, would leave the machine with no
+      connected connector at all and light nothing.
+
+      **Scanout and render are different cards on this machine, and one
+      function chooses both.** The card with a connected connector has no
+      render node; the card with the render node has nothing plugged into it.
+      `GetPreferredEGLDevice()` picks a render device and
+      `GetPrimaryDisplayCardPath()` picks a scanout card, and at this pin they
+      ask the same question of the same list -- which upstream can do because
+      on ChromeOS they are the same device.
+
+      So the shape of the remaining work is probably not a flag and not an
+      entry added to `GetPreferredDrmDrivers()`. It is that this fork has to
+      choose its render device separately from its scanout card, and the
+      measurement that would confirm it needs no Chromium tree at all:
+      `gbm_create_device()` on each `/dev/dri/renderD*`, and
+      `eglQueryDevicesEXT` with `eglQueryDeviceStringEXT(EGL_DRM_DEVICE_FILE_EXT)`
+      to list what `GetPreferredEGLDevice()` is actually choosing between. If
+      the nvidia render node backs GBM and the EGL enumeration puts vkms first,
+      that is the finding. If nothing on the host backs GBM for rendering, that
+      is a different answer and equally worth having before anyone writes a
+      patch
 - [ ] VT handling: watch the VT, call `RelinquishDisplayControl` on switch away
       and `TakeDisplayControl` on switch back
 - [ ] `EVIOCREVOKE` (or a libseat-shaped equivalent) on the evdev fds at those
