@@ -526,17 +526,32 @@ Step 2 — the embedder (the port):
       ask the same question of the same list -- which upstream can do because
       on ChromeOS they are the same device.
 
-      So the shape of the remaining work is probably not a flag and not an
-      entry added to `GetPreferredDrmDrivers()`. It is that this fork has to
-      choose its render device separately from its scanout card, and the
-      measurement that would confirm it needs no Chromium tree at all:
-      `gbm_create_device()` on each `/dev/dri/renderD*`, and
-      `eglQueryDevicesEXT` with `eglQueryDeviceStringEXT(EGL_DRM_DEVICE_FILE_EXT)`
-      to list what `GetPreferredEGLDevice()` is actually choosing between. If
-      the nvidia render node backs GBM and the EGL enumeration puts vkms first,
-      that is the finding. If nothing on the host backs GBM for rendering, that
-      is a different answer and equally worth having before anyone writes a
-      patch
+      So the shape of the remaining work is not a flag and not an entry added
+      to `GetPreferredDrmDrivers()`. **The build host measured it and the
+      answer is cross-device PRIME: rendering on one GPU and scanning out on
+      another, with the buffers shared through dma-buf import and export.**
+      That is not a small patch, and it is not a device-selection fix either --
+      choosing the nvidia render node correctly still leaves a buffer that has
+      to reach a vkms CRTC on a different device.
+
+      WHICH OF THREE IT IS, because the difference decides the next move. It is
+      not "the fork could pick its render device separately and it would not
+      help", and it is not "nothing here backs GBM for rendering". It is that
+      picking separately WOULD help and the machinery to carry a buffer across
+      the two devices is the work. The measurements behind that -- the per-node
+      `gbm_create_device()` results and the `eglQueryDevicesEXT` enumeration
+      `GetPreferredEGLDevice()` chooses from -- were taken on the build host and
+      are not in this repository yet; this paragraph records the conclusion so
+      the plan is not blocked on carrying them over.
+
+      WHAT THAT MEANS FOR A LIT SCREEN. Not "write the patch next". Either the
+      scanout and render device are made the same -- a monitor on `card1` with
+      `nvidia_drm.modeset=1`, or a machine whose GPU drives its own display --
+      or cross-device PRIME is real work to be scheduled rather than slipped
+      into step 2. `crux` cannot answer "does a desktop appear" either way: its
+      only connected connector is a vkms one, which presents to nobody. What it
+      can still answer is "does the modeset path run", and that is the question
+      worth pointing the next run at
 - [ ] VT handling: watch the VT, call `RelinquishDisplayControl` on switch away
       and `TakeDisplayControl` on switch back
 - [ ] `EVIOCREVOKE` (or a libseat-shaped equivalent) on the evdev fds at those
