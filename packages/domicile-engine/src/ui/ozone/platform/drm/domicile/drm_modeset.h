@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "ui/display/types/display_configuration_params.h"
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/display/types/native_display_observer.h"
@@ -52,11 +53,17 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
 // own report, so if the report has not changed, asking again cannot produce a
 // different answer. A real hotplug changes the report and always gets through.
 //
-// Compared against what was last ASKED FOR rather than what last succeeded, on
-// purpose. A refused modeset leaves the hardware in a state this process did
-// not choose and cannot read back, so retrying the identical request is the
-// one thing guaranteed not to help -- and it is how the loop comes back for
-// the failure case.
+// Compared against what the hardware last CONFIRMED, and the first attempt at
+// this compared against what was last asked for instead. That was wrong, and
+// wrong in a way that showed up only on a real machine: the driver's first
+// `Configure` goes out before the GPU thread has added a DRM device, so it
+// reaches nothing. Recording it anyway made the guard suppress the udev ADD
+// that arrives three seconds later with the same reading -- and the second ask
+// was the one that would have worked. Nothing modeset at all.
+//
+// So an ask that was never confirmed is not a state anything can be compared
+// to. The old code got away with it by re-configuring on every event, which is
+// the loop; the rule is the same one, applied to the right fact.
 bool ModesetWouldChangeAnything(
     const std::vector<display::DisplayConfigurationParams>& asked,
     const std::vector<display::DisplayConfigurationParams>& wanted);
@@ -98,9 +105,12 @@ class DrmModeset : public display::NativeDisplayObserver {
 
   const std::unique_ptr<display::NativeDisplayDelegate> delegate_;
   const raw_ptr<DrmScreen> screen_;  // Not owned; outlives this.
-  // What was last asked for, so a hotplug this driver caused is not answered
-  // with the modeset that caused it. See `ModesetWouldChangeAnything`.
-  std::vector<display::DisplayConfigurationParams> asked_;
+  // What the hardware last CONFIRMED, so a hotplug this driver caused is not
+  // answered with the modeset that caused it -- and so an ask that reached
+  // nothing is not mistaken for one that landed. See
+  // `ModesetWouldChangeAnything`.
+  std::vector<display::DisplayConfigurationParams> confirmed_;
+  base::WeakPtrFactory<DrmModeset> weak_factory_{this};
 };
 
 }  // namespace ui

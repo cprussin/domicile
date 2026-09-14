@@ -91,27 +91,38 @@ void DrmModeset::OnDisplaysReceived(
     return;
   }
 
-  if (!ModesetWouldChangeAnything(asked_, params)) {
-    // Almost certainly a hotplug this driver caused by answering the last one.
-    // Nothing is wrong and nothing is skipped: the screen has already been
-    // told, and the CRTCs are being asked for the modes they already have.
+  if (!ModesetWouldChangeAnything(confirmed_, params)) {
+    // A hotplug this driver caused by answering the last one. Nothing is wrong
+    // and nothing is skipped: the screen has already been told, and the CRTCs
+    // are already in the modes this would ask for.
     VLOG(1) << "domicile: the displays read the same as last time; not "
                "modesetting again";
     return;
   }
-  asked_ = params;
 
   delegate_->Configure(
       params,
-      base::BindOnce([](const std::vector<display::DisplayConfigurationParams>&,
-                        bool status) {
-        // Loud and no recovery, because there is none to attempt here: the
-        // modes came from the hardware's own report, so a refusal is a fact
-        // about the hardware or the master, not something a retry changes.
-        LOG_IF(ERROR, !status)
-            << "domicile: the DRM thread refused the modeset; the displays it "
-               "reported are connected but nothing is lit";
-      }),
+      base::BindOnce(
+          [](base::WeakPtr<DrmModeset> self,
+             std::vector<display::DisplayConfigurationParams> asked,
+             const std::vector<display::DisplayConfigurationParams>&,
+             bool status) {
+            if (!status) {
+              // Loud, and deliberately NOT recorded. An ask that the hardware
+              // did not confirm is not a state to compare the next reading
+              // against -- the first one this driver sends goes out before the
+              // GPU thread has a DRM device to send it to, and remembering
+              // that one is how a machine ends up never modesetting at all.
+              LOG(ERROR) << "domicile: the DRM thread refused the modeset; the "
+                            "displays it reported are connected but nothing is "
+                            "lit";
+              return;
+            }
+            if (self) {
+              self->confirmed_ = std::move(asked);
+            }
+          },
+          weak_factory_.GetWeakPtr(), params),
       {display::ModesetFlag::kCommitModeset});
 }
 
