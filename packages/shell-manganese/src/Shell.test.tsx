@@ -111,6 +111,29 @@ class FakeDomicile {
   }
 }
 
+/**
+ * What the page hears while these modifiers are held down.
+ *
+ * A key event rather than a `modifiers` message from the host, because the
+ * page is the only thing that hears this keyboard: the desktop is the chrome's
+ * window, and every key the compositor's seat knows about is one the SDK
+ * forwarded from this very document. The shell reads the set off the flags
+ * every key event carries rather than tracking the modifier keys themselves,
+ * so which key this is does not matter.
+ */
+const pageHolds = (held: {
+  alt?: boolean;
+  ctrl?: boolean;
+  shift?: boolean;
+}): void => {
+  fireEvent.keyDown(document, {
+    altKey: held.alt ?? false,
+    ctrlKey: held.ctrl ?? false,
+    key: "Alt",
+    shiftKey: held.shift ?? false,
+  });
+};
+
 const tabNames = (): string[] =>
   screen.getAllByRole("listitem").map((row) => row.textContent ?? "");
 
@@ -804,12 +827,7 @@ describe("Shell", () => {
       const rendered = renderShell();
       domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      domicile.emit("modifiers", {
-        altKey: held.alt,
-        ctrlKey: false,
-        metaKey: false,
-        shiftKey: held.shift,
-      });
+      pageHolds({ alt: held.alt, ctrl: false, shift: held.shift });
       return rendered;
     };
 
@@ -898,13 +916,53 @@ describe("Shell", () => {
       expect(portal?.style.blockSize).toBe("450px");
     });
 
+    it("keeps an Alt the compositor's seat never heard go down", () => {
+      // Alt+Enter spawns a terminal, and the Alt of it goes down before there
+      // is a window to forward it to — so the seat, which knows only the keys
+      // this page forwarded, never hears that Alt at all. The first key
+      // forwarded afterwards makes the compositor broadcast a set that denies
+      // it, and while the shell took that broadcast over its own keystrokes
+      // the grab sheet came down: Alt read as let go of with the user holding
+      // it, and the window they had just floated would not drag.
+      const { container } = renderShell();
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      pageHolds({ alt: true });
+      pageHolds({ alt: true, shift: true });
+      // What the seat has, and all it can have: the Shift, which went down
+      // with the terminal focused and so was forwarded, and no Alt.
+      domicile.emit("modifiers", {
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: true,
+      });
+      fireEvent.keyDown(document, { altKey: true, key: "Tab", shiftKey: true });
+      pageHolds({ alt: true });
+      // And the echo of the Shift coming back up, which arrives after the page
+      // has already heard it go: a socket round trip is slower than a
+      // listener. This is the one that used to land last and win.
+      domicile.emit("modifiers", {
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+      });
+
+      drag(grabbing(container), { x: 120, y: 60 });
+
+      const portal = portalFor(container, "term");
+      expect(portal?.style.insetInlineStart).toBe("168px");
+      expect(portal?.style.inlineSize).toBe("640px");
+    });
+
     it("resizes after a chord the page never heard the Shift of", () => {
-      // The other path into a float: once a window holds the keyboard the page
-      // hears no keys at all, and the compositor hands the whole chord back as
-      // one message. There is no held Shift to spend in that case — the shell
-      // was never told of one — and spending it anyway would swallow the first
-      // Shift the user pressed afterwards, leaving Alt+Shift+drag moving the
-      // window for as long as they held it.
+      // The other path into a float: a browser window's page is a browsing
+      // context of its own, so a chord pressed inside one reaches neither this
+      // page nor the compositor, and the browser process hands the whole thing
+      // back as one message. There is no held Shift to spend in that case —
+      // the shell was never told of one — and spending it anyway would swallow
+      // the first Shift the user pressed afterwards, leaving Alt+Shift+drag
+      // moving the window for as long as they held it.
       const { container } = renderShell();
       domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       domicile.emit("shortcut", {
@@ -914,12 +972,7 @@ describe("Shell", () => {
         metaKey: false,
         shiftKey: true,
       });
-      domicile.emit("modifiers", {
-        altKey: true,
-        ctrlKey: false,
-        metaKey: false,
-        shiftKey: true,
-      });
+      pageHolds({ alt: true, ctrl: false, shift: true });
 
       drag(grabbing(container), { x: 120, y: 60 });
 
@@ -936,17 +989,46 @@ describe("Shell", () => {
       const sheet = grabbing(container);
       sheet.setPointerCapture = () => undefined;
       fireEvent.pointerDown(sheet, { clientX: 0, clientY: 0, pointerId: 1 });
-      domicile.emit("modifiers", {
-        altKey: true,
-        ctrlKey: false,
-        metaKey: false,
-        shiftKey: false,
-      });
+      pageHolds({ alt: true, ctrl: false, shift: false });
       fireEvent.pointerMove(sheet, { clientX: 100, clientY: 40, pointerId: 1 });
 
       const portal = portalFor(container, "term");
       expect(portal?.style.inlineSize).toBe("740px");
       expect(portal?.style.insetInlineStart).toBe("48px");
+    });
+
+    it("keeps the keyboard on the window the user takes hold of", async () => {
+      // The press that takes hold of a floating window lands on the shell's
+      // own chrome, and the SDK gives the keyboard back to the page for any
+      // press that lands off every `<app>` — it cannot tell a float's grab
+      // sheet from the wallpaper behind it. So taking hold of a window left it
+      // typing into nothing, and the shell says again where the keyboard is.
+      //
+      // Said from an effect rather than from the grab, because the SDK's own
+      // handler is on `document` and runs after this one: anything said during
+      // the press is undone by the press.
+      const { container } = await floated({ alt: true, shift: false });
+      domicile.calls.length = 0;
+
+      drag(grabbing(container), { x: 40, y: 20 });
+
+      expect(domicile.calls).toContainEqual(["focusApp", "term"]);
+    });
+
+    it("leaves a browser window's focus to its own page", async () => {
+      // The other half of the rule above, and the reason it names a client
+      // rather than a window: a browser window's page holds the focus itself,
+      // there is no client for the compositor to be pointed at, and naming the
+      // window's own id would name one it has never heard of.
+      const { container } = renderShell();
+      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
+      pageHolds({ alt: true });
+      domicile.calls.length = 0;
+
+      drag(grabbing(container), { x: 40, y: 20 });
+
+      expect(domicile.calls.map(([kind]) => kind)).not.toContain("focusApp");
     });
 
     it("makes the window see-through while it is being dragged", async () => {
@@ -1008,12 +1090,7 @@ describe("Shell", () => {
       await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       domicile.emit("app_appeared", { app_id: "two", title: "Two" });
       await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      domicile.emit("modifiers", {
-        altKey: held.alt,
-        ctrlKey: false,
-        metaKey: false,
-        shiftKey: held.shift,
-      });
+      pageHolds({ alt: held.alt, ctrl: false, shift: held.shift });
       return rendered;
     };
 
@@ -1132,12 +1209,7 @@ describe("Shell", () => {
       // secondary button is the resize.
       const { container } = await twoFloats({ alt: false, shift: false });
       act(() => {
-        domicile.emit("modifiers", {
-          altKey: false,
-          ctrlKey: true,
-          metaKey: false,
-          shiftKey: false,
-        });
+        pageHolds({ alt: false, ctrl: true, shift: false });
       });
 
       expect(sheetsIn(container)).toHaveLength(2);
@@ -1158,12 +1230,7 @@ describe("Shell", () => {
       domicile.emit("app_appeared", { app_id: "float", title: "Float" });
       await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       act(() => {
-        domicile.emit("modifiers", {
-          altKey: true,
-          ctrlKey: false,
-          metaKey: false,
-          shiftKey: false,
-        });
+        pageHolds({ alt: true, ctrl: false, shift: false });
       });
 
       press(sheetOver(container, "float"), 0, 0);
@@ -1183,12 +1250,7 @@ describe("Shell", () => {
       // Alt stays held, so the float keeps its sheet and only the drag can be
       // what makes the *stage* window let the pointer through.
       act(() => {
-        domicile.emit("modifiers", {
-          altKey: true,
-          ctrlKey: false,
-          metaKey: false,
-          shiftKey: false,
-        });
+        pageHolds({ alt: true, ctrl: false, shift: false });
       });
       const sheet = sheetOver(container, "float");
       press(sheet, 0, 0);
@@ -1210,12 +1272,7 @@ describe("Shell", () => {
       press(sheetOver(container, "one"), 0, 0);
 
       act(() => {
-        domicile.emit("modifiers", {
-          altKey: false,
-          ctrlKey: false,
-          metaKey: false,
-          shiftKey: false,
-        });
+        pageHolds({ alt: false, ctrl: false, shift: false });
       });
 
       expect(portalFor(container, "two")?.className).toContain(
@@ -1228,12 +1285,7 @@ describe("Shell", () => {
       const dragged = sheetOver(container, "one");
       press(dragged, 0, 0);
       act(() => {
-        domicile.emit("modifiers", {
-          altKey: false,
-          ctrlKey: false,
-          metaKey: false,
-          shiftKey: false,
-        });
+        pageHolds({ alt: false, ctrl: false, shift: false });
       });
 
       fireEvent.pointerMove(dragged, { clientX: 90, clientY: 0, pointerId: 1 });
