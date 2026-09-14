@@ -1,0 +1,161 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 14 Sep 2026 00:32:34 -0700
+Subject: [PATCH] domicile: don't read a feature flag during static
+ initialization
+
+ui/ozone/platform/drm/common/drm_util.h declared kMaxDrmCount and
+kMaxDrmConnectors as namespace-scope const size_t whose initializers call
+display::features::IsEdidBasedDisplayIdsEnabled(). A const initialized by a
+call is a dynamic initializer, so every translation unit that includes this
+header called base::FeatureList::IsEnabled() during static initialization --
+before FeatureList::SetInstance() has run. base's EarlyFeatureAccessTracker
+treats that as fatal.
+
+Nothing noticed while the header only reached targets that never ran before
+startup. With ozone_platform_drm = true it reaches v8_context_snapshot_generator,
+a host tool that runs during the build, and the chrome target stopped there:
+
+  FATAL:base/feature_list.cc:193] Check failed: !feature.
+  Accessed feature EnableEdidBasedDisplayIds before FeatureList registration.
+  #7 base::(anonymous namespace)::EarlyFeatureAccessTracker::Fail()
+  #8 base::FeatureList::SetInstance()
+  #9 main
+
+Both become inline functions, so the flag is read on first use, which is after
+startup has registered the list. Every one of the twelve call sites is a runtime
+comparison or a log message; none wanted a constant expression, so this is
+mechanical.
+
+This is the ninth edit in the family patch 0012 opened, and the first inside the
+DRM platform's own logic rather than around it. It is also the first found by
+running a binary rather than by compiling or linking one: a static initializer
+that aborts the process it runs in cannot be asserted on from inside that
+process, so what stands in for a unit test here is v8_context_snapshot_generator
+completing and the chrome target linking. ozone_unittests' ten
+DrmGpuDisplayManagerTest cases cover the call sites.
+---
+ ui/ozone/platform/drm/common/drm_util.cc      |  6 ++---
+ ui/ozone/platform/drm/common/drm_util.h       | 22 ++++++++++++++-----
+ .../drm/gpu/drm_gpu_display_manager.cc        |  6 ++---
+ .../gpu/drm_gpu_display_manager_unittest.cc   | 12 +++++-----
+ 4 files changed, 29 insertions(+), 17 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/common/drm_util.cc b/ui/ozone/platform/drm/common/drm_util.cc
+index 8a1474e09a954..af1f9857ea6a6 100644
+--- a/ui/ozone/platform/drm/common/drm_util.cc
++++ b/ui/ozone/platform/drm/common/drm_util.cc
+@@ -669,10 +669,10 @@ GetDisplayInfosAndInvalidCrtcs(const DrmWrapper& drm) {
+   std::vector<drmModeConnector*> available_connectors;
+   const size_t count_connectors = resources->count_connectors;
+   for (size_t i = 0; i < count_connectors; ++i) {
+-    if (i >= kMaxDrmConnectors) {
+-      LOG(WARNING) << "Reached the current limit of " << kMaxDrmConnectors
++    if (i >= MaxDrmConnectors()) {
++      LOG(WARNING) << "Reached the current limit of " << MaxDrmConnectors()
+                    << " connectors per DRM. Ignoring the remaining "
+-                   << count_connectors - kMaxDrmConnectors << " connectors.";
++                   << count_connectors - MaxDrmConnectors() << " connectors.";
+       break;
+     }
+ 
+diff --git a/ui/ozone/platform/drm/common/drm_util.h b/ui/ozone/platform/drm/common/drm_util.h
+index fa7e84622c5aa..bfc1853201c3b 100644
+--- a/ui/ozone/platform/drm/common/drm_util.h
++++ b/ui/ozone/platform/drm/common/drm_util.h
+@@ -37,16 +37,28 @@ class DisplayMode;
+ namespace ui {
+ class HardwareDisplayControllerInfo;
+ 
+-// TODO(b/193019614): clean |kMaxDrmCount|'s and |kMaxDrmConnectors|'s
++// TODO(b/193019614): clean |MaxDrmCount()|'s and |MaxDrmConnectors()|'s
+ // assignment up once EDID-based ID migration is complete and the flag is
+ // removed.
++//
++// Domicile's engine fork: functions rather than the namespace-scope constants
++// these were. A const initialized by a call is a dynamic initializer, so every
++// translation unit including this header called
++// base::FeatureList::IsEnabled() before FeatureList::SetInstance() --
++// EarlyFeatureAccessTracker::Fail(), which is fatal. It took down
++// v8_context_snapshot_generator the first time ozone_platform_drm = true put
++// this header in that tool's link. Read on first use instead, which is after
++// startup has registered the list.
++//
+ // It is safe to assume there will be no more than 256 connected DRM devices.
+-const size_t kMaxDrmCount =
+-    display::features::IsEdidBasedDisplayIdsEnabled() ? 256u : 16u;
++inline size_t MaxDrmCount() {
++  return display::features::IsEdidBasedDisplayIdsEnabled() ? 256u : 16u;
++}
+ 
+ // It is safe to assume there will be no more than 256 connectors per DRM.
+-const size_t kMaxDrmConnectors =
+-    display::features::IsEdidBasedDisplayIdsEnabled() ? 256u : 16u;
++inline size_t MaxDrmConnectors() {
++  return display::features::IsEdidBasedDisplayIdsEnabled() ? 256u : 16u;
++}
+ 
+ // Using a moderate size e.g. 256 for the cursor is enough in most cases.
+ const int kMaxCursorBufferSize = 256;
+diff --git a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
+index a8994855e64e1..7a5b07ffda036 100644
+--- a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
++++ b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
+@@ -313,10 +313,10 @@ MovableDisplaySnapshots DrmGpuDisplayManager::GetDisplays() {
+   MapEdidIdToDisplaySnapshot edid_id_collision_map;
+   bool collision_detected = false;
+   for (const auto& drm : devices) {
+-    if (device_index >= kMaxDrmCount) {
+-      LOG(WARNING) << "Reached the current limit of " << kMaxDrmCount
++    if (device_index >= MaxDrmCount()) {
++      LOG(WARNING) << "Reached the current limit of " << MaxDrmCount()
+                    << " connected DRM devices. Ignoring the remaining "
+-                   << devices.size() - kMaxDrmCount << " connected devices.";
++                   << devices.size() - MaxDrmCount() << " connected devices.";
+       break;
+     }
+ 
+diff --git a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
+index fb8b56e6ef1f0..ad044727a4c2a 100644
+--- a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
++++ b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
+@@ -286,8 +286,8 @@ class DrmGpuDisplayManagerTest : public testing::Test {
+ };
+ 
+ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxDrmDeviceCount) {
+-  // Add |kMaxDrmCount| + 1 DRM devices, each with one active display.
+-  for (size_t i = 0; i < kMaxDrmCount + 1; ++i) {
++  // Add |MaxDrmCount()| + 1 DRM devices, each with one active display.
++  for (size_t i = 0; i < MaxDrmCount() + 1; ++i) {
+     auto fake_drm = AddDrmDevice();
+     fake_drm->ResetStateWithAllProperties();
+ 
+@@ -309,7 +309,7 @@ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxDrmDeviceCount) {
+     fake_drm->InitializeState(/* use_atomic */ true);
+   }
+ 
+-  ASSERT_EQ(drm_gpu_display_manager_->GetDisplays().size(), kMaxDrmCount);
++  ASSERT_EQ(drm_gpu_display_manager_->GetDisplays().size(), MaxDrmCount());
+ }
+ 
+ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxConnectorCount) {
+@@ -317,8 +317,8 @@ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxConnectorCount) {
+   auto fake_drm = AddDrmDevice();
+   fake_drm->ResetStateWithAllProperties();
+ 
+-  // Add |kMaxDrmConnectors| + 1 connector, each with one active display.
+-  for (size_t i = 0; i < kMaxDrmConnectors + 1; ++i) {
++  // Add |MaxDrmConnectors()| + 1 connector, each with one active display.
++  for (size_t i = 0; i < MaxDrmConnectors() + 1; ++i) {
+     // Add 1 CRTC
+     fake_drm->AddCrtcWithPrimaryAndCursorPlanes();
+ 
+@@ -336,7 +336,7 @@ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxConnectorCount) {
+   }
+   fake_drm->InitializeState(/* use_atomic */ true);
+ 
+-  ASSERT_EQ(drm_gpu_display_manager_->GetDisplays().size(), kMaxDrmConnectors);
++  ASSERT_EQ(drm_gpu_display_manager_->GetDisplays().size(), MaxDrmConnectors());
+ }
+ 
+ TEST_F(DrmGpuDisplayManagerTest, FindAndConfigureDisplaysOnSameDrmDevice) {
