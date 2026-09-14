@@ -1,4 +1,3 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
@@ -49,20 +48,26 @@ type HeldModifiers = {
 };
 
 /**
- * Which modifiers the shell should act on, from both of the places that can
- * know which are held.
+ * Which modifiers the shell should act on, off this page's own keyboard.
  *
- * The host is the one that matters. `wl_keyboard.modifiers` goes to whatever
- * holds the keyboard, so once a window is focused the page hears nothing about
- * the Alt the user is holding — which is exactly when the shell needs to know,
- * because that is when they are reaching for it to drag a window. So the
- * compositor broadcasts the set whenever it changes, and this listens.
+ * **The page is the only thing that hears this keyboard, and the compositor's
+ * answer is this page's own keystrokes handed back short.** The desktop is the
+ * chrome's window: every key the compositor's seat has ever seen arrived as a
+ * `key` the SDK forwarded from this document, and the SDK forwards only while
+ * a client holds the keyboard. So a modifier pressed while the chrome holds it
+ * — the Alt of the Alt+Enter that spawned the terminal, before there was a
+ * window to hold anything — never reaches the seat, and the next forwarded key
+ * makes the compositor broadcast a set that denies it.
  *
- * The page's own keyboard events are the other half, and they are what makes
- * the shell work in a plain browser with no host to ask — which is how it is
- * opened for styling work. The two cannot disagree: whichever of them is
- * hearing this keyboard is the only one delivering, and both describe the same
- * keys.
+ * This listened to that broadcast and took it over its own keystrokes, which
+ * is a held Alt read as let go of: the grab sheet came down and the window the
+ * user had just floated would not drag until they released Alt and pressed it
+ * again, which is what put it into the seat. The host cannot know a key this
+ * page did not tell it about, so there is nothing to ask it for. When input
+ * comes off DRM rather than out of the browser — see
+ * `/docs/architecture/A-DESKTOP-ON-A-TTY.md` — the compositor is the one that
+ * knows and the `modifiers` message is how it will say so; it does not know
+ * today.
  *
  * **Held is not the same question as meant, and only for Shift.** Alt+Shift+Tab
  * floats a window and Shift over a floating one resizes it, so the half-second
@@ -71,7 +76,7 @@ type HeldModifiers = {
  * the keys for resizing it already held. {@link HeldModifiers.spendShift} is
  * what the chord says so with.
  */
-export const useModifiers = (domicile: DomicileClient): HeldModifiers => {
+export const useModifiers = (): HeldModifiers => {
   const [held, setHeld] = useState(NOTHING_HELD);
 
   // The same object when nothing moved, so a page that holds Alt through a
@@ -91,18 +96,6 @@ export const useModifiers = (domicile: DomicileClient): HeldModifiers => {
   const spendShift = useCallback(() => {
     setHeld((last) => ({ ...last, spent: last.down.shift }));
   }, []);
-
-  useEffect(() => {
-    // `on` returns the client for chaining, so it is deliberately not returned
-    // as a cleanup — there is one handler per message type and re-registering
-    // replaces it.
-    // The compositor's names for these are the web's now, so the two halves
-    // below read the same: `altKey` off a `modifiers` message is the same fact
-    // as `altKey` off a `KeyboardEvent`.
-    domicile.on("modifiers", ({ altKey, ctrlKey, shiftKey }) => {
-      settle({ alt: altKey, ctrl: ctrlKey, shift: shiftKey });
-    });
-  }, [domicile, settle]);
 
   useEffect(() => {
     const follow = (event: KeyboardEvent) => {
