@@ -81,12 +81,21 @@ export const useShortcuts = ({ domicile, onFloat, onLaunch }: Options) => {
             }
             break;
           }
+          // Shift is part of this chord the way it is part of Alt+Enter's,
+          // and it says the opposite thing: Alt+Shift+Enter is claimed as
+          // well, and Alt+Shift+Tab is claimed by nobody. So it is left to
+          // the page, which is what the compositor does with it — and a page
+          // that answered it anyway would float on keys a focused client is
+          // handed, and leave the Shift the chord was pressed with reading as
+          // the resize modifier over the window it had just floated.
           case "Tab": {
-            // And the browser's own focus ring, which Tab would otherwise move
-            // out from under the window the user is floating.
-            event.preventDefault();
-            if (!event.repeat) {
-              onFloat();
+            if (event.shiftKey === ALT_TAB.shiftKey) {
+              // And the browser's own focus ring, which Tab would otherwise
+              // move out from under the window the user is floating.
+              event.preventDefault();
+              if (!event.repeat) {
+                onFloat();
+              }
             }
             break;
           }

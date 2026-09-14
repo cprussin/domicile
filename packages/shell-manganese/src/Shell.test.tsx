@@ -606,6 +606,24 @@ describe("Shell", () => {
       expect(portal?.style.zIndex).toBe("");
     });
 
+    it("leaves Alt+Shift+Tab to the page, the way the compositor does", async () => {
+      // Alt+Tab is claimed with Shift *not* held, and the page's own branch
+      // has to answer the same chord or the keys do one thing when a window
+      // holds the keyboard and another when the shell does.
+      //
+      // What the disagreement cost was not academic: the Shift the chord was
+      // pressed with is still down when the window lands, and Shift is the
+      // resize modifier — so the Alt+drag that followed resized the window
+      // from its corner instead of moving it, until the user let go of Alt
+      // and took hold again.
+      const { container } = renderShell();
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
+
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
+
+      expect(portalFor(container, "term")?.style.zIndex).toBe("");
+    });
+
     it("stacks each float above the one before it", async () => {
       const { container } = renderShell();
       domicile.emit("app_appeared", { app_id: "one", title: "One" });
