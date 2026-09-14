@@ -208,8 +208,8 @@ decides whether an item is waiting or workable.
 
 1. **A desktop on a tty.** Audited against the pin in
    `docs/architecture/A-DESKTOP-ON-A-TTY.md`. Getting `gn gen` to accept
-   `ozone_platform_drm = true` is a **patch**: eight edits, not one of them
-   inside the DRM platform's own logic, because its 49 `.cc` files hold two
+   `ozone_platform_drm = true` is a **patch**: nine edits, eight of them around
+   the DRM platform rather than inside it, because its 49 `.cc` files hold two
    ChromeOS references between them and no `BUILDFLAG(IS_CHROMEOS)` at all — the
    assert is conservative about the platform. Getting a lit screen out of it is
    a **port**, of the embedder ozone/drm has never had off ChromeOS: no
@@ -253,13 +253,37 @@ decides whether an item is waiting or workable.
    **The next measurable step is a run, not a reading -- and `crux` can now
    make it.** In order: `chrome` builds with the argument, then `chrome
    --ozone-platform=drm` *starts* without hitting a `NOTREACHED()`, then a CRTC
-   lights. **None of the three is done yet.** `out/Agent/args.gn` took
-   `ozone_platform_drm = true` on 2026-09-13; the `chrome` beside it was linked
-   the day before, and running that binary aborts in `PreSandboxStartup` with
-   `Invalid ozone platform: drm` -- before `CreateScreen()` is reached, so it
-   says nothing about `DrmScreen` either way. **An `args.gn` carrying an
-   argument is not a binary built with it**, and comparing the two timestamps
-   is what says which. The other two were blocked on a card node, and
+   lights. **The first two have now been run, and they answer differently.**
+
+   `chrome` builds with the argument -- but only after a ninth edit, which the
+   build found the way it found the eighth. `drm_util.h` declared two constants
+   whose initializers call `FeatureList::IsEnabled()`, which every including
+   translation unit then runs during static initialization; that is fatal, and
+   it killed `v8_context_snapshot_generator`. Both are functions now.
+
+   The trap on the way there is worth keeping even though the milestone moved
+   past it: `out/Agent` took the argument into its `args.gn` a day after its
+   `chrome` was linked, and that binary aborted in `GetOzonePlatformId` with
+   `Invalid ozone platform: drm` before a line of fork code ran. **An `args.gn`
+   carrying an argument is not a binary built with it**, and comparing the two
+   timestamps is what says which.
+
+   `chrome --ozone-platform=drm` **does not yet start**, and the `NOTREACHED()`
+   it hits has moved about twenty frames deeper. It clears `PreSandboxStartup`,
+   clears the `CreateScreen()`/`InitScreen()` pair `DrmScreen` answers, reaches
+   `Browser::Create()`, and dies in `DrmWindowHost::GetBoundsInDIP()` under
+   `WindowTreeHost::InitHost()` -- the same ChromeOS-shaped refusal as the one
+   just cleared, one layer out. `A-DESKTOP-ON-A-TTY.md` carries the trace and
+   has it as the next box.
+
+   Both of those runs were made without taking the engine tree lock, and CI
+   reset the checkout twice inside the build window, so **repeat them under the
+   lock before quoting them as measurements** -- as a dispatched CI job, which
+   takes the lock by construction and ends in a run URL a doc can cite. What
+   each finding rests on is readable in the source either way; what is in doubt
+   is the binary, not the diagnosis.
+
+   The two steps after that were blocked on a card node, and
    `crux` has one -- `/dev/dri/card0` is **vkms**, whose `Virtual-1` connector
    reads `connected` at a preferred 1024x768@60, with GBM up and a 256x256
    XRGB8888 scanout bo allocated on it (`drmprobe/probe`, read-only: it calls

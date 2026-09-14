@@ -1,7 +1,12 @@
 # A desktop on a tty
 
-**Getting `gn gen` to accept `ozone_platform_drm = true` is a patch: eight
-edits, and not one of them is inside the DRM platform's own logic.**
+**Getting `gn gen` to accept `ozone_platform_drm = true`, and a `chrome` out
+the other side, is a patch: nine edits, eight of them around the DRM platform
+rather than inside it.** The ninth is inside and mechanical: two constants in
+`drm_util.h` became functions, because a `const` whose initializer calls
+`base::FeatureList::IsEnabled()` runs that call during static initialization,
+and that is fatal. It was found by running a host tool, not by reading, and it
+is the first of the nine that a compiler and a linker both let through.
 Getting a lit screen out of it is a port — of the *embedder* ozone/drm has
 never had off ChromeOS, not of ozone/drm itself. It is not a fork: at
 `bbbfd22b56d9df22e578e9faf55b286714b7303c` the 49 `.cc` files in
@@ -434,6 +439,12 @@ Step 2 — the embedder (the port):
       the two widget lookups, which needs a `DrmWindowHost` and so a GPU thread
       adapter. The `chrome --ozone-platform=drm` run below is what exercises
       those
+- [ ] `DrmWindowHost::GetBoundsInDIP` and `SetBoundsInDIP`, which are both
+      `NOTREACHED()` and are what a views browser hits next, in
+      `WindowTreeHost::InitHost()`. `HeadlessWindow` is the model
+- [ ] `PlatformScreen::IsScreenSaverActive` and `CalculateIdleTime` on
+      `DrmScreen`. Not fatal — they log `Not implemented reached` on every
+      startup — and `HeadlessScreen` overrides both
 - [ ] a minimal modeset driver: snapshots → `DisplayConfigurationParams` →
       `DrmNativeDisplayDelegate::Configure`, and the same again on a udev
       hotplug event, without `//ui/display/manager`
@@ -468,14 +479,41 @@ Step 2 — the embedder (the port):
   `ui/events/ozone/BUILD.gn:44` — which ships its header on every platform, so
   it defeated the grep and the compiler both and surfaced only at the link.
 - **Does the engine's `chrome` target start at all under ozone/drm with no
-  ash?** Beyond `CreateScreen()`, which `DrmScreen` now answers, browser
-  startup touches display state in places this audit did not trace.
-  *Recommendation:* run it — `crux` has a card node after all. `/dev/dri/card0`
-  is **vkms**, `Virtual-1` reads `connected` at a preferred 1024x768@60, and
-  GBM allocates a scanout bo on it. A vkms CRTC presents to nobody, so the run
-  answers whether the modeset path executes and not whether a desktop appears,
-  which is the half this question was actually about. `card1` is the nvidia GPU
-  with four disconnected connectors.
+  ash?** **Answered: further than expected, and not all the way.** With
+  `DrmScreen` in and the static-initializer edit above, `chrome
+  --ozone-platform=drm` clears `PreSandboxStartup`, clears `CreateScreen()` and
+  `InitScreen()`, and reaches `Browser::Create()` — then dies about twenty
+  frames deeper:
+
+  ```
+  FATAL:ui/ozone/platform/drm/host/drm_window_host.cc:99] NOTREACHED hit.
+  #7  ui::DrmWindowHost::GetBoundsInDIP()
+  #8  views::DesktopWindowTreeHostPlatform::CalculateRootWindowBounds()
+  #9  aura::WindowTreeHost::InitHost()
+  #12 BrowserDesktopWindowTreeHostLinux::Init()
+  ```
+
+  The audit predicted display state it had not traced and that is exactly what
+  this is — the same shape as `CreateScreen()`, one layer out: `GetBoundsInDIP`
+  and `SetBoundsInDIP` are both `NOTREACHED()` on the grounds that DRM has no
+  scaling and should use pixel bounds, which holds on ChromeOS, where ash never
+  routes a window through `DesktopWindowTreeHostPlatform`. A views browser on
+  Linux does, during `InitHost()`. `HeadlessWindow::GetBoundsInDIP` is the
+  model, as `HeadlessScreen` was for the screen.
+
+  **This run wants repeating before it is treated as measured.** It was built
+  without taking `.github/scripts/engine-tree-lock.sh`, and CI reset the
+  checkout twice inside the build window (15:50 and 16:36 on 2026-09-13), which
+  is the mixture-of-two-trees case that lock exists to prevent. Both findings
+  are independently readable in the source -- `drm_util.h`'s constants do call
+  `IsEnabled()` at the pin, and `drm_window_host.cc:99` is `NOTREACHED()` at the
+  pin -- so neither is an artifact. The binary that produced the trace may be.
+
+  Measured on `crux`, whose `/dev/dri/card0` is **vkms** (`Virtual-1`
+  `connected`, preferred 1024x768@60, GBM up and a scanout bo allocated on it);
+  `card1` is the nvidia GPU with four disconnected connectors. A vkms CRTC
+  presents to nobody, so what this can answer is whether the path executes, not
+  whether a desktop appears.
 - **libseat/seatd, logind ACLs, or root.** ACLs on an active VT make the
   unmodified `open()` calls work and need no code; libseat would need an
   fd-passing seam ozone does not have. *Recommendation:* ship on logind ACLs,
