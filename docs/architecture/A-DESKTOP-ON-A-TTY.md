@@ -390,11 +390,17 @@ answered while the ones a build cannot are not.
 Step 1 — make the tree accept the argument (the patch):
 
 All eight edits are one patch,
-`packages/domicile-engine/patches/0012-domicile-let-gn-gen-accept-ozone_platform_drm-off-Ch.patch`,
-and it compiles nothing that ships: `scripts/build.sh` and
-`.github/scripts/engine-release-build.sh` both set `ozone_auto_platforms =
-false` and name only wayland and headless, so `//ui/ozone/BUILD.gn` never adds
-`platform/drm:gbm` and `ui/ozone/platform/drm/BUILD.gn` is not loaded at all.
+`packages/domicile-engine/patches/0012-domicile-let-gn-gen-accept-ozone_platform_drm-off-Ch.patch`.
+
+It compiled nothing that shipped when it landed, and that was the point: both
+`scripts/build.sh` and `.github/scripts/engine-release-build.sh` set
+`ozone_auto_platforms = false` and named only wayland and headless, so
+`//ui/ozone/BUILD.gn` never added `platform/drm:gbm` and
+`ui/ozone/platform/drm/BUILD.gn` was not loaded at all. **That is no longer
+true and the last item of step 2 is why** -- both blocks name
+`ozone_platform_drm = true` now, so this patch is compiled on every engine run
+rather than only by the probe. The staging was deliberate: an assert relaxed
+long before anything depended on it having been.
 
 - [x] add a patch to the series relaxing `ui/ozone/platform/drm/BUILD.gn:14` to
       `assert(is_linux || is_chromeos)` and moving `deps += [ "//ash/constants",
@@ -535,10 +541,22 @@ Step 2 — the embedder (the port):
       and `TakeDisplayControl` on switch back
 - [ ] `EVIOCREVOKE` (or a libseat-shaped equivalent) on the evdev fds at those
       same two moments
-- [ ] name `ozone_platform_drm = true` in `scripts/build.sh` and
-      `engine-release-build.sh`, which today name only wayland and headless —
-      after `DrmScreen` and the modeset driver, because a platform with no
-      embedder behind it turns a clear refusal into a crash
+- [x] name `ozone_platform_drm = true` in `scripts/build.sh` and
+      `engine-release-build.sh` — after `DrmScreen` and the modeset driver,
+      because a platform with no embedder behind it turns a clear refusal into
+      a crash. Both of those landed first, in that order, and then this did.
+
+      The safety argument is that the default platform does not move, and it is
+      read out of the pin rather than assumed: `ozone_platform` is unset in
+      both blocks, `generate_ozone_platform_list.py` reorders only when
+      `--default` names a platform that is in the list, so the order is
+      `//ui/ozone/BUILD.gn`'s own -- headless, then drm, then wayland. Headless
+      stays first and stays the default, so nothing that ran yesterday gets a
+      different platform today. `scripts/test-the-builds-agree-on-ozone.sh`
+      holds both halves of that: the two blocks name the same three platforms,
+      and neither sets `ozone_platform`, because setting it to `"drm"` looks
+      like a one-word tidy-up and would flip the default on every machine
+      including the ones with no card node
 - [ ] a `drm` arm in `domicile-launch`'s `platform()`, so a machine with no
       `WAYLAND_DISPLAY` gets a tty rather than `PlatformError::NoDisplayServer`.
       Auto-detection only, and last: `OZONE=drm` already overrides outright, so
