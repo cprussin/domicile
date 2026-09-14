@@ -151,5 +151,71 @@ TEST(DrmModesetTest, EveryReadableConnectorIsAskedFor) {
   EXPECT_EQ(params[1].id, 2);
 }
 
+// THE LOOP, AND WHY THESE FOUR CASES ARE THE WHOLE OF IT. The first run of
+// this driver on real hardware re-modeset a CRTC to the mode it was already in,
+// for as long as it was left running. Every `Configure` makes the kernel emit a
+// udev CHANGE; the browser turns that into `OnConfigurationChanged`; this
+// driver read the displays and configured them again. A screen that
+// re-modesets on a loop never settles enough to show anything, which is what
+// "it goes black and nothing draws" was.
+TEST(DrmModesetTest, TheSameReadingTwiceIsNotWorthAModeset) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
+  const std::vector<display::DisplayConfigurationParams> once =
+      ModesetParamsFromSnapshots(Pointers(snapshots));
+  const std::vector<display::DisplayConfigurationParams> again =
+      ModesetParamsFromSnapshots(Pointers(snapshots));
+
+  EXPECT_FALSE(ModesetWouldChangeAnything(once, again))
+      << "asking the hardware for the mode it just reported is the loop";
+}
+
+TEST(DrmModesetTest, TheFirstReadingIsAlwaysWorthAModeset) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
+
+  EXPECT_TRUE(ModesetWouldChangeAnything(
+      {}, ModesetParamsFromSnapshots(Pointers(snapshots))))
+      << "nothing has been asked for yet, so everything is a change";
+}
+
+// A REAL HOTPLUG MUST ALWAYS GET THROUGH, which is the half of this that a
+// too-eager guard would break. A monitor unplugged, a mode changed, a second
+// screen arriving: each changes the reading, and each has to reach the
+// hardware.
+TEST(DrmModesetTest, ADisplayArrivingIsWorthAModeset) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> one;
+  one.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> two;
+  two.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
+  two.push_back(SnapshotBuilder()
+                    .Id(12)
+                    .Origin(gfx::Point(2880, 0))
+                    .NativeMode(gfx::Size(3840, 2160), 60.f)
+                    .Build());
+
+  EXPECT_TRUE(
+      ModesetWouldChangeAnything(ModesetParamsFromSnapshots(Pointers(one)),
+                                 ModesetParamsFromSnapshots(Pointers(two))));
+}
+
+TEST(DrmModesetTest, AModeChangingOnOneDisplayIsWorthAModeset) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> before;
+  before.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> after;
+  after.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(1920, 1080), 60.f).Build());
+
+  EXPECT_TRUE(
+      ModesetWouldChangeAnything(ModesetParamsFromSnapshots(Pointers(before)),
+                                 ModesetParamsFromSnapshots(Pointers(after))))
+      << "the same connector at a different mode is a different request";
+}
+
 }  // namespace
 }  // namespace ui
