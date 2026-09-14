@@ -226,15 +226,65 @@ else
   FAILED=$((FAILED + 1))
 fi
 
+# ---- a stage after ui/ozone fails -------------------------------------------
+#
+# The tail used to be withheld by `drm probe: ui/ozone built`, which was the
+# last thing the probe did. It is not any more: the probe builds
+# `ozone_unittests` after it, so a log can carry that line and still be a
+# failure. Gated on the old sentinel, this shape came back with its windows and
+# no tail -- and for the MemoryError class of failure, which has no windows at
+# all, with nothing whatsoever.
+STAGE="$WORK/stage.log"
+{
+  echo "drm probe: configuring out/DrmProbe"
+  echo "drm probe: gn gen accepted ozone_platform_drm = true"
+  echo "drm probe: building ui/ozone"
+  noise 40
+  echo "drm probe: ui/ozone built"
+  echo "drm probe: building ozone_unittests"
+  noise 40
+  echo "FAILED: ozone_unittests"
+  echo "ld.lld: error: undefined symbol: ui::DrmScreen::IsScreenSaverActive() const"
+  noise 30
+  echo "ninja: build stopped: subcommand failed."
+} >"$STAGE"
+out="$("$REPORT" "$STAGE" 2>&1)"
+contains "a failure after ui/ozone names the symbol" \
+  "undefined symbol: ui::DrmScreen::IsScreenSaverActive() const" "$out"
+contains "and is not treated as a success because ui/ozone built" \
+  "-- the last of" "$out"
+contains "and says how far the probe got" "drm probe: building ozone_unittests" "$out"
+
+# The same shape with nothing the windows can key on, which is where the old
+# gate did the real damage: no `FAILED:`, no `error:`, no `stderr:`.
+QUIET="$WORK/quiet-stage.log"
+{
+  echo "drm probe: configuring out/DrmProbe"
+  echo "drm probe: ui/ozone built"
+  echo "drm probe: building ozone_unittests"
+  noise 40
+  echo "MemoryError"
+} >"$QUIET"
+out="$("$REPORT" "$QUIET" 2>&1)"
+contains "a quiet failure after ui/ozone still comes back in the tail" \
+  "MemoryError" "$out"
+
 # ---- a clean log ------------------------------------------------------------
 #
 # The probe's own verdict line, which is the answer when it works. The report
 # runs on success too — a green run that says nothing about what it configured
 # is a green run nobody can cite.
 OK="$WORK/ok.log"
-{ noise 50; echo "siso: build finished"; echo "drm probe: ui/ozone built"; } >"$OK"
+{
+  noise 50
+  echo "siso: build finished"
+  echo "drm probe: ui/ozone built"
+  echo "drm probe: ozone_unittests built"
+} >"$OK"
 out="$("$REPORT" "$OK" 2>&1)"
 contains "a clean log reports the verdict line" "drm probe: ui/ozone built" "$out"
+contains "and the last one, which is what says it finished" \
+  "drm probe: ozone_unittests built" "$out"
 lacks "and invents no failure" "nothing in the log looks like a failure" "$out"
 # The other direction of the fix above: a tail printed under a success reads
 # as one, so widening the tail must not widen it onto a green run.

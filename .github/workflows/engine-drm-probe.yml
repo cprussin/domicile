@@ -1,7 +1,16 @@
 name: Engine DRM probe
 
-# One question, asked of a compiler rather than of a reader: does the patched
-# tree accept `ozone_platform_drm = true`, and does `//ui/ozone` build with it?
+# Questions asked of a compiler rather than of a reader: does the patched tree
+# accept `ozone_platform_drm = true`, does `//ui/ozone` build with it, and do
+# the DRM platform's own tests build and pass?
+#
+# The third arrived with `DrmScreen` (#314) and is not a nicety. That class
+# lives in `ozone_unittests` and in no other suite, engine.yml's build names
+# only wayland and headless so it cannot contain it, and putting
+# `ozone_platform_drm` into the shipped build is ordered after the modeset
+# driver. So this is the only place `DrmScreenTest` runs at all -- and without
+# it the next box has no way to watch a test fail, which this repository
+# requires before writing the code that passes it.
 #
 # docs/architecture/A-DESKTOP-ON-A-TTY.md established from the source that the
 # ChromeOS-only assert on ozone/drm guards almost nothing -- two incidental
@@ -72,7 +81,10 @@ jobs:
 
     # The tree is warm but this output directory is not: `out/DrmProbe` starts
     # empty every run, and the closure of `//ui/ozone` is most of base, skia,
-    # mojo and gpu. The budget is for that from cold.
+    # mojo and gpu. The budget is for that from cold. `ozone_unittests` adds
+    # gtest and the platform's own test objects on top of a closure already
+    # built, which is a small increment on that -- but it is unmeasured, and if
+    # a run ever times out here that is the first number to go and get.
     timeout-minutes: 360
 
     env:
@@ -232,7 +244,55 @@ jobs:
             echo "::error::the probe ran and //ui/ozone did not build with ozone_platform_drm = true; the first failure is above" >&2
             exit 1
           }
+          [ -e "$PROBE-tested" ] || {
+            echo "::error::the probe ran, //ui/ozone built, and ozone_unittests did not; the first failure is above" >&2
+            exit 1
+          }
           echo "ozone_platform_drm = true configures and //ui/ozone compiles at this pin"
+
+      # THE ONLY RUN OF THIS SUITE ANYWHERE. engine.yml builds wayland and
+      # headless, so `DrmScreenTest` is not in its `components_unittests` and
+      # cannot be; adding `ozone_platform_drm` to the shipped build is ordered
+      # after the modeset driver. Until this step, the tests covering the one
+      # class step 2 has delivered ran on the build host and nowhere a PR could
+      # see -- which leaves TDD on the next box with nothing to watch fail.
+      #
+      # From the domicile dev shell and from inside the out directory, for
+      # engine.yml's two reasons: a component build's binary loads its own .so
+      # files from beside it, and Chromium's runtime libraries are in that shell
+      # rather than in Chromium's own, where a bare run dies on
+      # `libglib-2.0.so.0` in a way that reads like a broken test. `#full` is
+      # spelled against $GITHUB_WORKSPACE because this step is not in the
+      # workspace.
+      #
+      # Before the out directory comes off the disk and while the lock is still
+      # held, because both of those happen below.
+      - name: The DRM platform's own tests
+        working-directory: /build/chromium/src/out/DrmProbe
+        run: |
+          set -euo pipefail
+          # Counted before it is run, for the reason engine.yml counts: a
+          # `--gtest_filter` matching nothing exits 0, so a suite that failed to
+          # link or was renamed is a silent pass -- which is the exact failure
+          # this job exists to make impossible. Test names are the indented
+          # lines of --gtest_list_tests; suite names are not.
+          count=$(nix develop "$GITHUB_WORKSPACE#full" --command \
+            ./ozone_unittests --gtest_filter='DrmScreenTest.*' --gtest_list_tests |
+            grep -cE '^  ' || true)
+          echo "$count DrmScreenTest cases"
+          # Twelve is what landed with DrmScreen in #314. A floor rather than an
+          # equality so adding a case does not fail the job, and a floor at the
+          # real number rather than under it -- engine.yml's sat twelve below
+          # the truth for weeks and a whole suite could have stopped linking
+          # inside the gap.
+          [ "$count" -ge 12 ] || {
+            echo "::error::only $count DrmScreenTest cases; the suite was renamed or did not link" >&2
+            exit 1
+          }
+          # The whole suite, not just ours: `DrmScreen` is reached through
+          # `OzonePlatformDrm`, and upstream's own cases over that platform are
+          # what would catch us breaking it from underneath.
+          nix develop "$GITHUB_WORKSPACE#full" --command ./ozone_unittests
 
       # Before the lock is dropped, so the tree is still ours while a ~15G
       # directory comes off it, and `always()` so a failed probe does not leave
