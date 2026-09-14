@@ -31,6 +31,35 @@ pub fn output_scale(ratio: f64, max: u32) -> i32 {
     wanted.clamp(1, max.max(1)) as i32
 }
 
+/// The logical size of a box the engine states in device pixels, on a display
+/// of `ratio` device pixels per CSS pixel.
+///
+/// Blink lays out in device pixels, so the box an `<app>` element reports back
+/// through `SurfaceBoxChanged` is the page's CSS box already multiplied by the
+/// display's density. An `xdg_toplevel.configure` is in *logical* units — the
+/// density is the output's scale and the client applies it itself — so that
+/// number has to come back down before it is sent, or the client is told to
+/// lay out `ratio` times as much content as the box can hold and draws every
+/// bit of it `ratio` times too small.
+///
+/// The chrome reports the same box in CSS pixels through `resize_app`, and the
+/// two configures race: whichever lands last is the one the client acks. That
+/// is why this was a window whose text changed size when it was floated rather
+/// than one that was simply wrong — the race goes one way on the stage and the
+/// other when the box moves.
+///
+/// `ratio` arrives from the chrome as JSON, so it is not trusted: anything
+/// that is not a positive, finite number is treated as an unscaled display,
+/// which is the answer that cannot divide by zero. Rounded rather than
+/// truncated, and never to nothing: a client configured to zero draws nothing.
+pub fn logical_box(device: (u32, u32), ratio: f64) -> (u32, u32) {
+    if !ratio.is_finite() || ratio <= 0.0 {
+        return device;
+    }
+    let logical = |pixels: u32| ((f64::from(pixels) / ratio).round() as u32).max(1);
+    (logical(device.0), logical(device.1))
+}
+
 /// The logical size of a surface whose buffer is `buffer` pixels at
 /// `buffer_scale`.
 ///
@@ -48,7 +77,7 @@ pub fn logical_size(buffer: (u32, u32), buffer_scale: i32) -> (u32, u32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{logical_size, output_scale};
+    use super::{logical_box, logical_size, output_scale};
 
     #[test]
     fn an_ordinary_display_asks_for_no_scaling() {
@@ -93,6 +122,40 @@ mod tests {
     #[test]
     fn a_cap_of_zero_still_leaves_a_usable_scale() {
         assert_eq!(output_scale(2.0, 0), 1);
+    }
+
+    #[test]
+    fn a_layout_box_is_the_css_box_the_engine_was_given() {
+        // The fault this was written for. The chrome lays a window out at
+        // 1493x1522 CSS pixels on a 1.2x display; the engine reports the same
+        // box as 1792x1826, because Blink's layout units are device pixels.
+        // Sent as an `xdg_toplevel.configure` unconverted, the client lays out
+        // 1.2x too many columns and every one of them is 1.2x too small.
+        assert_eq!(logical_box((1792, 1826), 1.2), (1493, 1522));
+        assert_eq!(logical_box((766, 467), 1.2), (638, 389));
+    }
+
+    #[test]
+    fn an_unscaled_display_leaves_the_box_alone() {
+        // Where the ratio is 1 the two coordinate systems are the same one,
+        // which is why this went unnoticed on an ordinary display.
+        assert_eq!(logical_box((640, 390), 1.0), (640, 390));
+    }
+
+    #[test]
+    fn a_nonsense_ratio_leaves_the_box_alone() {
+        // `devicePixelRatio` crosses the wire as JSON, and a box divided by
+        // zero is a window configured to nothing.
+        assert_eq!(logical_box((640, 390), 0.0), (640, 390));
+        assert_eq!(logical_box((640, 390), f64::NAN), (640, 390));
+        assert_eq!(logical_box((640, 390), -2.0), (640, 390));
+    }
+
+    #[test]
+    fn a_box_never_rounds_away_to_nothing() {
+        // A client configured to zero draws nothing, and the rounding on a
+        // dense display is what would get it there.
+        assert_eq!(logical_box((1, 1), 4.0), (1, 1));
     }
 
     #[test]

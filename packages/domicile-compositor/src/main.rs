@@ -238,7 +238,16 @@ enum ClientRequest {
     KeyboardFocus {
         app_id: Option<String>,
     },
+    /// The chrome reported its `devicePixelRatio`.
+    ///
+    /// Both halves of it, because they answer different questions. `scale` is
+    /// what the output advertises, which Wayland can only say as an integer —
+    /// see [`crate::scale::output_scale`]. `ratio` is the fraction it was
+    /// rounded from, and the compositor keeps it because the *engine* states
+    /// an `<app>`'s box in device pixels: converting one back into the logical
+    /// units a configure is in needs the ratio and not the rounding of it.
     SetOutputScale {
+        ratio: f64,
         scale: i32,
     },
     /// The chrome's viewport changed; re-advertise the output at that size so
@@ -889,6 +898,7 @@ fn read_chrome_messages(
             // models — the scene is described in logical units either way.
             Ok(ChromeMessage::SetDevicePixelRatio { ratio }) => {
                 hub.send_request(ClientRequest::SetOutputScale {
+                    ratio,
                     scale: output_scale(ratio, hub.max_scale),
                 });
                 Vec::new()
@@ -1058,6 +1068,16 @@ struct DomicileCompositor {
     config: ConfigStore,
     /// What the outputs above are, and who gets to change them.
     screens: Screens,
+    /// The chrome's `devicePixelRatio`, as it last reported it.
+    ///
+    /// Only one thing reads it, and it is not the output's density: Blink lays
+    /// out in device pixels, so the box the engine states for an `<app>` is
+    /// this many times the CSS box the page drew. A configure is in logical
+    /// units, so it has to come back down — see [`crate::scale::logical_box`].
+    ///
+    /// 1.0 until a chrome says otherwise, which is the display that needs no
+    /// conversion and the answer a desktop with no chrome yet would want.
+    device_pixel_ratio: f64,
     /// Drag-and-drop and the clipboard.
     ///
     /// Advertised because a desktop without it is not one — but the reason it
@@ -1516,6 +1536,12 @@ impl DomicileCompositor {
                         tracing::debug!(%app_id, "the engine configured an app with no toplevel");
                         continue;
                     };
+                    // THE ENGINE COUNTS IN DEVICE PIXELS AND A CONFIGURE IS
+                    // IN LOGICAL ONES. Sent as it arrives, a window on a 1.2x
+                    // display is told to lay out 1.2x the content its box
+                    // holds and draws every bit of it 1.2x too small.
+                    let (width, height) =
+                        crate::scale::logical_box((width, height), self.device_pixel_ratio);
                     tracing::debug!(%app_id, width, height, "engine configure -> client");
                     toplevel.with_pending_state(|state| {
                         state.size = Some((width as i32, height as i32).into());
@@ -2536,7 +2562,15 @@ impl DomicileCompositor {
                 // needs are re-supplied by the hand-over pass in `present`,
                 announce_open_apps(&self.hub);
             }
-            ClientRequest::SetOutputScale { scale } => self.set_output_scale(scale),
+            ClientRequest::SetOutputScale { ratio, scale } => {
+                // Kept whether or not the scale below is taken up. A described
+                // desktop refuses the chrome's density — that is the config's
+                // statement about the user's screens — but the ratio is a fact
+                // about the *page's* coordinate system, which the engine
+                // reports boxes in either way.
+                self.device_pixel_ratio = ratio;
+                self.set_output_scale(scale);
+            }
             ClientRequest::SetOutputSize { logical } => self.set_output_size(logical),
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
@@ -3923,6 +3957,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chrome_toplevel: None,
         chrome_frame_shape: None,
         screens,
+        device_pixel_ratio: 1.0,
         modifiers: Held::default(),
         stop: Arc::new(AtomicBool::new(false)),
         engine,
