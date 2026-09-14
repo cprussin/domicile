@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/time/time.h"
 #include "ui/display/display.h"
 #include "ui/display/display_list.h"
 #include "ui/display/types/display_snapshot.h"
@@ -82,6 +83,8 @@ class DrmScreen : public PlatformScreen {
       const gfx::Point& point_in_dip) const override;
   display::Display GetDisplayMatching(
       const gfx::Rect& match_rect) const override;
+  bool IsScreenSaverActive() const override;
+  base::TimeDelta CalculateIdleTime() const override;
   void AddObserver(display::DisplayObserver* observer) override;
   void RemoveObserver(display::DisplayObserver* observer) override;
 

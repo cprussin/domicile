@@ -281,5 +281,25 @@ TEST(DrmScreenTest, AWidgetWithNoWindowGetsThePrimaryRatherThanACrash) {
             11);
 }
 
+// The pair below are not tests of arithmetic -- they are tests that the screen
+// ANSWERS. PlatformScreen's own defaults return the same two values, so a
+// DrmScreen that forgot these overrides would pass any assertion on the value
+// alone; what these pin is the contract, so that a later "implementation" that
+// starts reporting a saver nobody can turn on, or an idle time measured from
+// nothing, has to change a test that says why it should not.
+TEST(DrmScreenTest, NoOtherClientIsHoldingTheScreen) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+
+  EXPECT_FALSE(screen.IsScreenSaverActive());
+}
+
+TEST(DrmScreenTest, IdleIsTheCompositorsToMeasureAndSoIsReportedAsNone) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+
+  EXPECT_TRUE(screen.CalculateIdleTime().is_zero());
+}
+
 }  // namespace
 }  // namespace ui

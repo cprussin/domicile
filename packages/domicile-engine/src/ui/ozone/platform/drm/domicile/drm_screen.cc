@@ -138,6 +138,29 @@ display::Display DrmScreen::GetDisplayMatching(
   return display ? *display : GetPrimaryDisplay();
 }
 
+bool DrmScreen::IsScreenSaverActive() const {
+  // Nothing else is holding this screen. PlatformScreen's own default answers
+  // false too, but it answers with NOTIMPLEMENTED_LOG_ONCE() on the way, which
+  // is a line in every startup log saying a question was not answered -- and
+  // this one is.
+  //
+  // WaylandScreen has a window-system to ask and still assumes false, because
+  // idle_inhibitor says whether the saver is prevented rather than whether it
+  // is running. On a tty there is no window-system to ask: Domicile is the
+  // compositor, so blanking is the shell's decision and no other client can
+  // have taken the screen out from under it.
+  return false;
+}
+
+base::TimeDelta DrmScreen::CalculateIdleTime() const {
+  // Zero is "not idle", and it is the honest answer rather than a stub. Idle
+  // is measured from the last input event; input arrives over evdev and
+  // belongs to the compositor, which has it and this screen does not. When the
+  // shell wants an idle timer it will have one on its own side, and this would
+  // report from there rather than from a protocol that does not exist here.
+  return base::Seconds(0);
+}
+
 void DrmScreen::AddObserver(display::DisplayObserver* observer) {
   display_list_.AddObserver(observer);
 }

@@ -276,19 +276,25 @@ jobs:
           # link or was renamed is a silent pass -- which is the exact failure
           # this job exists to make impossible. Test names are the indented
           # lines of --gtest_list_tests; suite names are not.
-          count=$(nix develop "$GITHUB_WORKSPACE#full" --command \
-            ./ozone_unittests --gtest_filter='DrmScreenTest.*' --gtest_list_tests |
-            grep -cE '^  ' || true)
-          echo "$count DrmScreenTest cases"
-          # Twelve is what landed with DrmScreen in #314. A floor rather than an
-          # equality so adding a case does not fail the job, and a floor at the
-          # real number rather than under it -- engine.yml's sat twelve below
-          # the truth for weeks and a whole suite could have stopped linking
-          # inside the gap.
-          [ "$count" -ge 12 ] || {
-            echo "::error::only $count DrmScreenTest cases; the suite was renamed or did not link" >&2
-            exit 1
-          }
+          #
+          # ONE FLOOR PER SUITE, because a floor over the total would let one
+          # suite's cases pay for another's disappearance. Each number is what
+          # actually landed rather than a guess under it -- engine.yml's sat
+          # twelve below the truth for weeks and a whole suite could have
+          # stopped linking inside the gap -- and each is a floor rather than
+          # an equality so that adding a case does not fail the job.
+          for suite_and_floor in 'DrmScreenTest:14' 'DrmModesetTest:6'; do
+            suite="${suite_and_floor%%:*}"
+            floor="${suite_and_floor##*:}"
+            count=$(nix develop "$GITHUB_WORKSPACE#full" --command \
+              ./ozone_unittests --gtest_filter="$suite.*" --gtest_list_tests |
+              grep -cE '^  ' || true)
+            echo "$count $suite cases (floor $floor)"
+            [ "$count" -ge "$floor" ] || {
+              echo "::error::only $count $suite cases; the suite was renamed or did not link" >&2
+              exit 1
+            }
+          done
           # The whole suite, not just ours: `DrmScreen` is reached through
           # `OzonePlatformDrm`, and upstream's own cases over that platform are
           # what would catch us breaking it from underneath.
