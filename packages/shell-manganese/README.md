@@ -252,12 +252,16 @@ of windows hidden behind their own wallpaper. A window is a `cc::SurfaceLayer` i
 this page's layer tree now (`/docs/architecture/WINDOW-COMPOSITING.md`), so an
 element behind one is simply behind it.
 
-The photographs are [Lorem Picsum](https://picsum.photos) URLs, by seed, so they
-are the same six every time and the browser holds them after the first fetch.
-The subject is not promised — Picsum picks by hashing the seed, so these are six
-photographs rather than six landscapes — and a desktop with no network comes up
-on the theme's own `background`, which is what it came up on before this
-existed. A shell that wants its own pictures owns its own list.
+The photographs are [Wikimedia Commons](https://commons.wikimedia.org) files, by
+title: `Special:FilePath` serves the file a title names and `?width=` has
+Wikimedia's thumbnailer scale it, so they are the same six every time and the
+browser holds them after the first fetch. **The subject is chosen** — which is
+the reason they are titles rather than seeds into a placeholder service, because
+a seed pins the photograph without pinning what is in it. Three are from orbit
+and three from the ground, all six public domain, so showing one owes no credit
+line that this surface has nowhere to put. A desktop with no network comes up on
+the theme's own `background`, which is what it came up on before this existed. A
+shell that wants its own pictures owns its own list.
 
 ## Configure
 
