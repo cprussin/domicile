@@ -1,4 +1,8 @@
-import { APP_FOCUS_REQUESTED_EVENT } from "@domicile/chrome-sdk/app-element";
+import type { AppFocusReleaseRequest } from "@domicile/chrome-sdk/app-element";
+import {
+  APP_FOCUS_RELEASE_REQUESTED_EVENT,
+  APP_FOCUS_REQUESTED_EVENT,
+} from "@domicile/chrome-sdk/app-element";
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { focusApp } from "@domicile/chrome-sdk/focus-app";
@@ -6,6 +10,7 @@ import { useEffect, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
 import { surfaceBox } from "./floating/float";
+import { appWindowId } from "./window";
 import type { Floating } from "./window-state";
 import {
   clickThroughStyles,
@@ -132,6 +137,37 @@ export const AppWindow = ({
       };
     }
   }, [element, focused, onReach]);
+
+  // And the other direction. The SDK gives the keyboard back to the page for a
+  // press that lands off every `<app>`, which a float's own title bar and grab
+  // sheet do — so without this, taking hold of a window to move it took the
+  // keyboard off it. Nothing in the press says which window a `<div>` belongs
+  // to, which is why the chrome says so on itself and this reads it back.
+  //
+  // The nearest marked ancestor rather than a selector built from the id: an
+  // app id is a client's to choose, and one with a quote in it would be a
+  // selector that throws in the middle of a press.
+  useEffect(() => {
+    if (element === null) {
+      return undefined;
+    } else {
+      const releasing = (event: Event) => {
+        const { pressed } = (event as CustomEvent<AppFocusReleaseRequest>)
+          .detail;
+        const chrome = pressed?.closest("[data-window]");
+        if (chrome?.getAttribute("data-window") === appWindowId(appId)) {
+          event.preventDefault();
+        }
+      };
+      element.addEventListener(APP_FOCUS_RELEASE_REQUESTED_EVENT, releasing);
+      return () => {
+        element.removeEventListener(
+          APP_FOCUS_RELEASE_REQUESTED_EVENT,
+          releasing,
+        );
+      };
+    }
+  }, [appId, element]);
 
   return (
     <app

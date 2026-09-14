@@ -1001,34 +1001,48 @@ describe("Shell", () => {
       // The press that takes hold of a floating window lands on the shell's
       // own chrome, and the SDK gives the keyboard back to the page for any
       // press that lands off every `<app>` — it cannot tell a float's grab
-      // sheet from the wallpaper behind it. So taking hold of a window left it
-      // typing into nothing, and the shell says again where the keyboard is.
-      //
-      // Said from an effect rather than from the grab, because the SDK's own
-      // handler is on `document` and runs after this one: anything said during
-      // the press is undone by the press.
+      // sheet from the wallpaper behind it. So it asks, and the shell answers
+      // that this is a reach *for* the window: the keyboard never leaves, so
+      // there is nothing to put back.
       const { container } = await floated({ alt: true, shift: false });
       domicile.calls.length = 0;
 
       drag(grabbing(container), { x: 40, y: 20 });
 
-      expect(domicile.calls).toContainEqual(["focusApp", "term"]);
+      expect(domicile.calls.map(([kind]) => kind)).not.toContain("focusChrome");
     });
 
-    it("leaves a browser window's focus to its own page", async () => {
-      // The other half of the rule above, and the reason it names a client
-      // rather than a window: a browser window's page holds the focus itself,
-      // there is no client for the compositor to be pointed at, and naming the
-      // window's own id would name one it has never heard of.
-      const { container } = renderShell();
-      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      pageHolds({ alt: true });
+    it("keeps it for a press on the window's title bar too", async () => {
+      // The bar is the other half of a float's chrome and is dragged with no
+      // modifier at all, so it is the press a user makes most often.
+      const { container } = await floated({ alt: false, shift: false });
+      const bar = container.querySelector<HTMLElement>(
+        "main > div:not([aria-hidden])",
+      );
+      if (bar === null) {
+        throw new Error("no title bar to press");
+      }
       domicile.calls.length = 0;
 
-      drag(grabbing(container), { x: 40, y: 20 });
+      bar.setPointerCapture = () => undefined;
+      fireEvent.pointerDown(bar, { clientX: 0, clientY: 0, pointerId: 1 });
 
-      expect(domicile.calls.map(([kind]) => kind)).not.toContain("focusApp");
+      expect(domicile.calls.map(([kind]) => kind)).not.toContain("focusChrome");
+    });
+
+    it("gives it up for a press that is not on the window at all", async () => {
+      // The rule the one above is the exception to: a press on the desktop is
+      // a reach away from every window, and the chrome takes the keyboard.
+      const { container } = await floated({ alt: true, shift: false });
+      domicile.calls.length = 0;
+
+      fireEvent.pointerDown(container.querySelector("main") ?? container, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 1,
+      });
+
+      expect(domicile.calls.map(([kind]) => kind)).toContain("focusChrome");
     });
 
     it("makes the window see-through while it is being dragged", async () => {

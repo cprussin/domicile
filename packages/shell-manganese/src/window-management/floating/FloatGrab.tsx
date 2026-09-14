@@ -44,6 +44,11 @@ export const FloatGrab = ({ floating, resizes, ...moves }: Props) => {
         grabStyles,
         (drag?.resizes ?? resizes) ? resizeStyles : moveStyles,
       )}
+      // Which window this sheet belongs to, which is a fact the SDK asks for
+      // rather than a styling hook: a press here lands off every `<app>`, and
+      // left unanswered that is the chrome taking the keyboard off the window
+      // the user has just taken hold of. See `AppWindow`.
+      data-window={floating.float.id}
       style={floatPlacement(frameBox(floating.float), floating.depth)}
       {...handlers}
     />
