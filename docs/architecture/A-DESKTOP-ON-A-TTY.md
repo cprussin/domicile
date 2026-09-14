@@ -456,9 +456,9 @@ Step 2 — the embedder (the port):
       `HeadlessWindow` models every one of them.
       `scripts/test-drm-window-answers-in-dip.sh` reads the assertion out of
       the series, so it runs in the shell group without a Chromium tree
-- [ ] `PlatformScreen::IsScreenSaverActive` and `CalculateIdleTime` on
-      `DrmScreen`. Not fatal — they log `Not implemented reached` on every
-      startup — and `HeadlessScreen` overrides both
+- [x] `PlatformScreen::IsScreenSaverActive` and `CalculateIdleTime` on
+      `DrmScreen`. They were not fatal, only a `Not implemented reached` in
+      every startup log; both are answered now, with two unit tests
 - [x] a minimal modeset driver: snapshots → `DisplayConfigurationParams` →
       `DrmNativeDisplayDelegate::Configure`, and the same again on a udev
       hotplug event, without `//ui/display/manager` — patch `0016`. The

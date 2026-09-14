@@ -362,8 +362,8 @@ decides whether an item is waiting or workable.
    rendering on one card and scanning out on another, which ozone/drm cannot do.
    So "does the modeset path run" needs no new hardware and "does a desktop
    appear" needs a monitor on `card1` or a different machine.
-   `A-DESKTOP-ON-A-TTY.md` carries the numbers. Treat the costing as a floor: the last audit read
-   five edits and the compiler found eight.
+   `A-DESKTOP-ON-A-TTY.md` carries the numbers. Treat the costing as a floor:
+   the last audit read five edits and the compiler found eight.
 
    Both halves have landed, and a desktop is still a window inside an existing
    Wayland session or headless -- not because the engine cannot be told to take
