@@ -14,6 +14,7 @@ import { css, cx } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import { surfaceBox } from "./floating/float";
 import { useHistoryAvailability } from "./useHistoryAvailability";
+import { useReclaimFocus } from "./useReclaimFocus";
 import type { Floating } from "./window-state";
 import {
   clickThroughStyles,
@@ -147,6 +148,13 @@ export const BrowserWindow = ({
       view.focus();
     }
   }, [domicile, focused, view]);
+
+  // And keeps it, which is a separate job: the effect above runs when this
+  // window becomes the one being worked in, and the chrome can take the focus
+  // off the page long after that without this window hearing anything. Closing
+  // another window is the case that costs the user their keyboard — see
+  // `useReclaimFocus`.
+  useReclaimFocus(view, focused);
 
   // Every control here drives the view element, which is rendered by this
   // component and so is attached by the time anyone can press one. A press

@@ -781,6 +781,25 @@ describe("Shell", () => {
 
       expect(domicile.calls).toStrictEqual([]);
     });
+
+    // THE OTHER HALF OF THAT, AND THE ONE THE CHROME HAS TO ANSWER ITSELF. A
+    // client's window recovers from the chrome taking the keyboard on its own:
+    // the seat is the compositor's, the shell is told where it went, and the
+    // window it is still working in asks for it back. A browser window's
+    // keyboard *is* the page's focus, and there is no message when that lands
+    // on nothing — which is exactly what closing a tab does, because the X
+    // takes the focus on the press and is unmounted before the press ends.
+    it("puts a browser window's page back in focus when closing a tab drops it", async () => {
+      const { container } = renderShell();
+      domicile.emit("app_appeared", { app_id: "one", title: "One" });
+      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
+      const view = container.querySelector("webview");
+
+      await userEvent.click(screen.getByRole("button", { name: "Close One" }));
+      domicile.emit("app_closed", { app_id: "one" });
+
+      expect(document.activeElement).toBe(view);
+    });
   });
 
   describe("a floating window's title bar", () => {
