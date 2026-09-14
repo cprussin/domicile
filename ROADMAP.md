@@ -149,6 +149,37 @@ decides whether an item is waiting or workable.
    exactly this moment, with a header saying it is redundant and why; it comes
    out with the rest.
 
+   **What is not yet arranged is the thing that would catch it going wrong.**
+   `guard-shell.sh` is the only check that drives the native tag end to end,
+   and it runs in `engine.yml`, whose path filter is
+   `packages/domicile-engine/**` plus this workflow and its scripts.
+   `packages/chrome-sdk/**` is not in it -- so the deletion, which is entirely
+   inside the SDK, would merge with the unit tests and nothing that puts a
+   window on a screen. That is the same hole the missing `GetElementType`
+   override went through, described three paragraphs up, and it is worth
+   noticing *before* rather than after this time.
+
+   Three ways out, and the choice is a cost decision rather than a technical
+   one. Add `packages/chrome-sdk/**` to the filter and every SDK change queues
+   behind the most expensive job in the repository, which can be hours. Make
+   the shell guard dispatchable on its own, the way `engine-drm-probe.yml`
+   already is for the same reason. Or run it deliberately once, against the
+   deletion, and merge on that. The second is the shape the repository has
+   already chosen once; the first is the only one that keeps working when
+   somebody forgets.
+
+   A FOURTH THING IS ALSO TRUE and narrows what can be deleted: `measure` is
+   not only the placement path. `pointer-input.ts` asks it for the element's
+   `{size, transform}` and inverts that affine in `surfaceLocal`, which is what
+   makes a click land correctly on a window under a CSS rotation rather than be
+   approximated by its axis-aligned box. `offsetX`/`offsetY` from the engine
+   answer where a window is, not what it is transformed by. So the deletion is
+   `observe-placement.ts`, `placement-timing.ts`, `report-app-sizes.ts` and
+   `resizeApp` -- the reporting path, which the engine has genuinely replaced
+   -- while `measure.ts`, `element-transform.ts` and `matrix.ts` stay until
+   something answers the pointer's question. Splitting it that way is also what
+   makes the first half verifiable in one guard run rather than two.
+
    Two things are deliberately still on the canvas path and neither blocks the
    deletion. `scripts/spike-iframe.sh` compares an `<app>` against an
    out-of-process `<iframe>`, and the re-take is what makes leaving it
