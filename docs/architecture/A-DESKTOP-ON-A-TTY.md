@@ -439,15 +439,73 @@ Step 2 — the embedder (the port):
       the two widget lookups, which needs a `DrmWindowHost` and so a GPU thread
       adapter. The `chrome --ozone-platform=drm` run below is what exercises
       those
-- [ ] `DrmWindowHost::GetBoundsInDIP` and `SetBoundsInDIP`, which are both
-      `NOTREACHED()` and are what a views browser hits next, in
-      `WindowTreeHost::InitHost()`. `HeadlessWindow` is the model
+- [x] the seven `NOTREACHED()`s in `DrmWindowHost`, which are what a views
+      browser hits next — patch `0015`. This was costed as two,
+      `GetBoundsInDIP` (reached from `WindowTreeHost::InitHost()`) and
+      `SetBoundsInDIP`; a run on the build host found that answering those two
+      only moves the crash to `SizeConstraintsChanged()`, reached from
+      `DesktopNativeWidgetAura::InitNativeWidget()`, and that with throwaway
+      bodies in **all seven** the browser process stops failing entirely. So
+      all seven landed together rather than one four-hour build at a time.
+      `HeadlessWindow` models every one of them.
+      `scripts/test-drm-window-answers-in-dip.sh` reads the assertion out of
+      the series, so it runs in the shell group without a Chromium tree
 - [ ] `PlatformScreen::IsScreenSaverActive` and `CalculateIdleTime` on
       `DrmScreen`. Not fatal — they log `Not implemented reached` on every
       startup — and `HeadlessScreen` overrides both
-- [ ] a minimal modeset driver: snapshots → `DisplayConfigurationParams` →
+- [x] a minimal modeset driver: snapshots → `DisplayConfigurationParams` →
       `DrmNativeDisplayDelegate::Configure`, and the same again on a udev
-      hotplug event, without `//ui/display/manager`
+      hotplug event, without `//ui/display/manager` — patch `0016`. The
+      arithmetic is a free function with six unit tests; what is left around it
+      is a delegate, two asynchronous callbacks and a thread
+- [ ] **find out why the GL framebuffer is incomplete on this machine.** Not an
+      embedder port, and the checklist around it should not be read as implying
+      the rest of the work is. Past the seven methods above, the browser process
+      gets as far as asking viz for a root compositor frame sink and the **GPU**
+      process dies:
+
+          [FATAL:ui/ozone/platform/drm/gpu/gbm_surface_factory.cc:356]
+            DCHECK failed: thread_checker_.CalledOnValidThread().
+          #7  ui::GbmSurfaceFactory::CreateCanvasForWidget()
+          #8  viz::OutputSurfaceProviderImpl::CreateSoftwareOutputDeviceForPlatform()
+
+      The DCHECK is the symptom; the line under it is the finding — `"Software
+      rendering mode is not supported with GBM platform"`. **ozone/drm refuses
+      software compositing by design**, and the run had fallen back to it after
+      three GPU process restarts on
+      `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` → `Unable to initialize SkSurface`
+      → `Context was lost`.
+
+      The device topology is the suspect: `card0` is **vkms**, display-only and
+      with no render node, while `renderD128` belongs to `card1`, the
+      **nvidia** GPU. Scanout and rendering are on different devices and
+      nothing has told the GPU process how to bridge them. That may be a flag
+      (`--use-gl`, `--use-angle`, `--gpu-device-id`), it may want a render-node
+      argument, or vkms plus a separate render GPU may not be a configuration
+      ozone/drm supports without work. It is the last mile between a browser
+      that runs and a browser that draws.
+
+      Reading the pin narrows it to two things to check on the host before
+      anything is written. Both sides of the split -- the browser process
+      choosing a card and the GPU process choosing an EGL device -- ask
+      `GetPreferredDrmDrivers()`, and at this pin that returns
+      `{"i915", "amdgpu", "virtio_gpu"}` with no nvidia entry and no vkms
+      entry. So both fall through to "the first one", which is `card0`:
+
+      - `drm_util.cc:1247` is the list; `drm_display_host_manager.cc:222`
+        (`GetPrimaryDisplayCardPath`) and `gbm_surface_factory.cc:74`
+        (`GetPreferredEGLDevice`) are the two callers, and each falls back to
+        `cards[0]` / `devices[0]`
+      - `GetValidDisplayCards` keeps only cards reporting `count_crtcs > 0`.
+        **`nvidia-drm` reports none unless `nvidia_drm.modeset=1` is on the
+        kernel command line**, so without it the nvidia card is not merely
+        unpreferred, it is filtered out and vkms is the only candidate left
+
+      Two cheap checks on the host settle which of those is biting: whether
+      `nvidia_drm.modeset=1` is set, and whether the nvidia card node reports
+      CRTCs. If both are already true, the remaining question is ordering, and
+      not loading vkms is a smaller experiment than teaching
+      `GetPreferredDrmDrivers()` about a driver upstream has never listed
 - [ ] VT handling: watch the VT, call `RelinquishDisplayControl` on switch away
       and `TakeDisplayControl` on switch back
 - [ ] `EVIOCREVOKE` (or a libseat-shaped equivalent) on the evdev fds at those
