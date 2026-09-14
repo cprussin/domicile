@@ -58,6 +58,19 @@ cd "$CHROMIUM" || exit 1
 # Regenerated whenever the arguments here change, which `gn gen` decides for
 # itself by comparing them: passing --args every time is what makes editing
 # this file take effect without anybody remembering to delete the directory.
+#
+# THE DEFAULT PLATFORM IS NOT CHANGED BY ADDING ONE, and that is the whole
+# safety argument for `ozone_platform_drm = true` below. `ozone_platform` is
+# unset here, so `generate_ozone_platform_list.py` never reorders -- it only
+# moves a platform to the front when `--default` names one in the list. What is
+# left is `//ui/ozone/BUILD.gn`'s own order, which appends headless (line 37)
+# before drm (line 43) before wayland (line 56). So headless stays first, stays
+# the default, and drm is a platform `--ozone-platform=drm` can ask for rather
+# than one anything gets by accident.
+#
+# It is ordered after `DrmScreen` (patch 0013) and the modeset driver (patch
+# 0016) on purpose: a platform with no embedder behind it turns a clear refusal
+# into a crash. Both are in the series now.
 gn gen "$OUT" --args='
   is_debug = false
   is_component_build = false
@@ -69,6 +82,7 @@ gn gen "$OUT" --args='
   ozone_auto_platforms = false
   ozone_platform_wayland = true
   ozone_platform_headless = true
+  ozone_platform_drm = true
 ' || exit 1
 
 # `chrome` is the browser; `domicile_engine` is the library the compositor

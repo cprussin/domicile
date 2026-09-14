@@ -6,29 +6,30 @@
 # Small and fast rather than shippable: a component build with no symbols and
 # every Ozone platform off but the three this needs.
 #
-# Wayland and headless, and NOT drm -- now by choice rather than by refusal.
-# `ozone_platform_drm` is what would make a tty a display, and it USED to be
-# unsettable here: at this Chromium pin `ui/ozone/platform/drm/BUILD.gn` opened
-# with `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`, and
-# `//ui/ozone/BUILD.gn` makes `platform/drm:gbm` a dependency the moment the
-# argument is true, so `gn gen` refused before anything was compiled. Measured,
-# not read: run 34152521286.
-#
-# Patch `0012` relaxed that assert, and run 34623575435 measured the result --
-# `gn gen` accepts the argument and `//ui/ozone` compiles and links with it. So
-# what keeps drm out of this build is no longer the tree. It is that there is
-# nothing behind the platform yet: `OzonePlatformDrm::CreateScreen` is
-# `NOTREACHED()` and nothing modesets without `//ui/display/manager`. Building
-# the platform in before that embedder exists trades a clear refusal for a
-# crash. `docs/architecture/A-DESKTOP-ON-A-TTY.md` tracks that work.
-#
 #   wayland   nested in an existing session — a window, like running sway
 #             inside sway. What a developer has, and what CI drives
 #   headless  no display at all, which is what `crux` has
+#   drm       a tty, with no display server underneath at all
 #
 # Headless is not part of the design; it is what the measurement machine needs.
 # crux has no display server and no Wayland compositor, so without it the engine
 # cannot be started at all and scripts/spike.sh has nothing to talk to.
+#
+# DRM WAS UNSETTABLE HERE UNTIL RECENTLY, and the road to it is worth keeping
+# because each step was measured rather than read. At this Chromium pin
+# `ui/ozone/platform/drm/BUILD.gn` opened with `assert(is_chromeos, "Ozone DRM
+# platform is ChromeOS-only")`, and `//ui/ozone/BUILD.gn` makes
+# `platform/drm:gbm` a dependency the moment the argument is true, so `gn gen`
+# refused before anything was compiled -- run 34152521286. Patch `0012` relaxed
+# that assert and run 34623575435 measured the result: `gn gen` accepts the
+# argument and `//ui/ozone` compiles and links with it.
+#
+# What kept it out after that was that nothing stood behind the platform:
+# `OzonePlatformDrm::CreateScreen` was `NOTREACHED()` and nothing modesets
+# without `//ui/display/manager`. Patch `0013` answered the first and `0016` the
+# second, so the embedder exists and the argument goes on.
+# `docs/architecture/A-DESKTOP-ON-A-TTY.md` tracks what is left, which is a GPU
+# question rather than an embedder one.
 set -u
 
 CHROMIUM="${1:-}"
@@ -50,6 +51,19 @@ cd "$CHROMIUM" || exit 1
 # skipped on the one that runs the guards — which means CI went green having
 # built with the old arguments and said nothing. The release script has always
 # done it this way and says so; this one is the copy that drifted.
+#
+# THE DEFAULT PLATFORM IS NOT CHANGED BY ADDING ONE, and that is the whole
+# safety argument for `ozone_platform_drm = true` below. `ozone_platform` is
+# unset here, so `generate_ozone_platform_list.py` never reorders -- it only
+# moves a platform to the front when `--default` names one in the list. What is
+# left is `//ui/ozone/BUILD.gn`'s own order, which appends headless (line 37)
+# before drm (line 43) before wayland (line 56). So headless stays first, stays
+# the default, and drm is a platform `--ozone-platform=drm` can ask for rather
+# than one anything gets by accident.
+#
+# It is ordered after `DrmScreen` (patch 0013) and the modeset driver (patch
+# 0016) on purpose: a platform with no embedder behind it turns a clear refusal
+# into a crash. Both are in the series now.
 gn gen "$OUT" --args='
   is_debug = false
   symbol_level = 0
@@ -58,6 +72,7 @@ gn gen "$OUT" --args='
   ozone_auto_platforms = false
   ozone_platform_wayland = true
   ozone_platform_headless = true
+  ozone_platform_drm = true
 ' || exit 1
 
 # `domicile_css_parity` alongside the other producer, because `guard-css-and-resize.sh`
