@@ -387,8 +387,8 @@ export const reduceWindows = (
 // The compositor moving the keyboard onto a window is the user working in it,
 // so the shell follows. Clicking is the only way to reach a floating window
 // whose tab is not the selected one, and without this the rail would go on
-// highlighting whatever the user had left — and Alt+Tab, which acts on the
-// window they are working in, would float the wrong one.
+// highlighting whatever the user had left — and Alt+Shift+Tab, which acts on
+// the window they are working in, would float the wrong one.
 //
 // Focus that landed on the chrome, or on a window the shell has not been told
 // about yet, leaves the active window where it was: there is nothing better to

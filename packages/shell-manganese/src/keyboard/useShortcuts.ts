@@ -19,12 +19,16 @@ const ALT_ENTER: DomicileShortcut = {
   shiftKey: false,
 };
 
-/** Alt+Tab, the same way. 15 is Tab. */
-const ALT_TAB: DomicileShortcut = { ...ALT_ENTER, keycode: 15 };
+/** Alt+Shift+Tab, the same way. 15 is Tab. */
+const ALT_SHIFT_TAB: DomicileShortcut = {
+  ...ALT_ENTER,
+  keycode: 15,
+  shiftKey: true,
+};
 
 type Options = {
   domicile: DomicileClient;
-  /** Alt+Tab: take the window the user is working in out of the rail, or put it back. */
+  /** Alt+Shift+Tab: take the window the user is working in out of the rail, or put it back. */
   onFloat: () => void;
   /** Alt+Enter: launch a terminal, or with Shift open a browser window. */
   onLaunch: (withShift: boolean) => void;
@@ -46,7 +50,7 @@ export const useShortcuts = ({ domicile, onFloat, onLaunch }: Options) => {
   useEffect(() => {
     domicile.grabShortcut(ALT_ENTER);
     domicile.grabShortcut({ ...ALT_ENTER, shiftKey: true });
-    domicile.grabShortcut(ALT_TAB);
+    domicile.grabShortcut(ALT_SHIFT_TAB);
     // `on` returns the client for chaining, so it is deliberately not returned
     // as a cleanup — there is one handler per message type and re-registering
     // replaces it.
@@ -54,7 +58,7 @@ export const useShortcuts = ({ domicile, onFloat, onLaunch }: Options) => {
     // The press arrives as the same dictionary that claimed it, so this
     // compares the two field for field without parsing anything.
     domicile.on("shortcut", ({ keycode, shiftKey }) => {
-      if (keycode === ALT_TAB.keycode) {
+      if (keycode === ALT_SHIFT_TAB.keycode) {
         onFloat();
       } else {
         onLaunch(shiftKey);
@@ -81,12 +85,18 @@ export const useShortcuts = ({ domicile, onFloat, onLaunch }: Options) => {
             }
             break;
           }
+          // Shift is as much of this chord as Alt is, so a bare Alt+Tab is a
+          // combination nobody claimed and the page keeps it — the same thing
+          // the compositor does with one, and the reason the claim above is
+          // what this compares against rather than a `true` written twice.
           case "Tab": {
-            // And the browser's own focus ring, which Tab would otherwise move
-            // out from under the window the user is floating.
-            event.preventDefault();
-            if (!event.repeat) {
-              onFloat();
+            if (event.shiftKey === ALT_SHIFT_TAB.shiftKey) {
+              // And the browser's own focus ring, which Tab would otherwise
+              // move out from under the window the user is floating.
+              event.preventDefault();
+              if (!event.repeat) {
+                onFloat();
+              }
             }
             break;
           }

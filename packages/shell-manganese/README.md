@@ -89,16 +89,21 @@ theirs with `addEventListener` on a ref.
   scheme is loaded over https) and follows the page wherever it goes; the
   window's tab is labeled with the site it is showing. Back and forward are
   live only while the page's history reaches that way.
-- **Alt+Tab** — float the window you are working in, or put it back.
+- **Alt+Shift+Tab** — float the window you are working in, or put it back.
   **Alt+drag** moves a floating window; **Alt+Shift+drag** resizes it. See
   below.
 
 ## Floating a window
 
-**Alt+Tab** takes the window you are working in out of the rail, where it
+**Alt+Shift+Tab** takes the window you are working in out of the rail, where it
 floats over the stage in a box of its own; pressing it again puts the window
 back. Each float opens cascaded past the ones already out, and comes to the
 front when you click it or pick its tab.
+
+The Shift that floats a window is spent on the chord. Shift is also the resize
+modifier, and you are still holding both when the window lands — so until you
+let go of Shift and press it again, an Alt+drag moves the window rather than
+driving its corner.
 
 **A browser window comes to the front from a click anywhere in it**, its
 address bar and its page alike, and the two halves say so differently. The
@@ -194,7 +199,7 @@ behind it.
 A floated window keeps its tab. The tab is how it is reached when it is behind
 something, and a window with no tab and nothing selected is a window you have
 lost — so picking the tab of a floating window brings it to the front rather
-than putting it back on the stage. Alt+Tab is what changes the mode.
+than putting it back on the stage. Alt+Shift+Tab is what changes the mode.
 
 Both combinations are claimed twice over, because two different things can be
 holding the keyboard when the user presses one. The page listens for its own

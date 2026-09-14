@@ -36,7 +36,7 @@ export const FloatGrab = ({ floating, resizes, ...moves }: Props) => {
   });
   return (
     // Presentational, and `aria-hidden` for that reason: everything this
-    // offers is offered by the tab rail and by Alt+Tab as well, so there is
+    // offers is offered by the tab rail and by Alt+Shift+Tab as well, so there is
     // nothing here a keyboard cannot reach elsewhere.
     <div
       aria-hidden
