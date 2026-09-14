@@ -1,0 +1,142 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 13 Sep 2026 13:43:40 -0700
+Subject: [PATCH] domicile: a PlatformScreen over the displays DRM reports
+
+OzonePlatformDrm::CreateScreen() and InitScreen() were both NOTREACHED(). On
+ChromeOS ash installs display::Screen itself and never asks for one; a views
+browser on Linux goes DesktopScreenOzone -> ScreenOzone -> CreateScreen() and
+hits them on startup, which is why the platform builds today but could not be
+started. DrmScreen is what stands behind them.
+
+It is modeled on HeadlessScreen rather than WaylandScreen, for the reason
+docs/architecture/A-DESKTOP-ON-A-TTY.md gives: headless has no window-system
+output protocol either, so it builds its display list from nothing, and DRM is
+that shape with real snapshots in place of the fiction. Six of PlatformScreen's
+nine pure virtuals are delegations to display::DisplayList and
+ui/display/display_finder.h, and none of //ui/display/manager is ported --
+DisplayChangeObserver spends 478 lines turning snapshots into ManagedDisplayInfo,
+which is ChromeOS product surface that nothing here reads. The conversion this
+needs is DisplaySnapshot -> display::Display directly, and it is three free
+functions at the top of drm_screen.cc.
+
+Two things that are not obvious from the interface:
+
+A screen with no displays is not an answer PlatformScreen can give.
+HeadlessScreen CHECKs its primary iterator and aura dereferences the result, so
+"nothing plugged in" -- which is what all four connectors on the machine this
+was written on report -- has to be a display rather than an empty list.
+DisplaysFromSnapshots answers with one 1024x768 display in that case, and
+clearing the NOTREACHED() without it would have moved the crash rather than
+removed it.
+
+DrmWindowHostManager::GetWindow() is NOTREACHED() on a widget it does not hold,
+where every other ozone platform's manager returns null.
+PlatformScreen::GetDisplayForAcceleratedWidget is handed widgets belonging to
+other screens, so it cannot pass one through unchecked. HasWindow() is the
+non-fatal lookup beside it, and it is the only edit this makes to a file
+Chromium owns besides the two NOTREACHED()s and the BUILD.gn entries.
+
+Hotplug needs no observer code: DisplayList notifies from AddOrUpdateDisplay and
+RemoveDisplay, so OnDisplaysChanged replacing the list is the whole path.
+
+The modeset driver that calls OnDisplaysChanged with real snapshots is the next
+item in A-DESKTOP-ON-A-TTY.md's step 2; until it lands, InitScreen calls it with
+none and the screen answers with the displayless display above.
+---
+ ui/ozone/platform/drm/BUILD.gn                  |  3 +++
+ .../drm/host/drm_window_host_manager.cc         |  4 ++++
+ .../platform/drm/host/drm_window_host_manager.h |  8 ++++++++
+ ui/ozone/platform/drm/ozone_platform_drm.cc     | 17 +++++++++++++++--
+ 4 files changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index b70f88a48b45b..ffee39089df7d 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -120,6 +120,8 @@ source_set("gbm") {
+     "host/drm_window_host.cc",
+     "host/drm_window_host.h",
+     "host/drm_window_host_manager.cc",
++    "domicile/drm_screen.cc",
++    "domicile/drm_screen.h",
+     "host/drm_window_host_manager.h",
+     "host/gpu_thread_adapter.h",
+     "host/gpu_thread_observer.h",
+@@ -230,6 +232,7 @@ source_set("gbm_unittests") {
+     "gpu/mock_drm_modifiers_filter.cc",
+     "gpu/mock_drm_modifiers_filter.h",
+     "gpu/proxy_helpers_unittest.cc",
++    "domicile/drm_screen_unittest.cc",
+   ]
+ 
+   # `ui/display/manager/test/fake_display_snapshot.h` is the one thing this
+diff --git a/ui/ozone/platform/drm/host/drm_window_host_manager.cc b/ui/ozone/platform/drm/host/drm_window_host_manager.cc
+index c2b53e7a5e1b1..24f44e1cdb717 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host_manager.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host_manager.cc
+@@ -51,6 +51,10 @@ DrmWindowHost* DrmWindowHostManager::GetWindow(gfx::AcceleratedWidget widget) {
+   NOTREACHED() << "Attempting to get non-existing window " << widget;
+ }
+ 
++bool DrmWindowHostManager::HasWindow(gfx::AcceleratedWidget widget) const {
++  return window_map_.find(widget) != window_map_.end();
++}
++
+ DrmWindowHost* DrmWindowHostManager::GetWindowAt(const gfx::Point& location) {
+   for (auto it = window_map_.begin(); it != window_map_.end(); ++it)
+     if (it->second->GetBoundsInPixels().Contains(location))
+diff --git a/ui/ozone/platform/drm/host/drm_window_host_manager.h b/ui/ozone/platform/drm/host/drm_window_host_manager.h
+index ca23c512ee008..32c035ba3e515 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host_manager.h
++++ b/ui/ozone/platform/drm/host/drm_window_host_manager.h
+@@ -44,6 +44,14 @@ class DrmWindowHostManager {
+   // only be called if a valid window has been associated.
+   DrmWindowHost* GetWindow(gfx::AcceleratedWidget widget);
+ 
++  // Domicile's engine fork: whether |widget| has a window, asked without
++  // consequence. GetWindow() above is NOTREACHED() on a widget it does not
++  // hold -- every other ozone platform's manager returns null instead -- and
++  // PlatformScreen::GetDisplayForAcceleratedWidget is handed widgets it does
++  // not own. Asking first is what keeps that a lookup rather than a crash in
++  // the browser process. See ui/ozone/platform/drm/domicile/drm_screen.cc.
++  bool HasWindow(gfx::AcceleratedWidget widget) const;
++
+   // Returns the window containing the specified screen location, or NULL.
+   DrmWindowHost* GetWindowAt(const gfx::Point& location);
+ 
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index fb0426dcfa31b..662ee090043a2 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -46,6 +46,7 @@
+ #include "ui/ozone/platform/drm/host/drm_display_host_manager.h"
+ #include "ui/ozone/platform/drm/host/drm_native_display_delegate.h"
+ #include "ui/ozone/platform/drm/host/drm_window_host.h"
++#include "ui/ozone/platform/drm/domicile/drm_screen.h"
+ #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
+ #include "ui/ozone/platform/drm/host/host_drm_device.h"
+ #include "ui/ozone/platform/drm/mojom/drm_device.mojom.h"
+@@ -91,8 +92,20 @@ class OzonePlatformDrm : public OzonePlatform {
+     return event_factory_ozone_->input_controller();
+   }
+ 
+-  std::unique_ptr<PlatformScreen> CreateScreen() override { NOTREACHED(); }
+-  void InitScreen(PlatformScreen* screen) override { NOTREACHED(); }
++  // Domicile's engine fork. On ChromeOS ash installs display::Screen itself
++  // and never asks; a views browser on Linux goes DesktopScreenOzone ->
++  // ScreenOzone -> CreateScreen() and hit the NOTREACHED() that was here.
++  // See docs/architecture/A-DESKTOP-ON-A-TTY.md in the Domicile repository.
++  std::unique_ptr<PlatformScreen> CreateScreen() override {
++    return std::make_unique<DrmScreen>(window_manager_.get());
++  }
++  void InitScreen(PlatformScreen* screen) override {
++    // The display list arrives from DrmNativeDisplayDelegate, which the
++    // modeset driver owns; until it has run there are no snapshots, and
++    // DrmScreen answers with the displayless fallback its header describes
++    // rather than with nothing.
++    static_cast<DrmScreen*>(screen)->OnDisplaysChanged({});
++  }
+ 
+   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
+     return drm_device_connector_.get();
