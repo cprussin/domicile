@@ -66,6 +66,16 @@ void DrmModeset::OnDisplaySnapshotsInvalidated() {
   // than an empty body with no comment.
 }
 
+bool ModesetWouldChangeAnything(
+    const std::vector<display::DisplayConfigurationParams>& asked,
+    const std::vector<display::DisplayConfigurationParams>& wanted) {
+  // `DisplayConfigurationParams::operator==` compares the id, the origin, the
+  // mode and the VRR flag, which is every field a modeset request carries. So
+  // equal vectors are the same request, and the same request against an
+  // unchanged report is the loop.
+  return asked != wanted;
+}
+
 void DrmModeset::OnDisplaysReceived(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots) {
@@ -80,6 +90,16 @@ void DrmModeset::OnDisplaysReceived(
     // on a machine with no panel reports, and `DrmScreen` has already been told.
     return;
   }
+
+  if (!ModesetWouldChangeAnything(asked_, params)) {
+    // Almost certainly a hotplug this driver caused by answering the last one.
+    // Nothing is wrong and nothing is skipped: the screen has already been
+    // told, and the CRTCs are being asked for the modes they already have.
+    VLOG(1) << "domicile: the displays read the same as last time; not "
+               "modesetting again";
+    return;
+  }
+  asked_ = params;
 
   delegate_->Configure(
       params,
