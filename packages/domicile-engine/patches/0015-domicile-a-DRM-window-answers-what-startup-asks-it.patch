@@ -1,0 +1,161 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 14 Sep 2026 07:42:02 +0000
+Subject: [PATCH] domicile: a DRM window answers what startup asks it
+
+`DrmWindowHost` `NOTREACHED()`s seven `PlatformWindow` methods, on a premise
+stated in two of their comments: DRM does no scaling, so callers should always
+use pixel bounds -- and by extension, nothing else on that list is ever asked
+either.
+
+That holds on ChromeOS, where `ash` never routes a window through
+`DesktopWindowTreeHostPlatform`. It is false for a views browser on Linux,
+which asks during startup: `WindowTreeHost::InitHost()` reaches
+`DesktopWindowTreeHostPlatform::CalculateRootWindowBounds()`, which calls
+`GetBoundsInDIP()`. Starting `chrome --ozone-platform=drm` dies there -- twenty
+frames past the `CreateScreen()` that `DrmScreen` was added to answer.
+
+Answering that one alone only moves the crash: `SizeConstraintsChanged()` is
+next, from `DesktopNativeWidgetAura::InitNativeWidget()`, and the rest sit
+behind ordinary window operations a running browser reaches. Stubbing all seven
+is what gets the browser process past window creation and on to asking viz for
+a root compositor frame sink, so the seven are taken together rather than one
+crash at a time.
+
+`HeadlessWindow` models every one of them, and these are its answers:
+
+  * `Show`/`Hide`/`IsVisible` -- a `bool` the first two set and the third
+    reads. A CRTC is always lit; what the browser is asking is what it last
+    said, not what the hardware is doing.
+  * `SetBoundsInDIP`/`GetBoundsInDIP` -- convert through the delegate, which is
+    the only thing that knows a scale factor.
+  * `SetRestoredBoundsInDIP`/`GetRestoredBoundsInDIP` -- store pixels, convert
+    on the way in and out, and fall back to the current bounds, which is what a
+    window that has never been maximised should restore to.
+  * `SetWindowIcons` -- nothing draws a titlebar on a CRTC, so there is nowhere
+    to put an icon.
+  * `SizeConstraintsChanged` -- a window that fills a CRTC has no constraints
+    to renegotiate.
+
+The bounds conversions preserve upstream's behaviour wherever the old premise
+genuinely held: `PlatformWindowDelegate::ConvertRectToDIP` is the identity, and
+only `DesktopWindowTreeHostPlatform` -- the delegate the views browser supplies
+-- overrides it with a real factor.
+
+Every display `DrmScreen` reports has a device scale factor of 1 today, because
+nothing sets one and a `DisplaySnapshot` does not carry one. So DIP and pixels
+are the same number until that changes, and this is the identity in practice
+rather than a conversion anybody can currently observe. It is written as the
+conversion anyway: the identity is the delegate's answer, not an assumption
+worth re-encoding here.
+---
+ ui/ozone/platform/drm/host/drm_window_host.cc | 38 +++++++++++++------
+ ui/ozone/platform/drm/host/drm_window_host.h  |  7 ++++
+ 2 files changed, 34 insertions(+), 11 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
+index f31e0aa31a990..2585e47781d11 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host.cc
+@@ -66,14 +66,18 @@ gfx::Rect DrmWindowHost::GetCursorConfinedBounds() const {
+                                            : cursor_confined_bounds_;
+ }
+ 
+-void DrmWindowHost::Show(bool inactive) {}
++void DrmWindowHost::Show(bool inactive) {
++  visible_ = true;
++}
+ 
+-void DrmWindowHost::Hide() {}
++void DrmWindowHost::Hide() {
++  visible_ = false;
++}
+ 
+ void DrmWindowHost::Close() {}
+ 
+ bool DrmWindowHost::IsVisible() const {
+-  NOTREACHED();
++  return visible_;
+ }
+ 
+ void DrmWindowHost::PrepareForShutdown() {}
+@@ -90,13 +94,21 @@ gfx::Rect DrmWindowHost::GetBoundsInPixels() const {
+ }
+ 
+ void DrmWindowHost::SetBoundsInDIP(const gfx::Rect& bounds) {
+-  // No scaling at DRM level and should always use pixel bounds.
+-  NOTREACHED();
++  // Upstream is NOTREACHED() here, on the premise that DRM does no scaling and
++  // callers should always use pixel bounds. That holds on ChromeOS, where ash
++  // never routes a window through DesktopWindowTreeHostPlatform. A views
++  // browser on Linux does, during WindowTreeHost::InitHost(), so the premise is
++  // false off ChromeOS and the NOTREACHED() is a crash on startup.
++  //
++  // The delegate is what knows the scale: PlatformWindowDelegate's own
++  // implementation is the identity, which is exactly the old premise, and
++  // DesktopWindowTreeHostPlatform overrides it with the real factor. So this
++  // preserves upstream behaviour wherever the premise really did hold.
++  SetBoundsInPixels(delegate_->ConvertRectToPixels(bounds));
+ }
+ 
+ gfx::Rect DrmWindowHost::GetBoundsInDIP() const {
+-  // No scaling at DRM level and should always use pixel bounds.
+-  NOTREACHED();
++  return delegate_->ConvertRectToDIP(bounds_);
+ }
+ 
+ void DrmWindowHost::SetTitle(const std::u16string& title) {}
+@@ -161,20 +173,24 @@ void DrmWindowHost::ConfineCursorToBounds(const gfx::Rect& bounds) {
+ }
+ 
+ void DrmWindowHost::SetRestoredBoundsInDIP(const gfx::Rect& bounds) {
+-  NOTREACHED();
++  restored_bounds_ = delegate_->ConvertRectToPixels(bounds);
+ }
+ 
+ gfx::Rect DrmWindowHost::GetRestoredBoundsInDIP() const {
+-  NOTREACHED();
++  // Falls back to the current bounds, which is what a window that has never
++  // been maximised should restore to.
++  return delegate_->ConvertRectToDIP(restored_bounds_.value_or(bounds_));
+ }
+ 
+ void DrmWindowHost::SetWindowIcons(const gfx::ImageSkia& window_icon,
+                                    const gfx::ImageSkia& app_icon) {
+-  NOTREACHED();
++  // Nothing draws a titlebar on a CRTC, so there is nowhere to put an icon.
++  // Headless answers the same way, and for the same reason.
+ }
+ 
+ void DrmWindowHost::SizeConstraintsChanged() {
+-  NOTREACHED();
++  // A window that fills a CRTC has no constraints to renegotiate. Reached
++  // during startup from DesktopNativeWidgetAura::InitNativeWidget().
+ }
+ 
+ void DrmWindowHost::OnCursorUpdate() {
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
+index 1d9a66f641da8..3250e6b7c9c23 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.h
++++ b/ui/ozone/platform/drm/host/drm_window_host.h
+@@ -8,6 +8,7 @@
+ #include <stdint.h>
+ 
+ #include <memory>
++#include <optional>
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "ui/display/types/display_snapshot.h"
+@@ -117,6 +118,12 @@ class DrmWindowHost : public PlatformWindow,
+   const gfx::AcceleratedWidget widget_;
+ 
+   gfx::Rect cursor_confined_bounds_;
++
++  // Domicile's engine fork. Upstream NOTREACHED()s the seven PlatformWindow
++  // methods a views browser asks for during startup, because ash never asks
++  // them on ChromeOS. These are what two of the answers need.
++  bool visible_ = false;
++  std::optional<gfx::Rect> restored_bounds_;
+ };
+ 
+ }  // namespace ui
