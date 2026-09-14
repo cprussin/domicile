@@ -9,6 +9,15 @@ const page = (): HTMLElement => appended(document.createElement("webview"));
 /** Something of the chrome around it that can hold the focus of its own. */
 const control = (): HTMLElement => appended(document.createElement("button"));
 
+/**
+ * What taking the focus back means here: the DOM call, plainly. A real window
+ * has more to say about its own — see `BrowserWindow` — which is why the hook
+ * is told rather than calling `focus()` itself.
+ */
+const focusIt = (element: HTMLElement) => {
+  element.focus();
+};
+
 const appended = (element: HTMLElement): HTMLElement => {
   document.body.append(element);
   return element;
@@ -34,7 +43,7 @@ describe("useReclaimFocus", () => {
     const view = page();
     const pressed = control();
     const { rerender } = renderHook(() => {
-      useReclaimFocus(view, true);
+      useReclaimFocus(view, true, focusIt);
     });
     pressed.focus();
     expect(document.activeElement).toBe(pressed);
@@ -52,7 +61,7 @@ describe("useReclaimFocus", () => {
     const view = page();
     const pressed = control();
     renderHook(() => {
-      useReclaimFocus(view, true);
+      useReclaimFocus(view, true, focusIt);
     });
     pressed.focus();
 
@@ -72,7 +81,7 @@ describe("useReclaimFocus", () => {
     const view = page();
     const reached = control();
     renderHook(() => {
-      useReclaimFocus(view, true);
+      useReclaimFocus(view, true, focusIt);
     });
 
     act(() => {
@@ -86,7 +95,7 @@ describe("useReclaimFocus", () => {
   it("stays out of it while the user is working in another window", () => {
     const view = page();
     renderHook(() => {
-      useReclaimFocus(view, false);
+      useReclaimFocus(view, false, focusIt);
     });
     expect(document.activeElement).not.toBe(view);
   });

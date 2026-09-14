@@ -119,6 +119,7 @@ export enum WindowActionKind {
   WindowDropped,
   WindowFloated,
   WindowGrabbed,
+  WindowHovered,
   WindowMoved,
   WindowRaised,
   WindowRenamed,
@@ -222,6 +223,19 @@ export const WindowAction = {
   WindowGrabbed: (id: string) => ({
     id,
     kind: WindowActionKind.WindowGrabbed as const,
+  }),
+
+  /**
+   * The pointer moved into a window, which is what makes it the window the
+   * user is working in: focus follows the cursor here.
+   *
+   * Not the same as reaching for one, which is what a click is — see
+   * {@link WindowAction.WindowSelected} and the reducer's arm for what this
+   * deliberately leaves alone.
+   */
+  WindowHovered: (id: string) => ({
+    id,
+    kind: WindowActionKind.WindowHovered as const,
   }),
 
   /** The user dragged a floating window to a new corner of the stage. */
@@ -347,6 +361,9 @@ export const reduceWindows = (
       // Taking hold of a window brings it to the front, the same way clicking
       // one does — which is what a grab is.
       return { ...raiseWindow(state, action.id), draggingId: action.id };
+    }
+    case WindowActionKind.WindowHovered: {
+      return pointAtWindow(state, action.id);
     }
     case WindowActionKind.WindowMoved: {
       return reshape(state, action.id, (float) =>
@@ -520,6 +537,11 @@ const raiseWindow = (state: WindowState, id: string): WindowState => {
   const raised = floatOf(state, id);
   if (raised === undefined) {
     throw new Error(`shell: window ${id} is not floating`);
+  } else if (state.activeId === id && state.floats.at(-1)?.id === id) {
+    // A window already in front and already the one being worked in has
+    // nowhere to be raised to. The same object, so that a click on it does
+    // not re-render every window for nothing — see `showWindow`.
+    return state;
   } else {
     return {
       ...state,
@@ -587,9 +609,38 @@ const showWindow = (state: WindowState, id: string): WindowState => {
   if (!state.windows.some((window) => window.id === id)) {
     throw new Error(`shell: no window ${id} to show`);
   } else if (floatOf(state, id) === undefined) {
-    return { ...state, activeId: id, shownId: id };
+    // The same object when the window is on the stage and being worked in
+    // already. Every press in a window is reported, because focus follows the
+    // cursor here and the window under the pointer is the active one before
+    // the click lands — so a window that swallowed the presses it thought it
+    // had already answered could never be raised by one.
+    return state.activeId === id && state.shownId === id
+      ? state
+      : { ...state, activeId: id, shownId: id };
   } else {
     return raiseWindow(state, id);
+  }
+};
+
+// The window under the pointer is the window the keyboard is in, which is the
+// whole of this shell's focus policy — one arm, because it is a policy rather
+// than a mechanism, and a shell that would rather the user clicked writes a
+// different one.
+//
+// What it does not do is raise. A window that came to the front for being
+// crossed would cover the one the user was heading for, and the pointer would
+// have rearranged the desktop on the way there. Nor does it touch the stage:
+// the pointer can only be over a window that is on screen already.
+const pointAtWindow = (state: WindowState, id: string): WindowState => {
+  if (!state.windows.some((window) => window.id === id)) {
+    throw new Error(`shell: no window ${id} to point at`);
+  } else if (state.activeId === id) {
+    // The same object for a pointer that never left: a window says this again
+    // for every part of it that is an element of its own — a browser window's
+    // address bar, its page — and none of those is the user reaching anywhere.
+    return state;
+  } else {
+    return { ...state, activeId: id };
   }
 };
 

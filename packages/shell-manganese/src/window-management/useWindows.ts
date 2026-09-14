@@ -29,6 +29,11 @@ export type Windows = WindowState & {
   drop: () => void;
   /** Take hold of the floating window `id`, which also raises it. */
   grab: (id: string) => void;
+  /**
+   * The pointer moved into the window `id`, which is what makes it the window
+   * the user is working in: focus follows the cursor here.
+   */
+  hover: (id: string) => void;
   /** Put the floating window `id`'s top-left corner at `x`,`y`. */
   move: (id: string, x: number, y: number) => void;
   /** Open a browser window on the stage and give it the stage. */
@@ -145,6 +150,10 @@ export const useWindows = (domicile: DomicileClient): Windows => {
     dispatch(WindowAction.WindowDropped());
   }, []);
 
+  const hover = useCallback((id: string) => {
+    dispatch(WindowAction.WindowHovered(id));
+  }, []);
+
   const move = useCallback((id: string, x: number, y: number) => {
     dispatch(WindowAction.WindowMoved(id, x, y));
   }, []);
@@ -170,6 +179,7 @@ export const useWindows = (domicile: DomicileClient): Windows => {
       close,
       drop,
       grab,
+      hover,
       move,
       openBrowser,
       openTerminal,
@@ -183,6 +193,7 @@ export const useWindows = (domicile: DomicileClient): Windows => {
       close,
       drop,
       grab,
+      hover,
       move,
       openBrowser,
       openTerminal,

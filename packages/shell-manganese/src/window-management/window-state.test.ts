@@ -165,6 +165,23 @@ describe("reduceWindows", () => {
       expect(state.shownId).toBe("app:a");
     });
 
+    it("stays as it is for a click on the window it is already showing", () => {
+      // Every press in a window says the user reached it, because focus
+      // follows the cursor here: a window the pointer has already made the
+      // active one still has to raise when it is clicked, so the press cannot
+      // be dropped on the way in. What keeps that from re-rendering the
+      // desktop on every click is this, rather than a component deciding for
+      // itself which of its presses are worth reporting.
+      const shown = after(
+        WindowAction.AppAppeared("one", "One"),
+        WindowAction.AppAppeared("two", "Two"),
+      );
+
+      expect(reduceWindows(shown, WindowAction.WindowSelected("app:two"))).toBe(
+        shown,
+      );
+    });
+
     it("throws when asked to show a window that is not open", () => {
       expect(() => {
         after(WindowAction.WindowSelected("app:ghost"));
@@ -406,6 +423,20 @@ describe("floating windows", () => {
     expect(state.activeId).toBe("app:two");
   });
 
+  it("stays as it is for a click on the float already in front", () => {
+    // The same press as the stage's, on a window that is already on top of
+    // the stack it would be raised to the top of.
+    const raised = after(
+      ...twoTerminals,
+      WindowAction.WindowFloated("app:one"),
+      WindowAction.WindowFloated("app:two"),
+    );
+
+    expect(reduceWindows(raised, WindowAction.WindowRaised("app:two"))).toBe(
+      raised,
+    );
+  });
+
   it("takes a floating window's box with it when it closes", () => {
     const state = after(
       ...twoTerminals,
@@ -551,5 +582,70 @@ describe("moving and resizing a floating window", () => {
     expect(() =>
       reduceWindows(state, WindowAction.WindowMoved("app:one", 1, 1)),
     ).toThrow();
+  });
+});
+
+describe("focus follows the cursor", () => {
+  const floating = (state: WindowState): string[] =>
+    state.floats.map((float) => float.id);
+
+  const twoTerminals = [
+    WindowAction.AppAppeared("one", "One"),
+    WindowAction.AppAppeared("two", "Two"),
+  ] as const;
+
+  it("works in the window the pointer moved into", () => {
+    // This shell's focus policy, and the whole of it: the window under the
+    // pointer is the window the keyboard is in. One arm, because it is a
+    // policy rather than a mechanism — a shell that would rather the user
+    // clicked writes a different one.
+    const state = after(
+      ...twoTerminals,
+      WindowAction.WindowFloated("app:two"),
+      WindowAction.WindowHovered("app:one"),
+    );
+
+    expect(state.activeId).toBe("app:one");
+    // And nothing else moved: the window the pointer is over is on screen
+    // already, so there is nothing for the stage to do about it.
+    expect(state.shownId).toBe("app:one");
+    expect(floating(state)).toStrictEqual(["app:two"]);
+  });
+
+  it("does not raise the window the pointer moved into", () => {
+    // Focus follows the cursor; the stack does not. A window that came to the
+    // front for being crossed would cover the one the user was heading for,
+    // and the pointer would have rearranged the desktop on its way there.
+    const state = after(
+      ...twoTerminals,
+      WindowAction.WindowFloated("app:one"),
+      WindowAction.WindowFloated("app:two"),
+      WindowAction.WindowHovered("app:one"),
+    );
+
+    expect(state.activeId).toBe("app:one");
+    expect(floating(state)).toStrictEqual(["app:one", "app:two"]);
+  });
+
+  it("says nothing for a pointer still in the window it was in", () => {
+    // The pointer moving inside a window says so again for every part of it
+    // that is an element of its own — a browser window's address bar, its
+    // page — and none of those is the user reaching anywhere.
+    const hovered = after(
+      ...twoTerminals,
+      WindowAction.WindowHovered("app:two"),
+    );
+
+    expect(reduceWindows(hovered, WindowAction.WindowHovered("app:two"))).toBe(
+      hovered,
+    );
+  });
+
+  it("refuses a window it does not have", () => {
+    // Nothing but the shell's own windows is laid out to be pointed at, so a
+    // window it has no record of is a wiring fault rather than a stale event.
+    expect(() =>
+      reduceWindows(NO_WINDOWS, WindowAction.WindowHovered("app:ghost")),
+    ).toThrow("no window app:ghost to point at");
   });
 });

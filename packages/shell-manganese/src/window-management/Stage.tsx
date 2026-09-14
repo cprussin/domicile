@@ -30,6 +30,8 @@ type Props = {
   onClose: (id: string) => void;
   onDrop: () => void;
   onGrab: (id: string) => void;
+  /** The pointer moved into a window, which is the user working in it. */
+  onHover: (id: string) => void;
   onMove: (id: string, x: number, y: number) => void;
   /** A browser window's page navigated, so its tab says somewhere new. */
   onRename: (id: string, url: string) => void;
@@ -62,6 +64,7 @@ export const Stage = ({
   onClose,
   onDrop,
   onGrab,
+  onHover,
   onMove,
   onRename,
   onResize,
@@ -101,6 +104,9 @@ export const Stage = ({
               focused={window.id === activeId}
               hasKeyboard={window.id === focusedId}
               key={window.id}
+              onHover={() => {
+                onHover(window.id);
+              }}
               onReach={() => {
                 onSelect(window.id);
               }}
@@ -117,6 +123,9 @@ export const Stage = ({
               floating={floating}
               focused={window.id === activeId}
               key={window.id}
+              onHover={() => {
+                onHover(window.id);
+              }}
               onNavigate={(url) => {
                 onRename(window.id, url);
               }}

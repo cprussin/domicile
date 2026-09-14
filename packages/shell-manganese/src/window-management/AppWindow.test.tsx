@@ -33,6 +33,10 @@ const stubMeasure: Measure = () => ({
   visible: true,
 });
 
+const noHover = () => {
+  // Nothing in the case moves the pointer into the window.
+};
+
 /** The props every case here shares; each overrides the one it is about. */
 const windowProps = {
   appId: "term",
@@ -42,6 +46,7 @@ const windowProps = {
   dragging: false,
   floating: undefined,
   hasKeyboard: false,
+  onHover: noHover,
   onScreen: true,
 } as const;
 
@@ -106,26 +111,51 @@ describe("AppWindow", () => {
     expect(focused).toStrictEqual([]);
   });
 
-  it("leaves a click in the window it is already in alone", () => {
-    // Reaching what has already been reached. The window the user is in is
-    // the one the shell last named, and answering its own clicks would ask it
-    // to name that window again on every press.
-    const reached: string[] = [];
-    const { container } = render(
-      <AppWindow
-        {...windowProps}
-        focused
-        onReach={() => {
-          reached.push("term");
-        }}
-      />,
-    );
+  it("reports a click in the window it is already in", async () => {
+    // Focus follows the cursor here, so the window under the pointer is the
+    // one being worked in before the press lands — and a window that answered
+    // only presses in a window it was not already in could never be raised by
+    // a click. What keeps that from re-rendering the desktop on every press is
+    // the reduction, which returns the state it was given when a reach moves
+    // nothing.
+    await new Promise<void>((resolve) => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          focused
+          onReach={() => {
+            resolve();
+          }}
+        />,
+      );
 
-    portal(container).dispatchEvent(
-      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
-    );
+      portal(container).dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+      );
+    });
+  });
 
-    expect(reached).toStrictEqual([]);
+  it("reports the window the pointer moves into", async () => {
+    // Focus follows the cursor: the window under the pointer is the window
+    // the keyboard is in, and this element is where the page hears that the
+    // pointer arrived — the client behind it is sent the same motion by the
+    // SDK, which is a different question with the same answer.
+    await new Promise<void>((resolve) => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          onHover={() => {
+            resolve();
+          }}
+          onReach={noReach}
+        />,
+      );
+
+      portal(container).dispatchEvent(
+        new MouseEvent("pointerover", { bubbles: true }),
+      );
+    });
   });
 
   it("hides the element when the window is not on the stage", () => {

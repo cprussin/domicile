@@ -767,6 +767,29 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual(["focusApp", "two"]);
     });
 
+    it("moves it to the window the pointer arrives over", async () => {
+      // Focus follows the cursor, wired end to end: the page hears the pointer
+      // arrive over a window, the shell names that window the one being worked
+      // in, and the keyboard follows it to the client. No click anywhere.
+      const { container } = renderShell();
+      domicile.emit("app_appeared", { app_id: "one", title: "One" });
+      // Floated, so that both windows are on screen at once and there is
+      // somewhere for the pointer to arrive from.
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
+      domicile.emit("app_appeared", { app_id: "two", title: "Two" });
+      domicile.emit("focus_changed", { app_id: "two" });
+      domicile.calls.length = 0;
+
+      const window = container.querySelector(`${APP_TAG_NAME}[app-id="one"]`);
+      if (window === null) {
+        throw new Error("no window one on the stage");
+      } else {
+        fireEvent.pointerOver(window);
+      }
+
+      expect(domicile.calls).toContainEqual(["focusApp", "one"]);
+    });
+
     it("leaves it with the chrome while a browser window is the active one", async () => {
       // A browser window's page holds the focus itself, so there is no client
       // to point the compositor at — and the address bar is a real text box
