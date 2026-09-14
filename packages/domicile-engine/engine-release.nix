@@ -9,7 +9,7 @@
 # flake revision names exactly one engine, and moving to a new one is a commit
 # somebody can look at.
 {
-  commit = "7f15a2e6653383e633bcb40485efaea29e2c36a4";
-  url = "https://github.com/cprussin/domicile/releases/download/engine-nightly/domicile-engine-7f15a2e-linux-x64.tar.zst";
-  hash = "sha256-E8PCqd1ptNxwFUaNCmW0vAe6Ou3jLRl97CnKTN+kfHk=";
+  commit = "795e8f49acc9738604291a4e2bba64530bf3d719";
+  url = "https://github.com/cprussin/domicile/releases/download/engine-nightly/domicile-engine-795e8f4-linux-x64.tar.zst";
+  hash = "sha256-FJxJWmncNShA5vzdOeughIZuUWG7gaXV9/nws2fbtvg=";
 }
