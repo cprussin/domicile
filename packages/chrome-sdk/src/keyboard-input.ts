@@ -4,9 +4,11 @@
 // client is a surface rather than a browsing context, so there is nothing for
 // the browser to give focus to. The SDK routes them to whichever window was last
 // reached for — a click, or a `focusApp` — and a click anywhere else hands the
-// keyboard back to the chrome.
+// keyboard back to the chrome, unless the shell says that click was for a
+// window after all: see `releaseAllowed`.
 
-import { APP_TAG_NAME } from "./app-element";
+import type { AppFocusReleaseRequest } from "./app-element";
+import { APP_FOCUS_RELEASE_REQUESTED_EVENT, APP_TAG_NAME } from "./app-element";
 import type { ElementContext } from "./element-context";
 import { focusedApp, setFocusedApp } from "./element-context";
 import { evdevFromCode } from "./input";
@@ -93,13 +95,48 @@ const releaseFocusOffApp =
   (context: ElementContext) =>
   (event: Event): void => {
     const target = event.target;
-    const onApp =
-      target instanceof Element && target.closest(APP_TAG_NAME) !== null;
-    if (!onApp && focusedApp() !== undefined) {
+    const pressed = target instanceof Element ? target : undefined;
+    const onApp = pressed?.closest(APP_TAG_NAME) ?? null;
+    const appId = focusedApp();
+    if (
+      onApp === null &&
+      appId !== undefined &&
+      releaseAllowed(appId, pressed)
+    ) {
       setFocusedApp(undefined);
       context.domicile.focusChrome();
     }
   };
+
+/**
+ * Whether the window `appId` is to give the keyboard up for this press.
+ *
+ * The shell's to answer, because the SDK cannot: a press that landed off every
+ * `<app>` landed on the page, and nothing in it says whether that page was the
+ * desktop behind the windows or the title bar of the window being asked about.
+ * Left unanswered — a shell with no chrome of its own, which is most of
+ * them — it is a yes, so this changes nothing for a shell that has never heard
+ * of the event.
+ *
+ * A window whose element has left the page is not asked and not kept: there is
+ * nothing to dispatch on, and a keyboard held for a window that is gone is the
+ * desktop that stopped listening {@link keyboardTarget} exists to prevent.
+ */
+const releaseAllowed = (
+  appId: string,
+  pressed: Element | undefined,
+): boolean => {
+  const element = appElement(appId);
+  return (
+    element === undefined ||
+    element.dispatchEvent(
+      new CustomEvent<AppFocusReleaseRequest>(
+        APP_FOCUS_RELEASE_REQUESTED_EVENT,
+        { bubbles: true, cancelable: true, detail: { appId, pressed } },
+      ),
+    )
+  );
+};
 
 /**
  * Which client a press belongs to, or `undefined` for the chrome's own page.
@@ -133,7 +170,16 @@ const keyboardTarget = (context: ElementContext): string | undefined => {
 };
 
 /** Whether a window for `appId` is still in the document. */
-const onPage = (appId: string): boolean =>
-  [...document.querySelectorAll(APP_TAG_NAME)].some(
+const onPage = (appId: string): boolean => appElement(appId) !== undefined;
+
+/**
+ * The `<app>` showing `appId`, or `undefined` when none is on the page.
+ *
+ * Read off the attribute rather than the `appId` property, for the reason the
+ * rest of the delegation does: a shell running on stock Chromium gets an
+ * `HTMLUnknownElement` with none of the fork's properties on it.
+ */
+const appElement = (appId: string): Element | undefined =>
+  [...document.querySelectorAll(APP_TAG_NAME)].find(
     (element) => element.getAttribute("app-id") === appId,
   );

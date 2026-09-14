@@ -48,6 +48,10 @@ export const FloatTitleBar = ({
   return (
     <div
       className={cx(barStyles, floatEdgeStyles, focused && focusedStyles)}
+      // The window this bar belongs to, for the reason `FloatGrab` carries the
+      // same attribute: a press on it is a reach for that window, and the SDK
+      // has no other way to know.
+      data-window={floating.float.id}
       style={floatPlacement(barBox(floating.float), floating.depth)}
       {...handlers}
     >

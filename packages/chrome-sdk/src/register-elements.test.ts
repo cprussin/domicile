@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import type { AppFocusRequest } from "./app-element";
-import { APP_FOCUS_REQUESTED_EVENT, APP_TAG_NAME } from "./app-element";
+import type { AppFocusReleaseRequest, AppFocusRequest } from "./app-element";
+import {
+  APP_FOCUS_RELEASE_REQUESTED_EVENT,
+  APP_FOCUS_REQUESTED_EVENT,
+  APP_TAG_NAME,
+} from "./app-element";
 import type { DomicileClient, SurfaceSize } from "./domicile-client";
 import { focusApp } from "./focus-app";
 import { BTN_LEFT } from "./input";
@@ -455,6 +459,59 @@ describe("registerElements", () => {
       );
 
       expect(domicile.calls).toEqual([]);
+    });
+
+    it("keeps the keyboard where it is when the shell cancels the release", () => {
+      // The other half of the focus contract, and the half a shell that draws
+      // its own window chrome needs: a press on a float's title bar or on the
+      // sheet an Alt+drag is caught on lands off every `<app>`, and the SDK
+      // cannot tell that chrome from the wallpaper behind it. The shell can, so
+      // it is asked.
+      const element = mountApp("term");
+      element.dispatchEvent(pointer("pointerdown", { button: 0 }));
+      const chrome = document.createElement("div");
+      document.body.append(chrome);
+      document.addEventListener(
+        APP_FOCUS_RELEASE_REQUESTED_EVENT,
+        (event) => {
+          event.preventDefault();
+        },
+        { signal: shell.signal },
+      );
+      domicile.calls.length = 0;
+
+      chrome.dispatchEvent(pointer("pointerdown", { button: 0 }));
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, code: "KeyA" }),
+      );
+
+      expect(domicile.calls).toStrictEqual([["key", "term", 30, true]]);
+      // Released, because a key left down is left down for the whole suite.
+      document.dispatchEvent(
+        new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
+      );
+    });
+
+    it("names the window whose keyboard is being asked for", () => {
+      // The press is what a shell decides on — a float's own chrome is a reach
+      // for that window, and the desktop behind it is a reach away — and the
+      // app id is which window is about to lose the keyboard.
+      const element = mountApp("term");
+      element.dispatchEvent(pointer("pointerdown", { button: 0 }));
+      const chrome = document.createElement("div");
+      document.body.append(chrome);
+      const asked: AppFocusReleaseRequest[] = [];
+      document.addEventListener(
+        APP_FOCUS_RELEASE_REQUESTED_EVENT,
+        (event) => {
+          asked.push((event as CustomEvent<AppFocusReleaseRequest>).detail);
+        },
+        { signal: shell.signal },
+      );
+
+      chrome.dispatchEvent(pointer("pointerdown", { button: 0 }));
+
+      expect(asked).toStrictEqual([{ appId: "term", pressed: chrome }]);
     });
 
     it("clicking off every window returns the keyboard to the chrome", () => {

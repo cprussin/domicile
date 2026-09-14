@@ -54,6 +54,36 @@ export type AppFocusRequest = {
 };
 
 /**
+ * Fired on the `<app>` that holds the keyboard when a press lands off every
+ * window, and cancelable for the same reason its opposite is: the keyboard
+ * leaving a window is a move of it, and every move is the shell's to decide.
+ *
+ * Left uncanceled the keyboard goes back to the page, which is what a press on
+ * the desktop means and what a shell with no window chrome of its own wants.
+ * A shell that draws chrome *for* a window — a title bar, the sheet a drag is
+ * caught on — calls `preventDefault()` when the press landed on it: that is a
+ * reach for the window rather than away from it, and the SDK cannot tell the
+ * two apart because nothing in the press says which window a `<div>` belongs
+ * to. {@link AppFocusReleaseRequest.pressed} is what the shell reads to say.
+ *
+ * It bubbles, the way {@link APP_FOCUS_REQUESTED_EVENT} does and for the same
+ * reason.
+ */
+export const APP_FOCUS_RELEASE_REQUESTED_EVENT =
+  "domicile-focus-release-requested";
+
+/** The detail of an {@link APP_FOCUS_RELEASE_REQUESTED_EVENT}. */
+export type AppFocusReleaseRequest = {
+  /** The host's name for the client that is about to lose the keyboard. */
+  appId: string;
+  /**
+   * What the press landed on, or `undefined` where it landed on nothing an
+   * element can be read off.
+   */
+  pressed: Element | undefined;
+};
+
+/**
  * What an `<app>` is, to everything holding one.
  *
  * Global rather than exported, and declared rather than imported, for the same

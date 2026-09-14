@@ -30,10 +30,13 @@ It provides these:
   was last reached for. All of it is delegated from `document` over
   `closest("app")`: the tag is the engine's, so there is no element class to hang
   any of it on, and nothing here is registered. A click on a window fires a
-  cancelable `domicile-focus-requested` and then focuses the client, so a shell
-  that wants focus to be its own decision calls `preventDefault()` and a shell
-  with no opinion needs to know nothing about it.
-- **`<app>`** (`./app-element`) — the tag name, the focus-request event, and the
+  cancelable `domicile-focus-requested` and then focuses the client, and a press
+  that lands off every window fires a cancelable
+  `domicile-focus-release-requested` on the window that holds the keyboard and
+  then hands it back to the page — so a shell that wants focus to be its own
+  decision calls `preventDefault()` on either, and a shell with no opinion needs
+  to know nothing about them.
+- **`<app>`** (`./app-element`) — the tag name, the two focus events, and the
   TypeScript for the element, which is the fork's. The surface embed and the size
   a client is configured at are both the layout box's and the engine reports
   them; there is nothing to call.
@@ -97,26 +100,30 @@ of. Bind the events on a ref.
 
 ### Knowing which modifiers are held
 
-`wl_keyboard.modifiers` goes to whatever holds the keyboard, so the moment a
-window is focused the page stops hearing about the Alt the user is holding —
-which is exactly when a shell wants to know, because that is when it would
-begin an alt-drag. The host says instead:
+**Read them off your own key events.** The desktop is the chrome's window, so
+the page hears every key the user presses whatever the compositor's seat is
+pointed at — that is how `registerElements` forwards a keystroke to a client in
+the first place:
 
 ```ts
-domicile.on("modifiers", ({ altKey }) => {
+const follow = (event: KeyboardEvent) => {
   // While Alt is held, let the pointer reach the page rather than the window
   // it is over: `pointer-events: none` is what tells the compositor the
   // window is not taking clicks, and it hit-tests accordingly.
-  portal.style.pointerEvents = altKey ? "none" : "";
-});
+  portal.style.pointerEvents = event.altKey ? "none" : "";
+};
+document.addEventListener("keydown", follow);
+document.addEventListener("keyup", follow);
 ```
 
-Sent when the set changes, so a modifier held down arrives once and letting go
-arrives once; an ordinary key never appears here at all.
-
-Unlike `grabShortcut` this claims nothing — the focused window is given the
-key as well, because a modifier the chrome had to take would be one no window
-could ever use.
+**Not off the host's `modifiers` message, today.** It reports the compositor's
+seat, and the seat only knows the keys this page forwarded to it — which is
+only the keys pressed while a client held the keyboard. A modifier pressed
+while the chrome held it never reaches the seat, and the next forwarded key
+makes the message deny it: a shell that believed the message over its own
+keystrokes read a held Alt as let go of. The message is still sent, and is what
+will say so on the day input comes off DRM rather than out of the browser; it
+cannot know more than this page until then.
 
 ## Dependencies
 

@@ -299,6 +299,33 @@ something is always in it, so "this window has it" is an instruction the
 compositor can carry out and "this window does not" is not one. The keyboard
 leaves a window when another takes it or when a click lands on the chrome.
 
+**A click on chrome you drew for a window** is the same question the other way
+round, and it is the one a shell with window furniture has to answer. The SDK
+reads a press that lands off every `<app>` as the page asking for the keyboard
+back, which is right for a press on the desktop and wrong for a press on a
+window's own title bar — or on the sheet an alt-drag is caught on. Those land
+off every `<app>` too, and nothing in a press says which window a `<div>`
+belongs to. So it asks, with a cancelable `domicile-focus-release-requested` on
+the `<app>` that holds the keyboard:
+
+```ts
+import type { AppFocusReleaseRequest } from "@domicile/chrome-sdk/app-element";
+import { APP_FOCUS_RELEASE_REQUESTED_EVENT } from "@domicile/chrome-sdk/app-element";
+
+document.addEventListener(APP_FOCUS_RELEASE_REQUESTED_EVENT, (event) => {
+  const { appId, pressed } = (event as CustomEvent<AppFocusReleaseRequest>)
+    .detail;
+  if (isChromeFor(appId, pressed)) {
+    event.preventDefault();
+  }
+});
+```
+
+Left alone the keyboard goes back to the page, so a shell whose windows have no
+chrome of their own needs to know nothing about this. `shell-manganese` marks
+each float's bar and grab sheet with the window it belongs to and reads that
+back here, which is how dragging a window no longer takes the keyboard off it.
+
 **If you write JSX**, note that `<app>` has no hyphen in its name, so React
 treats the tag as an ordinary HTML element: it writes neither a property it does
 not recognize nor an `on…` prop for an event it has never heard of. Bind this
