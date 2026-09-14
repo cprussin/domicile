@@ -45,6 +45,14 @@ type Props = {
   /** Whether the user is working in this window, so it takes the keyboard. */
   focused: boolean;
   /**
+   * Whether the compositor says this window is the one it is typing into.
+   *
+   * Not the same fact as {@link Props.focused}, which is the shell's own, and
+   * the difference is the whole reason this is a prop: the two come apart
+   * whenever something takes the keyboard without the shell saying so.
+   */
+  hasKeyboard: boolean;
+  /**
    * Called when the user clicks into this window.
    *
    * The SDK would move the keyboard here by itself — a click on a client's
@@ -92,6 +100,7 @@ export const AppWindow = ({
   dragging,
   floating,
   focused,
+  hasKeyboard,
   onReach,
   onScreen,
 }: Props) => {
@@ -102,14 +111,24 @@ export const AppWindow = ({
   // Only that way round, which is why this is not `focused ? … : …`. Which
   // client holds the keyboard is one seat's answer and something is always in
   // it: "this window has it" is an instruction the compositor can carry out, and
-  // "this window does not" is not one. The keyboard leaves here when another
-  // window takes it or when a click lands on the chrome, both of which say where
-  // it went — so rendering `false` says nothing.
+  // "this window does not" is not one — so rendering `false` says nothing.
+  //
+  // Said again whenever the compositor answers with somewhere else, which is
+  // what `hasKeyboard` is for. The shell's idea of the active window and the
+  // seat come apart on their own: a press on the rail, on the wallpaper, on
+  // anything of the chrome's hands the keyboard back to the page, and the
+  // window being worked in has not changed — so nothing else the shell watches
+  // moves, and before this the divergence was permanent. The rail went on
+  // highlighting a window that every keystroke was missing.
+  //
+  // It cannot loop. A `focusApp` the compositor carries out comes back as the
+  // `focus_changed` that makes this false, and one it refuses moves neither
+  // this nor `focused`, so the effect is not run again either way.
   useEffect(() => {
-    if (focused) {
+    if (focused && !hasKeyboard) {
       focusApp(domicile, appId);
     }
-  }, [appId, domicile, focused]);
+  }, [appId, domicile, focused, hasKeyboard]);
 
   // A click on a client's window asks for the keyboard, and the SDK grants it
   // unless something answers first. This answers first: the request becomes the

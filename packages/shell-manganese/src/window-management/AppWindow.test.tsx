@@ -41,6 +41,7 @@ const windowProps = {
   domicile: recordingDomicile,
   dragging: false,
   floating: undefined,
+  hasKeyboard: false,
   onScreen: true,
 } as const;
 
@@ -145,6 +146,41 @@ describe("AppWindow", () => {
     // carries that to the compositor — and to the SDK, which is what routes the
     // keystrokes that follow.
     render(<AppWindow {...windowProps} focused onReach={noReach} />);
+    expect(focused).toStrictEqual(["term"]);
+  });
+
+  it("says nothing while the window already has the keyboard", () => {
+    // The compositor answers every `focusApp` with a `focus_changed` saying it
+    // carried it out, and a window that asked again on the strength of that
+    // would ask for ever.
+    render(
+      <AppWindow {...windowProps} focused hasKeyboard onReach={noReach} />,
+    );
+    expect(focused).toStrictEqual([]);
+  });
+
+  it("says so again when the keyboard has gone somewhere else", () => {
+    // The shell's idea of the active window and the compositor's seat are two
+    // facts and they come apart: a press on the rail, on the wallpaper, on any
+    // of the chrome hands the keyboard back to the page without the window the
+    // user is working in having changed. Nothing else the shell watches moves,
+    // so before this the rail went on highlighting a window that every
+    // keystroke was missing.
+    const { rerender } = render(
+      <AppWindow {...windowProps} focused hasKeyboard onReach={noReach} />,
+    );
+    // What the window asked for on the way in is not what this is about.
+    focused = [];
+
+    rerender(
+      <AppWindow
+        {...windowProps}
+        focused
+        hasKeyboard={false}
+        onReach={noReach}
+      />,
+    );
+
     expect(focused).toStrictEqual(["term"]);
   });
 

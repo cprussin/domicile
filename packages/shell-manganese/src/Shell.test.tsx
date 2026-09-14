@@ -736,6 +736,53 @@ describe("Shell", () => {
     });
   });
 
+  describe("the keyboard and the window the user is working in", () => {
+    /** Two terminals, the second of them the one being worked in. */
+    const twoTerminals = () => {
+      const rendered = renderShell();
+      domicile.emit("app_appeared", { app_id: "one", title: "One" });
+      domicile.emit("app_appeared", { app_id: "two", title: "Two" });
+      domicile.emit("focus_changed", { app_id: "two" });
+      domicile.calls.length = 0;
+      return rendered;
+    };
+
+    it("keeps it through a click on the active window's own tab", () => {
+      // The whole path, wired: a press on the rail lands off every `<app>`, so
+      // the SDK hands the keyboard back to the page, and the compositor says
+      // so. The tab of the window *already* being worked in moves nothing else
+      // the shell watches — `activeId` is what it was — so before this the
+      // keyboard went to the chrome and stayed there, with the rail still
+      // highlighting the terminal every keystroke was now missing.
+      //
+      // And the reason this shows up with more than one terminal open:
+      // reaching for the rail at all means there is something else in it.
+      twoTerminals();
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Two" }), {
+        pointerId: 1,
+      });
+      domicile.emit("focus_changed", { app_id: undefined });
+
+      expect(domicile.calls).toContainEqual(["focusApp", "two"]);
+    });
+
+    it("leaves it with the chrome while a browser window is the active one", async () => {
+      // A browser window's page holds the focus itself, so there is no client
+      // to point the compositor at — and the address bar is a real text box
+      // the user types into. A shell that took the keyboard back for it would
+      // be one where the address bar cannot be typed in.
+      renderShell();
+      domicile.emit("app_appeared", { app_id: "one", title: "One" });
+      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
+      domicile.calls.length = 0;
+
+      domicile.emit("focus_changed", { app_id: undefined });
+
+      expect(domicile.calls).toStrictEqual([]);
+    });
+  });
+
   describe("a floating window's title bar", () => {
     const barIn = (container: HTMLElement) =>
       container.querySelector<HTMLElement>("main > div:not([aria-hidden])");
