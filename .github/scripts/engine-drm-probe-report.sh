@@ -103,15 +103,24 @@ if [ -z "$said" ] && [ -z "$found" ]; then
   echo "::error::nothing in the log looks like a failure and the probe said nothing of its own, so the shell around it did not run the build"
 fi
 
-# Did it build? That, and nothing else, is what withholds the tail -- a tail
-# printed under a success reads as a failure, and that is the only harm a tail
-# can do. It is deliberately NOT gated on `found` as well: the fallback matches
-# a bare `ninja: build stopped`, which says a build stopped and not one word
-# about why, and gating on it would withhold the tail from exactly the failure
-# that has nothing else to offer. This is what this script's own header always
-# said -- the windows first, and the tail after them FOR CONTEXT RATHER THAN
-# INSTEAD OF THEM.
-if ! grep -qa '^drm probe: ui/ozone built' "$LOG"; then
+# Did it get all the way? That, and nothing else, is what withholds the tail --
+# a tail printed under a success reads as a failure, and that is the only harm
+# a tail can do. It is deliberately NOT gated on `found` as well: the fallback
+# matches a bare `ninja: build stopped`, which says a build stopped and not one
+# word about why, and gating on it would withhold the tail from exactly the
+# failure that has nothing else to offer. This is what this script's own header
+# always said -- the windows first, and the tail after them FOR CONTEXT RATHER
+# THAN INSTEAD OF THEM.
+#
+# THE GATE IS THE PROBE'S LAST WORD, AND IT HAS MOVED ONCE. It was `ui/ozone
+# built`, which was the last thing the probe did when this was written. The
+# probe builds `ozone_unittests` after it now, so that line stopped meaning
+# "finished" and started meaning "got past the first of two builds" -- and a
+# link failure in the second came back with its windows and no tail, while the
+# MemoryError class of failure, which has no windows at all, came back with
+# nothing whatsoever. Gate on the LAST sentinel the probe prints, and when a
+# stage is added after this one, move it again.
+if ! grep -qa '^drm probe: ozone_unittests built' "$LOG"; then
   echo "-- the last of $(wc -l <"$LOG" | tr -d ' ') lines:"
   tail -30 "$LOG" | sed 's/^/  | /'
 fi

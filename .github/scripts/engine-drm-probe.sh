@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Does a patched tree accept `ozone_platform_drm = true`, and does //ui/ozone
-# compile with it? Run from inside Chromium's own toolchain shell.
+# Does a patched tree accept `ozone_platform_drm = true`, does //ui/ozone
+# compile with it, and does the suite that covers the DRM platform build? Run
+# from inside Chromium's own toolchain shell.
+#
+# It BUILDS `ozone_unittests` and does not run it: the binary needs Chromium's
+# runtime libraries, which live in the domicile dev shell and not in this one.
+# The workflow runs it in a step of its own.
 #
 #   NIX_SHELL_RUN=".../engine-drm-probe.sh /build/chromium/src /tmp/domicile-drm-probe" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
@@ -16,13 +21,17 @@
 # build configured for DRM, or force a four-hour rebuild of a tree that is warm
 # on purpose. The probe's directory is removed by the caller when it is done.
 #
-# TWO SENTINELS, because the two failures are different questions:
+# THREE SENTINELS, because each failure is a different question:
 #
 #   <prefix>-ran      this script started, so Chromium's shell really ran it.
 #                     Without it, a shell that entered nothing and exited 0 is
 #                     indistinguishable from a build that worked -- which is
 #                     what happened twice in engine.yml's first weeks.
-#   <prefix>-built    autoninja finished. This is the answer.
+#   <prefix>-built    //ui/ozone compiled and linked.
+#   <prefix>-tested   `ozone_unittests` compiled and linked. The LAST one, and
+#                     so the one that means "finished" -- which is what
+#                     engine-drm-probe-report.sh withholds its tail on. When a
+#                     stage is added after this, that gate moves with it.
 #
 # The exit status is not the answer, and cannot be: upstream's shell is a
 # buildFHSEnv whose shellHook execs bwrap, and a command run through it does
@@ -105,3 +114,28 @@ fi
 
 touch "$PREFIX-built"
 echo "drm probe: ui/ozone built with ozone_platform_drm = true"
+
+# `ozone_unittests` after it, because compiling the platform is not the same
+# question as exercising it. `DrmScreen` lives in that suite and in no other,
+# and until this line existed NO WORKFLOW BUILT IT AT ALL: engine.yml's build
+# names only wayland and headless, so `DrmScreenTest` is not in that binary and
+# cannot be, and adding `ozone_platform_drm` to the shipped build is ordered
+# after the modeset driver on purpose. So the suite that covers the one class
+# this whole step is about had no run anywhere, which makes the next box --
+# `GetBoundsInDIP`, which is TDD like everything here -- impossible to watch
+# fail.
+#
+# BUILT HERE, RUN IN THE WORKFLOW. A component build's test binary loads its
+# .so files from beside it and needs Chromium's runtime libraries, and those
+# come from the domicile dev shell rather than from this one -- `nix develop
+# .#full`. engine.yml runs `components_unittests` that way for the same reason,
+# and a bare shell fails it on `libglib-2.0.so.0` in a way that reads like a
+# broken test rather than a missing library.
+echo "drm probe: building ozone_unittests"
+if ! autoninja -C out/DrmProbe ozone_unittests; then
+  echo "drm probe: ui/ozone built and autoninja could not build ozone_unittests"
+  exit 1
+fi
+
+touch "$PREFIX-tested"
+echo "drm probe: ozone_unittests built"
