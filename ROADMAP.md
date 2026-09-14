@@ -269,10 +269,11 @@ decides whether an item is waiting or workable.
    `//ui/display/manager` was ported. What is **not** measured is any of it
    running: nothing has started `chrome` under the platform, so the screen is
    correct against its tests and unexercised against a browser. The modeset
-   driver beside it is the next item.
+   driver beside it is the next item -- it landed the same night, and both of
+   those sentences are answered below.
 
    **Step 2 was costed as two files rather than a port of
-   `//ui/display/manager`, and the first of them came in at that size.** Only that target's *caller* is ChromeOS-only:
+   `//ui/display/manager`, and both came in at that size.** Only that target's *caller* is ChromeOS-only:
    `DrmNativeDisplayDelegate` already implements `GetDisplays`, `Configure`,
    `TakeDisplayControl`/`RelinquishDisplayControl` and a two-method observer,
    and every one of those seams is ungated. `PlatformScreen` has nine pure
@@ -299,13 +300,35 @@ decides whether an item is waiting or workable.
    carrying an argument is not a binary built with it**, and comparing the two
    timestamps is what says which.
 
-   `chrome --ozone-platform=drm` **does not yet start**, and the `NOTREACHED()`
-   it hits has moved about twenty frames deeper. It clears `PreSandboxStartup`,
-   clears the `CreateScreen()`/`InitScreen()` pair `DrmScreen` answers, reaches
-   `Browser::Create()`, and dies in `DrmWindowHost::GetBoundsInDIP()` under
-   `WindowTreeHost::InitHost()` -- the same ChromeOS-shaped refusal as the one
-   just cleared, one layer out. `A-DESKTOP-ON-A-TTY.md` carries the trace and
-   has it as the next box.
+   `chrome --ozone-platform=drm` got as far as `DrmWindowHost::GetBoundsInDIP()`
+   under `WindowTreeHost::InitHost()` -- the same ChromeOS-shaped refusal as the
+   `CreateScreen()` one just cleared, twenty frames out. **That box is closed,
+   and it was seven boxes rather than one.** `DrmWindowHost` holds seven
+   `NOTREACHED()`s; answering the two the costing named moves the crash to
+   `SizeConstraintsChanged()` under `DesktopNativeWidgetAura::InitNativeWidget()`,
+   and a run on the build host established that with bodies in all seven **the
+   browser process stops failing entirely** -- it creates its window and goes on
+   to ask viz for a root compositor frame sink. So all seven landed together
+   (patch `0015`) rather than one four-hour build at a time.
+
+   **The modeset driver landed beside it (patch `0016`), and the shipped engine
+   now carries the platform.** `scripts/build.sh` and `engine-release-build.sh`
+   both name `ozone_platform_drm = true`, which is the last item of step 2 that
+   is not about a screen. Four patches went in tonight -- `0014` a feature flag
+   read during static initialization, `0015` the seven methods, `0016` the
+   modeset driver, and the build argument on top of them.
+
+   **What stands next is not an embedder method, and that is the finding.**
+   Past the seven, the GPU process dies: ozone/drm refuses software compositing
+   by design and the run had fallen back to it after three GPU process restarts
+   on an incomplete GL framebuffer. `GetPreferredEGLDevice()` chooses a render
+   device and `GetPrimaryDisplayCardPath()` chooses a scanout card, and both ask
+   the same `GetPreferredDrmDrivers()` -- which upstream can do because on
+   ChromeOS they are the same device. On `crux` they cannot be: the card with a
+   connected connector has no render node, and the card with the render node has
+   nothing plugged into it. The build host has since confirmed the render-node
+   mismatch. `A-DESKTOP-ON-A-TTY.md` step 2 carries it, and it is a device
+   question rather than a porting one.
 
    Both of those runs were made without taking the engine tree lock, and CI
    reset the checkout twice inside the build window, so **repeat them under the
@@ -313,6 +336,14 @@ decides whether an item is waiting or workable.
    takes the lock by construction and ends in a run URL a doc can cite. What
    each finding rests on is readable in the source either way; what is in doubt
    is the binary, not the diagnosis.
+
+   `0014` was repeated under the lock and is a measurement. The seven-methods
+   finding and the GPU trace were not, and the patches they drove are in main
+   on the strength of the source rather than of those runs -- which is the
+   trade this paragraph describes, taken deliberately rather than forgotten.
+   What would settle them is one build of `chrome` under the lock with the
+   series applied, and that is cheaper now than it was: the shipped build
+   carries the platform, so an ordinary engine run compiles it.
 
    The two steps after that were blocked on a card node, and
    `crux` has one -- `/dev/dri/card0` is **vkms**, whose `Virtual-1` connector
@@ -326,8 +357,14 @@ decides whether an item is waiting or workable.
    needs no new hardware. Treat the costing as a floor: the last audit read
    five edits and the compiler found eight.
 
-   Until both halves land, a desktop is a window inside an existing Wayland
-   session, or headless.
+   Both halves have landed, and a desktop is still a window inside an existing
+   Wayland session or headless -- not because the engine cannot be told to take
+   a tty (`OZONE=drm` does that, and the platform is in the binary now) but
+   because nothing has got a lit screen out of it. `domicile-launch` still
+   refuses a machine with no session rather than auto-selecting `drm`, which is
+   deliberate: that would trade a clear message for whatever the GPU process
+   does on an unproven path. It becomes the right default the day a screen
+   lights.
 
 2. **What the engine ships that a desktop never runs.** Chrome carries a tab
    strip, a New Tab page, a settings UI, sign-in and sync. A desktop can reach
