@@ -464,9 +464,10 @@ Step 2 — the embedder (the port):
       hotplug event, without `//ui/display/manager` — patch `0016`. The
       arithmetic is a free function with six unit tests; what is left around it
       is a delegate, two asynchronous callbacks and a thread
-- [ ] **find out why the GL framebuffer is incomplete on this machine.** Not an
-      embedder port, and the checklist around it should not be read as implying
-      the rest of the work is. Past the seven methods above, the browser process
+- [x] **why the GL framebuffer is incomplete on this machine — measured, and it
+      is the host rather than the code.** Not an embedder port, and the
+      checklist around it should not be read as implying the rest of the work
+      is. Past the seven methods above, the browser process
       gets as far as asking viz for a root compositor frame sink and the **GPU**
       process dies:
 
@@ -482,76 +483,125 @@ Step 2 — the embedder (the port):
       `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` → `Unable to initialize SkSurface`
       → `Context was lost`.
 
-      The device topology is the suspect: `card0` is **vkms**, display-only and
-      with no render node, while `renderD128` belongs to `card1`, the
-      **nvidia** GPU. Scanout and rendering are on different devices and
-      nothing has told the GPU process how to bridge them. That may be a flag
-      (`--use-gl`, `--use-angle`, `--gpu-device-id`), it may want a render-node
-      argument, or vkms plus a separate render GPU may not be a configuration
-      ozone/drm supports without work. It is the last mile between a browser
-      that runs and a browser that draws.
+      **The two selections do not both land on vkms. They land on different
+      cards, and that is the whole finding.** Measured on `crux` 2026-09-14,
+      read-only, no Chromium tree and no tree lock required:
 
-      Reading the pin narrows it to two things to check on the host before
-      anything is written. Both sides of the split -- the browser process
-      choosing a card and the GPU process choosing an EGL device -- ask
-      `GetPreferredDrmDrivers()`, and at this pin that returns
-      `{"i915", "amdgpu", "virtio_gpu"}` with no nvidia entry and no vkms
-      entry. So both fall through to "the first one", which is `card0`:
+      | | |
+      |---|---|
+      | `/proc/cmdline` | **no `nvidia_drm.modeset=1`** — and it does not matter, see below |
+      | `card0` | `driver=vkms`, `crtcs=1 connectors=1 encoders=2`, `Virtual-1` **connected**, preferred 1024x768@60 |
+      | `card1` | `driver=nvidia-drm`, `crtcs=4 connectors=4 encoders=6`, all four **disconnected** |
+      | `/dev/dri/by-path` | `pci-0000:01:00.0-card -> card1`, `pci-0000:01:00.0-render -> renderD128`. vkms appears in neither: it has no PCI path and no render node |
 
-      - `drm_util.cc:1247` is the list; `drm_display_host_manager.cc:222`
-        (`GetPrimaryDisplayCardPath`) and `gbm_surface_factory.cc:74`
-        (`GetPreferredEGLDevice`) are the two callers, and each falls back to
-        `cards[0]` / `devices[0]`
-      - `GetValidDisplayCards` keeps only cards reporting `count_crtcs > 0`.
-        **`nvidia-drm` reports none unless `nvidia_drm.modeset=1` is on the
-        kernel command line**, so without it the nvidia card is not merely
-        unpreferred, it is filtered out and vkms is the only candidate left
+      `nvidia-drm` reports four CRTCs **without** `nvidia_drm.modeset=1` on the
+      command line, so the prediction above is wrong on this host: the nvidia
+      card is not filtered out of `GetValidDisplayCards()`, and no reboot is
+      needed to make it a candidate. (`/sys/module/nvidia_drm/parameters/modeset`
+      is root-only, so whether a driver default or an initrd `modprobe.d` set it
+      is unknown; the CRTC count is the answer either way.)
 
-      Two cheap checks on the host say which of those is biting: whether
-      `nvidia_drm.modeset=1` is set, and whether the nvidia card node reports
-      CRTCs.
+      `gbm_create_device()` succeeds on all three nodes, and each allocates a
+      `GBM_BO_USE_RENDERING` buffer:
 
-      But "make the nvidia card win the selection" is **not** the fix here, and
-      the ROADMAP already holds the reason: on `crux` all four of `card1`'s
-      connectors read `disconnected`, while `card0`'s `Virtual-1` reads
-      connected at a preferred 1024x768@60. Preferring the nvidia card, or
-      unloading vkms so it enumerates first, would leave the machine with no
-      connected connector at all and light nothing.
+          /dev/dri/card0       drv=vkms         gbm=drm     render_bo=ok
+          /dev/dri/card1       drv=nvidia-drm   gbm=nvidia  render_bo=ok
+          /dev/dri/renderD128  drv=nvidia-drm   gbm=nvidia  render_bo=ok
 
-      **Scanout and render are different cards on this machine, and one
-      function chooses both.** The card with a connected connector has no
-      render node; the card with the render node has nothing plugged into it.
-      `GetPreferredEGLDevice()` picks a render device and
-      `GetPrimaryDisplayCardPath()` picks a scanout card, and at this pin they
-      ask the same question of the same list -- which upstream can do because
-      on ChromeOS they are the same device.
+      `eglQueryDevicesEXT`, which is exactly what `GetPreferredEGLDevice()`
+      enumerates:
 
-      So the shape of the remaining work is not a flag and not an entry added
-      to `GetPreferredDrmDrivers()`. **The build host measured it and the
-      answer is cross-device PRIME: rendering on one GPU and scanning out on
-      another, with the buffers shared through dma-buf import and export.**
-      That is not a small patch, and it is not a device-selection fix either --
-      choosing the nvidia render node correctly still leaves a buffer that has
-      to reach a vkms CRTC on a different device.
+          EGL devices: 3
+            [0] drm_device=/dev/dri/card1   render_node=/dev/dri/renderD128
+            [1] drm_device=/dev/dri/card1   render_node=/dev/dri/renderD128
+            [2] drm_device=(none)           render_node=(none)
 
-      WHICH OF THREE IT IS, because the difference decides the next move. It is
-      not "the fork could pick its render device separately and it would not
-      help", and it is not "nothing here backs GBM for rendering". It is that
-      picking separately WOULD help and the machinery to carry a buffer across
-      the two devices is the work. The measurements behind that -- the per-node
-      `gbm_create_device()` results and the `eglQueryDevicesEXT` enumeration
-      `GetPreferredEGLDevice()` chooses from -- were taken on the build host and
-      are not in this repository yet; this paragraph records the conclusion so
-      the plan is not blocked on carrying them over.
+      **vkms is not in that list.** It has no render node, so it never becomes
+      a DRM-backed EGL device, and `GetPreferredEGLDevice()` skips entries with
+      no `EGL_DRM_DEVICE_FILE_EXT` as "Not a DRM device". Its `devices[0]`
+      fallback therefore lands on **nvidia**, while
+      `GetPrimaryDisplayCardPath()`'s `cards[0]` fallback lands on **vkms**:
 
-      WHAT THAT MEANS FOR A LIT SCREEN. Not "write the patch next". Either the
-      scanout and render device are made the same -- a monitor on `card1` with
-      `nvidia_drm.modeset=1`, or a machine whose GPU drives its own display --
-      or cross-device PRIME is real work to be scheduled rather than slipped
-      into step 2. `crux` cannot answer "does a desktop appear" either way: its
-      only connected connector is a vkms one, which presents to nobody. What it
-      can still answer is "does the modeset path run", and that is the question
-      worth pointing the next run at
+      | selection | code | lands on |
+      |---|---|---|
+      | scanout card | `drm_display_host_manager.cc:260`, sent to the GPU process by `GpuAddGraphicsDevice` | `card0`, vkms |
+      | render device | `gbm_surface_factory.cc:74`, via `EGL_PLATFORM_DEVICE_EXT` | `card1`, nvidia |
+
+      So the GPU process is handed a scanout device that cannot render and a
+      render device that is not the scanout device. That is the incomplete
+      framebuffer.
+
+      **And making them agree is not available on this host either.** EGL on
+      each card's own GBM device, with no Chromium involved:
+
+          == /dev/dri/card0 ==              == /dev/dri/card1 ==
+            gbm backend : drm                 gbm backend : nvidia
+            eglInitialize : ok 1.5            eglInitialize : ok 1.5
+            EGL_VENDOR : Mesa Project         EGL_VENDOR : NVIDIA
+            eglChooseConfig : 1 config        eglChooseConfig : 1 config
+            eglCreatePlatformWindowSurface:   GL_RENDERER : NVIDIA GeForce GTX 970
+              FAILED 0x3009 EGL_BAD_MATCH     glClear + eglSwapBuffers : ok
+
+      vkms takes a GBM device and an EGL display and then refuses a window
+      surface, with or without `GBM_BO_USE_SCANOUT`. nvidia renders a frame and
+      swaps it — it wants `GBM_BO_USE_SCANOUT` present, and returns
+      `0x3003 EGL_BAD_ALLOC` without it.
+
+      ### What "no patch applicable" means, precisely
+
+      Three things it does **not** mean:
+
+      - *Not* "this host cannot render on any node". `renderD128` renders: an
+        ES2 context, a `glClear` and a successful `eglSwapBuffers`.
+      - *Not* "the fork should choose its render device separately from its
+        scanout card". **It already does**, by accident of the two fallbacks —
+        and that separation is what fails. The seam exists; it is pointed at two
+        cards that cannot cooperate.
+      - *Not* "adding `nvidia-drm` to `GetPreferredDrmDrivers()` would fix it".
+        That makes both selections agree on nvidia, which renders and has
+        nothing plugged in. Nothing lights.
+
+      What it does mean: the only configuration that would put a frame on the
+      connected connector is **render on `card1`, scan out on `card0`** — a
+      buffer rendered on one device imported for scanout on another. That is
+      cross-device PRIME, it is a capability rather than a selection, and
+      ozone/drm does not have it. It would be a large piece of work whose only
+      beneficiary is a machine shaped like this one.
+
+      ### Which findings are about ozone/drm, and which are about `crux`
+
+      **About ozone/drm, and true anywhere:** one list (`GetPreferredDrmDrivers()`)
+      answers two different questions, and upstream can conflate them because on
+      ChromeOS the rendering device and the scanout device are the same card. On
+      any host where they are not, the two fallbacks diverge silently and the
+      failure surfaces four layers away as an incomplete framebuffer. That is
+      worth knowing regardless of `crux`.
+
+      **About `crux`, and not a property of the fork:** this machine has no card
+      that both renders and has a display. A host with one ordinary GPU with a
+      monitor on it would exercise none of the above — both selections would
+      land on that card and agree.
+
+      ### What would actually get a lit screen
+
+      In rough order of cost, for whoever picks this up:
+
+      - **Plug a monitor into `card1`.** A dummy HDMI/DP EDID plug is enough and
+        costs a few pounds. Both selections then land on nvidia and agree, and
+        `A-DESKTOP-ON-A-TTY` gets its first lit CRTC with no code at all. This is
+        the cheapest answer and it is hardware, not software.
+      - **Force a connector on `card1`.** `video=DP-1:1024x768e` on the kernel
+        command line, or `drm_kms_helper.edid_firmware=`. Free, but needs a
+        reboot, and nvidia-drm's support for those parameters should be checked
+        before spending one — they are best documented for the in-tree drivers.
+      - **A different machine**, with one GPU that both renders and has a
+        display, which is what any ordinary desktop is.
+      - **Cross-device PRIME in ozone/drm**, described above. Large, and only
+        worth it if a split-device host is a target rather than an accident.
+
+      `nvidia_drm.modeset=1` is **not** on this list: it is already effectively
+      on, and setting it explicitly changes nothing measured here.
+
 - [ ] VT handling: watch the VT, call `RelinquishDisplayControl` on switch away
       and `TakeDisplayControl` on switch back
 - [ ] `EVIOCREVOKE` (or a libseat-shaped equivalent) on the evdev fds at those

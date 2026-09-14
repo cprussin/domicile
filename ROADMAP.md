@@ -353,8 +353,16 @@ decides whether an item is waiting or workable.
    all four of its connectors read `disconnected`.
 
    A vkms CRTC presents to nobody, so it answers "does the modeset path run"
-   and not "does a desktop appear". That is the question standing next, and it
-   needs no new hardware. Treat the costing as a floor: the last audit read
+   and not "does a desktop appear". That reading survives -- but the second half
+   is now known to be **unreachable on this machine at any cost in code**, which
+   it was not when this was written. vkms takes a GBM device and then refuses an
+   EGL window surface (`EGL_BAD_MATCH`), so nothing renders on the card that has
+   the connected connector; `renderD128` renders fine and belongs to the card
+   with four disconnected ones. Putting a frame on the lit connector would mean
+   rendering on one card and scanning out on another, which ozone/drm cannot do.
+   So "does the modeset path run" needs no new hardware and "does a desktop
+   appear" needs a monitor on `card1` or a different machine.
+   `A-DESKTOP-ON-A-TTY.md` carries the numbers. Treat the costing as a floor: the last audit read
    five edits and the compiler found eight.
 
    Both halves have landed, and a desktop is still a window inside an existing
