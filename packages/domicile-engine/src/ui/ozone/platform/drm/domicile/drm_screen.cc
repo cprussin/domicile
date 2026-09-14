@@ -30,7 +30,8 @@ gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot) {
 }
 
 std::vector<display::Display> DisplaysFromSnapshots(
-    const std::vector<raw_ptr<display::DisplaySnapshot>>& snapshots) {
+    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+        snapshots) {
   if (snapshots.empty()) {
     return {display::Display(display::kDefaultDisplayId,
                              gfx::Rect(kDisplaylessBounds))};
@@ -50,7 +51,8 @@ DrmScreen::DrmScreen(DrmWindowHostManager* window_manager)
 DrmScreen::~DrmScreen() = default;
 
 void DrmScreen::OnDisplaysChanged(
-    const std::vector<raw_ptr<display::DisplaySnapshot>>& snapshots) {
+    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+        snapshots) {
   // A hotplug arrives as the whole list rather than as a delta, so what is
   // absent from it has been unplugged. DisplayList notifies its observers from
   // AddOrUpdateDisplay and RemoveDisplay, which is the whole of the hotplug

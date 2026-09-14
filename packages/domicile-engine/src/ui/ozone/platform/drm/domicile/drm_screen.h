@@ -45,7 +45,8 @@ gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot);
 
 // Every snapshot, or the displayless fallback above when there are none.
 std::vector<display::Display> DisplaysFromSnapshots(
-    const std::vector<raw_ptr<display::DisplaySnapshot>>& snapshots);
+    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+        snapshots);
 
 // `PlatformScreen` over the displays DRM reports.
 //
@@ -66,7 +67,8 @@ class DrmScreen : public PlatformScreen {
   // Add/Update/RemoveDisplay -- which is why hotplug needs no observer code of
   // its own here.
   void OnDisplaysChanged(
-      const std::vector<raw_ptr<display::DisplaySnapshot>>& snapshots);
+      const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+        snapshots);
 
   // PlatformScreen:
   const std::vector<display::Display>& GetAllDisplays() const override;

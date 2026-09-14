@@ -154,9 +154,9 @@ TEST(DrmScreenTest, NoSnapshotsAtAllStillYieldsOnePrimaryDisplay) {
 // The screen holds the manager the browser process owns. An empty one is the
 // whole of what these need: the widget lookups are the only members that read
 // it, and the one tested below is the case where it holds nothing.
-std::vector<raw_ptr<display::DisplaySnapshot>> Pointers(
+std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> Pointers(
     const std::vector<std::unique_ptr<display::DisplaySnapshot>>& owned) {
-  std::vector<raw_ptr<display::DisplaySnapshot>> pointers;
+  std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> pointers;
   for (const std::unique_ptr<display::DisplaySnapshot>& snapshot : owned) {
     pointers.push_back(snapshot.get());
   }
