@@ -30,7 +30,8 @@ shell opened itself; both get a tab, and the rail is what switches between them.
 Only the window on the stage has a box, so the SDK reports the rest to the host
 as no longer composited. The window that takes the stage takes the keyboard with
 it, so what the user just opened or switched to is typeable without a click: a
-client's keyboard goes to the host, a browser window's to its page.
+client's keyboard goes to the host, a browser window's to its page. So does the
+window the pointer moves into — focus follows the cursor here.
 
 ## Layout
 
@@ -93,6 +94,43 @@ theirs with `addEventListener` on a ref.
   **Alt+drag** moves a floating window; **Alt+Shift+drag** resizes it. See
   below.
 
+## Focus follows the cursor
+
+**The window under the pointer is the window the keyboard is in.** Move onto a
+window and it is the one you are typing into — a client's keystrokes to the
+host, a browser window's to its page — the one the rail highlights, and the one
+Alt+Shift+Tab acts on. No click anywhere. It is one arm of `reduceWindows`,
+because it is a policy rather than a mechanism: a shell that would rather the
+user clicked writes a different one and changes nothing else.
+
+**It does not raise.** A window that came to the front for being crossed would
+cover the one you were heading for, and the pointer would rearrange the desktop
+on its way anywhere. A click is still what raises — so every click is reported,
+including one in the window the pointer has already made the active one. A
+window that answered only the clicks which found it inactive could never be
+raised by one under this policy. What keeps that from re-rendering the desktop
+on every press is the reduction, where a reach that moves nothing returns the
+state it was given, rather than a window deciding which of its own clicks are
+worth reporting.
+
+**The chrome is not a window.** The rail, the wallpaper, a float's title bar
+and the sheet an Alt+drag is caught on leave the keyboard where it was: there
+is nothing better to point it at, and handing it back would make the desktop
+untypeable whenever the pointer came to rest on furniture. It is the rule
+`focus_changed` already followed for a seat that lands anywhere but a window.
+
+**A browser window hears the pointer where it hears a click: on its own
+chrome.** A pointer inside the page is the guest's, the same way a click there
+is, and whether one that lands straight in the page reaches the element the
+guest hangs off is the browser process's to say — nothing here has measured it,
+so treat a window entered over its page alone as one that may take the keyboard
+only when it is clicked. Every focus this shell puts *into* a guest — the one a window
+takes for becoming active, and the one it takes back when the chrome drops it
+— is announced exactly the way a click there is, because the element says so
+whichever route the focus came by, so the window spends the announcements it
+causes — without
+that, the pointer arriving over a browser window would raise it as well.
+
 ## Floating a window
 
 **Alt+Shift+Tab** takes the window you are working in out of the rail, where it
@@ -121,7 +159,8 @@ no `focusin` — Blink dispatches focus events only while the page is focused,
 and a guest taking focus is the moment the chrome's page loses it. So **the
 element says so itself**, in an event that is not a focus event, and the window
 listens for that as well as for its own chrome's pointer events. Either one
-brings it to the front and makes it the window everything keyed acts on.
+brings it to the front and makes it the window everything keyed acts on,
+whether or not the pointer had already made it the one being worked in.
 `guard-webview-click.sh` is what says a real click in a real guest arrives
 here — it is also what found that the focus alone did not.
 

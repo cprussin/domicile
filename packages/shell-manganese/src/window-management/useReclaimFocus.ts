@@ -2,7 +2,13 @@ import { useCallback, useEffect } from "react";
 
 /**
  * Keep this document's focus on `element` while the window it belongs to is
- * the one being worked in, taking it back whenever nothing at all holds it.
+ * the one being worked in, taking it back with `take` whenever nothing at all
+ * holds it.
+ *
+ * `take` rather than a `focus()` of its own because a window can have more to
+ * say about its own focus than the DOM call: a browser window's page announces
+ * every focus it is given as the announcement a click in it makes, so the
+ * window has to know which of them it caused. See `BrowserWindow`.
  *
  * **Only from nothing.** The chrome around a window is full of things that
  * take the focus on purpose, and every one of them is the user reaching for
@@ -30,9 +36,10 @@ import { useCallback, useEffect } from "react";
  * `null` rather than `undefined` for the missing element because that is what
  * React's ref API hands a callback ref.
  */
-export const useReclaimFocus = (
-  element: HTMLElement | null,
+export const useReclaimFocus = <Element extends HTMLElement>(
+  element: Element | null,
   focused: boolean,
+  take: (element: Element) => void,
 ): void => {
   const reclaim = useCallback(() => {
     if (
@@ -40,9 +47,9 @@ export const useReclaimFocus = (
       element !== null &&
       document.activeElement === document.body
     ) {
-      element.focus();
+      take(element);
     }
-  }, [element, focused]);
+  }, [element, focused, take]);
 
   // No dependency array on purpose: the focus an unmounted element took with
   // it changes nothing this hook is given, so the render is the whole signal.

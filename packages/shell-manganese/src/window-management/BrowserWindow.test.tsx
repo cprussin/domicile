@@ -5,7 +5,7 @@ import {
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_HISTORY_CHANGE_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { BrowserWindow } from "./BrowserWindow";
@@ -24,6 +24,10 @@ const recordingDomicile = (calls: string[]): DomicileClient =>
       calls.push("focusChrome");
     },
   }) as unknown as DomicileClient;
+
+const noHover = () => {
+  // Nothing in the case moves the pointer into the window.
+};
 
 const view = (container: HTMLElement): HTMLWebViewElement => {
   const element = container.querySelector("webview");
@@ -92,6 +96,7 @@ describe("BrowserWindow", () => {
         dragging={false}
         floating={undefined}
         focused
+        onHover={noHover}
         onNavigate={() => undefined}
         onReach={() => undefined}
         onScreen
@@ -111,6 +116,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           floating={undefined}
           focused
+          onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
           onScreen
@@ -137,6 +143,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           floating={undefined}
           focused
+          onHover={noHover}
           onNavigate={(url) => {
             seen.push(url);
           }}
@@ -160,6 +167,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           floating={undefined}
           focused
+          onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
           onScreen
@@ -193,6 +201,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           floating={undefined}
           focused
+          onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
           onScreen
@@ -211,6 +220,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           floating={undefined}
           focused={false}
+          onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
           onScreen
@@ -242,6 +252,7 @@ describe("BrowserWindow", () => {
             dragging={false}
             floating={undefined}
             focused={false}
+            onHover={noHover}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
@@ -263,6 +274,7 @@ describe("BrowserWindow", () => {
             dragging={false}
             floating={undefined}
             focused={false}
+            onHover={noHover}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
@@ -287,6 +299,57 @@ describe("BrowserWindow", () => {
             dragging={false}
             floating={undefined}
             focused={false}
+            onHover={noHover}
+            onNavigate={() => undefined}
+            onReach={() => {
+              resolve();
+            }}
+            onScreen
+            src="https://example.com"
+          />,
+        );
+        fireEvent.pointerDown(browser());
+      });
+    });
+
+    it("reports a click in the page of the window it is already in", async () => {
+      // Focus follows the cursor here, so the window under the pointer is the
+      // one being worked in before the click lands — and a click in the page
+      // is the only thing that can raise a window whose page the user is
+      // already typing into. A window that answered only the reaches which
+      // found it inactive would sit under whatever was covering it.
+      await new Promise<void>((resolve) => {
+        const { container } = render(
+          <BrowserWindow
+            clickThrough={false}
+            domicile={silentDomicile}
+            dragging={false}
+            floating={undefined}
+            focused
+            onHover={noHover}
+            onNavigate={() => undefined}
+            onReach={() => {
+              resolve();
+            }}
+            onScreen
+            src="https://example.com"
+          />,
+        );
+        view(container).dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
+      });
+    });
+
+    it("reports a click on the chrome of the window it is already in", async () => {
+      // The other half of the same window, and the same rule.
+      await new Promise<void>((resolve) => {
+        render(
+          <BrowserWindow
+            clickThrough={false}
+            domicile={silentDomicile}
+            dragging={false}
+            floating={undefined}
+            focused
+            onHover={noHover}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
@@ -300,10 +363,47 @@ describe("BrowserWindow", () => {
     });
 
     it("says nothing when the shell put the focus there itself", () => {
-      // The window the user is already working in has nothing to report: the
-      // focus in its page is the focus this window was given for being the one
-      // they are in, and answering it would ask the shell to reach a window it
-      // has just reached.
+      // The focus this window gives its own page is announced exactly the way
+      // a click there is: the element says so from inside `focus()`, whichever
+      // route the focus came by. So the window spends the announcement it
+      // caused — without it, the pointer arriving over a window would raise it
+      // as well as focus it, and crossing the desktop would restack it.
+      const reaches: string[] = [];
+      const windowProps = {
+        clickThrough: false,
+        domicile: silentDomicile,
+        dragging: false,
+        floating: undefined,
+        onHover: noHover,
+        onNavigate: () => undefined,
+        onReach: () => {
+          reaches.push("reach");
+        },
+        onScreen: true,
+        src: "https://example.com",
+      } as const;
+      const { container, rerender } = render(
+        <BrowserWindow {...windowProps} focused={false} />,
+      );
+      // The engine's own half, which happy-dom's element cannot carry: the
+      // announcement comes out of the call that focuses the element.
+      const guest = view(container);
+      guest.addEventListener("focus", () => {
+        guest.dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
+      });
+
+      rerender(<BrowserWindow {...windowProps} focused />);
+
+      expect(reaches).toStrictEqual([]);
+    });
+
+    it("says nothing when it takes the focus back from nothing", async () => {
+      // The keyboard this window puts back in its own page when the chrome
+      // drops the focus — closing another window's tab is the case
+      // `useReclaimFocus` exists for — is the shell's focus as much as the one
+      // a window is given for becoming active, and comes back as the same
+      // announcement. Left unspent, closing a tab would raise whatever window
+      // the pointer last crossed.
       const reaches: string[] = [];
       const { container } = render(
         <BrowserWindow
@@ -312,6 +412,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           floating={undefined}
           focused
+          onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => {
             reaches.push("reach");
@@ -320,8 +421,47 @@ describe("BrowserWindow", () => {
           src="https://example.com"
         />,
       );
-      fireEvent.focusIn(view(container));
+      const guest = view(container);
+      guest.addEventListener("focus", () => {
+        guest.dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
+      });
+      // Something of the chrome takes the focus and then leaves it on nothing,
+      // which is what an element unmounted mid-press does.
+      const pressed = document.createElement("button");
+      document.body.append(pressed);
+      pressed.focus();
+
+      await act(() => {
+        pressed.blur();
+        return Promise.resolve();
+      });
+      pressed.remove();
+
       expect(reaches).toStrictEqual([]);
+    });
+
+    it("reports the window the pointer moves into", async () => {
+      // Focus follows the cursor, and a browser window hears the pointer
+      // arrive the way any other chrome does.
+      await new Promise<void>((resolve) => {
+        render(
+          <BrowserWindow
+            clickThrough={false}
+            domicile={silentDomicile}
+            dragging={false}
+            floating={undefined}
+            focused={false}
+            onHover={() => {
+              resolve();
+            }}
+            onNavigate={() => undefined}
+            onReach={() => undefined}
+            onScreen
+            src="https://example.com"
+          />,
+        );
+        fireEvent.pointerOver(browser());
+      });
     });
   });
 
@@ -338,6 +478,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           floating={undefined}
           focused
+          onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
           onScreen
@@ -360,6 +501,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           floating={undefined}
           focused
+          onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
           onScreen
@@ -381,6 +523,7 @@ describe("BrowserWindow", () => {
         dragging={false}
         floating={undefined}
         focused={false}
+        onHover={noHover}
         onNavigate={() => undefined}
         onReach={() => undefined}
         onScreen={false}

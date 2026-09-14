@@ -36,6 +36,7 @@ export const Desktop = ({ domicile }: Props) => {
     floats,
     focusedId,
     grab,
+    hover,
     move,
     openBrowser,
     openTerminal,
@@ -114,6 +115,7 @@ export const Desktop = ({ domicile }: Props) => {
             onClose={close}
             onDrop={drop}
             onGrab={grab}
+            onHover={hover}
             onMove={move}
             onRename={renameToSite}
             onResize={resize}

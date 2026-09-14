@@ -53,6 +53,16 @@ type Props = {
    */
   hasKeyboard: boolean;
   /**
+   * Called when the pointer moves into this window.
+   *
+   * Focus follows the cursor in this shell, so arriving over a window is the
+   * user starting to work in it. The pointer over a client's surface belongs
+   * to the client, and this is not that question: the page hit-tests the
+   * element to decide who the pointer is for, so it knows the pointer is here
+   * whether or not the client is about to be sent it.
+   */
+  onHover: () => void;
+  /**
    * Called when the user clicks into this window.
    *
    * The SDK would move the keyboard here by itself — a click on a client's
@@ -101,6 +111,7 @@ export const AppWindow = ({
   floating,
   focused,
   hasKeyboard,
+  onHover,
   onReach,
   onScreen,
 }: Props) => {
@@ -139,23 +150,26 @@ export const AppWindow = ({
       return undefined;
     } else {
       const asked = (event: Event) => {
-        // Unconditionally, and before the branch below: the keyboard stays where
-        // the shell put it whether or not this particular click moves anything,
-        // which is the difference between a shell that owns focus and one that
-        // owns it except where it agrees with the SDK.
+        // Unconditionally: the keyboard stays where the shell put it whether or
+        // not this particular click moves anything, which is the difference
+        // between a shell that owns focus and one that owns it except where it
+        // agrees with the SDK.
         event.preventDefault();
-        // The window the user is already in has nothing to report: it would be
-        // asking the shell to reach what it has just reached, on every press.
-        if (!focused) {
-          onReach();
-        }
+        // And every press is reported, including one in the window the user is
+        // already in. Focus follows the cursor here, so the pointer has made
+        // this the active window before the press lands — a window that
+        // answered only the presses that found it inactive could never be
+        // raised by a click. The reduction is what keeps that from re-rendering
+        // the desktop: a reach that moves nothing returns the state it was
+        // given.
+        onReach();
       };
       element.addEventListener(APP_FOCUS_REQUESTED_EVENT, asked);
       return () => {
         element.removeEventListener(APP_FOCUS_REQUESTED_EVENT, asked);
       };
     }
-  }, [element, focused, onReach]);
+  }, [element, onReach]);
 
   // And the other direction. The SDK gives the keyboard back to the page for a
   // press that lands off every `<app>`, which a float's own title bar and grab
@@ -200,6 +214,12 @@ export const AppWindow = ({
         floating !== undefined && floatEdgeStyles,
       )}
       hidden={!onScreen}
+      // React's own event rather than a listener on the ref: `pointerover` is
+      // one it has heard of, unlike the two the SDK invented above. It rather
+      // than `pointerenter` because it is the one the page is actually given —
+      // an `<app>` is a replaced element with no rendered children, so nothing
+      // distinguishes the two here anyway.
+      onPointerOver={onHover}
       ref={setElement}
       // Inline because the box is a runtime number and Panda reads literals;
       // `window-styles` owns everything static. The cursor is inline for a

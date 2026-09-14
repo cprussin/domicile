@@ -8,7 +8,7 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
@@ -49,6 +49,14 @@ type Props = {
   /** Whether the user is working in this window, so it takes the keyboard. */
   focused: boolean;
   /**
+   * Called when the pointer moves into this window.
+   *
+   * Focus follows the cursor in this shell, so arriving over a window is the
+   * user starting to work in it. The chrome is what hears it: a pointer inside
+   * the page is the guest's, the same way a click there is.
+   */
+  onHover: () => void;
+  /**
    * Called with the address this window was sent to, whenever the shell sends
    * it somewhere.
    *
@@ -72,6 +80,10 @@ type Props = {
    * element says so itself, in {@link WEBVIEW_GUEST_FOCUS_EVENT}, and the
    * window listens for that as well as for its own chrome's pointer events.
    * Whichever arrives, this is the window the user is now working in.
+   *
+   * Reported for every click, including one in the window the user is already
+   * in: focus follows the cursor here, so the pointer has already made this
+   * the active window, and a click is still what raises it.
    */
   onReach: () => void;
   /**
@@ -100,6 +112,7 @@ export const BrowserWindow = ({
   dragging,
   floating,
   focused,
+  onHover,
   onNavigate,
   onReach,
   onScreen,
@@ -110,6 +123,23 @@ export const BrowserWindow = ({
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
   const [address, setAddress] = useState(src);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
+  // Whether the focus arriving in the page is the focus this window is putting
+  // there, which is the one thing about it the announcements cannot say: the
+  // element says a guest took focus whichever route the focus came by, and
+  // `focusin` says as little. Held across the call rather than across a render,
+  // because that is the span it has to tell apart — the engine dispatches from
+  // inside `focus()`, and so does the DOM.
+  const focusing = useRef(false);
+
+  // Every focus this window puts in its own page goes through here, because
+  // each of them comes back as the announcement a click there makes and the
+  // window has to spend the ones it caused. Bracketing the call is what tells
+  // them apart: the element says so from inside `focus()`, and so does the DOM.
+  const focusPage = useCallback((page: HTMLWebViewElement) => {
+    focusing.current = true;
+    page.focus();
+    focusing.current = false;
+  }, []);
 
   // The click in the page, which is the half of this window the shell cannot
   // see: the element dispatches this when its guest takes focus, because
@@ -119,9 +149,7 @@ export const BrowserWindow = ({
       return undefined;
     } else {
       const reached = () => {
-        // The window the user is already in has nothing to report: it is the
-        // focus the shell put there itself when the window became theirs.
-        if (!focused) {
+        if (!focusing.current) {
           onReach();
         }
       };
@@ -130,7 +158,7 @@ export const BrowserWindow = ({
         view.removeEventListener(WEBVIEW_GUEST_FOCUS_EVENT, reached);
       };
     }
-  }, [focused, onReach, view]);
+  }, [onReach, view]);
 
   // The window the user is working in takes the keyboard, and a browser
   // window's belongs to its page rather than to the chrome around it.
@@ -145,16 +173,16 @@ export const BrowserWindow = ({
   useEffect(() => {
     if (focused && view !== null) {
       domicile.focusChrome();
-      view.focus();
+      focusPage(view);
     }
-  }, [domicile, focused, view]);
+  }, [domicile, focused, focusPage, view]);
 
   // And keeps it, which is a separate job: the effect above runs when this
   // window becomes the one being worked in, and the chrome can take the focus
   // off the page long after that without this window hearing anything. Closing
   // another window is the case that costs the user their keyboard — see
   // `useReclaimFocus`.
-  useReclaimFocus(view, focused);
+  useReclaimFocus(view, focused, focusPage);
 
   // Every control here drives the view element, which is rendered by this
   // component and so is attached by the time anyone can press one. A press
@@ -175,10 +203,11 @@ export const BrowserWindow = ({
   // the two halves of the window say so differently — a pointer event from the
   // chrome, and from the page nothing but the focus it took. Both land here.
   const reach = () => {
-    // The window the user is already in has nothing to report: a focus in its
-    // page is the one it was handed for being that window, and answering it
-    // would ask the shell to reach what it has just reached.
-    if (!focused) {
+    // Every press, whichever window was the active one: focus follows the
+    // cursor here, so the pointer made this window the active one on its way
+    // in and a click is still what raises it. The one reach that is not the
+    // user's is the focus this window gives its own page — see `focusing`.
+    if (!focusing.current) {
       onReach();
     }
   };
@@ -217,6 +246,10 @@ export const BrowserWindow = ({
       // `onReach`, and the effect above.
       onFocus={reach}
       onPointerDown={reach}
+      // Focus follows the cursor: arriving anywhere in this window is the user
+      // starting to work in it — the page excepted, because a pointer in there
+      // is the guest's, the same way a click in it is.
+      onPointerOver={onHover}
       // Inline because the box is a runtime number and Panda reads literals;
       // `window-styles` owns everything static. `undefined` leaves the window
       // filling the stage, which is where a window that is not floating is.
