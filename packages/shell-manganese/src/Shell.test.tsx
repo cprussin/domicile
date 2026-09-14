@@ -543,7 +543,7 @@ describe("Shell", () => {
         `${APP_TAG_NAME}[app-id="${appId}"]`,
       );
 
-    it("claims Alt+Tab from the compositor", () => {
+    it("claims Alt+Shift+Tab from the compositor", () => {
       // The same reason Alt+Enter is claimed: the window being floated is the
       // one holding the keyboard, so the page hears nothing.
       renderShell();
@@ -555,12 +555,12 @@ describe("Shell", () => {
           ctrlKey: false,
           keycode: 15,
           metaKey: false,
-          shiftKey: false,
+          shiftKey: true,
         },
       ]);
     });
 
-    it("floats on an Alt+Tab the compositor hands back", () => {
+    it("floats on an Alt+Shift+Tab the compositor hands back", () => {
       // The path that matters most: once a window has the keyboard the page
       // hears nothing, so this is the only one that fires in a real desktop.
       const { container } = renderShell();
@@ -571,7 +571,7 @@ describe("Shell", () => {
           ctrlKey: false,
           keycode: 15,
           metaKey: false,
-          shiftKey: false,
+          shiftKey: true,
         });
       });
 
@@ -581,7 +581,7 @@ describe("Shell", () => {
     it("takes the window the user is working in out of the rail", async () => {
       const { container } = renderShell();
       domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
 
       const portal = portalFor(container, "term");
       // A box of its own rather than the stage's, and above the stage. The
@@ -597,8 +597,8 @@ describe("Shell", () => {
     it("puts a floating window back on the stage", async () => {
       const { container } = renderShell();
       domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
 
       const portal = portalFor(container, "term");
       // No box of its own, so `window-styles` has it filling the stage again.
@@ -606,15 +606,27 @@ describe("Shell", () => {
       expect(portal?.style.zIndex).toBe("");
     });
 
+    it("leaves a bare Alt+Tab to the page, the way the compositor does", async () => {
+      // The chord is claimed with Shift held, and the page's own branch has to
+      // answer the same one or the keys do one thing when a window holds the
+      // keyboard and another when the shell does.
+      const { container } = renderShell();
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
+
+      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+
+      expect(portalFor(container, "term")?.style.zIndex).toBe("");
+    });
+
     it("stacks each float above the one before it", async () => {
       const { container } = renderShell();
       domicile.emit("app_appeared", { app_id: "one", title: "One" });
       domicile.emit("app_appeared", { app_id: "two", title: "Two" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       // A click on the other window is what the compositor reports, and it is
-      // what says which window the next Alt+Tab is about.
+      // what says which window the next Alt+Shift+Tab is about.
       domicile.emit("focus_changed", { app_id: "one" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
 
       expect(portalFor(container, "two")?.style.zIndex).toBe("1");
       expect(portalFor(container, "one")?.style.zIndex).toBe("2");
@@ -652,9 +664,9 @@ describe("Shell", () => {
     const twoBrowsers = async () => {
       const rendered = renderShell();
       await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       return rendered;
     };
 
@@ -685,7 +697,7 @@ describe("Shell", () => {
       expect(depths()).toStrictEqual(["2", "1"]);
     });
 
-    it("makes it the window Alt+Tab acts on", async () => {
+    it("makes it the window Alt+Shift+Tab acts on", async () => {
       // Raising it is half the answer; the other half is that it becomes the
       // window the user is working in, which is what everything keyed acts
       // on. Without it the shell would put back the window they had left
@@ -693,7 +705,7 @@ describe("Shell", () => {
       await twoBrowsers();
 
       focusPageIn(browserWindow(0));
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
 
       // Back in the rail, on the stage, and the other one still floating.
       expect(browserWindow(0).style.zIndex).toBe("");
@@ -708,7 +720,7 @@ describe("Shell", () => {
     const floated = async () => {
       const rendered = renderShell();
       domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       return rendered;
     };
 
@@ -791,7 +803,7 @@ describe("Shell", () => {
     const floated = async (held: { alt: boolean; shift: boolean }) => {
       const rendered = renderShell();
       domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       domicile.emit("modifiers", {
         altKey: held.alt,
         ctrlKey: false,
@@ -848,6 +860,28 @@ describe("Shell", () => {
       expect(portalFor(container, "term")?.style.inlineSize).toBe("640px");
     });
 
+    it("moves the window with the chord's own Shift still down", async () => {
+      // The chord that floats a window is Alt+Shift+Tab, and Shift over a
+      // floating window is the resize modifier — so without this the first
+      // drag after a float drove the window's corner rather than moving it,
+      // for as long as the user had not let go of the Shift they floated it
+      // with. Which is most of the time: Alt has to stay down for the shell
+      // to have the pointer at all, and nobody lets go of half a chord.
+      //
+      // Answering the chord spends it. Shift means resize again once it has
+      // been let go of and pressed afresh, which is what the test above does.
+      const { container } = renderShell();
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}");
+
+      drag(grabbing(container), { x: 120, y: 60 });
+
+      const portal = portalFor(container, "term");
+      expect(portal?.style.insetInlineStart).toBe("168px");
+      expect(portal?.style.inlineSize).toBe("640px");
+      await userEvent.keyboard("{/Shift}{/Alt}");
+    });
+
     it("resizes the window with an Alt+Shift+drag", async () => {
       const { container } = await floated({ alt: true, shift: true });
       const before = portalFor(container, "term")?.style.insetInlineStart;
@@ -862,6 +896,36 @@ describe("Shell", () => {
       // rather than being added to it, so a window dragged to a height is
       // that height, bar included.
       expect(portal?.style.blockSize).toBe("450px");
+    });
+
+    it("resizes after a chord the page never heard the Shift of", () => {
+      // The other path into a float: once a window holds the keyboard the page
+      // hears no keys at all, and the compositor hands the whole chord back as
+      // one message. There is no held Shift to spend in that case — the shell
+      // was never told of one — and spending it anyway would swallow the first
+      // Shift the user pressed afterwards, leaving Alt+Shift+drag moving the
+      // window for as long as they held it.
+      const { container } = renderShell();
+      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      domicile.emit("shortcut", {
+        altKey: true,
+        ctrlKey: false,
+        keycode: 15,
+        metaKey: false,
+        shiftKey: true,
+      });
+      domicile.emit("modifiers", {
+        altKey: true,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: true,
+      });
+
+      drag(grabbing(container), { x: 120, y: 60 });
+
+      const portal = portalFor(container, "term");
+      expect(portal?.style.insetInlineStart).toBe("48px");
+      expect(portal?.style.inlineSize).toBe("760px");
     });
 
     it("goes on resizing after Shift is let go mid-drag", async () => {
@@ -941,9 +1005,9 @@ describe("Shell", () => {
     const twoFloats = async (held = { alt: true, shift: false }) => {
       const rendered = renderShell();
       domicile.emit("app_appeared", { app_id: "one", title: "One" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       domicile.emit("app_appeared", { app_id: "two", title: "Two" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       domicile.emit("modifiers", {
         altKey: held.alt,
         ctrlKey: false,
@@ -1092,7 +1156,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       domicile.emit("app_appeared", { app_id: "stage", title: "Stage" });
       domicile.emit("app_appeared", { app_id: "float", title: "Float" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       act(() => {
         domicile.emit("modifiers", {
           altKey: true,
@@ -1115,7 +1179,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       domicile.emit("app_appeared", { app_id: "stage", title: "Stage" });
       domicile.emit("app_appeared", { app_id: "float", title: "Float" });
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
       // Alt stays held, so the float keeps its sheet and only the drag can be
       // what makes the *stage* window let the pointer through.
       act(() => {

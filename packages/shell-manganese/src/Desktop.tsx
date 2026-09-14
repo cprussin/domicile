@@ -51,7 +51,7 @@ export const Desktop = ({ domicile }: Props) => {
   // drag a resize. Neither can be read off a DOM event here: while a window
   // holds the keyboard the page is told nothing, which is exactly when the user
   // is holding Alt over one.
-  const modifiers = useModifiers(domicile);
+  const { modifiers, spendShift } = useModifiers(domicile);
 
   const launch = useCallback(
     (withShift: boolean) => {
@@ -67,11 +67,18 @@ export const Desktop = ({ domicile }: Props) => {
   // The window rather than the stage: once one is floating, the stage is
   // showing something else, and a toggle that acted on the stage could never
   // put a float back.
+  //
+  // The Shift is spent whether or not there is a window to float, because what
+  // it says is about the press rather than the outcome: the user pressed it to
+  // reach this chord, and a Shift the desktop has already answered is not one
+  // held over the window that lands. Both paths into here — the page's own
+  // keydown and the chord the compositor hands back — go through it.
   const float = useCallback(() => {
+    spendShift();
     if (activeId !== undefined) {
       toggleFloat(activeId);
     }
-  }, [activeId, toggleFloat]);
+  }, [activeId, spendShift, toggleFloat]);
 
   useShortcuts({ domicile, onFloat: float, onLaunch: launch });
 

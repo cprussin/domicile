@@ -47,9 +47,9 @@ export type Windows = WindowState & {
    * Take the window `id` out of the rail to float over the stage, or put it
    * back if it is already out.
    *
-   * One call rather than two because it answers one keystroke: Alt+Tab is a
-   * toggle, and which way it goes is a fact about the window the shell already
-   * holds rather than something the caller should have to look up.
+   * One call rather than two because it answers one keystroke: Alt+Shift+Tab
+   * is a toggle, and which way it goes is a fact about the window the shell
+   * already holds rather than something the caller should have to look up.
    */
   toggleFloat: (id: string) => void;
 };
