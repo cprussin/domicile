@@ -311,6 +311,7 @@ jobs:
           set -euo pipefail
           out="$CHROMIUM/out/Domicile"
           for artifact in chrome libdomicile_engine.so components_unittests \
+                          ozone_unittests \
                           domicile_css_parity domicile_color_probe; do
             [ -e "$out/$artifact" ] || {
               echo "::error::the build produced no $artifact" >&2
@@ -380,6 +381,42 @@ jobs:
           }
           nix develop "$GITHUB_WORKSPACE#full" --command \
             ./components_unittests --gtest_filter="$filter"
+
+      # The DRM platform's own tests, which until now ran nowhere a pull
+      # request could see. They were executed by engine-drm-probe.yml, which is
+      # workflow_dispatch only, and that was not an oversight: this build named
+      # only wayland and headless, so DrmScreenTest and DrmModesetTest were not
+      # in any binary it produced and could not be. `ozone_platform_drm = true`
+      # changed that, and a test that runs on demand is a test that runs after
+      # the change that broke it has already landed.
+      #
+      # Filtered to the suites this fork wrote, for the reason the step above
+      # is filtered: the rest of ozone_unittests is upstream's business. The
+      # probe still runs the whole suite, which is where a regression we caused
+      # in upstream's own cases would show up -- the two jobs ask different
+      # questions and this is the cheap one.
+      #
+      # ONE FLOOR PER SUITE. A floor over the total would let one suite's cases
+      # pay for another's disappearance, and `--gtest_filter` matching nothing
+      # exits 0, so a suite that stopped linking is otherwise a silent pass.
+      - name: The DRM platform's unit tests
+        working-directory: /build/chromium/src/out/Domicile
+        run: |
+          set -euo pipefail
+          for suite_and_floor in 'DrmScreenTest:14' 'DrmModesetTest:6'; do
+            suite="${suite_and_floor%%:*}"
+            floor="${suite_and_floor##*:}"
+            count=$(nix develop "$GITHUB_WORKSPACE#full" --command \
+              ./ozone_unittests --gtest_filter="$suite.*" --gtest_list_tests |
+              grep -cE '^  ' || true)
+            echo "$count $suite cases (floor $floor)"
+            [ "$count" -ge "$floor" ] || {
+              echo "::error::only $count $suite cases; the suite was renamed or did not link" >&2
+              exit 1
+            }
+          done
+          nix develop "$GITHUB_WORKSPACE#full" --command \
+            ./ozone_unittests --gtest_filter='DrmScreenTest.*:DrmModesetTest.*'
 
       # The guard's producer. Built here rather than by the script, which only
       # checks for it — and the runner deletes its work directory when the

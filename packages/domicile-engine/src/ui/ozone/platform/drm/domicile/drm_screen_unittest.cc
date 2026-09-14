@@ -143,8 +143,14 @@ TEST(DrmScreenTest, ASnapshotWithNoNativeModeStillProducesAUsableDisplay) {
 // So clearing the NOTREACHED() at ozone_platform_drm.cc:86 without this would
 // move the crash rather than remove it.
 TEST(DrmScreenTest, NoSnapshotsAtAllStillYieldsOnePrimaryDisplay) {
-  const std::vector<display::Display> displays =
-      DisplaysFromSnapshots(std::vector<raw_ptr<display::DisplaySnapshot>>());
+  // `VectorExperimental`, and it has to be spelled: `raw_ptr<T>` and
+  // `raw_ptr<T, VectorExperimental>` are different types and vectors of them do
+  // not convert. This line said `raw_ptr<T>` from the day `DrmScreen` took the
+  // vector traits `GetDisplaysCallback` uses, and nothing noticed, because
+  // nothing in the pull-request path compiled this file until the job that
+  // found it.
+  const std::vector<display::Display> displays = DisplaysFromSnapshots(
+      std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>());
 
   ASSERT_EQ(displays.size(), 1u)
       << "a tty with nothing plugged in still has to answer GetPrimaryDisplay";
