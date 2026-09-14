@@ -439,6 +439,15 @@ costs nothing.
   like the answer and was not: the SDK synthesized it from Electron's
   `did-navigate` and it had fired for nothing since the fork landed, so it is
   deleted rather than left looking available.
+- **Two things configure a client, and they disagree by a border.** The
+  engine states an `<app>`'s box from `ReplacedContentRect` — the *content*
+  box — and the chrome's `resize_app` reports `offsetWidth`/`offsetHeight`,
+  the *border* box. A floating window is the only one with a border, so it is
+  the only one where the two differ, and it gets two configures a layout
+  change instead of one: the client redraws twice and settles on whichever
+  landed last, up to the border's width from the hole it is drawn into.
+  Harmless at 1px and the same seam that made the scale bug: the real answer
+  is one source, which `report-app-sizes.ts` already says is the engine's.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
 - **Hot-swapping the chrome page** is a page reload on the engine, and
   `announce_open_apps` is what makes one survivable. `scripts/dev-shell.sh` is
