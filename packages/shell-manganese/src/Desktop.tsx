@@ -34,6 +34,7 @@ export const Desktop = ({ domicile }: Props) => {
     draggingId,
     drop,
     floats,
+    focusedId,
     grab,
     move,
     openBrowser,
@@ -108,6 +109,7 @@ export const Desktop = ({ domicile }: Props) => {
             domicile={domicile}
             draggingId={draggingId}
             floats={floats}
+            focusedId={focusedId}
             modifiers={modifiers}
             onClose={close}
             onDrop={drop}

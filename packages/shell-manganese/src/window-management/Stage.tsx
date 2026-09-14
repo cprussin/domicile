@@ -18,6 +18,11 @@ type Props = {
   domicile: DomicileClient;
   /** The floating window the user has hold of, or `undefined` when none is. */
   draggingId: string | undefined;
+  /**
+   * The window the compositor is typing into, or `undefined` when the chrome
+   * is. Not the same as `activeId`: see `AppWindow`.
+   */
+  focusedId: string | undefined;
   /** The windows that have left the rail, back to front. */
   floats: readonly Float[];
   /** What the user is holding down, which decides who gets the pointer. */
@@ -52,6 +57,7 @@ export const Stage = ({
   domicile,
   draggingId,
   floats,
+  focusedId,
   modifiers: { alt, ctrl, shift },
   onClose,
   onDrop,
@@ -93,6 +99,7 @@ export const Stage = ({
               dragging={window.id === draggingId}
               floating={floating}
               focused={window.id === activeId}
+              hasKeyboard={window.id === focusedId}
               key={window.id}
               onReach={() => {
                 onSelect(window.id);
