@@ -1,0 +1,152 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 14 Sep 2026 16:11:50 +0000
+Subject: [PATCH] domicile: hand the console back on a VT switch
+
+A desktop on a tty holds DRM master for as long as it runs, and Ctrl+Alt+F2
+does not take it away. So switching to another VT left two owners on one CRTC:
+the kernel drawing a console it believed it had, and Chromium still scanning
+out over it. There was nothing to do about it from inside the desktop, and the
+way back was a reboot or an ssh session.
+
+THE SEAMS WERE ALL THERE AND UNGATED. NativeDisplayDelegate::
+RelinquishDisplayControl reaches DrmWrapper::DropMaster through
+DrmDisplayHostManager and the DRM thread, and TakeDisplayControl reaches
+SetMaster the same way. What did not exist off ChromeOS is a caller, because on
+ChromeOS the session manager owns the VT and ash never asks. This is that
+caller: VT_SETMODE in VT_PROCESS mode, a handler per signal, and the handshake
+the kernel expects.
+
+TESTED WHERE THE ORDER IS. `StepVtSwitch` is a free function for the reason
+`ModesetParamsFromSnapshots` is one: a tty, two signals, a self-pipe and an
+asynchronous delegate are wiring that only a real console exercises, while the
+ORDER of the handshake is where a mistake costs somebody their screen. Eleven
+cases, written first, and the two that carry a decision were watched failing
+against a table that got them wrong:
+
+A relinquish that FAILS refuses the switch. console_ioctl(2) allows a process
+to answer VT_RELDISP with 0, and this is what that is for -- acknowledging a
+switch we could not release the display for hands the console to the kernel
+while Chromium is still scanning out on it, which is the two-owner bug this
+patch exists to remove, arriving by the other door.
+
+A take that fails acknowledges anyway and remembers that it did.  An acqsig
+cannot be refused: by the time it arrives the console is already ours. But
+going back to "owned" would be a lie, and the next switch away would try to
+relinquish a display we do not have, fail, and refuse -- stranding somebody on
+a console nothing can paint. `kConsoleWithoutDisplay` is that state and its
+only job is that the way out stays open.
+
+Two smaller things the compiler would not have caught. The signal handler
+writes one byte to a pipe and the message loop does everything else, because
+`write` is async-signal-safe and a delegate call, a log line and an ioctl are
+not. And the destructor restores VT_AUTO: a VT left in VT_PROCESS waits on a
+handshake from a process that is exiting.
+
+WHAT THIS IS NOT is a recovery mechanism, and it is worth being plain because
+it is the first thing it will be asked for. The handshake runs in this process,
+so a browser wedged in a GPU wait never answers relsig and the kernel refuses
+the switch. A browser that dies needs none of this -- the kernel drops master
+when the fd closes and switches anyway. This makes a working desktop usable.
+
+Input is the other half and is not here: until the evdev fds are revoked on the
+same two edges, keys typed at another VT still reach this one.
+---
+ ui/ozone/platform/drm/BUILD.gn              |  3 ++
+ ui/ozone/platform/drm/ozone_platform_drm.cc | 31 +++++++++++++++++++++
+ 2 files changed, 34 insertions(+)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 1d789a5ce9f51..50dc4586f2a70 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -124,6 +124,8 @@ source_set("gbm") {
+     "domicile/drm_modeset.h",
+     "domicile/drm_screen.cc",
+     "domicile/drm_screen.h",
++    "domicile/drm_vt_switcher.cc",
++    "domicile/drm_vt_switcher.h",
+     "host/drm_window_host_manager.h",
+     "host/gpu_thread_adapter.h",
+     "host/gpu_thread_observer.h",
+@@ -236,6 +238,7 @@ source_set("gbm_unittests") {
+     "gpu/proxy_helpers_unittest.cc",
+     "domicile/drm_modeset_unittest.cc",
+     "domicile/drm_screen_unittest.cc",
++    "domicile/drm_vt_switcher_unittest.cc",
+   ]
+ 
+   # `ui/display/manager/test/fake_display_snapshot.h` is the one thing this
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 3fd2c99b3baef..3c23bee3cf3e7 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "ui/ozone/platform/drm/ozone_platform_drm.h"
+ 
++#include <fcntl.h>
+ #include <gbm.h>
+ #include <stdlib.h>
+ #include <xf86drm.h>
+@@ -14,9 +15,12 @@
+ #include "base/check.h"
+ #include "base/command_line.h"
+ #include "base/containers/flat_set.h"
++#include "base/files/scoped_file.h"
+ #include "base/functional/bind.h"
++#include "base/logging.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/notreached.h"
++#include "base/posix/eintr_wrapper.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/threading/platform_thread.h"
+ #include "build/build_config.h"
+@@ -48,6 +52,7 @@
+ #include "ui/ozone/platform/drm/host/drm_window_host.h"
+ #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
+ #include "ui/ozone/platform/drm/domicile/drm_screen.h"
++#include "ui/ozone/platform/drm/domicile/drm_vt_switcher.h"
+ #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
+ #include "ui/ozone/platform/drm/host/host_drm_device.h"
+ #include "ui/ozone/platform/drm/mojom/drm_device.mojom.h"
+@@ -110,6 +115,31 @@ class OzonePlatformDrm : public OzonePlatform {
+     modeset_ = std::make_unique<DrmModeset>(CreateNativeDisplayDelegate(),
+                                             static_cast<DrmScreen*>(screen));
+     modeset_->Start();
++
++    // And the console this is running on, so Ctrl+Alt+F<n> hands the display
++    // back instead of leaving two owners on one CRTC.
++    //
++    // `/dev/tty` and not `/dev/tty0`: the first is this process's controlling
++    // terminal, which is the VT the desktop was started from, and the second
++    // is whichever VT is active at the moment it is opened. Asking the wrong
++    // one to raise signals at us is how a handshake ends up installed on
++    // somebody else's console.
++    //
++    // FAILING IS ORDINARY AND IS NOT FATAL. A desktop nested in a Wayland
++    // session has no VT, a service started without a controlling terminal has
++    // no `/dev/tty`, and neither should stop a browser from starting. What is
++    // lost is only the ability to switch away, which is what the log line
++    // says.
++    base::ScopedFD tty(HANDLE_EINTR(open("/dev/tty", O_RDWR | O_CLOEXEC)));
++    if (!tty.is_valid()) {
++      VPLOG(1) << "no controlling terminal, so no VT switching";
++      return;
++    }
++    auto switcher = std::make_unique<DrmVtSwitcher>(
++        CreateNativeDisplayDelegate(), std::move(tty));
++    if (switcher->Start()) {
++      vt_switcher_ = std::move(switcher);
++    }
+   }
+ 
+   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
+@@ -395,6 +425,7 @@ class OzonePlatformDrm : public OzonePlatform {
+   // after display_manager_ so it is destroyed before the manager whose
+   // delegate it holds.
+   std::unique_ptr<DrmModeset> modeset_;
++  std::unique_ptr<DrmVtSwitcher> vt_switcher_;
+   PlatformRuntimeProperties host_properties_;
+ 
+   base::WeakPtrFactory<OzonePlatformDrm> weak_factory_{this};

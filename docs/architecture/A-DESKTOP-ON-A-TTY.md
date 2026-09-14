@@ -602,8 +602,20 @@ Step 2 — the embedder (the port):
       `nvidia_drm.modeset=1` is **not** on this list: it is already effectively
       on, and setting it explicitly changes nothing measured here.
 
-- [ ] VT handling: watch the VT, call `RelinquishDisplayControl` on switch away
-      and `TakeDisplayControl` on switch back
+- [x] VT handling: watch the VT, call `RelinquishDisplayControl` on switch away
+      and `TakeDisplayControl` on switch back — patch `0017`. `VT_SETMODE` in
+      `VT_PROCESS` mode, a signal per edge, and the handshake
+      `console_ioctl(2)` documents. The order is the whole of it and it is a
+      free function with eleven tests: a relinquish that FAILS refuses the
+      switch, because acknowledging one we could not release for hands the
+      console to the kernel while Chromium is still scanning out on it.
+
+      **It is not a recovery mechanism**, and the checklist should not be read
+      as if it were. The handshake runs in the browser process, so an engine
+      wedged in a GPU wait never answers `relsig` and the kernel refuses the
+      switch; an engine that *dies* needs none of this, because the kernel
+      drops master when the fd closes and switches anyway. What this buys is a
+      working desktop you can switch away from
 - [ ] `EVIOCREVOKE` (or a libseat-shaped equivalent) on the evdev fds at those
       same two moments
 - [x] name `ozone_platform_drm = true` in `scripts/build.sh` and
