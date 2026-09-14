@@ -116,14 +116,20 @@ touch "$PREFIX-built"
 echo "drm probe: ui/ozone built with ozone_platform_drm = true"
 
 # `ozone_unittests` after it, because compiling the platform is not the same
-# question as exercising it. `DrmScreen` lives in that suite and in no other,
-# and until this line existed NO WORKFLOW BUILT IT AT ALL: engine.yml's build
-# names only wayland and headless, so `DrmScreenTest` is not in that binary and
-# cannot be, and adding `ozone_platform_drm` to the shipped build is ordered
-# after the modeset driver on purpose. So the suite that covers the one class
-# this whole step is about had no run anywhere, which makes the next box --
-# `GetBoundsInDIP`, which is TDD like everything here -- impossible to watch
-# fail.
+# question as exercising it. `DrmScreen` and `DrmModeset` live in that suite
+# and in no other, and when this line was written NO WORKFLOW BUILT IT AT ALL:
+# engine.yml's build named only wayland and headless, so `DrmScreenTest` was
+# not in that binary and could not be, and adding `ozone_platform_drm` to the
+# shipped build was ordered after the modeset driver on purpose.
+#
+# BOTH HALVES OF THAT HAVE SINCE CHANGED. The modeset driver landed, the
+# argument is in `build.sh`, and engine.yml builds and runs these suites on
+# every pull request -- which is where they belong, because a suite that runs
+# on demand runs after the change that broke it has already landed. What this
+# job still uniquely does is run the WHOLE of `ozone_unittests`, upstream's own
+# cases included, which is where a regression this fork caused underneath the
+# DRM platform would show up. engine.yml runs only the two suites this fork
+# wrote. The two jobs ask different questions and this is the thorough one.
 #
 # BUILT HERE, RUN IN THE WORKFLOW. A component build's test binary loads its
 # .so files from beside it and needs Chromium's runtime libraries, and those
