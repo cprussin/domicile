@@ -30,7 +30,12 @@ fn an_x11_session_is_refused_as_itself() {
 }
 
 #[test]
-fn a_tty_is_refused_by_the_build_and_not_by_the_pin() {
+fn a_machine_with_no_session_is_refused_rather_than_given_an_unproven_tty() {
+    // Deliberate, not pending. The drm platform is in this binary now, so
+    // returning "drm" here would compile and run -- and would trade a clear
+    // refusal for whatever the GPU process does on a path no screen has ever
+    // lit. That is the trade this module exists to avoid. It becomes the right
+    // default the day a screen lights.
     assert_eq!(
         platform(None, None, None),
         Err(PlatformError::NoDisplayServer)
@@ -38,21 +43,26 @@ fn a_tty_is_refused_by_the_build_and_not_by_the_pin() {
 }
 
 #[test]
-fn the_tty_refusal_blames_the_engine_build_rather_than_the_pin() {
-    // The reason a tty is refused moved, and an error that names a blocker
-    // which has been removed sends the reader to argue with a settled
-    // question. `ozone_platform_drm = true` configures and links at this pin
-    // -- patch 0012 and the drm probe job establish that. What is missing is
-    // that the release build names only wayland and headless, and that there
-    // is no embedder behind the platform even when it is built.
+fn the_tty_refusal_names_the_blocker_that_is_actually_left() {
+    // The reason a tty is refused has moved twice, and an error that names a
+    // blocker somebody already removed sends its reader to argue with a
+    // settled question. It was the pin, until patch 0012. Then it was the
+    // build and the missing embedder, until 0013/0015/0016 and
+    // `ozone_platform_drm = true` in both gn gen blocks. What is left is that
+    // no screen has been lit, which is a GPU-device question -- so the message
+    // has to stop blaming the build and start pointing at the way to try.
     let said = PlatformError::NoDisplayServer.to_string();
     assert!(
         !said.contains("cannot be built at this Chromium pin"),
         "the refusal still blames the pin: {said}"
     );
     assert!(
-        said.contains("is not in this engine build"),
-        "the refusal does not name the build as the blocker: {said}"
+        !said.contains("is not in this engine build"),
+        "the refusal still blames the build, which now carries the platform: {said}"
+    );
+    assert!(
+        said.contains("OZONE=drm"),
+        "the refusal does not say how to try a tty: {said}"
     );
     assert!(
         said.contains("A-DESKTOP-ON-A-TTY.md"),

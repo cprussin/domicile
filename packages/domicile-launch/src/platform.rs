@@ -1,27 +1,32 @@
 //! Which ozone platform the engine takes, and why a machine cannot have one.
 //!
-//! WHERE IT WAS STARTED DECIDES WHAT IT IS, for the one case that works today.
-//! The engine is built with `wayland` and `headless` and nothing else, so a
-//! desktop is a window inside an existing Wayland session, and the two other
-//! ways to start one are refused rather than attempted.
+//! WHERE IT WAS STARTED DECIDES WHAT IT IS, for the one case that is proven
+//! today: a desktop is a window inside an existing Wayland session.
 //!
-//! `ozone_platform_drm` is what would make a tty the whole screen, and the
-//! reason it is refused has moved. It used to be the pin: `gn gen` would not
-//! accept the argument at all, because `ui/ozone/platform/drm/BUILD.gn` opened
-//! with `assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")`. Patch
-//! `0012` relaxed that assert and `engine-drm-probe.yml` measured the result --
-//! the argument configures and `//ui/ozone` compiles and links at this pin.
+//! THE REASON A TTY IS REFUSED HAS MOVED TWICE, and what it is now is worth
+//! stating precisely, because an error that names a blocker somebody already
+//! removed sends its reader to argue with a settled question.
 //!
-//! What refuses a tty now is two things further along. The engine that ships
-//! does not carry the platform: `scripts/build.sh` and
-//! `engine-release-build.sh` both set `ozone_auto_platforms = false` and name
-//! only wayland and headless. And behind the platform there is no embedder --
-//! `OzonePlatformDrm::CreateScreen` is `NOTREACHED()` and nothing in the tree
-//! modesets without `//ui/display/manager`, which is ChromeOS-only.
+//! It used to be the pin: `gn gen` would not accept `ozone_platform_drm` at
+//! all, because `ui/ozone/platform/drm/BUILD.gn` opened with
+//! `assert(is_chromeos)`. Patch `0012` relaxed that and the drm probe measured
+//! it. Then it was the build and the missing embedder: the shipped engine
+//! named only wayland and headless, `OzonePlatformDrm::CreateScreen` was
+//! `NOTREACHED()`, and nothing modeset. Patches `0013`, `0015` and `0016`
+//! answered the embedder, and the argument is in both `gn gen` blocks now.
 //!
-//! Handing `--ozone-platform=drm` to a binary with no drm platform in it is a
-//! black screen and a Chromium fatal, so this says the true thing instead.
-//! `docs/architecture/A-DESKTOP-ON-A-TTY.md` is where that work is tracked.
+//! So the platform IS in this binary, and `OZONE=drm` hands it
+//! `--ozone-platform=drm` outright. What has not happened is a lit screen:
+//! past the embedder the GPU process has its own question, which is a device
+//! one rather than a porting one -- scanout and rendering on separate cards,
+//! with one function choosing both. `docs/architecture/A-DESKTOP-ON-A-TTY.md`
+//! carries it.
+//!
+//! WHICH IS WHY A MACHINE WITH NO SESSION STILL GETS A REFUSAL RATHER THAN A
+//! TTY. Auto-selecting `drm` here would turn a clear refusal into whatever the
+//! GPU process does on an unproven path, and that trade -- a message for a
+//! black screen -- is the one this file exists to avoid. It becomes the right
+//! default the day a screen lights, and not before.
 
 /// A machine this engine cannot draw on, and what the person does about it.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -33,11 +38,12 @@ pub enum PlatformError {
     )]
     X11Session,
     #[error(
-        "there is no display server here, and a tty needs the drm ozone \
-         platform, which is not in this engine build — the release names only \
-         wayland and headless, and nothing behind the platform drives a screen \
-         yet. See docs/architecture/A-DESKTOP-ON-A-TTY.md. Start this from a \
-         Wayland session for a window; OZONE=headless runs it with no display."
+        "there is no display server here. This engine does carry the drm ozone \
+         platform now, so a tty is something it can be told to try — \
+         OZONE=drm — but nothing has yet got a lit screen out of it, so it is \
+         not what a machine with no session gets by default. See \
+         docs/architecture/A-DESKTOP-ON-A-TTY.md. Start this from a Wayland \
+         session for a window; OZONE=headless runs it with no display."
     )]
     NoDisplayServer,
 }
