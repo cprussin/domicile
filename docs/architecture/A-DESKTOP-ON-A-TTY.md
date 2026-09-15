@@ -193,8 +193,10 @@ how to get one:
 
 `DisplaySnapshot::physical_size()` is millimeters, which is exactly what
 `wl_output` wants and what the compositor fabricates as `size: (300, 200)`
-(`main.rs:3211`). The display-list event under [Outputs](#outputs) carries it
-rather than inventing it a second time.
+(`main.rs:3211`). The display-list event under [Outputs](#outputs) does **not**
+carry it yet: that event is built in the browser process out of
+`display::Display`, which has no physical size, and the snapshot that does is a
+layer below. `DrmScreen`'s `DisplayPhysicalSizeMm` is the seam waiting for it.
 
 ## The session and DRM master
 
@@ -337,6 +339,57 @@ has neither, and the `DisplaySnapshot` that does is a layer below where the
 browser process reads the list from -- so `wl_output` still fabricates
 `(300, 200)` and `ADVERTISED_REFRESH_MHZ`. That is the last row of the table
 above and its own checklist item.
+
+## The window has to be the size of the CRTC
+
+**This is why the first desktop on real hardware was black, and nothing about
+it was an error.** The modeset succeeded, the CRTC took `2880x1920`, and
+`DrmScreen` reported it correctly. The engine's window was `1050x1900` at
+`(10,10)`.
+
+`ScreenManager::UpdateControllerToWindowMapping` pairs a window with a
+controller through `FindWindowAt`, which compares
+`window->bounds() == gfx::Rect(controller->origin(), controller->GetModeSize())`
+-- an exact rectangle (`screen_manager.cc:1001`). No match means the window is
+given no controller, every page flip is dropped before it reaches the kernel,
+and the CRTC keeps the blank buffer the modeset put up. A black screen with a
+clean log.
+
+The window is Chromium's ordinary default, and
+`WindowSizer::GetDefaultWindowBounds` reproduces it exactly on a 2880x1920 work
+area:
+
+| | |
+|---|---|
+| `default_width` | `min(2880 - 2×10, kWindowMaxDefaultWidth)` = 1050 |
+| `default_height` | `1920 - 2×10` = 1900 |
+| origin | `(10 + work_area.x(), 10 + work_area.y())` = (10,10) |
+| the side-by-side halving | skipped: 2880/1920 = 1.5, under the 1.6 threshold |
+
+Nothing on a tty maximises a window: there is no window manager and no session
+to restore bounds from. `--window-size=2880,1920 --window-position=0,0` is read
+at `browser_window_state.cc:180` and makes the two rectangles match, which is
+the one-run experiment. **The flag is not the fix** -- a desktop has to fill
+whatever mode the CRTC took, on every machine and across a hotplug -- so this
+belongs in the fork, at the window's bounds.
+
+That arithmetic is also the strongest evidence `DrmScreen` works: 1050 and 1900
+are derivable only from a 2880x1920 work area.
+
+### How to see a modeset
+
+`DRM configuring:` and `Modeset succeeded.` are `VLOG(1)` in
+`ui/ozone/platform/drm/gpu/screen_manager.cc:383, 405`, and
+`--vmodule=drm*=1,gbm*=1,ozone*=1` prints neither -- none of those three
+patterns matches `screen_manager`. Name it:
+
+    --vmodule=screen_manager=1,drm*=1,gbm*=1,ozone*=1
+
+A run without it says nothing either way about whether the hardware modeset,
+and reading the absence of those lines as a failure costs a cycle. What a run
+*can* say without it: `domicile: the displays read the same as last time` is
+reachable only once a `Configure` has been confirmed, so that line is itself
+proof a modeset landed.
 
 ## Key decisions
 
@@ -493,7 +546,14 @@ Step 2 — the embedder (the port):
       `DrmNativeDisplayDelegate::Configure`, and the same again on a udev
       hotplug event, without `//ui/display/manager` — patch `0016`. The
       arithmetic is a free function with six unit tests; what is left around it
-      is a delegate, two asynchronous callbacks and a thread
+      is a delegate, two asynchronous callbacks and a thread.
+
+      **Confirmed on real hardware**, after a run that looped and a run that
+      never modeset at all: one `Configure`, confirmed by the DRM thread, and
+      the self-caused hotplug behind it correctly suppressed. The proof is
+      `domicile: the displays read the same as last time`, which is reachable
+      only with a confirmed modeset behind it — `confirmed_` is assigned in one
+      place and the failure branch logs instead
 - [x] **why the GL framebuffer is incomplete on this machine — measured, and it
       is the host rather than the code.** Not an embedder port, and the
       checklist around it should not be read as implying the rest of the work
@@ -645,7 +705,19 @@ Step 2 — the embedder (the port):
       wedged in a GPU wait never answers `relsig` and the kernel refuses the
       switch; an engine that *dies* needs none of this, because the kernel
       drops master when the fd closes and switches anyway. What this buys is a
-      working desktop you can switch away from
+      working desktop you can switch away from.
+
+      **It does not work on the machine it was written for**, and the switcher
+      is not what is wrong: every `Ctrl+Alt+F<n>` was refused, correctly,
+      behind `RelinquishDisplayControlDrm drop master failed`. See the open
+      question below — the drop may be in the wrong process
+- [ ] the window fills the CRTC, so that `FindWindowAt` matches it to a
+      controller and page flips reach the kernel. Chromium's default window is
+      1050x1900 at (10,10) on a 2880x1920 panel and an exact rectangle is what
+      the mapping wants, so nothing is scanned out. See
+      [The window has to be the size of the CRTC](#the-window-has-to-be-the-size-of-the-crtc).
+      **This is what stands between here and a desktop on a screen**, and
+      `--window-size`/`--window-position` is the experiment rather than the fix
 - [ ] take the evdev fds from logind's `Session.TakeDevice` instead of
       `open()`ing them, and follow `PauseDevice` / `ResumeDevice` — which is
       the `EVIOCREVOKE` at those same two moments, because logind does it to
@@ -745,6 +817,19 @@ Step 2 — the embedder (the port):
   the devices' group (`input`, conventionally) would also make the bare
   `open` work, and is rejected twice over: it is a standing keyboard grant to
   every process that user runs, and it revokes nothing on a VT switch.
+- **Can the GPU process drop DRM master?** **Measured: not on this machine.**
+  Every `Ctrl+Alt+F<n>` was refused behind
+  `RelinquishDisplayControlDrm drop master failed for: .../card1`
+  (`drm_gpu_display_manager.cc:438`). The VT switcher is doing its job — it
+  will not acknowledge a switch it could not release for — so what is broken is
+  under it. *Hypothesis, not measured:* the kernel's `drm_master_check_perm`
+  keys on the pid that **opened** the fd. The browser opens the card and
+  becomes master implicitly, which is why no `SetMaster` is ever called and why
+  everything else works; the **GPU** process is the one calling `DropMaster`,
+  and it is sandboxed without `CAP_SYS_ADMIN`. *Recommendation:* test
+  `drmDropMaster` on a passed fd before writing anything. If that is the
+  reason, the drop belongs in the process that opened the card and patch
+  `0017`'s seam is one process out.
 - **Fractional scale.** `wl_output` scale is `Scale::Integer` here and DRM
   panels routinely want 1.5. *Recommendation:* stay integer — `ROADMAP.md`'s
   existing "fractional scaling rounds up" gap is the same decision, and it
