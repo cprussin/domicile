@@ -31,19 +31,19 @@ const REPORT_EVERY_MS = 5000;
 // `@domicile/component-library/vite-shell`.
 applyPreference(loadPreference());
 
-// One call, two places. Under the fork this is `navigator.domicile`, the
+// One call, two places. Under the fork this is `window.domicile`, the
 // control channel the engine puts on a document it served; in a plain browser
 // there is none, and `connectToHost` says so on the console and hands back a
 // stand-in that does nothing — so the shell still opens for styling work
 // against a desktop that will never arrive.
-const domicile = new DomicileClient(connectToHost(navigator));
+const domicile = new DomicileClient(connectToHost(window));
 
 // And where the desktop comes from, which is the same question one answer
 // later: a host describes one, and with no host nothing ever will, so the
 // window is the only geometry there is. Built here rather than in the chrome
 // because this is where the host's absence is already known, and once rather
 // than per render because a source is the connection.
-const displays = hasHost(navigator)
+const displays = hasHost(window)
   ? hostDisplays(domicile)
   : viewportDisplays(window);
 registerElements(domicile);

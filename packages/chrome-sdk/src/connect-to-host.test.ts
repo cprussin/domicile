@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { HostNavigator } from "./connect-to-host";
+import type { HostGlobal } from "./connect-to-host";
 import { connectToHost, hasHost } from "./connect-to-host";
 import type { DomicileHost } from "./domicile-host";
 
@@ -11,16 +11,26 @@ import type { DomicileHost } from "./domicile-host";
  */
 const aHost = (): DomicileHost => ({ displays: [] }) as unknown as DomicileHost;
 
-const navigatorWith = (domicile: DomicileHost | null | undefined) =>
-  ({ domicile }) as HostNavigator;
+const globalWith = (domicile: DomicileHost | null | undefined) =>
+  ({ domicile }) as HostGlobal;
 
 describe("connectToHost", () => {
-  it("hands back the compositor when there is one", () => {
+  it("hands back the compositor when there is one, off either global", () => {
     // Identity, not equality: everything downstream registers listeners on
     // this object, and a copy would be an object nothing dispatches to.
+    //
+    // Both spellings, because `window.domicile` is an alias for
+    // `navigator.domicile` and not a second host — one object, however a shell
+    // reached it. The `satisfies` is where the SDK's own declarations are
+    // asserted: `Pick<Window, "domicile">` does not type-check unless the SDK
+    // declares the property on `Window`, so `test:types` fails if either
+    // declaration is dropped and a shell author loses completion.
     const host = aHost();
+    const page = { domicile: host } satisfies Pick<Window, "domicile">;
+    const nav = { domicile: host } satisfies Pick<Navigator, "domicile">;
 
-    expect(connectToHost(navigatorWith(host), () => undefined)).toBe(host);
+    expect(connectToHost(page, () => undefined)).toBe(host);
+    expect(connectToHost(nav, () => undefined)).toBe(host);
   });
 
   it("says so, once and in as many words, when there is none", async () => {
@@ -31,10 +41,10 @@ describe("connectToHost", () => {
     // clients, from a layout bug, and from a client that never drew, and this
     // is the only layer that knows which.
     const said = await new Promise<string>((resolve) => {
-      connectToHost(navigatorWith(undefined), resolve);
+      connectToHost(globalWith(undefined), resolve);
     });
 
-    expect(said).toContain("navigator.domicile");
+    expect(said).toContain("window.domicile");
   });
 
   it("reads a null compositor as no compositor", () => {
@@ -44,7 +54,7 @@ describe("connectToHost", () => {
     // `undefined` would take the second one for a host and call methods on it.
     const said: string[] = [];
 
-    connectToHost(navigatorWith(null), (message) => said.push(message));
+    connectToHost(globalWith(null), (message) => said.push(message));
 
     expect(said).toHaveLength(1);
   });
@@ -54,7 +64,7 @@ describe("connectToHost", () => {
     // client registers its listeners on whatever it is given and does it in
     // its constructor. Throwing here — or handing back `undefined` — would
     // turn "no desktop" into "no page".
-    const host = connectToHost(navigatorWith(undefined), () => undefined);
+    const host = connectToHost(globalWith(undefined), () => undefined);
 
     expect(() => {
       host.addEventListener("appappeared", () => undefined);
@@ -71,23 +81,23 @@ describe("connectToHost", () => {
     // described yet" and takes the viewport's geometry instead — see
     // `hasHost`, which is the question it asks to know that.
     expect(
-      connectToHost(navigatorWith(undefined), () => undefined).displays,
+      connectToHost(globalWith(undefined), () => undefined).displays,
     ).toBeNull();
   });
 });
 
 describe("hasHost", () => {
   it("is true when the engine put a compositor on this page", () => {
-    expect(hasHost(navigatorWith(aHost()))).toBeTrue();
+    expect(hasHost(globalWith(aHost()))).toBeTrue();
   });
 
   // The one case a shell has to get right: with no compositor there is no
   // display to lay windows out on, so a shell takes the viewport's geometry
-  // instead. Asked of `navigator` rather than of `location`, which is what it
+  // instead. Asked of the global rather than of `location`, which is what it
   // used to be — the page's scheme said whether a *bridge* was serving it, and
   // there is no bridge any more.
   it("is false when there is not, however that is spelled", () => {
-    expect(hasHost(navigatorWith(undefined))).toBeFalse();
-    expect(hasHost(navigatorWith(null))).toBeFalse();
+    expect(hasHost(globalWith(undefined))).toBeFalse();
+    expect(hasHost(globalWith(null))).toBeFalse();
   });
 });

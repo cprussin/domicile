@@ -1,6 +1,6 @@
 // What `DomicileClient.on` hands a shell, and what it is called.
 //
-// One layer below this is `navigator.domicile`, whose events are typed but are
+// One layer below this is `window.domicile`, whose events are typed but are
 // shaped for WebIDL: a `DOMString` that is empty rather than absent, a
 // `hasSize` boolean beside the numbers it guards, one event class doing five
 // jobs. One layer above it is a shell, which wants the thing that happened and
@@ -159,7 +159,7 @@ export type ModifiersMessage = {
  * The desktop, as it is now.
  *
  * The event that carries this is bare — `displayschanged` says the desktop
- * moved and `navigator.domicile.displays` says what it is. The client reads
+ * moved and `window.domicile.displays` says what it is. The client reads
  * the attribute and puts it here so a shell that wants to *react* to a change
  * gets the change and the desktop in one call, and one that wants to *read*
  * the desktop uses {@link DomicileClient.displays} instead.

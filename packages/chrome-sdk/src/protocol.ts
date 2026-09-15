@@ -5,7 +5,7 @@
 //
 // **A page no longer reads any of this.** Under the fork the compositor's JSON
 // is decoded in the browser process and reaches the document as typed events on
-// `navigator.domicile`; `host-message.ts` is what a shell sees. What still
+// `window.domicile`; `host-message.ts` is what a shell sees. What still
 // reads these schemas is `@domicile/e2e-harness`, a headless stand-in for a
 // chrome that connects to the compositor's own socket — because what those
 // scripts assert is what the *compositor* sends, and a harness that went

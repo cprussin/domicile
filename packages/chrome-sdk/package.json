@@ -2,7 +2,7 @@
   "dependencies": {
     "zod": "catalog:"
   },
-  "description": "Domicile chrome SDK: the input and size routing behind the engine's <app> tag, and the client for navigator.domicile",
+  "description": "Domicile chrome SDK: the input and size routing behind the engine's <app> tag, and the client for window.domicile",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile/test-support": "workspace:*",

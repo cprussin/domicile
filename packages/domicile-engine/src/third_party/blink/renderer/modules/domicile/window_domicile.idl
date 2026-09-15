@@ -1,0 +1,20 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+    ImplementedAs=WindowDomicile,
+    RuntimeEnabled=DomicileControlChannel,
+    SecureContext
+] partial interface Window {
+  // The same host `navigator.domicile` answers with, not a second one: a
+  // shell reaches system state through `window.domicile.<interface>` without
+  // registering anything, and the two spellings must therefore be one object
+  // -- a listener bound through either is bound to the channel both share.
+  //
+  // Null for the reason navigator's is: a shell opened in an ordinary
+  // browser -- a `vite dev` on its page, which is how shells get styled -- has
+  // no desktop behind it, and finding that out by reading a property is better
+  // than finding out when a call throws.
+  [SameObject] readonly attribute DomicileHost? domicile;
+};

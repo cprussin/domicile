@@ -13,7 +13,7 @@ clients as DOM elements.
 
 It provides these:
 
-- **`DomicileClient`** (`./domicile-client`) — the client for `navigator.domicile`, the
+- **`DomicileClient`** (`./domicile-client`) — the client for `window.domicile`, the
   typed control channel the forked engine puts on a document it served. It
   takes a `DomicileHost` and gives back a handler table for what the compositor
   says and a typed call per thing the chrome asks of it. There is no handshake
@@ -22,7 +22,7 @@ It provides these:
   a DOM event dispatched with no listener is gone, and a React shell registers
   tens of milliseconds after the compositor has announced every window already
   running. For the same reason a page must never call `addEventListener` on
-  `navigator.domicile` itself.
+  `window.domicile` itself.
 - **`registerElements`** (`./register-elements`) — the input and size routing
   behind the engine's `<app>` tag. It reports each window's on-screen box to the
   host, forwards the pointer over one to the client underneath in that client's
@@ -73,7 +73,7 @@ import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-const domicile = new DomicileClient(connectToHost(navigator));
+const domicile = new DomicileClient(connectToHost(window));
 registerElements(domicile);
 ```
 
@@ -82,10 +82,14 @@ the handshake it performed, the compositor's protocol version is checked in the
 browser process and only logged, and the first call on the channel is what
 binds it. Say what you have to say as soon as you have a domicile.
 
-Opened in an ordinary browser there is no `navigator.domicile` at all —
+Opened in an ordinary browser there is no `window.domicile` at all —
 `vite dev` on a shell's page is a real thing to do — and `connectToHost` hands
 back a stand-in that does nothing and says so once on the console. Ask
-`hasHost(navigator)` if your own code needs the answer.
+`hasHost(window)` if your own code needs the answer.
+
+`navigator.domicile` is the same object and still reads, so `connectToHost`
+takes either global and prefers neither. `window.domicile` is the spelling the
+guides use.
 
 Then render `<app app-id="…">` / `<webview src="…">` as normal DOM and style
 them with ordinary CSS — rounding, blur, transforms, and z-index all apply to the

@@ -69,11 +69,15 @@ work on NixOS, where a generic-linux Chromium cannot start at all.
 
 ## The control channel's protocol, and what of it is here
 
-`navigator.domicile` is the shell's control channel. The wire protocol lives in
-the browser process rather than in the page, which is what makes a malformed
-message unconstructable — and what makes adding one cost an engine release
-rather than a TypeScript edit. That trade was made deliberately; it is worth
-knowing which side of it you are on before asking for a new message.
+`window.domicile` is the shell's control channel, and `navigator.domicile` is
+the same object under the name it was born with: `WindowDomicile::domicile`
+forwards to `NavigatorDomicile`, which is the supplement that owns the one
+`DomicileHost` a window gets, so the alias cannot become a second channel. The
+wire protocol lives in the browser process rather than in the page, which is
+what makes a malformed message unconstructable — and what makes adding one cost
+an engine release rather than a TypeScript edit. That trade was made
+deliberately; it is worth knowing which side of it you are on before asking for
+a new message.
 
 **Implemented — every member the fork keeps.** Outbound: `spawn`, `focus_app`,
 `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
@@ -91,7 +95,7 @@ guest's never reach the shell. So the browser holds the set and matches it in
 `WebViewGuest::PreHandleKeyboardEvent`, and the press comes back up `shortcut`
 from there. See `src/components/domicile/browser/shortcut_registry.h`.
 
-`displays` reaches the page as an attribute — `navigator.domicile.displays` —
+`displays` reaches the page as an attribute — `window.domicile.displays` —
 with a bare `displayschanged` event beside it, rather than as an event carrying
 the desktop. The desktop is a fact and not a stream: a component that mounts
 after the description has to be able to read it, and an event carrying the only

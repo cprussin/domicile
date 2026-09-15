@@ -22,6 +22,8 @@ blink_modules_sources("domicile") {
     "domicile_host.h",
     "navigator_domicile.cc",
     "navigator_domicile.h",
+    "window_domicile.cc",
+    "window_domicile.h",
   ]
 
   deps = [

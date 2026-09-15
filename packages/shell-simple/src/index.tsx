@@ -12,11 +12,11 @@ import { Shell } from "./Shell";
 
 import "./shell.css";
 
-// Under the fork this is `navigator.domicile`, the control channel the engine
+// Under the fork this is `window.domicile`, the control channel the engine
 // puts on a document it served. In a plain browser there is none, and
 // `connectToHost` says so on the console and hands back a stand-in, so the
 // desktop still opens against windows that will never arrive.
-const domicile = new DomicileClient(connectToHost(navigator));
+const domicile = new DomicileClient(connectToHost(window));
 registerElements(domicile);
 
 // A container of our own: Domicile writes the document, and the body it writes
