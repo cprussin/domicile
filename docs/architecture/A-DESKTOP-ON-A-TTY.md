@@ -236,8 +236,8 @@ What a normal Linux tty has to supply:
 | open `/dev/dri/card0` | `open()` in the browser process | a logind session on an active VT gives the session user an ACL on the card node, so the bare `open` works unprivileged. Root also works. No code change |
 | become DRM master | implicit: the first opener of an unused card is master | nothing, *if* nothing else holds it |
 | drop master on VT-away, retake on VT-back | `DisplayConfigurator`, on a ChromeOS signal | does not exist. `TakeDisplayControl` / `RelinquishDisplayControl` are the right seam and are already plumbed to the DRM thread; the caller is what is missing |
-| open `/dev/input/event*` | `open()` in the browser process | **fails.** logind ACLs a card node and not a keyboard, so the fds have to come from `Session.TakeDevice`, which is a seam ozone does not have (see [Input](#input)) |
-| revoke input on VT-away | — | the same seam: logind `EVIOCREVOKE`s the fd it passed when it pauses the device |
+| open `/dev/input/event*` | `Session.TakeDevice(major, minor)` on the evdev thread | **done**, patch `0020`. The bare `open()` is `Permission denied`: logind ACLs a card node and not a keyboard (see [Input](#input)) |
+| revoke input on VT-away | logind, on `PauseDevice` | **done** by the same seam: logind `EVIOCREVOKE`s the fd it passed when it pauses the device |
 
 **Domicile needs exactly one DRM master, and it is the engine.** The
 compositor never touches a card node: `dmabuf_import.rs`'s `headless_renderer`
@@ -247,24 +247,18 @@ holds master and the Smithay side is unaffected.
 
 ## Input
 
-**Ozone DRM supplies evdev on this pin, and the existing forwarding path
-survives unchanged.**
+**The evdev descriptors come from logind, and nothing about the forwarding
+path changed.** Patch `0020`.
 
-`OzonePlatformDrm::InitializeUI` builds the same evdev stack any ozone platform
-on Linux can (`ozone_platform_drm.cc:194-209`):
-
-```cpp
-device_manager_ = CreateDeviceManager();                  // udev
-event_factory_ozone_ = std::make_unique<EventFactoryEvdev>(
-    cursor_.get(), device_manager_.get(),
-    KeyboardLayoutEngineManager::GetKeyboardLayoutEngine());
-```
+`OzonePlatformDrm::InitializeUI` builds the same evdev stack any ozone
+platform on Linux can — udev device manager, `EventFactoryEvdev`, a thread of
+its own for device I/O — and one thing about it is this platform's own: the
+`InputDeviceOpener` that thread uses.
 
 `InputDeviceOpenerEvdev::OpenInputDevice` opens `/dev/input/event*` directly
-with `open(O_RDWR | O_NONBLOCK)`
-(`ui/events/ozone/evdev/input_device_opener_evdev.cc:114`) — and **that open
-fails on an ordinary desktop.** This is the one thing about input the audit
-had wrong, and the first run on real hardware is what said so.
+with `open(O_RDWR | O_NONBLOCK)`, and **that open fails on an ordinary
+desktop.** This is the one thing about input the audit had wrong, and the
+first run on real hardware is what said so.
 
 **logind's ACLs do not cover a keyboard.** `70-uaccess.rules` tags `drm
 card*` and `renderD*`; among input devices it tags only
@@ -274,15 +268,114 @@ opens and every evdev node does not — which is exactly the shape of that run:
 `Modeset succeeded` at `2880x1920p@120`, and fifteen
 `Cannot open /dev/input/eventN: Permission denied (13)`.
 
-What logind supplies instead is fd-passing.
-`org.freedesktop.login1.Session.TakeDevice(major, minor)` returns an open fd
-for a device on the session's seat, and `PauseDevice` / `ResumeDevice` are how
-it takes one back and returns it. That is what libseat wraps and what a
-Wayland compositor on a tty uses. Domicile's own compositor is not a second
-copy of it to borrow from: it opens no devices at all, and Smithay's session,
-DRM and udev backends are deliberately outside its dependency tree
-(`packages/domicile-compositor/Cargo.toml:48`). The seam belongs in the
-engine, where the `open()` is.
+**The `input` group is the other way to make that open work, and it is
+rejected.** No other Wayland compositor requires it. It is a standing keyboard
+grant to every process that user runs, and it revokes nothing: an fd opened
+while the session was active goes on delivering after the user switches away,
+which is a keylogger rather than a papercut.
+
+### What happens instead
+
+| Moment | Call | Who |
+|---|---|---|
+| evdev thread starts | `Manager.GetSessionByPID(0)`, then `Session.TakeControl(false)` | `DrmLogindInput`, in its constructor |
+| udev announces a device | `stat` the node, then `Session.TakeDevice(major, minor)` | `DrmLogindInput::OpenDeviceFd`, from upstream's `OpenInputDevice` |
+| VT switch away | `PauseDevice(major, minor, "pause")` arrives; answered with `PauseDeviceComplete` | `DrmTakenDevices::Pause` |
+| VT switch back | `ResumeDevice(major, minor, fd)` arrives; the descriptor is parked and the device is closed and opened again | `DrmTakenDevices::Resume` |
+| that reopen | `RemoveInputDevice(path)` then `AddInputDevice(id, path)`; the reopened device consumes the parked descriptor | `InputDeviceFactoryEvdev`, through the callback it handed the opener |
+| device unplugged | `PauseDevice(..., "gone")`; the device is forgotten | `DrmTakenDevices::Pause` |
+| shutdown | `Session.ReleaseDevice` per device, then `Session.ReleaseControl` | `~DrmLogindInput` |
+
+`Session.TakeDevice(major, minor)` answers with an open descriptor for a
+device on the session's seat; `PauseDevice` / `ResumeDevice` are how logind
+takes one back and returns it. That is what libseat wraps and what a Wayland
+compositor on a tty uses. Domicile's own compositor is not a second copy of it
+to borrow from: it opens no devices at all, and Smithay's session, DRM and
+udev backends are deliberately outside its dependency tree
+(`packages/domicile-compositor/Cargo.toml:48`). So the seam is in the engine,
+where the `open()` was — `InputDeviceOpener`, a one-method pure virtual that
+`InputDeviceFactoryEvdev` already took as a constructor argument.
+
+**Chromium's own `dbus::Bus`, not libseat.** D-Bus is already compiled into
+this engine and already in use by the browser process — the engine CI log
+carries `ERROR:dbus/object_proxy.cc` and `ERROR:dbus/bus.cc` lines from UPower
+and NetworkManager calls at runtime — so this adds no system or third-party
+dependency. `//ui/ozone/platform/wayland` already depends on `//dbus` for its
+idle monitor. libseat would add a dependency for no gain.
+
+**No fallback to `open()`.** No session, or a `TakeControl` that something
+else holds, is fatal, and the message names the remedy. A desktop that quietly
+comes up deaf is the bug this removed. Nested and headless runs use another
+ozone platform and no evdev at all, so the DRM platform is the only caller.
+
+### The thread bridge
+
+`OpenInputDevice` is **synchronous** and runs on the **evdev thread**;
+`dbus::ObjectProxy::CallMethodAndBlock` is only legal on the thread that owns
+the bus. The bus is therefore created **on the evdev thread**, with a
+thread-pool single-thread runner of its own — the same shape
+`dbus_thread_linux::CreateSharedBus` uses. That makes the evdev thread the
+bus's *origin* thread, so `ConnectToSignal` and every `PauseDevice` /
+`ResumeDevice` callback land there with no hop and no lock and the state
+machine is single-threaded, and it leaves exactly one crossing:
+`CallMethodAndBlock` posted to the D-Bus thread with the evdev thread waiting
+on a `base::WaitableEvent`.
+
+Two alternatives, and why neither:
+
+- **Run the bus on the evdev thread with no D-Bus thread at all.** Cannot
+  work. `dbus::Bus` watches its socket through `base::FileDescriptorWatcher`,
+  and `base::Thread` installs one only when `CurrentIOThread::IsSet()`
+  (`base/threading/thread.cc`). The evdev thread runs a `MessagePumpType::UI`
+  pump, so it does not have one.
+- **Take the devices on the UI thread and hand descriptors across.** Costs
+  re-plumbing `OpenInputDeviceParams`, `EventFactoryEvdev` and the factory
+  proxy to carry a descriptor the seam is designed to produce, for no gain:
+  blocking is what this call already did. The `open` it replaces and the
+  `EVIOCG*` ioctls behind `EventDeviceInfo::Initialize` are synchronous on
+  this same thread, and nothing disallows `//base` sync primitives on a plain
+  `base::Thread`.
+
+### A console switch round trip keeps input alive
+
+**The resume is a reopen, not a repair**, and that is not a style choice.
+logind `EVIOCREVOKE`s the descriptor it paused, so the converter's next read
+is `ENODEV` and `EventConverterEvdevImpl::OnFileCanReadWithoutBlocking`
+answers that with `Stop()`. Nothing re-arms that watch, and swapping the
+descriptor underneath cannot: `dup2` closes the revoked description, and the
+kernel drops an epoll registration when the description behind a number is
+closed. `InputDeviceFactoryEvdev::AttachInputDevice` is the **only** caller of
+`EventConverterEvdev::Start()`.
+
+So `ResumeDevice` parks its descriptor against the device's path and asks the
+factory for `RemoveInputDevice(path)` then `AddInputDevice(id, path)`. The
+`OpenInputDevice` that follows finds the parked descriptor and consumes it
+instead of calling `TakeDevice` — logind refuses a second `TakeDevice` for a
+device the session already holds, so that half is not optional. The explicit
+detach ahead of the open is not redundant either: `AttachInputDevice` would
+detach, but a task later, leaving the dead converter watching in between.
+
+The factory hands the opener that callback from its own constructor
+(`InputDeviceOpener::SetDeviceReopener`), because an opener is built in order
+to be given to the factory and so cannot be given the factory first. An opener
+that `open`s its own descriptors never runs it; nothing takes those away.
+
+**The id is reused, not minted.** `NextDeviceId()` is a counter on
+`EventFactoryEvdev` on the UI thread and is not reachable from the evdev
+thread, and nothing keys on an id being fresh: `converters_` is keyed by path,
+and `OnInputDeviceRemoved(id)` only drops per-device settings for it, which
+`AttachInputDevice` re-applies. Reuse is also what happened — it is the same
+device coming back. The device list sees one removal and one addition per
+device per round trip, which is honest about a descriptor that really was
+revoked.
+
+**Why this had to be in the same change.** Patch `0019` is what makes
+`Ctrl+Alt+F<n>` work at all. Shipped beside a resume that only replaced the
+descriptor, the pair would read as "switch away, switch back, keyboard and
+mouse are dead" — worse than the `input` group they replace, whose descriptors
+are never revoked at all.
+
+### What did not change
 
 Today's route into the compositor's seat is the chrome forwarding
 `ClientRequest::Key { app_id, keycode, pressed }` over the host socket, where
@@ -293,18 +386,23 @@ the X keycode the keymap wants). That route lives entirely inside the engine
 and the host socket: it does not care whether the engine learned the key from
 `wl_keyboard` or from `/dev/input/event3`. **Input needs no new route.**
 
-Two things do change:
+One thing still diverges: **the keymap is stated twice.** The compositor sets
+its seat's `XkbConfig`; the engine's `XkbKeyboardLayoutEngine` is configured
+separately from ozone. Two keymaps over one keyboard is a divergence a nested
+run never had, because the host compositor owned the keymap.
 
-- **The revoke is the same mechanism, not a second one.** Chromium has no
-  `EVIOCREVOKE` call and no VT awareness, so an fd opened while the session
-  was active keeps delivering after the user switches away — a keylogger
-  rather than a papercut. `TakeDevice` closes it for free: logind
-  `EVIOCREVOKE`s the fd itself on `PauseDevice`. Getting the fds and giving
-  them up are one seam and one checklist item.
-- **The keymap is stated twice.** The compositor sets its seat's `XkbConfig`;
-  the engine's `XkbKeyboardLayoutEngine` is configured separately from ozone.
-  Two keymaps over one keyboard is a divergence a nested run never had, because
-  the host compositor owned the keymap.
+### This is also how DRM master should be acquired
+
+Not implemented, and not this change. `TakeDevice` on the card node plus
+`PauseDevice` / `ResumeDevice` is how wlroots does VT switching: logind hands
+over the card, drops master on it when the session goes inactive and sets
+master again when it comes back, in the process that asked for the device.
+That supersedes patch `0019`'s `dup`-based approach outright — the `dup`
+exists only because the kernel freezes the permitted pid on a file that was
+ever master and `SCM_RIGHTS` carries it to the GPU process, which is a problem
+a card taken from logind does not have. It also removes the browser's own
+`open` of `/dev/dri/card0`, which is the one place a tty desktop still leans
+on an ACL. Follow-up, below.
 
 ## Outputs
 
@@ -769,12 +867,34 @@ Step 2 — the embedder (the port):
       `kUnknown` also makes `DesktopWindowTreeHostPlatform::IsFullscreen()`
       permanently false, so views re-enters fullscreen every time and its own
       `DCHECK_EQ` fails in a DCHECK build
-- [ ] take the evdev fds from logind's `Session.TakeDevice` instead of
+- [x] take the evdev fds from logind's `Session.TakeDevice` instead of
       `open()`ing them, and follow `PauseDevice` / `ResumeDevice` — which is
       the `EVIOCREVOKE` at those same two moments, because logind does it to
       the fd it passed. One item rather than two: on an ordinary desktop the
       bare `open` is `Permission denied` and there is nothing to revoke yet.
-      See [Input](#input)
+      Patch `0020`, and see [Input](#input).
+
+      **The seam was already there**, so the edits to files Chromium owns are
+      three: the choice of opener reaching the evdev thread, one protected
+      `OpenDeviceFd` on `InputDeviceOpenerEvdev` — the descriptor is the one
+      thing that differs, so the monotonic clock, `EventDeviceInfo` and the
+      choice of converter stay upstream's — and the reopen below.
+      `DrmInputDevicesTest`, thirteen cases, is where the logic is: the node to
+      `(major, minor)` through an injected `stat`, the pause half and what each
+      of logind's three types means, the resume's reopen and the descriptor it
+      hands over exactly once, and a release that asks every device even after
+      one refuses.
+
+      **The resume is a reopen**, which was the second hard part. The revoked
+      descriptor takes the converter's watch down with it, and nothing but
+      `InputDeviceFactoryEvdev::AttachInputDevice` starts one — so a `dup2`
+      under the converter would have shipped "switch away, switch back,
+      keyboard dead" alongside `0019`'s working `Ctrl+Alt+F<n>`. See
+      [A console switch round trip keeps input alive](#a-console-switch-round-trip-keeps-input-alive)
+- [ ] take the card node from logind too — `TakeDevice` on `/dev/dri/card0`
+      plus `PauseDevice` / `ResumeDevice`, which is how wlroots does VT
+      switching and which supersedes patch `0019`'s `dup`. See
+      [This is also how DRM master should be acquired](#this-is-also-how-drm-master-should-be-acquired)
 - [x] name `ozone_platform_drm = true` in `scripts/build.sh` and
       `engine-release-build.sh` — after `DrmScreen` and the modeset driver,
       because a platform with no embedder behind it turns a clear refusal into
@@ -863,11 +983,14 @@ Step 2 — the embedder (the port):
   and nothing else — `70-uaccess.rules` tags `drm card*` and `renderD*` — so
   the card opened and modeset while all fifteen `/dev/input/event*` came back
   `Permission denied (13)`. There is no ACL to ship on for input.
-  *Decision:* the fd-passing seam, in front of `InputDeviceOpenerEvdev`, fed
-  by logind's `TakeDevice` — directly or through libseat. Putting the user in
-  the devices' group (`input`, conventionally) would also make the bare
-  `open` work, and is rejected twice over: it is a standing keyboard grant to
-  every process that user runs, and it revokes nothing on a VT switch.
+  *Decision, and shipped in patch `0020`:* the fd-passing seam, in front of
+  `InputDeviceOpenerEvdev`, fed by logind's `TakeDevice` — directly, over
+  Chromium's own `dbus::Bus`, rather than through libseat, which would be a new
+  third-party dependency for a protocol that is four method calls and two
+  signals. Putting the user in the devices' group (`input`, conventionally)
+  would also make the bare `open` work, and is rejected twice over: it is a
+  standing keyboard grant to every process that user runs, and it revokes
+  nothing on a VT switch.
 - **Can the GPU process drop DRM master?** **Answered: no, and it never
   could.** Not a machine, a sandbox or a permission bit — the kernel forbids
   it by construction, and reading the two functions that say so is the whole

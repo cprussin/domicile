@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+# Whether the DRM platform's evdev descriptors come from logind.
+#
+# On a tty the bare `open("/dev/input/eventN", O_RDWR)` in
+# `InputDeviceOpenerEvdev::OpenInputDevice` is `Permission denied`: logind's
+# `70-uaccess.rules` ACLs `card*` and `renderD*` and, among input devices,
+# only `ID_INPUT_JOYSTICK`. A keyboard keeps its group-owned mode and the
+# session user gets no ACL entry on it. Every other Wayland compositor takes
+# the descriptor from `org.freedesktop.login1.Session.TakeDevice` instead; the
+# alternative is putting the user in the `input` group, which is a standing
+# keyboard grant to every process that user runs and is revoked on nothing.
+#
+# THE TWO HALVES THIS GUARDS ARE THE TWO THAT CAN ROT SILENTLY. The seam
+# (`InputDeviceOpener`, injected into `InputDeviceFactoryEvdev` by design) can
+# be left unplugged and the build is still green -- the desktop just comes up
+# deaf, which is exactly the failure this change exists to remove. And a
+# fallback to `open()` added later "so it works in more places" would put the
+# deafness back while looking like robustness.
+#
+# NO CHROMIUM TREE. The series is the source of truth, so this reads `src/`
+# and `patches/`, which is what makes it cheap enough to run in the shell group
+# on every push rather than only when the fork is built.
+set -u
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ENGINE="$ROOT/packages/domicile-engine"
+PATCHES="$ENGINE/patches"
+DOMICILE="$ENGINE/src/ui/ozone/platform/drm/domicile"
+[ -d "$PATCHES" ] || { echo "no patch series at $PATCHES" >&2; exit 1; }
+
+FAILED=0
+ok()   { printf '  ok    %s\n' "$1"; }
+fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
+
+# Added lines only (`^+`), so a patch that merely quotes upstream in context
+# cannot satisfy this.
+added="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -a '^+' || true)"
+in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
+
+# The Domicile-owned half lives in `src/`, never in a patch: a file is in one
+# or the other and never both.
+for f in drm_input_devices.h drm_input_devices.cc drm_input_devices_unittest.cc \
+         drm_logind_input.h drm_logind_input.cc; do
+  if [ -f "$DOMICILE/$f" ]; then
+    ok "domicile/$f exists"
+  else
+    fail "domicile/$f exists" "no such file under src/ui/ozone/platform/drm/domicile"
+  fi
+done
+
+sources="$(cat "$DOMICILE"/drm_logind_input.cc "$DOMICILE"/drm_input_devices.cc 2>/dev/null || true)"
+in_sources() { case "$sources" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
+
+# The four calls that make up logind's fd-passing protocol. `TakeControl`
+# before anything else (logind refuses `TakeDevice` to a session that does not
+# hold control), `TakeDevice` per device, and the pause half, which is not
+# optional: logind waits on `PauseDeviceComplete` before it hands the VT over,
+# so leaving it out stalls every console switch for logind's timeout.
+for call in TakeControl TakeDevice PauseDeviceComplete ReleaseControl; do
+  if in_sources "\"$call\""; then
+    ok "the session's $call is called"
+  else
+    fail "the session's $call is called" "no \"$call\" in the domicile sources"
+  fi
+done
+
+for signal in PauseDevice ResumeDevice; do
+  if in_sources "kSignal$signal"; then
+    ok "the $signal signal is followed"
+  else
+    fail "the $signal signal is followed" "no kSignal$signal in the domicile sources"
+  fi
+done
+
+# THE WAY BACK FROM A CONSOLE SWITCH, which is the half that is easy to leave
+# out and impossible to notice in a build. logind `EVIOCREVOKE`s the descriptor
+# it paused, the converter answers the resulting `ENODEV` read with `Stop()`,
+# and nothing re-arms that watch -- so a resume that only replaced the
+# descriptor would leave the desktop dead after the first `Ctrl+Alt+F<n>` round
+# trip. Worse than the `input` group this replaces, which is never revoked at
+# all. The device has to go back through `InputDeviceFactoryEvdev`, whose
+# `AttachInputDevice` is the only caller of `Start()`.
+if in_sources 'reopen_.Run('; then
+  ok "a resume puts the device back through the factory"
+else
+  fail "a resume puts the device back through the factory" \
+    "nothing runs the reopen callback; a dup2 alone cannot re-arm the watch"
+fi
+
+if in_patches 'SetDeviceReopener'; then
+  ok "the factory hands the opener a way back in"
+else
+  fail "the factory hands the opener a way back in" \
+    "no patch gives InputDeviceOpener a reopen callback"
+fi
+
+# AND THE MEMBER THAT CARRIES IT COSTS A TRANSLATION UNIT. `InputDeviceOpener`
+# was an empty interface, so an inlined `= default` destructor was fine; one
+# `base::RepeatingCallback` member makes it "complex" to the chromium-style
+# plugin (`tools/clang/plugins/FindBadConstructsConsumer.cpp` scores a single
+# templated non-trivial member at 10, and its threshold is 10), and the plugin
+# then demands an out-of-line constructor AND destructor. The build runs the
+# plugin with `-Werror`, so re-inlining either of them is a failed build 26
+# minutes into a contended runner rather than a review comment.
+if in_patches '"input_device_opener.cc",'; then
+  ok "the opener's constructor and destructor have a translation unit"
+else
+  fail "the opener's constructor and destructor have a translation unit" \
+    "input_device_opener.cc is not in the evdev target; chromium-style will refuse the header"
+fi
+
+if in_patches 'factory->RemoveInputDevice(path);'; then
+  ok "the reopen closes the device before opening it again"
+else
+  fail "the reopen closes the device before opening it again" \
+    "no patch calls RemoveInputDevice ahead of AddInputDevice"
+fi
+
+# AND THE REOPEN MUST NOT ASK logind AGAIN. `TakeDevice` for a device the
+# session already holds is refused, so the descriptor the `ResumeDevice` signal
+# carried is the only one there will be -- it has to be what the reopened
+# device consumes, and it has to be consulted BEFORE the call that would ask
+# for another.
+opener_body="$(awk '/^base::ScopedFD DrmLogindInput::OpenDeviceFd/,/^}/' \
+  "$DOMICILE/drm_logind_input.cc" 2>/dev/null || true)"
+resumed_at="$(printf '%s\n' "$opener_body" | grep -n 'Resumed(' | head -1 | cut -d: -f1)"
+take_at="$(printf '%s\n' "$opener_body" | grep -n 'take_device(' | head -1 | cut -d: -f1)"
+if [ -n "$resumed_at" ] && [ -n "$take_at" ] && [ "$resumed_at" -lt "$take_at" ]; then
+  ok "a reopen consumes the resumed descriptor instead of taking the device again"
+else
+  fail "a reopen consumes the resumed descriptor instead of taking the device again" \
+    "OpenDeviceFd does not consult the resumed descriptor before calling TakeDevice"
+fi
+
+# NO FALLBACK TO open(). A desktop that quietly comes up deaf is the bug being
+# fixed, so a logind session that is missing or refuses must be a loud failure
+# rather than a quiet retreat to the `open` that cannot work.
+if in_sources 'open('; then
+  fail "there is no fallback to open()" \
+    "drm_logind_input.cc calls open(); the whole point is that it cannot work"
+else
+  ok "there is no fallback to open()"
+fi
+
+# The seam, plugged. `InputDeviceOpener` is a one-method pure virtual that
+# `InputDeviceFactoryEvdev` takes as a constructor argument, so the platform
+# gets to choose -- but only if the choice is actually carried from
+# `ozone_platform_drm.cc` down to the evdev thread.
+if in_patches 'std::make_unique<DrmLogindInput>()'; then
+  ok "the DRM platform installs the logind opener"
+else
+  fail "the DRM platform installs the logind opener" \
+    "no patch constructs DrmLogindInput"
+fi
+
+if in_patches 'virtual base::ScopedFD OpenDeviceFd'; then
+  ok "the descriptor is the one thing the opener overrides"
+else
+  fail "the descriptor is the one thing the opener overrides" \
+    "no patch adds InputDeviceOpenerEvdev::OpenDeviceFd"
+fi
+
+# Registered, or it does not link and `--gtest_filter` matching nothing exits
+# zero -- the silent pass both workflows' floors exist to refuse.
+if in_patches '"domicile/drm_input_devices_unittest.cc"'; then
+  ok "the unit test is in the gbm_unittests target"
+else
+  fail "the unit test is in the gbm_unittests target" \
+    "no patch adds domicile/drm_input_devices_unittest.cc to BUILD.gn"
+fi
+
+for workflow in engine.yml engine-drm-probe.yml; do
+  if grep -q "DrmInputDevicesTest:" "$ROOT/.github/workflows/$workflow" 2>/dev/null; then
+    ok "$workflow carries a floor for the suite"
+  else
+    fail "$workflow carries a floor for the suite" \
+      "no 'DrmInputDevicesTest:<n>' in .github/workflows/$workflow"
+  fi
+done
+
+# A floor without a run is a count of tests nobody executed.
+if grep -q 'DrmInputDevicesTest\.\*' "$ROOT/.github/workflows/engine.yml" 2>/dev/null; then
+  ok "engine.yml's filtered run names the suite"
+else
+  fail "engine.yml's filtered run names the suite" \
+    "DrmInputDevicesTest.* is not in the --gtest_filter"
+fi
+
+if [ "$FAILED" -gt 0 ]; then
+  echo "$FAILED failed"
+  exit 1
+fi
+echo "all ok"
