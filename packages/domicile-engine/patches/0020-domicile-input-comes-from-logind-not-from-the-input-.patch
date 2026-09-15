@@ -1,0 +1,609 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 15 Sep 2026 18:59:08 +0000
+Subject: [PATCH] domicile: input comes from logind, not from the input group
+
+On a tty the desktop came up deaf. `InputDeviceOpenerEvdev::OpenInputDevice`
+opens `/dev/input/event*` with a bare `open(O_RDWR | O_NONBLOCK)`, and on an
+ordinary Linux desktop that is `Permission denied`: logind's
+`70-uaccess.rules` ACLs `drm card*` and `renderD*` and, among input devices,
+tags only `ID_INPUT_JOYSTICK`. A keyboard keeps its group-owned mode and the
+session user gets no ACL entry on it -- which is exactly the shape of the
+first run on real hardware, one `Modeset succeeded` and fifteen `Cannot open
+/dev/input/eventN: Permission denied (13)`.
+
+PUTTING THE USER IN THE `input` GROUP IS THE WRONG FIX AND NO OTHER
+COMPOSITOR ASKS FOR IT. It is a standing keyboard grant to every process that
+user runs, and it is revoked on nothing -- an fd opened while the session was
+active goes on delivering after a switch away, which is a keylogger rather
+than a papercut. What every Wayland compositor does instead is
+`org.freedesktop.login1.Session.TakeControl` and then `TakeDevice(major,
+minor)` per device, and the revoke comes free: logind `EVIOCREVOKE`s the fd it
+passed when it pauses the device.
+
+THE SEAM ALREADY EXISTED. `InputDeviceOpener` is a one-method pure virtual
+that `InputDeviceFactoryEvdev` takes as a constructor argument, so the edits
+to files Chromium owns are the choice reaching the evdev thread
+(`EventFactoryEvdev` to `EventThreadEvdev` to `EvdevThread`), one protected
+`OpenDeviceFd` hook on `InputDeviceOpenerEvdev` -- the descriptor is the one
+thing that differs, so the monotonic clock, `EventDeviceInfo` and the choice
+of converter stay upstream's -- and the reopen below. Every other platform
+keeps the `open`, through a default argument that names it.
+
+CHROMIUM'S OWN `dbus::Bus`, NOT libseat. D-Bus is already compiled into this
+engine and already in use by the browser process -- the engine CI log carries
+`ERROR:dbus/object_proxy.cc` and `ERROR:dbus/bus.cc` lines from UPower and
+NetworkManager calls at runtime -- so this adds no system or third-party
+dependency. libseat would add one for no gain. `//ui/ozone/platform/wayland`
+already depends on `//dbus` for its idle monitor.
+
+THE THREAD BRIDGE, WHICH IS ONE OF THE TWO HARD PARTS. `OpenInputDevice` is
+synchronous and runs on the evdev thread; `CallMethodAndBlock` is only legal
+on the thread that owns the bus. The bus is therefore created ON the evdev
+thread with a thread-pool single-thread runner of its own, which makes the
+evdev thread the bus's ORIGIN thread -- so `ConnectToSignal` and every
+`PauseDevice` / `ResumeDevice` callback land there with no hop and no lock,
+and the state machine is single-threaded. That leaves exactly one crossing,
+`CallMethodAndBlock` posted to the D-Bus thread with this one waiting on a
+`base::WaitableEvent`.
+
+Running the bus on the evdev thread with no D-Bus thread at all was the
+alternative and it cannot work: `base::Thread` installs a
+`FileDescriptorWatcher` only when `CurrentIOThread::IsSet()`
+(`base/threading/thread.cc`), the evdev thread is a `MessagePumpType::UI`
+pump, and `dbus::Bus` watches its socket through exactly that API. Taking the
+devices on the UI thread and handing descriptors across was the other, and it
+costs re-plumbing `OpenInputDeviceParams`, `EventFactoryEvdev` and the factory
+proxy to carry a descriptor the seam is designed to produce. Blocking is also
+what this call already did: the `open` it replaces and the `EVIOCG*` ioctls
+behind `EventDeviceInfo::Initialize` are synchronous on this same thread, and
+nothing disallows sync primitives on a plain `base::Thread`.
+
+A RESUME IS A REOPEN, WHICH IS THE OTHER HARD PART AND THE ONE THAT WOULD
+HAVE SHIPPED A REGRESSION. Swapping the descriptor under the converter looks
+like enough and is not. logind `EVIOCREVOKE`s what it paused, the converter's
+next read is `ENODEV`, and `EventConverterEvdevImpl` answers that with
+`Stop()`; `dup2` cannot re-arm that watch either, because the kernel drops an
+epoll registration when the description behind a number is closed, which is
+what `dup2` does to the revoked one. `AttachInputDevice` is the ONLY caller of
+`EventConverterEvdev::Start()`. So a `ResumeDevice` parks its descriptor
+against the device's path and asks the factory for `RemoveInputDevice` then
+`AddInputDevice`, and the `OpenInputDevice` that follows consumes the parked
+descriptor rather than calling `TakeDevice` again -- logind refuses a second
+`TakeDevice` for a device the session already holds, so that part is not
+optional. The explicit detach ahead of the open matters too:
+`AttachInputDevice` would detach, but a task later, leaving the dead converter
+watching in between.
+
+Without it, `0019`'s working `Ctrl+Alt+F<n>` and this would ship together as
+"switch away, switch back, keyboard is dead" -- worse than the group
+membership they replace, whose descriptors are never revoked at all.
+
+THE FACTORY HANDS THE OPENER ITS WAY BACK IN, from the factory's own
+constructor, because an opener is built in order to be given to the factory
+and so cannot be given the factory first. `SetDeviceReopener` is not virtual
+and the callback lives on `InputDeviceOpener`: an opener that `open`s its own
+descriptors never runs it, since nothing takes those away.
+
+THE ID IS REUSED, NOT MINTED. `NextDeviceId()` is a counter on
+`EventFactoryEvdev` on the UI thread and is not reachable from here, and
+nothing keys on an id being fresh -- `converters_` is keyed by path, and
+`OnInputDeviceRemoved(id)` only drops per-device settings for it, which
+`AttachInputDevice` re-applies. Reuse is also what happened: it is the same
+device coming back. What the device list sees is one removal and one addition
+per device per console switch round trip, which is honest about a descriptor
+that really was revoked.
+
+TESTED WHERE THE LOGIC IS. `DrmInputDevicesTest`, thirteen cases: the path to
+`(major, minor)` through an injected `stat`, including a directory, a block
+device carrying the same two numbers in a different space, and a node that
+went away between udev's announcement and the lookup; the pause half, where
+only type "pause" is answered with `PauseDeviceComplete` -- logind holds the
+console switch open until it is, so silence costs its whole timeout -- where a
+pause for a device this session never took is answered anyway rather than
+wedging the console, and where "gone" forgets the device instead of releasing
+it later; the resume half, where the reopen names the same id and path, gets
+the descriptor logind sent and gets it exactly once, and where a resume for a
+device never taken reopens nothing; and the release, which asks every device
+even after one refuses, for the reason `DrmMaster` does -- logind hands a
+device to the next session only once every holder has let go.
+
+The reopen double in that suite calls back for the parked descriptor while
+`Resume` is still on the stack, which is what the real factory does, so the
+re-entrancy is exercised and not merely reasoned about.
+
+`scripts/test-input-comes-from-logind.sh` holds the parts a unit test cannot
+reach: that the seam is plugged from `ozone_platform_drm.cc`, that all four
+calls and both signals are there, that a resume goes back through the factory
+and consumes the parked descriptor BEFORE the call that would take the device
+again, and that no `open` came back. It reads the series rather than a
+Chromium tree, so it runs in the shell group on every push.
+
+`DrmInputDevicesTest:13` is a floor in both workflows and the filtered run
+names the suite, so it actually executes.
+
+Guidelines audited: docs/guidelines/TESTING.md, docs/guidelines/ERRORS.md,
+docs/guidelines/CONTROL_FLOW.md, docs/guidelines/FUNCTIONS.md,
+docs/guidelines/FILES.md, docs/guidelines/DESIGN_DOCS.md. Change complies.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0121wHJhHTqCKfhKTwP4R2t1
+---
+ ui/events/ozone/evdev/BUILD.gn                |  1 +
+ ui/events/ozone/evdev/event_factory_evdev.cc  | 11 +++--
+ ui/events/ozone/evdev/event_factory_evdev.h   | 16 +++++--
+ ui/events/ozone/evdev/event_thread_evdev.cc   | 21 ++++++---
+ ui/events/ozone/evdev/event_thread_evdev.h    |  7 ++-
+ .../ozone/evdev/input_device_factory_evdev.cc | 18 ++++++++
+ ui/events/ozone/evdev/input_device_opener.cc  | 19 ++++++++
+ ui/events/ozone/evdev/input_device_opener.h   | 45 ++++++++++++++++++-
+ .../ozone/evdev/input_device_opener_evdev.cc  | 16 ++++++-
+ .../ozone/evdev/input_device_opener_evdev.h   | 19 ++++++++
+ ui/ozone/platform/drm/BUILD.gn                | 11 +++++
+ ui/ozone/platform/drm/DEPS                    |  1 +
+ ui/ozone/platform/drm/ozone_platform_drm.cc   | 15 ++++++-
+ 13 files changed, 182 insertions(+), 18 deletions(-)
+ create mode 100644 ui/events/ozone/evdev/input_device_opener.cc
+
+diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
+index 20597d0300626..00bc1e7f841a3 100644
+--- a/ui/events/ozone/evdev/BUILD.gn
++++ b/ui/events/ozone/evdev/BUILD.gn
+@@ -73,6 +73,7 @@ component("evdev") {
+     "input_device_factory_evdev_metrics.h",
+     "input_device_factory_evdev_proxy.cc",
+     "input_device_factory_evdev_proxy.h",
++    "input_device_opener.cc",
+     "input_device_opener.h",
+     "input_device_opener_evdev.cc",
+     "input_device_opener_evdev.h",
+diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
+index 6b80cf2449a7b..193323e477029 100644
+--- a/ui/events/ozone/evdev/event_factory_evdev.cc
++++ b/ui/events/ozone/evdev/event_factory_evdev.cc
+@@ -220,9 +220,11 @@ PointerDetails GetTransformedEventPointerDetails(const T& params) {
+ 
+ }  // namespace
+ 
+-EventFactoryEvdev::EventFactoryEvdev(CursorDelegateEvdev* cursor,
+-                                     DeviceManager* device_manager,
+-                                     KeyboardLayoutEngine* keyboard_layout)
++EventFactoryEvdev::EventFactoryEvdev(
++    CursorDelegateEvdev* cursor,
++    DeviceManager* device_manager,
++    KeyboardLayoutEngine* keyboard_layout,
++    InputDeviceOpenerFactory opener_factory)
+     : device_manager_(device_manager),
+       gamepad_provider_(GamepadProviderOzone::GetInstance()),
+       keyboard_(
+@@ -236,6 +238,7 @@ EventFactoryEvdev::EventFactoryEvdev(CursorDelegateEvdev* cursor,
+       input_controller_(&keyboard_,
+                         &mouse_button_map_,
+                         &pointing_stick_button_map_),
++      opener_factory_(std::move(opener_factory)),
+       touch_id_generator_(0) {
+   DCHECK(device_manager_);
+ }
+@@ -598,7 +601,7 @@ void EventFactoryEvdev::StartThread() {
+   thread_.Start(std::move(proxy_dispatcher), cursor_,
+                 base::BindOnce(&EventFactoryEvdev::OnThreadStarted,
+                                weak_ptr_factory_.GetWeakPtr()),
+-                &input_controller_);
++                &input_controller_, std::move(opener_factory_));
+ }
+ 
+ void EventFactoryEvdev::OnThreadStarted(
+diff --git a/ui/events/ozone/evdev/event_factory_evdev.h b/ui/events/ozone/evdev/event_factory_evdev.h
+index c252511791efd..b374fc8301b40 100644
+--- a/ui/events/ozone/evdev/event_factory_evdev.h
++++ b/ui/events/ozone/evdev/event_factory_evdev.h
+@@ -17,6 +17,8 @@
+ #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
+ #include "ui/events/ozone/evdev/event_thread_evdev.h"
+ #include "ui/events/ozone/evdev/input_controller_evdev.h"
++#include "ui/events/ozone/evdev/input_device_opener.h"
++#include "ui/events/ozone/evdev/input_device_opener_evdev.h"
+ #include "ui/events/ozone/evdev/keyboard_evdev.h"
+ #include "ui/events/ozone/evdev/mouse_button_map_evdev.h"
+ #include "ui/events/ozone/gamepad/gamepad_event.h"
+@@ -53,9 +55,14 @@ enum class StylusState;
+ class COMPONENT_EXPORT(EVDEV) EventFactoryEvdev : public DeviceEventObserver,
+                                                   public PlatformEventSource {
+  public:
+-  EventFactoryEvdev(CursorDelegateEvdev* cursor,
+-                    DeviceManager* device_manager,
+-                    KeyboardLayoutEngine* keyboard_layout_engine);
++  // `opener_factory` is how a platform whose input descriptors do not come
++  // from an `open` says so; it is run on the evdev thread. The default is the
++  // `open`, which is what every platform but Domicile's DRM one wants.
++  EventFactoryEvdev(
++      CursorDelegateEvdev* cursor,
++      DeviceManager* device_manager,
++      KeyboardLayoutEngine* keyboard_layout_engine,
++      InputDeviceOpenerFactory opener_factory = OpenInputDevicesDirectly());
+ 
+   EventFactoryEvdev(const EventFactoryEvdev&) = delete;
+   EventFactoryEvdev& operator=(const EventFactoryEvdev&) = delete;
+@@ -175,6 +182,9 @@ class COMPONENT_EXPORT(EVDEV) EventFactoryEvdev : public DeviceEventObserver,
+   // Whether we've set up the device factory.
+   bool initialized_ = false;
+ 
++  // Handed to the evdev thread when it starts, and run there.
++  InputDeviceOpenerFactory opener_factory_;
++
+   // Thread for device I/O.
+   EventThreadEvdev thread_;
+ 
+diff --git a/ui/events/ozone/evdev/event_thread_evdev.cc b/ui/events/ozone/evdev/event_thread_evdev.cc
+index 946793e0eb4e3..d6c711088d4c9 100644
+--- a/ui/events/ozone/evdev/event_thread_evdev.cc
++++ b/ui/events/ozone/evdev/event_thread_evdev.cc
+@@ -20,7 +20,6 @@
+ #include "ui/events/ozone/evdev/input_controller_evdev.h"
+ #include "ui/events/ozone/evdev/input_device_factory_evdev.h"
+ #include "ui/events/ozone/evdev/input_device_factory_evdev_proxy.h"
+-#include "ui/events/ozone/evdev/input_device_opener_evdev.h"
+ 
+ namespace ui {
+ 
+@@ -32,20 +31,25 @@ class EvdevThread : public base::Thread {
+   EvdevThread(std::unique_ptr<DeviceEventDispatcherEvdev> dispatcher,
+               CursorDelegateEvdev* cursor,
+               EventThreadStartCallback callback,
+-              InputControllerEvdev* input_controller)
++              InputControllerEvdev* input_controller,
++              InputDeviceOpenerFactory opener_factory)
+       : base::Thread("evdev"),
+         dispatcher_(std::move(dispatcher)),
+         cursor_(cursor),
+         init_callback_(std::move(callback)),
+         init_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
+-        input_controller_(input_controller) {}
++        input_controller_(input_controller),
++        opener_factory_(std::move(opener_factory)) {}
+   ~EvdevThread() override { Stop(); }
+ 
+   void Init() override {
+     TRACE_EVENT0("evdev", "EvdevThread::Init");
++    // HERE, NOT IN THE CONSTRUCTOR: this is the evdev thread, and an opener
++    // that takes its descriptors from logind makes a D-Bus connection whose
++    // origin has to be the thread that uses it.
+     input_device_factory_ = std::make_unique<InputDeviceFactoryEvdev>(
+-        std::move(dispatcher_), cursor_,
+-        std::make_unique<InputDeviceOpenerEvdev>(), input_controller_);
++        std::move(dispatcher_), cursor_, std::move(opener_factory_).Run(),
++        input_controller_);
+ 
+     auto proxy = std::make_unique<InputDeviceFactoryEvdevProxy>(
+         base::SingleThreadTaskRunner::GetCurrentDefault(),
+@@ -70,6 +74,7 @@ class EvdevThread : public base::Thread {
+   EventThreadStartCallback init_callback_;
+   scoped_refptr<base::SingleThreadTaskRunner> init_runner_;
+   raw_ptr<InputControllerEvdev> input_controller_;
++  InputDeviceOpenerFactory opener_factory_;
+ 
+   // Thread-internal state.
+   std::unique_ptr<InputDeviceFactoryEvdev> input_device_factory_;
+@@ -87,10 +92,12 @@ void EventThreadEvdev::Start(
+     std::unique_ptr<DeviceEventDispatcherEvdev> dispatcher,
+     CursorDelegateEvdev* cursor,
+     EventThreadStartCallback callback,
+-    InputControllerEvdev* input_controller) {
++    InputControllerEvdev* input_controller,
++    InputDeviceOpenerFactory opener_factory) {
+   TRACE_EVENT0("evdev", "EventThreadEvdev::Start");
+   thread_ = std::make_unique<EvdevThread>(
+-      std::move(dispatcher), cursor, std::move(callback), input_controller);
++      std::move(dispatcher), cursor, std::move(callback), input_controller,
++      std::move(opener_factory));
+   base::Thread::Options thread_options;
+   thread_options.message_pump_type = base::MessagePumpType::UI;
+   thread_options.thread_type = base::ThreadType::kPresentation;
+diff --git a/ui/events/ozone/evdev/event_thread_evdev.h b/ui/events/ozone/evdev/event_thread_evdev.h
+index 5be4718878a53..b3bb623997bdb 100644
+--- a/ui/events/ozone/evdev/event_thread_evdev.h
++++ b/ui/events/ozone/evdev/event_thread_evdev.h
+@@ -9,6 +9,7 @@
+ 
+ #include "base/functional/callback.h"
+ #include "ui/events/ozone/evdev/input_controller_evdev.h"
++#include "ui/events/ozone/evdev/input_device_opener.h"
+ 
+ namespace base {
+ class Thread;
+@@ -36,10 +37,14 @@ class EventThreadEvdev {
+   // Start a new events thread. All device events will get sent to the
+   // passed dispatcher. The thread will call directly into cursor, so it
+   // must be synchronized accordingly.
++  // `opener_factory` is run ON THE NEW THREAD, because the opener it builds
++  // is used there and one of them owns a D-Bus connection whose origin is the
++  // thread that created it.
+   void Start(std::unique_ptr<DeviceEventDispatcherEvdev> dispatcher,
+              CursorDelegateEvdev* cursor,
+              EventThreadStartCallback callback,
+-             InputControllerEvdev* input_controller);
++             InputControllerEvdev* input_controller,
++             InputDeviceOpenerFactory opener_factory);
+ 
+  private:
+   std::unique_ptr<base::Thread> thread_;
+diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.cc b/ui/events/ozone/evdev/input_device_factory_evdev.cc
+index 5e26d25b6a898..79074020a3a33 100644
+--- a/ui/events/ozone/evdev/input_device_factory_evdev.cc
++++ b/ui/events/ozone/evdev/input_device_factory_evdev.cc
+@@ -112,6 +112,24 @@ InputDeviceFactoryEvdev::InputDeviceFactoryEvdev(
+       imposter_checker_(new ImposterCheckerEvdev()),
+       input_device_opener_(std::move(input_device_opener)),
+       input_controller_(input_controller) {
++  // THE OPENER'S WAY BACK IN, handed over here because an opener is built in
++  // order to be given to this factory and so cannot be given this factory
++  // first. `base::Unretained` is safe for the same reason: the opener is owned
++  // here and cannot outlive what owns it.
++  //
++  // Closing a device and opening it again is the only thing that re-arms the
++  // watch on it -- `AttachInputDevice` is the sole caller of
++  // `EventConverterEvdev::Start()` -- and an opener whose descriptors can be
++  // revoked under it (Domicile's, from logind, on a console switch) has no
++  // other way to get a device reading again. The explicit detach ahead of the
++  // open matters: `AttachInputDevice` would detach too, but it runs a task
++  // later, which would leave the dead converter watching in between.
++  input_device_opener_->SetDeviceReopener(base::BindRepeating(
++      [](InputDeviceFactoryEvdev* factory, int id, const base::FilePath& path) {
++        factory->RemoveInputDevice(path);
++        factory->AddInputDevice(id, path);
++      },
++      base::Unretained(this)));
+ }
+ 
+ InputDeviceFactoryEvdev::~InputDeviceFactoryEvdev() = default;
+diff --git a/ui/events/ozone/evdev/input_device_opener.cc b/ui/events/ozone/evdev/input_device_opener.cc
+new file mode 100644
+index 0000000000000..dec71d017bbfe
+--- /dev/null
++++ b/ui/events/ozone/evdev/input_device_opener.cc
+@@ -0,0 +1,19 @@
++// Copyright 2022 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "ui/events/ozone/evdev/input_device_opener.h"
++
++#include <utility>
++
++namespace ui {
++
++InputDeviceOpener::InputDeviceOpener() = default;
++
++InputDeviceOpener::~InputDeviceOpener() = default;
++
++void InputDeviceOpener::SetDeviceReopener(ReopenInputDeviceCall reopen) {
++  reopen_device_ = std::move(reopen);
++}
++
++}  // namespace ui
+diff --git a/ui/events/ozone/evdev/input_device_opener.h b/ui/events/ozone/evdev/input_device_opener.h
+index fda925ba72c62..7d6ca2a9b8766 100644
+--- a/ui/events/ozone/evdev/input_device_opener.h
++++ b/ui/events/ozone/evdev/input_device_opener.h
+@@ -5,7 +5,11 @@
+ #ifndef UI_EVENTS_OZONE_EVDEV_INPUT_DEVICE_OPENER_H_
+ #define UI_EVENTS_OZONE_EVDEV_INPUT_DEVICE_OPENER_H_
+ 
++#include <memory>
++
+ #include "base/component_export.h"
++#include "base/files/file_path.h"
++#include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "ui/events/ozone/evdev/event_converter_evdev.h"
+ #include "ui/events/ozone/evdev/touch_filter/shared_palm_detection_filter_state.h"
+@@ -37,13 +41,52 @@ struct OpenInputDeviceParams {
+   raw_ptr<SharedPalmDetectionFilterState> shared_palm_state;
+ };
+ 
++// Asks the factory to close the device at `path` and open it again under
++// `id`, which is the only thing that re-arms the watch on it: the converter
++// stops watching a descriptor whose read failed, and
++// `InputDeviceFactoryEvdev::AttachInputDevice` is the only caller of
++// `EventConverterEvdev::Start()`.
++using ReopenInputDeviceCall =
++    base::RepeatingCallback<void(int id, const base::FilePath& path)>;
++
+ class COMPONENT_EXPORT(EVDEV) InputDeviceOpener {
+  public:
+-  virtual ~InputDeviceOpener() = default;
++  // Out of line, both of them, because `reopen_device_` makes this a class
++  // the chromium-style plugin calls complex -- a single templated non-trivial
++  // member is its whole threshold -- and it then requires an out-of-line
++  // constructor AND destructor. It was an empty interface before that member
++  // and an inlined `= default` pair was fine.
++  InputDeviceOpener();
++  virtual ~InputDeviceOpener();
+ 
+   virtual std::unique_ptr<EventConverterEvdev> OpenInputDevice(
+       const OpenInputDeviceParams& params) = 0;
++
++  // Handed over by the factory that owns this opener, once that factory
++  // exists -- an opener is constructed in order to be given to the factory, so
++  // it cannot take the factory as an argument.
++  //
++  // An opener that `open`s its own descriptors never needs it: nothing takes
++  // those away. One whose descriptors are lent to it -- Domicile's, from
++  // logind, which revokes them on a console switch -- has no other way back.
++  void SetDeviceReopener(ReopenInputDeviceCall reopen);
++
++ protected:
++  const ReopenInputDeviceCall& reopen_device() const { return reopen_device_; }
++
++ private:
++  ReopenInputDeviceCall reopen_device_;
+ };
++
++// How an ozone platform says which opener its evdev thread should use.
++//
++// A FACTORY RATHER THAN AN INSTANCE, because the opener is used on the evdev
++// thread and only there, and one of them -- the DRM platform's, which takes
++// its descriptors from logind over D-Bus -- owns a connection whose origin
++// thread is the thread that created it. Making it here would make the wrong
++// thread the owner.
++using InputDeviceOpenerFactory =
++    base::OnceCallback<std::unique_ptr<InputDeviceOpener>()>;
+ }  // namespace ui
+ 
+ #endif  // UI_EVENTS_OZONE_EVDEV_INPUT_DEVICE_OPENER_H_
+diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.cc b/ui/events/ozone/evdev/input_device_opener_evdev.cc
+index 1a7e671b49210..e9b64c7d7d807 100644
+--- a/ui/events/ozone/evdev/input_device_opener_evdev.cc
++++ b/ui/events/ozone/evdev/input_device_opener_evdev.cc
+@@ -7,10 +7,12 @@
+ #include <fcntl.h>
+ 
+ #include <memory>
++#include <utility>
+ 
+ #include "base/command_line.h"
+ #include "base/files/file_path.h"
+ #include "base/files/scoped_file.h"
++#include "base/functional/bind.h"
+ #include "base/logging.h"
+ #include "base/memory/ptr_util.h"
+ #include "base/trace_event/trace_event.h"
+@@ -110,7 +112,7 @@ std::unique_ptr<EventConverterEvdev> InputDeviceOpenerEvdev::OpenInputDevice(
+   const base::FilePath& path = params.path;
+   TRACE_EVENT1("evdev", "OpenInputDevice", "path", path.value());
+ 
+-  base::ScopedFD fd(open(path.value().c_str(), O_RDWR | O_NONBLOCK));
++  base::ScopedFD fd = OpenDeviceFd(params);
+   if (fd.get() < 0) {
+     PLOG(ERROR) << "Cannot open " << path.value();
+     return nullptr;
+@@ -132,4 +134,16 @@ std::unique_ptr<EventConverterEvdev> InputDeviceOpenerEvdev::OpenInputDevice(
+   return CreateConverter(params, std::move(fd), devinfo);
+ }
+ 
++base::ScopedFD InputDeviceOpenerEvdev::OpenDeviceFd(
++    const OpenInputDeviceParams& params) {
++  return base::ScopedFD(
++      open(params.path.value().c_str(), O_RDWR | O_NONBLOCK));
++}
++
++InputDeviceOpenerFactory OpenInputDevicesDirectly() {
++  return base::BindOnce([]() -> std::unique_ptr<InputDeviceOpener> {
++    return std::make_unique<InputDeviceOpenerEvdev>();
++  });
++}
++
+ }  // namespace ui
+diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.h b/ui/events/ozone/evdev/input_device_opener_evdev.h
+index 7a89eae7efb77..4afe766ca4a5b 100644
+--- a/ui/events/ozone/evdev/input_device_opener_evdev.h
++++ b/ui/events/ozone/evdev/input_device_opener_evdev.h
+@@ -24,7 +24,26 @@ class COMPONENT_EXPORT(EVDEV) InputDeviceOpenerEvdev
+ 
+   std::unique_ptr<EventConverterEvdev> OpenInputDevice(
+       const OpenInputDeviceParams& params) override;
++
++ protected:
++  // The descriptor for `params.path`, and the ONE thing a platform whose
++  // descriptors do not come from an `open` has to replace. It is given the
++  // whole of `params` rather than the path because a platform that has to
++  // reopen a device later needs the id the factory knows it by. Everything
++  // else this class does
++  // -- the monotonic clock, `EventDeviceInfo` and the choice of converter --
++  // is the same whoever opened the node.
++  //
++  // It is a seam because on an ordinary Linux desktop the `open` below fails:
++  // logind's `70-uaccess.rules` ACLs `drm card*` and `renderD*` and, among
++  // input devices, only `ID_INPUT_JOYSTICK`, so a keyboard keeps its
++  // group-owned mode and the session user gets nothing on it. See
++  // `ui/ozone/platform/drm/domicile/drm_logind_input.h`.
++  virtual base::ScopedFD OpenDeviceFd(const OpenInputDeviceParams& params);
+ };
++
++// The opener every platform but Domicile's DRM one wants.
++COMPONENT_EXPORT(EVDEV) InputDeviceOpenerFactory OpenInputDevicesDirectly();
+ }  // namespace ui
+ 
+ #endif  // UI_EVENTS_OZONE_EVDEV_INPUT_DEVICE_OPENER_EVDEV_H_
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 54fcfd4ca1bd0..98850d6d0aaa6 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -122,6 +122,10 @@ source_set("gbm") {
+     "host/drm_window_host_manager.cc",
+     "domicile/drm_fullscreen.cc",
+     "domicile/drm_fullscreen.h",
++    "domicile/drm_input_devices.cc",
++    "domicile/drm_input_devices.h",
++    "domicile/drm_logind_input.cc",
++    "domicile/drm_logind_input.h",
+     "domicile/drm_master.cc",
+     "domicile/drm_master.h",
+     "domicile/drm_modeset.cc",
+@@ -145,6 +149,12 @@ source_set("gbm") {
+     "//base",
+     "//build/config/linux/libdrm",
+     "//components/viz/common/resources:shared_image_format",
++
++    # THE EVDEV DESCRIPTORS COME FROM LOGIND, over the D-Bus this process
++    # already speaks -- the browser makes UPower and NetworkManager calls over
++    # it at runtime -- so this adds no system or third-party dependency.
++    # `//ui/ozone/platform/wayland` depends on it for the same kind of reason.
++    "//dbus",
+     "//gpu/vulkan:buildflags",
+     "//ipc",
+     "//media:media_buildflags",
+@@ -241,6 +251,7 @@ source_set("gbm_unittests") {
+     "gpu/mock_drm_modifiers_filter.h",
+     "gpu/proxy_helpers_unittest.cc",
+     "domicile/drm_fullscreen_unittest.cc",
++    "domicile/drm_input_devices_unittest.cc",
+     "domicile/drm_master_unittest.cc",
+     "domicile/drm_modeset_unittest.cc",
+     "domicile/drm_screen_unittest.cc",
+diff --git a/ui/ozone/platform/drm/DEPS b/ui/ozone/platform/drm/DEPS
+index 110e1a7d0e38e..2652ce937ff92 100644
+--- a/ui/ozone/platform/drm/DEPS
++++ b/ui/ozone/platform/drm/DEPS
+@@ -1,4 +1,5 @@
+ include_rules = [
++  "+dbus",
+   "+mojo/public",
+   "+services/service_manager",
+   "+services/viz/public/mojom",
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 3c23bee3cf3e7..aabe8e62c1ed0 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -50,6 +50,7 @@
+ #include "ui/ozone/platform/drm/host/drm_display_host_manager.h"
+ #include "ui/ozone/platform/drm/host/drm_native_display_delegate.h"
+ #include "ui/ozone/platform/drm/host/drm_window_host.h"
++#include "ui/ozone/platform/drm/domicile/drm_logind_input.h"
+ #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
+ #include "ui/ozone/platform/drm/domicile/drm_screen.h"
+ #include "ui/ozone/platform/drm/domicile/drm_vt_switcher.h"
+@@ -264,9 +265,21 @@ class OzonePlatformDrm : public OzonePlatform {
+     KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
+         keyboard_layout_engine_.get());
+ 
++    // THE DESCRIPTORS COME FROM LOGIND ON THIS PLATFORM, and there is no
++    // fallback to the `open` upstream does. On an ordinary Linux desktop that
++    // `open` is `Permission denied` -- logind ACLs a card node and not a
++    // keyboard -- so a platform that kept it would come up deaf, and the group
++    // membership that would make it work is a standing keyboard grant revoked
++    // on nothing. See `domicile/drm_logind_input.h`.
++    //
++    // Only here. Nested and headless runs use another ozone platform and no
++    // evdev at all, so nothing else is asked to find a session.
+     event_factory_ozone_ = std::make_unique<EventFactoryEvdev>(
+         cursor_.get(), device_manager_.get(),
+-        KeyboardLayoutEngineManager::GetKeyboardLayoutEngine());
++        KeyboardLayoutEngineManager::GetKeyboardLayoutEngine(),
++        base::BindOnce([]() -> std::unique_ptr<InputDeviceOpener> {
++          return std::make_unique<DrmLogindInput>();
++        }));
+ 
+     GpuThreadAdapter* adapter;
+ 
