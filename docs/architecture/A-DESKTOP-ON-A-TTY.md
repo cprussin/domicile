@@ -234,7 +234,8 @@ What a normal Linux tty has to supply:
 | open `/dev/dri/card0` | `open()` in the browser process | a logind session on an active VT gives the session user an ACL on the card node, so the bare `open` works unprivileged. Root also works. No code change |
 | become DRM master | implicit: the first opener of an unused card is master | nothing, *if* nothing else holds it |
 | drop master on VT-away, retake on VT-back | `DisplayConfigurator`, on a ChromeOS signal | does not exist. `TakeDisplayControl` / `RelinquishDisplayControl` are the right seam and are already plumbed to the DRM thread; the caller is what is missing |
-| revoke input on VT-away | — | does not exist (see [Input](#input)) |
+| open `/dev/input/event*` | `open()` in the browser process | **fails.** logind ACLs a card node and not a keyboard, so the fds have to come from `Session.TakeDevice`, which is a seam ozone does not have (see [Input](#input)) |
+| revoke input on VT-away | — | the same seam: logind `EVIOCREVOKE`s the fd it passed when it pauses the device |
 
 **Domicile needs exactly one DRM master, and it is the engine.** The
 compositor never touches a card node: `dmabuf_import.rs`'s `headless_renderer`
@@ -259,8 +260,27 @@ event_factory_ozone_ = std::make_unique<EventFactoryEvdev>(
 
 `InputDeviceOpenerEvdev::OpenInputDevice` opens `/dev/input/event*` directly
 with `open(O_RDWR | O_NONBLOCK)`
-(`ui/events/ozone/evdev/input_device_opener_evdev.cc:114`) — again, an active
-logind session's ACLs suffice, and again there is no seat interface.
+(`ui/events/ozone/evdev/input_device_opener_evdev.cc:114`) — and **that open
+fails on an ordinary desktop.** This is the one thing about input the audit
+had wrong, and the first run on real hardware is what said so.
+
+**logind's ACLs do not cover a keyboard.** `70-uaccess.rules` tags `drm
+card*` and `renderD*`; among input devices it tags only
+`ID_INPUT_JOYSTICK`. A keyboard or a mouse keeps its group-owned mode on an
+active VT and the session user gets no ACL entry on it. So the card node
+opens and every evdev node does not — which is exactly the shape of that run:
+`Modeset succeeded` at `2880x1920p@120`, and fifteen
+`Cannot open /dev/input/eventN: Permission denied (13)`.
+
+What logind supplies instead is fd-passing.
+`org.freedesktop.login1.Session.TakeDevice(major, minor)` returns an open fd
+for a device on the session's seat, and `PauseDevice` / `ResumeDevice` are how
+it takes one back and returns it. That is what libseat wraps and what a
+Wayland compositor on a tty uses. Domicile's own compositor is not a second
+copy of it to borrow from: it opens no devices at all, and Smithay's session,
+DRM and udev backends are deliberately outside its dependency tree
+(`packages/domicile-compositor/Cargo.toml:48`). The seam belongs in the
+engine, where the `open()` is.
 
 Today's route into the compositor's seat is the chrome forwarding
 `ClientRequest::Key { app_id, keycode, pressed }` over the host socket, where
@@ -273,10 +293,12 @@ and the host socket: it does not care whether the engine learned the key from
 
 Two things do change:
 
-- **Nothing revokes the keyboard on a VT switch.** Chromium has no
-  `EVIOCREVOKE` call and no VT awareness; an fd opened while the session was
-  active keeps delivering after the user switches away. On a tty that is a
-  keylogger, not a papercut.
+- **The revoke is the same mechanism, not a second one.** Chromium has no
+  `EVIOCREVOKE` call and no VT awareness, so an fd opened while the session
+  was active keeps delivering after the user switches away — a keylogger
+  rather than a papercut. `TakeDevice` closes it for free: logind
+  `EVIOCREVOKE`s the fd itself on `PauseDevice`. Getting the fds and giving
+  them up are one seam and one checklist item.
 - **The keymap is stated twice.** The compositor sets its seat's `XkbConfig`;
   the engine's `XkbKeyboardLayoutEngine` is configured separately from ozone.
   Two keymaps over one keyboard is a divergence a nested run never had, because
@@ -616,8 +638,12 @@ Step 2 — the embedder (the port):
       switch; an engine that *dies* needs none of this, because the kernel
       drops master when the fd closes and switches anyway. What this buys is a
       working desktop you can switch away from
-- [ ] `EVIOCREVOKE` (or a libseat-shaped equivalent) on the evdev fds at those
-      same two moments
+- [ ] take the evdev fds from logind's `Session.TakeDevice` instead of
+      `open()`ing them, and follow `PauseDevice` / `ResumeDevice` — which is
+      the `EVIOCREVOKE` at those same two moments, because logind does it to
+      the fd it passed. One item rather than two: on an ordinary desktop the
+      bare `open` is `Permission denied` and there is nothing to revoke yet.
+      See [Input](#input)
 - [x] name `ozone_platform_drm = true` in `scripts/build.sh` and
       `engine-release-build.sh` — after `DrmScreen` and the modeset driver,
       because a platform with no embedder behind it turns a clear refusal into
@@ -692,10 +718,16 @@ Step 2 — the embedder (the port):
   `card1` is the nvidia GPU with four disconnected connectors. A vkms CRTC
   presents to nobody, so what this can answer is whether the path executes, not
   whether a desktop appears.
-- **libseat/seatd, logind ACLs, or root.** ACLs on an active VT make the
-  unmodified `open()` calls work and need no code; libseat would need an
-  fd-passing seam ozone does not have. *Recommendation:* ship on logind ACLs,
-  and revisit only if multi-seat or a non-logind system asks.
+- **libseat/seatd, logind ACLs, or root.** **Answered by the first run on
+  real hardware, and not the way this recommended.** ACLs carry the card node
+  and nothing else — `70-uaccess.rules` tags `drm card*` and `renderD*` — so
+  the card opened and modeset while all fifteen `/dev/input/event*` came back
+  `Permission denied (13)`. There is no ACL to ship on for input.
+  *Decision:* the fd-passing seam, in front of `InputDeviceOpenerEvdev`, fed
+  by logind's `TakeDevice` — directly or through libseat. Putting the user in
+  the devices' group (`input`, conventionally) would also make the bare
+  `open` work, and is rejected twice over: it is a standing keyboard grant to
+  every process that user runs, and it revokes nothing on a VT switch.
 - **Fractional scale.** `wl_output` scale is `Scale::Integer` here and DRM
   panels routinely want 1.5. *Recommendation:* stay integer — `ROADMAP.md`'s
   existing "fractional scaling rounds up" gap is the same decision, and it
