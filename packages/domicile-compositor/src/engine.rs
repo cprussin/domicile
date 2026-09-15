@@ -124,9 +124,33 @@ impl Dmabuf {
     }
 }
 
+/// One display the engine is scanning out on, as it reports it.
+///
+/// The engine holds DRM master, so on a tty this is the only reading of the
+/// screens there is -- `docs/architecture/A-DESKTOP-ON-A-TTY.md`, *Outputs*.
+/// It comes off the same `DisplaySnapshot`s the modeset driver configures the
+/// CRTCs from, so the desktop advertised and the modes lit cannot disagree.
+///
+/// No scale and no physical size yet: a snapshot carries a physical size the
+/// C ABI does not, and nothing on the DRM path sets a scale factor at all
+/// (`drm_screen.cc` says so where it declines to). Both are their own item on
+/// that document's checklist, and a field that is always 1 is not a reading.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Display {
+    /// What the engine calls this display, and what the `wl_output` is named
+    /// after. Derived from the EDID, so it survives a hotplug: an output whose
+    /// name is in both desktops keeps its global rather than being unplugged
+    /// and replaced (`Screens::rearranged_into`).
+    pub id: i64,
+    /// Its top-left corner, in the desktop the engine laid out.
+    pub position: (i32, i32),
+    /// Its native mode, in physical pixels.
+    pub size: (u32, u32),
+}
+
 /// What the browser has to tell the compositor, and what each already is in
 /// Wayland terms.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     /// `xdg_toplevel.configure`: the page's layout box changed.
     Configure {
@@ -145,6 +169,14 @@ pub enum Event {
         surface: SurfaceId,
         buffer: BufferId,
     },
+    /// `wl_output`: the whole display list, primary first.
+    ///
+    /// Sent once when the engine has a screen and again on every hotplug, as
+    /// the whole list rather than a delta -- so what is absent from it has
+    /// been unplugged. There is no Wayland request this answers, because the
+    /// compositor is the one that would normally have read the hardware; here
+    /// the engine holds DRM master and this is how the reading crosses.
+    Displays(Vec<Display>),
 }
 
 #[repr(C)]
@@ -153,6 +185,7 @@ struct Callbacks {
     configure: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32)>,
     frame: Option<extern "C" fn(*mut c_void, SurfaceId, u64)>,
     released: Option<extern "C" fn(*mut c_void, SurfaceId, BufferId)>,
+    displays: Option<extern "C" fn(*mut c_void, *const RawDisplay, u32)>,
 }
 
 /// The engine's opaque handle.
@@ -172,6 +205,21 @@ pub struct Engine {
     events: Box<RefCell<Vec<Event>>>,
     library: Library,
     path: PathBuf,
+}
+
+/// `DomicileDisplay`, exactly as the C header lays it out.
+///
+/// Flat scalars rather than the pairs [`Display`] carries, because C has no
+/// tuples and an array of these is what crosses the ABI. Not public:
+/// [`Display`] is what a caller wants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
+struct RawDisplay {
+    id: i64,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
 }
 
 /// `DomicileSpikeCapture`, exactly as the C header lays it out.
@@ -235,6 +283,7 @@ impl Engine {
             configure: Some(on_configure),
             frame: Some(on_frame),
             released: Some(on_released),
+            displays: Some(on_displays),
         };
 
         let socket_path = socket.as_ref().to_path_buf();
@@ -478,7 +527,7 @@ fn symbol<'library, T>(
     })
 }
 
-/// The three callbacks, which do nothing but queue: they fire inside
+/// The four callbacks, which do nothing but queue: they fire inside
 /// `dispatch`, and what to do about them is the compositor's business rather
 /// than this module's.
 extern "C" fn on_configure(user_data: *mut c_void, surface: SurfaceId, width: u32, height: u32) {
@@ -504,6 +553,43 @@ extern "C" fn on_frame(user_data: *mut c_void, surface: SurfaceId, deadline_us: 
 
 extern "C" fn on_released(user_data: *mut c_void, surface: SurfaceId, buffer: BufferId) {
     push(user_data, Event::Released { surface, buffer });
+}
+
+/// The only callback that carries an array, so the only one with a length to
+/// believe. An empty list is queued as one rather than dropped: `DrmScreen`
+/// answers with its displayless display instead of nothing, so zero displays
+/// is the engine breaking its own contract and `Screens::from_the_engine` is
+/// where that is refused -- silently dropping it here would leave the desktop
+/// on a stale list with nothing said.
+extern "C" fn on_displays(user_data: *mut c_void, displays: *const RawDisplay, count: u32) {
+    // SAFETY: the ABI says `displays` points at `count` records, and the
+    // engine's own queue is what fills them in. Borrowed only for this call:
+    // `displays_from` copies, so nothing outlives the callback.
+    let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
+    push(user_data, Event::Displays(displays_from(records)));
+}
+
+/// The ABI's flat records as the pairs the compositor lays out in.
+fn displays_from(records: &[RawDisplay]) -> Vec<Display> {
+    records
+        .iter()
+        .map(|record| Display {
+            id: record.id,
+            position: (record.x, record.y),
+            size: (as_extent(record.width), as_extent(record.height)),
+        })
+        .collect()
+}
+
+/// A display's extent as the `u32` a size is here.
+///
+/// `int32_t` on the wire because a DRM mode is measured the same way a
+/// position is and the C header says so once; never negative, because a mode
+/// is a mode. Asserted rather than folded: a negative extent is an engine
+/// reporting something that is not a screen, and the plausible positive a
+/// cast would make is a desktop of the wrong size with nothing to say why.
+fn as_extent(measure: i32) -> u32 {
+    u32::try_from(measure).expect("a display's mode is never negative")
 }
 
 fn push(user_data: *mut c_void, event: Event) {
@@ -533,6 +619,54 @@ mod tests {
         assert_eq!(
             std::mem::size_of::<RawCapture>(),
             6 * std::mem::size_of::<i32>()
+        );
+    }
+
+    /// The same guard as above, for the struct a display list is an array of.
+    /// A field added or dropped on one side of the ABI and not the other reads
+    /// every display after the first out of the middle of its neighbour.
+    #[test]
+    fn a_display_is_the_one_int64_and_four_int32_the_c_header_declares() {
+        assert_eq!(
+            std::mem::size_of::<RawDisplay>(),
+            std::mem::size_of::<i64>() + 4 * std::mem::size_of::<i32>()
+        );
+    }
+
+    #[test]
+    fn a_display_list_crosses_the_abi_as_the_compositor_counts_them() {
+        // The ABI counts a corner and an extent separately because C has no
+        // tuples; the compositor pairs them because everything it lays out is
+        // a pair.
+        assert_eq!(
+            displays_from(&[
+                RawDisplay {
+                    id: 7,
+                    x: 0,
+                    y: 0,
+                    width: 2880,
+                    height: 1920,
+                },
+                RawDisplay {
+                    id: 9,
+                    x: 2880,
+                    y: 0,
+                    width: 1920,
+                    height: 1080,
+                },
+            ]),
+            vec![
+                Display {
+                    id: 7,
+                    position: (0, 0),
+                    size: (2880, 1920),
+                },
+                Display {
+                    id: 9,
+                    position: (2880, 0),
+                    size: (1920, 1080),
+                },
+            ]
         );
     }
 

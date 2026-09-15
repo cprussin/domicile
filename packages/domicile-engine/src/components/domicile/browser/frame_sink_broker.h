@@ -20,6 +20,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote_set.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace viz {
@@ -96,6 +97,17 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
              const gfx::Size& size,
              EmbedCallback callback);
 
+  // The browser's displays, as the embedder has just read them. Forwarded to
+  // every producer watching, and remembered so that one connecting afterwards
+  // is told without waiting for the next change.
+  //
+  // An EMPTY list is a screen that has not been read yet rather than a desktop
+  // with no displays -- DrmScreen answers with its displayless display instead
+  // of nothing -- so it is not a reading and is not stored or forwarded. A
+  // producer told "no displays" would advertise a desktop no window can land
+  // on, which is worse than one it has not been told about yet.
+  void OnDisplaysChanged(std::vector<mojom::DisplayPtr> displays);
+
   // mojom::FrameSinkBroker implementation.
   void CreateFrameSink(
       mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
@@ -114,6 +126,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
                     const gfx::Rect& damage) override;
   void DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
                      uint64_t buffer_id) override;
+  void ObserveDisplays(
+      mojo::PendingRemote<mojom::DisplayListObserver> observer) override;
 
  private:
   // A page that asked to embed before any producer had connected.
@@ -158,6 +172,11 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       frame_sink_map_;
 
   std::vector<PendingEmbed> pending_embeds_;
+
+  mojo::RemoteSet<mojom::DisplayListObserver> display_observers_;
+
+  // The last reading, or empty for "not read yet". See OnDisplaysChanged.
+  std::vector<mojom::DisplayPtr> displays_;
 };
 
 }  // namespace domicile

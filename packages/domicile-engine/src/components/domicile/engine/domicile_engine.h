@@ -71,6 +71,29 @@ typedef struct DomicileDmabuf {
   DomicileDmabufPlane planes[4];
 } DomicileDmabuf;
 
+// One display the browser is scanning out on.
+//
+// THIS EXISTS BECAUSE THE ENGINE IS THE PROCESS THAT HOLDS DRM MASTER. A
+// Wayland compositor normally reads its own hardware; Domicile's does not and
+// carries no DRM backend at all, so on a tty the display list is the browser's
+// reading and this is how it crosses. Nested, nothing sends these: the screen
+// there is the host's monitors, which are not this desktop's displays.
+//
+// `x`, `y`, `width` and `height` are the display's place on the browser's
+// desktop, in pixels. No physical size and no refresh yet — both are their own
+// item on docs/architecture/A-DESKTOP-ON-A-TTY.md's checklist, and a field
+// that is always the same number is not a reading.
+typedef struct DomicileDisplay {
+  // Stable across a hotplug: ozone derives it from the EDID. The compositor
+  // names its wl_output after this, so a monitor unplugged and plugged back in
+  // keeps the output its clients are on.
+  int64_t id;
+  int32_t x;
+  int32_t y;
+  int32_t width;
+  int32_t height;
+} DomicileDisplay;
+
 // What the browser has to tell the compositor. Each maps onto a Wayland request
 // the compositor already speaks, which is why this is a translation table
 // rather than a protocol:
@@ -79,10 +102,17 @@ typedef struct DomicileDmabuf {
 //   frame      wl_surface.frame       — viz asked for a frame
 //   released   wl_buffer.release      — viz is done sampling a buffer, so the
 //                                       client may draw into it again
+//   displays   wl_output              — the whole display list, primary first
 //
-// All three fire from domicile_engine_dispatch, on the thread that calls it.
+// All four fire from domicile_engine_dispatch, on the thread that calls it.
 // `user_data` is passed back untouched. A null function pointer means that
 // event is dropped.
+//
+// `displays` is the only one carrying an array. It points at `count` records
+// borrowed for the duration of the call — the library owns them and frees them
+// when the callback returns, so a caller that keeps one copies it. `count` is
+// never zero: an empty list is a screen nobody has read yet rather than a
+// desktop with no displays, and the browser does not send one.
 typedef struct DomicileEngineCallbacks {
   void* user_data;
   void (*configure)(void* user_data,
@@ -93,6 +123,9 @@ typedef struct DomicileEngineCallbacks {
                 DomicileSurfaceId surface,
                 uint64_t deadline_us);
   void (*released)(void* user_data, DomicileSurfaceId surface, uint64_t buffer);
+  void (*displays)(void* user_data,
+                   const DomicileDisplay* displays,
+                   uint32_t count);
 } DomicileEngineCallbacks;
 
 // Joins the browser's mojo graph over the named socket the browser is

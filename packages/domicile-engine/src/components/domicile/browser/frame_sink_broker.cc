@@ -5,10 +5,12 @@
 #include "components/domicile/browser/frame_sink_broker.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
+#include "mojo/public/cpp/bindings/clone_traits.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "components/viz/host/host_frame_sink_manager.h"
@@ -173,6 +175,26 @@ void FrameSinkBroker::DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
   BrokeredFrameSink* frame_sink = OwnedFrameSink(frame_sink_id);
   if (frame_sink) {
     frame_sink->DestroyBuffer(buffer_id);
+  }
+}
+
+void FrameSinkBroker::ObserveDisplays(
+    mojo::PendingRemote<mojom::DisplayListObserver> observer) {
+  const mojo::RemoteSetElementId id =
+      display_observers_.Add(std::move(observer));
+  if (!displays_.empty()) {
+    display_observers_.Get(id)->OnDisplaysChanged(mojo::Clone(displays_));
+  }
+}
+
+void FrameSinkBroker::OnDisplaysChanged(
+    std::vector<mojom::DisplayPtr> displays) {
+  if (displays.empty()) {
+    return;
+  }
+  displays_ = std::move(displays);
+  for (auto& observer : display_observers_) {
+    observer->OnDisplaysChanged(mojo::Clone(displays_));
   }
 }
 

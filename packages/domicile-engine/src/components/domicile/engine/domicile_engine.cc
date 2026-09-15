@@ -270,6 +270,48 @@ class Surface : public mojom::SurfaceObserver,
   viz::FrameTokenGenerator next_frame_token_;
 };
 
+// The browser's display list, pushed at the compositor.
+//
+// Its own receiver rather than a method on Surface, because the screens are a
+// fact about the machine and not about any one window: a producer with no
+// surfaces at all still has to advertise its outputs, and on a tty it has to
+// do so before any window exists to put on them.
+class Displays : public mojom::DisplayListObserver {
+ public:
+  explicit Displays(EngineEventQueue* queue) : queue_(queue) {}
+
+  Displays(const Displays&) = delete;
+  Displays& operator=(const Displays&) = delete;
+
+  ~Displays() override = default;
+
+  mojo::PendingRemote<mojom::DisplayListObserver> BindRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+  // Unbound on the thread it was bound on, which is what a mojo receiver
+  // validates. Same reason TearDown resets the broker and the probe by hand.
+  void Unbind() { receiver_.reset(); }
+
+  // mojom::DisplayListObserver implementation.
+  void OnDisplaysChanged(std::vector<mojom::DisplayPtr> displays) override {
+    EngineEvent event{.type = EngineEvent::Type::kDisplays};
+    event.displays.reserve(displays.size());
+    for (const mojom::DisplayPtr& one : displays) {
+      event.displays.push_back(EngineDisplay{.id = one->id,
+                                             .x = one->bounds.x(),
+                                             .y = one->bounds.y(),
+                                             .width = one->bounds.width(),
+                                             .height = one->bounds.height()});
+    }
+    queue_->Push(event);
+  }
+
+ private:
+  const raw_ptr<EngineEventQueue> queue_;
+  mojo::Receiver<mojom::DisplayListObserver> receiver_{this};
+};
+
 // A client's dmabuf, as mojo wants it. The fds are duplicated: the caller keeps
 // the originals, which is what a compositor holding a wl_buffer expects.
 gfx::GpuMemoryBufferHandle ToGpuMemoryBufferHandle(
@@ -355,6 +397,26 @@ struct DomicileEngine {
           if (callbacks_.released) {
             callbacks_.released(callbacks_.user_data, event.surface,
                                 event.buffer);
+          }
+          break;
+        case domicile::EngineEvent::Type::kDisplays:
+          if (callbacks_.displays) {
+            // Copied into the ABI's own record rather than handing over the
+            // queue's storage. The two structs are the same five fields in the
+            // same order today, and a reinterpret_cast across the seam would
+            // make that a silent requirement of both -- for a list with as
+            // many entries as the machine has monitors.
+            std::vector<DomicileDisplay> records;
+            records.reserve(event.displays.size());
+            for (const domicile::EngineDisplay& display : event.displays) {
+              records.push_back(DomicileDisplay{.id = display.id,
+                                                .x = display.x,
+                                                .y = display.y,
+                                                .width = display.width,
+                                                .height = display.height});
+            }
+            callbacks_.displays(callbacks_.user_data, records.data(),
+                                static_cast<uint32_t>(records.size()));
           }
           break;
       }
@@ -456,6 +518,13 @@ struct DomicileEngine {
         invitation.ExtractMessagePipe(domicile::kBrokerPipeName), 0));
     probe_.Bind(mojo::PendingRemote<domicile::mojom::SpikeProbe>(
         invitation.ExtractMessagePipe(domicile::kProbePipeName), 0));
+    if (broker_.is_bound()) {
+      // Asked for here rather than when a surface is created, because a
+      // desktop has to know what its screens are before it has any windows to
+      // put on them. The browser answers immediately if it has already read
+      // them, and says nothing until it has if it has not.
+      broker_->ObserveDisplays(displays_.BindRemote());
+    }
     *connected = broker_.is_bound();
   }
 
@@ -654,6 +723,8 @@ struct DomicileEngine {
     // Bound on this thread, so it has to die on it: a mojo::Remote validates
     // the sequence it is destroyed on.
     probe_.reset();
+    // And a mojo::Receiver validates the same thing.
+    displays_.Unbind();
   }
 
   void RunOnThreadAndWait(base::OnceClosure task) {
@@ -670,6 +741,9 @@ struct DomicileEngine {
 
   const DomicileEngineCallbacks callbacks_;
   domicile::EngineEventQueue queue_;
+  // Bound on the engine's thread, in ConnectOnThread, like every other
+  // receiver here.
+  domicile::Displays displays_{&queue_};
   base::Thread thread_;
   std::unique_ptr<mojo::core::ScopedIPCSupport> ipc_support_;
   mojo::Remote<domicile::mojom::FrameSinkBroker> broker_;

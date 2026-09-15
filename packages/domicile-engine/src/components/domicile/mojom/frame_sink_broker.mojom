@@ -46,6 +46,38 @@ interface SurfaceObserver {
   OnBufferReleased(uint64 buffer_id);
 };
 
+// One display the browser can see, as a producer that has to advertise it needs
+// it.
+//
+// `bounds` is the display's place on the browser's desktop in DIP, which on the
+// DRM platform is the connector's native mode at its origin: nothing there sets
+// a scale factor, so DIP and pixels are the same number. No physical size and
+// no refresh, because display::Display carries neither and the snapshot they
+// come off is a layer the browser process does not reach from here -- both are
+// their own item on docs/architecture/A-DESKTOP-ON-A-TTY.md's checklist.
+struct Display {
+  // Stable across a hotplug: ozone derives it from the EDID. The producer
+  // names its output after this, so an unplugged-and-replugged monitor keeps
+  // the wl_output its clients are on rather than being handed a new one.
+  int64 id;
+  gfx.mojom.Rect bounds;
+};
+
+// Tells a producer what the screens are.
+//
+// There is no Wayland request this answers, because a Wayland compositor is
+// normally the process that read the hardware. Here it is not: on a tty the
+// ENGINE holds DRM master -- the compositor has no card node and deliberately
+// carries no DRM backend -- so the display list is the browser's reading and
+// this is how it crosses. See docs/architecture/A-DESKTOP-ON-A-TTY.md,
+// "Outputs".
+interface DisplayListObserver {
+  // The whole list, primary first, rather than a delta: what is absent from it
+  // has been unplugged. Sent once when the browser has read the displays and
+  // again on every change.
+  OnDisplaysChanged(array<Display> displays);
+};
+
 // Brokers viz frame sinks to a compositing producer that is not a renderer.
 //
 // blink.mojom.EmbeddedFrameSinkProvider is the same thing for renderers, and it
@@ -149,4 +181,17 @@ interface FrameSinkBroker {
   // this interface brokered is destroyed anyway when the connection drops; this
   // is for a producer outliving one of its own surfaces.
   DestroyFrameSink(viz.mojom.FrameSinkId frame_sink_id);
+
+  // Registers `observer` for the display list, and sends it the current one.
+  //
+  // Sent on registration rather than only on change, because a producer that
+  // connects after the browser read its displays would otherwise wait for a
+  // hotplug to learn what the screens are -- which on a machine nobody touches
+  // is forever. A browser that has not read them yet sends nothing, and the
+  // first real reading is what arrives.
+  //
+  // On this interface rather than one of its own: a producer already holds
+  // this pipe, and what it is being told is what to advertise the surfaces it
+  // brokers here ON.
+  ObserveDisplays(pending_remote<DisplayListObserver> observer);
 };

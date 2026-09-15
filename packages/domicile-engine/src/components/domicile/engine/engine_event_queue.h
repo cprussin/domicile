@@ -13,6 +13,19 @@
 
 namespace domicile {
 
+// One display the browser is scanning out on, as the C ABI carries it.
+//
+// Flat scalars because an array of these crosses to a caller that has no
+// tuples, and `int32_t` throughout because a mode is measured the way a
+// position is. Mirrors DomicileDisplay in domicile_engine.h.
+struct EngineDisplay {
+  int64_t id = 0;
+  int32_t x = 0;
+  int32_t y = 0;
+  int32_t width = 0;
+  int32_t height = 0;
+};
+
 // What the library has to tell domicile-compositor, and the fd it says it on.
 //
 // libdomicile_engine.so must not own the compositor's thread: the compositor
@@ -35,6 +48,10 @@ struct EngineEvent {
     // draw into it again. Without this the compositor would reuse a dmabuf viz
     // is still reading, which is a tear rather than an error.
     kReleased,
+    // wl_output: the whole display list, primary first. On a tty the browser
+    // is the process holding DRM master, so this is the compositor's only
+    // reading of what its screens are.
+    kDisplays,
   };
 
   Type type = Type::kFrame;
@@ -46,6 +63,9 @@ struct EngineEvent {
   uint64_t deadline_us = 0;
   // kReleased.
   uint64_t buffer = 0;
+  // kDisplays. Never empty: an empty list is a screen nobody has read yet
+  // rather than a desktop with no displays, and the browser does not send one.
+  std::vector<EngineDisplay> displays;
 };
 
 // Thread-safe, and deliberately only just: one writer thread (mojo's) and one

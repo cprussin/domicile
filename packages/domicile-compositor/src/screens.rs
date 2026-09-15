@@ -13,6 +13,8 @@ use domicile_config::Desktop;
 use domicile_protocol::DisplayInfo;
 use domicile_scene::{Bounds, Point};
 
+use crate::engine::Display;
+
 /// One `wl_output`, in the form the compositor advertises it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Advertised {
@@ -172,6 +174,53 @@ impl Screens {
         }
     }
 
+    /// The outputs the engine reports, one per display DRM has.
+    ///
+    /// The third source of a display list, beside the config and Domicile's
+    /// own window: on a tty the engine holds DRM master, so the screens are
+    /// its reading and nobody else's. Not window-following for the same reason
+    /// `described` is not -- these are the user's actual monitors, and there
+    /// is no Domicile window on a tty to resize them with.
+    ///
+    /// Scale 1 because the engine reports none: see [`Display`].
+    ///
+    /// Positions are the engine's, unshifted. Ozone lays its displays out from
+    /// the origin rightwards, so the desktop's corner is already (0, 0) and
+    /// normalizing would be arithmetic over a fact rather than a fix.
+    pub fn from_the_engine(displays: &[Display]) -> Screens {
+        let outputs: Vec<Advertised> = displays
+            .iter()
+            .map(|display| Advertised {
+                logical: (as_coordinate(display.size.0), as_coordinate(display.size.1)),
+                name: format!("drm-{}", display.id),
+                position: display.position,
+                scale: 1,
+            })
+            .collect();
+        // `checked_add` for the reason `Advertised::bounds` gives one layer
+        // down, and for one more: these coordinates are the engine's rather
+        // than a validated config's, so nothing upstream has bounded them.
+        let far = |at: i32, size: i32| {
+            at.checked_add(size)
+                .expect("a display's far edge fits a coordinate")
+        };
+        let size = outputs
+            .iter()
+            .map(|output| {
+                (
+                    far(output.position.0, output.logical.0),
+                    far(output.position.1, output.logical.1),
+                )
+            })
+            .reduce(|desktop, output| (desktop.0.max(output.0), desktop.1.max(output.1)))
+            .expect("the engine reports at least one display");
+        Screens {
+            follows_the_window: false,
+            outputs,
+            size,
+        }
+    }
+
     /// The one output a run with no described desktop starts on.
     ///
     /// `compositor.nested_size` is in *logical* units: a `wl_output` mode is
@@ -272,6 +321,29 @@ impl Screens {
             .filter(|index| !slots.contains(&Slot::Kept(*index)))
             .collect();
         Rearrangement { slots, retired }
+    }
+
+    /// The desktop the engine's displays make, or `None` to leave this one be.
+    ///
+    /// [`reloaded_into`](Screens::reloaded_into)'s rule from the other side,
+    /// and for the same reason: two sources both claim to know what the
+    /// screens are, and only one of them can be the authority at a time. A
+    /// *described* desktop is the user stating their monitors, so a reading
+    /// off DRM does not overrule it -- a machine whose config describes a
+    /// desktop wants that desktop whether or not the hardware agrees. With
+    /// nothing described the engine is the authority, because on a tty it is
+    /// the only one there is: it holds DRM master and the compositor has no
+    /// card node of its own to read.
+    ///
+    /// A nested run never reaches the `Some` arm, because a nested engine does
+    /// not report displays at all -- the browser only watches them on the
+    /// platform that owns them. That is deliberate and not a coincidence to
+    /// lean on: a Wayland engine's screen is the *host's* monitors, which are
+    /// not this desktop's displays, and adopting them would take the desktop
+    /// away from the window that defines it.
+    pub fn replugged_into(&self, displays: &[Display]) -> Option<Screens> {
+        self.follows_the_window
+            .then(|| Screens::from_the_engine(displays))
     }
 
     /// Which outputs a window with these bounds is on, in [`outputs`] order.
@@ -747,6 +819,80 @@ mod tests {
 }"#,
         ));
         assert!(!screens.follows_the_window());
+    }
+
+    #[test]
+    fn a_tty_desktop_is_the_displays_the_engine_reported() {
+        // The engine holds DRM, so on a tty it is the only thing that knows
+        // what the screens are. Before this the compositor had no third
+        // source and fell back to the window it did not have, advertising a
+        // 1050x1900 desktop at a CRTC running 2880x1920.
+        let screens = Screens::from_the_engine(&[
+            Display {
+                id: 1,
+                position: (0, 0),
+                size: (2880, 1920),
+            },
+            Display {
+                id: 2,
+                position: (2880, 0),
+                size: (1920, 1080),
+            },
+        ]);
+        assert_eq!(
+            screens.outputs().cloned().collect::<Vec<_>>(),
+            vec![
+                Advertised {
+                    logical: (2880, 1920),
+                    name: "drm-1".into(),
+                    position: (0, 0),
+                    scale: 1,
+                },
+                Advertised {
+                    logical: (1920, 1080),
+                    name: "drm-2".into(),
+                    position: (2880, 0),
+                    scale: 1,
+                },
+            ]
+        );
+        assert_eq!(screens.size(), (4800, 1920));
+        // The engine's displays are as much a fact about the user's screens as
+        // a described desktop is, so Domicile's own window does not redefine
+        // them -- there is no window on a tty to redefine them with.
+        assert!(!screens.follows_the_window());
+    }
+
+    const PLUGGED_IN: &[Display] = &[Display {
+        id: 1,
+        position: (0, 0),
+        size: (2880, 1920),
+    }];
+
+    #[test]
+    fn a_described_desktop_is_not_overruled_by_what_the_engine_sees() {
+        // The user said what their screens are. A reading off DRM is the same
+        // kind of claim `reloaded_into` refuses to let the config make about a
+        // window-following desktop, from the other side.
+        assert_eq!(described(LEFT).replugged_into(PLUGGED_IN), None);
+    }
+
+    #[test]
+    fn a_desktop_nothing_described_is_the_engines_to_define() {
+        let taken = Screens::nested((1280, 800))
+            .replugged_into(PLUGGED_IN)
+            .expect("an undescribed desktop takes the engine's displays");
+        assert_eq!(taken.size(), (2880, 1920));
+        assert!(!taken.follows_the_window());
+    }
+
+    #[test]
+    #[should_panic(expected = "the engine reports at least one display")]
+    fn a_desktop_of_no_displays_is_refused_rather_than_sized_zero() {
+        // DrmScreen answers with kDisplaylessBounds rather than an empty list,
+        // so this is an engine that broke its own contract. A zero-sized
+        // desktop is not a smaller desktop: every window lands off it.
+        let _ = Screens::from_the_engine(&[]);
     }
 
     #[test]

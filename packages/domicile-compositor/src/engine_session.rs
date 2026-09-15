@@ -108,7 +108,7 @@ impl EngineSession {
                         why: Returned::Released,
                     })
                 }
-                Event::Configure { .. } | Event::Frame { .. } => None,
+                Event::Configure { .. } | Event::Frame { .. } | Event::Displays(_) => None,
             })
             .collect();
         (events, releases)

@@ -1465,7 +1465,10 @@ impl DomicileCompositor {
     ///
     /// Called from the engine's calloop source and nowhere else: the ABI's
     /// callbacks fire inside `dispatch`, so this is the one place they land.
-    fn pump_the_engine(&mut self) {
+    ///
+    /// `dh` is here for one of those events: a display list rearranges the
+    /// desktop, and creating a `wl_output` needs the display to create it on.
+    fn pump_the_engine(&mut self, dh: &DisplayHandle) {
         let Some(session) = self.engine.as_mut() else {
             return;
         };
@@ -1556,6 +1559,17 @@ impl DomicileCompositor {
                 engine::Event::Frame { .. } => {}
                 // Handled above, where the buffer is.
                 engine::Event::Released { .. } => {}
+                // The engine holds DRM master, so on a tty its reading of the
+                // screens is the only one there is. `replugged_into` is what
+                // decides whether this desktop is the engine's to define, and
+                // `adopt_the_desktop` is a no-op for a list that says what the
+                // last one said -- which is what a hotplug the modeset driver
+                // caused reports.
+                engine::Event::Displays(displays) => {
+                    if let Some(screens) = self.screens.replugged_into(&displays) {
+                        self.adopt_the_desktop(dh, screens);
+                    }
+                }
             }
         }
     }
@@ -4003,7 +4017,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         handle.insert_source(
             Generic::new(engine_fd, Interest::READ, Mode::Level),
             |_, _, data: &mut CalloopData| {
-                data.state.pump_the_engine();
+                let dh = data.display.handle();
+                data.state.pump_the_engine(&dh);
                 Ok(PostAction::Continue)
             },
         )?;

@@ -45,6 +45,29 @@ TEST(EngineEventQueueTest, PushingWakesThePollingThreadAndCarriesTheEvent) {
   EXPECT_EQ(drained[0].height, 130u);
 }
 
+// The one event carrying a variable-length payload, and the only reason this
+// queue holds anything but scalars. A list flattened to the first display, or
+// to a count with no records, is a desktop the size of one monitor.
+TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
+  EngineEventQueue queue;
+
+  EngineEvent pushed{.type = EngineEvent::Type::kDisplays};
+  pushed.displays.push_back(
+      EngineDisplay{.id = 7, .x = 0, .y = 0, .width = 2880, .height = 1920});
+  pushed.displays.push_back(EngineDisplay{
+      .id = 9, .x = 2880, .y = 0, .width = 1920, .height = 1080});
+  queue.Push(pushed);
+
+  const std::vector<EngineEvent> drained = queue.Drain();
+  ASSERT_EQ(drained.size(), 1u);
+  EXPECT_EQ(drained[0].type, EngineEvent::Type::kDisplays);
+  ASSERT_EQ(drained[0].displays.size(), 2u);
+  EXPECT_EQ(drained[0].displays[0].id, 7);
+  EXPECT_EQ(drained[0].displays[0].width, 2880);
+  EXPECT_EQ(drained[0].displays[1].id, 9);
+  EXPECT_EQ(drained[0].displays[1].x, 2880);
+}
+
 // The compositor dispatches once per wakeup, so a burst has to arrive whole
 // rather than one per poll — otherwise a frame callback sits in the queue until
 // something unrelated wakes the loop again.
