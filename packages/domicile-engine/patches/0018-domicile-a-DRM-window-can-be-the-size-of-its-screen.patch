@@ -1,0 +1,261 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 15 Sep 2026 15:13:15 +0000
+Subject: [PATCH] domicile: a DRM window can be the size of its screen
+
+A desktop on a tty came up black with nothing wrong in any log, and this is
+why.
+
+`ScreenManager::UpdateControllerToWindowMapping` binds a window to a display
+controller through `FindWindowAt`, which compares the window's rectangle to
+`gfx::Rect(controller->origin(), controller->GetModeSize())` for EXACT
+equality. A window that is not precisely the CRTC's rect gets no controller,
+and every frame it submits is dropped before it reaches the kernel.
+
+Chromium's default window is `kWindowMaxDefaultWidth` wide and the work area
+inset by `kWindowTilePixels` -- 1050x1900 at (10, 10) on a 2880x1920 panel --
+so out of the box nothing is ever scanned out. Nothing on a tty maximises a
+window either: there is no window manager and no session to restore bounds
+from.
+
+TWO THINGS WERE MISSING, and either alone is still a black screen.
+
+`DrmWindowHost::SetFullscreen` is an empty body upstream, on the premise behind
+the seven NOTREACHED()s patch 0015 answered: ash sizes its own root window to
+the display, so nothing on ChromeOS asks a DRM window to go fullscreen. It is
+implemented here, along with `GetPlatformWindowState`, which upstream answers
+`kUnknown` forever -- making `DesktopWindowTreeHostPlatform::IsFullscreen()`
+permanently false, so views re-enters fullscreen on every request and the
+`DCHECK_EQ` in its own `SetFullscreen` fails in a DCHECK build.
+
+AND NOTHING WAS CALLING IT. `--start-fullscreen` is honoured in
+`StartupBrowserCreatorImpl::MaybeToggleFullscreen`, which an --app= launch
+never reaches: `MaybeLaunchAppShortcutWindow` answers the startup sequence
+with `return true` before `LaunchBrowserForLastProfiles` is ever called. So
+the flag is silently dropped for exactly the launch Domicile uses, and the
+window implementation above would have sat there unreachable. It is honoured
+in that path now.
+
+Kiosk is deliberately not mirrored: it carries a policy surface -- accelerator
+stripping, forced app mode -- that this fork has no business turning on as a
+side effect of drawing a desktop.
+
+The bounds come from `display::Screen`, and that it agrees with the CRTC is by
+construction rather than luck: `DrmScreen` builds its display list from the
+same `DisplaySnapshot`s the modeset driver configures from, so a display's
+bounds and `gfx::Rect(controller->origin(), GetModeSize())` are one rectangle
+-- including after a mode change or a hotplug. Which is why this is fullscreen
+rather than a size on the command line: the panel this was found on advertises
+more than one preferred mode, so any number written down is a guess.
+
+The decision itself is a free function with four tests in
+`domicile/drm_fullscreen.cc`, for the reason `DrmModeset`'s arithmetic is one:
+what is left in the host is a state toggle over platform singletons it is
+handed rather than owns.
+---
+ .../ui/startup/startup_browser_creator.cc     | 27 ++++++-
+ ui/ozone/platform/drm/BUILD.gn                |  3 +
+ ui/ozone/platform/drm/host/drm_window_host.cc | 73 ++++++++++++++++++-
+ ui/ozone/platform/drm/host/drm_window_host.h  |  9 +++
+ 4 files changed, 107 insertions(+), 5 deletions(-)
+
+diff --git a/chrome/browser/ui/startup/startup_browser_creator.cc b/chrome/browser/ui/startup/startup_browser_creator.cc
+index 644b8d08de7e3..82a9ce04d3789 100644
+--- a/chrome/browser/ui/startup/startup_browser_creator.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator.cc
+@@ -63,6 +63,7 @@
+ #include "chrome/browser/signin/signin_util.h"
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+ #include "chrome/browser/ui/extensions/application_launch.h"
+@@ -416,12 +417,32 @@ bool MaybeLaunchAppShortcutWindow(const base::CommandLine& command_line,
+       const content::WebContents* web_contents =
+           apps::OpenExtensionAppShortcutWindow(profile, url);
+       if (web_contents) {
++        BrowserWindowInterface* app_browser =
++            GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
++                web_contents);
+         web_app::startup::FinalizeWebAppLaunch(
+             web_app::startup::OpenMode::kInWindowByUrl, command_line,
+-            is_first_run,
+-            GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
+-                web_contents),
++            is_first_run, app_browser,
+             apps::LaunchContainer::kLaunchContainerWindow);
++        // Domicile's engine fork. `--start-fullscreen` is honoured in
++        // StartupBrowserCreatorImpl::MaybeToggleFullscreen, and the `return
++        // true` below is why an --app= launch never reaches it: this function
++        // answers the startup sequence before LaunchBrowserForLastProfiles is
++        // ever called. So the flag is silently dropped for exactly the launch
++        // Domicile uses.
++        //
++        // WHICH ON A TTY IS THE DIFFERENCE BETWEEN A DESKTOP AND A BLACK
++        // SCREEN. ozone/drm binds a window to a display controller only when
++        // the window's rectangle is exactly the CRTC's, and Chromium's default
++        // window is not; fullscreen is what makes it so. See
++        // DrmWindowHost::SetFullscreen.
++        //
++        // Kiosk is deliberately not mirrored here: it carries a policy surface
++        // -- accelerator stripping, forced app mode -- that this fork has no
++        // business turning on as a side effect of drawing a desktop.
++        if (app_browser && command_line.HasSwitch(switches::kStartFullscreen)) {
++          chrome::ToggleFullscreenMode(app_browser, /*user_initiated=*/false);
++        }
+         return true;
+       }
+     }
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 50dc4586f2a70..a16ef6c5e8b8b 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -120,6 +120,8 @@ source_set("gbm") {
+     "host/drm_window_host.cc",
+     "host/drm_window_host.h",
+     "host/drm_window_host_manager.cc",
++    "domicile/drm_fullscreen.cc",
++    "domicile/drm_fullscreen.h",
+     "domicile/drm_modeset.cc",
+     "domicile/drm_modeset.h",
+     "domicile/drm_screen.cc",
+@@ -236,6 +238,7 @@ source_set("gbm_unittests") {
+     "gpu/mock_drm_modifiers_filter.cc",
+     "gpu/mock_drm_modifiers_filter.h",
+     "gpu/proxy_helpers_unittest.cc",
++    "domicile/drm_fullscreen_unittest.cc",
+     "domicile/drm_modeset_unittest.cc",
+     "domicile/drm_screen_unittest.cc",
+     "domicile/drm_vt_switcher_unittest.cc",
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
+index 2585e47781d11..f55dc09465218 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host.cc
+@@ -9,12 +9,15 @@
+ #include "base/notimplemented.h"
+ #include "ui/base/cursor/platform_cursor.h"
+ #include "ui/display/display.h"
++#include "ui/display/screen.h"
++#include "ui/display/types/display_constants.h"
+ #include "ui/events/devices/device_data_manager.h"
+ #include "ui/events/event.h"
+ #include "ui/events/ozone/evdev/event_factory_evdev.h"
+ #include "ui/events/ozone/events_ozone.h"
+ #include "ui/events/platform/platform_event_source.h"
+ #include "ui/ozone/common/bitmap_cursor.h"
++#include "ui/ozone/platform/drm/domicile/drm_fullscreen.h"
+ #include "ui/ozone/platform/drm/host/drm_cursor.h"
+ #include "ui/ozone/platform/drm/host/drm_display_host.h"
+ #include "ui/ozone/platform/drm/host/drm_display_host_manager.h"
+@@ -125,7 +128,69 @@ bool DrmWindowHost::HasCapture() const {
+   return widget_ == window_manager_->event_grabber();
+ }
+ 
+-void DrmWindowHost::SetFullscreen(bool fullscreen, int64_t target_display_id) {}
++void DrmWindowHost::SetFullscreen(bool fullscreen, int64_t target_display_id) {
++  // Upstream is an empty body, on the same premise as the NOTREACHED()s above:
++  // ash sizes its own root window to the display, so nothing on ChromeOS ever
++  // asks a DRM window to go fullscreen. A views browser does -- it is how
++  // --start-fullscreen and --kiosk are implemented -- and on a tty it is the
++  // only thing that makes the window the size of the screen.
++  //
++  // WHICH IS THE WHOLE OF WHETHER ANYTHING IS DRAWN.
++  // ScreenManager::UpdateControllerToWindowMapping binds a window to a display
++  // controller through FindWindowAt, which compares the window's rectangle to
++  // gfx::Rect(controller->origin(), controller->GetModeSize()) for EXACT
++  // equality. A window that is not precisely the CRTC's rect is a window with
++  // no controller, and every frame it submits is dropped before it reaches the
++  // kernel -- a black screen with nothing wrong in any log. Chromium's default
++  // window is 1050x1900 at (10, 10) on a 2880x1920 panel, so out of the box a
++  // desktop on a tty draws nothing at all.
++  const PlatformWindowState next = fullscreen
++                                       ? PlatformWindowState::kFullScreen
++                                       : PlatformWindowState::kNormal;
++  if (state_ == next) {
++    return;
++  }
++
++  const PlatformWindowState previous = state_;
++  state_ = next;
++
++  const gfx::Rect next_bounds = BoundsForFullscreenChange(
++      fullscreen, bounds_, restored_bounds_, FullscreenBounds(target_display_id));
++  if (fullscreen) {
++    restored_bounds_ = bounds_;
++  } else {
++    restored_bounds_.reset();
++  }
++  SetBoundsInPixels(next_bounds);
++
++  delegate_->OnWindowStateChanged(previous, state_);
++}
++
++gfx::Rect DrmWindowHost::FullscreenBounds(int64_t target_display_id) const {
++  // The screen rather than this host's own display manager, because the two
++  // agree by construction and only one of them knows which display a window is
++  // on: DrmScreen builds its display list from the same DisplaySnapshots the
++  // modeset driver configures the CRTCs from, so a display's bounds and
++  // gfx::Rect(controller->origin(), controller->GetModeSize()) are the same
++  // rectangle -- including after a mode change or a hotplug.
++  //
++  // CHECKed rather than guarded: this is reached from a views browser going
++  // fullscreen, which cannot happen before the toolkit built a screen, and a
++  // fullscreen window sized from a screen that is not there would be a silent
++  // black display rather than a crash anybody could read.
++  display::Screen* screen = display::Screen::Get();
++  CHECK(screen) << "domicile: no screen to size a fullscreen window from";
++
++  display::Display target;
++  if (target_display_id != display::kInvalidDisplayId &&
++      screen->GetDisplayWithDisplayId(target_display_id, &target)) {
++    return target.bounds();
++  }
++  // No display named, or one that is no longer plugged in: the display this
++  // window is already on, which is what a fullscreen request without a target
++  // means.
++  return screen->GetDisplayMatching(bounds_).bounds();
++}
+ 
+ void DrmWindowHost::Maximize() {}
+ 
+@@ -134,7 +199,11 @@ void DrmWindowHost::Minimize() {}
+ void DrmWindowHost::Restore() {}
+ 
+ PlatformWindowState DrmWindowHost::GetPlatformWindowState() const {
+-  return PlatformWindowState::kUnknown;
++  // Upstream answers kUnknown, which is honest on ChromeOS where nothing sets
++  // a state. Here SetFullscreen does, and views reads this back through
++  // DesktopWindowTreeHostPlatform::IsFullscreen() -- so answering kUnknown
++  // would make every fullscreen request look like the first one.
++  return state_;
+ }
+ 
+ void DrmWindowHost::Activate() {
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
+index 3250e6b7c9c23..916342495552f 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.h
++++ b/ui/ozone/platform/drm/host/drm_window_host.h
+@@ -107,6 +107,10 @@ class DrmWindowHost : public PlatformWindow,
+  private:
+   void SendBoundsChange();
+ 
++  // The rectangle a fullscreen window takes: the whole of the display it is
++  // on, which on this platform is the whole of a CRTC.
++  gfx::Rect FullscreenBounds(int64_t target_display_id) const;
++
+   const raw_ptr<PlatformWindowDelegate> delegate_;        // Not owned.
+   const raw_ptr<GpuThreadAdapter> sender_;                // Not owned.
+   const raw_ptr<EventFactoryEvdev> event_factory_;        // Not owned.
+@@ -124,6 +128,11 @@ class DrmWindowHost : public PlatformWindow,
+   // them on ChromeOS. These are what two of the answers need.
+   bool visible_ = false;
+   std::optional<gfx::Rect> restored_bounds_;
++  // What this window last told views it is. Upstream answers kUnknown forever,
++  // which makes DesktopWindowTreeHostPlatform::IsFullscreen() permanently
++  // false -- so views re-enters fullscreen every time and the DCHECK_EQ in
++  // DesktopWindowTreeHostPlatform::SetFullscreen fails in a DCHECK build.
++  PlatformWindowState state_ = PlatformWindowState::kNormal;
+ };
+ 
+ }  // namespace ui

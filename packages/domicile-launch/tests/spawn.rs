@@ -88,6 +88,46 @@ fn the_engine_is_a_desktop_rather_than_a_browser() {
 }
 
 #[test]
+fn a_tty_desktop_asks_for_the_whole_screen() {
+    // WITHOUT THIS THE SCREEN STAYS BLACK, and nothing says so. ozone/drm
+    // binds a window to a display controller only when the window's rectangle
+    // is EXACTLY the CRTC's -- `ScreenManager::FindWindowAt` compares whole
+    // rects -- and Chromium's default window is `kWindowMaxDefaultWidth` wide
+    // inset by ten pixels, which on a 2880x1920 panel is 1050x1900 at (10,10).
+    // No match means no controller, and every page flip is dropped before it
+    // reaches the kernel.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "drm",
+        &runtime(),
+        None,
+    ));
+    assert!(args.contains(&"--start-fullscreen".to_string()), "{args:?}");
+}
+
+#[test]
+fn a_nested_desktop_does_not_take_over_the_screen() {
+    // The other half, and the reason this is not passed unconditionally: a
+    // nested run is a window inside somebody else's session, and a desktop
+    // that goes fullscreen the moment it starts is one a developer has to
+    // fight to get out of.
+    for platform in ["wayland", "headless"] {
+        let args = args_of(&engine(
+            Path::new("/l/engine"),
+            &shell(),
+            platform,
+            &runtime(),
+            None,
+        ));
+        assert!(
+            !args.contains(&"--start-fullscreen".to_string()),
+            "{platform}: {args:?}"
+        );
+    }
+}
+
+#[test]
 fn the_engine_is_told_where_the_shell_is_and_where_the_compositor_is() {
     // THE THREE THAT REPLACED THE BRIDGE. The page was served over a loopback
     // HTTP port and reached the compositor through a WebSocket on it; now the

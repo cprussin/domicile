@@ -83,6 +83,11 @@ pub struct Runtime {
 /// broken. A machine that needs either says so through `extra`, because
 /// whatever one machine needs is a fact about that machine rather than about
 /// the command every machine runs.
+/// The ozone platform that drives a CRTC rather than living in somebody else's
+/// session. `domicile-launch` is where the name is decided, so it is where the
+/// one behaviour that depends on it belongs.
+const SCANOUT_PLATFORM: &str = "drm";
+
 pub fn engine(
     engine: &Path,
     shell: &Shell,
@@ -115,6 +120,28 @@ pub fn engine(
         format!("--user-data-dir={}", runtime.profile.display()).into(),
         format!("--domicile-broker-socket={}", runtime.broker.display()).into(),
     ];
+    // ON A TTY THE WINDOW IS THE SCREEN, and saying so is not cosmetic.
+    // ozone/drm binds a window to a display controller only when the window's
+    // rectangle is EXACTLY the CRTC's -- `ScreenManager::FindWindowAt`
+    // compares whole rects -- so a window one pixel off is a window with no
+    // controller, and every page flip it makes is dropped before it reaches
+    // the kernel. That is a black screen with nothing wrong in the log, and it
+    // is what Chromium's default window gets you: `kWindowMaxDefaultWidth`
+    // wide, inset by ten pixels, which on a 2880x1920 panel is 1050x1900 at
+    // (10, 10).
+    //
+    // Fullscreen rather than `--window-size`, because the size is not ours to
+    // know: this panel advertises more than one preferred mode and ozone takes
+    // the first, so a number written here is a guess that goes stale on the
+    // next monitor. `DrmWindowHost::SetFullscreen` answers with the display's
+    // own bounds, which come from the same snapshot the modeset used.
+    //
+    // Only on the platform that scans out. A nested run is a window inside
+    // somebody else's session, and one that goes fullscreen on startup is one
+    // a developer has to fight back out of.
+    if platform == SCANOUT_PLATFORM {
+        args.push("--start-fullscreen".into());
+    }
     // Word-split, which is what an argument list in an environment variable is
     // for; empty runs of spaces are not arguments.
     args.extend(
