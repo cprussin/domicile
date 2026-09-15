@@ -34,9 +34,25 @@ api() { curl -sS -f -H "Authorization: Bearer $GITHUB_TOKEN" \
 if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
   TAG="$GITHUB_REF_NAME"
   PRERELEASE=false
+  # A pushed tag is already immutable, so there is nothing for the second
+  # release below to add: publishing a copy of it under another name would be
+  # two names for one build with nothing to choose between them.
+  PINNABLE=""
 else
   TAG="engine-nightly"
   PRERELEASE=true
+  # THE ROLLING TAG CANNOT BE PINNED, and that is what the second release is
+  # for. `engine-nightly` is deleted and recreated on every run, so the asset
+  # a checkout is pinned to STOPS EXISTING the moment anybody cuts a release:
+  # `nix run` on main starts 404ing and every open pull request goes red on
+  # `packages` with `cannot download ... from any mirror`. That happened twice
+  # in one afternoon, which is once more than a papercut, and it made
+  # engine-release.nix's own header -- "a flake revision names exactly one
+  # engine" -- false.
+  #
+  # The same short revision the tarball is named after, so the tag and the
+  # filename cannot drift apart.
+  PINNABLE="engine-$(git rev-parse --short HEAD)"
 fi
 
 # A release for this tag may exist: the nightly always does after the first
@@ -62,7 +78,8 @@ engine without anybody building one.
 
 - domicile commit: \`$GITHUB_SHA\`
 - chromium pin: \`$PIN\`
-- gn args: \`.github/scripts/engine-release-build.sh\` at that commit
+- gn args: \`.github/scripts/engine-release-build.sh\` at that commit${PINNABLE:+
+- immutable release: \`$PINNABLE\`}
 
 Unpack it and put the directory on \`LD_LIBRARY_PATH\`:
 \`libdomicile_engine.so\` is dlopened by name.
@@ -80,13 +97,38 @@ release=$(jq -n --arg tag "$TAG" --arg sha "$GITHUB_SHA" --arg body "$BODY" \
   api -X POST "$API/releases" -d @-)
 id=$(echo "$release" | jq -r .id)
 
-for asset in "$TARBALL" "$TARBALL.sha256"; do
-  echo "uploading $asset"
-  curl -sS -f -X POST \
-    -H "Authorization: Bearer $GITHUB_TOKEN" \
-    -H "Content-Type: application/octet-stream" \
-    --data-binary "@$STAGE/$asset" \
-    "$UPLOADS/releases/$id/assets?name=$asset" >/dev/null
-done
+upload_assets() {
+  local into="$1"
+  for asset in "$TARBALL" "$TARBALL.sha256"; do
+    echo "uploading $asset"
+    curl -sS -f -X POST \
+      -H "Authorization: Bearer $GITHUB_TOKEN" \
+      -H "Content-Type: application/octet-stream" \
+      --data-binary "@$STAGE/$asset" \
+      "$UPLOADS/releases/$into/assets?name=$asset" >/dev/null
+  done
+}
 
+upload_assets "$id"
 echo "published $(echo "$release" | jq -r .html_url)"
+
+# The release that keeps existing. Every build is ALSO published under a tag
+# naming its commit, and that release is never deleted, so a pin points at a
+# url that does not move. The nightly stays because it is the useful thing to
+# hand somebody who just wants the newest build.
+if [ -n "$PINNABLE" ]; then
+  if api "$API/releases/tags/$PINNABLE" >/dev/null 2>&1; then
+    # Re-running a release for a commit that already has one. Left alone rather
+    # than replaced: something may already be pinned to it, and the whole point
+    # of this release is that what it points at does not move.
+    echo "$PINNABLE already published; leaving it alone"
+  else
+    echo "creating release $PINNABLE"
+    pinnable=$(jq -n --arg tag "$PINNABLE" --arg sha "$GITHUB_SHA" \
+                    --arg body "$BODY" \
+      '{tag_name: $tag, target_commitish: $sha, name: $tag, body: $body, prerelease: false}' |
+      api -X POST "$API/releases" -d @-)
+    upload_assets "$(echo "$pinnable" | jq -r .id)"
+    echo "published $(echo "$pinnable" | jq -r .html_url)"
+  fi
+fi
