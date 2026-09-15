@@ -713,12 +713,38 @@ Step 2 — the embedder (the port):
       the wrong process, and the kernel says so in two functions — see
       [the open questions](#open-questions). The handshake stands; what is
       under it moves to the browser
-- [ ] do the drop and the retake in the process that opened the card: keep a
-      `dup()` of the primary card fd in the browser, and `drmDropMaster` /
-      `drmSetMaster` on that rather than through the GPU. Without it the VT
-      switcher above refuses every switch, which is a desktop you cannot get
-      out of. See [the open questions](#open-questions) for the kernel
-      functions that make this the only shape that works
+- [x] do the drop and the retake in the process that opened the card -- patch
+      `0019`. `DrmMaster` holds a `dup` of every card `DrmDisplayHostManager`
+      hands the GPU process, keyed by the sysfs path a removal carries, and
+      `drmDropMaster` / `drmSetMaster` run on those. See
+      [the open questions](#open-questions) for the kernel functions that make
+      this the only shape that works.
+
+      **The ordering is the part that carries a decision.** A relinquish is
+      GPU-first: `DrmGpuDisplayManager::RelinquishDisplayControl` detaches
+      planes while this process still holds master, and only then does
+      `GpuRelinquishedDisplayControl` drop. A take is the mirror -- master
+      first, and the GPU is not asked at all if it failed. A drop that fails
+      fails the whole relinquish even when the GPU half succeeded, because the
+      VT switcher's refusal is the thing that keeps the console off a display
+      Chromium is still scanning out on.
+
+      **The syscall moves; the GPU's `has_master()` stays honest**, and the
+      difference between those two is a live GPU process.
+      `DrmWindow::SchedulePageFlip` reads that flag to decide whether a frame
+      is worth committing. Left saying yes while the console belongs to
+      somebody else it commits one; the atomic plane manager has no `EACCES`
+      exemption (the legacy one does, atomic is what a modern driver uses), so
+      the commit fails, arms `PageFlipWatchdog`, and its 15s timer is
+      `LOG(FATAL) << "Failed to modeset ... Crashing GPU process."` Only a
+      modeset disarms it and nothing modesets on the way back. So the two
+      loops call `DrmWrapper::AssumeMaster` instead: the flag without the
+      ioctl, because the transition is decided in another process.
+      `TakeDisplayControl` also rebuilds the window mapping unconditionally --
+      `IsFastDrmMasterDropEnabled()` is off by default so nothing tears it
+      down today, but nothing else would rebuild it if it were on, since
+      `DrmVtSwitcher` calls the delegate directly rather than through
+      `DisplayConfigurator`
 - [x] the window fills the CRTC, so that `FindWindowAt` matches it to a
       controller and page flips reach the kernel -- patch `0018` and
       `--start-fullscreen` from `domicile-launch` on the scanout platform only.
@@ -887,10 +913,8 @@ Step 2 — the embedder (the port):
   caller's tgid is the recorded one, so the check passes. Patch `0017`'s
   handshake is right; its seam is one process out.
 
-  What still has to be worked out is the **ordering against Chromium's own
-  bookkeeping**: `RelinquishDisplayControl` does more in the GPU process than
-  the syscall, and a browser-side drop has to sit either side of that rather
-  than instead of it.
+  *Done,* patch `0019` — `DrmMaster` and the ordering the checklist item above
+  records.
 - **Fractional scale.** `wl_output` scale is `Scale::Integer` here and DRM
   panels routinely want 1.5. *Recommendation:* stay integer — `ROADMAP.md`'s
   existing "fractional scaling rounds up" gap is the same decision, and it
