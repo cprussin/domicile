@@ -53,7 +53,7 @@ neither of them is yours:
 The order is forced and Domicile forces it: the engine first, because the
 compositor connects to the socket it creates. Your page is served over
 `domicile://` rather than opened off disk because `file:` has no origin, and
-the channel to the compositor is `navigator.domicile` rather than a socket the
+the channel to the compositor is `window.domicile` rather than a socket the
 page opens, because a page cannot open a Unix socket and nothing here binds a
 port.
 
@@ -65,22 +65,28 @@ One call, and it is the whole of the wiring:
 import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 
-const domicile = new DomicileClient(connectToHost(navigator));
+const domicile = new DomicileClient(connectToHost(window));
 ```
 
-`connectToHost` reads `navigator.domicile`, which is the control channel the
+`connectToHost` reads `window.domicile`, which is the control channel the
 engine puts on a document it served. There is nothing to configure and nothing
 to pass: it is a property of the page, so no query string carries a socket path
 and no two things can disagree about where the compositor is.
+
+`navigator.domicile` is the same object and keeps working — the engine hangs
+one host off the window and answers both spellings with it, so a listener bound
+through either is bound to the one channel. Write `window.domicile`: system
+state is reached at `window.domicile.<interface>` with nothing to register
+first, and that is the surface the rest of this guide names.
 
 A page with no compositor gets a stand-in that does nothing, so the layout
 still lays out, and `connectToHost` says once, on the console, that there was no
 compositor to find and so no window will ever appear. That one line covers the
 elements as well: the thing that defines `<app>` is the thing that binds
-`navigator.domicile`, so a page with an `<app>` that can never show a window is
+`window.domicile`, so a page with an `<app>` that can never show a window is
 exactly the page this warned about. There an `<app>` is an
 `HTMLUnknownElement` — it takes a box and shows nothing, and the SDK routes
-pointers over it as usual. Ask `hasHost(navigator)` if you need the question
+pointers over it as usual. Ask `hasHost(window)` if you need the question
 answered in your own code; do not reconstruct it.
 
 Do not develop against that, though: it is the chrome with every window in it
@@ -106,7 +112,7 @@ constructor and holds anything that arrives before your `on` does. A React
 shell registers in its first effect flush, tens of milliseconds late, and every
 window already running is announced before then.
 
-**So never call `addEventListener` on `navigator.domicile` yourself.** It
+**So never call `addEventListener` on `window.domicile` yourself.** It
 works, and it works for everything dispatched after your listener existed —
 which on a desktop with no clients open is everything, which is what makes the
 bug invisible until somebody reloads with a terminal running.
@@ -153,7 +159,7 @@ One package, published to npm and usable outside this repo:
 |---|---|
 | `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input and size routing over your `<app>` elements), `focusApp`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
 
-It is not required. A shell may drive `navigator.domicile` itself — it is a
+It is not required. A shell may drive `window.domicile` itself — it is a
 typed surface rather than a wire, described in
 `@domicile/chrome-sdk/domicile-host` and, definitively, in the IDL under
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
@@ -177,7 +183,7 @@ import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-const domicile = new DomicileClient(connectToHost(navigator));
+const domicile = new DomicileClient(connectToHost(window));
 registerElements(domicile);
 
 const mounted = new Map<string, HTMLElement>();

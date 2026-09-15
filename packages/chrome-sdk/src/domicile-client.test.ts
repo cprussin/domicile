@@ -36,7 +36,7 @@ const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
   });
 
 /**
- * A stand-in for `navigator.domicile`: it records what the page asks of it, and
+ * A stand-in for `window.domicile`: it records what the page asks of it, and
  * it fires an event only at whatever registered for that event through
  * `addEventListener`.
  *

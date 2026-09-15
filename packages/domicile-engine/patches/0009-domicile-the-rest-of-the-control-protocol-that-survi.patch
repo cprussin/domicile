@@ -78,9 +78,9 @@ needs a new event type and that invalidates the generated bindings. These were
 added together for that reason.
 ---
  .../bindings/generated_in_modules.gni         | 22 +++++++++++++++++++
- .../renderer/bindings/idl_in_modules.gni      | 11 ++++++++++
+ .../renderer/bindings/idl_in_modules.gni      | 12 ++++++++++
  .../core/events/event_type_names.json5        |  9 ++++++++
- 3 files changed, 42 insertions(+)
+ 3 files changed, 43 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
 index 838a9c4f8883a..c9596041e5c57 100644
@@ -132,10 +132,10 @@ index 838a9c4f8883a..c9596041e5c57 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 06bc263861259..6976e452af1bf 100644
+index 06bc263861259..9f85229fb20a3 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -274,9 +274,20 @@ static_idl_files_in_modules = [
+@@ -274,10 +274,22 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/encryptedmedia/navigator_request_media_key_system_access.idl",
    "//third_party/blink/renderer/modules/eventsource/event_source.idl",
    "//third_party/blink/renderer/modules/eventsource/event_source_init.idl",
@@ -154,8 +154,10 @@ index 06bc263861259..6976e452af1bf 100644
 +  "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",
    "//third_party/blink/renderer/modules/domicile/navigator_domicile.idl",
++  "//third_party/blink/renderer/modules/domicile/window_domicile.idl",
    "//third_party/blink/renderer/modules/eyedropper/color_selection_options.idl",
    "//third_party/blink/renderer/modules/eyedropper/color_selection_result.idl",
+   "//third_party/blink/renderer/modules/eyedropper/eye_dropper.idl",
 diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/third_party/blink/renderer/core/events/event_type_names.json5
 index 37929c05d7a78..98cbababfe5aa 100644
 --- a/third_party/blink/renderer/core/events/event_type_names.json5

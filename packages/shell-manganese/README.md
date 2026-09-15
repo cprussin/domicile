@@ -70,7 +70,7 @@ window the pointer moves into — focus follows the cursor here.
 
 There is no main process and no preload. The engine is the display compositor
 and serves this page over `domicile://`, and the channel to it is
-`navigator.domicile`, so what is here is the chrome and nothing else.
+`window.domicile`, so what is here is the chrome and nothing else.
 
 React owns this DOM, so the chrome writes the tags in JSX: `<app>` and
 `<webview>`, both the engine's own. React has had a `webview` tag and an

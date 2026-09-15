@@ -1,4 +1,4 @@
-// The in-page client for `navigator.domicile`.
+// The in-page client for `window.domicile`.
 //
 // The engine gives a shell's document a typed control channel: a `DomicileHost`
 // that is an `EventTarget` with methods on it. There is no JSON here, no
@@ -28,7 +28,7 @@
 // process, rather than between a page and a socket.
 //
 // **A page must therefore never call `addEventListener` on
-// `navigator.domicile` itself.** Not because it would fail — it would work,
+// `window.domicile` itself.** Not because it would fail — it would work,
 // and it would work for everything dispatched after the listener existed,
 // which is the subset that makes the bug invisible on a desktop with no
 // clients open.
@@ -228,7 +228,7 @@ export class DomicileClient {
    * The displays the compositor described, or `undefined` until it has.
    *
    * Read through to the host rather than retained here. The desktop is a fact
-   * and not a stream: it lives on `navigator.domicile.displays`, where a
+   * and not a stream: it lives on `window.domicile.displays`, where a
    * component that mounts long after the description reads the same answer as
    * one that was there for it, and where a second reader cannot take it from
    * the first.

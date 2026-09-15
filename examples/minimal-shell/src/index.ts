@@ -11,12 +11,12 @@ import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio"
 import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 
-// One call, two places. Under the engine this is `navigator.domicile`, the
+// One call, two places. Under the engine this is `window.domicile`, the
 // control channel on a document the fork served; in an ordinary browser there
 // is none, and `connectToHost` says so on the console and hands back a
 // stand-in — which is worth keeping possible, because the layout can be worked
 // on without a compositor, against apps that will never arrive.
-const domicile = new DomicileClient(connectToHost(navigator));
+const domicile = new DomicileClient(connectToHost(window));
 // Binds the SDK to this client: `<app>` is the engine's tag and needs no
 // defining, but the pointer and keyboard over one are the page's to forward, and
 // until this runs nothing does.

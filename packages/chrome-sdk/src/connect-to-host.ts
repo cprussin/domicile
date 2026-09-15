@@ -4,7 +4,7 @@
 // business:
 //
 //   the fork     what we ship. A document served over `domicile://` gets
-//                `navigator.domicile`, a typed control channel to the
+//                `window.domicile`, a typed control channel to the
 //                compositor, and that is the whole of the wiring
 //   a browser     no compositor at all. `vite dev` on a shell's page is a real
 //                thing to do, and it must lay out rather than throw
@@ -23,8 +23,19 @@
 
 import type { DomicileHost } from "./domicile-host";
 
-/** The globals this reads, named so a test can supply them. */
-export type HostNavigator = {
+/**
+ * The global this reads, named so a test can supply one.
+ *
+ * Both `window` and `navigator` satisfy it, and neither is preferred, because
+ * under the fork they carry *the same object*: `window.domicile` is an alias
+ * that forwards to `navigator.domicile` rather than a second host. A
+ * preference between them would be a branch nothing can ever take, and reading
+ * one after the other would be a fallback for a failure that cannot happen.
+ * So the caller says which global it has and this reads `domicile` off it —
+ * `connectToHost(window)` is the spelling the guides use, since
+ * `window.domicile` is the surface a shell is written against.
+ */
+export type HostGlobal = {
   readonly domicile?: DomicileHost | null;
 };
 
@@ -43,8 +54,8 @@ const warnOnConsole = (message: string): void => {
  *
  * `connectToHost` is written in terms of this so the two cannot disagree.
  */
-export const hasHost = (navigator: HostNavigator): boolean =>
-  compositorOn(navigator) !== undefined;
+export const hasHost = (global: HostGlobal): boolean =>
+  compositorOn(global) !== undefined;
 
 /**
  * The compositor behind this page, or a stand-in that does nothing.
@@ -67,7 +78,7 @@ export const hasHost = (navigator: HostNavigator): boolean =>
  * **And it says it for the elements too, which is why they no longer do.** The
  * `<app>` element used to warn on its own account, when the `<canvas>` it made
  * had no `embedExternalSurface` on it; the tag is the engine's now, and the one
- * thing that defines it is the one thing that binds `navigator.domicile` — so a
+ * thing that defines it is the one thing that binds `window.domicile` — so a
  * page with an `<app>` that cannot show a window is exactly a page this warned
  * about already.
  *
@@ -75,14 +86,14 @@ export const hasHost = (navigator: HostNavigator): boolean =>
  *   without a console.
  */
 export const connectToHost = (
-  navigator: HostNavigator,
+  global: HostGlobal,
   warn: typeof warnOnConsole = warnOnConsole,
 ): DomicileHost => {
-  const compositor = compositorOn(navigator);
+  const compositor = compositorOn(global);
   if (compositor === undefined) {
     warn(
       "domicile: there is no compositor behind this page —" +
-        " navigator.domicile is absent, so this document was not served by" +
+        " window.domicile is absent, so this document was not served by" +
         " the forked engine. The shell will lay out and style as usual; no" +
         " window will ever appear in it, nothing it asks the compositor for" +
         " will happen, and no desktop will be described.",
@@ -101,8 +112,8 @@ export const connectToHost = (
  * CONTROL_FLOW.md — but it is one WebIDL's `DomicileHost?` produces, and this
  * is the boundary where it stops.
  */
-const compositorOn = (navigator: HostNavigator): DomicileHost | undefined =>
-  navigator.domicile ?? undefined;
+const compositorOn = (global: HostGlobal): DomicileHost | undefined =>
+  global.domicile ?? undefined;
 
 /**
  * A `DomicileHost` that answers every question with nothing.
