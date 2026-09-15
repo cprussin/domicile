@@ -323,12 +323,20 @@ What does assume one fixed output:
 | physical size is a fiction | `size: (300, 200)` on every output (`main.rs:3160`) — harmless nested, a wrong DPI on a real panel |
 | the display list comes from the config, or from Domicile's own window | `screens.rs` has exactly two constructors, `described` and `following_the_window` |
 
-The last row is the real gap. On a tty the display list comes from DRM, which
-the **engine** owns, and the engine's C ABI has no event for it: `engine::Event`
-is `Configure` / `Frame` / `Released`
-(`packages/domicile-compositor/src/engine.rs:130`). A tty desktop needs a third
-source of `Screens` and a new ABI event to feed it, carrying mode, physical
-size, refresh and hotplug off the `DisplaySnapshot`s the engine already has.
+The last row **was** the real gap and is now closed for the list itself. On a
+tty the display list comes from DRM, which the **engine** owns, so the C ABI
+carries a fourth event -- `displays`, an array of `DomicileDisplay` -- and
+`Screens::from_the_engine` is the third constructor beside `described` and
+`following_the_window`. `Screens::replugged_into` is which of the two sources
+wins: a described desktop is the user stating their monitors and DRM does not
+overrule it, and a nested run is never sent the event at all, because the
+browser watches displays only under `--ozone-platform=drm`.
+
+What the event does **not** carry is physical size and refresh. `display::Display`
+has neither, and the `DisplaySnapshot` that does is a layer below where the
+browser process reads the list from -- so `wl_output` still fabricates
+`(300, 200)` and `ADVERTISED_REFRESH_MHZ`. That is the last row of the table
+above and its own checklist item.
 
 ## Key decisions
 
@@ -664,10 +672,19 @@ Step 2 — the embedder (the port):
       `WAYLAND_DISPLAY` gets a tty rather than `PlatformError::NoDisplayServer`.
       Auto-detection only, and last: `OZONE=drm` already overrides outright, so
       nothing is blocked on this
-- [ ] a display-list event on the engine C ABI, and `Screens::from_the_engine`
-      beside `described` and `following_the_window`
-- [ ] drive `adopt_the_desktop` from that event, so a hotplug rearranges rather
-      than restarts
+- [x] a display-list event on the engine C ABI, and `Screens::from_the_engine`
+      beside `described` and `following_the_window` -- `DisplayListObserver` on
+      `mojom::FrameSinkBroker`, fed in the browser process by a
+      `display::DisplayObserver` over the screen ozone built, which on this
+      platform is `DrmScreen` reading the same snapshots the modeset driver
+      configures from. Registered ONLY under `--ozone-platform=drm`: a nested
+      engine's screen is the host's monitors, and a producer told about those
+      would take its desktop away from the window that defines it
+- [x] drive `adopt_the_desktop` from that event, so a hotplug rearranges rather
+      than restarts -- `Screens::rearranged_into` matches on the `wl_output`
+      name and the name is `drm-<display id>`, which ozone derives from the
+      EDID, so a monitor unplugged and plugged back in keeps the output its
+      clients are on rather than being handed a new one
 - [ ] real physical size and refresh on `wl_output`, from the snapshot rather
       than `(300, 200)` and `ADVERTISED_REFRESH_MHZ`
 

@@ -23,6 +23,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace domicile {
@@ -74,6 +75,35 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
  private:
   mojo::Receiver<mojom::SurfaceObserver> receiver_{this};
 };
+
+// Stands in for the producer's other half: the compositor being told what the
+// screens are.
+class FakeDisplayListObserver : public mojom::DisplayListObserver {
+ public:
+  mojo::PendingRemote<mojom::DisplayListObserver> BindRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+  // mojom::DisplayListObserver implementation.
+  void OnDisplaysChanged(std::vector<mojom::DisplayPtr> displays) override {
+    lists_.push_back(std::move(displays));
+  }
+
+  // Every list this observer was sent, in order. A list rather than a count
+  // because "told once" and "told twice with the same thing" are different
+  // facts about a desktop that re-reads its displays.
+  std::vector<std::vector<mojom::DisplayPtr>> lists_;
+
+ private:
+  mojo::Receiver<mojom::DisplayListObserver> receiver_{this};
+};
+
+// A display list of one, at the origin.
+std::vector<mojom::DisplayPtr> OneDisplay(int64_t id, const gfx::Size& size) {
+  std::vector<mojom::DisplayPtr> displays;
+  displays.push_back(mojom::Display::New(id, gfx::Rect(size)));
+  return displays;
+}
 
 }  // namespace
 
@@ -453,6 +483,64 @@ TEST_F(FrameSinkBrokerTest, DestroyingTheSinkUnregistersTheHierarchy) {
   RunUntilIdle();
 
   EXPECT_FALSE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
+}
+
+TEST_F(FrameSinkBrokerTest, AnObserverIsToldTheDisplaysAlreadyRead) {
+  // The order a tty comes up in: the browser modesets, and the compositor
+  // connects afterwards. Without this it would wait for a hotplug to learn
+  // what it is drawing on, which on a machine nobody touches is forever.
+  broker()->OnDisplaysChanged(OneDisplay(7, gfx::Size(2880, 1920)));
+
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeDisplayListObserver observer;
+  remote->ObserveDisplays(observer.BindRemote());
+  RunUntilIdle();
+
+  ASSERT_EQ(observer.lists_.size(), 1u);
+  ASSERT_EQ(observer.lists_[0].size(), 1u);
+  EXPECT_EQ(observer.lists_[0][0]->id, 7);
+  EXPECT_EQ(observer.lists_[0][0]->bounds, gfx::Rect(2880, 1920));
+}
+
+TEST_F(FrameSinkBrokerTest, AnObserverHearsNothingUntilTheDisplaysAreRead) {
+  // The other order, and the reason the broker remembers a reading rather than
+  // a list: an empty list is a screen nobody has read yet, and a producer told
+  // "no displays" would advertise a desktop with nothing on it.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeDisplayListObserver observer;
+  remote->ObserveDisplays(observer.BindRemote());
+  RunUntilIdle();
+
+  EXPECT_TRUE(observer.lists_.empty());
+
+  broker()->OnDisplaysChanged(OneDisplay(7, gfx::Size(2880, 1920)));
+  RunUntilIdle();
+
+  ASSERT_EQ(observer.lists_.size(), 1u);
+  EXPECT_EQ(observer.lists_[0][0]->bounds, gfx::Rect(2880, 1920));
+}
+
+TEST_F(FrameSinkBrokerTest, AHotplugReachesEveryObserver) {
+  mojo::Remote<mojom::FrameSinkBroker> first_remote;
+  broker()->Bind(first_remote.BindNewPipeAndPassReceiver());
+  FakeDisplayListObserver first;
+  first_remote->ObserveDisplays(first.BindRemote());
+
+  mojo::Remote<mojom::FrameSinkBroker> second_remote;
+  broker()->Bind(second_remote.BindNewPipeAndPassReceiver());
+  FakeDisplayListObserver second;
+  second_remote->ObserveDisplays(second.BindRemote());
+  RunUntilIdle();
+
+  broker()->OnDisplaysChanged(OneDisplay(7, gfx::Size(1920, 1080)));
+  RunUntilIdle();
+
+  ASSERT_EQ(first.lists_.size(), 1u);
+  ASSERT_EQ(second.lists_.size(), 1u);
+  EXPECT_EQ(first.lists_[0][0]->bounds, gfx::Rect(1920, 1080));
+  EXPECT_EQ(second.lists_[0][0]->bounds, gfx::Rect(1920, 1080));
 }
 
 }  // namespace domicile
