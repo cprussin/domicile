@@ -711,13 +711,30 @@ Step 2 — the embedder (the port):
       is not what is wrong: every `Ctrl+Alt+F<n>` was refused, correctly,
       behind `RelinquishDisplayControlDrm drop master failed`. See the open
       question below — the drop may be in the wrong process
-- [ ] the window fills the CRTC, so that `FindWindowAt` matches it to a
-      controller and page flips reach the kernel. Chromium's default window is
-      1050x1900 at (10,10) on a 2880x1920 panel and an exact rectangle is what
-      the mapping wants, so nothing is scanned out. See
+- [x] the window fills the CRTC, so that `FindWindowAt` matches it to a
+      controller and page flips reach the kernel -- patch `0018` and
+      `--start-fullscreen` from `domicile-launch` on the scanout platform only.
+      See
       [The window has to be the size of the CRTC](#the-window-has-to-be-the-size-of-the-crtc).
-      **This is what stands between here and a desktop on a screen**, and
-      `--window-size`/`--window-position` is the experiment rather than the fix
+
+      **Fullscreen rather than a size on the command line**, and the difference
+      is not style. `--window-size=WxH --window-position=0,0` does work --
+      `browser_window_state.cc:180` applies both after `WindowSizer` and forces
+      `kNormal` -- but the numbers are a guess: this panel advertises more than
+      one preferred mode and `drm_util.cc:880` takes the FIRST one flagged
+      preferred, not the largest. `DrmWindowHost::SetFullscreen` asks
+      `display::Screen` instead, and that it agrees with the CRTC is by
+      construction: `DrmScreen` builds its list from the same
+      `DisplaySnapshot`s the modeset driver configures from, so a display's
+      bounds and `gfx::Rect(controller->origin(), GetModeSize())` are one
+      rectangle -- through a mode change and a hotplug alike.
+
+      Upstream's `SetFullscreen` is an empty body and `GetPlatformWindowState`
+      answers `kUnknown` forever, both on patch `0015`'s premise: ash sizes its
+      own root window, so nothing on ChromeOS asks a DRM window for either.
+      `kUnknown` also makes `DesktopWindowTreeHostPlatform::IsFullscreen()`
+      permanently false, so views re-enters fullscreen every time and its own
+      `DCHECK_EQ` fails in a DCHECK build
 - [ ] take the evdev fds from logind's `Session.TakeDevice` instead of
       `open()`ing them, and follow `PauseDevice` / `ResumeDevice` — which is
       the `EVIOCREVOKE` at those same two moments, because logind does it to
