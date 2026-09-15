@@ -6,6 +6,7 @@
 #define UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_MODESET_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -36,6 +37,26 @@ class DrmScreen;
 // that did not report one. Asking a CRTC for a mode the hardware never
 // advertised is how a screen goes black rather than wrong.
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
+    const std::vector<raw_ptr<display::DisplaySnapshot,
+                              VectorExperimental>>& snapshots);
+
+// What a reading of the displays says, in one line.
+//
+// THIS EXISTS BECAUSE THREE RUNS ON REAL HARDWARE WERE SPENT INFERRING WHAT
+// THIS DRIVER DID. It logged when it SKIPPED a modeset and said nothing at all
+// when it performed one, so a successful modeset was invisible unless
+// Chromium's own `screen_manager` VLOG was enabled -- and
+// `--vmodule=drm*=1,gbm*=1,ozone*=1`, the incantation everybody was using,
+// does not match `screen_manager`. Absence of evidence read as evidence of
+// absence, twice.
+//
+// The mode is the load-bearing part. It is what the CRTC is set to, and it is
+// what the browser window has to match EXACTLY -- `ScreenManager::FindWindowAt`
+// compares whole rectangles -- or no controller is bound to the window and
+// every page flip is dropped before it reaches the kernel.
+//
+// A free function so it has a test, like the two below.
+std::string DescribeSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots);
 

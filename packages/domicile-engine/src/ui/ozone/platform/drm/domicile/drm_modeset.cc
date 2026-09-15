@@ -4,10 +4,15 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
 
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
@@ -34,6 +39,31 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
                         native_mode);
   }
   return params;
+}
+
+std::string DescribeSnapshots(
+    const std::vector<raw_ptr<display::DisplaySnapshot,
+                              VectorExperimental>>& snapshots) {
+  std::vector<std::string> described;
+  described.reserve(snapshots.size());
+  for (const display::DisplaySnapshot* snapshot : snapshots) {
+    const display::DisplayMode* native_mode = snapshot->native_mode();
+    // Truncated to whole hertz: this is a log line, and 119.88 tells nobody
+    // anything 120 does not.
+    const std::string mode =
+        native_mode
+            ? base::StrCat({native_mode->size().ToString(), "@",
+                            base::NumberToString(static_cast<int>(
+                                native_mode->refresh_rate()))})
+            : std::string("no mode");
+    described.push_back(base::StrCat({base::NumberToString(
+                                          snapshot->display_id()),
+                                      " at ", snapshot->origin().ToString(),
+                                      " ", mode}));
+  }
+  return base::StrCat({base::NumberToString(snapshots.size()),
+                       " connector(s)", described.empty() ? "" : ": ",
+                       base::JoinString(described, "; ")});
 }
 
 DrmModeset::DrmModeset(
@@ -79,6 +109,11 @@ bool ModesetWouldChangeAnything(
 void DrmModeset::OnDisplaysReceived(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots) {
+  // Every reading, whatever is decided about it. This is the line that says
+  // what the hardware reported and, crucially, at which mode -- see
+  // `DescribeSnapshots`.
+  VLOG(1) << "domicile: DRM reports " << DescribeSnapshots(snapshots);
+
   // The screen first: a window needs somewhere to land whether or not the
   // modeset succeeds, and `DrmScreen` answers for an empty list by design.
   screen_->OnDisplaysChanged(snapshots);
@@ -88,6 +123,7 @@ void DrmModeset::OnDisplaysReceived(
   if (params.empty()) {
     // Nothing readable is plugged in. Not an error: it is what every connector
     // on a machine with no panel reports, and `DrmScreen` has already been told.
+    VLOG(1) << "domicile: nothing readable is plugged in; not modesetting";
     return;
   }
 
@@ -100,6 +136,7 @@ void DrmModeset::OnDisplaysReceived(
     return;
   }
 
+  VLOG(1) << "domicile: configuring " << params.size() << " display(s)";
   delegate_->Configure(
       params,
       base::BindOnce(
@@ -118,6 +155,7 @@ void DrmModeset::OnDisplaysReceived(
                             "lit";
               return;
             }
+            VLOG(1) << "domicile: the DRM thread confirmed the modeset";
             if (self) {
               self->confirmed_ = std::move(asked);
             }

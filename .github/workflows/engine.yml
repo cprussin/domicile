@@ -405,7 +405,7 @@ jobs:
         working-directory: /build/chromium/src/out/Domicile
         run: |
           set -euo pipefail
-          for suite_and_floor in 'DrmScreenTest:14' 'DrmModesetTest:13' 'DrmVtSwitcherTest:11'; do
+          for suite_and_floor in 'DrmScreenTest:14' 'DrmModesetTest:15' 'DrmVtSwitcherTest:11'; do
             suite="${suite_and_floor%%:*}"
             floor="${suite_and_floor##*:}"
             count=$(nix develop "$GITHUB_WORKSPACE#full" --command \
