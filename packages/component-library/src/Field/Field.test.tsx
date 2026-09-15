@@ -148,6 +148,10 @@ describe(Field, () => {
       expect(await screen.findByText("Custom error")).toBeInTheDocument();
     });
 
+    // The default 5000ms per-test budget is tight for two sequential
+    // `waitFor` polls plus popover enter/exit animation work under a busy
+    // test runner (the full 20-file suite runs these concurrently); the
+    // 15000ms below raises that ceiling rather than the assertions.
     it("toggles the error popover when the error prop changes", async () => {
       const { rerender } = render(
         <Field label="Username">
@@ -171,7 +175,7 @@ describe(Field, () => {
       await waitFor(() => {
         expect(screen.queryByText("Too short")).not.toBeInTheDocument();
       });
-    });
+    }, 15_000);
 
     it.skipIf(runtimeSupportsValidationMessage() === false)(
       "surfaces the browser validationMessage by reading the control's validity",
@@ -183,7 +187,12 @@ describe(Field, () => {
           </Field>,
         );
         const input = screen.getByRole("textbox") as HTMLInputElement;
-        input.focus();
+        // Base UI's blur validation suppresses a bare `valueMissing` error
+        // until the control has been dirtied by user input (it treats an
+        // untouched empty required field as "not yet worth complaining
+        // about"). Typing a too-short value both dirties the field and
+        // trips the `minLength` constraint, so blur commits a real error.
+        await user.type(input, "ab");
         await user.tab();
         const message = input.validationMessage;
         await waitFor(() => {

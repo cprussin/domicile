@@ -40,7 +40,7 @@ domicile-launch = { path = "../domicile-launch" }
 domicile-test-client = { path = "../domicile-test-client" }
 # Same dlopen crate Smithay uses for EGL, so libEGL can be probed for before
 # Smithay loads it (it treats a missing library as fatal).
-libloading = "0.8"
+libloading = "0.9"
 thiserror.workspace = true
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
