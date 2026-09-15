@@ -709,8 +709,16 @@ Step 2 — the embedder (the port):
 
       **It does not work on the machine it was written for**, and the switcher
       is not what is wrong: every `Ctrl+Alt+F<n>` was refused, correctly,
-      behind `RelinquishDisplayControlDrm drop master failed`. See the open
-      question below — the drop may be in the wrong process
+      behind `RelinquishDisplayControlDrm drop master failed`. The drop is in
+      the wrong process, and the kernel says so in two functions — see
+      [the open questions](#open-questions). The handshake stands; what is
+      under it moves to the browser
+- [ ] do the drop and the retake in the process that opened the card: keep a
+      `dup()` of the primary card fd in the browser, and `drmDropMaster` /
+      `drmSetMaster` on that rather than through the GPU. Without it the VT
+      switcher above refuses every switch, which is a desktop you cannot get
+      out of. See [the open questions](#open-questions) for the kernel
+      functions that make this the only shape that works
 - [x] the window fills the CRTC, so that `FindWindowAt` matches it to a
       controller and page flips reach the kernel -- patch `0018` and
       `--start-fullscreen` from `domicile-launch` on the scanout platform only.
@@ -834,19 +842,55 @@ Step 2 — the embedder (the port):
   the devices' group (`input`, conventionally) would also make the bare
   `open` work, and is rejected twice over: it is a standing keyboard grant to
   every process that user runs, and it revokes nothing on a VT switch.
-- **Can the GPU process drop DRM master?** **Measured: not on this machine.**
-  Every `Ctrl+Alt+F<n>` was refused behind
+- **Can the GPU process drop DRM master?** **Answered: no, and it never
+  could.** Not a machine, a sandbox or a permission bit — the kernel forbids
+  it by construction, and reading the two functions that say so is the whole
+  answer.
+
+  What was seen: every `Ctrl+Alt+F<n>` refused behind
   `RelinquishDisplayControlDrm drop master failed for: .../card1`
   (`drm_gpu_display_manager.cc:438`). The VT switcher is doing its job — it
-  will not acknowledge a switch it could not release for — so what is broken is
-  under it. *Hypothesis, not measured:* the kernel's `drm_master_check_perm`
-  keys on the pid that **opened** the fd. The browser opens the card and
-  becomes master implicitly, which is why no `SetMaster` is ever called and why
-  everything else works; the **GPU** process is the one calling `DropMaster`,
-  and it is sandboxed without `CAP_SYS_ADMIN`. *Recommendation:* test
-  `drmDropMaster` on a passed fd before writing anything. If that is the
-  reason, the drop belongs in the process that opened the card and patch
-  `0017`'s seam is one process out.
+  will not acknowledge a switch it could not release for — so what is broken
+  is under it.
+
+  Why, in five steps, each one a line of source:
+
+  1. The **browser** process opens the card:
+     `drm_display_host_manager.cc:202`.
+  2. Nothing else holds master on a bare tty, so that open takes it, and
+     `drm_set_master` sets `fpriv->was_master = true`
+     (`drivers/gpu/drm/drm_auth.c:151-159`). That is also why no `SetMaster`
+     is ever called and why the modeset works.
+  3. `drm_file_update_pid` **refreshes the recorded pid on every ioctl except
+     for a file that was ever master** (`drivers/gpu/drm/drm_file.c:452-463`,
+     and the comment there says it is deliberately so that
+     `drm_master_check_perm` keeps working). So the pid on this fd is frozen
+     as the browser's, permanently.
+  4. The fd is then **moved** to the GPU process —
+     `DrmWrapper::ToScopedFD(std::move(...))` (`drm_wrapper.cc:518-520`) at
+     `drm_display_host_manager.cc:493` and `:539`. `SCM_RIGHTS` shares the
+     `struct drm_file`; it does not make a new one, so the frozen pid travels
+     with it.
+  5. `drm_dropmaster_ioctl` calls `drm_master_check_perm`
+     (`drivers/gpu/drm/drm_auth.c:233-243`), which passes only if
+     `was_master && pid == task_tgid(current)` — false in the GPU process —
+     and otherwise demands `CAP_SYS_ADMIN`, which a renderer-adjacent process
+     does not have. `-EACCES`.
+
+  No probe is needed and none should be written: a `drmDropMaster` test on a
+  passed fd would measure `capable(CAP_SYS_ADMIN)`, which is already known.
+
+  *Fix:* the drop belongs in the process that opened the card. Keep a `dup()`
+  of the primary card fd in the browser before handing it over, and do
+  `drmDropMaster`/`drmSetMaster` on that. A `dup` shares the one `struct
+  drm_file`, so the drop takes effect for the GPU's copy as well, and the
+  caller's tgid is the recorded one, so the check passes. Patch `0017`'s
+  handshake is right; its seam is one process out.
+
+  What still has to be worked out is the **ordering against Chromium's own
+  bookkeeping**: `RelinquishDisplayControl` does more in the GPU process than
+  the syscall, and a browser-side drop has to sit either side of that rather
+  than instead of it.
 - **Fractional scale.** `wl_output` scale is `Scale::Integer` here and DRM
   panels routinely want 1.5. *Recommendation:* stay integer — `ROADMAP.md`'s
   existing "fractional scaling rounds up" gap is the same decision, and it
