@@ -181,7 +181,7 @@ export const RequiredValidation = {
     docs: {
       description: {
         story:
-          "Demonstrates HTML5 validation: tab away from the empty input and the Field automatically surfaces the browser's validation message via its error popover — no manual error tracking required.",
+          "Demonstrates HTML5 validation: type fewer than the minimum characters and tab away, and the Field automatically surfaces the browser's validation message via its error popover — no manual error tracking required. (Tabbing away from the input untouched shows nothing: Base UI treats an empty field nobody has typed into yet as not worth complaining about.)",
       },
     },
   },
@@ -349,7 +349,7 @@ export const WithTextareaRequiredValidation = {
     docs: {
       description: {
         story:
-          "Demonstrates HTML5 validation on a `Textarea`: tab away from the empty textarea and the Field automatically surfaces the browser's validation message via its error popover — no manual error tracking required.",
+          "Demonstrates HTML5 validation on a `Textarea`: type fewer than the minimum characters and tab away, and the Field automatically surfaces the browser's validation message via its error popover — no manual error tracking required. (Tabbing away from the textarea untouched shows nothing: Base UI treats an empty field nobody has typed into yet as not worth complaining about.)",
       },
     },
   },
