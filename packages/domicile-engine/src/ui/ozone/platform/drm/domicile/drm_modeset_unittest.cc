@@ -87,6 +87,32 @@ std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> Pointers(
   return pointers;
 }
 
+TEST(DrmModesetTest, AReadingSaysWhatEveryConnectorReported) {
+  // THREE RUNS ON REAL HARDWARE WERE SPENT INFERRING THIS FROM ABSENT LINES.
+  // The mode matters twice over: it is what the CRTC is set to, and it is what
+  // the browser window has to match exactly or nothing is ever scanned out.
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(SnapshotBuilder()
+                      .Id(7)
+                      .Origin(gfx::Point(0, 0))
+                      .NativeMode(gfx::Size(2880, 1920), 120.f)
+                      .Build());
+  owned.push_back(SnapshotBuilder()
+                      .Id(9)
+                      .Origin(gfx::Point(2880, 0))
+                      .NoNativeMode()
+                      .Build());
+
+  EXPECT_EQ(DescribeSnapshots(Pointers(owned)),
+            "2 connector(s): 7 at 0,0 2880x1920@120; 9 at 2880,0 no mode");
+}
+
+TEST(DrmModesetTest, AReadingOfNothingSaysSo) {
+  // A machine with nothing plugged in is an ordinary state, and a log line
+  // that goes missing entirely is indistinguishable from one that never ran.
+  EXPECT_EQ(DescribeSnapshots({}), "0 connector(s)");
+}
+
 TEST(DrmModesetTest, AModesetAsksForTheSnapshotsNativeMode) {
   auto snapshot = SnapshotBuilder()
                       .Id(7)
