@@ -13,12 +13,9 @@ equality. A window that is not precisely the CRTC's rect gets no controller,
 and every frame it submits is dropped before it reaches the kernel.
 
 Chromium's default window is `kWindowMaxDefaultWidth` wide and the work area
-inset by `kWindowTilePixels` -- 1050x1900 at (10, 10) on a 2880x1920 panel --
-so out of the box nothing is ever scanned out. Nothing on a tty maximises a
-window either: there is no window manager and no session to restore bounds
-from.
-
-TWO THINGS WERE MISSING, and either alone is still a black screen.
+inset by `kWindowTilePixels` -- 1050x1900 on a 2880x1920 panel -- so out of the
+box nothing is ever scanned out. Nothing on a tty maximises a window either:
+there is no window manager and no session to restore bounds from.
 
 `DrmWindowHost::SetFullscreen` is an empty body upstream, on the premise behind
 the seven NOTREACHED()s patch 0015 answered: ash sizes its own root window to
@@ -28,13 +25,18 @@ implemented here, along with `GetPlatformWindowState`, which upstream answers
 permanently false, so views re-enters fullscreen on every request and the
 `DCHECK_EQ` in its own `SetFullscreen` fails in a DCHECK build.
 
-AND NOTHING WAS CALLING IT. `--start-fullscreen` is honoured in
-`StartupBrowserCreatorImpl::MaybeToggleFullscreen`, which an --app= launch
-never reaches: `MaybeLaunchAppShortcutWindow` answers the startup sequence
-with `return true` before `LaunchBrowserForLastProfiles` is ever called. So
-the flag is silently dropped for exactly the launch Domicile uses, and the
-window implementation above would have sat there unreachable. It is honoured
-in that path now.
+NOTHING IN `chrome/` NEEDS TOUCHING, and an earlier revision of this patch
+touched it anyway. `--start-fullscreen` is honoured in
+`StartupBrowserCreatorImpl::MaybeToggleFullscreen`, and the `--app=` path does
+reach it: `MaybeLaunchAppShortcutWindow` calls
+`web_app::startup::FinalizeWebAppLaunch`, whose last statement is that call
+(`chrome/browser/ui/startup/web_app_startup_utils.cc`). A second
+`chrome::ToggleFullscreenMode` beside it is an EXIT rather than a second
+entry -- `FullscreenController::ToggleFullscreenModeInternal` reads
+`enter_fullscreen = !context->IsFullscreen()` -- which put the window straight
+back on `restored_bounds_` and is the black screen this patch was written to
+end. `scripts/test-the-fullscreen-flag-is-honoured-once.sh` is what says so
+without a Chromium tree.
 
 Kiosk is deliberately not mirrored: it carries a policy surface -- accelerator
 stripping, forced app mode -- that this fork has no business turning on as a
@@ -53,60 +55,11 @@ The decision itself is a free function with four tests in
 what is left in the host is a state toggle over platform singletons it is
 handed rather than owns.
 ---
- .../ui/startup/startup_browser_creator.cc     | 27 ++++++-
  ui/ozone/platform/drm/BUILD.gn                |  3 +
  ui/ozone/platform/drm/host/drm_window_host.cc | 73 ++++++++++++++++++-
  ui/ozone/platform/drm/host/drm_window_host.h  |  9 +++
- 4 files changed, 107 insertions(+), 5 deletions(-)
+ 3 files changed, 83 insertions(+), 2 deletions(-)
 
-diff --git a/chrome/browser/ui/startup/startup_browser_creator.cc b/chrome/browser/ui/startup/startup_browser_creator.cc
-index 644b8d08de7e3..82a9ce04d3789 100644
---- a/chrome/browser/ui/startup/startup_browser_creator.cc
-+++ b/chrome/browser/ui/startup/startup_browser_creator.cc
-@@ -63,6 +63,7 @@
- #include "chrome/browser/signin/signin_util.h"
- #include "chrome/browser/ui/browser_window.h"
- #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-+#include "chrome/browser/ui/browser_commands.h"
- #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
- #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
- #include "chrome/browser/ui/extensions/application_launch.h"
-@@ -416,12 +417,32 @@ bool MaybeLaunchAppShortcutWindow(const base::CommandLine& command_line,
-       const content::WebContents* web_contents =
-           apps::OpenExtensionAppShortcutWindow(profile, url);
-       if (web_contents) {
-+        BrowserWindowInterface* app_browser =
-+            GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
-+                web_contents);
-         web_app::startup::FinalizeWebAppLaunch(
-             web_app::startup::OpenMode::kInWindowByUrl, command_line,
--            is_first_run,
--            GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
--                web_contents),
-+            is_first_run, app_browser,
-             apps::LaunchContainer::kLaunchContainerWindow);
-+        // Domicile's engine fork. `--start-fullscreen` is honoured in
-+        // StartupBrowserCreatorImpl::MaybeToggleFullscreen, and the `return
-+        // true` below is why an --app= launch never reaches it: this function
-+        // answers the startup sequence before LaunchBrowserForLastProfiles is
-+        // ever called. So the flag is silently dropped for exactly the launch
-+        // Domicile uses.
-+        //
-+        // WHICH ON A TTY IS THE DIFFERENCE BETWEEN A DESKTOP AND A BLACK
-+        // SCREEN. ozone/drm binds a window to a display controller only when
-+        // the window's rectangle is exactly the CRTC's, and Chromium's default
-+        // window is not; fullscreen is what makes it so. See
-+        // DrmWindowHost::SetFullscreen.
-+        //
-+        // Kiosk is deliberately not mirrored here: it carries a policy surface
-+        // -- accelerator stripping, forced app mode -- that this fork has no
-+        // business turning on as a side effect of drawing a desktop.
-+        if (app_browser && command_line.HasSwitch(switches::kStartFullscreen)) {
-+          chrome::ToggleFullscreenMode(app_browser, /*user_initiated=*/false);
-+        }
-         return true;
-       }
-     }
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
 index 50dc4586f2a70..a16ef6c5e8b8b 100644
 --- a/ui/ozone/platform/drm/BUILD.gn

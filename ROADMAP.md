@@ -403,12 +403,13 @@ decides whether an item is waiting or workable.
    inset by ten pixels -- 1050x1900 at (10,10) on a 2880x1920 panel. No match
    means no controller, and every frame is dropped before the kernel sees it,
    with nothing wrong in any log because nothing went wrong. `domicile-launch`
-   passes `--start-fullscreen` on the scanout platform only, the patch honours
-   that flag on the `--app=` path (where `MaybeLaunchAppShortcutWindow` returns
-   before `MaybeToggleFullscreen` is ever reached, so it was being silently
-   dropped for exactly the launch Domicile uses), and `DrmWindowHost` answers
-   `SetFullscreen` and `GetPlatformWindowState`, both of which were stubs on
-   `0015`'s premise that ash sizes its own root window.
+   passes `--start-fullscreen` on the scanout platform only, and `DrmWindowHost`
+   answers `SetFullscreen` and `GetPlatformWindowState`, both of which were
+   stubs on `0015`'s premise that ash sizes its own root window. Nothing in
+   `chrome/` is touched, and the revision of `0018` that touched it is what the
+   second tty run below found: the `--app=` path already reaches
+   `MaybeToggleFullscreen`, through the `FinalizeWebAppLaunch` call
+   `MaybeLaunchAppShortcutWindow` already makes.
 
    `0019` is **the browser dropping DRM master, because the GPU process never
    could.** Not a sandbox and not a permission bit: `drm_set_master` marks the
@@ -479,6 +480,26 @@ decides whether an item is waiting or workable.
    icon: `supports_system_tray_windowing` is false on ozone/drm and
    `StatusIconButtonLinux` refuses to build its widget without it. Read a
    folded frame as a fact about the *group*, not the name.
+
+   **The second run got all the way up and still drew nothing**, and `0018`
+   was why. Modeset confirmed, compositor serving, chrome connected and
+   handshaken -- and the chrome reported a desktop of 1050x1900, which is
+   Chromium's default app window on that panel to the pixel. `0018`'s ozone
+   half was right and its `chrome/` half was a second caller: the `--app=`
+   path does reach `StartupBrowserCreatorImpl::MaybeToggleFullscreen`, because
+   `MaybeLaunchAppShortcutWindow` calls `web_app::startup::FinalizeWebAppLaunch`
+   and that function's last statement is exactly it. So `--start-fullscreen`
+   was never being dropped, the patch's extra `chrome::ToggleFullscreenMode`
+   ran on a window that had *just* gone fullscreen, and
+   `FullscreenController::ToggleFullscreenModeInternal` reads
+   `enter_fullscreen = !context->IsFullscreen()` -- so it exited, and
+   `DrmWindowHost` put the window back on the `restored_bounds_` it had
+   recorded a moment earlier. A patch that made a stub work, and then undid
+   the only thing calling it. What guards it now is
+   `scripts/test-the-fullscreen-flag-is-honoured-once.sh`, reading the series:
+   the DRM window must answer a fullscreen request with new bounds, and the
+   series must add no second toggle to startup. `0017`, `0019` and `0020`
+   remain unexercised.
 
    What is left of step 2 after a screen lights: a **`drm` arm in
    `domicile-launch`'s `platform()`**
