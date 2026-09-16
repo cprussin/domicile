@@ -27,11 +27,10 @@ constexpr char kManagerInterface[] = "org.freedesktop.login1.Manager";
 constexpr char kSessionInterface[] = "org.freedesktop.login1.Session";
 // THE SEAT RATHER THAN THE SESSION, because a chord names a console and not a
 // session: `Session.Activate` can only raise a session already known by name,
-// while `Seat.SwitchTo(u)` is "whoever is on VT 3". `self` is logind's alias
-// for the caller's own seat, so this needs no lookup. logind's shipped polkit
+// while `Seat.SwitchTo(u)` is "whoever is on VT 3". logind's shipped polkit
 // policy gives `org.freedesktop.login1.chvt` `allow_active yes`, so an active
-// session authenticates for none of this.
-constexpr char kSeatPath[] = "/org/freedesktop/login1/seat/self";
+// session authenticates for none of this. WHICH seat is read off the session
+// rather than written down here -- see `SeatOfSession`.
 constexpr char kSeatInterface[] = "org.freedesktop.login1.Seat";
 
 constexpr char kGetSessionByPID[] = "GetSessionByPID";
@@ -41,6 +40,11 @@ constexpr char kPropertiesInterface[] = "org.freedesktop.DBus.Properties";
 constexpr char kPropertiesGet[] = "Get";
 constexpr char kPropertiesChanged[] = "PropertiesChanged";
 constexpr char kActive[] = "Active";
+constexpr char kSeat[] = "Seat";
+
+// What logind writes for the seat of a session that is on none. A valid object
+// path, and not an object.
+constexpr char kNoSeat[] = "/";
 
 // The console the chord is on, counted from the key rather than mapped: the
 // twelve function keys are contiguous and `Seat.SwitchTo` takes the number the
@@ -64,6 +68,21 @@ std::optional<uint32_t> VtForChord(const KeyEvent& event) {
   return named ? std::optional<uint32_t>(
                      static_cast<uint32_t>(event.key_code() - VKEY_F1 + 1))
                : std::nullopt;
+}
+
+std::optional<dbus::ObjectPath> SeatOfSession(dbus::MessageReader* reader) {
+  dbus::MessageReader variant(nullptr);
+  dbus::MessageReader seat(nullptr);
+  std::string id;
+  dbus::ObjectPath path;
+  if (!reader->PopVariant(&variant) || !variant.PopStruct(&seat) ||
+      !seat.PopString(&id) || !seat.PopObjectPath(&path)) {
+    LOG(FATAL) << "logind answered " << kSeat
+               << " with something that is not a seat";
+  }
+
+  return path.value() == kNoSeat ? std::nullopt
+                                 : std::optional<dbus::ObjectPath>(path);
 }
 
 VtStep StepVtSwitch(VtState state, VtEvent event, bool succeeded) {
@@ -180,8 +199,6 @@ DrmVtSwitcher::DrmVtSwitcher(
       base::SingleThreadTaskRunnerThreadMode::SHARED);
   bus_ = base::MakeRefCounted<dbus::Bus>(std::move(options));
 
-  seat_ = bus_->GetObjectProxy(kLogind, dbus::ObjectPath(kSeatPath));
-
   dbus::ObjectProxy* manager =
       bus_->GetObjectProxy(kLogind, dbus::ObjectPath(kManagerPath));
   dbus::MethodCall find_session(kManagerInterface, kGetSessionByPID);
@@ -217,18 +234,16 @@ void DrmVtSwitcher::WillProcessEvent(const PlatformEvent& event) {
     return;
   }
 
-  dbus::MethodCall switch_to(kSeatInterface, kSwitchTo);
-  dbus::MessageWriter writer(&switch_to);
-  writer.AppendUint32(*console);
-  seat_->CallMethod(
-      &switch_to, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-      base::BindOnce(
-          [](uint32_t console, dbus::Response* response) {
-            if (!response) {
-              LOG(ERROR) << "logind would not switch to console " << console;
-            }
-          },
-          *console));
+  // THE SEAT IS TWO ROUND TRIPS AWAY AND A CHORD CAN BEAT THEM BOTH. Neither
+  // may be waited for here: this is the thread every key in the desktop is
+  // dispatched on. So a console asked for before logind has said which seat
+  // this session is on is remembered, and `OnSeatFound` asks for it.
+  if (seat_ == nullptr) {
+    pending_console_ = console;
+    return;
+  }
+
+  SwitchTo(*console);
 }
 
 // The chord is read on the way in and nothing is read on the way out, but the
@@ -251,12 +266,63 @@ void DrmVtSwitcher::OnSessionFound(dbus::Response* response) {
   }
   session_ = bus_->GetObjectProxy(kLogind, session_path);
 
+  ReadSeat();
+
   session_->ConnectToSignal(
       kPropertiesInterface, kPropertiesChanged,
       base::BindRepeating(&DrmVtSwitcher::OnPropertiesChanged,
                           weak_factory_.GetWeakPtr()),
       base::BindOnce(&DrmVtSwitcher::OnSubscribed,
                      weak_factory_.GetWeakPtr()));
+}
+
+void DrmVtSwitcher::ReadSeat() {
+  dbus::MethodCall get(kPropertiesInterface, kPropertiesGet);
+  dbus::MessageWriter writer(&get);
+  writer.AppendString(kSessionInterface);
+  writer.AppendString(kSeat);
+  session_->CallMethod(
+      &get, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+      base::BindOnce(&DrmVtSwitcher::OnSeatFound, weak_factory_.GetWeakPtr()));
+}
+
+void DrmVtSwitcher::OnSeatFound(dbus::Response* response) {
+  if (!response) {
+    LOG(FATAL) << "logind would not say which seat this session is on, so "
+                  "Ctrl+Alt+F<n> would have no object to ask for a console "
+                  "switch and this desktop would have no way out of itself.";
+  }
+
+  dbus::MessageReader reader(response);
+  const std::optional<dbus::ObjectPath> seat = SeatOfSession(&reader);
+  if (!seat.has_value()) {
+    LOG(FATAL) << "logind puts this session on no seat, so there is no console "
+                  "to switch to. Start Domicile from a logind session on a tty "
+                  "of its own, which is a session with a seat.";
+  }
+
+  seat_ = bus_->GetObjectProxy(kLogind, *seat);
+  VLOG(1) << "Ctrl+Alt+F<n> asks " << seat->value() << " to switch";
+
+  if (pending_console_.has_value()) {
+    SwitchTo(*pending_console_);
+    pending_console_.reset();
+  }
+}
+
+void DrmVtSwitcher::SwitchTo(uint32_t console) {
+  dbus::MethodCall switch_to(kSeatInterface, kSwitchTo);
+  dbus::MessageWriter writer(&switch_to);
+  writer.AppendUint32(console);
+  seat_->CallMethod(
+      &switch_to, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+      base::BindOnce(
+          [](uint32_t console, dbus::Response* response) {
+            if (!response) {
+              LOG(ERROR) << "logind would not switch to console " << console;
+            }
+          },
+          console));
 }
 
 void DrmVtSwitcher::OnSubscribed(const std::string& interface,

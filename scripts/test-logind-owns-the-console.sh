@@ -95,13 +95,39 @@ fi
 # session's own `Activate` cannot express "whichever session is on VT 3" --
 # and `org.freedesktop.login1.chvt` is `allow_active yes` in logind's shipped
 # polkit policy, so an active session needs no authentication for it.
-for call in SwitchTo /org/freedesktop/login1/seat/self; do
-  if in_sources "$call"; then
-    ok "the seat's $call is named"
-  else
-    fail "the seat's $call is named" "no $call in domicile/drm_vt_switcher.cc"
-  fi
-done
+if in_sources 'SwitchTo'; then
+  ok "the seat's SwitchTo is named"
+else
+  fail "the seat's SwitchTo is named" \
+    "no SwitchTo in domicile/drm_vt_switcher.cc"
+fi
+
+# AND THE OBJECT IT IS SENT TO IS READ RATHER THAN WRITTEN DOWN, which is the
+# half that shipped broken. `SwitchTo` went to
+# `/org/freedesktop/login1/seat/self` and logind answered `UnknownObject` on a
+# real tty: `self` is not a name logind stores, it is a lookup through the
+# sending connection's own credentials, and `seat_object_find` answers "no such
+# object" for every way that lookup comes up empty. `seat0` written out instead
+# is the other way to be wrong, on the second seat of a machine that has two.
+# The session object `GetSessionByPID` already answered carries the seat it is
+# on, so that is what the path comes off.
+#
+# NAMED RATHER THAN FORBIDDEN BY ITS STRING, because the prose explaining the
+# alias is the point of the file: what is checked is the reader that replaced
+# it, and that no constant spells a seat path again.
+if in_sources 'SeatOfSession'; then
+  ok "the seat comes off the session's own Seat property"
+else
+  fail "the seat comes off the session's own Seat property" \
+    "nothing in domicile/drm_vt_switcher.cc reads Session.Seat"
+fi
+
+if in_sources 'constexpr char kSeatPath'; then
+  fail "no seat object path is written down" \
+    "domicile/drm_vt_switcher.cc spells a seat path instead of reading it"
+else
+  ok "no seat object path is written down"
+fi
 
 # WHERE THE CHORD HAS TO BE BOUND, and it is not a free choice. The compositor
 # advertises a `wl_seat` and reads no evdev node at all -- it has neither
