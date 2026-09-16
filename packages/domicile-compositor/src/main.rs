@@ -93,6 +93,7 @@ mod dmabuf_import;
 mod engine;
 mod engine_buffers;
 mod engine_session;
+mod keymap;
 mod latency;
 mod modifiers;
 mod outbound;
@@ -109,6 +110,7 @@ use crate::latency::{Latency, Step as LatencyStep};
 use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
+use crate::keymap::compiled_keymap;
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::scale::{logical_size, output_scale};
@@ -3810,6 +3812,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         200,
         25,
     )?;
+    // The same keymap as text, for the chrome's browser process, which has a
+    // keyboard layout engine of its own and no fd to hand it. Compiled here
+    // rather than read back off the seat because Smithay only lends the
+    // keymap through the compositor state, and that value does not exist until
+    // long after the chrome socket is accepting connections. See `keymap`.
+    let keymap = compiled_keymap(keyboard)?;
     seat.add_pointer();
 
     // Advertise an output per described display, or the one that follows
@@ -3856,10 +3864,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ChromeHub::new(request_tx, config.output.max_scale, socket_name.clone());
     // Before any chrome can connect: the desktop rides with the handshake, so
     // a page that arrives in the same millisecond as the socket still gets it.
-    hub.host
-        .lock()
-        .unwrap()
-        .describe_displays(screens.outputs().map(Advertised::described).collect());
+    {
+        let mut host = hub.host.lock().unwrap();
+        host.describe_displays(screens.outputs().map(Advertised::described).collect());
+        // And the keymap, which rides with the same handshake for the same
+        // reason one layer down: the browser process reading that socket
+        // decodes every key the shell is typed with, and off ChromeOS nothing
+        // else in Chromium ever hands its layout engine one. See `keymap`.
+        host.set_keymap(keymap);
+    }
     // Bound here rather than in the serving thread, so that a socket that
     // cannot be bound ends the run rather than a thread. The shell is waiting
     // on the session document, which is published long after this — so nothing

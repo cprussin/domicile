@@ -65,6 +65,15 @@ pub struct Host {
     /// protocol from a bare `Session` and never describes a desktop to it.
     /// Saying "no screens" beats inventing a display it never asked for.
     displays: Vec<DisplayInfo>,
+    /// The keymap the compositor compiled, for the browser process reading
+    /// this socket rather than for the page.
+    ///
+    /// `None` until something sets one, and then nothing is said — a `Host`
+    /// nobody has handed a keymap is the `domicile` daemon and every unit
+    /// test, neither of which has a keyboard behind it. Inventing a layout for
+    /// them would be worse than the silence: it would be a desktop typing in
+    /// a layout nobody chose.
+    keymap: Option<String>,
 }
 
 impl Host {
@@ -93,6 +102,25 @@ impl Host {
         HostMessage::Displays {
             displays: self.displays.clone(),
         }
+    }
+
+    /// Hand over the keymap the compositor compiled, for every chrome that
+    /// connects after.
+    ///
+    /// Set once, at startup, out of the same `input.keyboard` the seat is
+    /// built from — so the browser decodes a key against the compositor's own
+    /// reading of the config rather than against a second reading of its own,
+    /// which is two readings that can disagree.
+    pub fn set_keymap(&mut self, keymap: String) {
+        self.keymap = Some(keymap);
+    }
+
+    /// The keymap, in the message a chrome is told it as, or `None` from a
+    /// host that has never been given one.
+    pub fn describe_keymap(&self) -> Option<HostMessage> {
+        self.keymap
+            .clone()
+            .map(|keymap| HostMessage::Keymap { keymap })
     }
 
     /// Register a newly-mapped Wayland toplevel. Returns its assigned id and the

@@ -51,6 +51,15 @@ const ONE_DISPLAY: &str = r#"{
   "output": { "displays": [ { "name": "left", "size": [1920, 1080] } ] }
 }"#;
 
+/// A display, and a keyboard laid out deliberately unlike the default.
+///
+/// `dvorak` rather than the `dvp` the config falls back to, so that the keymap
+/// this test reads off the wire can only have come from *this* file.
+const A_DVORAK_KEYBOARD: &str = r#"{
+  "output": { "displays": [ { "name": "left", "size": [1920, 1080] } ] },
+  "input": { "keyboard": { "xkb_layout": "us", "xkb_variant": "dvorak" } }
+}"#;
+
 /// The left mouse button, as Linux names it and the protocol carries it.
 const BTN_LEFT: u32 = 0x110;
 
@@ -246,4 +255,52 @@ fn a_pointer_over_a_window_asks_the_chrome_for_that_window_s_cursor() {
             |message| matches!(message, HostMessage::AppCursor { app_id, .. } if *app_id == app),
         )
         .expect("a client the pointer entered asks the chrome for a cursor");
+}
+
+/// The keymap the compositor compiled reaches the chrome, and it is the one
+/// the config asked for.
+///
+/// **The chrome here stands in for the browser process, not for a page.** The
+/// engine drawing the desktop decodes every key the shell is typed with
+/// through a `KeyboardLayoutEngine` of its own, and off ChromeOS the only
+/// thing in Chromium that ever gives one a keymap is the *Wayland* ozone
+/// platform handling `wl_keyboard.keymap` — which a DRM/Ozone browser is not
+/// running. So its `xkb_state` stays null, `XkbLookup` logs `No current XKB
+/// state` at every press, and every printable key comes out as an
+/// unidentified `DomKey` on a positional US-QWERTY code: a shell nobody can
+/// type into, in whatever layout they configured.
+///
+/// The symbol rather than the string's mere presence, and a variant the
+/// default is not, because both halves can be wrong quietly: a compositor that
+/// sent some keymap would pass a length check, and one that compiled its own
+/// defaults instead of reading the config would pass anything that only
+/// asserted `dvp`.
+#[test]
+fn the_keymap_the_config_names_reaches_the_chrome() {
+    let compositor = Compositor::started_with(A_DVORAK_KEYBOARD);
+    let mut chrome = compositor.chrome();
+
+    let told = chrome
+        .wait_for(|message| matches!(message, HostMessage::Keymap { .. }))
+        .expect("the keymap rides with the handshake");
+
+    let HostMessage::Keymap { keymap } = told else {
+        unreachable!("the wait matched on the variant");
+    };
+    let top_left = key_block(&keymap, "AD01");
+    assert!(
+        top_left.contains("apostrophe"),
+        "on `dvorak` the key qwerty prints `q` on is an apostrophe, and this          keymap says: {top_left}"
+    );
+}
+
+/// The `key <NAME> { ... };` block of a compiled keymap.
+fn key_block(keymap: &str, name: &str) -> String {
+    let opens = format!("key <{name}>");
+    let at = keymap
+        .find(&opens)
+        .unwrap_or_else(|| panic!("no key <{name}> in the keymap:\n{keymap}"));
+    let rest = &keymap[at..];
+    let ends = rest.find("};").expect("a key block closes");
+    rest[..ends].to_string()
 }

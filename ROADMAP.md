@@ -543,6 +543,41 @@ decides whether an item is waiting or workable.
    and does nothing. Unexercised like the four before it, and for the same
    reason: it is read at the pin rather than off a screen.
 
+   **Every run logged `No current XKB state` before every keypress**, and what
+   that line costs was hidden by the fallback behind it. `xkb_state_` is set
+   only by `XkbKeyboardLayoutEngine::SetKeymap`, whose reachable callers are
+   `SetCurrentLayoutByName` -- `#if BUILDFLAG(IS_CHROMEOS)` around a
+   `NOTIMPLEMENTED()`, with `CanSetCurrentLayout()` answering false to match --
+   and `SetCurrentLayoutFromBuffer`, which is *not* gated and whose one caller
+   in the tree is `WaylandKeyboard::OnKeymap`. A non-ChromeOS DRM/Ozone build
+   runs neither, so the browser process held a null xkb state for its whole
+   life. `Lookup` still returns true: it falls back to
+   `DomCodeToNonPrintableDomKey`, a static table, so Escape, the function keys
+   and `Ctrl+Alt+F<n>` decoded correctly and the log line read as noise. **A
+   printable key is not in that table.** It came out as
+   `DomKey::UNIDENTIFIED` with the US-QWERTY `KeyboardCode` for wherever the
+   key physically sits -- no `key`, no text, and `xkb_layout` / `xkb_variant`
+   ignored in the browser process entirely. It had not been hit only because
+   nothing had drawn yet.
+
+   **The keymap is the compositor's, so it travels compositor -> engine**,
+   which is the direction `displays` already runs on the chrome control
+   socket. It rides the handshake as `keymap`, carrying the text the
+   compositor compiled from `input.keyboard` and hands every Wayland client,
+   so the shell and the windows on it read one layout rather than each reading
+   that config for itself -- the class of disagreement `0018` and `0022` both
+   were. `ControlChannel::DispatchLine` takes it before the page's client
+   is looked at and never relays it: the compositor has already resolved the
+   modifiers against it, and a document holding 40 kilobytes of xkb has
+   nothing to do with it. The layout engine belongs to the UI thread and that
+   socket is read on the IO thread, so the binder -- which runs on the UI
+   thread -- binds the sink and hands it in, which is what keeps
+   `//components/domicile:control_channel` free of `//content`. Three gtest
+   cases in `components/domicile/browser/keyboard_layout_unittest.cc` are the
+   bug written down, and
+   `scripts/test-the-keymap-reaches-the-browser.sh` is what compares the tag
+   and the field across the two languages that spell them separately.
+
    What is left of step 2 after a screen lights: a **`drm` arm in
    `domicile-launch`'s `platform()`**
    so a machine with no `WAYLAND_DISPLAY` gets a tty rather than a refusal,

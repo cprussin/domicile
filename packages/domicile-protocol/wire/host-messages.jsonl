@@ -9,6 +9,7 @@
 {"type":"app_cursor","app_id":"app-2","cursor":"vertical-text"}
 {"type":"displays","displays":[{"name":"left","position":[0,0],"size":[1920,1080],"scale":1},{"name":"right","position":[1920,0],"size":[2560,1440],"scale":2}]}
 {"type":"displays","displays":[{"name":"domicile-0","position":[0,0],"size":[1280,800],"scale":1}]}
+{"type":"keymap","keymap":"xkb_keymap {\n  xkb_keycodes { include \"evdev+aliases(qwerty)\" };\n};\n"}
 {"type":"focus_changed","app_id":"app-2"}
 {"type":"focus_changed","app_id":null}
 {"type":"focus_requested","app_id":"app-2"}

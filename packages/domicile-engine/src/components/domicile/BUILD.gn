@@ -2,6 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# For `use_xkbcommon`, which decides whether there is an
+# XkbKeyboardLayoutEngine for the keymap's tests to assert against.
+import("//ui/base/ui_features.gni")
+
 # The browser-process half of Domicile's engine fork: brokering viz frame sinks
 # to a compositing producer that is not a renderer. See
 # docs/architecture/ENGINE-FORK.md in the Domicile repository.
@@ -168,6 +172,26 @@ source_set("web_view_guest") {
   ]
 }
 
+# The keymap the browser process decodes a key press with.
+#
+# Its own target beside :control_channel rather than part of it, for the reason
+# :shortcut_registry is one: it is the piece of this that can be asserted
+# against a real XkbKeyboardLayoutEngine with no socket, no mojo and no
+# browser, which is where the whole of the bug is written down as a test. What
+# it needs is //ui/events/ozone/layout and that is all -- no //content and no
+# //net.
+source_set("keyboard_layout") {
+  sources = [
+    "browser/keyboard_layout.cc",
+    "browser/keyboard_layout.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//ui/events/ozone/layout",
+  ]
+}
+
 # The shell's control channel, in the browser process.
 #
 # Its own target so the slice can meet a compiler before the Blink half exists,
@@ -204,10 +228,23 @@ source_set("unit_tests") {
     "spike/window_diff_unittest.cc",
   ]
 
+  # The keymap's own tests need an XkbKeyboardLayoutEngine to assert against,
+  # and that class -- and the xkbcommon headers its own header reaches for
+  # through scoped_xkb.h -- are in //ui/events/ozone/layout only when
+  # xkbcommon is. The function under test takes the abstract
+  # KeyboardLayoutEngine and needs neither, which is why only the test is
+  # conditional. The config is the one //ui/events/ozone/layout:unittests adds
+  # for the same include, by the same name.
+  if (use_xkbcommon) {
+    sources += [ "browser/keyboard_layout_unittest.cc" ]
+    configs += [ "//ui/events/ozone/layout:xkbcommon" ]
+  }
+
   deps = [
     ":browser",
     ":command_protocol",
     ":cursor_shape",
+    ":keyboard_layout",
     ":shell_scheme",
     ":shell_source",
     ":shortcut_registry",
@@ -223,6 +260,15 @@ source_set("unit_tests") {
     "//testing/gmock",
     "//testing/gtest",
     "//ui/display",
+    # The keymap test's four: the engine it asserts against, the DomCode and
+    # DomKey it decodes to, the KeyboardCode beside them, and the xkbcommon
+    # declarations `xkb_keyboard_layout_engine.h` includes through
+    # `scoped_xkb.h`. //ui/events/ozone/layout:unittests names the same set.
+    "//ui/events",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:event_constants",
+    "//ui/events/keycodes:xkb",
+    "//ui/events/ozone/layout",
     "//ui/gfx/geometry",
   ]
 }

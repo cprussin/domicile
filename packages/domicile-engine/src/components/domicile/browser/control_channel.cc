@@ -29,8 +29,10 @@ constexpr int kReadBufferSize = 16 * 1024;
 
 ControlChannel::ControlChannel(
     const std::string& socket_path,
-    mojo::PendingReceiver<mojom::ControlChannel> receiver)
+    mojo::PendingReceiver<mojom::ControlChannel> receiver,
+    KeymapSink keymap_sink)
     : socket_path_(socket_path),
+      keymap_sink_(std::move(keymap_sink)),
       receiver_(this, std::move(receiver)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
           kReadBufferSize)) {
@@ -395,7 +397,7 @@ void ControlChannel::OnRead(int result) {
 
 void ControlChannel::DispatchLine(const std::string& line,
                                  base::TimeTicks arrival) {
-  if (line.empty() || !client_) {
+  if (line.empty()) {
     return;
   }
 
@@ -409,6 +411,41 @@ void ControlChannel::DispatchLine(const std::string& line,
   const base::DictValue& message = *parsed;
   const std::string* type = message.FindString("type");
   if (!type) {
+    return;
+  }
+
+  // THE ONE MESSAGE ON THIS SOCKET THAT IS NOT THE PAGE'S, and the one that is
+  // handled before `client_` is looked at for that reason. What the compositor
+  // is describing is how this *process* reads a keyboard: without it the
+  // browser's own KeyboardLayoutEngine has no keymap at all, and a shell is a
+  // page nobody can type into. See
+  // components/domicile/browser/keyboard_layout.h, which is where the whole of
+  // why lives.
+  //
+  // Nothing goes on to the page, and nothing should: the compositor already
+  // resolves the modifiers against this keymap before it sends them, so a
+  // document holding 40 kilobytes of xkb has nothing to do with it.
+  if (*type == "keymap") {
+    const std::string* keymap = message.FindString("keymap");
+    if (keymap) {
+      keymap_sink_.Run(*keymap);
+    } else {
+      // Said, unlike every other arm here, which drops a malformed message and
+      // moves on. Those cost one window or one cursor; this one costs the
+      // whole keyboard, and it costs it the way this bug arrived in the first
+      // place -- with every log on both sides reporting a desktop that is
+      // fine.
+      LOG(ERROR) << "domicile: the compositor sent a `keymap` message with no "
+                    "keymap in it. The layout engine keeps what it had, which "
+                    "on this platform is nothing, and printable keys will "
+                    "carry no character.";
+    }
+    return;
+  }
+
+  // Everything below is relayed to the page, so there is nowhere to put it
+  // until the page has given this channel somewhere.
+  if (!client_) {
     return;
   }
 
@@ -592,8 +629,8 @@ void ControlChannel::DispatchLine(const std::string& line,
   // cost an engine release to remove.
 }
 
-void BindControlChannel(
-    mojo::PendingReceiver<mojom::ControlChannel> receiver) {
+void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
+                        KeymapSink keymap_sink) {
   const std::string socket_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           kDomicileControlSocketSwitch);
@@ -608,7 +645,7 @@ void BindControlChannel(
   }
   // Owns itself: it lives until the page drops the pipe or the compositor is
   // declared unreachable.
-  new ControlChannel(socket_path, std::move(receiver));
+  new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink));
 }
 
 }  // namespace domicile

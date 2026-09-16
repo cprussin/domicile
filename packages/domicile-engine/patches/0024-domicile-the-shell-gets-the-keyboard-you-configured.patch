@@ -1,0 +1,112 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Wed, 16 Sep 2026 15:42:13 +0000
+Subject: [PATCH] domicile: the shell gets the keyboard you configured
+
+A tty run logged `No current XKB state` from
+`XkbKeyboardLayoutEngine::XkbLookup` before every keypress, and that line is
+the whole of a desktop nobody can type into.
+
+`xkb_state_` is set by `XkbKeyboardLayoutEngine::SetKeymap` and by nothing
+else. Its three callers are `SetCurrentLayoutByName` -- `#if
+BUILDFLAG(IS_CHROMEOS)` around a `NOTIMPLEMENTED()`, with
+`CanSetCurrentLayout()` answering false to match -- `OnKeymapLoaded`, which is
+only reachable from it, and `SetCurrentLayoutFromBuffer`, which is NOT gated
+and whose one caller in the tree is `WaylandKeyboard::OnKeymap`, handling
+`wl_keyboard.keymap` for the Wayland ozone platform. Domicile is a
+non-ChromeOS DRM/Ozone build running neither, so the browser process holds a
+null xkb state for its whole life.
+
+WHY THAT LOOKED HARMLESS. `Lookup` still returns true: `XkbLookup` fails, and
+the fallback is `DomCodeToNonPrintableDomKey`, a static table. Escape, the
+function keys and Ctrl+Alt+F<n> go on decoding correctly out of it, which is
+why the VT-switch chord was measured working. A printable key is not in that
+table. It comes out as `DomKey::UNIDENTIFIED` with the US-QWERTY
+`KeyboardCode` for wherever the key physically sits -- no `key`, no text, and
+the user's `xkb_layout`/`xkb_variant` ignored in the browser process entirely.
+
+THE KEYMAP IS THE COMPOSITOR'S, SO IT TRAVELS COMPOSITOR -> ENGINE. The
+compositor compiles it from `input.keyboard` and hands it to every Wayland
+client; sending that same text on to the browser is what keeps the shell and
+the windows on it reading one layout rather than each reading that config for
+itself, which is the class of disagreement patches 0018 and 0022 were. It
+rides the channel that already runs in that direction -- the chrome control
+socket, with the handshake, beside `displays` -- as
+`{"type":"keymap","keymap":"..."}`.
+
+`ControlChannel::DispatchLine` takes it before the `client_` gate and does not
+relay it: the page has no use for 40 kilobytes of xkb, and the compositor has
+already resolved the modifiers against it. The layout engine belongs to the UI
+thread and this channel is read on the IO thread, so the binder -- which runs
+on the UI thread -- binds `SetProcessKeymap` to it and hands the callback in.
+That is what keeps `//components/domicile:control_channel` free of
+`//content`.
+
+`components/domicile/browser/keyboard_layout_unittest.cc` is the bug written
+down: a keymap saying the key QWERTY prints `s` on is an `o`, an engine with
+none decoding that key as `UNIDENTIFIED`/`VKEY_S`, and the same engine given
+the keymap decoding it as `o`/`VKEY_O`.
+---
+ chrome/browser/BUILD.gn                       |  5 +++--
+ .../chrome_browser_interface_binders.cc       | 21 +++++++++++++++++--
+ 2 files changed, 22 insertions(+), 4 deletions(-)
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 425629d66e552..96a8ca087fd64 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -2374,10 +2374,11 @@ source_set("browser") {
+     "//components/domain_reliability",
+ 
+     # Domicile's engine fork: serving the shell over domicile://, the
+-    # shell's control channel to the compositor, and the socket a running
+-    # engine is told which shell to serve on.
++    # shell's control channel to the compositor, the keymap that channel
++    # carries, and the socket a running engine is told which shell to serve on.
+     "//chrome/browser/domicile",
+     "//components/domicile:control_channel",
++    "//components/domicile:keyboard_layout",
+     "//components/domicile:shell_scheme",
+     "//components/domicile:web_view_guest",
+ 
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index 6c80e940fba07..460adce2808f0 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -4,7 +4,9 @@
+ 
+ #include "chrome/browser/chrome_browser_interface_binders.h"
+ 
++#include "base/task/bind_post_task.h"
+ #include "components/domicile/browser/control_channel.h"
++#include "components/domicile/browser/keyboard_layout.h"
+ #include "components/domicile/browser/web_view_guest.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "mojo/public/cpp/bindings/message.h"
+@@ -502,9 +504,24 @@ void PopulateChromeFrameBinders(
+         // On the IO thread: the channel talks to a unix socket through
+         // net::SocketPosix, which DCHECKs that it is on a thread with an IO
+         // message pump. Binders run on the UI thread, so this has to hop.
++        //
++        // AND ONE MESSAGE ON THAT SOCKET HAS TO HOP BACK. The compositor's
++        // keymap is not the page's business and never reaches it: what it is
++        // for is this process's own KeyboardLayoutEngine, which off ChromeOS
++        // nothing else ever gives a keymap at all -- see
++        // components/domicile/browser/keyboard_layout.h for what that costs.
++        // That engine belongs to the UI thread, along with every evdev key
++        // dispatched through it, so the return trip is bound HERE, where the
++        // UI thread is already the current one. Reaching for it out there
++        // would work and would put //content into
++        // //components/domicile:control_channel, which deliberately has none.
+         content::GetIOThreadTaskRunner({})->PostTask(
+-            FROM_HERE, base::BindOnce(&domicile::BindControlChannel,
+-                                      std::move(receiver)));
++            FROM_HERE,
++            base::BindOnce(
++                &domicile::BindControlChannel, std::move(receiver),
++                base::BindPostTask(
++                    content::GetUIThreadTaskRunner({}),
++                    base::BindRepeating(&domicile::SetProcessKeymap))));
+       }));
+ 
+   // Domicile's engine fork: a <webview> asking for a guest to put behind it.

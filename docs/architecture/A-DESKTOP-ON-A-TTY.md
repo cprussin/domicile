@@ -413,10 +413,21 @@ the X keycode the keymap wants). That route lives entirely inside the engine
 and the host socket: it does not care whether the engine learned the key from
 `wl_keyboard` or from `/dev/input/event3`. **Input needs no new route.**
 
-One thing still diverges: **the keymap is stated twice.** The compositor sets
-its seat's `XkbConfig`; the engine's `XkbKeyboardLayoutEngine` is configured
-separately from ozone. Two keymaps over one keyboard is a divergence a nested
-run never had, because the host compositor owned the keymap.
+One thing diverged, and the audit had it backwards: **the keymap was not
+stated twice, it was stated once.** The compositor set its seat's `XkbConfig`
+and the browser's `XkbKeyboardLayoutEngine` was configured by nothing at all —
+off ChromeOS the only caller that sets one is the *Wayland* platform's, which
+a DRM/Ozone build never runs. Every tty run said so, `No current XKB state`
+before every press, and it read as noise because the static-table fallback
+behind it kept the non-printable keys working. Printable ones carried no
+character at all. `components/domicile/browser/keyboard_layout.h` is the
+mechanism in full.
+
+**Done**, by the patch named *the shell gets the keyboard you configured*: the
+compositor sends the keymap it compiled down the chrome control socket with
+the handshake, as `keymap`, and the browser process reads it there rather than
+passing it to the page. One layout, read from the config once — which is what
+a nested run had for free, because the host compositor owned the keymap.
 
 ### This is also how DRM master should be acquired
 
