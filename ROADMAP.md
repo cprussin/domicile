@@ -49,7 +49,8 @@ The wire protocol is at `PROTOCOL_VERSION = 1`.
 | A window composites at native cost | A submitted frame reaches the display compositor's output in one display frame, indistinguishable from the probe's own floor. `ENGINE-FORK.md`, *What it costs* |
 | CSS is structural, not reimplemented | Seven properties measured on a GPU — `z-index` against ordinary DOM, `transform`, `border-radius`, `opacity`, `filter: blur()`, `mix-blend-mode`, resize — every one bit-exact against an ordinary element beside it. `ENGINE-FORK.md`, *What CSS does to an `<app>`* |
 | `<app>` and `<webview>` are elements the fork defines | Patch 0007. `document.createElement("app").constructor.name` is `HTMLAppElement`; `app-id` reflects both ways |
-| A shell loads over `domicile://`, with no port behind it | Patches 0008 and 0009: a standard scheme, deliberately not web-safe, both loader hooks, the document the fork writes, and `navigator.domicile` bound for that origin — a stand-in compositor read `hello` and a `spawn` back over it. Five gates stand between a registered scheme and a page that loads and all five are through, the last of them `MaybeLaunchAppShortcutWindow`, which declines `--app=domicile://shell/` for a scheme that is not web-safe and launches an ordinary browser window on the New Tab page instead, logging nothing on either side. No desktop binds a loopback port any more: the process that served one is gone, and `connectToHost` takes `navigator.domicile` rather than opening a WebSocket |
+| A shell loads over `domicile://`, with no port behind it | Patches 0008 and 0009: a standard scheme, deliberately not web-safe, both loader hooks, the document the fork writes, and `navigator.domicile` bound for that origin — a stand-in compositor read `hello` and a `spawn` back over it. Five gates stand between a registered scheme and a page that loads and all five are through, the last of them `MaybeLaunchAppShortcutWindow`, which declines `--app=domicile://shell/` for a scheme that is not web-safe and launches an ordinary browser window on the New Tab page instead, logging nothing on either side. No desktop binds a loopback port any more: the process that served one is gone, and `connectToHost` takes the host off a global rather than opening a WebSocket |
+| A shell reaches the compositor at `window.domicile` | `window_domicile.idl` and `WindowDomicile`, a `STATIC_ONLY` forward to the `NavigatorDomicile` supplement, so the two spellings are **one object** rather than two channels to one compositor. Evidence it actually binds is `guard-shell.sh` in engine CI: it builds a real shell whose SDK reads `window.domicile`, so a binding that never bound shows up there as a desktop with no window in it. `navigator.domicile` still answers, and is where it lives |
 | A `<webview>` is a guest, so a site that refuses framing loads in one | `guard-webview-framing.sh`. The element shows a page sending `X-Frame-Options: DENY` and `frame-ancestors 'none'`; its control frames that page and a copy differing only in those two headers from an ordinary http page, and shows the copy and not the original. So the site is refused where it has an ancestor, and the element is not giving it one |
 | A desktop chord reaches the shell while a browser window has the keyboard | `guard-webview-keyboard.sh`. A key pressed before focus moves reaches the shell's `document`; the chord after it comes back as `shortcut` and the window never sees it; an ungrabbed key reaches the window's page and not the shell |
 | A click inside a browser window reaches the shell that has to raise it | `guard-webview-click.sh`. A press driven at the engine lands in the guest's own page and arrives in the shell's `document` as an event on the element the guest hangs off, which is what a shell raises the window on; its control clicks the shell's own chrome instead and nothing reaches the element. Patch 0011 is both halves of why it crosses: upstream dispatches no focus event across a remote frame's process boundary, and focusing the element across it dispatches none either — Blink suppresses focus events while the page is unfocused, which a guest taking focus always makes it — so the element says so in an event of its own. The first run of the guard, with only the focus, is what found the second half |
@@ -235,6 +236,26 @@ decides whether an item is waiting or workable.
    gone rather than left switching nothing on — so `scripts/dev-shell.sh` is
    still right that a rebuilt shell needs the desktop restarted.
 
+4. **What living in it needs and it does not have.** Named here rather than
+   discovered on the first day somebody tries to stay in this desktop, because
+   none of it is in `A-DESKTOP-ON-A-TTY.md` -- that document audits getting a
+   desktop *up*, and these are all about keeping one.
+
+   - **Suspend and resume are unhandled.** Nothing re-establishes DRM master
+     or re-modesets on the way back, and nothing in this repository mentions
+     either. Close a lid and the honest expectation is a desktop that does not
+     come back.
+   - **Nothing restarts a component that dies.** `domicile-launch`'s
+     `supervise` watches for an exit and *reports* it; there is no respawn. An
+     engine crash is the whole desktop, which also makes a shell author's
+     mistake cost more than it should.
+   - **No idle, no lock, no DPMS.** A desktop you walk away from is one anybody
+     can walk up to, and blanking a screen after a timeout is the same seam.
+
+   The order above is the order they bite. None of them is the fork's: the
+   first is the compositor's and the launcher's between them, and the other two
+   are this repository's outright.
+
 ### In the engine fork — the agent on `crux`
 
 1. **A desktop on a tty.** Audited against the pin in
@@ -365,14 +386,76 @@ decides whether an item is waiting or workable.
    `A-DESKTOP-ON-A-TTY.md` carries the numbers. Treat the costing as a floor:
    the last audit read five edits and the compiler found eight.
 
-   Both halves have landed, and a desktop is still a window inside an existing
-   Wayland session or headless -- not because the engine cannot be told to take
-   a tty (`OZONE=drm` does that, and the platform is in the binary now) but
-   because nothing has got a lit screen out of it. `domicile-launch` still
-   refuses a machine with no session rather than auto-selecting `drm`, which is
-   deliberate: that would trade a clear message for whatever the GPU process
-   does on an unproven path. It becomes the right default the day a screen
-   lights.
+   **Step 2's code is done -- four more patches -- and not one line of it has
+   run on a screen.** Keep those two halves together; the rest of this item is
+   the first and the paragraph after it is the second.
+
+   `0017` is the VT switcher: `VT_SETMODE` in `VT_PROCESS` mode, a signal per
+   edge, and the handshake as a free function with eleven tests, because a
+   relinquish that fails has to refuse the switch rather than hand the console
+   to the kernel while Chromium is still scanning out.
+
+   `0018` is **the black screen, and it was never the display list.**
+   `ScreenManager::FindWindowAt` compares a window's rectangle to
+   `gfx::Rect(controller->origin(), controller->GetModeSize())` for *exact*
+   equality, and Chromium's default window is `kWindowMaxDefaultWidth` wide
+   inset by ten pixels -- 1050x1900 at (10,10) on a 2880x1920 panel. No match
+   means no controller, and every frame is dropped before the kernel sees it,
+   with nothing wrong in any log because nothing went wrong. `domicile-launch`
+   passes `--start-fullscreen` on the scanout platform only, the patch honours
+   that flag on the `--app=` path (where `MaybeLaunchAppShortcutWindow` returns
+   before `MaybeToggleFullscreen` is ever reached, so it was being silently
+   dropped for exactly the launch Domicile uses), and `DrmWindowHost` answers
+   `SetFullscreen` and `GetPlatformWindowState`, both of which were stubs on
+   `0015`'s premise that ash sizes its own root window.
+
+   `0019` is **the browser dropping DRM master, because the GPU process never
+   could.** Not a sandbox and not a permission bit: `drm_set_master` marks the
+   fd `was_master` when the browser's open takes master on a bare tty,
+   `drm_file_update_pid` then refuses to refresh the recorded pid for any fd
+   that was ever master -- deliberately, so `drm_master_check_perm` keeps
+   working -- and `SCM_RIGHTS` hands the GPU the same `struct drm_file` with
+   that frozen pid in it. A `dup` kept in the browser shares the one
+   `drm_file`, so the drop takes effect for the GPU's copy and the caller's
+   tgid is the recorded one. The GPU keeps honest `has_master()` bookkeeping
+   without the ioctl, which is load-bearing rather than tidy: left saying yes,
+   `DrmWindow::SchedulePageFlip` commits a frame while the console belongs to
+   somebody else, the atomic plane manager has no EACCES exemption, and
+   `PageFlipWatchdog` ends fifteen seconds later in `LOG(FATAL)`.
+
+   `0020` is **input from logind, so no user is ever in the `input` group.**
+   `TakeControl`, `TakeDevice` per device, `PauseDevice`/`ResumeDevice`, over
+   Chromium's own `dbus::Bus` rather than libseat -- D-Bus is already compiled
+   into this engine and in use by the browser process, so it adds no
+   dependency. The seam was already there: `InputDeviceOpener` is a one-method
+   interface the factory takes as a constructor argument, and the whole bug was
+   one bare `open()`. A resume is a **reopen**, not a `dup2`: the kernel drops
+   the epoll registration with the description behind it, and
+   `AttachInputDevice` is the only caller of `Start()` -- so without that,
+   `0019`'s working `Ctrl+Alt+F<n>` and this would have shipped together as
+   "switch away, switch back, keyboard dead", which is worse than the group
+   membership they replace.
+
+   **None of those four has been exercised.** They rest on source read at the
+   pin, unit tests (`DrmFullscreenTest`, `DrmMasterTest`, `DrmInputDevicesTest`,
+   `DrmVtSwitcherTest`), and an engine build that compiles and links. `crux`
+   still cannot answer the other half -- vkms has the connected connector and
+   refuses an EGL window surface, `renderD128` renders and belongs to the card
+   with four disconnected ones -- so the first real evidence will be a run on a
+   machine with a monitor, and every one of these four is a candidate to be
+   wrong there in a way no test here can see. The black screen `0018` fixes is
+   exactly that shape: three prior patches were correct and the desktop was
+   still dark.
+
+   What is left of step 2 after a screen lights: **real physical size and
+   refresh on `wl_output`**, which today are `(300, 200)` and
+   `ADVERTISED_REFRESH_MHZ` -- wrong DPI on any real panel, so scaling and font
+   sizing are wrong with it; a **`drm` arm in `domicile-launch`'s `platform()`**
+   so a machine with no `WAYLAND_DISPLAY` gets a tty rather than a refusal,
+   which is auto-detection only and blocks nothing because `OZONE=drm`
+   overrides outright; and **taking the card node from logind too**, which is
+   how wlroots does VT switching and would supersede `0019`'s `dup` and remove
+   the browser's own `open()` of the card.
 
 2. **What the engine ships that a desktop never runs.** Chrome carries a tab
    strip, a New Tab page, a settings UI, sign-in and sync. A desktop can reach
@@ -448,6 +531,10 @@ costs nothing.
   landed last, up to the border's width from the hole it is drawn into.
   Harmless at 1px and the same seam that made the scale bug: the real answer
   is one source, which `report-app-sizes.ts` already says is the engine's.
+- **On a tty, `wl_output` reports a made-up physical size and refresh** --
+  `(300, 200)` and `ADVERTISED_REFRESH_MHZ` rather than the snapshot's own. A
+  client computing DPI from that gets it wrong, so scaling and font sizing are
+  wrong with it. The snapshot has both; nothing carries them across yet.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
 - **Hot-swapping the chrome page** is a page reload on the engine, and
   `announce_open_apps` is what makes one survivable. `scripts/dev-shell.sh` is
