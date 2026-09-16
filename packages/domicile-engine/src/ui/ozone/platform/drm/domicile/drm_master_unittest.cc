@@ -76,7 +76,9 @@ TEST(DrmMasterTest, DropsMasterOnEveryCardItHolds) {
   // The browser's own descriptors, which is the whole point: the GPU's copies
   // of them are the same `struct drm_file` and cannot be dropped from there.
   EXPECT_EQ(drop.calls(), std::vector<int>({first_fd, second_fd}));
-  EXPECT_TRUE(set.calls().empty());
+  // The two arrivals, and nothing else: taking master on a card as it arrives
+  // is the only reason a set ever runs before a console switch.
+  EXPECT_EQ(set.calls(), std::vector<int>({first_fd, second_fd}));
 }
 
 TEST(DrmMasterTest, TakesMasterBackOnEveryCardItHolds) {
@@ -92,8 +94,55 @@ TEST(DrmMasterTest, TakesMasterBackOnEveryCardItHolds) {
   master.Add(base::FilePath(kCard1), std::move(second));
 
   EXPECT_TRUE(master.Take());
-  EXPECT_EQ(set.calls(), std::vector<int>({first_fd, second_fd}));
+  // The two arrivals and then the retake: a card is mastered when it arrives
+  // and every card held is asked again on the way back from a console switch.
+  EXPECT_EQ(set.calls(),
+            std::vector<int>({first_fd, second_fd, first_fd, second_fd}));
   EXPECT_TRUE(drop.calls().empty());
+}
+
+TEST(DrmMasterTest, ACardIsMasteredAsItArrives) {
+  RecordedCall set;
+  RecordedCall drop;
+  DrmMaster master(set.Bind(), drop.Bind());
+
+  base::ScopedFD arrived = OpenScratchFd();
+  const int arrived_fd = arrived.get();
+  master.Add(base::FilePath(kCard0), std::move(arrived));
+
+  // THE SCREEN THAT LIT ONLY AFTER A TRIP TO ANOTHER CONSOLE AND BACK. The
+  // browser's `open` of a card takes master only if the card was free, and
+  // nothing checked: off ChromeOS there is no `DisplayConfigurator` and so no
+  // `TakeDisplayControl` before the first modeset, and the only `drmSetMaster`
+  // in the tree sat behind a VT switch. A first atomic commit that the kernel
+  // answers `EACCES` is what that looks like from the GPU process.
+  EXPECT_EQ(set.calls(), std::vector<int>({arrived_fd}));
+  EXPECT_TRUE(drop.calls().empty());
+}
+
+TEST(DrmMasterTest, ACardThatArrivesOnSomebodyElsesConsoleIsNotMastered) {
+  RecordedCall set;
+  RecordedCall drop;
+  DrmMaster master(set.Bind(), drop.Bind());
+
+  base::ScopedFD held = OpenScratchFd();
+  const int held_fd = held.get();
+  master.Add(base::FilePath(kCard0), std::move(held));
+  ASSERT_TRUE(master.Drop());
+
+  base::ScopedFD arrived = OpenScratchFd();
+  const int arrived_fd = arrived.get();
+  master.Add(base::FilePath(kCard1), std::move(arrived));
+
+  // THE TWO-OWNER BUG BY THE THIRD DOOR. A display plugged in while the user
+  // is on another console would otherwise be mastered by a desktop nobody can
+  // see, on a console this process handed over.
+  EXPECT_EQ(set.calls(), std::vector<int>({held_fd}));
+
+  // And it is not forgotten either: the console coming back asks for every
+  // card, including the one that arrived while it was away.
+  EXPECT_TRUE(master.Take());
+  EXPECT_EQ(set.calls(), std::vector<int>({held_fd, held_fd, arrived_fd}));
 }
 
 TEST(DrmMasterTest, ACardThatRefusesFailsTheDropAndTheRestAreStillAsked) {

@@ -283,7 +283,7 @@ jobs:
           # twelve below the truth for weeks and a whole suite could have
           # stopped linking inside the gap -- and each is a floor rather than
           # an equality so that adding a case does not fail the job.
-          for suite_and_floor in 'DrmScreenTest:18' 'DrmModesetTest:16' 'DrmVtSwitcherTest:17' 'DrmFullscreenTest:4' 'DrmMasterTest:5' 'DrmInputDevicesTest:19'; do
+          for suite_and_floor in 'DrmScreenTest:18' 'DrmModesetTest:16' 'DrmVtSwitcherTest:17' 'DrmFullscreenTest:4' 'DrmMasterTest:7' 'DrmInputDevicesTest:19'; do
             suite="${suite_and_floor%%:*}"
             floor="${suite_and_floor##*:}"
             count=$(nix develop "$GITHUB_WORKSPACE#full" --command \

@@ -260,7 +260,7 @@ What a normal Linux tty has to supply:
 | Need | Who supplies it today | What a tty needs |
 |---|---|---|
 | open `/dev/dri/card0` | `open()` in the browser process | a logind session on an active VT gives the session user an ACL on the card node, so the bare `open` works unprivileged. Root also works. No code change |
-| become DRM master | implicit: the first opener of an unused card is master | nothing, *if* nothing else holds it |
+| become DRM master | implicit: the first opener of an unused card is master | **done**, `DrmMaster::Add`. Implicit is not enough: nothing asked the kernel, and off ChromeOS there is no `DisplayConfigurator::TakeControl` at startup either, so a card the `open` did not master stayed unmastered until a VT switch |
 | drop master on VT-away, retake on VT-back | `DisplayConfigurator`, on a ChromeOS signal | **done**, patch `0022`. `TakeDisplayControl` / `RelinquishDisplayControl` were already plumbed to the DRM thread; what is new is a caller, driven by the logind session's `Active` property |
 | start a VT switch | the kernel, on `Ctrl+Alt+F<n>` | **does not exist once `TakeControl` has run**: logind's `session_prepare_vt` sets `KDSKBMODE K_OFF`, which is the kernel's chord handling. The desktop binds the chord and calls `Seat.SwitchTo(u)`. **done**, patch `0022` |
 | open `/dev/input/event*` | `Session.TakeDevice(major, minor)` on the evdev thread | **done**, patch `0020`. The bare `open()` is `Permission denied`: logind ACLs a card node and not a keyboard (see [Input](#input)) |
@@ -932,6 +932,28 @@ Step 2 — the embedder (the port):
       down today, but nothing else would rebuild it if it were on, since
       `DrmVtSwitcher` calls the delegate directly rather than through
       `DisplayConfigurator`
+- [x] take master when a card arrives, so that the first modeset is one the
+      kernel permits -- `DrmMaster::Add`. Nothing took it before: the browser's
+      `open` takes master only if the card was free, and both processes then
+      assert ownership nobody asked for -- `DrmWrapper::has_master_` is
+      initialized `true` and
+      `DrmDisplayHostManager::display_externally_controlled_` `false`. On
+      ChromeOS ash closes that with `DisplayConfigurator::TakeControl` during
+      startup; this fork has no `DisplayConfigurator`, so the only
+      `drmSetMaster` in the tree was `DrmVtSwitcher`'s take arm and the desktop
+      drew nothing until the user had been to another console and back.
+
+      **The arrival is the moment, and there is no earlier one.** A card is
+      gained where the browser hands it to the GPU process, which is after the
+      `open` and before anything can commit on it; `DrmModeset::Start` is
+      earlier still and holds no card to ask about. The ask is idempotent --
+      the kernel answers 0 for a file that is already the current master -- so
+      a machine whose `open` did take master pays one ioctl and no behavior.
+
+      **A card that arrives on somebody else's console is recorded and not
+      taken**, or a display plugged in during a VT switch would be mastered by
+      a desktop nobody can see. The take on the way back asks for every card
+      held, that one included
 - [x] the window fills the CRTC, so that `FindWindowAt` matches it to a
       controller and page flips reach the kernel -- patch `0018` and
       `--start-fullscreen` from `domicile-launch` on the scanout platform only.
