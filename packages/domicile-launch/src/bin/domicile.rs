@@ -22,7 +22,7 @@ use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::platform::platform;
 use domicile_launch::shell_path::shell_module;
 use domicile_launch::spawn::{compositor, engine, Runtime};
-use domicile_launch::supervise::{catch_interrupts, Running, ASK_EVERY};
+use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 
 /// How long each component gets to do the one thing the next one waits on. A
 /// debug build on a loaded machine is seconds, not milliseconds.
@@ -227,14 +227,21 @@ fn answering(control: &Control, module: PathBuf) -> Result<(), String> {
 }
 
 /// Wait for one milestone against the real world: the filesystem for whether
-/// it happened, the components for whether one of them stopped, and the clock
-/// for how long it has been.
+/// it happened, the components for whether one of them stopped, the signal
+/// handler's flag for whether a stop has been asked for, and the clock for how
+/// long it has been.
+///
+/// The flag is read here as well as in [`Running::until_one_exits`], because
+/// between them is where a run spends its first minute. A Ctrl-C in that
+/// minute used to do nothing at all — see [`reach`] for what that leaves on a
+/// tty.
 fn wait_for(milestone: &Milestone, path: &Path, running: &mut Running) -> Result<(), String> {
     let started = Instant::now();
     reach(
         milestone,
         &|| path.exists(),
         &mut || running.exited(),
+        &interrupted,
         &mut || {
             std::thread::sleep(ASK_EVERY);
             started.elapsed()
