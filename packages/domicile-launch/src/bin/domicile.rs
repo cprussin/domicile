@@ -22,7 +22,7 @@ use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::platform::platform;
 use domicile_launch::shell_path::shell_module;
 use domicile_launch::spawn::{compositor, engine, Runtime};
-use domicile_launch::supervise::{Running, ASK_EVERY};
+use domicile_launch::supervise::{catch_interrupts, Running, ASK_EVERY};
 
 /// How long each component gets to do the one thing the next one waits on. A
 /// debug build on a loaded machine is seconds, not milliseconds.
@@ -113,6 +113,12 @@ fn desktop(shell: &str) -> Result<ExitCode, String> {
     let control = take(&places.control).map_err(|why| why.to_string())?;
     answering(&control, module_of(&module)?)?;
     println!("{VARIABLE}={}", places.control.display());
+
+    // BEFORE THE FIRST COMPONENT STARTS, because each one leads a process
+    // group of its own and is therefore out of the terminal's foreground
+    // group: Ctrl-C reaches this process alone now, and its default action
+    // would kill it before the components it started were stopped.
+    catch_interrupts();
 
     let mut running = Running::new();
 

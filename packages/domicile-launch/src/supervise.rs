@@ -16,7 +16,9 @@
 //! What is left here is starting them, watching them, and making sure nothing
 //! outlives the run.
 
+use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, ExitStatus};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use crate::spawn::Spawn;
@@ -64,6 +66,16 @@ impl Exit {
     }
 }
 
+/// How long a component gets to put the machine down tidily before it is
+/// taken down.
+///
+/// It is asked to stop rather than stopped because the engine has two things
+/// to hand back on its way out and both are the console: `VT_AUTO`, without
+/// which the tty stays in `VT_PROCESS`, and logind's devices, which it took
+/// with `TakeControl`. `SIGKILL` runs no destructor, so a run that only ever
+/// killed left both behind.
+const LAST_WORDS: Duration = Duration::from_secs(3);
+
 /// Children killed when the run ends, however it ends.
 ///
 /// A desktop that exits leaving an engine behind holds the Wayland display its
@@ -74,9 +86,50 @@ pub struct Running(Vec<(&'static str, Child)>);
 impl Drop for Running {
     fn drop(&mut self) {
         for (_, child) in &mut self.0 {
-            let _ = child.kill();
-            let _ = child.wait();
+            end_the_group(child);
         }
+    }
+}
+
+/// Stop a component and everything it started.
+///
+/// THE ENGINE IS NOT ONE PROCESS, which is what made this necessary.
+/// Chromium forks a GPU process, a zygote and more, and `Child::kill` reaches
+/// the browser alone: on 2026-09-15 the browser took `SIGSEGV` two hundred
+/// milliseconds into a tty run and a sibling was still logging eight seconds
+/// later, holding DRM master on the card. The console was not recoverable and
+/// nothing said why, because from here the component had exited.
+///
+/// So each one leads a process group and the group is what is signalled.
+/// `SIGTERM` first, because the engine has a console to hand back; `SIGKILL`
+/// after `LAST_WORDS`, because a component that will not go is worse than one
+/// that did not get to say goodbye.
+///
+/// Signalling the group by the leader's pid stays right after the leader has
+/// been reaped: a process group outlives its leader as long as it has members,
+/// and the members are exactly what this is for.
+fn end_the_group(child: &mut Child) {
+    let group = child.id() as libc::pid_t;
+    signal_group(group, libc::SIGTERM);
+
+    let deadline = std::time::Instant::now() + LAST_WORDS;
+    while std::time::Instant::now() < deadline {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            _ => std::thread::sleep(ASK_EVERY),
+        }
+    }
+
+    signal_group(group, libc::SIGKILL);
+    let _ = child.wait();
+}
+
+/// `killpg`, with the failure ignored on purpose: the only one reachable here
+/// is `ESRCH`, which means the group is already gone, which is the outcome
+/// being asked for.
+fn signal_group(group: libc::pid_t, signal: libc::c_int) {
+    unsafe {
+        libc::killpg(group, signal);
     }
 }
 
@@ -122,10 +175,16 @@ impl Running {
     /// nothing on the terminal.
     pub fn until_one_exits(&mut self) -> Exit {
         loop {
-            match self.exited() {
-                Some(exit) => return exit,
-                None => std::thread::sleep(ASK_EVERY),
+            if let Some(exit) = self.exited() {
+                return exit;
             }
+            if interrupted() {
+                return Exit {
+                    what: "desktop",
+                    how: "interrupted".to_string(),
+                };
+            }
+            std::thread::sleep(ASK_EVERY);
         }
     }
 }
@@ -134,6 +193,50 @@ impl Default for Running {
     fn default() -> Self {
         Running::new()
     }
+}
+
+/// Set by the handler, read by the poll loop. A `static` because a signal
+/// handler has no other way to reach the program, and an `AtomicBool` because
+/// it is the only thing it is allowed to touch.
+static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+
+extern "C" fn note_the_interrupt(_signal: libc::c_int) {
+    INTERRUPTED.store(true, Ordering::Relaxed);
+}
+
+/// Make Ctrl-C end the run rather than end this process.
+///
+/// WITHOUT THIS, PUTTING THE COMPONENTS IN THEIR OWN GROUPS WOULD BREAK
+/// CTRL-C. The kernel sends `SIGINT` to the terminal's foreground process
+/// group, and all three used to be in it, so Ctrl-C reached the engine and the
+/// compositor directly and the default action stopped them. They are not in it
+/// any more -- that is the point, so that `end_the_group` can reach what they
+/// fork -- so the signal now arrives here alone, and the default action would
+/// kill this process before `Running::drop` could run. The desktop would be
+/// exactly as orphaned as the crash this change is about.
+///
+/// A flag rather than a teardown in the handler, because a handler may call
+/// almost nothing and `kill` is not the half of it. The supervisor already
+/// polls at `ASK_EVERY`; this is one more thing for it to notice.
+///
+/// `SIGTERM` as well as `SIGINT`: a `systemctl stop` and a Ctrl-C are the same
+/// request, and a desktop left running by the first is the same wedged console.
+pub fn catch_interrupts() {
+    for signal in [libc::SIGINT, libc::SIGTERM] {
+        // SAFETY: `note_the_interrupt` touches one atomic and nothing else,
+        // which is what a handler is permitted to do.
+        unsafe {
+            libc::signal(
+                signal,
+                note_the_interrupt as *const () as libc::sighandler_t,
+            );
+        }
+    }
+}
+
+/// Whether a stop has been asked for since the run began.
+pub fn interrupted() -> bool {
+    INTERRUPTED.load(Ordering::Relaxed)
 }
 
 fn exit(what: &'static str, status: ExitStatus) -> Exit {
@@ -149,5 +252,13 @@ fn command(spawn: &Spawn) -> Command {
     for (name, value) in &spawn.env {
         command.env(name, value);
     }
+    // A GROUP OF ITS OWN, so that `end_the_group` can reach what this process
+    // goes on to fork. `0` means "a new group led by the child".
+    //
+    // It also takes the child out of the terminal's foreground group, which is
+    // why `catch_interrupts` exists: Ctrl-C used to reach all three because
+    // they shared that group, and without a handler here it would now reach
+    // this process alone and kill it before any of this ran.
+    command.process_group(0);
     command
 }
