@@ -131,6 +131,12 @@ class DrmModeset : public display::NativeDisplayObserver {
   // nothing is not mistaken for one that landed. See
   // `ModesetWouldChangeAnything`.
   std::vector<display::DisplayConfigurationParams> confirmed_;
+  // Whether control is still inside `delegate_->Configure`, which is how a
+  // yes that reached hardware is told from one that did not: a real modeset is
+  // committed on the DRM thread and answered on a later task, so the only
+  // thing that can answer before the call returns is this process itself. See
+  // `OnDisplaysReceived`.
+  bool inside_configure_ = false;
   base::WeakPtrFactory<DrmModeset> weak_factory_{this};
 };
 

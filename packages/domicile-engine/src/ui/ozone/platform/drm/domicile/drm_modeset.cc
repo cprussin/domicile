@@ -137,6 +137,7 @@ void DrmModeset::OnDisplaysReceived(
   }
 
   VLOG(1) << "domicile: configuring " << params.size() << " display(s)";
+  inside_configure_ = true;
   delegate_->Configure(
       params,
       base::BindOnce(
@@ -155,13 +156,36 @@ void DrmModeset::OnDisplaysReceived(
                             "lit";
               return;
             }
-            VLOG(1) << "domicile: the DRM thread confirmed the modeset";
-            if (self) {
-              self->confirmed_ = std::move(asked);
+            if (!self) {
+              return;
             }
+            if (self->inside_configure_) {
+              // A YES THAT NEVER LEFT THIS PROCESS, and it is the one that got
+              // through the guard above. `Start()` runs at `InitScreen` time,
+              // before a GPU process exists, so `DrmDisplayHostManager` has
+              // only the dummy snapshots its constructor built from its own
+              // read of the primary card -- and `ConfigureDisplays` reads
+              // `is_dummy()` on those and runs this callback with `true`
+              // without asking anything. On the machine this was found on, the
+              // confirmation was logged three microseconds after the ask.
+              //
+              // A real modeset is committed on the DRM thread and answered on
+              // a later task, so an answer that arrives before `Configure` has
+              // returned is by construction one no hardware saw. Recording it
+              // would make the first REAL reading look like a repeat, and on a
+              // single-card machine whose dummy reading matches its real one
+              // nothing would ever modeset.
+              VLOG(1) << "domicile: the modeset was answered from inside the "
+                         "browser process; no hardware saw it, so it is not a "
+                         "confirmation";
+              return;
+            }
+            VLOG(1) << "domicile: the DRM thread confirmed the modeset";
+            self->confirmed_ = std::move(asked);
           },
           weak_factory_.GetWeakPtr(), params),
       {display::ModesetFlag::kCommitModeset});
+  inside_configure_ = false;
 }
 
 }  // namespace ui
