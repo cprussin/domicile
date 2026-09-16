@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
+#include "dbus/object_path.h"
 #include "dbus/object_proxy.h"
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/events/event.h"
@@ -31,6 +32,27 @@ namespace ui {
 // `Ctrl+Alt+Shift+F1`, and finding the console switch out from under it would
 // be the kind of collision a desktop cannot explain.
 std::optional<uint32_t> VtForChord(const KeyEvent& event);
+
+// The seat this session is on, out of the `(so)` logind answers a `Get` of
+// `org.freedesktop.login1.Session.Seat` with: the seat's id and its object
+// path. Nothing is answered for a session that is on no seat.
+//
+// READ RATHER THAN SPELLED, AND THAT IS THE WHOLE POINT OF IT.
+// `/org/freedesktop/login1/seat/self` is what `Seat.SwitchTo` used to be sent
+// to, and on a real tty logind answered `UnknownObject`: `self` is not a name
+// it stores anywhere, it is a lookup -- `seat_object_find` resolves it through
+// the sending connection's own credentials to a session and then to that
+// session's seat, and answers "no such object" whichever half comes up empty.
+// The session object is already in hand from `GetSessionByPID`, so its own
+// `Seat` names the seat this session is actually on, off a path logind gave
+// us rather than one we guessed. `seat0` written out here would be the other
+// way to be wrong, on the second seat of any machine that has one.
+//
+// A SESSION ON NO SEAT IS ANSWERED `("", "/")`, and `/` is a perfectly
+// well-formed object path -- so it would travel all the way to a `SwitchTo`
+// and fail there as cryptically as the alias did. It is not a seat, and this
+// says so instead.
+std::optional<dbus::ObjectPath> SeatOfSession(dbus::MessageReader* reader);
 
 // What logind said, or what an asynchronous answer brought back.
 enum class VtEvent {
@@ -162,6 +184,11 @@ class DrmVtSwitcher : public PlatformEventObserver {
   // logind answered `GetSessionByPID`; from here on there is a session to
   // follow.
   void OnSessionFound(dbus::Response* response);
+  // Which seat that session is on, which is the object a chord is sent to.
+  void ReadSeat();
+  void OnSeatFound(dbus::Response* response);
+  // Ask logind for the console the chord named.
+  void SwitchTo(uint32_t console);
   // Every property of the session, because `Active` is the only one worth
   // reading and reading it is cheaper than deciding whether this message
   // carried it -- logind may name a changed property in either the dictionary
@@ -181,7 +208,13 @@ class DrmVtSwitcher : public PlatformEventObserver {
   raw_ptr<PlatformEventSource> events_;
   scoped_refptr<dbus::Bus> bus_;
   raw_ptr<dbus::ObjectProxy> session_ = nullptr;
+  // Null until logind has answered which seat this session is on, which is two
+  // round trips after construction and cannot be waited for on this thread.
   raw_ptr<dbus::ObjectProxy> seat_ = nullptr;
+  // THE CHORD THAT BEAT THE ANSWER. A console asked for before the seat is
+  // known is remembered rather than dropped: the user pressed the keys, and
+  // the console they named is still the one they want a round trip later.
+  std::optional<uint32_t> pending_console_;
   VtState state_ = VtState::kForeground;
   base::WeakPtrFactory<DrmVtSwitcher> weak_factory_{this};
 };

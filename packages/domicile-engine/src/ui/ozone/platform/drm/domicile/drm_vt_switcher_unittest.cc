@@ -4,6 +4,11 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_vt_switcher.h"
 
+#include <memory>
+#include <string>
+
+#include "dbus/message.h"
+#include "dbus/object_path.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -18,6 +23,23 @@ KeyEvent Pressed(KeyboardCode key, int flags) {
 }
 
 constexpr int kChord = EF_CONTROL_DOWN | EF_ALT_DOWN;
+
+// What logind answers a `Get` of the session's `Seat` with: the seat's id and
+// its object path, as a `(so)` inside the variant every property comes in.
+std::unique_ptr<dbus::Response> SeatAnswer(const std::string& id,
+                                           const std::string& path) {
+  std::unique_ptr<dbus::Response> answer = dbus::Response::CreateEmpty();
+  dbus::MessageWriter writer(answer.get());
+  dbus::MessageWriter variant(nullptr);
+  writer.OpenVariant("(so)", &variant);
+  dbus::MessageWriter seat(nullptr);
+  variant.OpenStruct(&seat);
+  seat.AppendString(id);
+  seat.AppendObjectPath(dbus::ObjectPath(path));
+  variant.CloseContainer(&seat);
+  writer.CloseContainer(&variant);
+  return answer;
+}
 
 // The whole of what a user does: one chord per console, and the number on the
 // key is the number of the console. `Seat.SwitchTo` takes that number, so
@@ -260,6 +282,38 @@ TEST(DrmVtSwitcherTest, NoPathLeavesTheDisplayHeldInTheBackground) {
       EXPECT_NE(settled.state, VtState::kForegroundWithoutDisplay);
     }
   }
+}
+
+// THE ONE THE CHORD WAS SHIPPED BROKEN ON. `SwitchTo` went to
+// `/org/freedesktop/login1/seat/self` and logind answered `UnknownObject` on a
+// real tty: `self` is not a name it stores, it is a lookup through the
+// caller's own bus credentials, and `seat_object_find` answers "no such
+// object" for every way that lookup can come up empty. The session object
+// `GetSessionByPID` already handed over carries the seat it is on, and reading
+// that needs nobody's credentials -- nor a `seat0` spelled out here, which is
+// the wrong seat on the second seat of a machine that has two.
+TEST(DrmVtSwitcherTest, TheSeatIsWhicheverOneTheSessionIsOn) {
+  for (const std::string id : {"seat0", "seat1"}) {
+    const std::string path = "/org/freedesktop/login1/seat/" + id;
+    const std::unique_ptr<dbus::Response> answer = SeatAnswer(id, path);
+    dbus::MessageReader reader(answer.get());
+
+    const std::optional<dbus::ObjectPath> seat = SeatOfSession(&reader);
+    ASSERT_TRUE(seat.has_value());
+    EXPECT_EQ(seat->value(), path);
+  }
+}
+
+// `/` IS logind's WORD FOR "NO SEAT", and it is a perfectly well-formed object
+// path -- so a `SwitchTo` sent there fails exactly as cryptically as the alias
+// did, and nothing between here and the panel would catch it. A session on no
+// seat has no console to switch to at all, which is a thing to say out loud
+// rather than a round trip to watch fail.
+TEST(DrmVtSwitcherTest, ASessionOnNoSeatNamesNoSeat) {
+  const std::unique_ptr<dbus::Response> answer = SeatAnswer("", "/");
+  dbus::MessageReader reader(answer.get());
+
+  EXPECT_FALSE(SeatOfSession(&reader).has_value());
 }
 
 }  // namespace
