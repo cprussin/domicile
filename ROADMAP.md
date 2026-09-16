@@ -514,6 +514,35 @@ decides whether an item is waiting or workable.
    series must add no second toggle to startup. `0019`, `0020` and `0022`
    remain unexercised.
 
+   **The third run went fullscreen and stayed there for 1.37 seconds**, and
+   `0023` is what ended it. `--start-fullscreen` reached the window once, the
+   desktop reported 2880x1920, and then it reported 1050x1900 again. What asks
+   is `ExclusiveAccessBubbleViews`: entering browser fullscreen puts up the
+   "press Esc to exit" bubble, `Show()` arms a 1500ms
+   `presentation_watchdog_timer_` against a wedged GPU, and on timeout it
+   calls `ExclusiveAccessManager::ExitExclusiveAccess()` -- which for
+   browser-mode fullscreen ends in `DrmWindowHost::SetFullscreen(false)` and
+   `restored_bounds_`. **The bubble is a top-level window of its own and on
+   ozone/drm that means it is never presented**:
+   `SubtleNotificationView::CreatePopupWidget` asks for
+   `ui::ZOrderLevel::kSecuritySurface` and a security surface is always
+   `kDesktopNativeWidgetAura`, a second window is bound to no CRTC,
+   `DrmWindow::SchedulePageFlip` answers `PresentationFeedback::Failure()`,
+   and a failed presentation keeps the successful-presentation callbacks
+   pending rather than running them. So the watchdog was not a hang detector
+   here, it was a timer, and it fired on a healthy machine. The arm above it
+   in the same function says exactly this about headless, down to naming
+   `--start-fullscreen` as what it would revert; the new one asks Ozone
+   instead of guessing, through
+   `PlatformRuntimeProperties::presents_every_window` -- true by default,
+   because everywhere else a window system is answerable for a frame once it
+   is handed over, and false on the platform that *is* the window system.
+   What guards it is
+   `scripts/test-the-fullscreen-bubble-does-not-undo-fullscreen.sh`: the
+   bubble has to ask and ozone/drm has to answer, and either alone compiles
+   and does nothing. Unexercised like the four before it, and for the same
+   reason: it is read at the pin rather than off a screen.
+
    What is left of step 2 after a screen lights: a **`drm` arm in
    `domicile-launch`'s `platform()`**
    so a machine with no `WAYLAND_DISPLAY` gets a tty rather than a refusal,
