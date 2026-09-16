@@ -38,13 +38,16 @@ type Options = {
  * The combinations the desktop answers, claimed twice over — because two
  * different things can be holding the keyboard when the user presses one.
  *
- * `grabShortcut` claims the combination for the desktop, which is what answers
- * when a window has the keyboard: the compositor takes it before a Wayland
- * client is given it, and the browser process takes it before a browser
- * window's page is — a `<webview>` is a browsing context of its own,
- * so a key pressed on a site the shell is showing reaches neither this page nor
- * the compositor. The page's own `keydown` is what answers when the shell
- * itself has focus. Exactly one of the two paths fires for any press.
+ * `grabShortcut` claims the combination for the desktop, and the claim is what
+ * decides which of the two answers. A `<webview>` is a browsing context of its
+ * own, so a key pressed on a site the shell is showing reaches neither this
+ * document nor the compositor: the browser process is the only layer above it,
+ * it matches the claim there, and the `shortcut` message is how the press gets
+ * back. Every other press lands on this document as a `keydown` — a Wayland
+ * window is an `<app>` element and DOM focus never leaves the page — and the
+ * branch below is what answers it. The same claim is what keeps the SDK from
+ * forwarding the chord to that window on its way past, which is what makes it
+ * exactly one of the two paths for any press rather than both.
  */
 export const useShortcuts = ({ domicile, onFloat, onLaunch }: Options) => {
   useEffect(() => {

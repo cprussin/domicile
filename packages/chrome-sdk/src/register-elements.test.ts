@@ -14,6 +14,7 @@ import type { Measure } from "./measure";
 import type { ObservePlacement } from "./observe-placement";
 import { placementTiming } from "./placement-timing";
 import { registerElements } from "./register-elements";
+import { claimShortcut } from "./shortcut-claims";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
@@ -289,6 +290,34 @@ describe("registerElements", () => {
       document.dispatchEvent(
         new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
       );
+    });
+
+    it("keeps a chord the desktop claimed out of the focused window", () => {
+      // A Wayland window is an element in this page, so DOM focus never leaves
+      // the document and the shell's own `keydown` handler sees the press as
+      // well as the forwarding here. Without the claim both act: Alt+Enter
+      // spawns a terminal *and* types a newline into the one already open.
+      claimShortcut({ altKey: true, keycode: 28 });
+      const element = mountApp("term");
+      element.dispatchEvent(pointer("pointerdown", { button: 0 }));
+      domicile.calls.length = 0;
+
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          altKey: true,
+          bubbles: true,
+          code: "Enter",
+        }),
+      );
+      document.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          altKey: true,
+          bubbles: true,
+          code: "Enter",
+        }),
+      );
+
+      expect(domicile.calls.filter(([kind]) => kind === "key")).toEqual([]);
     });
 
     it("ignores the browser's auto-repeat while a key is held", () => {

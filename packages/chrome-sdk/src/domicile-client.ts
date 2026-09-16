@@ -84,6 +84,7 @@ import {
   modifiers,
   shortcut,
 } from "./host-message";
+import { claimShortcut } from "./shortcut-claims";
 import type { AxisDelta } from "./wheel-axis";
 
 type Handler = (message: never) => void;
@@ -383,11 +384,18 @@ export class DomicileClient {
   /**
    * Claim a key combination for the desktop, whatever holds the keyboard.
    *
-   * The press arrives back as a `shortcut` message rather than as a DOM event,
-   * because the page is not what received it — and it carries the same fields
-   * this was given, so a shell compares the two without parsing a string.
+   * Claimed in two places, because there are two layers above a focused window
+   * and they are different layers. The host's claim is matched in the browser
+   * process, the only one above a `<webview>` guest, and the press arrives back
+   * as a `shortcut` message rather than as a DOM event, because the page is not
+   * what received it — carrying the same fields this was given, so a shell
+   * compares the two without parsing a string. A focused *Wayland* window is an
+   * element in the page, so its keys do reach the document, and the page's own
+   * copy of the claim — see `shortcut-claims.ts` — is what stops
+   * `keyboard-input.ts` forwarding the chord to it on the way past.
    */
   grabShortcut(shortcut: DomicileShortcut): void {
+    claimShortcut(shortcut);
     this.#host.grabShortcut(shortcut);
   }
 
