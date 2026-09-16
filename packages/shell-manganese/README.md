@@ -242,15 +242,20 @@ than putting it back on the stage. Alt+Shift+Tab is what changes the mode.
 
 Both combinations are claimed twice over, because two different things can be
 holding the keyboard when the user presses one. The page listens for its own
-`keydown`, which is what answers when the shell itself has focus — including
-over an `<app>`, whose pixels are a hole in this document.
-And `grabShortcut` claims the combination for the desktop, which is what
-answers when a window has it: the compositor takes it before a Wayland client
-is given it, and the browser process takes it before a browser window's page
-is — a `<webview>` is a browsing context of its own, so a key pressed
-on a site the shell is showing reaches neither this page nor the compositor,
-and the layer inside the engine is the only one above it. One ask, honored
-wherever the keyboard happens to be; exactly one path fires for any press.
+`keydown`, which is what answers for every press that lands on this document —
+the shell's own chrome, and a focused Wayland window too, since an `<app>` is an
+element here and DOM focus never leaves the page. And `grabShortcut` claims the
+combination for the desktop, which is what answers when a `<webview>` has the
+keyboard: a browser window is a browsing context of its own, so a key pressed on
+a site the shell is showing reaches neither this page nor the compositor, and
+the layer inside the engine is the only one above it.
+
+That claim is also what keeps the two from both firing. The SDK forwards this
+document's keystrokes to whichever window has the keyboard, and a chord it did
+not know was spoken for went to the window as well as to the handler here —
+Alt+Enter opening a terminal and typing a newline into the one already
+open. It reads the claim now, so the chord stops at the page. One ask, honored
+wherever the keyboard happens to be; exactly one path acts for any press.
 
 A tab reorders by drag, or by Alt+Up / Alt+Shift+Up (and their Down
 counterparts) on a focused row. Every tab closes its window — by its X, or by a

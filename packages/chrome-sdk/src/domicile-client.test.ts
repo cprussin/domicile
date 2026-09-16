@@ -9,6 +9,7 @@ import type {
   DomicileShortcut,
 } from "./domicile-host";
 import { BTN_LEFT } from "./input";
+import { isClaimed } from "./shortcut-claims";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
@@ -376,6 +377,25 @@ describe("DomicileClient", () => {
 
       domicile.key("term", 30, true);
       expect(host.lastCall()).toStrictEqual(["key", "term", 30, true]);
+    });
+
+    it("claims a grabbed chord for the page as well as the browser process", () => {
+      // The browser process matches a claim for a focused `<webview>`, whose
+      // keys never reach this document. A focused Wayland window's do — it is
+      // an element in this page — so the page has to know the same claim, or
+      // `keyboard-input.ts` forwards the chord to the window the shell just
+      // answered it over.
+      domicile.grabShortcut({ altKey: true, keycode: 15, shiftKey: true });
+
+      expect(
+        isClaimed({
+          altKey: true,
+          ctrlKey: false,
+          keycode: 15,
+          metaKey: false,
+          shiftKey: true,
+        }),
+      ).toBe(true);
     });
 
     it("spreads a size into the two doubles the host takes", () => {

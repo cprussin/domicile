@@ -12,6 +12,8 @@ import { APP_FOCUS_RELEASE_REQUESTED_EVENT, APP_TAG_NAME } from "./app-element";
 import type { ElementContext } from "./element-context";
 import { focusedApp, setFocusedApp } from "./element-context";
 import { evdevFromCode } from "./input";
+import type { KeyPress } from "./shortcut-claims";
+import { isClaimed } from "./shortcut-claims";
 
 // The app each forwarded press was sent for, until the key comes up.
 //
@@ -51,7 +53,15 @@ const forwardPress =
   (event: KeyboardEvent): void => {
     const appId = keyboardTarget(context);
     const keycode = evdevFromCode(event.code);
-    if (appId !== undefined && keycode !== undefined) {
+    // A combination the desktop claimed is not the window's, wherever the
+    // keyboard is pointed: the page is where it is answered, and forwarding it
+    // as well is the window acting on a key the shell already spent. The
+    // release is not forwarded either, because it was never taken down as held.
+    if (
+      appId !== undefined &&
+      keycode !== undefined &&
+      !isClaimed(press(event, keycode))
+    ) {
       event.preventDefault();
       // The browser repeats a held key; Wayland does not. A client synthesizes
       // repeat itself from `wl_keyboard.repeat_info`, so forwarding these as
@@ -183,3 +193,12 @@ const appElement = (appId: string): Element | undefined =>
   [...document.querySelectorAll(APP_TAG_NAME)].find(
     (element) => element.getAttribute("app-id") === appId,
   );
+
+/** The press, in the terms a claim is written in. */
+const press = (event: KeyboardEvent, keycode: number): KeyPress => ({
+  altKey: event.altKey,
+  ctrlKey: event.ctrlKey,
+  keycode,
+  metaKey: event.metaKey,
+  shiftKey: event.shiftKey,
+});
