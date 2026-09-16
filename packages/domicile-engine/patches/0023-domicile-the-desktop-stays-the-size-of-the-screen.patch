@@ -1,0 +1,199 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Wed, 16 Sep 2026 15:14:39 +0000
+Subject: [PATCH] domicile: the desktop stays the size of the screen
+
+`0018` made the window the size of the screen and it worked. A tty run
+reported a desktop of 2880x1920 -- and 1.37 seconds later, one of 1050x1900.
+That is Chromium's default app window on that panel, which is the
+`restored_bounds_` `DrmWindowHost::SetFullscreen` records on the way in, and a
+window that is not EXACTLY the CRTC's rectangle gets no controller out of
+`ScreenManager::FindWindowAt`. So from that moment nothing was drawn at all.
+
+WHAT LEFT FULLSCREEN IS A WATCHDOG ON A WINDOW THAT CANNOT ANSWER IT.
+`ExclusiveAccessBubbleViews::Show` arms `presentation_watchdog_timer_` for
+1500ms and stops it in `OnFirstPresentation`; on timeout it calls
+`ExclusiveAccessManager::ExitExclusiveAccess()`, which for browser-mode
+fullscreen is `FullscreenController::ExitFullscreenModeInternal()` and ends in
+`BrowserView::ProcessFullscreen(false, ...)` -> `Widget::SetFullscreen(false)`
+-> `DrmWindowHost::SetFullscreen(false)` -> `restored_bounds_`. The bubble
+exists because `FullscreenController::WindowFullscreenStateChanged` updates it
+on the way in, and `GetExclusiveAccessExitBubbleType` answers
+`BROWSER_FULLSCREEN_EXIT_INSTRUCTION` for a controller-initiated fullscreen
+that is not kiosk -- which is exactly what `--start-fullscreen` is.
+
+And it can never be presented. The bubble is a top-level window of its own:
+`SubtleNotificationView::CreatePopupWidget` asks for
+`ui::ZOrderLevel::kSecuritySurface`, and `GetNativeWidgetTypeForInitParams`
+answers a security surface with `kDesktopNativeWidgetAura` unconditionally, so
+that nothing can cover the one piece of UI standing between a page and a
+convincing fake desktop. On ozone/drm a second top-level window has no display
+controller, `DrmWindow::SchedulePageFlip` takes its `if (!controller_)` branch
+and answers `gfx::PresentationFeedback::Failure()`, and a failed presentation
+does not run the successful-presentation callbacks -- it keeps them pending
+(`cc/trees/presentation_time_callback_buffer.cc`). `OnFirstPresentation` never
+runs. The watchdog is not a GPU-hang detector here; it is a 1500ms timer.
+
+The arm above it already says all of this about headless, in the same words,
+down to naming `--start-fullscreen` as what it would revert. This is that
+arm's twin, and the question is Ozone's rather than the bubble's:
+`PlatformRuntimeProperties::presents_every_window` is true by default, because
+everywhere a window system puts the pixels on the screen the compositor hands
+a frame over and the server is answerable for it. ozone/drm IS the window
+system, so it answers false -- in `InitializeUI` rather than beside
+`supports_native_pixmaps` in `InitializeGPU`, because the process that has to
+know is the browser and out of single-process mode `InitializeGPU` never runs
+there. `supports_system_tray_windowing` is the same shape: a platform saying
+which windows it cannot host, read from `chrome/` at the one place it decides
+something.
+
+NOT KIOSK AND NOT A SWITCH. `IsRunningInAppMode()` would suppress the bubble
+and carries the policy surface `0018` refused, and a launcher flag would be a
+fact about the ozone platform written down somewhere the ozone platform is
+not -- so `--ozone-platform=drm` by hand would bring the timer back. What is
+lost is the exit instructions, which on a tty name a chord for a window there
+is nothing to exit to; what was lost before was every pixel.
+
+`scripts/test-the-fullscreen-bubble-does-not-undo-fullscreen.sh` reads the
+series for both halves: the bubble has to ask and ozone/drm has to answer.
+Either alone compiles and does nothing.
+---
+ .../ui/views/exclusive_access/BUILD.gn        |  6 +++
+ .../exclusive_access_bubble_views.cc          | 37 ++++++++++++++++++-
+ ui/ozone/platform/drm/ozone_platform_drm.cc   | 14 +++++++
+ ui/ozone/public/ozone_platform.h              | 20 ++++++++++
+ 4 files changed, 76 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/ui/views/exclusive_access/BUILD.gn b/chrome/browser/ui/views/exclusive_access/BUILD.gn
+index 55010cf136957..9307806117e22 100644
+--- a/chrome/browser/ui/views/exclusive_access/BUILD.gn
++++ b/chrome/browser/ui/views/exclusive_access/BUILD.gn
+@@ -40,6 +40,12 @@ source_set("impl") {
+     "//ui/views",
+   ]
+ 
++  # The presentation watchdog asks the platform whether a window that is not
++  # the screen is ever presented, which only Ozone can answer.
++  if (use_ozone) {
++    deps += [ "//ui/ozone" ]
++  }
++
+   # exclusive_access_bubble_views.cc includes views/frame/top_container_view.h,
+   # which is still compiled in //chrome/browser/ui:ui. Reach it via
+   # browser_public_dependencies; the reverse edge is the
+diff --git a/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc b/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
+index 3ac0ebf8584cc..d5aa9046b702d 100644
+--- a/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
++++ b/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
+@@ -43,11 +43,35 @@
+ #include "ui/base/l10n/l10n_util_win.h"
+ #endif
+ 
++#if BUILDFLAG(IS_OZONE)
++#include "ui/ozone/public/ozone_platform.h"
++#endif
++
+ bool ExclusiveAccessBubbleViews::skip_presentation_delay_for_testing_ = false;
+ bool ExclusiveAccessBubbleViews::simulate_gpu_hang_for_testing_ = false;
+ 
+ namespace {
+ 
++// Whether a frame this bubble's own window submits can reach a display at all.
++//
++// The bubble is a top-level window of its own wherever views is:
++// SubtleNotificationView::CreatePopupWidget asks for
++// ui::ZOrderLevel::kSecuritySurface, and a security surface is answered with
++// kDesktopNativeWidgetAura unconditionally, so that a menu cannot cover the
++// one piece of UI standing between a page and a convincing fake desktop.
++//
++// On a platform that scans out one window per display that makes it a window
++// with nowhere to go. See PlatformRuntimeProperties::presents_every_window.
++bool PlatformPresentsEveryWindow() {
++#if BUILDFLAG(IS_OZONE)
++  return ui::OzonePlatform::GetInstance()
++      ->GetPlatformRuntimeProperties()
++      .presents_every_window;
++#else
++  return true;
++#endif
++}
++
+ // Returns whether `type` indicates a tab-initiated fullscreen mode.
+ bool IsTabFullscreenType(ExclusiveAccessBubbleType type) {
+   return type == EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION ||
+@@ -425,7 +449,18 @@ void ExclusiveAccessBubbleViews::Show() {
+   // relying on visible exit instructions. Arming the watchdog would make it
+   // always fire and spuriously exit fullscreen (e.g. reverting the
+   // --start-fullscreen switch shortly after startup).
+-  if (!headless::IsHeadlessMode()) {
++  //
++  // Domicile's engine fork. A platform that presents only the window filling a
++  // display is the same case for the same reason: this bubble is a second
++  // top-level window, ozone/drm hands it no display controller, and every
++  // frame it submits comes back gfx::PresentationFeedback::Failure(). A failed
++  // presentation does not run the successful-presentation callbacks, it keeps
++  // them pending -- so OnFirstPresentation() never runs, the watchdog is not a
++  // GPU-hang detector but a 1500ms timer, and a desktop that came up on
++  // --start-fullscreen left again a second and a half later. On ozone/drm a
++  // window that is not the screen's rectangle is bound to no CRTC, so what
++  // that exit cost was not the instructions: it was every pixel.
++  if (!headless::IsHeadlessMode() && PlatformPresentsEveryWindow()) {
+     presentation_watchdog_timer_.Start(
+         FROM_HERE, base::Milliseconds(1500),
+         base::BindOnce(&ExclusiveAccessBubbleViews::OnPresentationTimeout,
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 80b99eff1789d..dff327ec921d1 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -238,6 +238,20 @@ class OzonePlatformDrm : public OzonePlatform {
+ 
+     host_thread_ = base::PlatformThread::CurrentRef();
+ 
++    // ONE WINDOW PER CRTC REACHES THE SCREEN, AND THE REST ARE DROPPED.
++    // ScreenManager::FindWindowAt binds a window to a display controller only
++    // when the window's rectangle is EXACTLY the CRTC's, so a second top-level
++    // window -- a menu, a dialog, the fullscreen exit bubble -- takes
++    // DrmWindow::SchedulePageFlip's `if (!controller_)` branch and is answered
++    // gfx::PresentationFeedback::Failure() every frame for as long as it
++    // lives. Nothing is wrong when that happens; it is what this platform is.
++    //
++    // Set here rather than in InitializeGPU beside supports_native_pixmaps,
++    // because the process that has to know is the browser: out of
++    // single-process mode InitializeGPU never runs there, and a default that
++    // reached views would be the answer every windowed platform gives.
++    host_properties_.presents_every_window = false;
++
+     device_manager_ = CreateDeviceManager();
+     window_manager_ = std::make_unique<DrmWindowHostManager>();
+     cursor_ = std::make_unique<DrmCursor>(window_manager_.get());
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index 4537244c51441..d1ce2d90d33f4 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -211,6 +211,26 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+     // ui::kStatusIconWmRoleName) are supported.
+     bool supports_system_tray_windowing = false;
+ 
++    // Whether every window this platform takes a frame for can reach a
++    // display, or only some of them can.
++    //
++    // True wherever a window system is what puts pixels on a screen, which is
++    // why it is the default: the compositor hands a frame over and the server
++    // is answerable for it from there. False on ozone/drm, which IS the window
++    // system -- ScreenManager::FindWindowAt binds a window to a display
++    // controller only when the window's rectangle is EXACTLY
++    // gfx::Rect(controller->origin(), controller->GetModeSize()), so one
++    // window per CRTC is scanned out and every other one takes
++    // DrmWindow::SchedulePageFlip's `if (!controller_)` branch, which answers
++    // gfx::PresentationFeedback::Failure() for as long as the window lives.
++    //
++    // Ask before waiting on a window's presentation. A failed presentation
++    // keeps the successful-presentation callbacks pending rather than running
++    // them (cc/trees/presentation_time_callback_buffer.cc), so a timeout
++    // written to catch a wedged GPU is, on such a platform, a timer that
++    // always fires on a healthy one.
++    bool presents_every_window = true;
++
+     // Allows overriding whether per window scaling is enabled in tests.
+     static SupportsForTest override_supports_per_window_scaling_for_test;
+ 
