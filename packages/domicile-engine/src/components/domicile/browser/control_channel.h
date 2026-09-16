@@ -24,6 +24,17 @@
 
 namespace domicile {
 
+// How a keymap off this channel reaches the engine that decodes keys with it.
+//
+// A callback rather than a call, because the two ends are on different
+// threads: this channel is read on the IO thread and the keyboard layout
+// engine belongs to the UI thread, along with every evdev key dispatched
+// through it. The binder that constructs a ControlChannel runs on the UI
+// thread, so it is the one that can bind SetProcessKeymap to it -- and this
+// target stays free of //content, which is where a task runner would otherwise
+// have to come from. See components/domicile/browser/keyboard_layout.h.
+using KeymapSink = base::RepeatingCallback<void(const std::string&)>;
+
 // The shell's control channel, in the browser process.
 //
 // Speaks newline-delimited JSON over the compositor's unix control socket --
@@ -41,7 +52,8 @@ class ControlChannel : public mojom::ControlChannel {
   // direction and leaves the page holding a channel that looks alive and
   // swallows everything written to it.
   ControlChannel(const std::string& socket_path,
-                 mojo::PendingReceiver<mojom::ControlChannel> receiver);
+                 mojo::PendingReceiver<mojom::ControlChannel> receiver,
+                 KeymapSink keymap_sink);
 
   ControlChannel(const ControlChannel&) = delete;
   ControlChannel& operator=(const ControlChannel&) = delete;
@@ -132,6 +144,7 @@ class ControlChannel : public mojom::ControlChannel {
   void DispatchLine(const std::string& line, base::TimeTicks arrival);
 
   const std::string socket_path_;
+  const KeymapSink keymap_sink_;
   mojo::Receiver<mojom::ControlChannel> receiver_;
   mojo::Remote<mojom::ControlChannelClient> client_;
 
@@ -168,8 +181,8 @@ class ControlChannel : public mojom::ControlChannel {
 // that decision -- registering the interface only for a document whose origin
 // is domicile:// -- is the whole of the security property. See
 // PopulateChromeFrameBinders.
-void BindControlChannel(
-    mojo::PendingReceiver<mojom::ControlChannel> receiver);
+void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
+                        KeymapSink keymap_sink);
 
 }  // namespace domicile
 

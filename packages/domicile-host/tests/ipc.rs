@@ -186,3 +186,39 @@ fn handshake_works_over_a_real_unix_socket() {
         "server session reached ready"
     );
 }
+
+#[test]
+fn a_keymap_the_compositor_compiled_rides_with_the_handshake() {
+    // THE BROWSER PROCESS IS THE READER OF THIS ONE, not the page. Its
+    // KeyboardLayoutEngine is a `XkbKeyboardLayoutEngine` with no keymap in
+    // it — off ChromeOS nothing sets one, and it answers every printable key
+    // with `No current XKB state` and an unidentified DomKey — so a desktop on
+    // a tty types nothing until it is handed the keymap the compositor
+    // compiled. Like the desktop above it is a fact rather than a stream, so
+    // it rides with the handshake: a reload opens a new channel, and a channel
+    // with no keymap on it is a keyboard that stopped working.
+    let mut session = Session::new();
+    session.host_mut().set_keymap(KEYMAP.into());
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert_eq!(
+        out,
+        vec![
+            HostMessage::Welcome {
+                protocol_version: PROTOCOL_VERSION
+            },
+            HostMessage::Displays { displays: vec![] },
+            HostMessage::Keymap {
+                keymap: KEYMAP.into()
+            },
+        ],
+        "after the version it is written in, and after the desktop"
+    );
+}
+
+/// Standing in for the real thing, which is some 40 kilobytes of
+/// `xkb_keymap { ... }`. What crosses is text and nothing here compiles it.
+const KEYMAP: &str = "xkb_keymap { /* the compositor's */ };";

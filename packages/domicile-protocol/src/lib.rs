@@ -250,6 +250,34 @@ pub enum HostMessage {
     /// out on, which is the honest answer from a host that never asked for any.
     Displays { displays: Vec<DisplayInfo> },
 
+    /// The keymap the compositor compiled, in `XKB_KEYMAP_FORMAT_TEXT_V1` —
+    /// the same text `wl_keyboard.keymap` hands a Wayland client.
+    ///
+    /// **This one is read by the browser process and never reaches the page.**
+    /// The chrome's engine decodes a key with a `KeyboardLayoutEngine` of its
+    /// own, and off ChromeOS nothing ever sets that engine a keymap: the two
+    /// setters that would are `#[cfg(IS_CHROMEOS)]`, and the third —
+    /// `SetCurrentLayoutFromBuffer`, which is not gated — has exactly one
+    /// caller upstream, the Wayland ozone platform handling this same event.
+    /// A DRM/Ozone browser therefore holds a null `xkb_state`, logs
+    /// `No current XKB state` at every keypress, and answers every printable
+    /// key with an unidentified `DomKey` and a positional US-QWERTY keycode.
+    /// So a user typing into the shell gets no character at all, whatever
+    /// `xkb_layout` they configured.
+    ///
+    /// The compositor is where the keymap is, because the keymap is what it
+    /// hands its clients: the shell and the windows on it read one layout
+    /// rather than each reading `input.keyboard` for itself. That is why the
+    /// compiled text crosses rather than the `XkbConfig` behind it — a browser
+    /// handed the config would be a second reading of it, with nothing
+    /// anywhere comparing the two answers.
+    ///
+    /// A fact and not a stream, like [`HostMessage::Displays`]: it rides with
+    /// the handshake, so a page that reloads — a new control channel, and a
+    /// browser process whose engine may have been handed nothing yet — is told
+    /// again rather than having had to be listening.
+    Keymap { keymap: String },
+
     /// Who holds the keyboard now: an app, or the chrome itself (`None`).
     ///
     /// The chrome asks for focus with `focus_app`, but it is not the only

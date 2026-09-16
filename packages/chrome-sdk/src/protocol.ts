@@ -197,6 +197,24 @@ const appCursorSchema = z.looseObject({
   type: z.literal("app_cursor"),
 });
 
+// The keymap the compositor compiled, in `XKB_KEYMAP_FORMAT_TEXT_V1` — the
+// same text `wl_keyboard.keymap` hands a client.
+//
+// Nothing in a page reads it, and nothing should: what it is for is the
+// browser process, whose own `KeyboardLayoutEngine` decodes every key the
+// desktop is typed with and, off ChromeOS, is never given a keymap by anything
+// else. It is here because these schemas are the compositor's wire rather than
+// the page's surface — see the note at the top of this file — and
+// `wire-fixture.test.ts` requires them to read every line Rust writes.
+//
+// Non-empty rather than merely a string: an empty keymap compiles to nothing
+// and what follows from it is a keyboard that types nothing, which is the
+// failure this message exists to end.
+const keymapSchema = z.looseObject({
+  keymap: z.string().min(1),
+  type: z.literal("keymap"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -210,6 +228,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appClosedSchema,
   appCursorSchema,
   displaysSchema,
+  keymapSchema,
   focusChangedSchema,
   focusRequestedSchema,
   shortcutMessageSchema,
@@ -234,6 +253,7 @@ export type AppResizedMessage = z.infer<typeof appResizedSchema>;
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
+export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;

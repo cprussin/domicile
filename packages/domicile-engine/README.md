@@ -84,7 +84,18 @@ a new message.
 `set_device_pixel_ratio`, `grab_shortcut`, `key`, `pointer_motion`,
 `pointer_leave`, `pointer_button`, `pointer_axis`. Inbound: `welcome`,
 `app_appeared`, `app_titled`, `app_resized`, `app_closed`, `app_cursor`,
-`shortcut`, `modifiers`, `focus_changed`, `displays`.
+`shortcut`, `modifiers`, `focus_changed`, `displays`, `keymap`.
+
+`keymap` is the one inbound message that stops in the browser process. It
+carries the keymap the compositor compiled from `input.keyboard`, in the text
+`wl_keyboard.keymap` hands a client, and what wants it is this process's own
+`KeyboardLayoutEngine` — which off ChromeOS nothing else ever gives one, so
+without it every printable key decodes to `DomKey::UNIDENTIFIED` and a shell
+is a page nobody can type into. `components/domicile/browser/keyboard_layout.h`
+is the whole of why, and it is not relayed to the page: the compositor has
+already resolved the modifiers against this keymap, so a document holding 40
+kilobytes of xkb has nothing to do with it. Adding a message therefore costs
+four places *or one*, depending on which side of the browser it stops on.
 
 `grab_shortcut` is the one member that goes no further than the browser
 process. It used to be relayed to the compositor, which held the claims and

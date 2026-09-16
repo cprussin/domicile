@@ -27,9 +27,10 @@ pub fn parse_chrome(line: &str) -> Result<ChromeMessage, serde_json::Error> {
 /// A single chrome connection: owns a [`Host`] and drives the handshake.
 ///
 /// Feed inbound lines to [`ingest`](Session::ingest); it returns any messages
-/// to send back to the chrome — the handshake `Welcome`, and the `Displays`
-/// describing the desktop that follows it. App lifecycle events originate on
-/// the Wayland side via [`Session::host_mut`].
+/// to send back to the chrome — the handshake `Welcome`, the `Displays`
+/// describing the desktop that follows it, and the `Keymap` after that where
+/// something has set one. App lifecycle events originate on the Wayland side
+/// via [`Session::host_mut`].
 #[derive(Debug, Default)]
 pub struct Session {
     host: Host,
@@ -94,12 +95,22 @@ pub fn apply_chrome_message(
                 // other way to learn what it is laying out against, and one
                 // that reloads has to be told again — so it cannot be a change
                 // the chrome might have missed.
-                vec![
+                //
+                // And the keymap behind it, for the same reason and one layer
+                // lower: the browser process reading this socket decodes every
+                // key the desktop is typed with, and off ChromeOS nothing but
+                // this ever gives its layout engine a keymap. Absent from a
+                // host nobody has handed one, which is every `Session` with no
+                // compositor behind it.
+                [
                     HostMessage::Welcome {
                         protocol_version: agreed,
                     },
                     host.describe_desktop(),
                 ]
+                .into_iter()
+                .chain(host.describe_keymap())
+                .collect()
             }
             // Answered, and with *this* build's version rather than nothing.
             // The chrome has a version-mismatch failure it can report — it
