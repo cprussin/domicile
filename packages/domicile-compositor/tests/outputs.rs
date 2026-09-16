@@ -111,9 +111,16 @@ const TWO_DISPLAYS: &str = r#"{
 /// `2560x1440` because a mode is physical pixels: the logical size times the
 /// scale. A compositor reporting the logical size in the mode would have every
 /// scaling toolkit draw at a quarter of the area.
+///
+/// `0mHz` and `0x0mm` are the protocol's own word for "this output has no such
+/// number", and both are the truth here: nothing tells this compositor how
+/// many millimetres a configured display is or how fast a panel it never
+/// opened refreshes. A screen described as `300x200mm` at `60000mHz` — which
+/// is what was advertised, for every display and whatever the config said — is
+/// a DPI a client can compute and act on, and it is wrong.
 const AS_TOLD: [&str; 2] = [
-    "left@0,0@1=1920x1080(current preferred)",
-    "right@1920,0@2=5120x2880(current preferred)",
+    "left@0,0@1=1920x1080(current preferred) 0mHz 0x0mm",
+    "right@1920,0@2=5120x2880(current preferred) 0mHz 0x0mm",
 ];
 
 /// A two-display config becomes two `wl_output`s, each described in full.

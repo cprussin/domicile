@@ -192,11 +192,13 @@ how to get one:
 ### The physical size is already in the snapshot
 
 `DisplaySnapshot::physical_size()` is millimeters, which is exactly what
-`wl_output` wants and what the compositor fabricates as `size: (300, 200)`
-(`main.rs:3211`). The display-list event under [Outputs](#outputs) does **not**
-carry it yet: that event is built in the browser process out of
-`display::Display`, which has no physical size, and the snapshot that does is a
-layer below. `DrmScreen`'s `DisplayPhysicalSizeMm` is the seam waiting for it.
+`wl_output` wants and what the compositor no longer has: it advertises
+`size: (0, 0)`, the protocol's own word for an output with no such number,
+because inventing `(300, 200)` gave every client a DPI to be wrong about. The
+display-list event under [Outputs](#outputs) does **not** carry the real one
+yet: that event is built in the browser process out of `display::Display`,
+which has no physical size, and the snapshot that does is a layer below.
+`DrmScreen`'s `DisplayPhysicalSizeMm` is the seam waiting for it.
 
 ## The session and DRM master
 
@@ -418,9 +420,9 @@ What does assume one fixed output:
 | Assumption | Where |
 |---|---|
 | a window-following desktop has exactly one output | `main.rs:2077, 2103, 2125, 2133` — four `.expect("a window-following desktop advertises its one output")` |
-| refresh is a constant | `const ADVERTISED_REFRESH_MHZ: i32 = 60_000` (`main.rs:4045`), also the frame budget at `main.rs:1672` |
+| refresh is unknown | `const UNKNOWN_REFRESH_MHZ: i32 = 0` — said rather than invented; the latency run's own frame budget keeps a `SPIKE_REFRESH_MHZ` of its own |
 | scale is an integer | `Scale::Integer(...)` at `main.rs:2135` and `main.rs:3184` |
-| physical size is a fiction | `size: (300, 200)` on every output (`main.rs:3160`) — harmless nested, a wrong DPI on a real panel |
+| physical size is unknown | `size: (0, 0)` on every output — said rather than invented; a real panel's millimetres are still the engine's to carry |
 | the display list comes from the config, or from Domicile's own window | `screens.rs` has exactly two constructors, `described` and `following_the_window` |
 
 The last row **was** the real gap and is now closed for the list itself. On a
@@ -434,9 +436,10 @@ browser watches displays only under `--ozone-platform=drm`.
 
 What the event does **not** carry is physical size and refresh. `display::Display`
 has neither, and the `DisplaySnapshot` that does is a layer below where the
-browser process reads the list from -- so `wl_output` still fabricates
-`(300, 200)` and `ADVERTISED_REFRESH_MHZ`. That is the last row of the table
-above and its own checklist item.
+browser process reads the list from -- so `wl_output` advertises zero for both
+and says it knows neither, which is where that stands until a field on
+`DomicileDisplay` and the mojom struct behind it carries them. That is the last
+row of the table above and its own checklist item.
 
 ## The window has to be the size of the CRTC
 
@@ -929,7 +932,7 @@ Step 2 — the embedder (the port):
       EDID, so a monitor unplugged and plugged back in keeps the output its
       clients are on rather than being handed a new one
 - [ ] real physical size and refresh on `wl_output`, from the snapshot rather
-      than `(300, 200)` and `ADVERTISED_REFRESH_MHZ`
+      than the zeroes that say the compositor knows neither
 
 ## Open questions
 

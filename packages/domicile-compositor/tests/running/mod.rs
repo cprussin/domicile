@@ -817,6 +817,12 @@ impl Client {
     /// mode is the logical size in physical pixels, and the flags are two
     /// separate promises — `current` and `preferred` — each of which a
     /// one-line mutation can drop on its own.
+    ///
+    /// The millimetres and the refresh rate are read for the same reason and
+    /// one more: they are the two fields the compositor cannot know, and a
+    /// reading blind to them cannot tell a compositor that says so from one
+    /// that invents a panel — which is what this one did, for every screen and
+    /// always the same one.
     pub fn screens(&self) -> Vec<String> {
         let trace = self.trace();
         let mut found: Vec<(String, Screen)> = Vec::new();
@@ -878,6 +884,8 @@ struct Screen {
     position: Option<String>,
     scale: Option<String>,
     mode: Option<String>,
+    physical: Option<String>,
+    refresh: Option<String>,
 }
 
 impl Screen {
@@ -893,10 +901,14 @@ impl Screen {
         let args: Vec<&str> = rest.trim_end_matches(')').split(", ").collect();
         match (name, args.as_slice()) {
             ("name", [called]) => self.name = Some(called.trim_matches('"').to_string()),
-            ("geometry", [x, y, ..]) => self.position = Some(format!("{x},{y}")),
+            ("geometry", [x, y, millimeters_wide, millimeters_high, ..]) => {
+                self.position = Some(format!("{x},{y}"));
+                self.physical = Some(format!("{millimeters_wide}x{millimeters_high}"));
+            }
             ("scale", [factor]) => self.scale = Some((*factor).to_string()),
-            ("mode", [flags, width, height, ..]) => {
+            ("mode", [flags, width, height, refresh]) => {
                 self.mode = Some(format!("{width}x{height}({})", Self::flags(flags)));
+                self.refresh = Some((*refresh).to_string());
             }
             _ => {}
         }
@@ -943,13 +955,25 @@ impl Screen {
     /// naming the absent field beats comparing against a string with a hole
     /// in it.
     fn said(&self) -> String {
-        match (&self.name, &self.position, &self.scale, &self.mode) {
-            (Some(name), Some(position), Some(scale), Some(mode)) => {
-                format!("{name}@{position}@{scale}={mode}")
-            }
+        match (
+            &self.name,
+            &self.position,
+            &self.scale,
+            &self.mode,
+            &self.physical,
+            &self.refresh,
+        ) {
+            (
+                Some(name),
+                Some(position),
+                Some(scale),
+                Some(mode),
+                Some(physical),
+                Some(refresh),
+            ) => format!("{name}@{position}@{scale}={mode} {refresh}mHz {physical}mm"),
             _ => format!(
-                "an output described only as name={:?} position={:?} scale={:?} mode={:?}",
-                self.name, self.position, self.scale, self.mode
+                "an output described only as name={:?} position={:?} scale={:?} mode={:?} physical={:?} refresh={:?}",
+                self.name, self.position, self.scale, self.mode, self.physical, self.refresh
             ),
         }
     }
