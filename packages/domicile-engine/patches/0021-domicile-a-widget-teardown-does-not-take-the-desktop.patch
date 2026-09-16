@@ -1,0 +1,173 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 16 Sep 2026 00:33:31 +0000
+Subject: [PATCH] domicile: a widget teardown does not take the desktop with it
+
+The first run on a tty with a connected panel modeset a 2880x1920@120
+connector, logged `the DRM thread confirmed the modeset`, and SEGV'd in the
+browser process about 200ms later with nothing ever drawn:
+
+    Received signal 11 SEGV_MAPERR 000000000088
+    #4 views::DesktopWindowTreeHostPlatform::CloseNow()
+    #5 views::DesktopNativeWidgetAura::~DesktopNativeWidgetAura()
+    #7 views::Widget::~Widget()
+    #8 (anonymous namespace)::StatusIconWidget::~StatusIconWidget()
+    #9 base::TaskAnnotator::RunTaskImpl()
+
+`0x88` is `compositor()` being null: `WindowTreeHost::compositor()` is
+`compositor_.get()`, and `CloseNow()` calls
+`SetExternalBeginFrameControllerClientFactory` on it one line past a guard that
+null-checks `platform_window()` and not the compositor.
+
+FRAME 8 IS NOT THE STATUS ICON, and reading it as one would have fixed the
+wrong thing. `StatusIconButtonLinux::OnSetDelegate` refuses to build its widget
+at all unless `GetPlatformRuntimeProperties().supports_system_tray_windowing`
+is true; that field defaults to false, only `ozone_platform_x11.cc` sets it,
+and `OzonePlatformDrm::GetPlatformRuntimeProperties` returns a
+`host_properties_` that never touches it -- a grep of the whole tree finds
+three references and none of them is ozone/drm. So on this platform
+`StatusIconWidget` is unconstructable and the guard did fire.
+
+The name is an ICF fold. `use_icf` is on for the shipped engine (`is_posix &&
+!is_debug`, and it is neither a sanitizer nor a coverage build), and the
+deleting destructor of a `views::Widget` subclass that adds no members is
+`call views::Widget::~Widget; jmp operator delete` -- identical instructions
+AND identical relocations to every other such subclass's, and to
+`views::Widget`'s own, because the operand of `operator delete` is the same
+`sizeof`. Compiled at this pin's clang, two such destructors come out
+byte-for-byte equal with no vptr store between them. `symbol_level = 0` leaves
+`.symtab` in place, so `base/third_party/symbolize` names the folded address
+from whichever symbol it meets; on a Linux build `StatusIconWidget` is the only
+anonymous-namespace `views::Widget` subclass there is to meet. What frame 8
+actually establishes is "a `views::Widget` was deleted from a posted task", and
+nothing narrower.
+
+WHAT THE HALF-BUILT HOST REALLY IS. `compositor_` is only ever cleared in two
+places: `~WindowTreeHostPlatform`, where the object is dying, and
+`DesktopWindowTreeHostPlatform::CloseNow`. So frame 4 is the SECOND `CloseNow`
+on that host, and the first one left the wreckage. `CloseNow` ends
+`DestroyCompositor(); platform_window()->Close();` -- and
+`DrmWindowHost::Close()` was `{}`, alone among Ozone platforms.
+`PlatformWindow::Close()` is a request whose completion is
+`PlatformWindowDelegate::OnClosed()`: `HeadlessWindow::Close()` is nothing
+else, `WaylandWindow::Close()` is nothing else, `X11Window::Close()` tears the
+X window down and then makes it. `OnClosed()` is what runs
+`SetPlatformWindow(nullptr)` and `OnHostClosed()`, which is what destroys the
+host and the `DesktopNativeWidgetAura` and clears `Widget::native_widget_`.
+None of that happened, so the widget's own destruction later found a live
+native widget over a live platform window over a destroyed compositor.
+Upstream states the invariant one line into `~DesktopWindowTreeHostPlatform`:
+
+    DCHECK(!platform_window()) << "The host must be closed before destroying it.";
+
+`dcheck_always_on = false` in the shipped build, so the assertion that would
+have named this is compiled out and what is left is the SEGV.
+
+WHY HERE AND NOT THE THREE OTHER PLACES IT COULD GO.
+
+Not "stop the widget being created": the widget is not the status icon, the
+guard that would have refused one is already firing, and every widget a views
+browser makes hits this. A fix at the widget removes one crash and leaves the
+platform unable to close any window.
+
+Not "make the software-compositing refusal stop producing a half-built host":
+the refusal has nothing to do with it. `force_software_compositing` does not
+skip the compositor -- `DesktopWindowTreeHostPlatform::Init` calls
+`CreateCompositor(params.force_software_compositing || type == TYPE_TOOLTIP,
+...)` unconditionally, and `WindowTreeHost::CreateCompositor` always
+`make_unique`s one. ozone/drm's refusal is one `LOG(ERROR)` in
+`GbmSurfaceFactory::CreateCanvasForWidget`, in the GPU process, at the display
+compositor; it cannot reach `WindowTreeHost::compositor_`.
+
+Not "null-check `compositor()` in `CloseNow()`": that would make the second
+`CloseNow` survive a state that must not exist. The host would still never be
+destroyed, the `DrmWindowHost` would stay registered in `DrmWindowHostManager`,
+`GpuDestroyWindow` would never be sent, and the window would go on owning a
+CRTC nobody can close. The crash is the only report there is that the close
+never happened, and quieting it would cost the report.
+
+So: the same shape as `0015`'s seven `NOTREACHED()`s and `0018`'s empty
+`SetFullscreen` -- a stub whose ChromeOS premise is that ash never routes a
+window through `DesktopWindowTreeHostPlatform`, reached by a views browser on a
+tty, where the premise is false. `delegate_->OnClosed()` is the last statement,
+because it destroys this object from inside the call.
+
+NO UNIT TEST, and that is not an omission dressed up. The fix is one call with
+no decision in it: there is no branch, no state and no injectable I/O, and
+`DrmWindowHost` takes six collaborators before it can be constructed. A gtest
+here would assert that a line of code is the line of code it is. What can be
+checked cheaply is that the line is there at all, which is the same species of
+one-line-that-must-exist as the missing `GetElementType` override, and it is
+guarded the same way: `scripts/test-a-closed-drm-window-says-so.sh` reads the
+series, requires the empty upstream body to be REMOVED, and requires the body
+that replaces it to call `delegate_->OnClosed()` -- collected from that hunk
+rather than from anywhere in the file, so the call cannot be satisfied by some
+other method. No Chromium tree, so it runs in the shell group on every push.
+
+Guidelines audited: docs/guidelines/TESTING.md, docs/guidelines/ERRORS.md,
+docs/guidelines/CONTROL_FLOW.md, docs/guidelines/FUNCTIONS.md,
+docs/guidelines/FILES.md. Change complies.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0121wHJhHTqCKfhKTwP4R2t1
+---
+ ui/ozone/platform/drm/host/drm_window_host.cc | 45 ++++++++++++++++++-
+ 1 file changed, 44 insertions(+), 1 deletion(-)
+
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
+index f55dc09465218..831fe37f026c2 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host.cc
+@@ -77,7 +77,50 @@ void DrmWindowHost::Hide() {
+   visible_ = false;
+ }
+ 
+-void DrmWindowHost::Close() {}
++void DrmWindowHost::Close() {
++  // Upstream is an empty body, on the same premise as the NOTREACHED()s below:
++  // ash never routes a window through DesktopWindowTreeHostPlatform, so on
++  // ChromeOS nothing ever calls this. A views browser on a tty does, and an
++  // empty body there is a SEGV in the browser process.
++  //
++  // Close() IS A REQUEST, NOT A RELEASE. Its completion is
++  // PlatformWindowDelegate::OnClosed(), and every other Ozone platform says so
++  // by making that call the last thing it does: HeadlessWindow::Close() is
++  // nothing else, WaylandWindow::Close() is nothing else, X11Window::Close()
++  // tears the X window down and then makes it.
++  //
++  // DesktopWindowTreeHostPlatform::CloseNow() destroys the compositor and then
++  // calls platform_window()->Close(), and OnClosed() is what nulls the platform
++  // window and finishes the teardown. With no OnClosed() the host is left
++  // half-destroyed -- compositor gone, platform window alive, native widget
++  // alive -- and the next thing to touch it dereferences the destroyed
++  // compositor, which is the crash a 2880x1920 panel produced 200ms after the
++  // modeset it had just confirmed:
++  //
++  //   #4 views::DesktopWindowTreeHostPlatform::CloseNow()
++  //   #5 views::DesktopNativeWidgetAura::~DesktopNativeWidgetAura()
++  //   #7 views::Widget::~Widget()
++  //
++  // That frame 4 is the SECOND CloseNow() on the same host. The first ran from
++  // the task Close() posts, passed its `if (!platform_window()) return;` guard,
++  // and ended in DestroyCompositor() plus this no-op. The guard cannot catch
++  // the second, because the platform window this was supposed to close is still
++  // there -- so compositor() is null one line past the guard that was meant to
++  // stop exactly this.
++  //
++  // Upstream states the invariant an empty body breaks, one line into
++  // ~DesktopWindowTreeHostPlatform:
++  //
++  //   DCHECK(!platform_window()) << "The host must be closed before destroying it.";
++  //
++  // The shipped engine sets dcheck_always_on = false, so the assertion that
++  // would have named this is compiled out and what is left is the SEGV.
++  //
++  // The delegate destroys this object from inside the call -- OnClosed() ends
++  // in SetPlatformWindow(nullptr) -- so nothing may touch a member afterward.
++  // That is why it is the last statement here, as it is on Wayland and X11.
++  delegate_->OnClosed();
++}
+ 
+ bool DrmWindowHost::IsVisible() const {
+   return visible_;

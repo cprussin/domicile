@@ -386,9 +386,10 @@ decides whether an item is waiting or workable.
    `A-DESKTOP-ON-A-TTY.md` carries the numbers. Treat the costing as a floor:
    the last audit read five edits and the compiler found eight.
 
-   **Step 2's code is done -- four more patches -- and not one line of it has
-   run on a screen.** Keep those two halves together; the rest of this item is
-   the first and the paragraph after it is the second.
+   **Step 2's code is done -- four more patches -- and of it only the modeset
+   has run on a screen**, in the run recorded below. Keep those two halves
+   together; the rest of this item is the first and the paragraph after it is
+   the second.
 
    `0017` is the VT switcher: `VT_SETMODE` in `VT_PROCESS` mode, a signal per
    edge, and the handshake as a free function with eleven tests, because a
@@ -436,8 +437,9 @@ decides whether an item is waiting or workable.
    "switch away, switch back, keyboard dead", which is worse than the group
    membership they replace.
 
-   **None of those four has been exercised.** They rest on source read at the
-   pin, unit tests (`DrmFullscreenTest`, `DrmMasterTest`, `DrmInputDevicesTest`,
+   **None of those four had been exercised when they landed**, and the run
+   below has since exercised none of them either. They rest on source read at
+   the pin, unit tests (`DrmFullscreenTest`, `DrmMasterTest`, `DrmInputDevicesTest`,
    `DrmVtSwitcherTest`), and an engine build that compiles and links. `crux`
    still cannot answer the other half -- vkms has the connected connector and
    refuses an EGL window surface, `renderD128` renders and belongs to the card
@@ -446,6 +448,37 @@ decides whether an item is waiting or workable.
    wrong there in a way no test here can see. The black screen `0018` fixes is
    exactly that shape: three prior patches were correct and the desktop was
    still dark.
+
+   **The first run on a tty with a connected panel has now happened, and the
+   modeset worked.** `the DRM thread confirmed the modeset` on a 2880x1920@120
+   connector -- `0016` doing what it was written to do, on hardware, for the
+   first time. Nothing drew, because the browser process SEGV'd about 200ms
+   later, and `0021` is that crash. `0017`, `0018`, `0019` and `0020` are still
+   unexercised: the run ended before anything could ask them anything.
+
+   `DrmWindowHost::Close()` was `{}` -- upstream's, not the fork's, and the
+   only Ozone platform whose `Close()` does not end in
+   `PlatformWindowDelegate::OnClosed()`. That call is what completes a close:
+   it nulls the platform window and destroys the host. Without it
+   `DesktopWindowTreeHostPlatform::CloseNow()` destroys the compositor, asks
+   the platform window to close, and is told nothing -- so the host survives
+   half-destroyed, and the widget's own destruction later dereferences the
+   compositor that is already gone. **The same species as `0015` and `0018`: a
+   stub whose premise is that ash never routes a window through
+   `DesktopWindowTreeHostPlatform`, reached by a views browser on a tty.** It
+   is one call with no decision in it, so what guards it is
+   `scripts/test-a-closed-drm-window-says-so.sh` reading the series, not a
+   gtest.
+
+   The crash trace named `StatusIconWidget`, and **that is an ICF fold rather
+   than the widget**: the deleting destructor of any `views::Widget` subclass
+   that adds no members folds with `views::Widget`'s own, `symbol_level = 0`
+   leaves the symbolizer naming the folded address from whichever symbol it
+   meets, and on a Linux build that class is the only anonymous-namespace
+   `views::Widget` subclass there is to meet. It cannot have been the status
+   icon: `supports_system_tray_windowing` is false on ozone/drm and
+   `StatusIconButtonLinux` refuses to build its widget without it. Read a
+   folded frame as a fact about the *group*, not the name.
 
    What is left of step 2 after a screen lights: **real physical size and
    refresh on `wl_output`**, which today are zero -- the protocol's own word
