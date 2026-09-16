@@ -50,9 +50,33 @@ class DrmMaster {
 
   ~DrmMaster();
 
-  // Gains a card. `fd` must be a `dup` of the descriptor handed to the GPU
-  // process, taken before the move that hands it over; a fresh `open` would be
-  // a different `struct drm_file` and would not be master at all.
+  // Gains a card AND TAKES MASTER ON IT. `fd` must be a `dup` of the
+  // descriptor handed to the GPU process, taken before the move that hands it
+  // over; a fresh `open` would be a different `struct drm_file` and would not
+  // be master at all.
+  //
+  // THE TAKE IS HERE BECAUSE THERE IS NOWHERE ELSE IT COULD BE, and its
+  // absence is why a desktop drew nothing until the user had been to another
+  // console and back. The browser's `open` takes master only if the card was
+  // free (`drm_master_open` -> `drm_new_set_master`), and nothing ever checked:
+  // `DrmWrapper::has_master_` is initialized `true` and
+  // `DrmDisplayHostManager::display_externally_controlled_` `false`, so both
+  // processes assert ownership that neither asked the kernel for. On ChromeOS
+  // ash closes that gap -- `DisplayConfigurator::TakeControl` runs at startup
+  // -- and this fork has no `DisplayConfigurator`, so the only `drmSetMaster`
+  // in the tree sat behind `DrmVtSwitcher`'s take arm. A GPU process that is
+  // not master gets `EACCES` from the first atomic commit, which is a screen
+  // that stays dark while every log line says the displays are connected.
+  //
+  // A card arrives when the browser hands it to the GPU process, which is
+  // before anything can commit on it, and the ask is idempotent -- the kernel
+  // answers 0 for a file that is already the current master -- so a machine
+  // where the `open` did take master pays one ioctl and no behavior.
+  //
+  // A CARD THAT ARRIVES ON SOMEBODY ELSE'S CONSOLE IS RECORDED AND NOT TAKEN.
+  // A display plugged in while this session is in the background would
+  // otherwise be mastered by a desktop nobody can see; the take on the way
+  // back asks for every card held, including that one.
   void Add(const base::FilePath& device, base::ScopedFD fd);
 
   // Loses one, closing the descriptor with it. `device` is keyed the way
@@ -79,6 +103,13 @@ class DrmMaster {
 
   DrmMasterCall set_master_;
   DrmMasterCall drop_master_;
+
+  // Whether the display belongs to this console, which is what decides
+  // whether a card gained now is one to take master on. It follows the
+  // INTENTION rather than the kernel: a drop that the kernel refused has still
+  // handed the console over -- logind does not ask -- and a take that failed is
+  // a display this console is owed and has to keep asking for.
+  bool display_is_ours_ = true;
 
   // Ordered, so that a failure is reported against the same card every time.
   std::map<base::FilePath, base::ScopedFD> cards_;
