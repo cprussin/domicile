@@ -1,0 +1,225 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 16 Sep 2026 05:44:16 +0000
+Subject: [PATCH] domicile: logind owns the console, and Ctrl+Alt+F<n> asks it
+ to switch
+
+On a real panel, on a real tty, `Ctrl+Alt+F<n>` did nothing at all. The log
+said `VT switching is on`, and it was: patch `0017` had the half that ANSWERS
+a switch and nothing anywhere had the half that STARTS one. Both halves are
+this patch, and the reason the missing one went unnoticed is that on every
+machine without logind the kernel starts the switch for you.
+
+`TakeControl` IS WHAT TURNS THE KERNEL'S OWN CHORD OFF, and patch `0020` calls
+it because no ACL covers a keyboard. logind's `session_prepare_vt` then runs
+`KDSKBMODE K_OFF`, `KDSETMODE KD_GRAPHICS` and `VT_SETMODE VT_PROCESS` on the
+session's VT -- the three error strings are adjacent in any shipped
+`systemd-logind` and were read out of one rather than assumed. `K_OFF` is the
+console's chord handling, off. From the moment the desktop takes its input,
+the only process that can start a console switch is the desktop. That is why
+every Wayland compositor binds the chord itself, and it is what nothing here
+did.
+
+AND THE ANSWERING HALF WAS FIGHTING logind FOR THE VT. `0017`'s own
+`VT_SETMODE` did not conflict with logind's -- the kernel overwrites `vt_mode`
+and `vt_pid` with no `EBUSY`, so it SILENTLY TOOK IT. logind then never got
+its release signal, never paused the devices it had lent this session, and
+never handed the console over. A handshake installed on a VT logind already
+owns is not a second opinion; it is a theft, and the only correct number of VT
+ioctls in this fork is zero. `scripts/test-logind-owns-the-console.sh` counts
+them, in the patches by net and in `src/` outright.
+
+WHERE THE CHORD IS BOUND, WHICH IS THE DECISION THE REST FOLLOWS FROM. The
+compositor advertises a `wl_seat` and reads no evdev node at all -- it pulls
+neither libinput nor a session backend, by a decision `domicile-compositor`'s
+`Cargo.toml` writes down -- so its seat is a promise to clients, not a source
+of keys. Every key in the desktop arrives on the browser's evdev thread and is
+dispatched by `EventFactoryEvdev`, which is a `PlatformEventSource`. So the
+browser is the only process holding a keyboard descriptor and
+`WillProcessEvent` is the first thing a key reaches: ahead of every dispatcher
+and of any nested run loop's override, which is what makes a console switch
+impossible to starve. It does not consume the press, and does not need to --
+logind revokes the devices a moment later, so the shell sees a key that never
+comes back up either way.
+
+THE DISPLAY FOLLOWS THE SESSION, NOT A SIGNAL. `Active` on the session object,
+read with a `Get` on every `PropertiesChanged` rather than parsed out of one:
+logind names a changed property in the dictionary or in the invalidated list
+depending on the property, and the table below ignores an answer that changes
+nothing, so asking is both shorter and total. `Seat.SwitchTo(u)` on
+`/org/freedesktop/login1/seat/self` is the other direction -- the seat and not
+the session, because a chord names a console and `Session.Activate` cannot
+express "whoever is on VT 3". logind's shipped polkit policy gives
+`org.freedesktop.login1.chvt` `allow_active yes`, so none of it authenticates.
+
+WHAT THIS DOES NOT REACH, said plainly because the ordering is the one thing a
+reader will ask about. The card is NOT one of logind's devices -- the browser
+opens `/dev/dri/card*` itself, through the ACL `70-uaccess.rules` does put on
+it -- so no `PauseDevice` arrives for it and there is nothing to hold open
+with `PauseDeviceComplete` the way libseat holds a DRM device. `Active` is a
+statement about a switch logind has already made, so the drop is late by one
+D-Bus round trip. Late is not wedged: the kernel restores its own framebuffer
+when the last master goes, so the console is stale for that width rather than
+black, and logind hands the VT over whatever this end does. Taking the card
+from logind too is what closes it, and `A-DESKTOP-ON-A-TTY.md` carries it.
+
+THE TABLE SURVIVED AND ITS IOCTLS DID NOT. `StepVtSwitch` is still a free
+function for the reason `ModesetParamsFromSnapshots` is one, and it still
+answers an asynchronous delegate against an edge that may have moved. Three
+things changed. `kRefuseSwitch` is gone: there is nothing to refuse, so a drop
+that fails is a log line and a display to take again rather than a console the
+kernel is told to keep. `kConsoleWithoutDisplay` became
+`kForegroundWithoutDisplay` and kept its job, which is that the way out stays
+open. And the two RACES are new, because `Active` can flip twice before the
+delegate answers once -- a console switched away from and straight back to
+does exactly that. A take that lands after the session left gives the display
+straight back, which is the two-owner bug arriving by the last door it had; a
+drop that lands after the session returned asks for it again.
+
+Fifteen cases, five of them over the chord. `Ctrl+Alt+Shift+F1` is somebody
+else's shortcut and matching on the whole modifier mask rather than on two
+bits is what keeps it theirs.
+
+`0019` is untouched and is what makes any of this work: the drop still goes
+through `DrmMaster`, in the process that opened the card, because the kernel
+forbids it anywhere else. The comment there that promised a `VT_RELDISP(0)`
+is the only line of it that had to change.
+
+Guidelines audited: docs/guidelines/TESTING.md, docs/guidelines/ERRORS.md,
+docs/guidelines/CONTROL_FLOW.md, docs/guidelines/FUNCTIONS.md,
+docs/guidelines/FILES.md. Change complies. The D-Bus wiring itself has no
+unit test, for the reason `DrmLogindInput` has none: it is glue over
+`dbus::ObjectProxy` with no logic of its own, and every decision it makes is
+in `StepVtSwitch` or `VtForChord`, which are tested. Nothing here compiles in
+this container.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0121wHJhHTqCKfhKTwP4R2t1
+---
+ ui/ozone/platform/drm/BUILD.gn                | 14 +++++++
+ .../drm/host/drm_display_host_manager.cc      |  7 ++--
+ ui/ozone/platform/drm/ozone_platform_drm.cc   | 42 +++++++------------
+ 3 files changed, 33 insertions(+), 30 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 98850d6d0aaa6..303195bef42a6 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -288,6 +288,20 @@ source_set("gbm_unittests") {
+     "//third_party/libdrm",
+     "//ui/base/ime",
+     "//ui/display:test_support",
++
++    # `DrmVtSwitcherTest` includes `drm_vt_switcher.h`, which names
++    # `scoped_refptr<dbus::Bus>` and so includes `dbus/bus.h` -- and that pulls
++    # the system `<dbus/dbus.h>`, whose include directory only the `//dbus`
++    # target supplies. `:gbm` having the edge is not enough: an include
++    # directory reaches the translation units of the target that names it, and
++    # the test is its own target. `drm_logind_input.h` includes the same header
++    # and did not need this, because no test includes THAT one.
++    "//dbus",
++
++    # `DrmVtSwitcherTest` builds the `KeyEvent` it asks `VtForChord` about, so
++    # this target includes a `//ui/events` header directly rather than only
++    # through `:gbm`, and `gn check` wants the edge said out loud.
++    "//ui/events",
+     "//ui/gfx",
+     "//ui/gfx/linux:drm",
+     "//ui/gfx/linux:gbm",
+diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
+index b3f4d821cec9a..4322dd7442994 100644
+--- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
++++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
+@@ -695,9 +695,10 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
+   // arriving by the other door.
+   //
+   // A DROP THAT FAILS MAKES THE WHOLE RELINQUISH FAIL, even though the GPU
+-  // succeeded. `DrmVtSwitcher` answers `VT_RELDISP(0)` to that and the switch
+-  // is refused, which is correct: the console would otherwise go to the kernel
+-  // while Chromium is still scanning out on it.
++  // succeeded. There is no refusing the switch -- logind owns the handshake
++  // and has handed the console over already -- so what this buys is that
++  // `DrmVtSwitcher` records a display it does not have and asks for it again
++  // on the way back, rather than believing a drop that did not happen.
+   const bool relinquished = status && drm_master_.Drop();
+ 
+   if (relinquished) {
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index aabe8e62c1ed0..80b99eff1789d 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -4,7 +4,6 @@
+ 
+ #include "ui/ozone/platform/drm/ozone_platform_drm.h"
+ 
+-#include <fcntl.h>
+ #include <gbm.h>
+ #include <stdlib.h>
+ #include <xf86drm.h>
+@@ -15,12 +14,9 @@
+ #include "base/check.h"
+ #include "base/command_line.h"
+ #include "base/containers/flat_set.h"
+-#include "base/files/scoped_file.h"
+ #include "base/functional/bind.h"
+-#include "base/logging.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/notreached.h"
+-#include "base/posix/eintr_wrapper.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/threading/platform_thread.h"
+ #include "build/build_config.h"
+@@ -117,30 +113,20 @@ class OzonePlatformDrm : public OzonePlatform {
+                                             static_cast<DrmScreen*>(screen));
+     modeset_->Start();
+ 
+-    // And the console this is running on, so Ctrl+Alt+F<n> hands the display
+-    // back instead of leaving two owners on one CRTC.
++    // And the console this is running on, which logind owns. `TakeControl`
++    // -- which the evdev opener calls, and must, because no ACL covers a
++    // keyboard -- already put this VT in `K_OFF`, `KD_GRAPHICS` and
++    // `VT_PROCESS` with logind's own signals. So there is no handshake to
++    // install here and taking one would steal logind's: what this does instead
++    // is bind `Ctrl+Alt+F<n>` on the event source the evdev thread feeds and
++    // follow the session's `Active` property. See `domicile/drm_vt_switcher.h`.
+     //
+-    // `/dev/tty` and not `/dev/tty0`: the first is this process's controlling
+-    // terminal, which is the VT the desktop was started from, and the second
+-    // is whichever VT is active at the moment it is opened. Asking the wrong
+-    // one to raise signals at us is how a handshake ends up installed on
+-    // somebody else's console.
+-    //
+-    // FAILING IS ORDINARY AND IS NOT FATAL. A desktop nested in a Wayland
+-    // session has no VT, a service started without a controlling terminal has
+-    // no `/dev/tty`, and neither should stop a browser from starting. What is
+-    // lost is only the ability to switch away, which is what the log line
+-    // says.
+-    base::ScopedFD tty(HANDLE_EINTR(open("/dev/tty", O_RDWR | O_CLOEXEC)));
+-    if (!tty.is_valid()) {
+-      VPLOG(1) << "no controlling terminal, so no VT switching";
+-      return;
+-    }
+-    auto switcher = std::make_unique<DrmVtSwitcher>(
+-        CreateNativeDisplayDelegate(), std::move(tty));
+-    if (switcher->Start()) {
+-      vt_switcher_ = std::move(switcher);
+-    }
++    // `event_factory_ozone_` because that is the `PlatformEventSource` every
++    // key in the desktop is dispatched through, and it exists by now:
++    // `InitializeUI` builds it and a screen is not initialized before a
++    // platform is.
++    vt_switcher_ = std::make_unique<DrmVtSwitcher>(
++        CreateNativeDisplayDelegate(), event_factory_ozone_.get());
+   }
+ 
+   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
+@@ -438,6 +424,8 @@ class OzonePlatformDrm : public OzonePlatform {
+   // after display_manager_ so it is destroyed before the manager whose
+   // delegate it holds.
+   std::unique_ptr<DrmModeset> modeset_;
++  // And after event_factory_ozone_ for the same kind of reason: it observes
++  // that event source for as long as it lives.
+   std::unique_ptr<DrmVtSwitcher> vt_switcher_;
+   PlatformRuntimeProperties host_properties_;
+ 

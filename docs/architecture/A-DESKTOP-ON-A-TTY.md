@@ -261,7 +261,8 @@ What a normal Linux tty has to supply:
 |---|---|---|
 | open `/dev/dri/card0` | `open()` in the browser process | a logind session on an active VT gives the session user an ACL on the card node, so the bare `open` works unprivileged. Root also works. No code change |
 | become DRM master | implicit: the first opener of an unused card is master | nothing, *if* nothing else holds it |
-| drop master on VT-away, retake on VT-back | `DisplayConfigurator`, on a ChromeOS signal | does not exist. `TakeDisplayControl` / `RelinquishDisplayControl` are the right seam and are already plumbed to the DRM thread; the caller is what is missing |
+| drop master on VT-away, retake on VT-back | `DisplayConfigurator`, on a ChromeOS signal | **done**, patch `0022`. `TakeDisplayControl` / `RelinquishDisplayControl` were already plumbed to the DRM thread; what is new is a caller, driven by the logind session's `Active` property |
+| start a VT switch | the kernel, on `Ctrl+Alt+F<n>` | **does not exist once `TakeControl` has run**: logind's `session_prepare_vt` sets `KDSKBMODE K_OFF`, which is the kernel's chord handling. The desktop binds the chord and calls `Seat.SwitchTo(u)`. **done**, patch `0022` |
 | open `/dev/input/event*` | `Session.TakeDevice(major, minor)` on the evdev thread | **done**, patch `0020`. The bare `open()` is `Permission denied`: logind ACLs a card node and not a keyboard (see [Input](#input)) |
 | revoke input on VT-away | logind, on `PauseDevice` | **done** by the same seam: logind `EVIOCREVOKE`s the fd it passed when it pauses the device |
 
@@ -530,7 +531,10 @@ proof a modeset landed.
   master, and the Smithay side of Domicile does not change.
 - **VT handling is Domicile's, at the `TakeDisplayControl` /
   `RelinquishDisplayControl` seam.** Both are already plumbed from the host
-  process to the DRM thread; only the caller is missing.
+  process to the DRM thread; only the caller is missing. What owns the VT
+  itself is logind, not Domicile — `TakeControl` takes it — so the caller
+  follows the session's `Active` property rather than a VT signal, and starts
+  a switch by asking logind for one.
 - **Prove step 1 in CI before designing step 2.** The cheapest fact available
   is whether the patched tree configures and links, and it costs one engine-job
   slot.
@@ -839,6 +843,52 @@ Step 2 — the embedder (the port):
       the wrong process, and the kernel says so in two functions — see
       [the open questions](#open-questions). The handshake stands; what is
       under it moves to the browser
+
+      **And then the handshake did not stand either.** Patch `0022` removes
+      every VT ioctl in this paragraph. Read it as the history it is: the
+      table of orderings survived, the `VT_SETMODE` under it did not
+- [x] stop fighting logind for the VT, and bind the chord that starts a switch
+      — patch `0022`. `TakeControl` (patch `0020`, and not optional: no ACL
+      covers a keyboard) runs logind's `session_prepare_vt`, which sets
+      `KDSKBMODE K_OFF`, `KDSETMODE KD_GRAPHICS` and `VT_SETMODE VT_PROCESS`
+      on the session's VT. Two things follow and `0017` had neither right.
+
+      **`K_OFF` is the kernel's own `Ctrl+Alt+F<n>`, off.** From the moment
+      the desktop takes its input, the only process that can start a console
+      switch is the desktop — which is why every Wayland compositor binds the
+      chord itself. Nothing here did, so on real hardware the chord did
+      nothing at all while the log said `VT switching is on`.
+
+      **A second `VT_SETMODE` is a theft, not a conflict.** The kernel
+      overwrites `vt_mode` and `vt_pid` with no `EBUSY`, so `0017`'s handshake
+      silently took logind's: logind never got its release signal, never
+      paused the devices it had lent the session, and never handed the console
+      over.
+
+      So: `Seat.SwitchTo(u)` on `/org/freedesktop/login1/seat/self` out, the
+      session's `Active` property in, and zero VT ioctls in the fork —
+      `scripts/test-logind-owns-the-console.sh` counts them. The chord is read
+      in `PlatformEventObserver::WillProcessEvent` on `EventFactoryEvdev`,
+      because the browser is the only process holding a keyboard descriptor:
+      the compositor advertises a `wl_seat` to its clients and pulls neither
+      libinput nor a session backend.
+
+      **The drop is one D-Bus round trip late, and that is a real gap.** The
+      card is not one of logind's devices — the browser `open`s it, through
+      the ACL `70-uaccess.rules` does put on a card node — so no `PauseDevice`
+      arrives for it and there is nothing to hold the switch open with
+      `PauseDeviceComplete`, the way libseat holds a DRM device. `Active` is a
+      statement about a switch logind has already made. Late is not wedged:
+      the kernel restores its own framebuffer when the last master goes, so
+      the console is stale for that width rather than black. Taking the card
+      from logind too is what closes it, and is the open item below
+- [ ] take the card from logind as well, so the drop happens before the
+      console changes hands rather than one D-Bus round trip after. Today
+      `DrmDisplayHostManager::OpenDrmDevice` `open`s it and `DrmMaster` keeps
+      the browser's `dup`; taking it through `Session.TakeDevice` instead
+      would bring `PauseDevice` / `ResumeDevice` for the card with it, and
+      logind holds a switch open until every `PauseDeviceComplete` is in —
+      which is exactly how libseat and wlroots get the ordering right
 - [x] do the drop and the retake in the process that opened the card -- patch
       `0019`. `DrmMaster` holds a `dup` of every card `DrmDisplayHostManager`
       hands the GPU process, keyed by the sysfs path a removal carries, and
@@ -851,9 +901,9 @@ Step 2 — the embedder (the port):
       planes while this process still holds master, and only then does
       `GpuRelinquishedDisplayControl` drop. A take is the mirror -- master
       first, and the GPU is not asked at all if it failed. A drop that fails
-      fails the whole relinquish even when the GPU half succeeded, because the
-      VT switcher's refusal is the thing that keeps the console off a display
-      Chromium is still scanning out on.
+      fails the whole relinquish even when the GPU half succeeded, so that
+      the switcher records a display it does not have and asks for it again on
+      the way back rather than believing a drop that did not happen.
 
       **The syscall moves; the GPU's `has_master()` stays honest**, and the
       difference between those two is a live GPU process.
@@ -1066,8 +1116,12 @@ Step 2 — the embedder (the port):
   of the primary card fd in the browser before handing it over, and do
   `drmDropMaster`/`drmSetMaster` on that. A `dup` shares the one `struct
   drm_file`, so the drop takes effect for the GPU's copy as well, and the
-  caller's tgid is the recorded one, so the check passes. Patch `0017`'s
-  handshake is right; its seam is one process out.
+  caller's tgid is the recorded one, so the check passes.
+
+  *And the handshake above it was wrong too*, which this did not see because
+  a refused switch and a stolen one look the same from here. Patch `0022`
+  replaced it: logind owns the VT, and the drop hangs off the session's
+  `Active` rather than off a signal this process asked the kernel for.
 
   *Done,* patch `0019` — `DrmMaster` and the ordering the checklist item above
   records.

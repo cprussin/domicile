@@ -5,188 +5,259 @@
 #include "ui/ozone/platform/drm/domicile/drm_vt_switcher.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/event.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
+#include "ui/events/types/event_type.h"
 
 namespace ui {
 namespace {
 
-// The happy path, in the order `console_ioctl(2)` documents: the kernel asks,
-// the delegate answers, and only then does the switch get its acknowledgement.
-TEST(DrmVtSwitcherTest, AReleaseDropsTheDisplayBeforeItAllowsTheSwitch) {
-  const VtStep asked =
-      StepVtSwitch(VtState::kOwned, VtEvent::kReleaseRequested, false);
-  EXPECT_EQ(asked.action, VtAction::kRelinquishDisplay);
-  EXPECT_EQ(asked.state, VtState::kReleasing);
+KeyEvent Pressed(KeyboardCode key, int flags) {
+  return KeyEvent(EventType::kKeyPressed, key, flags);
+}
+
+constexpr int kChord = EF_CONTROL_DOWN | EF_ALT_DOWN;
+
+// The whole of what a user does: one chord per console, and the number on the
+// key is the number of the console. `Seat.SwitchTo` takes that number, so
+// there is nothing between this and logind.
+TEST(DrmVtSwitcherTest, EveryFunctionKeyNamesItsOwnConsole) {
+  for (uint32_t vt = 1; vt <= 12; vt++) {
+    const KeyboardCode key = static_cast<KeyboardCode>(VKEY_F1 + vt - 1);
+    const std::optional<uint32_t> named = VtForChord(Pressed(key, kChord));
+    ASSERT_TRUE(named.has_value());
+    EXPECT_EQ(*named, vt);
+  }
+}
+
+// A chord is a press. Switching on the release as well would ask logind for
+// the same console twice, and a release arriving after the switch is one this
+// session no longer has the device to see.
+TEST(DrmVtSwitcherTest, AReleaseIsNotASwitch) {
+  const KeyEvent released(EventType::kKeyReleased, VKEY_F3, kChord);
+
+  EXPECT_FALSE(VtForChord(released).has_value());
+}
+
+// Alt+F4 closes a window and Ctrl+F5 reloads a page. Both halves of the chord
+// are what makes it a console switch rather than somebody's shortcut.
+TEST(DrmVtSwitcherTest, HalfTheChordIsNotTheChord) {
+  EXPECT_FALSE(VtForChord(Pressed(VKEY_F4, EF_ALT_DOWN)).has_value());
+  EXPECT_FALSE(VtForChord(Pressed(VKEY_F5, EF_CONTROL_DOWN)).has_value());
+  EXPECT_FALSE(VtForChord(Pressed(VKEY_F2, EF_NONE)).has_value());
+}
+
+// AND MORE THAN THE CHORD IS NOT THE CHORD EITHER, which is the half that
+// would be a bug rather than a papercut: a shell that grabs Ctrl+Alt+Shift+F1
+// would find the console switching out from under it. `Ctrl+Alt+F<n>` means
+// exactly those two modifiers.
+TEST(DrmVtSwitcherTest, AnExtraModifierIsSomebodyElsesShortcut) {
+  for (const int extra : {EF_SHIFT_DOWN, EF_COMMAND_DOWN, EF_ALTGR_DOWN}) {
+    EXPECT_FALSE(VtForChord(Pressed(VKEY_F1, kChord | extra)).has_value());
+  }
+}
+
+TEST(DrmVtSwitcherTest, AKeyThatIsNotAFunctionKeyNamesNoConsole) {
+  EXPECT_FALSE(VtForChord(Pressed(VKEY_A, kChord)).has_value());
+  EXPECT_FALSE(VtForChord(Pressed(VKEY_F13, kChord)).has_value());
+  EXPECT_FALSE(VtForChord(Pressed(VKEY_DELETE, kChord)).has_value());
+}
+
+// The happy path away: logind says the session is no longer in front of the
+// user, the display goes back, and that is the whole handshake this end has.
+TEST(DrmVtSwitcherTest, ASessionGoingAwayDropsTheDisplay) {
+  const VtStep told =
+      StepVtSwitch(VtState::kForeground, VtEvent::kSessionDeactivated, false);
+  EXPECT_EQ(told.action, VtAction::kRelinquishDisplay);
+  EXPECT_EQ(told.state, VtState::kRelinquishing);
 
   const VtStep answered =
-      StepVtSwitch(asked.state, VtEvent::kRelinquishFinished, true);
-  EXPECT_EQ(answered.action, VtAction::kAllowSwitch);
-  EXPECT_EQ(answered.state, VtState::kReleased);
+      StepVtSwitch(told.state, VtEvent::kRelinquishFinished, true);
+  EXPECT_EQ(answered.action, VtAction::kNothing);
+  EXPECT_EQ(answered.state, VtState::kBackground);
 }
 
-// THE CASE THE ORDERING EXISTS FOR. `VT_RELDISP(1)` before the delegate has
-// answered would hand the console to the kernel while Chromium still holds DRM
-// master, and both would then be driving the same CRTC. The switch is refused
-// instead, which leaves the user on a working desktop rather than on a screen
-// two processes are fighting over.
-TEST(DrmVtSwitcherTest, ARelinquishThatFailsRefusesTheSwitch) {
-  const VtStep step =
-      StepVtSwitch(VtState::kReleasing, VtEvent::kRelinquishFinished, false);
-
-  EXPECT_EQ(step.action, VtAction::kRefuseSwitch);
-  EXPECT_EQ(step.state, VtState::kOwned)
-      << "a refused switch leaves the display where it was";
-}
-
-TEST(DrmVtSwitcherTest, AnAcquireTakesTheDisplayBeforeItAcknowledges) {
-  const VtStep asked =
-      StepVtSwitch(VtState::kReleased, VtEvent::kAcquireRequested, false);
-  EXPECT_EQ(asked.action, VtAction::kTakeDisplay);
-  EXPECT_EQ(asked.state, VtState::kAcquiring);
+TEST(DrmVtSwitcherTest, ASessionComingBackTakesTheDisplay) {
+  const VtStep told =
+      StepVtSwitch(VtState::kBackground, VtEvent::kSessionActivated, false);
+  EXPECT_EQ(told.action, VtAction::kTakeDisplay);
+  EXPECT_EQ(told.state, VtState::kTaking);
 
   const VtStep answered =
-      StepVtSwitch(asked.state, VtEvent::kTakeFinished, true);
-  EXPECT_EQ(answered.action, VtAction::kAckAcquire);
-  EXPECT_EQ(answered.state, VtState::kOwned);
+      StepVtSwitch(told.state, VtEvent::kTakeFinished, true);
+  EXPECT_EQ(answered.action, VtAction::kNothing);
+  EXPECT_EQ(answered.state, VtState::kForeground);
 }
 
-// An acquire cannot be refused -- by the time `acqsig` arrives the console is
-// already ours -- so a failed take still acknowledges. What it must not do is
-// pretend the display came back with it.
-TEST(DrmVtSwitcherTest, ATakeThatFailsStillAcknowledgesTheSwitch) {
-  const VtStep step =
-      StepVtSwitch(VtState::kAcquiring, VtEvent::kTakeFinished, false);
-
-  EXPECT_EQ(step.action, VtAction::kAckAcquire);
-  EXPECT_EQ(step.state, VtState::kConsoleWithoutDisplay)
-      << "the console is ours and the display is not, and saying otherwise is "
-         "what strands somebody";
+// THE DIFFERENCE BETWEEN THIS TABLE AND THE ONE IT REPLACES, in one case. A
+// switch used to be refusable: `VT_RELDISP(0)` told the kernel to leave the
+// console where it was, and a relinquish that failed said exactly that. logind
+// owns the handshake now and hands the console over on its own schedule, so
+// there is nothing to refuse -- a drop that failed leaves a display nobody can
+// paint on and a session that is in the background regardless, and the only
+// way out is the take on the way back.
+TEST(DrmVtSwitcherTest, ARelinquishCannotRefuseTheSwitch) {
+  for (const bool succeeded : {false, true}) {
+    const VtStep step = StepVtSwitch(VtState::kRelinquishing,
+                                     VtEvent::kRelinquishFinished, succeeded);
+    EXPECT_EQ(step.action, VtAction::kNothing);
+    EXPECT_EQ(step.state, VtState::kBackground);
+  }
 }
 
-// AND THE REASON THAT STATE EXISTS. With the display already lost, trying to
-// relinquish it again would fail, and a failed relinquish refuses the switch --
-// which would trap the user on a console nothing can paint. So the way out is
-// always open.
-TEST(DrmVtSwitcherTest, AConsoleWithNoDisplayLetsTheUserSwitchAwayAtOnce) {
-  const VtStep step = StepVtSwitch(VtState::kConsoleWithoutDisplay,
-                                   VtEvent::kReleaseRequested, false);
+// A take that fails must not say the display came back with the session: the
+// next thing that happens is a deactivation, and relinquishing a display we do
+// not have is a round trip that can only fail. What the state does carry is
+// that another activation should try again.
+TEST(DrmVtSwitcherTest, ATakeThatFailsLeavesTheDisplayToBeTakenAgain) {
+  const VtStep failed =
+      StepVtSwitch(VtState::kTaking, VtEvent::kTakeFinished, false);
+  EXPECT_EQ(failed.action, VtAction::kNothing);
+  EXPECT_EQ(failed.state, VtState::kForegroundWithoutDisplay);
 
-  EXPECT_EQ(step.action, VtAction::kAllowSwitch)
-      << "there is no display to give back, so nothing is owed before the "
-         "switch";
-  EXPECT_EQ(step.state, VtState::kReleased);
+  const VtStep left = StepVtSwitch(failed.state, VtEvent::kSessionDeactivated,
+                                   false);
+  EXPECT_EQ(left.action, VtAction::kNothing)
+      << "there is no display to give back, so nothing is asked for";
+  EXPECT_EQ(left.state, VtState::kBackground);
+
+  const VtStep again =
+      StepVtSwitch(failed.state, VtEvent::kSessionActivated, false);
+  EXPECT_EQ(again.action, VtAction::kTakeDisplay);
 }
 
-// The kernel sends one `relsig` per switch, but a second arriving while the
-// delegate is still thinking must not start a second relinquish -- two drops in
-// flight is two answers, and the second would acknowledge a switch the first
-// has already acknowledged.
-TEST(DrmVtSwitcherTest, ASecondReleaseWhileReleasingIsIgnored) {
-  const VtStep step =
-      StepVtSwitch(VtState::kReleasing, VtEvent::kReleaseRequested, false);
+// THE FIRST OF THE TWO RACES, AND THEY ARE REAL. A console switched away from
+// and straight back to answers `PropertiesChanged` twice before the display
+// delegate has answered once. A drop that lands after the session returned
+// leaves the desktop in front of the user with no display, so it asks for it
+// back rather than believing the state it started in.
+TEST(DrmVtSwitcherTest, ARelinquishThatLandsAfterTheSessionReturnedTakesItBack) {
+  const VtStep returned = StepVtSwitch(VtState::kRelinquishing,
+                                       VtEvent::kSessionActivated, false);
+  EXPECT_EQ(returned.action, VtAction::kNothing)
+      << "a drop is already in flight; asking for the display now would race it";
+  EXPECT_EQ(returned.state, VtState::kForeground);
 
-  EXPECT_EQ(step.action, VtAction::kNothing);
-  EXPECT_EQ(step.state, VtState::kReleasing);
+  const VtStep dropped =
+      StepVtSwitch(returned.state, VtEvent::kRelinquishFinished, true);
+  EXPECT_EQ(dropped.action, VtAction::kTakeDisplay);
+  EXPECT_EQ(dropped.state, VtState::kTaking);
 }
 
-// Asked to leave a console we do not have. Nothing is owed, and the switch is
-// allowed rather than refused: refusing would wedge whoever asked.
-TEST(DrmVtSwitcherTest, AReleaseWhileAlreadyReleasedIsAllowed) {
-  const VtStep step =
-      StepVtSwitch(VtState::kReleased, VtEvent::kReleaseRequested, false);
+// THE MIRROR, and the one that matters more: a take that lands after the
+// session left would leave this process holding DRM master on a console
+// somebody else is looking at, which is the two-owner bug the whole file
+// exists to remove.
+TEST(DrmVtSwitcherTest, ATakeThatLandsAfterTheSessionLeftGivesItStraightBack) {
+  const VtStep left =
+      StepVtSwitch(VtState::kTaking, VtEvent::kSessionDeactivated, false);
+  EXPECT_EQ(left.action, VtAction::kNothing);
+  EXPECT_EQ(left.state, VtState::kBackground);
 
-  EXPECT_EQ(step.action, VtAction::kAllowSwitch);
-  EXPECT_EQ(step.state, VtState::kReleased);
+  const VtStep taken =
+      StepVtSwitch(left.state, VtEvent::kTakeFinished, true);
+  EXPECT_EQ(taken.action, VtAction::kRelinquishDisplay);
+  EXPECT_EQ(taken.state, VtState::kRelinquishing);
+
+  const VtStep never = StepVtSwitch(left.state, VtEvent::kTakeFinished, false);
+  EXPECT_EQ(never.action, VtAction::kNothing)
+      << "a take that failed left nothing to give back";
+  EXPECT_EQ(never.state, VtState::kBackground);
 }
 
-// Told we have a console we never lost. Acknowledging is harmless and silence
-// is not: the kernel is waiting for one.
-TEST(DrmVtSwitcherTest, AnAcquireWhileAlreadyOwnedIsAcknowledged) {
-  const VtStep step =
-      StepVtSwitch(VtState::kOwned, VtEvent::kAcquireRequested, false);
+// logind emits `PropertiesChanged` for every property a session has, and this
+// end answers all of them by reading `Active` -- so the same answer arrives
+// repeatedly and only the edges may act.
+TEST(DrmVtSwitcherTest, BeingToldTheSameThingTwiceAsksForNothing) {
+  const VtStep again = StepVtSwitch(VtState::kRelinquishing,
+                                    VtEvent::kSessionDeactivated, false);
+  EXPECT_EQ(again.action, VtAction::kNothing);
+  EXPECT_EQ(again.state, VtState::kRelinquishing);
 
-  EXPECT_EQ(step.action, VtAction::kAckAcquire);
-  EXPECT_EQ(step.state, VtState::kOwned);
+  for (const VtState settled : {VtState::kForeground, VtState::kBackground}) {
+    const VtEvent same = settled == VtState::kForeground
+                             ? VtEvent::kSessionActivated
+                             : VtEvent::kSessionDeactivated;
+    const VtStep step = StepVtSwitch(settled, same, false);
+    EXPECT_EQ(step.action, VtAction::kNothing);
+    EXPECT_EQ(step.state, settled);
+  }
 }
 
-// A delegate answering a question nobody is waiting on. This is not
-// hypothetical -- a relinquish that completes after its switch was refused, or
-// after the console came back, arrives exactly here -- and acting on it would
-// acknowledge a handshake that is over.
+// A delegate answering a question nobody is waiting on. Acting on it would
+// take or drop a display on the strength of a round trip that has already been
+// superseded.
 TEST(DrmVtSwitcherTest, AnAnswerNobodyIsWaitingForChangesNothing) {
-  for (const VtState state : {VtState::kOwned, VtState::kReleased,
-                              VtState::kConsoleWithoutDisplay}) {
+  for (const VtState state :
+       {VtState::kBackground, VtState::kForegroundWithoutDisplay}) {
     const VtStep relinquished =
         StepVtSwitch(state, VtEvent::kRelinquishFinished, true);
     EXPECT_EQ(relinquished.action, VtAction::kNothing);
     EXPECT_EQ(relinquished.state, state);
+  }
 
+  for (const VtState state :
+       {VtState::kForeground, VtState::kForegroundWithoutDisplay,
+        VtState::kRelinquishing}) {
     const VtStep taken = StepVtSwitch(state, VtEvent::kTakeFinished, true);
     EXPECT_EQ(taken.action, VtAction::kNothing);
     EXPECT_EQ(taken.state, state);
   }
 }
 
-// THE POSITIVE CONTROL THIS TABLE WOULD BE WORTHLESS WITHOUT. Every state must
-// answer every event with something, because a state machine that falls
-// through to "do nothing" on an input it did not anticipate is how a console
-// stops answering the kernel and a machine needs a power cycle. This asserts
-// the table is total rather than that any particular cell is right -- the cells
-// are the tests above.
+// THE POSITIVE CONTROL THIS TABLE WOULD BE WORTHLESS WITHOUT. A state machine
+// that falls off the end of its enum on an input it did not anticipate is how
+// a desktop ends up holding DRM master forever. This asserts the table is
+// total rather than that any particular cell is right -- the cells are the
+// tests above.
 TEST(DrmVtSwitcherTest, EveryStateAnswersEveryEvent) {
   constexpr VtState kStates[] = {
-      VtState::kOwned, VtState::kReleasing, VtState::kReleased,
-      VtState::kAcquiring, VtState::kConsoleWithoutDisplay};
+      VtState::kForeground, VtState::kRelinquishing, VtState::kBackground,
+      VtState::kTaking, VtState::kForegroundWithoutDisplay};
   constexpr VtEvent kEvents[] = {
-      VtEvent::kReleaseRequested, VtEvent::kRelinquishFinished,
-      VtEvent::kAcquireRequested, VtEvent::kTakeFinished};
+      VtEvent::kSessionDeactivated, VtEvent::kRelinquishFinished,
+      VtEvent::kSessionActivated, VtEvent::kTakeFinished};
 
   for (const VtState state : kStates) {
     for (const VtEvent event : kEvents) {
       for (const bool succeeded : {false, true}) {
         const VtStep step = StepVtSwitch(state, event, succeeded);
-        // The kernel is waiting on exactly two of these, so whenever the table
-        // says a switch is in flight it must eventually produce one of them.
-        // What is asserted here is weaker and is the part that can be: the
-        // step lands in a real state rather than off the end of the enum.
         EXPECT_GE(static_cast<int>(step.state),
-                  static_cast<int>(VtState::kOwned));
+                  static_cast<int>(VtState::kForeground));
         EXPECT_LE(static_cast<int>(step.state),
-                  static_cast<int>(VtState::kConsoleWithoutDisplay));
+                  static_cast<int>(VtState::kForegroundWithoutDisplay));
       }
     }
   }
 }
 
-// NO SWITCH IS EVER LEFT UNANSWERED, walked rather than argued. From every
-// state, a release request followed by whatever the delegate says must reach
-// `kAllowSwitch` or `kRefuseSwitch` -- the two things the kernel accepts. A
-// path that reaches neither is a console waiting forever on a process that has
-// stopped talking to it, which is the failure this whole file exists to avoid.
-TEST(DrmVtSwitcherTest, EveryReleaseReachesAnAnswerForTheKernel) {
+// NO DISPLAY IS EVER HELD IN THE BACKGROUND, walked rather than argued. From
+// every state, a deactivation followed by whatever the delegate says must end
+// somewhere that is either done with the display or on its way to being: a
+// path that settles in `kForeground` is this process scanning out over
+// somebody else's console.
+TEST(DrmVtSwitcherTest, NoPathLeavesTheDisplayHeldInTheBackground) {
   constexpr VtState kStates[] = {
-      VtState::kOwned, VtState::kReleasing, VtState::kReleased,
-      VtState::kAcquiring, VtState::kConsoleWithoutDisplay};
+      VtState::kForeground, VtState::kRelinquishing, VtState::kBackground,
+      VtState::kTaking, VtState::kForegroundWithoutDisplay};
 
   for (const VtState start : kStates) {
     for (const bool delegate_says : {false, true}) {
-      const VtStep asked =
-          StepVtSwitch(start, VtEvent::kReleaseRequested, false);
-      if (asked.action == VtAction::kAllowSwitch ||
-          asked.action == VtAction::kRefuseSwitch) {
-        continue;  // Answered outright.
-      }
-      if (asked.action == VtAction::kNothing) {
-        // Only legal while an answer is already in flight, which the
-        // `kRelinquishFinished` row below then delivers.
-        ASSERT_EQ(asked.state, VtState::kReleasing)
-            << "a release was dropped in a state with nothing in flight";
-      }
-      const VtStep answered =
-          StepVtSwitch(asked.state, VtEvent::kRelinquishFinished,
-                       delegate_says);
-      EXPECT_TRUE(answered.action == VtAction::kAllowSwitch ||
-                  answered.action == VtAction::kRefuseSwitch)
-          << "a release from this state never answers the kernel";
+      const VtStep told =
+          StepVtSwitch(start, VtEvent::kSessionDeactivated, false);
+      EXPECT_NE(told.state, VtState::kForeground)
+          << "a deactivation left the session believing it is in front";
+      EXPECT_NE(told.state, VtState::kForegroundWithoutDisplay);
+
+      const VtEvent settles = told.state == VtState::kRelinquishing
+                                  ? VtEvent::kRelinquishFinished
+                                  : VtEvent::kTakeFinished;
+      const VtStep settled =
+          StepVtSwitch(told.state, settles, delegate_says);
+      EXPECT_NE(settled.state, VtState::kForeground)
+          << "the delegate's answer put the display back in the foreground";
+      EXPECT_NE(settled.state, VtState::kForegroundWithoutDisplay);
     }
   }
 }
