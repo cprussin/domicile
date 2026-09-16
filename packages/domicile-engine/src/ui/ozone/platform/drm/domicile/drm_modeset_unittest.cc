@@ -261,6 +261,10 @@ class FakeDelegate : public display::NativeDisplayDelegate {
       display::ConfigureCallback callback,
       display::ModesetFlags modeset_flags) override {
     asked_.push_back(config_requests);
+    if (inline_answer_.has_value()) {
+      std::move(callback).Run(config_requests, *inline_answer_);
+      return;
+    }
     pending_ = std::move(callback);
   }
 
@@ -269,6 +273,11 @@ class FakeDelegate : public display::NativeDisplayDelegate {
     ASSERT_TRUE(pending_) << "nothing was asked, so there is nothing to answer";
     std::move(pending_).Run({}, status);
   }
+  // An answer that comes back out of `Configure` itself, which is what
+  // `DrmDisplayHostManager::ConfigureDisplays` does for a dummy display: it
+  // reads `is_dummy()` and runs the callback with `true` without leaving the
+  // browser process.
+  void AnswersFromInsideConfigure(bool status) { inline_answer_ = status; }
   // An ask that reaches nothing: the GPU thread has no DRM device yet, so the
   // callback never comes. This is the case the first fix got wrong.
   void NeverAnswers() { pending_.Reset(); }
@@ -332,6 +341,7 @@ class FakeDelegate : public display::NativeDisplayDelegate {
   std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> snapshots_;
   std::vector<std::vector<display::DisplayConfigurationParams>> asked_;
   display::ConfigureCallback pending_;
+  std::optional<bool> inline_answer_;
 };
 
 // THE BUG THIS EXISTS FOR, and it is the one the first fix introduced. The
@@ -403,6 +413,40 @@ TEST(DrmModesetTest, ARefusedModesetDoesNotSuppressTheNextOne) {
 
   modeset.OnConfigurationChanged();
   EXPECT_EQ(fake->asks(), 2u);
+}
+
+// A YES FROM INSIDE THE BROWSER PROCESS IS NOT A CONFIRMATION EITHER, and it
+// is the one that got through. `Start()` runs at `InitScreen` time, before a
+// GPU process exists; `DrmDisplayHostManager::UpdateDisplays` therefore answers
+// with the dummy snapshots its constructor built from its own read of the
+// primary card, and `ConfigureDisplays` reads `is_dummy()` on those and runs
+// the callback with `true` without leaving the process. On the machine this was
+// found on, "the DRM thread confirmed the modeset" was logged three
+// microseconds after "configuring 2 display(s)" -- no hardware commit had
+// happened, and recording that yes is what suppresses the first REAL reading
+// when it matches. A single-card machine whose dummy reading matches its real
+// one would never modeset at all.
+TEST(DrmModesetTest, AnAnswerFromInsideTheAskIsNotAConfirmation) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
+  fake->SetSnapshots(Pointers(snapshots));
+  fake->AnswersFromInsideConfigure(true);
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+  DrmModeset modeset(std::move(owned), &screen);
+
+  modeset.Start();
+  ASSERT_EQ(fake->asks(), 1u) << "the first reading must be asked for";
+
+  // The GPU thread is up now, and it reports what the dummies already said.
+  modeset.OnConfigurationChanged();
+  EXPECT_EQ(fake->asks(), 2u)
+      << "a yes that arrived before the ask returned reached no hardware, so "
+         "the first real reading must still get through";
 }
 
 }  // namespace
