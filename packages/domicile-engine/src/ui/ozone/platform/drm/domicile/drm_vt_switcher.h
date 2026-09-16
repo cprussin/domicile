@@ -5,47 +5,66 @@
 #ifndef UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_VT_SWITCHER_H_
 #define UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_VT_SWITCHER_H_
 
-#include <memory>
+#include <stdint.h>
 
-#include "base/files/file_descriptor_watcher_posix.h"
-#include "base/files/scoped_file.h"
+#include <memory>
+#include <optional>
+#include <string>
+
+#include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "dbus/bus.h"
+#include "dbus/message.h"
+#include "dbus/object_proxy.h"
 #include "ui/display/types/native_display_delegate.h"
+#include "ui/events/event.h"
+#include "ui/events/platform/platform_event_observer.h"
+#include "ui/events/platform/platform_event_source.h"
 
 namespace ui {
 
-// What the kernel asked for, or what an asynchronous answer brought back.
+// The console this chord asks for, or nothing.
+//
+// `Ctrl+Alt+F<n>` and exactly that: both modifiers and neither more nor less,
+// on the press rather than the release. A shell is free to grab
+// `Ctrl+Alt+Shift+F1`, and finding the console switch out from under it would
+// be the kind of collision a desktop cannot explain.
+std::optional<uint32_t> VtForChord(const KeyEvent& event);
+
+// What logind said, or what an asynchronous answer brought back.
 enum class VtEvent {
-  // The kernel's `relsig`: somebody pressed Ctrl+Alt+F2 and the console is
-  // being taken away. We are asked, not told -- the switch does not happen
-  // until `VT_RELDISP`.
-  kReleaseRequested,
+  // The session's `Active` went false: somebody switched to another console
+  // and logind has already handed it over. This is a statement, not a
+  // question -- unlike the kernel's `relsig`, which this used to answer, there
+  // is nothing left to refuse.
+  kSessionDeactivated,
   // `NativeDisplayDelegate::RelinquishDisplayControl` answered.
   kRelinquishFinished,
-  // The kernel's `acqsig`: the console is ours again. This one is a statement
-  // rather than a question; the switch has already happened.
-  kAcquireRequested,
+  // The session's `Active` went true: this console is in front of the user
+  // again.
+  kSessionActivated,
   // `NativeDisplayDelegate::TakeDisplayControl` answered.
   kTakeFinished,
 };
 
-// Where the switcher is between having the console and not.
+// Where the switcher is between having the display and not.
 enum class VtState {
-  // Console and DRM master, which is the ordinary running state.
-  kOwned,
-  // A release was asked for and the delegate has not answered yet.
-  kReleasing,
-  // Somebody else has the console.
-  kReleased,
+  // In front of the user with DRM master, which is the ordinary running state.
+  kForeground,
+  // A drop was asked for and the delegate has not answered yet.
+  kRelinquishing,
+  // Somebody else's console is on the panel.
+  kBackground,
   // The console came back and the delegate has not answered yet.
-  kAcquiring,
-  // THE STATE THAT KEEPS A USER OFF A BLACK SCREEN. The console is ours and
-  // DRM master is not, because taking it back failed. Nothing will draw, so
-  // the only thing that matters here is that the next switch away is allowed
-  // immediately rather than attempted through a delegate that has already
-  // said no. Without this state that switch would be refused and the console
-  // would be stuck on a display nothing can paint.
-  kConsoleWithoutDisplay,
+  kTaking,
+  // THE STATE THAT KEEPS A USER OFF A BLACK SCREEN. The session is in front of
+  // the user and DRM master is not ours, because taking it back failed.
+  // Nothing will draw, so what this state is for is that the next activation
+  // asks again rather than believing a display it does not have -- and that
+  // the next deactivation asks for nothing, since a drop of what we do not
+  // hold is a round trip that can only fail.
+  kForegroundWithoutDisplay,
 };
 
 // What to do about it.
@@ -53,14 +72,8 @@ enum class VtAction {
   kNothing,
   // Ask the delegate to drop DRM master.
   kRelinquishDisplay,
-  // `VT_RELDISP(1)`: let the switch proceed.
-  kAllowSwitch,
-  // `VT_RELDISP(0)`: refuse it, because we still hold the display.
-  kRefuseSwitch,
   // Ask the delegate to take DRM master back.
   kTakeDisplay,
-  // `VT_RELDISP(VT_ACKACQ)`: acknowledge that we have the console.
-  kAckAcquire,
 };
 
 struct VtStep {
@@ -68,83 +81,108 @@ struct VtStep {
   VtAction action;
 };
 
-// One step of the VT handshake, as arithmetic rather than as ioctls.
+// One step of following the session, as arithmetic rather than as D-Bus.
 //
 // This is a free function for the reason `ModesetParamsFromSnapshots` is one:
-// what surrounds it -- a tty, two signals, a self-pipe and an asynchronous
-// delegate -- is wiring that only a real console exercises, while the order of
-// the handshake is where a mistake costs somebody their screen. Every decision
-// worth arguing about is in this table and every one of them has a test.
+// what surrounds it -- a bus, a session proxy and an asynchronous delegate --
+// is wiring that only a real console exercises, while the order is where a
+// mistake costs somebody their screen. Every decision worth arguing about is
+// in this table and every one of them has a test.
 //
-// TWO ORDERINGS, AND THEY ARE NOT THE SAME. `console_ioctl(2)` says a process
-// handling `relsig` releases its resources and *then* calls `VT_RELDISP` to
-// allow or refuse; a process handling `acqsig` acquires its resources and
-// *then* calls `VT_RELDISP(VT_ACKACQ)`. So release is delegate-then-ioctl and
-// acquire is also delegate-then-ioctl -- the asymmetry is that release may say
-// no and acquire may not, because on `acqsig` the switch has already happened.
+// THE TWO RACES ARE THE WHOLE REASON THIS IS A TABLE. `Active` can flip twice
+// before the display delegate answers once -- a console switched away from and
+// straight back to does exactly that -- so an answer has to be read against
+// where the session is now rather than where it was when the question was
+// asked. A take that lands after the session left gives the display straight
+// back; a drop that lands after it returned asks for it again.
 //
-// `succeeded` is read only for the two `*Finished` events and ignored
-// otherwise.
+// `succeeded` is read only for `kTakeFinished`. A relinquish that failed
+// changes nothing here: logind owns the handshake and hands the console over
+// on its own schedule, so there is no refusing a switch, and the way out of a
+// display that would not drop is the take on the way back.
 VtStep StepVtSwitch(VtState state, VtEvent event, bool succeeded);
 
-// Hands the console back on Ctrl+Alt+F<n>, and takes it when it returns.
+// Ctrl+Alt+F<n>, and the display following the console it moves.
 //
-// The seams this drives are all ungated and all upstream:
-// `NativeDisplayDelegate::RelinquishDisplayControl` reaches
-// `DrmWrapper::DropMaster` through `DrmDisplayHostManager` and the DRM thread,
-// and `TakeDisplayControl` reaches `SetMaster` the same way. What did not
-// exist off ChromeOS is a caller, because on ChromeOS the session manager owns
-// the VT and `ash` never asks. This is that caller and nothing more.
+// LOGIND OWNS THE VT AND THIS DOES NOT ARGUE WITH IT. `TakeControl` -- which
+// `DrmLogindInput` calls, and must, because no ACL covers a keyboard -- runs
+// logind's `session_prepare_vt`: `K_OFF`, `KD_GRAPHICS` and `VT_PROCESS` with
+// logind's own signals. Two consequences, and this class exists for both.
 //
-// WHAT IT DOES NOT DO, said here because it is the first thing somebody will
-// expect of it: it does not rescue a wedged engine. `VT_SETMODE`'s handshake
-// runs in this process, so a browser that is stuck in a GPU wait never answers
-// `relsig`, never calls `VT_RELDISP`, and the kernel refuses the switch. A
-// browser that *dies* is fine without any of this -- the kernel drops DRM
-// master when the fd closes and switches anyway, because the process that
-// asked for `VT_PROCESS` is gone. So this makes a working desktop usable; it
-// is not a recovery mechanism.
+// The first is that the kernel's own `Ctrl+Alt+F<n>` is off, because `K_OFF`
+// is what turns it off. From that moment the only process that can start a
+// console switch is this one, which is why every Wayland compositor binds the
+// chord itself and calls `Seat.SwitchTo`. Until it was bound here the chord
+// did nothing at all.
 //
-// Input is the other half and is not here. Until the evdev fds are revoked on
-// the same two edges, keystrokes typed at another VT still reach this one --
-// `A-DESKTOP-ON-A-TTY.md` carries that as its own item.
-class DrmVtSwitcher {
+// The second is that a `VT_SETMODE` of our own would be a theft rather than a
+// conflict. The kernel overwrites `vt_mode` and `vt_pid` without an `EBUSY`,
+// so the handshake logind installed would simply stop being logind's: it would
+// never get its release signal, never pause the devices it lent this session,
+// and never hand the console over. That is what this used to do, and removing
+// it is half of what makes the switch work.
+//
+// WHERE THE CHORD IS READ, AND WHY IT IS HERE RATHER THAN IN THE COMPOSITOR.
+// The compositor advertises a `wl_seat` to its clients and reads no evdev node
+// at all -- it pulls neither libinput nor a session backend, by a decision its
+// `Cargo.toml` records -- so every key in the desktop arrives through this
+// process's evdev thread and is dispatched by `EventFactoryEvdev`, which is a
+// `PlatformEventSource`. `WillProcessEvent` is the first thing that runs on a
+// key, ahead of every dispatcher and of any nested run loop's override, which
+// is what makes it the one place a console switch cannot be starved out of.
+//
+// THE DISPLAY FOLLOWS `Active`, AND NOT A SIGNAL OF OURS. The card is not one
+// of logind's devices -- the browser opens `/dev/dri/card*` itself, through
+// the ACL `70-uaccess.rules` does put on it -- so no `PauseDevice` ever
+// arrives for it and there is nothing to answer with `PauseDeviceComplete`.
+// What is left is the session's own `Active` property, which is a statement
+// about a switch logind has already made. So the drop is late by the width of
+// one D-Bus round trip, and the console is stale for that long rather than
+// black: the kernel restores its own framebuffer when the last master goes.
+// Taking the card from logind too is what would close that gap, and
+// `A-DESKTOP-ON-A-TTY.md` carries it as its own item.
+class DrmVtSwitcher : public PlatformEventObserver {
  public:
-  // `delegate` must outlive this. `tty` is an open fd on the console this
-  // process is running on -- `/dev/tty` of the session, not `/dev/tty0`, which
-  // is whichever VT is active rather than ours.
+  // `events` must outlive this, and does: `OzonePlatformDrm` builds the event
+  // factory in `InitializeUI` and this in `InitScreen`, so this is destroyed
+  // first. Everything else is asynchronous and starts here.
   DrmVtSwitcher(std::unique_ptr<display::NativeDisplayDelegate> delegate,
-                base::ScopedFD tty);
+                PlatformEventSource* events);
 
   DrmVtSwitcher(const DrmVtSwitcher&) = delete;
   DrmVtSwitcher& operator=(const DrmVtSwitcher&) = delete;
 
-  // Restores `VT_AUTO`, so a console this process was handling is left in the
-  // mode it was found in. Skipping this would leave the VT expecting a
-  // handshake from a process that is exiting.
-  ~DrmVtSwitcher();
+  ~DrmVtSwitcher() override;
 
-  // Installs the signal handlers and puts the tty in `VT_PROCESS`. Returns
-  // false and changes nothing if either fails, because a half-installed
-  // handshake is worse than none: the kernel would wait for an acknowledgement
-  // nothing sends.
-  bool Start();
-
-  VtState state_for_testing() const { return state_; }
+  // PlatformEventObserver:
+  void WillProcessEvent(const PlatformEvent& event) override;
+  void DidProcessEvent(const PlatformEvent& event) override;
 
  private:
+  // logind answered `GetSessionByPID`; from here on there is a session to
+  // follow.
+  void OnSessionFound(dbus::Response* response);
+  // Every property of the session, because `Active` is the only one worth
+  // reading and reading it is cheaper than deciding whether this message
+  // carried it -- logind may name a changed property in either the dictionary
+  // or the invalidated list.
+  void OnPropertiesChanged(dbus::Signal* signal);
+  void OnSubscribed(const std::string& interface,
+                    const std::string& signal,
+                    bool connected);
+  void ReadActive();
+  void OnActive(dbus::Response* response);
+
   // One event, and whatever the table says to do about it.
   void Handle(VtEvent event, bool succeeded);
   void Perform(VtAction action);
-  // Reads the byte the signal handler wrote and turns it into an event. A
-  // signal handler may do almost nothing, so it writes and this reads.
-  void OnSignalPipeReadable();
 
   std::unique_ptr<display::NativeDisplayDelegate> delegate_;
-  base::ScopedFD tty_;
-  std::unique_ptr<base::FileDescriptorWatcher::Controller> watch_;
-  VtState state_ = VtState::kOwned;
-  bool installed_ = false;
+  raw_ptr<PlatformEventSource> events_;
+  scoped_refptr<dbus::Bus> bus_;
+  raw_ptr<dbus::ObjectProxy> session_ = nullptr;
+  raw_ptr<dbus::ObjectProxy> seat_ = nullptr;
+  VtState state_ = VtState::kForeground;
   base::WeakPtrFactory<DrmVtSwitcher> weak_factory_{this};
 };
 

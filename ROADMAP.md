@@ -391,10 +391,9 @@ decides whether an item is waiting or workable.
    together; the rest of this item is the first and the paragraph after it is
    the second.
 
-   `0017` is the VT switcher: `VT_SETMODE` in `VT_PROCESS` mode, a signal per
-   edge, and the handshake as a free function with eleven tests, because a
-   relinquish that fails has to refuse the switch rather than hand the console
-   to the kernel while Chromium is still scanning out.
+   `0017` was the VT switcher: `VT_SETMODE` in `VT_PROCESS` mode, a signal
+   per edge, and the handshake as a free function. `0022` took every VT ioctl
+   in it back out -- see below.
 
    `0018` is **the black screen, and it was never the display list.**
    `ScreenManager::FindWindowAt` compares a window's rectangle to
@@ -438,7 +437,21 @@ decides whether an item is waiting or workable.
    "switch away, switch back, keyboard dead", which is worse than the group
    membership they replace.
 
-   **None of those four had been exercised when they landed**, and the run
+   `0022` is **logind owning the console, and the chord that starts a switch.**
+   `TakeControl` runs logind's `session_prepare_vt`, so the session's VT is
+   already `K_OFF`, `KD_GRAPHICS` and `VT_PROCESS` before the first key
+   arrives. `K_OFF` is the kernel's own `Ctrl+Alt+F<n>`, off -- so on real
+   hardware the chord did nothing at all while the log said `VT switching is
+   on` -- and a second `VT_SETMODE` does not conflict with logind's, it
+   silently takes it, leaving logind waiting for a release signal that never
+   comes. So the fork has no VT ioctl now: the chord is read in
+   `PlatformEventObserver::WillProcessEvent` on `EventFactoryEvdev` (the
+   browser holds every keyboard descriptor; the compositor advertises a
+   `wl_seat` and reads no evdev node), it calls `Seat.SwitchTo(u)`, and the
+   display follows the session's `Active` property. `0017`'s table of
+   orderings survived it; the ioctls under it did not.
+
+   **None of those five had been exercised when they landed**, and the run
    below has since exercised none of them either. They rest on source read at
    the pin, unit tests (`DrmFullscreenTest`, `DrmMasterTest`, `DrmInputDevicesTest`,
    `DrmVtSwitcherTest`), and an engine build that compiles and links. `crux`
@@ -498,7 +511,7 @@ decides whether an item is waiting or workable.
    the only thing calling it. What guards it now is
    `scripts/test-the-fullscreen-flag-is-honoured-once.sh`, reading the series:
    the DRM window must answer a fullscreen request with new bounds, and the
-   series must add no second toggle to startup. `0017`, `0019` and `0020`
+   series must add no second toggle to startup. `0019`, `0020` and `0022`
    remain unexercised.
 
    What is left of step 2 after a screen lights: a **`drm` arm in
@@ -506,8 +519,11 @@ decides whether an item is waiting or workable.
    so a machine with no `WAYLAND_DISPLAY` gets a tty rather than a refusal,
    which is auto-detection only and blocks nothing because `OZONE=drm`
    overrides outright; and **taking the card node from logind too**, which is
-   how wlroots does VT switching and would supersede `0019`'s `dup` and remove
-   the browser's own `open()` of the card.
+   how wlroots does VT switching and would supersede `0019`'s `dup`, remove
+   the browser's own `open()` of the card, and close the one gap `0022` leaves:
+   with no `PauseDevice` for the card there is nothing to hold a switch open
+   with `PauseDeviceComplete`, so the drop trails the console change by a
+   D-Bus round trip.
 
 2. **What the engine ships that a desktop never runs.** Chrome carries a tab
    strip, a New Tab page, a settings UI, sign-in and sync. A desktop can reach
