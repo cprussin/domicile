@@ -47,6 +47,11 @@ pub enum Stalled {
         awaited: String,
         check: String,
     },
+    /// A stop was asked for before the desktop was up. There is nothing to
+    /// check, because nothing went wrong: what was asked for is what
+    /// happened, and the sentence says how far the run had got.
+    #[error("stopped before {awaited} turned up.")]
+    Stopped { awaited: String },
     /// Everything is still running and the thing still has not happened.
     #[error("{awaited} has not turned up after {seconds}s.\n{check}")]
     Waited {
@@ -59,19 +64,35 @@ pub enum Stalled {
 /// Wait for one milestone, or say why the desktop is not coming up.
 ///
 /// `observed` is asked whether the thing has happened, `exited` whether any
-/// component has stopped, and `tick` waits a moment and answers how long the
-/// wait has been going. All three are the caller's so that a thirty-second
-/// patience is four calls in a test — and so that what "the thing has
-/// happened" means stays with the milestone rather than being fixed here.
+/// component has stopped, `stopped` whether a stop has been asked for, and
+/// `tick` waits a moment and answers how long the wait has been going. All
+/// four are the caller's so that a thirty-second patience is four calls in a
+/// test — and so that what "the thing has happened" means stays with the
+/// milestone rather than being fixed here.
 ///
 /// `exited` is asked first, and before the clock: a component that is gone is
 /// the answer to every question after it, and asking it first is what turns
 /// thirty seconds of silence followed by a sentence about a socket into a
 /// sentence about the process that died.
+///
+/// `stopped` IS ASKED BEFORE `observed`, AND A RUN THAT IGNORED IT COULD NOT
+/// BE STOPPED AT ALL. A `SIGINT` or a `SIGTERM` that arrives while a
+/// milestone is outstanding used to be noticed only once the desktop was up —
+/// [`crate::supervise::Running::until_one_exits`] was the one reader of the
+/// flag — so a Ctrl-C during startup did nothing for the whole of the
+/// patience. Whatever sends that signal sends a `SIGKILL` after it, and the
+/// launcher does its entire teardown in `Running::drop`: a launcher killed
+/// before that runs leaves the engine alive on the tty holding logind's
+/// session control, every keyboard and mouse logind handed it, and the
+/// console in `K_OFF` and `KD_GRAPHICS`. Nothing takes any of that back
+/// afterwards, because nothing is left that could, and the machine has no way
+/// in. Reaching the milestone is not a reason to carry on either: the next
+/// thing a reached milestone does is start another component.
 pub fn reach(
     milestone: &Milestone,
     observed: &dyn Fn() -> bool,
     exited: &mut dyn FnMut() -> Option<Exit>,
+    stopped: &dyn Fn() -> bool,
     tick: &mut dyn FnMut() -> Duration,
 ) -> Result<(), Stalled> {
     loop {
@@ -80,6 +101,11 @@ pub fn reach(
                 awaited: milestone.awaited.clone(),
                 check: milestone.check.clone(),
                 exit,
+            });
+        }
+        if stopped() {
+            return Err(Stalled::Stopped {
+                awaited: milestone.awaited.clone(),
             });
         }
         if observed() {

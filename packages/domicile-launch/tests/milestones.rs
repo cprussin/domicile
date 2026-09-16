@@ -36,7 +36,14 @@ fn all_running() -> impl FnMut() -> Option<Exit> {
 #[test]
 fn something_already_there_is_not_waited_for() {
     let mut clock = ticking();
-    reach(&broker(), &|| true, &mut all_running(), &mut clock).expect("it is there");
+    reach(
+        &broker(),
+        &|| true,
+        &mut all_running(),
+        &|| false,
+        &mut clock,
+    )
+    .expect("it is there");
     // The clock was never asked, which is what "not waited for" means.
     assert_eq!(clock(), Duration::from_secs(1));
 }
@@ -51,6 +58,7 @@ fn something_that_turns_up_while_there_is_still_time_is_reached() {
             polls.get() > 2
         },
         &mut all_running(),
+        &|| false,
         &mut ticking(),
     )
     .expect("it turned up");
@@ -58,8 +66,14 @@ fn something_that_turns_up_while_there_is_still_time_is_reached() {
 
 #[test]
 fn something_that_never_turns_up_names_itself_and_what_to_check() {
-    let stalled = reach(&broker(), &|| false, &mut all_running(), &mut ticking())
-        .expect_err("never turned up");
+    let stalled = reach(
+        &broker(),
+        &|| false,
+        &mut all_running(),
+        &|| false,
+        &mut ticking(),
+    )
+    .expect_err("never turned up");
 
     assert_eq!(
         stalled,
@@ -90,6 +104,7 @@ fn a_component_that_exits_first_is_the_answer_rather_than_the_wait() {
                 how: "exit status: 1".to_string(),
             })
         },
+        &|| false,
         &mut ticking(),
     )
     .expect_err("the engine is gone");
@@ -114,6 +129,7 @@ fn a_component_that_exits_beats_a_milestone_that_was_reached_anyway() {
                 how: "signal: 11 (SIGSEGV)".to_string(),
             })
         },
+        &|| false,
         &mut ticking(),
     )
     .expect_err("the engine is gone");
@@ -121,4 +137,38 @@ fn a_component_that_exits_beats_a_milestone_that_was_reached_anyway() {
     assert!(stalled
         .to_string()
         .starts_with("the engine exited (signal: 11 (SIGSEGV))"));
+}
+
+#[test]
+fn a_stop_asked_for_before_the_desktop_is_up_ends_the_wait() {
+    // THE MOST DANGEROUS THING THIS BINARY CAN DO IS OUTLIVE ITS OWN
+    // SUPERVISION. Only `until_one_exits` used to consult the flag, so a
+    // `SIGINT` or a `SIGTERM` that arrived while a milestone was still
+    // outstanding was ignored for the whole of the patience -- thirty seconds
+    // each, sixty for the two. Whatever sends that signal sends a `SIGKILL`
+    // after it, and a launcher killed before `Running::drop` has run leaves
+    // the engine alive on the tty holding logind's session control, every
+    // keyboard and mouse logind handed it, and the console in `K_OFF` and
+    // `KD_GRAPHICS`. Nothing then takes any of it back, because nothing is
+    // left that could: that is the machine with no way in.
+    let stalled = reach(
+        &broker(),
+        &|| false,
+        &mut all_running(),
+        &|| true,
+        &mut ticking(),
+    )
+    .expect_err("the run was stopped");
+
+    assert_eq!(
+        stalled,
+        Stalled::Stopped {
+            awaited: "the engine's broker socket at /run/domicile/broker".to_string(),
+        }
+    );
+    assert_eq!(
+        stalled.to_string(),
+        "stopped before the engine's broker socket at /run/domicile/broker \
+         turned up."
+    );
 }

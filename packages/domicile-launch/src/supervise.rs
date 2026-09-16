@@ -69,11 +69,21 @@ impl Exit {
 /// How long a component gets to put the machine down tidily before it is
 /// taken down.
 ///
-/// It is asked to stop rather than stopped because the engine has two things
-/// to hand back on its way out and both are the console: `VT_AUTO`, without
-/// which the tty stays in `VT_PROCESS`, and logind's devices, which it took
-/// with `TakeControl`. `SIGKILL` runs no destructor, so a run that only ever
-/// killed left both behind.
+/// NOT LONG ENOUGH TO MATTER FOR THE CONSOLE, AND IT DOES NOT NEED TO BE.
+/// The console is not handed back by the engine on its way out under either
+/// signal: Chromium's `SIGTERM` handler ends in
+/// `TerminateCurrentProcessImmediately`, which is `_exit`, so no destructor
+/// runs on the term path any more than on the kill path. What gives the tty
+/// back is logind, which restores `VT_AUTO`, the keyboard mode and `KD_TEXT`
+/// and revokes every device it handed out when the controller's bus name
+/// drops (`session_drop_controller`, systemd `src/login/logind-session.c`) --
+/// and a closed socket is a closed socket whether it was closed by `_exit` or
+/// by `SIGKILL`. So this grace is not racing the console.
+///
+/// It is still asked to stop rather than stopped, for the profile Chromium
+/// writes on the way out. Lengthening it would not make a tty safer; what
+/// makes a tty safe is that nothing gets orphaned while still holding the
+/// console, which is [`crate::milestones::reach`]'s business.
 const LAST_WORDS: Duration = Duration::from_secs(3);
 
 /// Children killed when the run ends, however it ends.
