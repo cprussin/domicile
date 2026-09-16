@@ -118,6 +118,12 @@ const TWO_DISPLAYS: &str = r#"{
 /// opened refreshes. A screen described as `300x200mm` at `60000mHz` — which
 /// is what was advertised, for every display and whatever the config said — is
 /// a DPI a client can compute and act on, and it is wrong.
+///
+/// A *described* desktop, which is what this config makes, keeps saying so
+/// even now that the engine's own displays carry a real panel: a config is
+/// arithmetic, not millimetres of glass. The zeros here are the evidence that
+/// the plumbing did not start filling them in for outputs that have nothing to
+/// fill them with.
 const AS_TOLD: [&str; 2] = [
     "left@0,0@1=1920x1080(current preferred) 0mHz 0x0mm",
     "right@1920,0@2=5120x2880(current preferred) 0mHz 0x0mm",

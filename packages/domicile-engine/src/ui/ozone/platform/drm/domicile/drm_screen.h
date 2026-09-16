@@ -39,9 +39,10 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot);
 
 // The snapshot's physical size, in millimeters.
 //
-// Named rather than inlined because it is the number `wl_output` wants and the
-// compositor currently fabricates as (300, 200) (`main.rs:3211`). When the
-// display-list ABI event carries it, this is where it comes from.
+// Named rather than inlined because it is the number `wl_output` wants, and it
+// is where the density `DisplayFromSnapshot` sets on the display comes from --
+// display::Display has no millimeters of its own, which is the whole reason
+// that conversion is there. See `drm_screen.cc`.
 gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot);
 
 // Every snapshot, or the displayless fallback above when there are none.

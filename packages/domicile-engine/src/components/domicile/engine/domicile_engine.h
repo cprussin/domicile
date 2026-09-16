@@ -80,9 +80,16 @@ typedef struct DomicileDmabuf {
 // there is the host's monitors, which are not this desktop's displays.
 //
 // `x`, `y`, `width` and `height` are the display's place on the browser's
-// desktop, in pixels. No physical size and no refresh yet — both are their own
-// item on docs/architecture/A-DESKTOP-ON-A-TTY.md's checklist, and a field
-// that is always the same number is not a reading.
+// desktop, in pixels.
+//
+// `physical_width_mm`, `physical_height_mm` and `refresh_mhz` are the panel
+// itself, in the units wl_output states them in, and any of the three may be
+// zero — which is that protocol's own word for a screen with no such number,
+// and what a projector, a virtual output or a connector with no readable mode
+// reports. They are a reading rather than a constant: the browser divides them
+// back out of the DisplaySnapshot's own physical size, which is the only place
+// on the machine those millimeters exist, because the engine is the process
+// holding DRM master.
 typedef struct DomicileDisplay {
   // Stable across a hotplug: ozone derives it from the EDID. The compositor
   // names its wl_output after this, so a monitor unplugged and plugged back in
@@ -92,6 +99,9 @@ typedef struct DomicileDisplay {
   int32_t y;
   int32_t width;
   int32_t height;
+  int32_t physical_width_mm;
+  int32_t physical_height_mm;
+  int32_t refresh_mhz;
 } DomicileDisplay;
 
 // What the browser has to tell the compositor. Each maps onto a Wayland request

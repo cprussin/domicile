@@ -131,10 +131,16 @@ impl Dmabuf {
 /// It comes off the same `DisplaySnapshot`s the modeset driver configures the
 /// CRTCs from, so the desktop advertised and the modes lit cannot disagree.
 ///
-/// No scale and no physical size yet: a snapshot carries a physical size the
-/// C ABI does not, and nothing on the DRM path sets a scale factor at all
-/// (`drm_screen.cc` says so where it declines to). Both are their own item on
-/// that document's checklist, and a field that is always 1 is not a reading.
+/// The millimetres and the rate are the panel's own, off the same snapshot,
+/// and either can be zero -- `wl_output`'s word for a screen with no such
+/// number. A connector reports no physical size (a projector, a virtual
+/// output) or no mode (connected but unreadable) often enough that this is an
+/// ordinary reading rather than a broken one, and the compositor advertises
+/// the zero rather than inventing something a client can divide by.
+///
+/// No scale yet: nothing on the DRM path sets a scale factor at all
+/// (`drm_screen.cc` says so where it declines to), and a field that is always
+/// 1 is not a reading. That is its own item on that document's checklist.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Display {
     /// What the engine calls this display, and what the `wl_output` is named
@@ -146,6 +152,12 @@ pub struct Display {
     pub position: (i32, i32),
     /// Its native mode, in physical pixels.
     pub size: (u32, u32),
+    /// The panel's own size, in millimetres, or `(0, 0)` for a display that
+    /// reports none.
+    pub physical_mm: (i32, i32),
+    /// The rate the CRTC took, in mHz, or zero for a display that reports
+    /// none.
+    pub refresh_mhz: i32,
 }
 
 /// What the browser has to tell the compositor, and what each already is in
@@ -212,6 +224,9 @@ pub struct Engine {
 /// Flat scalars rather than the pairs [`Display`] carries, because C has no
 /// tuples and an array of these is what crosses the ABI. Not public:
 /// [`Display`] is what a caller wants.
+///
+/// One `int64_t` and seven `int32_t`, which is 36 bytes in a struct that is
+/// 40 -- see the size test below, and the C header this mirrors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
 struct RawDisplay {
@@ -220,6 +235,9 @@ struct RawDisplay {
     y: i32,
     width: i32,
     height: i32,
+    physical_width_mm: i32,
+    physical_height_mm: i32,
+    refresh_mhz: i32,
 }
 
 /// `DomicileSpikeCapture`, exactly as the C header lays it out.
@@ -577,6 +595,8 @@ fn displays_from(records: &[RawDisplay]) -> Vec<Display> {
             id: record.id,
             position: (record.x, record.y),
             size: (as_extent(record.width), as_extent(record.height)),
+            physical_mm: (record.physical_width_mm, record.physical_height_mm),
+            refresh_mhz: record.refresh_mhz,
         })
         .collect()
 }
@@ -625,12 +645,17 @@ mod tests {
     /// The same guard as above, for the struct a display list is an array of.
     /// A field added or dropped on one side of the ABI and not the other reads
     /// every display after the first out of the middle of its neighbour.
+    ///
+    /// Spelled as a number rather than as a sum of its fields, because the
+    /// struct is no longer the sum of its fields: one `int64_t` and seven
+    /// `int32_t` is 36 bytes, and a struct aligned to its widest member rounds
+    /// that to 40. The four bytes of tail padding are as much part of the ABI
+    /// as the fields are -- both sides get them from the same rule -- and a
+    /// sum would have quietly asserted 36 and failed on a struct that is
+    /// correct.
     #[test]
-    fn a_display_is_the_one_int64_and_four_int32_the_c_header_declares() {
-        assert_eq!(
-            std::mem::size_of::<RawDisplay>(),
-            std::mem::size_of::<i64>() + 4 * std::mem::size_of::<i32>()
-        );
+    fn a_display_is_the_one_int64_and_seven_int32_the_c_header_declares() {
+        assert_eq!(std::mem::size_of::<RawDisplay>(), 40);
     }
 
     #[test]
@@ -638,6 +663,12 @@ mod tests {
         // The ABI counts a corner and an extent separately because C has no
         // tuples; the compositor pairs them because everything it lays out is
         // a pair.
+        //
+        // The second display carries zeros for the panel, which is not a
+        // second display with a bug in it: a connector that reports no
+        // millimetres is ordinary -- a projector, a virtual output -- and zero
+        // is what `wl_output` states for one. A conversion that invented a
+        // size for it would be the fiction this whole path exists to remove.
         assert_eq!(
             displays_from(&[
                 RawDisplay {
@@ -646,6 +677,9 @@ mod tests {
                     y: 0,
                     width: 2880,
                     height: 1920,
+                    physical_width_mm: 597,
+                    physical_height_mm: 336,
+                    refresh_mhz: 59_997,
                 },
                 RawDisplay {
                     id: 9,
@@ -653,6 +687,9 @@ mod tests {
                     y: 0,
                     width: 1920,
                     height: 1080,
+                    physical_width_mm: 0,
+                    physical_height_mm: 0,
+                    refresh_mhz: 0,
                 },
             ]),
             vec![
@@ -660,11 +697,15 @@ mod tests {
                     id: 7,
                     position: (0, 0),
                     size: (2880, 1920),
+                    physical_mm: (597, 336),
+                    refresh_mhz: 59_997,
                 },
                 Display {
                     id: 9,
                     position: (2880, 0),
                     size: (1920, 1080),
+                    physical_mm: (0, 0),
+                    refresh_mhz: 0,
                 },
             ]
         );

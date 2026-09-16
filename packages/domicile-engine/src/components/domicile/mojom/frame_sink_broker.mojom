@@ -51,16 +51,39 @@ interface SurfaceObserver {
 //
 // `bounds` is the display's place on the browser's desktop in DIP, which on the
 // DRM platform is the connector's native mode at its origin: nothing there sets
-// a scale factor, so DIP and pixels are the same number. No physical size and
-// no refresh, because display::Display carries neither and the snapshot they
-// come off is a layer the browser process does not reach from here -- both are
-// their own item on docs/architecture/A-DESKTOP-ON-A-TTY.md's checklist.
+// a scale factor, so DIP and pixels are the same number.
 struct Display {
   // Stable across a hotplug: ozone derives it from the EDID. The producer
   // names its output after this, so an unplugged-and-replugged monitor keeps
   // the wl_output its clients are on rather than being handed a new one.
   int64 id;
   gfx.mojom.Rect bounds;
+
+  // The panel itself, in millimeters, or an empty size for a display that
+  // reports none.
+  //
+  // Millimeters because this is what a producer puts in wl_output.geometry,
+  // and a client divides the mode by it to get a DPI. Empty is that protocol's
+  // own word for a screen with no such number -- "the physical size can be set
+  // to zero if it doesn't make sense for this output (e.g. for projectors or
+  // virtual outputs)" -- and a connector reporting no size is ordinary rather
+  // than broken, so it crosses as empty rather than as something invented on
+  // its behalf.
+  //
+  // display::Display has no such field: it carries a DPI, which is where this
+  // is divided back out of. See components/domicile/browser/display_list.cc
+  // and ui/ozone/platform/drm/domicile/drm_screen.cc, which are the two ends
+  // of that one conversion.
+  gfx.mojom.Size physical_size_mm;
+
+  // What the CRTC is running at, in mHz, or zero for a display with no mode to
+  // report.
+  //
+  // mHz because that is what wl_output.mode states, and zero for the same
+  // reason an empty physical size is empty. A client is paced by
+  // wl_surface.frame rather than by this, so a screen that does not know its
+  // rate loses nothing by saying so.
+  int32 refresh_mhz;
 };
 
 // Tells a producer what the screens are.

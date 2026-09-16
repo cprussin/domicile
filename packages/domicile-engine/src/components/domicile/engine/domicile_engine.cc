@@ -298,11 +298,15 @@ class Displays : public mojom::DisplayListObserver {
     EngineEvent event{.type = EngineEvent::Type::kDisplays};
     event.displays.reserve(displays.size());
     for (const mojom::DisplayPtr& one : displays) {
-      event.displays.push_back(EngineDisplay{.id = one->id,
-                                             .x = one->bounds.x(),
-                                             .y = one->bounds.y(),
-                                             .width = one->bounds.width(),
-                                             .height = one->bounds.height()});
+      event.displays.push_back(
+          EngineDisplay{.id = one->id,
+                        .x = one->bounds.x(),
+                        .y = one->bounds.y(),
+                        .width = one->bounds.width(),
+                        .height = one->bounds.height(),
+                        .physical_width_mm = one->physical_size_mm.width(),
+                        .physical_height_mm = one->physical_size_mm.height(),
+                        .refresh_mhz = one->refresh_mhz});
     }
     queue_->Push(event);
   }
@@ -402,18 +406,22 @@ struct DomicileEngine {
         case domicile::EngineEvent::Type::kDisplays:
           if (callbacks_.displays) {
             // Copied into the ABI's own record rather than handing over the
-            // queue's storage. The two structs are the same five fields in the
-            // same order today, and a reinterpret_cast across the seam would
-            // make that a silent requirement of both -- for a list with as
-            // many entries as the machine has monitors.
+            // queue's storage. The two structs are the same eight fields in
+            // the same order today, and a reinterpret_cast across the seam
+            // would make that a silent requirement of both -- for a list with
+            // as many entries as the machine has monitors.
             std::vector<DomicileDisplay> records;
             records.reserve(event.displays.size());
             for (const domicile::EngineDisplay& display : event.displays) {
-              records.push_back(DomicileDisplay{.id = display.id,
-                                                .x = display.x,
-                                                .y = display.y,
-                                                .width = display.width,
-                                                .height = display.height});
+              records.push_back(DomicileDisplay{
+                  .id = display.id,
+                  .x = display.x,
+                  .y = display.y,
+                  .width = display.width,
+                  .height = display.height,
+                  .physical_width_mm = display.physical_width_mm,
+                  .physical_height_mm = display.physical_height_mm,
+                  .refresh_mhz = display.refresh_mhz});
             }
             callbacks_.displays(callbacks_.user_data, records.data(),
                                 static_cast<uint32_t>(records.size()));

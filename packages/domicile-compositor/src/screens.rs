@@ -15,6 +15,26 @@ use domicile_scene::{Bounds, Point};
 
 use crate::engine::Display;
 
+/// What `wl_output` states for a screen whose physical size is not a number
+/// anybody has.
+///
+/// The protocol's own word rather than a placeholder: "the physical size can
+/// be set to zero if it doesn't make sense for this output (e.g. for
+/// projectors or virtual outputs)". A client checks it rather than dividing by
+/// it, which is the difference between one that knows it does not know and one
+/// that is confidently wrong -- and this used to be `(300, 200)` on every
+/// display, which made a 3840x2160 screen 325 DPI and a 1280x800 one 108.
+pub const UNKNOWN_PHYSICAL_MM: (i32, i32) = (0, 0);
+
+/// What `wl_output` states for a screen with no refresh rate to report, in
+/// mHz.
+///
+/// The same sentence of the protocol, for the other field: "the vertical
+/// refresh rate can be set to zero if it doesn't make sense for this output
+/// (e.g. for virtual outputs)". Nothing is lost by saying so -- a client is
+/// paced by `wl_surface.frame`, which comes off a real composite.
+pub const UNKNOWN_REFRESH_MHZ: i32 = 0;
+
 /// One `wl_output`, in the form the compositor advertises it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Advertised {
@@ -27,6 +47,18 @@ pub struct Advertised {
     /// What clients on it draw at. The `wl_output` scale, and the reason the
     /// mode is bigger than the logical size rather than equal to it.
     pub scale: i32,
+    /// The panel's own size in millimetres, or [`UNKNOWN_PHYSICAL_MM`] where
+    /// this output is not a panel at all.
+    ///
+    /// Only one of the three desktops has one. A described desktop is a
+    /// config's arithmetic and a window-following one is a window, and neither
+    /// is millimetres of glass; the engine's displays are monitors, and the
+    /// engine is the process that read them.
+    pub physical_mm: (i32, i32),
+    /// The rate the panel is running at in mHz, or [`UNKNOWN_REFRESH_MHZ`]
+    /// where nothing here has a mode to report. The same three desktops, the
+    /// same one of them that answers.
+    pub refresh_mhz: i32,
 }
 
 impl Advertised {
@@ -165,6 +197,8 @@ impl Screens {
                     name: display.name.clone(),
                     position: display.position,
                     scale: as_coordinate(display.scale),
+                    physical_mm: UNKNOWN_PHYSICAL_MM,
+                    refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 })
                 .collect(),
             size: (
@@ -182,7 +216,11 @@ impl Screens {
     /// `described` is not -- these are the user's actual monitors, and there
     /// is no Domicile window on a tty to resize them with.
     ///
-    /// Scale 1 because the engine reports none: see [`Display`].
+    /// Scale 1 because the engine reports none: see [`Display`]. The
+    /// millimetres and the rate it *does* report are carried straight through,
+    /// zeros included -- a connector with no physical size or no mode is an
+    /// ordinary reading, and [`UNKNOWN_PHYSICAL_MM`] is what the engine sends
+    /// for one.
     ///
     /// Positions are the engine's, unshifted. Ozone lays its displays out from
     /// the origin rightwards, so the desktop's corner is already (0, 0) and
@@ -195,6 +233,8 @@ impl Screens {
                 name: format!("drm-{}", display.id),
                 position: display.position,
                 scale: 1,
+                physical_mm: display.physical_mm,
+                refresh_mhz: display.refresh_mhz,
             })
             .collect();
         // `checked_add` for the reason `Advertised::bounds` gives one layer
@@ -256,6 +296,8 @@ impl Screens {
                 name: "domicile-0".to_string(),
                 position: (0, 0),
                 scale,
+                physical_mm: UNKNOWN_PHYSICAL_MM,
+                refresh_mhz: UNKNOWN_REFRESH_MHZ,
             }],
             size: logical,
         }
@@ -479,12 +521,20 @@ mod tests {
                     name: "left".into(),
                     position: (0, 0),
                     scale: 1,
+                    // A described display is a config's arithmetic rather
+                    // than millimetres of glass, and no config states a rate.
+                    // Both stay the protocol's own word for "no such number",
+                    // however much the engine has to say about a real panel.
+                    physical_mm: UNKNOWN_PHYSICAL_MM,
+                    refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
                 Advertised {
                     logical: (2560, 1440),
                     name: "right".into(),
                     position: (1920, 0),
                     scale: 2,
+                    physical_mm: UNKNOWN_PHYSICAL_MM,
+                    refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
             ]
         );
@@ -596,6 +646,8 @@ mod tests {
             name: "impossible".into(),
             position: (0, 0),
             scale: 1,
+            physical_mm: UNKNOWN_PHYSICAL_MM,
+            refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
         let panicked = std::panic::catch_unwind({
             let bogus = bogus.clone();
@@ -621,6 +673,8 @@ mod tests {
             name: "impossible".into(),
             position: (0, 0),
             scale: 1,
+            physical_mm: UNKNOWN_PHYSICAL_MM,
+            refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
         let panicked = std::panic::catch_unwind(move || squashed.described())
             .expect_err("a negative height must not be described to the chrome");
@@ -641,6 +695,8 @@ mod tests {
             name: "impossible".into(),
             position: (0, 0),
             scale: -2,
+            physical_mm: UNKNOWN_PHYSICAL_MM,
+            refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
         let panicked = std::panic::catch_unwind(move || inverted.described())
             .expect_err("a negative scale must not be described to the chrome");
@@ -772,6 +828,8 @@ mod tests {
             name: "impossible".into(),
             position: (i32::MAX - 1, 0),
             scale: 1,
+            physical_mm: UNKNOWN_PHYSICAL_MM,
+            refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
 
         let panicked = std::panic::catch_unwind(move || past_the_end.bounds())
@@ -832,11 +890,15 @@ mod tests {
                 id: 1,
                 position: (0, 0),
                 size: (2880, 1920),
+                physical_mm: (597, 336),
+                refresh_mhz: 59_997,
             },
             Display {
                 id: 2,
                 position: (2880, 0),
                 size: (1920, 1080),
+                physical_mm: (0, 0),
+                refresh_mhz: 0,
             },
         ]);
         assert_eq!(
@@ -847,12 +909,20 @@ mod tests {
                     name: "drm-1".into(),
                     position: (0, 0),
                     scale: 1,
+                    // The panel's own, carried rather than invented -- and the
+                    // second display's zeros carried just as faithfully,
+                    // because a connector that reports no millimetres and no
+                    // mode is ordinary and `wl_output` has a word for it.
+                    physical_mm: (597, 336),
+                    refresh_mhz: 59_997,
                 },
                 Advertised {
                     logical: (1920, 1080),
                     name: "drm-2".into(),
                     position: (2880, 0),
                     scale: 1,
+                    physical_mm: UNKNOWN_PHYSICAL_MM,
+                    refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
             ]
         );
@@ -867,6 +937,8 @@ mod tests {
         id: 1,
         position: (0, 0),
         size: (2880, 1920),
+        physical_mm: (597, 336),
+        refresh_mhz: 59_997,
     }];
 
     #[test]
@@ -909,6 +981,11 @@ mod tests {
                 name: "domicile-0".into(),
                 position: (0, 0),
                 scale: 2,
+                // A window is not a panel: the desktop this output describes is
+                // whatever box the host gave Domicile, which has no millimetres
+                // and no mode of its own to report.
+                physical_mm: UNKNOWN_PHYSICAL_MM,
+                refresh_mhz: UNKNOWN_REFRESH_MHZ,
             }]
         );
         assert_eq!(screens.size(), (1280, 800));

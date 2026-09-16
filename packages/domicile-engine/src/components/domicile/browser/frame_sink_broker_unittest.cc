@@ -98,10 +98,17 @@ class FakeDisplayListObserver : public mojom::DisplayListObserver {
   mojo::Receiver<mojom::DisplayListObserver> receiver_{this};
 };
 
-// A display list of one, at the origin.
+// A display list of one, at the origin, on a 597x336mm panel at a hair under
+// 60Hz.
+//
+// The panel is here rather than left at zero because the broker is a pipe and
+// what a pipe drops it drops silently: these two fields were added to the
+// mojom after `id` and `bounds`, and a fixture that never sets them would pass
+// whether or not they cross.
 std::vector<mojom::DisplayPtr> OneDisplay(int64_t id, const gfx::Size& size) {
   std::vector<mojom::DisplayPtr> displays;
-  displays.push_back(mojom::Display::New(id, gfx::Rect(size)));
+  displays.push_back(mojom::Display::New(id, gfx::Rect(size),
+                                         gfx::Size(597, 336), 59997));
   return displays;
 }
 
@@ -501,6 +508,8 @@ TEST_F(FrameSinkBrokerTest, AnObserverIsToldTheDisplaysAlreadyRead) {
   ASSERT_EQ(observer.lists_[0].size(), 1u);
   EXPECT_EQ(observer.lists_[0][0]->id, 7);
   EXPECT_EQ(observer.lists_[0][0]->bounds, gfx::Rect(2880, 1920));
+  EXPECT_EQ(observer.lists_[0][0]->physical_size_mm, gfx::Size(597, 336));
+  EXPECT_EQ(observer.lists_[0][0]->refresh_mhz, 59997);
 }
 
 TEST_F(FrameSinkBrokerTest, AnObserverHearsNothingUntilTheDisplaysAreRead) {

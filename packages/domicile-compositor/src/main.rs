@@ -3246,28 +3246,23 @@ fn advertise_output(dh: &DisplayHandle, advertised: &Advertised) -> LiveOutput {
     let output = Output::new(
         advertised.name.clone(),
         PhysicalProperties {
-            // Zero, which is `wl_output`'s own word for a screen that has no
-            // such number: "the physical size can be set to zero if it doesn't
-            // make sense for this output (e.g. for projectors or virtual
-            // outputs)". Nothing here has one. A described desktop is a
-            // config's arithmetic and a nested one is a window, neither of
-            // which is millimeters of glass; and on a tty the panel is real
-            // but its size is the *engine's* reading, because the engine holds
-            // DRM master and this process has no card node. `DomicileDisplay`
-            // carries an id, a position and a mode and nothing else, so the
-            // `physical_size()` that `drm_screen.cc` already reads off the
-            // snapshot does not cross — see A-DESKTOP-ON-A-TTY.md, "The
-            // physical size is already in the snapshot".
+            // The panel's own millimetres on a tty, and
+            // `screens::UNKNOWN_PHYSICAL_MM` — zero, which is `wl_output`'s
+            // word for a screen with no such number — everywhere else. A described desktop is a config's
+            // arithmetic and a nested one is a window, and neither is
+            // millimetres of glass; the engine's displays are monitors it read
+            // off their EDID while holding DRM master, which this process has
+            // no card node to do for itself.
             //
-            // This said `(300, 200)` on every display, whatever the config
-            // described. That is not a harmless placeholder: a toolkit divides
-            // the mode by it to get a DPI, and 300mm wide makes a 3840x2160
-            // screen 325 DPI and a 1280x800 one 108, neither of which is a
-            // fact about anything. Zero is the value the protocol tells a
-            // client to expect when there is nothing to compute from, so it is
-            // checked rather than divided by — the difference between a client
-            // that knows it does not know and one that is confidently wrong.
-            size: (0, 0).into(),
+            // Never recomputed here, and that is the point: `Advertised`
+            // carries what the display said, so the one output that has a real
+            // size gets it and the ones that do not get zero rather than a
+            // number invented on their behalf. This said `(300, 200)` on every
+            // display, whatever the config described, which made a 3840x2160
+            // screen 325 DPI and a 1280x800 one 108 — neither a fact about
+            // anything, and both something a toolkit would scale and size
+            // fonts from.
+            size: advertised.physical_mm.into(),
             subpixel: Subpixel::Unknown,
             make: "Domicile".into(),
             model: "Virtual".into(),
@@ -3283,6 +3278,12 @@ fn advertise_output(dh: &DisplayHandle, advertised: &Advertised) -> LiveOutput {
 /// Apart from creating one because a display that only changed shape keeps the
 /// `wl_output` it had — see [`Slot::Kept`], which says what destroying it
 /// instead would tell a client.
+///
+/// Not the physical size, which `Output` fixes at construction and which a
+/// kept output cannot have changed: [`Slot::Kept`] matches on the name, an
+/// engine display's name is its EDID-derived id, and the millimetres are a
+/// property of the panel that id names. An output whose name did not survive
+/// is a new one and goes through [`advertise_output`] instead.
 fn restate_output(output: &Output, advertised: &Advertised) {
     let mode = current_mode(advertised);
     output.change_current_state(
@@ -3304,7 +3305,7 @@ fn restate_output(output: &Output, advertised: &Advertised) {
 fn current_mode(advertised: &Advertised) -> OutputMode {
     OutputMode {
         size: advertised.mode().into(),
-        refresh: UNKNOWN_REFRESH_MHZ,
+        refresh: advertised.refresh_mhz,
     }
 }
 
@@ -4224,30 +4225,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// What this desktop tells clients its outputs refresh at, in mHz.
-///
-/// Zero, for the reason the physical size in [`advertise_output`] is zero and
-/// with the same protocol wording behind it: "the vertical refresh rate can be
-/// set to zero if it doesn't make sense for this output (e.g. for virtual
-/// outputs)". No backend here has a mode to report — winit's window is not a
-/// panel, the headless one has no display at all, and on a tty the rate the
-/// CRTC took is the engine's reading and the display event does not carry it.
-///
-/// Nothing is lost by saying so. The protocol tells clients not to schedule
-/// frames off this number in the first place — `wl_surface.frame` is what
-/// paces a client, and that comes from a real composite here — so a refresh
-/// that only fed a DPI-style calculation is better absent than invented.
-const UNKNOWN_REFRESH_MHZ: i32 = 0;
-
 /// What the latency run takes a display frame to be, in mHz.
 ///
 /// The divisor that turns the run's milliseconds into frames, and an
 /// assumption rather than a reading: nothing here can ask viz what its display
 /// interval is — `css_parity.cc` can, because it runs inside the browser, and
-/// reads it off `BeginFrameArgs`. Not what `wl_output` says, which is
-/// [`UNKNOWN_REFRESH_MHZ`] and deliberately says nothing: a number a client
-/// must not act on is not a number a measurement may quietly act on either,
-/// so the assumption is named here where the report that rests on it is.
+/// reads it off `BeginFrameArgs`. Not what `wl_output` says, which is the
+/// display's own rate where the engine read one and
+/// [`UNKNOWN_REFRESH_MHZ`](crate::screens::UNKNOWN_REFRESH_MHZ) where nobody
+/// did: a number a client must not act on is not a number a measurement may
+/// quietly act on either, so the assumption is named here where the report
+/// that rests on it is.
 const SPIKE_REFRESH_MHZ: i32 = 60_000;
 
 /// THROWAWAY, with the rest of the spike. Which key the latency run presses.

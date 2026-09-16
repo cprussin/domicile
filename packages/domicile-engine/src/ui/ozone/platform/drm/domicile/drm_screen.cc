@@ -21,8 +21,55 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot) {
   const display::DisplayMode* native_mode = snapshot.native_mode();
   const gfx::Size size =
       native_mode ? native_mode->size() : kDisplaylessBounds;
-  return display::Display(snapshot.display_id(),
+  // Not named `display`: that is the namespace half of this function's own
+  // names are in, and a local by that name makes `display::kInchInMm` below
+  // fail to compile.
+  display::Display screen(snapshot.display_id(),
                           gfx::Rect(snapshot.origin(), size));
+
+  // THE PANEL LEAVES HERE OR IT DOES NOT LEAVE AT ALL. This display::Display is
+  // everything the browser process ever learns about a snapshot: the display
+  // list a producer is told reaches it as display::Screen::Get()->
+  // GetAllDisplays(), which is this list, and the DisplaySnapshot itself is
+  // inside //ui/ozone/platform/drm where //content cannot see it. So a number
+  // not set below is one that does not exist anywhere the compositor can be
+  // told it from.
+  //
+  // The rate is straightforward: display_frequency() is Hz and is what every
+  // other platform's screen reports a mode with (screen_win.cc:296,
+  // screen_mac.mm:192, display_manager.cc:2469).
+  //
+  // THE MILLIMETERS LEAVE AS A DENSITY BECAUSE THERE IS NO FIELD FOR THEM.
+  // display::Display carries no physical size -- ManagedDisplayInfo does, and
+  // it is //ui/display/manager, 478 lines of ChromeOS product surface this fork
+  // deliberately does not port -- and set_pixels_per_inch is the one field
+  // whose value IS the panel's size, expressed per axis so both millimeter
+  // figures survive. components/domicile/browser/display_list.cc divides it
+  // back out by the same kInchInMm, and its test asserts this panel's numbers
+  // from the other end.
+  //
+  // Both are set on the way IN and DisplayList::UpdateDisplay copies neither,
+  // so a display the list already has keeps what it was added with. That is
+  // safe for exactly the reason the id is: display_id() is derived from the
+  // EDID, so an id the list already holds is the same panel -- and a panel's
+  // millimeters and its native mode are the two things about it that cannot
+  // change while it stays plugged in. What DOES change on a hotplug is the
+  // origin, and bounds is copied.
+  if (native_mode) {
+    screen.set_display_frequency(native_mode->refresh_rate());
+  }
+  // Zero millimeters is a connector saying it has no physical size -- a
+  // projector, a virtual output -- and a density divided out of it would be
+  // whatever the mode is over nothing. Left at display::Display's own zero,
+  // which is what "nobody said" is there too.
+  const gfx::Size millimeters = DisplayPhysicalSizeMm(snapshot);
+  if (native_mode && !millimeters.IsEmpty()) {
+    screen.set_pixels_per_inch(
+        display::kInchInMm * native_mode->size().width() / millimeters.width(),
+        display::kInchInMm * native_mode->size().height() /
+            millimeters.height());
+  }
+  return screen;
 }
 
 gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot) {

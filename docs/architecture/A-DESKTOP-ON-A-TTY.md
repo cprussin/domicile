@@ -189,16 +189,40 @@ how to get one:
 `ManagedDisplayInfo`, which is ChromeOS product surface. Domicile wants
 `DisplaySnapshot` → `display::Display` directly.
 
-### The physical size is already in the snapshot
+### The physical size is in the snapshot, and it leaves as a DPI
 
 `DisplaySnapshot::physical_size()` is millimeters, which is exactly what
-`wl_output` wants and what the compositor no longer has: it advertises
-`size: (0, 0)`, the protocol's own word for an output with no such number,
-because inventing `(300, 200)` gave every client a DPI to be wrong about. The
-display-list event under [Outputs](#outputs) does **not** carry the real one
-yet: that event is built in the browser process out of `display::Display`,
-which has no physical size, and the snapshot that does is a layer below.
-`DrmScreen`'s `DisplayPhysicalSizeMm` is the seam waiting for it.
+`wl_output` wants, and `DrmScreen`'s `DisplayPhysicalSizeMm` is where it is
+read. Getting it out of ozone is the awkward part, and the reason is one
+missing field.
+
+**`display::Display` is the whole of what the browser process learns about a
+snapshot.** The display-list event under [Outputs](#outputs) is built from
+`display::Screen::Get()->GetAllDisplays()`, which on this platform is
+`DrmScreen`'s own list; the `DisplaySnapshot` behind it lives in
+`//ui/ozone/platform/drm`, where `//content` cannot see it and where no
+dependency may point. So whatever is not set on a `display::Display` in
+`DisplayFromSnapshot` does not exist anywhere the compositor can be told it
+from.
+
+`display::Display` has a refresh rate — `set_display_frequency`, in Hz, which
+is what every other platform's screen reports a mode with. It has **no
+physical size**: the field that does is on `ManagedDisplayInfo`, which is
+`//ui/display/manager` and not ported. What it has instead is
+`set_pixels_per_inch`, per axis, whose value *is* the panel's size expressed
+as a density — so the millimeters cross as one and
+`components/domicile/browser/display_list.cc` divides them back out by the same
+`display::kInchInMm`. Both ends assert the same panel, so the pair cannot drift
+apart silently.
+
+**The one place this could go stale is closed by the id.**
+`DisplayList::UpdateDisplay` copies a fixed set of fields and neither of these
+two is in it, so a display the list already holds keeps the density and the
+rate it was *added* with. That is safe for the same reason the output name is:
+`display_id()` comes off the EDID, so an id the list already holds is the same
+panel — and a panel's millimeters and its native mode are precisely the two
+things about it that cannot change while it stays plugged in. What does change
+on a hotplug is the origin, and `bounds` *is* copied.
 
 ## The session and DRM master
 
@@ -420,9 +444,9 @@ What does assume one fixed output:
 | Assumption | Where |
 |---|---|
 | a window-following desktop has exactly one output | `main.rs:2077, 2103, 2125, 2133` — four `.expect("a window-following desktop advertises its one output")` |
-| refresh is unknown | `const UNKNOWN_REFRESH_MHZ: i32 = 0` — said rather than invented; the latency run's own frame budget keeps a `SPIKE_REFRESH_MHZ` of its own |
+| refresh is the display's, or unknown | `Advertised::refresh_mhz`, which the engine's displays carry and the other two desktops leave at `UNKNOWN_REFRESH_MHZ` — said rather than invented; the latency run's own frame budget keeps a `SPIKE_REFRESH_MHZ` of its own |
 | scale is an integer | `Scale::Integer(...)` at `main.rs:2135` and `main.rs:3184` |
-| physical size is unknown | `size: (0, 0)` on every output — said rather than invented; a real panel's millimetres are still the engine's to carry |
+| physical size is the panel's, or unknown | `Advertised::physical_mm`, off the engine's reading of the EDID, and `UNKNOWN_PHYSICAL_MM` where there is no panel — a described desktop is arithmetic and a nested one is a window |
 | the display list comes from the config, or from Domicile's own window | `screens.rs` has exactly two constructors, `described` and `following_the_window` |
 
 The last row **was** the real gap and is now closed for the list itself. On a
@@ -434,12 +458,13 @@ wins: a described desktop is the user stating their monitors and DRM does not
 overrule it, and a nested run is never sent the event at all, because the
 browser watches displays only under `--ozone-platform=drm`.
 
-What the event does **not** carry is physical size and refresh. `display::Display`
-has neither, and the `DisplaySnapshot` that does is a layer below where the
-browser process reads the list from -- so `wl_output` advertises zero for both
-and says it knows neither, which is where that stands until a field on
-`DomicileDisplay` and the mojom struct behind it carries them. That is the last
-row of the table above and its own checklist item.
+The event carries the panel too: `physical_width_mm`, `physical_height_mm` and
+`refresh_mhz` on `DomicileDisplay`, off the same snapshot, by the route
+[The physical size is in the snapshot](#the-physical-size-is-in-the-snapshot-and-it-leaves-as-a-dpi)
+describes. Any of the three may be zero, which is `wl_output`'s own word for a
+screen with no such number and what a projector or a virtual output reports --
+so the compositor advertises the reading, including when the reading is that
+there is nothing to read.
 
 ## The window has to be the size of the CRTC
 
@@ -931,8 +956,13 @@ Step 2 — the embedder (the port):
       name and the name is `drm-<display id>`, which ozone derives from the
       EDID, so a monitor unplugged and plugged back in keeps the output its
       clients are on rather than being handed a new one
-- [ ] real physical size and refresh on `wl_output`, from the snapshot rather
-      than the zeroes that say the compositor knows neither
+- [x] real physical size and refresh on `wl_output`, from the snapshot rather
+      than the zeroes that say the compositor knows neither -- fields on
+      `DomicileDisplay` and the mojom `Display` behind it, with the millimeters
+      crossing `display::Display` as the DPI they make with the mode because
+      that is the only field it has for them. A desktop with no panel -- a
+      described one, a nested one, a connector reporting no size -- still says
+      zero, because zero is what it knows
 
 ## Open questions
 
