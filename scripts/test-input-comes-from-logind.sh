@@ -132,6 +132,44 @@ else
     "OpenDeviceFd does not consult the resumed descriptor before calling TakeDevice"
 fi
 
+# AND A RE-ACQUISITION GIVES THE DEVICE BACK FIRST. On a seat with VTs logind
+# never sends the polite pause at all -- it sends "force", having already
+# revoked every descriptor -- and promises no `ResumeDevice` afterwards. The
+# only way back to a live descriptor is `ReleaseDevice` and then `TakeDevice`,
+# in that order: logind refuses `TakeDevice` for a device the session still
+# holds, so a retake without the release ahead of it is a device that stays
+# dead for the life of the desktop.
+giveback_at="$(printf '%s\n' "$opener_body" | grep -n 'GiveBack(' | head -1 | cut -d: -f1)"
+if [ -n "$giveback_at" ] && [ -n "$take_at" ] && [ "$giveback_at" -lt "$take_at" ]; then
+  ok "a device held from before is given back before it is taken again"
+else
+  fail "a device held from before is given back before it is taken again" \
+    "OpenDeviceFd calls TakeDevice without releasing first; logind refuses it"
+fi
+
+# THE `b` IN `TakeDevice`'s `hb` REPLY IS NOT OPTIONAL. logind writes
+# `!sd->active` there and revokes the descriptor it is handing over when the
+# session is not the one in front of the user, so a caller that pops only the
+# descriptor trusts a dead one -- which is a desktop that comes up deaf after a
+# startup scan that raced an activation, saying nothing at all.
+if in_sources 'PopBool(&inactive)'; then
+  ok "the liveness in TakeDevice's reply is read"
+else
+  fail "the liveness in TakeDevice's reply is read" \
+    "nothing pops the boolean beside the descriptor; the fd may be revoked"
+fi
+
+# AND THE WAY BACK HANGS OFF THE SESSION'S `Active`, not off a signal that a
+# seat with VTs never sends.
+for followed in kPropertiesChanged kActive Reclaim; do
+  if in_sources "$followed"; then
+    ok "the session's activation is followed ($followed)"
+  else
+    fail "the session's activation is followed ($followed)" \
+      "no $followed in the domicile sources; a revoked device would never come back"
+  fi
+done
+
 # NO FALLBACK TO open(). A desktop that quietly comes up deaf is the bug being
 # fixed, so a logind session that is missing or refuses must be a loud failure
 # rather than a quiet retreat to the `open` that cannot work.

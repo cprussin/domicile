@@ -47,6 +47,24 @@ namespace ui {
 // `ResumeDevice` parks its descriptor and asks the factory to close the device
 // and open it again. See `DrmTakenDevices`.
 //
+// AND THE WAY BACK HANGS OFF `Active`, NOT OFF `ResumeDevice`. A resume is
+// not promised: on a seat with VTs logind revokes the whole set with a
+// `PauseDevice` of type "force" and resumes only out of a real seat
+// transition, so a desktop that waits for a resume can wait forever with
+// every keyboard and every trackpad dead at once. The session's `Active`
+// property going true is the edge that is there either way, so this follows
+// `PropertiesChanged` and answers it by giving each revoked device back and
+// taking it again.
+//
+// A SECOND SUBSCRIPTION, DELIBERATELY. `DrmVtSwitcher` follows the same
+// property for the display, and it is not shareable: it holds its own PRIVATE
+// `dbus::Bus` whose origin thread is the browser's UI thread, a D-Bus match
+// is per connection, and the work here -- blocking `ReleaseDevice` and
+// `TakeDevice` round trips against tables this thread owns -- has to happen
+// on the evdev thread. Reusing its subscription would mean a thread hop and a
+// lifetime seam through `ozone_platform_drm.cc` for a match rule that costs
+// logind one extra signal to route.
+//
 // THE BRIDGE, NAMED. `InputDeviceOpener::OpenInputDevice` is synchronous and
 // runs on the evdev thread; `TakeDevice` is a D-Bus call, which Chromium's
 // `dbus::Bus` will only issue from the thread that owns the connection. The
@@ -94,11 +112,21 @@ class DrmLogindInput : public InputDeviceOpenerEvdev {
 
   // Subscribes on the bus's thread and blocks this one until it is done, so
   // that a signal cannot be missed between subscribing and taking a device.
-  bool ConnectAndBlock(const std::string& signal,
+  bool ConnectAndBlock(const std::string& interface,
+                       const std::string& signal,
                        dbus::ObjectProxy::SignalCallback callback);
 
   void OnPauseDevice(dbus::Signal* signal);
   void OnResumeDevice(dbus::Signal* signal);
+
+  // Any property of the session changed; the one that matters is `Active`.
+  void OnPropertiesChanged(dbus::Signal* signal);
+
+  // Whether logind says this session is the one in front of the user. Read
+  // rather than remembered: a `PropertiesChanged` names the changed property
+  // in the dictionary or in the invalidated list depending on which property
+  // it is, and asking for the value is cheaper than being right about that.
+  bool SessionIsActive();
 
   bool ReleaseDevice(DeviceNumber number);
 
