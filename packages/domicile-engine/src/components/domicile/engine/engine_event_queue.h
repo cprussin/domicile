@@ -24,6 +24,12 @@ struct EngineDisplay {
   int32_t y = 0;
   int32_t width = 0;
   int32_t height = 0;
+  // The panel, in millimeters, and the rate it is running at in mHz. Zero for
+  // a display that reports neither, which is what wl_output states for one --
+  // see the mojom this is filled in from.
+  int32_t physical_width_mm = 0;
+  int32_t physical_height_mm = 0;
+  int32_t refresh_mhz = 0;
 };
 
 // What the library has to tell domicile-compositor, and the fd it says it on.

@@ -480,12 +480,8 @@ decides whether an item is waiting or workable.
    `StatusIconButtonLinux` refuses to build its widget without it. Read a
    folded frame as a fact about the *group*, not the name.
 
-   What is left of step 2 after a screen lights: **real physical size and
-   refresh on `wl_output`**, which today are zero -- the protocol's own word
-   for "this output has no such number", which is honest and is not the size
-   of the panel; the snapshot has both and the display event carries neither,
-   so closing this is a field on `DomicileDisplay` and the mojom struct behind
-   it; a **`drm` arm in `domicile-launch`'s `platform()`**
+   What is left of step 2 after a screen lights: a **`drm` arm in
+   `domicile-launch`'s `platform()`**
    so a machine with no `WAYLAND_DISPLAY` gets a tty rather than a refusal,
    which is auto-detection only and blocks nothing because `OZONE=drm`
    overrides outright; and **taking the card node from logind too**, which is
@@ -566,16 +562,17 @@ costs nothing.
   landed last, up to the border's width from the hole it is drawn into.
   Harmless at 1px and the same seam that made the scale bug: the real answer
   is one source, which `report-app-sizes.ts` already says is the engine's.
-- **On a tty, `wl_output` reports no physical size and no refresh** -- zero
-  for both, which is what `wl_output` says a screen with no such number
-  advertises, rather than the `(300, 200)` at 60Hz it used to invent for every
-  display. A client can no longer compute a confidently wrong DPI off it, but
-  it still cannot compute the right one: the millimetres and the rate the CRTC
-  took are the *engine's* reading, and `DomicileDisplay` carries an id, a
-  position and a mode and nothing else. `DrmScreen::DisplayPhysicalSizeMm` is
-  the seam waiting for it; the browser-side half builds the list out of
-  `display::Display`, which has neither, so the snapshot has to reach it
-  first.
+- **A `wl_output` that is not a panel reports no physical size and no
+  refresh** -- zero for both, which is what `wl_output` says a screen with no
+  such number advertises. That is every described desktop and every nested one:
+  a config's arithmetic and a host's window are not millimetres of glass, and
+  neither has a mode. On a tty they are the panel's own, off the same
+  `DisplaySnapshot` the CRTCs are configured from, and `DomicileDisplay`
+  carries them. The one thing `display::Display` had no field for is the
+  millimetres, so they cross it as the DPI they make with the mode and are
+  divided back out in `components/domicile/browser/display_list.cc`; a
+  connector that reports no size -- a projector, a virtual output -- still
+  advertises zero, because zero is the reading.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
 - **Hot-swapping the chrome page** is a page reload on the engine, and
   `announce_open_apps` is what makes one survivable. `scripts/dev-shell.sh` is

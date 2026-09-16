@@ -14,12 +14,18 @@ source_set("browser") {
   sources = [
     "browser/brokered_frame_sink.cc",
     "browser/brokered_frame_sink.h",
+    "browser/display_list.cc",
+    "browser/display_list.h",
     "browser/external_surface_provider.cc",
     "browser/external_surface_provider.h",
     "browser/frame_sink_broker.cc",
     "browser/frame_sink_broker.h",
   ]
 
+  # //ui/display is here for `browser/display_list.cc` and for nothing else: a
+  # display::Display is what ozone's screen reads the monitors into, and
+  # turning that into what a wl_output states is the one piece of this target
+  # that is arithmetic rather than plumbing. It is still not //content.
   public_deps = [
     "//base",
     "//components/domicile/mojom",
@@ -27,6 +33,7 @@ source_set("browser") {
     "//components/viz/host",
     "//gpu/command_buffer/client",
     "//mojo/public/cpp/bindings",
+    "//ui/display",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -188,6 +195,7 @@ source_set("unit_tests") {
 
   sources = [
     "browser/command_protocol_unittest.cc",
+    "browser/display_list_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
@@ -214,6 +222,7 @@ source_set("unit_tests") {
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/display",
     "//ui/gfx/geometry",
   ]
 }

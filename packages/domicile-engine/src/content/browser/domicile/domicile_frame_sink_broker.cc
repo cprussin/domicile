@@ -17,6 +17,7 @@
 #include "base/no_destructor.h"
 #include "base/process/process_handle.h"
 #include "base/task/thread_pool.h"
+#include "components/domicile/browser/display_list.h"
 #include "components/domicile/browser/external_surface_provider.h"
 #include "components/domicile/browser/frame_sink_broker.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
@@ -81,23 +82,6 @@ constexpr char kScanoutPlatform[] = "drm";
 // worth adding to that target for one string.
 constexpr char kOzonePlatformSwitch[] = "ozone-platform";
 
-// Domicile's display list, off the screen ozone built.
-//
-// The whole of the translation, and it is small because display::Display is
-// already the shape wanted. Physical size and refresh are not on it -- see the
-// mojom -- so neither is here.
-std::vector<domicile::mojom::DisplayPtr> DisplayListFor(
-    const std::vector<display::Display>& displays) {
-  std::vector<domicile::mojom::DisplayPtr> list;
-  list.reserve(displays.size());
-  // Not named `display`: that is the namespace this loop's own type is in, and
-  // shadowing it makes the next line anyone adds here mean something else.
-  for (const display::Display& screen : displays) {
-    list.push_back(domicile::mojom::Display::New(screen.id(), screen.bounds()));
-  }
-  return list;
-}
-
 // Keeps the broker's display list level with the screen's.
 //
 // A display::DisplayObserver rather than anything of Domicile's own: on the
@@ -143,7 +127,7 @@ class DomicileDisplayWatcher : public display::DisplayObserver {
  private:
   void Read() {
     broker_->OnDisplaysChanged(
-        DisplayListFor(display::Screen::Get()->GetAllDisplays()));
+        domicile::DisplayListFor(display::Screen::Get()->GetAllDisplays()));
   }
 
   const raw_ptr<domicile::FrameSinkBroker> broker_;

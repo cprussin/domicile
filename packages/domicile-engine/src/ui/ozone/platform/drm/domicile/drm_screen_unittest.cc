@@ -115,8 +115,8 @@ TEST(DrmScreenTest, ADisplayIsPlacedAtTheSnapshotsOrigin) {
 }
 
 // The reason this conversion exists rather than DisplayChangeObserver's: the
-// millimeters are already in the snapshot, and the compositor currently
-// fabricates them as (300, 200). See A-DESKTOP-ON-A-TTY.md.
+// millimeters are already in the snapshot, and the compositor cannot read
+// them. See A-DESKTOP-ON-A-TTY.md.
 TEST(DrmScreenTest, APhysicalSizeInMillimetersSurvivesTheConversion) {
   auto snapshot = SnapshotBuilder().PhysicalSizeMm(gfx::Size(597, 336)).Build();
 
@@ -124,6 +124,67 @@ TEST(DrmScreenTest, APhysicalSizeInMillimetersSurvivesTheConversion) {
 
   EXPECT_EQ(display.native_origin(), gfx::Point());
   EXPECT_EQ(DisplayPhysicalSizeMm(*snapshot), gfx::Size(597, 336));
+}
+
+// display::Display has no millimeters -- it has a DPI -- and it is the only
+// thing that crosses from here to the browser code that builds the producer's
+// display list. So the panel's size leaves as the density it makes with the
+// mode, and `components/domicile/browser/display_list.cc` divides it back. The
+// numbers here and the ones there are deliberately the same panel: the two
+// halves of one conversion, asserted from both ends.
+TEST(DrmScreenTest, APanelsMillimetersCrossAsTheDpiTheyMakeWithTheMode) {
+  auto snapshot = SnapshotBuilder()
+                      .PhysicalSizeMm(gfx::Size(597, 336))
+                      .NativeMode(gfx::Size(1920, 1080), 60.f)
+                      .Build();
+
+  const display::Display display = DisplayFromSnapshot(*snapshot);
+
+  // 1920 pixels across 597mm is 81.7 per inch, and 1080 across 336mm is 81.6.
+  // Per axis rather than one number for both: a panel is not obliged to have
+  // square pixels, and a single DPI would make one of the two millimeter
+  // figures come back wrong.
+  EXPECT_NEAR(display.GetPixelsPerInchX(), 81.688f, 0.001f);
+  EXPECT_NEAR(display.GetPixelsPerInchY(), 81.643f, 0.001f);
+}
+
+// What the CRTC is running at, which on a tty is the only reading of it there
+// is -- the compositor holds no card node and has no mode of its own to
+// report.
+TEST(DrmScreenTest, ADisplayTakesItsRefreshRateFromTheNativeMode) {
+  auto snapshot =
+      SnapshotBuilder().NativeMode(gfx::Size(2560, 1440), 143.998f).Build();
+
+  EXPECT_FLOAT_EQ(DisplayFromSnapshot(*snapshot).display_frequency(), 143.998f);
+}
+
+// A projector and a virtual output report no physical size at all, and that is
+// an ordinary reading rather than a broken one. There is no DPI to compute
+// from it and none is invented: zero is what display::Display means by "nobody
+// said", and wl_output says the same thing with the same number.
+TEST(DrmScreenTest, AConnectorWithNoPhysicalSizeIsGivenNoDensity) {
+  auto snapshot = SnapshotBuilder().PhysicalSizeMm(gfx::Size()).Build();
+
+  const display::Display display = DisplayFromSnapshot(*snapshot);
+
+  EXPECT_EQ(display.GetPixelsPerInchX(), 0.f);
+  EXPECT_EQ(display.GetPixelsPerInchY(), 0.f);
+}
+
+// The other half of the same rule: a connector with no mode has no rate, and
+// no density either -- a DPI needs both numbers and this one has only the
+// millimeters. Its bounds are still the displayless fallback, because a window
+// has to land somewhere; a density does not.
+TEST(DrmScreenTest, AConnectorWithNoModeHasNeitherARateNorADensity) {
+  auto snapshot = SnapshotBuilder()
+                      .PhysicalSizeMm(gfx::Size(597, 336))
+                      .NoNativeMode()
+                      .Build();
+
+  const display::Display display = DisplayFromSnapshot(*snapshot);
+
+  EXPECT_EQ(display.display_frequency(), 0.f);
+  EXPECT_EQ(display.GetPixelsPerInchX(), 0.f);
 }
 
 TEST(DrmScreenTest, ASnapshotWithNoNativeModeStillProducesAUsableDisplay) {
