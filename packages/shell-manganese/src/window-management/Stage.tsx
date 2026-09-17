@@ -61,7 +61,7 @@ export const Stage = ({
   draggingId,
   floats,
   focusedId,
-  modifiers: { meta, shift },
+  modifiers: { alt, shift },
   onClose,
   onDrop,
   onGrab,
@@ -89,7 +89,7 @@ export const Stage = ({
       // release that should have ended the drag, leaving the window grabbed
       // with the mouse already let go.
       const clickThrough =
-        draggingId !== undefined || (floating !== undefined && meta);
+        draggingId !== undefined || (floating !== undefined && alt);
       // A window with no placement is not on screen, so what it would stack
       // against is not a question: it is rendered hidden, which is what keeps
       // its portal and its page alive across a workspace switch.
@@ -198,7 +198,7 @@ export const Stage = ({
               onReach={onReachThis}
               title={window.title}
             />
-            {(meta || window.id === draggingId) && (
+            {(alt || window.id === draggingId) && (
               <FloatGrab
                 depth={placement.depth}
                 float={floating}

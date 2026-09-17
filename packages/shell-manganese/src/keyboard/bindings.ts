@@ -8,9 +8,10 @@
 // every binding carries both spellings of its key: the `code` a key event
 // names, and the evdev keycode the control channel speaks.
 //
-// **The modifier is Mod4**, the Super key, which is what the config sets and
-// what makes the whole table possible: a chord the compositor has claimed is
-// not delivered to any client, so `mod+h` can be the desktop's while `h`
+// **The modifier is Alt**, and it is the one thing here the config does not
+// decide — it sets Mod4, and this desktop answers Mod1. What makes the whole
+// table possible either way is the claim: a chord the compositor has claimed
+// is not delivered to any client, so `mod+h` can be the desktop's while `h`
 // stays the window's.
 //
 // The keysyms are the config's own — `h`, `parenleft`, `Return` — and
@@ -89,12 +90,12 @@ const bound = (
       action,
       // Every modifier is named rather than left to the dictionary's default:
       // the compositor matches the set it was given and nothing else, so the
-      // ones that must *not* be held are as much of the chord as Super is.
+      // ones that must *not* be held are as much of the chord as Alt is.
       chord: {
-        altKey: false,
+        altKey: true,
         ctrlKey: false,
         keycode,
-        metaKey: true,
+        metaKey: false,
         shiftKey: shift,
       },
       code,

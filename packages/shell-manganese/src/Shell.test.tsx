@@ -6,6 +6,7 @@ import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { css } from "../styled-system/css";
 import { codeFor } from "./keyboard/programmers-dvorak";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
@@ -164,8 +165,8 @@ const clientAppears = (appId: string, title = appId): void => {
  */
 const press = (keysym: string, shift = false): void => {
   fireEvent.keyDown(document, {
+    altKey: true,
     code: codeFor(keysym),
-    metaKey: true,
     shiftKey: shift,
   });
 };
@@ -177,10 +178,10 @@ const hostPress = (keysym: string, shift = false): void => {
     throw new Error(`test: no evdev code written down for ${keysym}`);
   } else {
     domicile.emit("shortcut", {
-      altKey: false,
+      altKey: true,
       ctrlKey: false,
       keycode,
-      metaKey: true,
+      metaKey: false,
       shiftKey: shift,
     });
   }
@@ -199,11 +200,11 @@ const KEYCODES: Readonly<Record<string, number>> = {
 };
 
 /** What the page holds down, which is what hands the shell the pointer. */
-const pageHolds = (held: { meta?: boolean; shift?: boolean }): void => {
+const pageHolds = (held: { alt?: boolean; shift?: boolean }): void => {
   fireEvent.keyDown(document, {
-    code: "MetaLeft",
-    key: "Meta",
-    metaKey: held.meta ?? false,
+    altKey: held.alt ?? false,
+    code: "AltLeft",
+    key: "Alt",
     shiftKey: held.shift ?? false,
   });
 };
@@ -363,6 +364,18 @@ describe("Shell", () => {
   });
 
   describe("the top bar", () => {
+    it("draws its text white, with a shadow to keep it off the wallpaper", () => {
+      // The bar paints no background, so nothing else separates its text from
+      // whatever photograph is behind it. Declarations rather than a class
+      // name, because Panda hashes them: the check is that the element carries
+      // *these rules*.
+      const { container } = renderShell();
+
+      const bar = container.querySelector("header");
+      expect(bar?.className).toContain(css({ color: "white" }));
+      expect(bar?.className).toContain(css({ textShadow: "textOverPhoto" }));
+    });
+
     it("reads the date and the time down to the second", () => {
       renderShell();
 
@@ -534,10 +547,10 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual([
         "grabShortcut",
         {
-          altKey: false,
+          altKey: true,
           ctrlKey: false,
           keycode: KEYCODES.Return,
-          metaKey: true,
+          metaKey: false,
           shiftKey: false,
         },
       ]);
@@ -721,7 +734,7 @@ describe("Shell", () => {
       pageHolds({});
       expect(grabSheets(container)).toHaveLength(0);
 
-      pageHolds({ meta: true });
+      pageHolds({ alt: true });
       expect(grabSheets(container)).toHaveLength(1);
     });
 

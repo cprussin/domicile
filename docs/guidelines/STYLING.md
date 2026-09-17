@@ -242,7 +242,7 @@ equivalent (`background`, `card`, `foreground`, …) instead.
 | `fontSize`, `fontWeight`, `letterSpacing`, `lineHeights` | Default Panda typography scales. `lineHeights.normal` (1.5), `lineHeights.tight` (1.25), etc. |
 | `borderRadius` | Named scale: `xs`, `sm`, `md`, `lg`, `xl`, `2xl`, `3xl`, `4xl`, `full`. Per-size radii that aren't in this scale can be expressed by interpolating spacing tokens (e.g. `borderRadius: "{spacing.4}"`). |
 | `shadows.md` | Default Panda shadow scale. |
-| `shadows.lifted`, `shadows.modal` | Domicile preset. `lifted` is a soft, broad drop shadow for floating surfaces — the `Select` popup is what uses it; `modal` is the heavier elevation used by dialogs. |
+| `shadows.lifted`, `shadows.modal`, `shadows.textOverPhoto` | Domicile preset. `lifted` is a soft, broad drop shadow for floating surfaces — the `Select` popup is what uses it; `modal` is the heavier elevation used by dialogs. `textOverPhoto` is a *text* shadow — Panda reads `textShadow` out of this category — for light text drawn straight onto a photograph, which is what a shell's bar over its wallpaper is. |
 | `durations.fastest/faster/fast/normal/slow/slower/slowest/pulse` | Used in `transition` shorthands. |
 | `durations.crossfade` | Domicile preset. A 2s dissolve between two pictures — far longer than the scale above, which measures how long a control takes to answer. |
 | `easings.default/linear/in/out/in-out` | Used in `transition` shorthands. |

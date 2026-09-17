@@ -58,9 +58,9 @@ export const useShortcuts = ({ domicile, mode, onAction }: Options) => {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       // Every modifier is part of the chord, the way the compositor's claim
-      // is: Ctrl+Super+Return is a combination nobody claimed, and the page is
+      // is: Ctrl+Alt+Return is a combination nobody claimed, and the page is
       // the only path that would otherwise answer it.
-      if (event.metaKey && !event.altKey && !event.ctrlKey) {
+      if (event.altKey && !event.ctrlKey && !event.metaKey) {
         const action = actionForCode(mode, event.code, event.shiftKey);
         if (action !== undefined) {
           // Taken from the page whether or not it acts: the chord is the

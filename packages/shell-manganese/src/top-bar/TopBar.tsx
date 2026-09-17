@@ -86,7 +86,18 @@ export const TopBar = ({
 );
 
 const barStyles = grid({
+  // The bar's own controls come from the component library, whose recipes
+  // set their own colour; this is what puts the workspace numbers and the
+  // launchers' icons on the same footing as the text beside them. The theme
+  // switch keeps its own: colour is how it says which way it is set.
+  "& button": { color: "white" },
   alignItems: "center",
+  // White with a shadow under it, in both themes. The bar paints no
+  // background, so nothing separates its text from the photograph behind it
+  // — and `foreground` would not do: it flips with the theme, and the
+  // wallpaper does not. The shadow is what survives a picture that happens
+  // to be white behind any given letter.
+  color: "white",
   // Three columns, the outer two equal: what is in them can be any width and
   // the middle one stays in the middle of the screen.
   gridTemplateColumns: "1fr auto 1fr",
@@ -94,14 +105,17 @@ const barStyles = grid({
   insetInline: 0,
   paddingInline: 2,
   position: "absolute",
+  textShadow: "textOverPhoto",
 });
 
 const middleStyles = css({ justifySelf: "center" });
 
 const endStyles = hstack({ gap: 1, justify: "flex-end" });
 
+// Not a colour of its own: the bar's text is white over a photograph, and
+// what marks this out is that it is a word in capitals where the rest of the
+// bar is numbers and a clock.
 const modeStyles = css({
-  color: "accent",
   fontSize: "0.625rem",
   textTransform: "uppercase",
 });

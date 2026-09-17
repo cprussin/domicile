@@ -34,7 +34,11 @@ a title bar, and both are moved, floated and closed by the same keys.
 **The layout is sway's**, and so are the keys: the config it was written
 against is `config/modules/ui/sway` in the author's dotfiles, and what is not
 bound there is bound by `lib.mkOptionDefault` — sway's own defaults — so both
-halves are in the table below. The modifier is **Mod4**, the Super key.
+halves are in the table below.
+
+**The modifier is Alt**, which is the one thing here the config does not
+decide: it sets `Mod4`, the Super key, and this desktop answers `Mod1`. Every
+`Mod+` below is Alt.
 
 A workspace holds a tree. A window is a leaf; every layout is a container of
 them; opening a window puts it beside the one being worked in, and closing one
@@ -97,7 +101,8 @@ let go of Shift and press it again, a Mod+drag moves the window rather than
 driving its corner.
 
 **Mod+drag** moves a floating window and **Mod+Shift+drag** (or Mod+right-drag)
-resizes it from the bottom-right corner — sway's `floating_modifier $mod`.
+resizes it from the bottom-right corner — sway's `floating_modifier $mod`, and
+the same key as the bindings, so it is Alt as well.
 Which of the two a drag is, is read when it starts and then kept, so letting go
 of Shift half way through does not turn a resize into a move with the window
 jumping to wherever the pointer got to. A window is never dragged smaller than
@@ -245,6 +250,14 @@ windows are laid out in what is *left* of the screen under it, so nothing is
 behind it but the wallpaper. A window that covers it is one the user put there:
 a float dragged up, or a window filling the screen.
 
+**Its text is white with a black shadow under it, in both themes.** There is no
+background to read against, so the theme's `foreground` would not do: it flips
+with the theme and the photograph does not, and half of any photograph is
+lighter than light text. The shadow is `shadows.textOverPhoto` from the
+component library's preset — tight and nearly opaque rather than soft, because
+a blurred shadow under ten-pixel type reads as a smudge. The theme switch keeps
+its own colours: colour is how it says which way it is set.
+
 The workspaces on it are the ones with windows on them, plus the one being
 looked at — sway's own rule. The desktop keeps all ten all the time, which is
 the one place that difference from sway could show, and it does not: an empty
@@ -373,6 +386,8 @@ The parts of the config this shell cannot answer, and why:
   and the bar is this page rather than a swaybar process.
 - **Mouse warping, per-window borders, `hideEdgeBorders`.** A window's frame
   is CSS here; there is no pointer to warp from a page.
+- **`Mod4` as the modifier.** The config sets Super and this desktop answers
+  Alt. Every chord is otherwise the config's.
 
 ## Configure
 
