@@ -17,7 +17,7 @@ first, then make the change.
 | Doc | Covers |
 |---|---|
 | [STRUCTURE.md](./STRUCTURE.md) | Component directory layout (three files per component) and the file-organization rule inside a component file. |
-| [STYLING.md](./STYLING.md) | Component-library styling conventions (the `control` recipe, the shared `wrapperBase`, the prefix-icon / resize `data-*` patterns). The cross-cutting Panda rules live in [/docs/guidelines/STYLING.md](/docs/guidelines/STYLING.md) — read that first. Its "Panda's static extractor" section catches a class of bug that's invisible until you ship. |
+| [STYLING.md](./STYLING.md) | Component-library styling conventions (the `control` recipe, the shared `wrapperBase`, the prefix-icon / resize `data-*` patterns). The cross-cutting Panda rules live in [/docs/guidelines/STYLING.md](/docs/guidelines/STYLING.md) — read that first, and its "Panda's static extractor" section catches a class of bug that's invisible until you ship. |
 | [TESTING.md](./TESTING.md) | bun:test + RTL conventions, coverage expectations, selector preferences. |
 
 ## IF TOUCHED (load when your change touches the topic)
@@ -50,7 +50,10 @@ Most common causes:
   runtime construction is opaque. Inline the literal array.
 - `flex(helperReturningStyles())` — same. Inline at the call site.
 
-Full details in [STYLING.md](./STYLING.md#pandas-static-extractor--the-1-source-of-bugs).
+Full details in
+[/docs/guidelines/STYLING.md](/docs/guidelines/STYLING.md#pandas-static-extractor--the-1-source-of-bugs);
+[STYLING.md](./STYLING.md#shared-base-styles-for-input--textarea) is this
+package's worked example of the fix.
 
 ### Storybook arg traps
 
