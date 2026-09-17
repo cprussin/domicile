@@ -126,6 +126,7 @@ fn desktop(shell: &str) -> Result<ExitCode, String> {
         env("OZONE").as_deref(),
         env("WAYLAND_DISPLAY").as_deref(),
         env("DISPLAY").as_deref(),
+        env("XDG_VTNR").as_deref(),
     )
     .map_err(|why| why.to_string())?;
     println!("the engine is taking the {platform} platform");

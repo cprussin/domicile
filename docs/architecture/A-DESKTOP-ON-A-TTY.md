@@ -1022,10 +1022,16 @@ Step 2 — the embedder (the port):
       and neither sets `ozone_platform`, because setting it to `"drm"` looks
       like a one-word tidy-up and would flip the default on every machine
       including the ones with no card node
-- [ ] a `drm` arm in `domicile-launch`'s `platform()`, so a machine with no
-      `WAYLAND_DISPLAY` gets a tty rather than `PlatformError::NoDisplayServer`.
-      Auto-detection only, and last: `OZONE=drm` already overrides outright, so
-      nothing is blocked on this
+- [x] a `drm` arm in `domicile-launch`'s `platform()`, so a machine with no
+      `WAYLAND_DISPLAY` gets a tty rather than `PlatformError::NoDisplayServer`
+      -- `XDG_VTNR`, read AFTER `WAYLAND_DISPLAY` and `DISPLAY`, because a
+      session has a VT too and reading it first would take the console out from
+      under the session the desktop was to be a window inside of. logind is
+      what sets it, which is the same logind the engine then asks for
+      `TakeControl` and `TakeDevice`, so the variable that says there is a VT
+      is also the one that says those calls will work. The refusal stays for a
+      machine with neither a display nor a VT -- ssh, a container -- and now
+      names that rather than the lit screen that has since happened
 - [x] a display-list event on the engine C ABI, and `Screens::from_the_engine`
       beside `described` and `following_the_window` -- `DisplayListObserver` on
       `mojom::FrameSinkBroker`, fed in the browser process by a
