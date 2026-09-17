@@ -2376,8 +2376,8 @@ impl DomicileCompositor {
     /// chrome holds the keyboard until it says a window has been focused, and
     /// gets it back when it says one has not. A second seat for the chrome
     /// would let both hold a focus at once, but a client does not have to bind
-    /// more than one — GTK asserts and Electron drops the connection outright —
-    /// so the desktop cannot depend on it.
+    /// more than one — GTK asserts on a second — so the desktop cannot depend
+    /// on it.
     ///
     /// Called again when the window is focused as well as when the chrome maps,
     /// because a client that had not bound its keyboard by the time the first

@@ -4,9 +4,9 @@
 //! Domicile's own end-to-end checks are about the compositor, not about any
 //! shell — so what they need on the other end of the chrome socket is
 //! something that speaks the protocol and remembers what it heard, which is
-//! all this is. A real shell is a web engine, an Electron and a page; none of
-//! that is under test when the question is "does a compositor started on a
-//! two-display config describe two displays".
+//! all this is. A real shell is the fork's engine and a page; neither is under
+//! test when the question is "does a compositor started on a two-display config
+//! describe two displays".
 //!
 //! The reading and writing are separate from the socket on purpose: every rule
 //! about what a chrome may say and when is checkable against a pair of

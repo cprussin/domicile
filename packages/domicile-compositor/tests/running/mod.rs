@@ -203,10 +203,11 @@ impl Compositor {
 
     /// The same, on the display the chrome's own window goes on.
     ///
-    /// A real chrome is an Electron; what matters to the compositor is which
-    /// socket the client arrived on, so an ordinary test client on that
-    /// display is the chrome as far as the classification is concerned — which
-    /// is what makes the claim testable without a browser.
+    /// A real chrome is the fork's engine with a shell in it; what matters to
+    /// the compositor is which socket the client arrived on, so an ordinary
+    /// test client on that display is the chrome as far as the classification
+    /// is concerned — which is what makes the claim testable without a
+    /// browser.
     pub fn chrome_side_client(&self, title: &str) -> Client {
         self.client_on(&self.session.chrome_wayland_display, title)
     }

@@ -11,17 +11,15 @@
 # every window in it missing. Useful for a stylesheet and misleading for
 # anything else, and it is not what "run the shell" should mean.
 #
-# So dev mode is the desktop now. The engine, the compositor, the bridge and
-# the shell, exactly as `nix run .#manganese` assembles them — with two
-# differences, both of which exist to make an edit cheap:
-#
-#   - the page is rebuilt on save, by the shell's own vite in watch mode
-#   - the page reloads itself when that finishes, because a desktop runs under
-#     `--app` and there is no reload in it. See `shell-document.ts`.
+# So dev mode is the desktop now. The engine, the compositor and the shell,
+# exactly as `nix run .#manganese` assembles them — with one difference, and it
+# is there to make an edit cheap: the page is rebuilt on save, by the shell's
+# own vite in watch mode. Nothing reloads it. A rebuilt shell needs the desktop
+# restarted, for the reason the `DOMICILE_PAGE` paragraph below gives.
 #
 # Where each piece comes from is the point. The engine is the published one the
 # flake pins, because building Chromium is four hours and a shell author is not
-# doing that. The compositor and the bridge come out of *this checkout*, built
+# doing that. The compositor and the runner come out of *this checkout*, built
 # here, so a change to either is one restart away rather than a release.
 set -u
 

@@ -151,11 +151,8 @@ fn rejects_invalid_syntax() {
 ///
 /// The one property the whole shell-to-compositor interface leans on: a shell
 /// generates this file, so a key that does nothing is a bug in a program
-/// rather than a typo at a prompt, and `@domicile/electron-chrome-host` says
-/// so in as many words — its `parseDesktop` mirrors `deny_unknown_fields` with
-/// `.strict()`, and its `configDocument` test reasons that what stays *out* of
-/// an emitted section is a claim about that section. Nothing else here covers
-/// it: the test that did went with `[shell]`.
+/// rather than a typo at a prompt. Nothing else here covers it: the test that
+/// did went with `[shell]`.
 #[test]
 fn rejects_a_key_nothing_reads() {
     // Misspelt in a section that exists, which is the shape a real one takes.

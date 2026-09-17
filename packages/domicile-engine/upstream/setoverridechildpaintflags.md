@@ -5,10 +5,26 @@ machine that found this nor the session that reviewed it has one, so filing it
 is a person's job. It is kept here rather than on a build machine so it is not
 lost, and so that whoever files it does not have to re-derive it.
 
+## Why this repo carries it
+
+`HTMLAppElement` owns a `SurfaceLayerBridge`, so every `<app>` gets a
+`cc::SurfaceLayer` the bridge configured — and this bug is the one
+configuration difference between the `<app>` path and the OOPIF path that
+cannot be closed from outside Chromium. `SetStretchContentToFillBounds(false)`
+matches the OOPIF; `SetOverrideChildPaintFlags(false)` cannot, because the
+setter writes `true` regardless. `ENGINE-FORK.md`'s parity table is where that
+comparison lives.
+
+**Latent rather than live.** No measured number disagrees between the two
+paths today, so nothing is waiting on this fix — it is a difference that
+cannot be ruled out, not one that has shown up.
+
 Everything below is written to be pasted into https://issues.chromium.org
 (component: Internals>Compositing).
 
-Verified present on trunk `725aa8ea5082c`, fetched 2026-09-05.
+Verified present on trunk `725aa8ea5082c`, fetched 2026-09-05. **Re-read
+`cc/layers/surface_layer.cc` at trunk before filing** — that date is old
+enough that the body may describe code somebody has already changed.
 
 ---
 

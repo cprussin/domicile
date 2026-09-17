@@ -67,10 +67,11 @@
 //     this module exists to end.
 //
 // Every `.sh` in `scripts/`, not only the `e2e-*.sh` ones: `check.sh` runs the
-// `test-*.sh` checks in the same loop and for the same stated reason, and
-// `measure*.sh` and `probe-transparency.sh` drive the same harnesses. An
-// earlier version globbed `e2e-*` and three scripts that would reach for
-// `exit 99` were exempt without anyone deciding they should be.
+// `test-*.sh` checks in the same loop and for the same stated reason, and a
+// script that drives a compositor can reach for `exit 99` whatever it is
+// called. An earlier version globbed `e2e-*`, and the scripts outside that
+// prefix were exempt because of their names rather than because anyone decided
+// they should be.
 //
 // Nothing imports this outside its own test, and nothing should: it is a rule
 // about the repo rather than a step in any run. That is why it is a module

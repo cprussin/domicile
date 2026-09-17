@@ -41,8 +41,8 @@ const verdict = (pid: string): { status: number; out: string } => {
  * Every script in `scripts/`, as `[name, contents]`.
  *
  * All of them, not the `e2e-*.sh` ones: `check.sh` runs the `test-*.sh`
- * checks in the same loop and says why, and `measure*.sh` and
- * `probe-transparency.sh` drive the same harnesses. Reading the directory
+ * checks in the same loop and says why, and a script that drives a compositor
+ * can reach for `exit 99` whatever it is called. Reading the directory
  * without recursing is also what leaves `lib/harness.sh` out, which is the
  * one file the rules below are about rather than applied to.
  */
