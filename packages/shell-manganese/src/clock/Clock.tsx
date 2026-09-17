@@ -33,8 +33,9 @@ export const Clock = ({ now = wallClock }: Props) => {
   );
 };
 
+// No colour of its own: in the top bar it takes the white the bar draws its
+// text in, and on a screen with no bar it takes the page's own foreground.
 const clockStyles = css({
-  color: "foreground",
   // Ten pixels, which is what the desktop asks for and what no font-size token
   // is: the scale steps from 8px to 12px. A rem rather than a px literal, the
   // way every other off-scale length in this repo is written.

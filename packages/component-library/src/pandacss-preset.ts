@@ -352,6 +352,16 @@ export const domicilePreset = definePreset({
           modal: {
             value: "0 20px 48px rgb(from black r g b / 60%)",
           },
+          // A *text* shadow, which is what `textShadow` reads this category
+          // for: light text over a photograph, where nothing else separates
+          // the two. Tight and nearly opaque rather than soft and broad — a
+          // blurred shadow under 10px type reads as a smudge, and what this
+          // has to survive is a wallpaper that may be white behind any
+          // given letter. The same in both themes, because a photograph is
+          // not a theme.
+          textOverPhoto: {
+            value: "0 1px 2px rgb(from black r g b / 80%)",
+          },
         },
       },
       tokens: {
