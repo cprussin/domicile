@@ -336,9 +336,9 @@ export const domicilePreset = definePreset({
           },
         },
         shadows: {
-          // Soft, broad drop shadow for floating surfaces that sit on top of
-          // the chat content (e.g. the message Composer). Bigger and softer
-          // than the default `shadows.md` so the elevation reads on the
+          // Soft, broad drop shadow for a surface that floats over the page
+          // it belongs to — `Select`'s popup is the one consumer. Bigger and
+          // softer than the default `shadows.md` so the elevation reads on the
           // dark `background` without looking crisply outlined. Light mode
           // drops the alpha dramatically (50% → 15%) because the same shadow
           // on a light surface looks heavy and grayed-out — light surfaces
