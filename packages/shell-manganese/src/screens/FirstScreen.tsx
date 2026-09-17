@@ -16,7 +16,7 @@ import type { PropsWithChildren } from "react";
  * elements in this slot, and React reconciles by position: the switch unmounts
  * the whole subtree and mounts a fresh one, taking every window with it — every
  * portal re-created blank, every embedded page reloaded to the URL its window
- * was opened at. Windows can already be on the stage by then, because a chrome
+ * was opened at. Windows can already be open by then, because a chrome
  * that reloads is told about the clients it missed. Waiting costs the
  * handshake's worth of blank window and mounts the chrome exactly once; where
  * nothing will ever describe a desktop, `viewport-displays` describes one

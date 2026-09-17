@@ -9,14 +9,13 @@ import { focusApp } from "@domicile/chrome-sdk/focus-app";
 import { useEffect, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
-import { surfaceBox } from "./floating/float";
+import type { Rect } from "./rect";
 import { appWindowId } from "./window";
-import type { Floating } from "./window-state";
 import {
   clickThroughStyles,
   draggingStyles,
-  floatEdgeStyles,
-  floatPlacement,
+  edgeStyles,
+  placedAt,
   windowStyles,
 } from "./window-styles";
 
@@ -38,10 +37,10 @@ type Props = {
    * none — which leaves the pointer whatever the page's own styling says.
    */
   cursor: CursorShape | undefined;
+  /** How it stacks: the window's own `z-index`, which the SDK reports. */
+  depth: number;
   /** The channel the keyboard is asked for over. */
   domicile: DomicileClient;
-  /** How this window floats over the stage, or `undefined` while it is on it. */
-  floating: Floating | undefined;
   /** Whether the user is working in this window, so it takes the keyboard. */
   focused: boolean;
   /**
@@ -68,24 +67,21 @@ type Props = {
    * The SDK would move the keyboard here by itself — a click on a client's
    * window is a request for it, and left alone the SDK grants one. This shell
    * takes that back: which window the user is working in is one fact with one
-   * owner, and a keyboard that moved without the shell saying so is the rail
-   * highlighting one window while another is typed into.
+   * owner, and a keyboard that moved without the shell saying so is one
+   * window's title bar drawn as focused while another is typed into.
    */
   onReach: () => void;
   /**
-   * Whether this window is on screen at all.
-   *
-   * Not the same as being focused: a floating window is on screen whatever
-   * else the user is doing, and a tabbed one is on screen only while its tab
-   * is the selected one.
+   * Where the window's contents go, or `undefined` when it is not on screen
+   * at all — on another workspace, or behind another window's tab.
    */
-  onScreen: boolean;
+  rect: Rect | undefined;
 };
 
 /**
  * A Wayland client's window: one `<app>`, which is the whole point of
  * Domicile — the client's live pixels are a real element that takes ordinary
- * CSS. Hiding is what takes it off the stage: a hidden element has no box, so
+ * CSS. Hiding is what takes it off the screen: a hidden element has no box, so
  * the SDK reports it to the host as no longer composited.
  *
  * The element is the engine's rather than the SDK's, so what this component
@@ -106,14 +102,14 @@ export const AppWindow = ({
   appId,
   clickThrough,
   cursor,
+  depth,
   domicile,
   dragging,
-  floating,
   focused,
   hasKeyboard,
   onHover,
   onReach,
-  onScreen,
+  rect,
 }: Props) => {
   // `null` rather than `undefined` because that is what React's ref API hands a
   // callback ref on unmount.
@@ -126,11 +122,11 @@ export const AppWindow = ({
   //
   // Said again whenever the compositor answers with somewhere else, which is
   // what `hasKeyboard` is for. The shell's idea of the active window and the
-  // seat come apart on their own: a press on the rail, on the wallpaper, on
+  // seat come apart on their own: a press on the top bar, on the wallpaper, on
   // anything of the chrome's hands the keyboard back to the page, and the
   // window being worked in has not changed — so nothing else the shell watches
-  // moves, and before this the divergence was permanent. The rail went on
-  // highlighting a window that every keystroke was missing.
+  // moves, and before this the divergence was permanent. The desktop went on
+  // drawing a window as focused that every keystroke was missing.
   //
   // It cannot loop. A `focusApp` the compositor carries out comes back as the
   // `focus_changed` that makes this false, and one it refuses moves neither
@@ -208,12 +204,11 @@ export const AppWindow = ({
       className={cx(
         windowStyles,
         appStyles,
+        edgeStyles,
         clickThrough && clickThroughStyles,
         dragging && draggingStyles,
-        floating !== undefined && framedStyles,
-        floating !== undefined && floatEdgeStyles,
       )}
-      hidden={!onScreen}
+      hidden={rect === undefined}
       // React's own event rather than a listener on the ref: `pointerover` is
       // one it has heard of, unlike the two the SDK invented above. It rather
       // than `pointerenter` because it is the one the page is actually given —
@@ -224,31 +219,19 @@ export const AppWindow = ({
       // Inline because the box is a runtime number and Panda reads literals;
       // `window-styles` owns everything static. The cursor is inline for a
       // different reason: it is a value a client sends, so no build-time rule
-      // could name it. `undefined` on either leaves the window filling the stage
-      // with the page's own cursor over it.
+      // could name it. `undefined` on either leaves the window unplaced and
+      // hidden, with the page's own cursor over it.
       style={{
         cursor,
-        ...(floating === undefined
-          ? undefined
-          : floatPlacement(surfaceBox(floating.float), floating.depth)),
+        ...(rect === undefined ? undefined : placedAt(rect, depth)),
       }}
     />
   );
 };
 
-const appStyles = css({
-  // Rounded by the compositor, not by the browser: this element is a hole in
-  // the page and has no pixels of its own to clip. The SDK reports the radius
-  // with the placement and the compositor's shader applies it to the client's
-  // own buffer, which is why a window can be round at all without a copy. A
-  // length rather than a percentage on purpose: the computed value keeps the
-  // `%`, and the number in front of it would be read as pixels.
-  borderRadius: "lg",
-});
-
-// A floating window's corners are the frame's, not its own. Square, because
-// the compositor's shader takes one radius for all four — it is the element's
+// Every window's corners are its frame's rather than its own, and square: the
+// compositor's shader takes one radius for all four — it is the element's
 // `border-top-left-radius` the SDK reports — so a window cannot be square
-// under its bar and round at the bottom. The bar carries the rounding, and the
-// surface under it meets it flush.
-const framedStyles = css({ borderBlockStartWidth: 0, borderRadius: 0 });
+// under its bar and round at the bottom. The bar carries the edge above it,
+// and the surface meets it flush.
+const appStyles = css({ borderBlockStartWidth: 0 });

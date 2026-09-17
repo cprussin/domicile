@@ -1,111 +1,161 @@
-// Every change the shell's window list can undergo, as one pure reduction.
+// Every change the desktop can undergo, as one pure reduction.
 //
-// The shell owns two things: which windows exist and which one has the stage.
-// Both move together — a window that opens takes the stage, a window that
-// closes hands it back — so they are one state, reduced in one place, with no
-// DOM or domicile client in sight. `useWindows` is what feeds host events into
-// it.
+// The shell owns three things: which windows exist, which workspace each of
+// them is on, and which key bindings are live. They move together — a window
+// that opens lands on the workspace being looked at, a window sent to the
+// scratchpad leaves every workspace — so they are one state, reduced in one
+// place, with no DOM or domicile client in sight. `useWindows` is what feeds
+// host events and keystrokes into it.
+//
+// **The actions are sway's commands.** `keyboard/bindings.ts` is a table from
+// a key to one of the constructors below, so the desktop's vocabulary is the
+// one the user's config is written in: `focus left`, `move container to
+// workspace 2`, `layout tabbed`. What a command *means* is the workspace's or
+// the tree's to say, and almost every arm of the reduction is one call into
+// `workspace.ts`.
 
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
-import type { DropPosition } from "@domicile/component-library/TabRail";
 
-import type { Float } from "./floating/float";
-import { floatFor, movedTo, sizedTo } from "./floating/float";
-import type { ClientWindow } from "./window";
-import { appWindowId, ShellWindow, WindowKind } from "./window";
+import type { Axis, Direction } from "./direction";
+import type { Layout } from "./tree/node";
+import type { ClientWindow, ShellWindow } from "./window";
+import { appWindowId, ShellWindow as Window, WindowKind } from "./window";
+import type { Workspace } from "./workspace";
+import {
+  childFocused,
+  closed,
+  containerLaidOut,
+  containerSplit,
+  emptyWorkspace,
+  floatMoved,
+  floatOn,
+  floatSized,
+  floatToggled,
+  focusedOn,
+  focusStepped,
+  fullscreenToggled,
+  holds,
+  modeToggled,
+  opened,
+  parentFocused,
+  pointedAt,
+  reached,
+  shown,
+  splitFlipped,
+  windowGrown,
+  windowMoved,
+} from "./workspace";
+
+/**
+ * Which set of bindings the keys are read in.
+ *
+ * sway's binding modes, of which this desktop has the two its config names:
+ * the default one, and the resize mode `mod+r` enters.
+ */
+export enum BindingMode {
+  Default,
+  Resize,
+}
+
+/**
+ * The workspaces, by the names the config's keys name them with.
+ *
+ * All ten exist from the start rather than being made as they are reached.
+ * sway creates and destroys them on demand, which is a difference the user can
+ * see in exactly one place — the bar — and the bar shows the ones that have
+ * something on them, so the two agree where it counts.
+ */
+export const WORKSPACES: readonly string[] = [
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "10",
+];
 
 export type WindowState = {
-  /**
-   * The window the user is working in, floating or not.
-   *
-   * Not the same as `shownId`, which names the *tabbed* window the stage is
-   * showing. A floating window is on screen without being on the stage, so
-   * once one is in front there are two questions to answer and one answer
-   * cannot serve both: the rail highlights this, the stage shows that, and
-   * this is what the keyboard follows.
-   */
-  activeId: string | undefined;
   /** How many browser windows have been opened, ever — the id counter. */
   browsersOpened: number;
+  /** The workspace on screen. */
+  current: string;
   /**
    * The floating window the user has hold of, or `undefined` when none is.
    *
    * Here rather than in the component that reads the pointer because it is
    * what makes the window see-through while it moves, and because a drag
-   * outlives the modifier that started it: letting go of Alt half way through
-   * one must not drop the window.
+   * outlives the modifier that started it: letting go of the modifier half
+   * way through one must not drop the window.
    */
   draggingId: string | undefined;
   /**
-   * The windows that have left the rail, back to front.
-   *
-   * The order is the stacking order, so raising a window is moving it to the
-   * end — and its index is what the shell writes as `z-index`, which is what
-   * the compositor stacks the client's own surface by.
-   */
-  floats: readonly Float[];
-  /**
    * The app that holds the keyboard, or `undefined` when the chrome does.
    *
-   * Not the same as `shownId`: the stage says which window the shell is
-   * *showing*, and this says which one the compositor is *typing into*. They
-   * agree while the shell is the only thing moving focus, and part company the
-   * moment a click does — which is what this exists to follow.
+   * Not the same as the window being worked in: that is the shell's own idea
+   * and this is the compositor's. They agree while the shell is the only
+   * thing moving focus, and part company the moment a click does — which is
+   * what this exists to follow.
    */
   focusedId: string | undefined;
+  mode: BindingMode;
   /**
-   * The tabbed window on the stage, or `undefined` when none is.
-   *
-   * Never a floating window: a float is drawn over the stage rather than on
-   * it, and the stage going blank because the user floated what was on it
-   * would hide every other window they have open.
+   * The workspace the current one was reached from, which the same key goes
+   * back to (`workspaceAutoBackAndForth`).
    */
-  shownId: string | undefined;
+  previous: string | undefined;
+  /** The windows in the scratchpad, the most recently hidden last. */
+  scratchpad: readonly string[];
   windows: readonly ShellWindow[];
+  workspaces: readonly Workspace[];
 };
 
-/** A shell with nothing open: what the chrome starts from. */
+/** A desktop with nothing open: what the chrome starts from. */
 export const NO_WINDOWS: WindowState = {
-  activeId: undefined,
   browsersOpened: 0,
+  current: "1",
   draggingId: undefined,
-  floats: [],
   focusedId: undefined,
-  shownId: undefined,
+  mode: BindingMode.Default,
+  previous: undefined,
+  scratchpad: [],
   windows: [],
+  workspaces: WORKSPACES.map((name) => emptyWorkspace(name)),
 };
 
-/** A floating window's box and where it sits in the stack. */
-export type Floating = {
-  /**
-   * Its place in the float order, which is what the shell writes as the
-   * element's own `z-index`.
-   */
-  depth: number;
-  float: Float;
+/** The workspace on screen. */
+export const workspaceOn = (state: WindowState): Workspace =>
+  workspaceNamed(state, state.current);
+
+/** The workspace of this name. Throws for a name the desktop does not have. */
+export const workspaceNamed = (state: WindowState, name: string): Workspace => {
+  const workspace = state.workspaces.find((found) => found.name === name);
+  if (workspace === undefined) {
+    throw new Error(`shell: no workspace ${name}`);
+  } else {
+    return workspace;
+  }
 };
 
-/**
- * How the window `id` floats, or `undefined` when it is still in the rail.
- *
- * Takes the list rather than the whole state so that a component reading it
- * depends on the floats alone — every other field moves for reasons that do
- * not change where a window sits.
- */
-export const floatingOf = (
-  floats: readonly Float[],
+/** The workspace the window `id` is on, or `undefined` for a hidden one. */
+export const workspaceHolding = (
+  state: WindowState,
   id: string,
-): Floating | undefined => {
-  const depth = floats.findIndex((float) => float.id === id);
-  // Indexed rather than `.at`, which reads -1 as the last entry — so a window
-  // that is not floating at all would come back floating on top.
-  const float = floats[depth];
-  return float === undefined ? undefined : { depth, float };
-};
+): Workspace | undefined =>
+  state.workspaces.find((workspace) => holds(workspace, id));
 
-/** The box the window `id` floats in, or `undefined` when it is tabbed. */
-const floatOf = (state: WindowState, id: string): Float | undefined =>
-  state.floats.find((float) => float.id === id);
+/** The window the user is working in, or `undefined` on an empty workspace. */
+export const activeIdOf = (state: WindowState): string | undefined =>
+  focusedOn(workspaceOn(state));
+
+/** The window `id`, or `undefined` for one that has closed. */
+export const windowOf = (
+  state: WindowState,
+  id: string,
+): ShellWindow | undefined => state.windows.find((window) => window.id === id);
 
 export enum WindowActionKind {
   AppAppeared,
@@ -113,20 +163,34 @@ export enum WindowActionKind {
   AppCursorChanged,
   AppTitled,
   BrowserOpened,
+  ChildFocused,
+  ContainerSplit,
+  FloatToggled,
   FocusChanged,
   FocusRequested,
+  FocusStepped,
+  FullscreenToggled,
+  LayoutSet,
+  ModeSet,
+  ModeSwapped,
+  ParentFocused,
+  ScratchpadShown,
+  SplitToggled,
+  TerminalLaunched,
   WindowClosed,
   WindowDropped,
-  WindowFloated,
   WindowGrabbed,
+  WindowGrown,
   WindowHovered,
+  WindowKilled,
   WindowMoved,
-  WindowRaised,
   WindowRenamed,
   WindowResized,
   WindowSelected,
-  WindowTabbed,
-  WindowsReordered,
+  WindowSentToScratchpad,
+  WindowSentToWorkspace,
+  WindowStepped,
+  WorkspaceSelected,
 }
 
 export const WindowAction = {
@@ -170,6 +234,18 @@ export const WindowAction = {
     src,
   }),
 
+  /** `focus child`. */
+  ChildFocused: () => ({ kind: WindowActionKind.ChildFocused as const }),
+
+  /** `splith` / `splitv`. */
+  ContainerSplit: (axis: Axis) => ({
+    axis,
+    kind: WindowActionKind.ContainerSplit as const,
+  }),
+
+  /** `floating toggle`. */
+  FloatToggled: () => ({ kind: WindowActionKind.FloatToggled as const }),
+
   /**
    * The compositor moved the keyboard, by whatever route.
    *
@@ -185,33 +261,71 @@ export const WindowAction = {
   /**
    * A client asked for the keyboard. Nothing has moved yet.
    *
-   * The question {@link WindowAction.FocusChanged} is the answer to, and it
-   * arrives unanswered on purpose: the compositor forwards the request and
-   * leaves the seat where it is, so what happens next is this shell's policy
-   * rather than the desktop's. See the reducer's arm for what manganese
-   * decided.
+   * The compositor forwards the request over `xdg-activation` and leaves the
+   * seat where it is, so what happens next is this shell's policy rather than
+   * the desktop's. Manganese grants it, and goes to the workspace the window
+   * is on to do it.
    */
   FocusRequested: (appId: string) => ({
     appId,
     kind: WindowActionKind.FocusRequested as const,
   }),
 
-  /** The user closed a window from its tab. */
+  /** `focus <direction>`. */
+  FocusStepped: (direction: Direction) => ({
+    direction,
+    kind: WindowActionKind.FocusStepped as const,
+  }),
+
+  /** `fullscreen` — or `fullscreen toggle global`, across every screen. */
+  FullscreenToggled: (global: boolean) => ({
+    global,
+    kind: WindowActionKind.FullscreenToggled as const,
+  }),
+
+  /** `layout tabbed` / `layout stacking`. */
+  LayoutSet: (layout: Layout) => ({
+    kind: WindowActionKind.LayoutSet as const,
+    layout,
+  }),
+
+  /** `mode resize` and the `mode default` that leaves it. */
+  ModeSet: (mode: BindingMode) => ({
+    kind: WindowActionKind.ModeSet as const,
+    mode,
+  }),
+
+  /** `focus mode_toggle`: between the floating windows and the tiled ones. */
+  ModeSwapped: () => ({ kind: WindowActionKind.ModeSwapped as const }),
+
+  /** `focus parent`. */
+  ParentFocused: () => ({ kind: WindowActionKind.ParentFocused as const }),
+
+  /** `scratchpad show`. */
+  ScratchpadShown: () => ({ kind: WindowActionKind.ScratchpadShown as const }),
+
+  /** `layout toggle split`. */
+  SplitToggled: () => ({ kind: WindowActionKind.SplitToggled as const }),
+
+  /**
+   * The user asked for a terminal, which the compositor spawns.
+   *
+   * Nothing in the state moves: the window arrives as an announcement from
+   * the host like any other client's. It is an action so that the bindings
+   * table can be one table of them.
+   */
+  TerminalLaunched: () => ({
+    kind: WindowActionKind.TerminalLaunched as const,
+  }),
+
+  /** The user closed a window from its title bar. */
   WindowClosed: (id: string) => ({
     id,
     kind: WindowActionKind.WindowClosed as const,
   }),
 
   /** The user let go of the window they had hold of. */
-  WindowDropped: () => ({
-    kind: WindowActionKind.WindowDropped as const,
-  }),
-
-  /** The user took a window out of the rail to float over the stage. */
-  WindowFloated: (id: string) => ({
-    id,
-    kind: WindowActionKind.WindowFloated as const,
-  }),
+  WindowDropped: () => ({ kind: WindowActionKind.WindowDropped as const }),
 
   /**
    * The user took hold of a floating window to move or resize it.
@@ -225,20 +339,28 @@ export const WindowAction = {
     kind: WindowActionKind.WindowGrabbed as const,
   }),
 
+  /** `resize grow` / `resize shrink`, which is what resize mode's keys do. */
+  WindowGrown: (direction: Direction) => ({
+    direction,
+    kind: WindowActionKind.WindowGrown as const,
+  }),
+
   /**
    * The pointer moved into a window, which is what makes it the window the
    * user is working in: focus follows the cursor here.
    *
    * Not the same as reaching for one, which is what a click is — see
-   * {@link WindowAction.WindowSelected} and the reducer's arm for what this
-   * deliberately leaves alone.
+   * {@link WindowAction.WindowSelected}.
    */
   WindowHovered: (id: string) => ({
     id,
     kind: WindowActionKind.WindowHovered as const,
   }),
 
-  /** The user dragged a floating window to a new corner of the stage. */
+  /** `kill`: close the window being worked in. */
+  WindowKilled: () => ({ kind: WindowActionKind.WindowKilled as const }),
+
+  /** The user dragged a floating window to a new corner of the desktop. */
   WindowMoved: (id: string, x: number, y: number) => ({
     id,
     kind: WindowActionKind.WindowMoved as const,
@@ -246,13 +368,7 @@ export const WindowAction = {
     y,
   }),
 
-  /** The user touched a floating window, which brings it to the front. */
-  WindowRaised: (id: string) => ({
-    id,
-    kind: WindowActionKind.WindowRaised as const,
-  }),
-
-  /** A browser window's page navigated, so its tab says somewhere new. */
+  /** A browser window's page navigated, so its title says somewhere new. */
   WindowRenamed: (id: string, title: string) => ({
     id,
     kind: WindowActionKind.WindowRenamed as const,
@@ -267,24 +383,33 @@ export const WindowAction = {
     width,
   }),
 
-  /** The user picked a window's tab. */
+  /** The user reached for a window — a click in it, or on its title bar. */
   WindowSelected: (id: string) => ({
     id,
     kind: WindowActionKind.WindowSelected as const,
   }),
 
-  /** The user dragged (or keyed) `fromId` to sit beside `toId`. */
-  WindowsReordered: (fromId: string, toId: string, position: DropPosition) => ({
-    fromId,
-    kind: WindowActionKind.WindowsReordered as const,
-    position,
-    toId,
+  /** `move scratchpad`. */
+  WindowSentToScratchpad: () => ({
+    kind: WindowActionKind.WindowSentToScratchpad as const,
   }),
 
-  /** The user put a floating window back on the stage. */
-  WindowTabbed: (id: string) => ({
-    id,
-    kind: WindowActionKind.WindowTabbed as const,
+  /** `move container to workspace <name>`. */
+  WindowSentToWorkspace: (name: string) => ({
+    kind: WindowActionKind.WindowSentToWorkspace as const,
+    name,
+  }),
+
+  /** `move <direction>`. */
+  WindowStepped: (direction: Direction) => ({
+    direction,
+    kind: WindowActionKind.WindowStepped as const,
+  }),
+
+  /** `workspace <name>`. */
+  WorkspaceSelected: (name: string) => ({
+    kind: WindowActionKind.WorkspaceSelected as const,
+    name,
   }),
 };
 
@@ -322,6 +447,17 @@ export const reduceWindows = (
     case WindowActionKind.BrowserOpened: {
       return openBrowser(state, action.src);
     }
+    case WindowActionKind.ChildFocused: {
+      return onCurrent(state, childFocused);
+    }
+    case WindowActionKind.ContainerSplit: {
+      return onCurrent(state, (workspace) =>
+        containerSplit(workspace, action.axis),
+      );
+    }
+    case WindowActionKind.FloatToggled: {
+      return onCurrent(state, floatToggled);
+    }
     case WindowActionKind.FocusChanged: {
       const focusedId =
         action.appId === undefined ? undefined : appWindowId(action.appId);
@@ -334,97 +470,128 @@ export const reduceWindows = (
         : followFocus({ ...state, focusedId }, focusedId);
     }
     case WindowActionKind.FocusRequested: {
-      // Manganese grants it, by the same path picking a tab takes. That is a
-      // policy rather than a mechanism: the same ask carries "open this link in
-      // the browser I already have running" and a dialog stealing the window
-      // you were typing into, this shell cannot tell them apart, and a shell
-      // that would rather refuse changes this arm and nothing else.
-      //
-      // A window this shell has no record of is not refused so much as
-      // unreachable: `showWindow` throws for one, and a request can name a
-      // window whose close has already been reduced here.
-      const requested = appWindowId(action.appId);
-      return state.windows.some((window) => window.id === requested)
-        ? showWindow(state, requested)
-        : state;
+      return reachWindow(state, appWindowId(action.appId));
+    }
+    case WindowActionKind.FocusStepped: {
+      return onCurrent(state, (workspace) =>
+        focusStepped(workspace, action.direction),
+      );
+    }
+    case WindowActionKind.FullscreenToggled: {
+      return onCurrent(state, (workspace) =>
+        fullscreenToggled(workspace, action.global),
+      );
+    }
+    case WindowActionKind.LayoutSet: {
+      return onCurrent(state, (workspace) =>
+        containerLaidOut(workspace, action.layout),
+      );
+    }
+    case WindowActionKind.ModeSet: {
+      return { ...state, mode: action.mode };
+    }
+    case WindowActionKind.ModeSwapped: {
+      return onCurrent(state, modeToggled);
+    }
+    case WindowActionKind.ParentFocused: {
+      return onCurrent(state, parentFocused);
+    }
+    case WindowActionKind.ScratchpadShown: {
+      return showScratchpad(state);
+    }
+    case WindowActionKind.SplitToggled: {
+      return onCurrent(state, splitFlipped);
+    }
+    case WindowActionKind.TerminalLaunched: {
+      // The compositor spawns it and the host announces the window it opens.
+      return state;
     }
     case WindowActionKind.WindowClosed: {
-      return closeWindow(state, action.id);
+      return killWindow(state, action.id);
     }
     case WindowActionKind.WindowDropped: {
       return { ...state, draggingId: undefined };
     }
-    case WindowActionKind.WindowFloated: {
-      return floatWindow(state, action.id);
-    }
     case WindowActionKind.WindowGrabbed: {
       // Taking hold of a window brings it to the front, the same way clicking
       // one does — which is what a grab is.
-      return { ...raiseWindow(state, action.id), draggingId: action.id };
+      return { ...reachWindow(state, action.id), draggingId: action.id };
+    }
+    case WindowActionKind.WindowGrown: {
+      return onCurrent(state, (workspace) =>
+        windowGrown(workspace, action.direction),
+      );
     }
     case WindowActionKind.WindowHovered: {
       return pointAtWindow(state, action.id);
     }
-    case WindowActionKind.WindowMoved: {
-      return reshape(state, action.id, (float) =>
-        movedTo(float, action.x, action.y),
-      );
+    case WindowActionKind.WindowKilled: {
+      const id = activeIdOf(state);
+      return id === undefined ? state : killWindow(state, id);
     }
-    case WindowActionKind.WindowRaised: {
-      return raiseWindow(state, action.id);
+    case WindowActionKind.WindowMoved: {
+      return onWorkspaceWith(state, action.id, (workspace) =>
+        floatMoved(workspace, action.id, action.x, action.y),
+      );
     }
     case WindowActionKind.WindowRenamed: {
       return renameWindow(state, action.id, action.title);
     }
     case WindowActionKind.WindowResized: {
-      return reshape(state, action.id, (float) =>
-        sizedTo(float, action.width, action.height),
+      return onWorkspaceWith(state, action.id, (workspace) =>
+        floatSized(workspace, action.id, action.width, action.height),
       );
     }
     case WindowActionKind.WindowSelected: {
-      return showWindow(state, action.id);
+      return reachWindow(state, action.id);
     }
-    case WindowActionKind.WindowTabbed: {
-      return tabWindow(state, action.id);
+    case WindowActionKind.WindowSentToScratchpad: {
+      return hideInScratchpad(state);
     }
-    case WindowActionKind.WindowsReordered: {
-      return {
-        ...state,
-        windows: moveWindow(
-          state.windows,
-          action.fromId,
-          action.toId,
-          action.position,
-        ),
-      };
+    case WindowActionKind.WindowSentToWorkspace: {
+      return sendToWorkspace(state, action.name);
+    }
+    case WindowActionKind.WindowStepped: {
+      return onCurrent(state, (workspace) =>
+        windowMoved(workspace, action.direction),
+      );
+    }
+    case WindowActionKind.WorkspaceSelected: {
+      return selectWorkspace(state, action.name);
     }
   }
 };
 
-// The compositor moving the keyboard onto a window is the user working in it,
-// so the shell follows. Clicking is the only way to reach a floating window
-// whose tab is not the selected one, and without this the rail would go on
-// highlighting whatever the user had left — and Alt+Shift+Tab, which acts on
-// the window they are working in, would float the wrong one.
-//
-// Focus that landed on the chrome, or on a window the shell has not been told
-// about yet, leaves the active window where it was: there is nothing better to
-// point at, and `undefined` would be worse than stale.
-const followFocus = (
+// The workspace on screen, put through `into`. Most of the keyed commands are
+// exactly this: they act on what the user is looking at.
+const onCurrent = (
   state: WindowState,
-  focusedId: string | undefined,
+  into: (workspace: Workspace) => Workspace,
+): WindowState => onWorkspace(state, state.current, into);
+
+const onWorkspace = (
+  state: WindowState,
+  name: string,
+  into: (workspace: Workspace) => Workspace,
+): WindowState => ({
+  ...state,
+  workspaces: state.workspaces.map((workspace) =>
+    workspace.name === name ? into(workspace) : workspace,
+  ),
+});
+
+// The workspace the window `id` is on, put through `into`. A window the
+// desktop has no workspace for — one in the scratchpad, or one whose close has
+// already been reduced — leaves the state as it is.
+const onWorkspaceWith = (
+  state: WindowState,
+  id: string,
+  into: (workspace: Workspace) => Workspace,
 ): WindowState => {
-  if (
-    focusedId === undefined ||
-    !state.windows.some((window) => window.id === focusedId)
-  ) {
-    return state;
-  } else if (floatOf(state, focusedId) === undefined) {
-    return { ...state, activeId: focusedId };
-  } else {
-    // Clicked under another float, so it comes to the front as well.
-    return raiseWindow(state, focusedId);
-  }
+  const workspace = workspaceHolding(state, id);
+  return workspace === undefined
+    ? state
+    : onWorkspace(state, workspace.name, into);
 };
 
 // A client the shell already has a window for is the host re-announcing it,
@@ -434,143 +601,110 @@ const openApp = (
   appId: string,
   title: string | undefined,
 ): WindowState => {
-  const window = ShellWindow.App(appId, title ?? appId);
-  return state.windows.some((open) => open.id === window.id)
-    ? state
-    : openWindow(state, window);
+  const window = Window.App(appId, title ?? appId);
+  return windowOf(state, window.id) === undefined
+    ? openWindow(state, window)
+    : state;
 };
 
 const openBrowser = (state: WindowState, src: string): WindowState => {
   const browsersOpened = state.browsersOpened + 1;
   return openWindow(
     { ...state, browsersOpened },
-    ShellWindow.Browser(browsersOpened, src),
+    Window.Browser(browsersOpened, src),
   );
 };
 
-// A window that opens takes the stage; whatever had it is a tab away. It
-// opens tabbed, so it is also the window the user is now working in.
-const openWindow = (state: WindowState, window: ShellWindow): WindowState => ({
+// A window that opens lands tiled on the workspace being looked at and takes
+// the keyboard, which is what sway does with a client it has not been told
+// anything else about.
+const openWindow = (state: WindowState, window: ShellWindow): WindowState =>
+  onCurrent({ ...state, windows: [...state.windows, window] }, (workspace) =>
+    opened(workspace, window.id),
+  );
+
+/**
+ * `kill` on one window: the shell's own go at once, and a client's is asked.
+ *
+ * A client's window is the client's to end — the compositor sends its toplevel
+ * a close and an editor with unsaved work is entitled to stay — so nothing
+ * moves here and the window leaves on the `app_closed` that follows. The ask
+ * itself is `useWindows`'s, because the state cannot make it.
+ */
+const killWindow = (state: WindowState, id: string): WindowState => {
+  const window = windowOf(state, id);
+  return window?.kind === WindowKind.Browser ? closeWindow(state, id) : state;
+};
+
+// A window gone from everywhere it could be: the list, whichever workspace had
+// it, and the scratchpad. A close for a window the shell never opened is the
+// host draining events for a portal already torn down, which leaves the state
+// as it is.
+const closeWindow = (state: WindowState, id: string): WindowState => ({
   ...state,
-  activeId: window.id,
-  shownId: window.id,
-  windows: [...state.windows, window],
+  draggingId: state.draggingId === id ? undefined : state.draggingId,
+  scratchpad: state.scratchpad.filter((hidden) => hidden !== id),
+  windows: state.windows.filter((window) => window.id !== id),
+  workspaces: state.workspaces.map((workspace) =>
+    holds(workspace, id) ? closed(workspace, id) : workspace,
+  ),
 });
 
-// The window the stage falls back to: the most recently opened of the ones
-// still in the rail. A floating window is on screen already and putting it on
-// the stage as well would draw it twice.
-const lastTabbed = (
-  windows: readonly ShellWindow[],
-  floats: readonly Float[],
-): string | undefined =>
-  windows
-    .filter((window) => !floats.some((float) => float.id === window.id))
-    .at(-1)?.id;
-
-// Out of the rail and over the stage. Floating one twice is not an error and
-// not a second box either: the user asking again for what they already have
-// is the same window, and re-cascading it would move a window they had put
-// somewhere on purpose.
-const floatWindow = (state: WindowState, id: string): WindowState => {
-  if (!state.windows.some((window) => window.id === id)) {
-    throw new Error(`shell: no window ${id} to float`);
-  } else if (floatOf(state, id) === undefined) {
-    const floats = [...state.floats, floatFor(id, state.floats.length)];
-    return {
-      ...state,
-      activeId: id,
-      floats,
-      // The stage keeps whatever it had unless this window was it, in which
-      // case it falls back the same way a close does.
-      shownId:
-        state.shownId === id
-          ? lastTabbed(state.windows, floats)
-          : state.shownId,
-    };
-  } else {
-    return state;
-  }
-};
-
-// And back into the rail, onto the stage, which is where a window that is no
-// longer floating has to go: the alternative is a window with no box and no
-// tab selected, which is a window the user has lost.
-const tabWindow = (state: WindowState, id: string): WindowState => {
-  if (floatOf(state, id) === undefined) {
-    throw new Error(`shell: window ${id} is not floating`);
-  } else {
-    return {
-      ...state,
-      activeId: id,
-      // Whatever the pointer was doing, it was doing it to a window that is
-      // now on the stage and has no box to drag.
-      draggingId: state.draggingId === id ? undefined : state.draggingId,
-      floats: state.floats.filter((float) => float.id !== id),
-      shownId: id,
-    };
-  }
-};
-
-// A floating window's box, replaced. Only a floating window has one, so
-// asking to reshape a tabbed one is a wiring fault rather than a no-op: the
-// caller is dragging something the shell is not laying out.
-const reshape = (
+// The compositor moving the keyboard onto a window is the user working in it,
+// so the shell follows — and goes to the workspace the window is on, because
+// a seat pointed at a window nobody can see is a desktop typing into thin air.
+//
+// Focus that landed on the chrome, or on a window the shell has not been told
+// about yet, leaves the window being worked in where it was: there is nothing
+// better to point at, and `undefined` would be worse than stale.
+const followFocus = (
   state: WindowState,
-  id: string,
-  into: (float: Float) => Float,
-): WindowState => {
-  if (floatOf(state, id) === undefined) {
-    throw new Error(`shell: window ${id} is not floating`);
-  } else {
-    return {
-      ...state,
-      floats: state.floats.map((float) =>
-        float.id === id ? into(float) : float,
-      ),
-    };
-  }
-};
+  focusedId: string | undefined,
+): WindowState =>
+  focusedId === undefined || windowOf(state, focusedId) === undefined
+    ? state
+    : reachWindow(state, focusedId);
 
-// To the front, which is the end of the list: the order is the stacking order.
-const raiseWindow = (state: WindowState, id: string): WindowState => {
-  const raised = floatOf(state, id);
-  if (raised === undefined) {
-    throw new Error(`shell: window ${id} is not floating`);
-  } else if (state.activeId === id && state.floats.at(-1)?.id === id) {
-    // A window already in front and already the one being worked in has
-    // nowhere to be raised to. The same object, so that a click on it does
-    // not re-render every window for nothing — see `showWindow`.
+/**
+ * The user reached a window: it takes the keyboard, and comes to the front if
+ * it floats.
+ *
+ * The workspace it is on comes with it. Picking a window that is not on screen
+ * is something only a client's own ask can do — `xdg-activation`, which this
+ * shell grants — and going there is what makes granting it mean anything.
+ */
+const reachWindow = (state: WindowState, id: string): WindowState => {
+  const workspace = workspaceHolding(state, id);
+  if (workspace === undefined) {
     return state;
   } else {
-    return {
-      ...state,
-      activeId: id,
-      floats: [...state.floats.filter((float) => float.id !== id), raised],
-    };
+    return onWorkspace(
+      workspace.name === state.current
+        ? state
+        : { ...state, current: workspace.name, previous: state.current },
+      workspace.name,
+      (found) => reached(found, id),
+    );
   }
 };
 
-// The stage goes to the most recently opened of the survivors, so closing a
-// window lands on the one the user was on before it. A close for a window the
-// shell never opened is the host draining events for a portal already torn
-// down, which leaves the list as it is.
-const closeWindow = (state: WindowState, id: string): WindowState => {
-  const windows = state.windows.filter((window) => window.id !== id);
-  const floats = state.floats.filter((float) => float.id !== id);
-  const shownId =
-    state.shownId === id ? lastTabbed(windows, floats) : state.shownId;
-  return {
-    ...state,
-    // The topmost float first, because closing the front window puts the user
-    // on the one it was covering; the stage is what is left when none is out.
-    activeId:
-      state.activeId === id ? (floats.at(-1)?.id ?? shownId) : state.activeId,
-    draggingId: state.draggingId === id ? undefined : state.draggingId,
-    floats,
-    shownId,
-    windows,
-  };
+// The window under the pointer is the window the keyboard is in, which is the
+// whole of this shell's focus policy. What it does not do is raise: a window
+// that came to the front for being crossed would cover the one the user was
+// heading for, and the pointer would have rearranged the desktop on the way
+// there.
+const pointAtWindow = (state: WindowState, id: string): WindowState => {
+  const workspace = workspaceOn(state);
+  if (!holds(workspace, id)) {
+    return state;
+  } else if (focusedOn(workspace) === id) {
+    // The same object for a pointer that never left: a window says this again
+    // for every part of it that is an element of its own — a browser window's
+    // address bar, its page — and none of those is the user reaching anywhere.
+    return state;
+  } else {
+    return onCurrent(state, (found) => pointedAt(found, id));
+  }
 };
 
 // A fact the client reported about its own window, written onto the shell's
@@ -601,66 +735,71 @@ const renameWindow = (
   ),
 });
 
-// A tab is a way to reach a window, and a floating window still has one. What
-// reaching it means differs: a tabbed window goes on the stage, and a floating
-// one is on screen already, so it comes to the front instead. Putting it back
-// on the stage would undo the float the user asked for by clicking its tab.
-const showWindow = (state: WindowState, id: string): WindowState => {
-  if (!state.windows.some((window) => window.id === id)) {
-    throw new Error(`shell: no window ${id} to show`);
-  } else if (floatOf(state, id) === undefined) {
-    // The same object when the window is on the stage and being worked in
-    // already. Every press in a window is reported, because focus follows the
-    // cursor here and the window under the pointer is the active one before
-    // the click lands — so a window that swallowed the presses it thought it
-    // had already answered could never be raised by one.
-    return state.activeId === id && state.shownId === id
-      ? state
-      : { ...state, activeId: id, shownId: id };
-  } else {
-    return raiseWindow(state, id);
-  }
-};
-
-// The window under the pointer is the window the keyboard is in, which is the
-// whole of this shell's focus policy — one arm, because it is a policy rather
-// than a mechanism, and a shell that would rather the user clicked writes a
-// different one.
-//
-// What it does not do is raise. A window that came to the front for being
-// crossed would cover the one the user was heading for, and the pointer would
-// have rearranged the desktop on the way there. Nor does it touch the stage:
-// the pointer can only be over a window that is on screen already.
-const pointAtWindow = (state: WindowState, id: string): WindowState => {
-  if (!state.windows.some((window) => window.id === id)) {
-    throw new Error(`shell: no window ${id} to point at`);
-  } else if (state.activeId === id) {
-    // The same object for a pointer that never left: a window says this again
-    // for every part of it that is an element of its own — a browser window's
-    // address bar, its page — and none of those is the user reaching anywhere.
+// `workspace <name>`, with the config's `workspaceAutoBackAndForth`: naming
+// the workspace already on screen goes back to the one before it.
+const selectWorkspace = (state: WindowState, name: string): WindowState => {
+  if (name !== state.current) {
+    return { ...state, current: name, previous: state.current };
+  } else if (state.previous === undefined) {
     return state;
   } else {
-    return { ...state, activeId: id };
+    return { ...state, current: state.previous, previous: state.current };
   }
 };
 
-const moveWindow = (
-  windows: readonly ShellWindow[],
-  fromId: string,
-  toId: string,
-  position: DropPosition,
-): readonly ShellWindow[] => {
-  const moved = windows.find((window) => window.id === fromId);
-  if (moved === undefined) {
-    throw new Error(`shell: no window ${fromId} to move`);
+// `move container to workspace <name>`: the window goes and the user stays,
+// which is sway's default. It lands tiled there however it was laid out here.
+const sendToWorkspace = (state: WindowState, name: string): WindowState => {
+  const id = activeIdOf(state);
+  if (id === undefined || name === state.current) {
+    return state;
   } else {
-    const rest = windows.filter((window) => window.id !== fromId);
-    const target = rest.findIndex((window) => window.id === toId);
-    if (target === -1) {
-      throw new Error(`shell: no window ${toId} to drop onto`);
-    } else {
-      const at = position === "before" ? target : target + 1;
-      return [...rest.slice(0, at), moved, ...rest.slice(at)];
-    }
+    return onWorkspace(
+      onCurrent(state, (workspace) => closed(workspace, id)),
+      name,
+      (workspace) => opened(workspace, id),
+    );
+  }
+};
+
+// `move scratchpad`: off every workspace, and out of the way. The window is
+// still open — it is a window with nowhere on screen to be.
+const hideInScratchpad = (state: WindowState): WindowState => {
+  const id = activeIdOf(state);
+  if (id === undefined) {
+    return state;
+  } else {
+    return onCurrent(
+      { ...state, scratchpad: [...state.scratchpad, id] },
+      (workspace) => closed(workspace, id),
+    );
+  }
+};
+
+/**
+ * `scratchpad show`: the last window hidden, floating over this workspace —
+ * or the one already up, hidden again.
+ *
+ * Which of the two it is, is the question the float's own `scratchpad` flag
+ * answers: sway's `scratchpad show` cycles a window out and back, and the
+ * window being worked in is the one it acts on.
+ */
+const showScratchpad = (state: WindowState): WindowState => {
+  const workspace = workspaceOn(state);
+  const id = focusedOn(workspace);
+  const up = id === undefined ? undefined : floatOn(workspace, id);
+  const hidden = state.scratchpad.at(-1);
+  if (up?.scratchpad === true && id !== undefined) {
+    return onCurrent(
+      { ...state, scratchpad: [...state.scratchpad, id] },
+      (found) => closed(found, id),
+    );
+  } else if (hidden === undefined) {
+    return state;
+  } else {
+    return onCurrent(
+      { ...state, scratchpad: state.scratchpad.slice(0, -1) },
+      (found) => shown(found, hidden),
+    );
   }
 };

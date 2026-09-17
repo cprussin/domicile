@@ -1,21 +1,32 @@
-// A window that has left the tab rail: where it sits on the stage, and how big.
+// A window that is floating rather than tiled: where it sits on the desktop,
+// and how big.
 //
 // Its own module rather than a field on `ShellWindow` because floating is not
 // a kind of window — any window can be floated and put back, and a client's
 // portal is the same portal either way. What changes is where the shell lays
 // it out, which is exactly what this describes.
 
-/** Where a floating window sits, in the stage's own pixels. */
+import type { Direction } from "../direction";
+import { Axis, axisOf, isForward } from "../direction";
+import type { Rect } from "../rect";
+import { TITLE_BAR } from "../rect";
+
+/** Where a floating window sits, in the desktop's own pixels. */
 export type Float = {
   height: number;
   /** The window this is the box of. */
   id: string;
+  /**
+   * Whether it is up from the scratchpad, so `scratchpad show` hides it again
+   * rather than fetching the next one.
+   */
+  scratchpad: boolean;
   width: number;
   x: number;
   y: number;
 };
 
-/** How big a window is when it first leaves the rail. */
+/** How big a window is when it first leaves the tiling. */
 const OPENS_AT = { height: 420, width: 640 };
 
 /**
@@ -30,17 +41,25 @@ const CASCADE = 36;
 /** Where the first float sits. */
 const ORIGIN = 48;
 
+/** How far one keyed `move` or `resize` shifts a floating window. */
+export const FLOAT_STEP = 10;
+
 /**
- * A box for a window leaving the rail, cascaded past the `floating` boxes
+ * A box for a window leaving the tiling, cascaded past the `floating` boxes
  * already out there.
  *
  * The count rather than the last box's corner: dragging a window into the
- * corner must not put the next one off the stage, and the count is what says
+ * corner must not put the next one off the screen, and the count is what says
  * how many are already out regardless of where the user has since put them.
  */
-export const floatFor = (id: string, floating: number): Float => ({
+export const floatFor = (
+  id: string,
+  floating: number,
+  scratchpad = false,
+): Float => ({
   ...OPENS_AT,
   id,
+  scratchpad,
   x: ORIGIN + CASCADE * floating,
   y: ORIGIN + CASCADE * floating,
 });
@@ -60,10 +79,11 @@ const SMALLEST = { height: 120, width: 240 };
 /**
  * The same box, moved.
  *
- * Kept on the stage at the top and the left, which are the two edges a window
- * dragged past cannot be dragged back from — the corner you would reach for is
- * off the screen. The right and the bottom are left alone: a window dragged
- * most of the way off those still has its top-left corner in reach.
+ * Kept on the desktop at the top and the left, which are the two edges a
+ * window dragged past cannot be dragged back from — the corner you would
+ * reach for is off the screen. The right and the bottom are left alone: a
+ * window dragged most of the way off those still has its top-left corner in
+ * reach.
  */
 export const movedTo = (float: Float, x: number, y: number): Float => ({
   ...float,
@@ -82,47 +102,26 @@ export const sizedTo = (
   width: Math.max(SMALLEST.width, width),
 });
 
-/**
- * How tall a floating window's title bar is.
- *
- * It comes out of the window rather than being added to it: a float's box is
- * the whole frame, so a window dragged to a size is that size, bar included,
- * and a resize does not have to reason about a frame that grows with it.
- */
-export const TITLE_BAR = 30;
-
-/** What a floating window's box is made of: a bar over a client's surface. */
-export type Box = {
-  height: number;
-  width: number;
-  x: number;
-  y: number;
+/** The same box, shifted one step `direction` — what a keyed `move` does. */
+export const shifted = (float: Float, direction: Direction): Float => {
+  const step = isForward(direction) ? FLOAT_STEP : -FLOAT_STEP;
+  return axisOf(direction) === Axis.Horizontal
+    ? movedTo(float, float.x + step, float.y)
+    : movedTo(float, float.x, float.y + step);
 };
 
-/** The whole frame — the bar and the surface under it. */
-export const frameBox = ({ height, width, x, y }: Float): Box => ({
+/** The same box, one step bigger or smaller — what resize mode does. */
+export const grown = (float: Float, direction: Direction): Float => {
+  const step = isForward(direction) ? FLOAT_STEP : -FLOAT_STEP;
+  return axisOf(direction) === Axis.Horizontal
+    ? sizedTo(float, float.width + step, float.height)
+    : sizedTo(float, float.width, float.height + step);
+};
+
+/** The whole frame — the bar and the window's contents under it. */
+export const rectOf = ({ height, width, x, y }: Float): Rect => ({
   height,
   width,
   x,
   y,
-});
-
-/** Just the bar, along the top of it. */
-export const barBox = (float: Float): Box => ({
-  ...frameBox(float),
-  height: TITLE_BAR,
-});
-
-/**
- * And the client's surface, under the bar.
- *
- * Never shorter than nothing: {@link sizedTo} keeps a window taller than its
- * own bar, so this stays positive — but a negative height would be reported to
- * the compositor as a window turned inside out, which is worth not relying on
- * a number in another module for.
- */
-export const surfaceBox = (float: Float): Box => ({
-  ...frameBox(float),
-  height: Math.max(0, float.height - TITLE_BAR),
-  y: float.y + TITLE_BAR,
 });

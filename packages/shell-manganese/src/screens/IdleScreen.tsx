@@ -1,5 +1,5 @@
 import { flex } from "../../styled-system/patterns";
-import { Clock } from "../Clock";
+import { Clock } from "../clock/Clock";
 
 /**
  * What a screen the chrome is not on shows: a clock, in the middle of it.

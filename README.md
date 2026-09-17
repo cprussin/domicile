@@ -19,7 +19,7 @@ Needs Nix, and either a Wayland session or a console login. Nothing to
 clone.
 
 ```sh
-nix run github:cprussin/domicile#manganese   # tabs, stage, address bar
+nix run github:cprussin/domicile#manganese   # tiling, sway's keys, address bar
 nix run github:cprussin/domicile#simple      # floating windows only
 ```
 

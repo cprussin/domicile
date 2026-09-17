@@ -1,17 +1,26 @@
 import { describe, expect, it } from "bun:test";
 
+import { Direction } from "../direction";
+import { TITLE_BAR } from "../rect";
 import type { Float } from "./float";
 import {
-  barBox,
+  FLOAT_STEP,
   floatFor,
-  frameBox,
+  grown,
   movedTo,
+  rectOf,
+  shifted,
   sizedTo,
-  surfaceBox,
-  TITLE_BAR,
 } from "./float";
 
-const AT: Float = { height: 420, id: "w1", width: 640, x: 100, y: 80 };
+const AT: Float = {
+  height: 420,
+  id: "w1",
+  scratchpad: false,
+  width: 640,
+  x: 100,
+  y: 80,
+};
 
 describe("floatFor", () => {
   it("opens the first window in from the corner", () => {
@@ -31,7 +40,7 @@ describe("floatFor", () => {
 
   it("cascades by the count rather than by where the last one ended up", () => {
     // Dragging a window into the corner must not put the next one off the
-    // stage, so the count is what says how many are already out.
+    // screen, so the count is what says how many are already out.
     expect(floatFor("w3", 2)).toStrictEqual({
       ...floatFor("other", 2),
       id: "w3",
@@ -100,45 +109,54 @@ describe("sizedTo", () => {
   });
 });
 
-describe("the parts of a floating window", () => {
-  it("gives the frame the whole box", () => {
-    expect(frameBox(AT)).toStrictEqual({
+describe("rectOf", () => {
+  it("is the whole frame, bar included", () => {
+    expect(rectOf(AT)).toStrictEqual({
       height: AT.height,
       width: AT.width,
       x: AT.x,
       y: AT.y,
     });
   });
+});
 
-  it("puts the bar along the top of the frame", () => {
-    expect(barBox(AT)).toStrictEqual({
-      height: TITLE_BAR,
-      width: AT.width,
-      x: AT.x,
+describe("shifted", () => {
+  it("moves the window one step the way it was told", () => {
+    expect(shifted(AT, Direction.Right)).toMatchObject({
+      x: AT.x + FLOAT_STEP,
       y: AT.y,
     });
-  });
-
-  it("puts the surface under the bar", () => {
-    expect(surfaceBox(AT)).toStrictEqual({
-      height: AT.height - TITLE_BAR,
-      width: AT.width,
+    expect(shifted(AT, Direction.Up)).toMatchObject({
       x: AT.x,
-      y: AT.y + TITLE_BAR,
+      y: AT.y - FLOAT_STEP,
     });
   });
 
-  it("takes the bar out of the window rather than adding it on", () => {
-    // A float's box is the whole frame, so a window dragged to a size is that
-    // size, bar included, and a resize needs no frame that grows with it.
-    const parts = barBox(AT).height + surfaceBox(AT).height;
-    expect(parts).toBe(frameBox(AT).height);
+  it("keeps the window in reach, the way a drag does", () => {
+    expect(shifted({ ...AT, y: 0 }, Direction.Up).y).toBe(0);
+  });
+});
+
+describe("grown", () => {
+  it("grows the window along the axis it was told", () => {
+    expect(grown(AT, Direction.Right)).toMatchObject({
+      height: AT.height,
+      width: AT.width + FLOAT_STEP,
+    });
+    expect(grown(AT, Direction.Down)).toMatchObject({
+      height: AT.height + FLOAT_STEP,
+      width: AT.width,
+    });
   });
 
-  it("never gives the surface a negative height", () => {
-    // `sizedTo` keeps a window taller than its own bar, so this holds — but a
-    // negative height reaches the compositor as a window turned inside out.
-    const squashed: Float = { ...AT, height: 1 };
-    expect(surfaceBox(squashed).height).toBe(0);
+  it("shrinks it the other way about", () => {
+    expect(grown(AT, Direction.Left).width).toBe(AT.width - FLOAT_STEP);
+    expect(grown(AT, Direction.Up).height).toBe(AT.height - FLOAT_STEP);
+  });
+
+  it("will not shrink it below what is left to grab", () => {
+    const smallest = grown({ ...AT, height: TITLE_BAR + 1 }, Direction.Up);
+
+    expect(smallest.height).toBeGreaterThan(TITLE_BAR);
   });
 });

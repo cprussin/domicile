@@ -1,81 +1,55 @@
 import type { CSSProperties } from "react";
 
 import { css } from "../../styled-system/css";
-import type { Box } from "./floating/float";
+import type { Rect } from "./rect";
 
 /**
- * What every window shares: it fills the stage, and the one that is not on it
- * has no box at all.
+ * What every window shares, which is almost nothing.
  *
  * A background is not among them. A window that shows a client's surface must
  * not paint one: where the compositor draws that surface itself the element is
  * a hole in the page, and a background here would fill the hole in and hide the
  * window behind it. A window that draws its own contents sets its own.
  *
- * `display` is not among them either. A window that lays its own
- * contents out has to set it, and two atomic classes on one element tie on
- * specificity — so a `display` here silently beats the window's own wherever
- * the bundle happens to order the two rules. Absolute positioning blockifies
- * the box anyway, which is all a window that sets no `display` ever wanted.
+ * `display` is not among them either. A window that lays its own contents out
+ * has to set it, and two atomic classes on one element tie on specificity — so
+ * a `display` here would silently beat the window's own wherever the bundle
+ * happens to order the two rules. Absolute positioning blockifies the box
+ * anyway, which is all a window that sets no `display` ever wanted.
  *
- * Filling the stage is spelled as four properties rather than `inset: 0`
- * because a floating window overrides them one at a time — see
- * {@link floatPlacement}. `inset` would leave `right` and `bottom` behind, and
- * a box with a left, a right and a width is over-constrained: it lays out by
- * the rule that says which one to ignore, which is not a rule to lay a desktop
- * out by.
+ * Nor is a box: every window is placed at a rectangle the layout worked out,
+ * and {@link placedAt} is what writes it.
  */
 export const windowStyles = css({
   // A window's own `display` would otherwise beat the `hidden` attribute's UA
   // rule; this selector outranks it.
   "&[hidden]": { display: "none" },
-  blockSize: "100%",
-  inlineSize: "100%",
-  insetBlockStart: 0,
-  insetInlineStart: 0,
-  position: "absolute",
 });
 
 /**
- * The lowest `z-index` a floating window is given.
- *
- * Above the stage, which has none: a window that left the rail is over the one
- * that is still on it, always, whatever order the two happen to be in the DOM.
- */
-const FLOOR = 1;
-
-/**
- * Where a part of a floating window sits, as the inline style that puts it
- * there.
+ * Where a part of a window sits, as the inline style that puts it there.
  *
  * Inline rather than a Panda class because these are runtime numbers, and
  * Panda extracts styles by reading literals at build time: a class built from
- * a number that does not exist yet comes out with no rule behind it. Everything
- * static is in {@link windowStyles}, which this overrides property for
- * property.
+ * a number that does not exist yet comes out with no rule behind it.
  *
- * `depth` is the window's place in the shell's float order, and it becomes the
- * element's *own* `z-index` — which is what the SDK reports with the placement
- * and what the compositor stacks the client's surface by. On the element
- * rather than on a wrapper for exactly that reason: a wrapper's `z-index` is
- * one the page can see and the desktop cannot.
+ * `depth` becomes the element's *own* `z-index` — which is what the SDK
+ * reports with the placement and what the compositor stacks the client's
+ * surface by. On the element rather than on a wrapper for exactly that reason:
+ * a wrapper's `z-index` is one the page can see and the desktop cannot.
+ *
+ * **In the desktop's coordinates rather than any container's.** The page spans
+ * every display, so the viewport *is* the desktop: a window at 0 is at its
+ * corner, over the top bar, which is where a fullscreen or dragged window is
+ * allowed to be. It is the same space `<Screen>` places its regions in.
  */
-export const floatPlacement = (box: Box, depth: number): CSSProperties => ({
-  blockSize: `${box.height.toString()}px`,
-  inlineSize: `${box.width.toString()}px`,
-  insetBlockStart: `${box.y.toString()}px`,
-  insetInlineStart: `${box.x.toString()}px`,
-  // In the desktop's coordinates rather than the stage's, which is what lets a
-  // window be dragged over the rail. A float laid out against the stage cannot
-  // leave it, and the stage begins where the rail ends — so most of the
-  // left-hand edge of the screen was somewhere a window could not go.
-  //
-  // The page spans the whole desktop, so the viewport *is* the desktop and a
-  // float at 0 is at its corner. That is the same space `<Screen>` places its
-  // regions in, which is why this is a change of nothing but reach: the
-  // numbers a float is given mean what they always meant, over a wider area.
+export const placedAt = (rect: Rect, depth: number): CSSProperties => ({
+  blockSize: `${rect.height.toString()}px`,
+  inlineSize: `${rect.width.toString()}px`,
+  insetBlockStart: `${rect.y.toString()}px`,
+  insetInlineStart: `${rect.x.toString()}px`,
   position: "fixed",
-  zIndex: FLOOR + depth,
+  zIndex: depth,
 });
 
 /**
@@ -90,16 +64,14 @@ export const floatPlacement = (box: Box, depth: number): CSSProperties => ({
 export const draggingStyles = css({ opacity: 0.6 });
 
 /**
- * The line around a floating window, so its edge is visible against whatever
- * it is over.
+ * The line around a window, so its edge is visible against whatever it is
+ * over.
  *
  * On the page rather than on the client: the element is a hole and the border
  * is drawn around the hole, which is the one part of a window's frame the
- * compositor does not have to be told about. A window on the stage needs none
- * — it meets the rail and the screen edge, and there is nothing to tell it
- * apart from.
+ * compositor does not have to be told about.
  */
-export const floatEdgeStyles = css({
+export const edgeStyles = css({
   borderColor: "borderStrong",
   borderStyle: "solid",
   borderWidth: "1px",
@@ -108,11 +80,11 @@ export const floatEdgeStyles = css({
 /**
  * A window the pointer goes straight through.
  *
- * How the shell takes the mouse back while Alt is held. The compositor
- * hit-tests a rectangle and gives the pointer to the window under it; a window
- * that says `pointer-events: none` is reported as taking no pointer, so the
- * events arrive in the page instead — which is where a drag is handled. The
- * same mechanism that stops a window swallowing the clicks meant for a menu
- * drawn over it.
+ * How the shell takes the mouse back while the desktop's modifier is held. The
+ * compositor hit-tests a rectangle and gives the pointer to the window under
+ * it; a window that says `pointer-events: none` is reported as taking no
+ * pointer, so the events arrive in the page instead — which is where a drag is
+ * handled. The same mechanism that stops a window swallowing the clicks meant
+ * for a menu drawn over it.
  */
 export const clickThroughStyles = css({ pointerEvents: "none" });

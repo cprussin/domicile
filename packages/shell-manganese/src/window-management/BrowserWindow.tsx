@@ -12,15 +12,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
-import { surfaceBox } from "./floating/float";
+import type { Rect } from "./rect";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useReclaimFocus } from "./useReclaimFocus";
-import type { Floating } from "./window-state";
 import {
   clickThroughStyles,
   draggingStyles,
-  floatEdgeStyles,
-  floatPlacement,
+  edgeStyles,
+  placedAt,
   windowStyles,
 } from "./window-styles";
 import { withScheme } from "./with-scheme";
@@ -42,10 +41,10 @@ type Props = {
    * before it can be told where the window is being dragged to.
    */
   clickThrough: boolean;
+  /** How it stacks: the window's own `z-index`, which the SDK reports. */
+  depth: number;
   /** Whether the user has hold of this window, which makes it see-through. */
   dragging: boolean;
-  /** How this window floats over the stage, or `undefined` while it is on it. */
-  floating: Floating | undefined;
   /** Whether the user is working in this window, so it takes the keyboard. */
   focused: boolean;
   /**
@@ -87,19 +86,16 @@ type Props = {
    */
   onReach: () => void;
   /**
-   * Whether this window is on screen at all.
-   *
-   * Not the same as being focused: a floating window is on screen whatever
-   * else the user is doing, and a tabbed one is on screen only while its tab
-   * is the selected one.
+   * Where the window's contents go, or `undefined` when it is not on screen
+   * at all — on another workspace, or behind another window's tab.
    */
-  onScreen: boolean;
+  rect: Rect | undefined;
   /** Where the window starts. The view owns navigation from there. */
   src: string;
 };
 
 /**
- * A browser window on the stage: an address bar over a `<webview>`.
+ * A browser window: an address bar over a `<webview>`.
  *
  * The window is ordinary chrome, built from the same component library as the
  * rest of it — so the controls a browser needs cost nothing to style and match
@@ -107,15 +103,15 @@ type Props = {
  * itself; this is the chrome the user drives it with.
  */
 export const BrowserWindow = ({
-  domicile,
   clickThrough,
+  depth,
+  domicile,
   dragging,
-  floating,
   focused,
   onHover,
   onNavigate,
   onReach,
-  onScreen,
+  rect,
   src,
 }: Props) => {
   // `null` rather than `undefined` because that is what React's ref API hands
@@ -233,13 +229,13 @@ export const BrowserWindow = ({
       className={cx(
         windowStyles,
         browserStyles,
+        // The bar above carries the top edge; this picks up the other three.
+        edgeStyles,
+        noTopEdgeStyles,
         clickThrough && clickThroughStyles,
         dragging && draggingStyles,
-        // The bar above carries the top edge; this picks up the other three.
-        floating !== undefined && floatEdgeStyles,
-        floating !== undefined && noTopEdgeStyles,
       )}
-      hidden={!onScreen}
+      hidden={rect === undefined}
       // Focus as well as the press, for the chrome's own controls: pressing
       // the address bar is a pointer event, and reaching it with the keyboard
       // is not. What happens in the page arrives on the element instead — see
@@ -251,13 +247,9 @@ export const BrowserWindow = ({
       // is the guest's, the same way a click in it is.
       onPointerOver={onHover}
       // Inline because the box is a runtime number and Panda reads literals;
-      // `window-styles` owns everything static. `undefined` leaves the window
-      // filling the stage, which is where a window that is not floating is.
-      style={
-        floating === undefined
-          ? undefined
-          : floatPlacement(surfaceBox(floating.float), floating.depth)
-      }
+      // `window-styles` owns everything static. `undefined` is a window with no
+      // rectangle, which is a window that is not on screen.
+      style={rect === undefined ? undefined : placedAt(rect, depth)}
     >
       <form className={addressBarStyles} onSubmit={handleSubmit}>
         <Button
@@ -364,6 +356,6 @@ const viewStyles = css({
   minInlineSize: 0,
 });
 
-// A floating browser window meets its title bar at the top, and the seam
-// between the two is not a line to draw twice.
+// A browser window meets its title bar at the top, and the seam between the
+// two is not a line to draw twice.
 const noTopEdgeStyles = css({ borderBlockStartWidth: 0 });

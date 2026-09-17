@@ -12,9 +12,9 @@ import { useCallback, useEffect } from "react";
  *
  * **Only from nothing.** The chrome around a window is full of things that
  * take the focus on purpose, and every one of them is the user reaching for
- * it: the address bar over the page, a tab in the rail, the theme switch. A
+ * it: the address bar over the page, a workspace on the bar, the theme switch. A
  * window that took the focus back from those is a window whose address bar
- * cannot be typed in, and a rail whose tabs cannot be walked with the
+ * cannot be typed in, and a bar whose controls cannot be reached with the
  * keyboard. What is taken back is the focus that landed on *nothing*.
  *
  * Which the chrome does every time a window closes: the control pressed to

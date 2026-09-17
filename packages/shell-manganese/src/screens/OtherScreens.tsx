@@ -5,8 +5,8 @@ import type { PropsWithChildren } from "react";
 /**
  * Every display the chrome is not on.
  *
- * There is one stage and it is on the first screen, so this is what the others
- * have to show. Nothing at all before the desktop is described, rather than
+ * The windows are all on the first screen, so this is what the others have to
+ * show. Nothing at all before the desktop is described, rather than
  * everywhere: the first screen is not known yet, so "the others" is not either.
  */
 export const OtherScreens = ({ children }: PropsWithChildren) => {

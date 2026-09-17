@@ -37,17 +37,20 @@ const noHover = () => {
   // Nothing in the case moves the pointer into the window.
 };
 
+/** Where a window on screen is, which no case here is about. */
+const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
+
 /** The props every case here shares; each overrides the one it is about. */
 const windowProps = {
   appId: "term",
   clickThrough: false,
   cursor: undefined,
+  depth: 0,
   domicile: recordingDomicile,
   dragging: false,
-  floating: undefined,
   hasKeyboard: false,
   onHover: noHover,
-  onScreen: true,
+  rect: ON_SCREEN,
 } as const;
 
 const noReach = () => {
@@ -88,7 +91,7 @@ describe("AppWindow", () => {
     // The SDK focuses a clicked client unless something says otherwise, and
     // this shell says otherwise: which window the user is working in is one
     // fact, and it has one owner. Left to the SDK the keyboard would move
-    // while the rail went on highlighting the window before it — the same
+    // while the desktop went on drawing the window before it as focused — the same
     // split a browser window had before `onReach`.
     const reached: string[] = [];
     const { container } = render(
@@ -158,13 +161,13 @@ describe("AppWindow", () => {
     });
   });
 
-  it("hides the element when the window is not on the stage", () => {
+  it("hides the element when the window is not on screen", () => {
     const { container } = render(
       <AppWindow
         {...windowProps}
         focused={false}
         onReach={noReach}
-        onScreen={false}
+        rect={undefined}
       />,
     );
     expect(portal(container)).not.toBeVisible();
@@ -191,10 +194,10 @@ describe("AppWindow", () => {
 
   it("says so again when the keyboard has gone somewhere else", () => {
     // The shell's idea of the active window and the compositor's seat are two
-    // facts and they come apart: a press on the rail, on the wallpaper, on any
+    // facts and they come apart: a press on the bar, on the wallpaper, on any
     // of the chrome hands the keyboard back to the page without the window the
     // user is working in having changed. Nothing else the shell watches moves,
-    // so before this the rail went on highlighting a window that every
+    // so before this the desktop went on drawing a window as focused that every
     // keystroke was missing.
     const { rerender } = render(
       <AppWindow {...windowProps} focused hasKeyboard onReach={noReach} />,

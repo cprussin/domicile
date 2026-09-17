@@ -87,19 +87,22 @@ stylesheet.textContent = readFileSync(
   .replaceAll(/@layer [^{]+\{/g, "@media all{");
 document.head.append(stylesheet);
 
+/** Where a window on screen is, which no case here is about. */
+const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
+
 describe("BrowserWindow", () => {
   it("points its view at the address it opened with", () => {
     const { container } = render(
       <BrowserWindow
         clickThrough={false}
+        depth={0}
         domicile={silentDomicile}
         dragging={false}
-        floating={undefined}
         focused
         onHover={noHover}
         onNavigate={() => undefined}
         onReach={() => undefined}
-        onScreen
+        rect={ON_SCREEN}
         src="https://example.com"
       />,
     );
@@ -112,14 +115,14 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          depth={0}
           domicile={silentDomicile}
           dragging={false}
-          floating={undefined}
           focused
           onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
-          onScreen
+          rect={ON_SCREEN}
           src="https://example.com"
         />,
       );
@@ -139,16 +142,16 @@ describe("BrowserWindow", () => {
       render(
         <BrowserWindow
           clickThrough={false}
+          depth={0}
           domicile={silentDomicile}
           dragging={false}
-          floating={undefined}
           focused
           onHover={noHover}
           onNavigate={(url) => {
             seen.push(url);
           }}
           onReach={() => undefined}
-          onScreen
+          rect={ON_SCREEN}
           src="https://example.com"
         />,
       );
@@ -159,18 +162,18 @@ describe("BrowserWindow", () => {
   });
 
   describe("the page", () => {
-    it("takes the whole stage under the address bar", () => {
+    it("takes the whole window under the address bar", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          depth={0}
           domicile={silentDomicile}
           dragging={false}
-          floating={undefined}
           focused
           onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
-          onScreen
+          rect={ON_SCREEN}
           src="https://example.com"
         />,
       );
@@ -197,14 +200,14 @@ describe("BrowserWindow", () => {
       render(
         <BrowserWindow
           clickThrough={false}
+          depth={0}
           domicile={recordingDomicile(calls)}
           dragging={false}
-          floating={undefined}
           focused
           onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
-          onScreen
+          rect={ON_SCREEN}
           src="https://example.com"
         />,
       );
@@ -216,14 +219,14 @@ describe("BrowserWindow", () => {
       render(
         <BrowserWindow
           clickThrough={false}
+          depth={0}
           domicile={recordingDomicile(calls)}
           dragging={false}
-          floating={undefined}
           focused={false}
           onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
-          onScreen
+          rect={ON_SCREEN}
           src="https://example.com"
         />,
       );
@@ -248,16 +251,16 @@ describe("BrowserWindow", () => {
         const { container } = render(
           <BrowserWindow
             clickThrough={false}
+            depth={0}
             domicile={silentDomicile}
             dragging={false}
-            floating={undefined}
             focused={false}
             onHover={noHover}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
             }}
-            onScreen
+            rect={ON_SCREEN}
             src="https://example.com"
           />,
         );
@@ -270,16 +273,16 @@ describe("BrowserWindow", () => {
         const { container } = render(
           <BrowserWindow
             clickThrough={false}
+            depth={0}
             domicile={silentDomicile}
             dragging={false}
-            floating={undefined}
             focused={false}
             onHover={noHover}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
             }}
-            onScreen
+            rect={ON_SCREEN}
             src="https://example.com"
           />,
         );
@@ -295,16 +298,16 @@ describe("BrowserWindow", () => {
         render(
           <BrowserWindow
             clickThrough={false}
+            depth={0}
             domicile={silentDomicile}
             dragging={false}
-            floating={undefined}
             focused={false}
             onHover={noHover}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
             }}
-            onScreen
+            rect={ON_SCREEN}
             src="https://example.com"
           />,
         );
@@ -322,16 +325,16 @@ describe("BrowserWindow", () => {
         const { container } = render(
           <BrowserWindow
             clickThrough={false}
+            depth={0}
             domicile={silentDomicile}
             dragging={false}
-            floating={undefined}
             focused
             onHover={noHover}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
             }}
-            onScreen
+            rect={ON_SCREEN}
             src="https://example.com"
           />,
         );
@@ -345,16 +348,16 @@ describe("BrowserWindow", () => {
         render(
           <BrowserWindow
             clickThrough={false}
+            depth={0}
             domicile={silentDomicile}
             dragging={false}
-            floating={undefined}
             focused
             onHover={noHover}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
             }}
-            onScreen
+            rect={ON_SCREEN}
             src="https://example.com"
           />,
         );
@@ -371,15 +374,15 @@ describe("BrowserWindow", () => {
       const reaches: string[] = [];
       const windowProps = {
         clickThrough: false,
+        depth: 0,
         domicile: silentDomicile,
         dragging: false,
-        floating: undefined,
         onHover: noHover,
         onNavigate: () => undefined,
         onReach: () => {
           reaches.push("reach");
         },
-        onScreen: true,
+        rect: ON_SCREEN,
         src: "https://example.com",
       } as const;
       const { container, rerender } = render(
@@ -399,25 +402,25 @@ describe("BrowserWindow", () => {
 
     it("says nothing when it takes the focus back from nothing", async () => {
       // The keyboard this window puts back in its own page when the chrome
-      // drops the focus — closing another window's tab is the case
+      // drops the focus — closing another window is the case
       // `useReclaimFocus` exists for — is the shell's focus as much as the one
       // a window is given for becoming active, and comes back as the same
-      // announcement. Left unspent, closing a tab would raise whatever window
+      // announcement. Left unspent, closing a window would raise whatever window
       // the pointer last crossed.
       const reaches: string[] = [];
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          depth={0}
           domicile={silentDomicile}
           dragging={false}
-          floating={undefined}
           focused
           onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => {
             reaches.push("reach");
           }}
-          onScreen
+          rect={ON_SCREEN}
           src="https://example.com"
         />,
       );
@@ -447,16 +450,16 @@ describe("BrowserWindow", () => {
         render(
           <BrowserWindow
             clickThrough={false}
+            depth={0}
             domicile={silentDomicile}
             dragging={false}
-            floating={undefined}
             focused={false}
             onHover={() => {
               resolve();
             }}
             onNavigate={() => undefined}
             onReach={() => undefined}
-            onScreen
+            rect={ON_SCREEN}
             src="https://example.com"
           />,
         );
@@ -474,14 +477,14 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          depth={0}
           domicile={silentDomicile}
           dragging={false}
-          floating={undefined}
           focused
           onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
-          onScreen
+          rect={ON_SCREEN}
           src="https://example.com"
         />,
       );
@@ -497,14 +500,14 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          depth={0}
           domicile={silentDomicile}
           dragging={false}
-          floating={undefined}
           focused
           onHover={noHover}
           onNavigate={() => undefined}
           onReach={() => undefined}
-          onScreen
+          rect={ON_SCREEN}
           src="https://example.com"
         />,
       );
@@ -515,18 +518,18 @@ describe("BrowserWindow", () => {
     });
   });
 
-  it("hides the window when it is not on the stage", () => {
+  it("hides the window when it is not on screen", () => {
     render(
       <BrowserWindow
         clickThrough={false}
+        depth={0}
         domicile={silentDomicile}
         dragging={false}
-        floating={undefined}
         focused={false}
         onHover={noHover}
         onNavigate={() => undefined}
         onReach={() => undefined}
-        onScreen={false}
+        rect={undefined}
         src="https://example.com"
       />,
     );
