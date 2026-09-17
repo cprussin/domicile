@@ -97,6 +97,9 @@ release=$(jq -n --arg tag "$TAG" --arg sha "$GITHUB_SHA" --arg body "$BODY" \
   api -X POST "$API/releases" -d @-)
 id=$(echo "$release" | jq -r .id)
 
+# What a release carries: the build, and the digest beside it.
+ASSETS=("$TARBALL" "$TARBALL.sha256")
+
 # How many times one asset is offered before the run gives up. GITHUB'S UPLOAD
 # ENDPOINT 500s, and half a gigabyte is a long time to be exposed to it: run
 # 35252793831 built the engine, packaged it and passed the pixel guard, and then
@@ -118,7 +121,16 @@ upload_asset() {
         echo "  dropping what a failed upload left behind ($stale)"
         api -X DELETE "$API/releases/assets/$stale" >/dev/null
       done
+    # AN UPLOAD WITH NO CEILING IS NOT A RETRY, IT IS A HANG. Run
+    # 35260586435 put both assets on the nightly in seven seconds, then sat on
+    # the next one for a quarter of an hour with nothing to end it, because
+    # curl waits on a stalled socket for as long as the kernel lets it. Ten
+    # minutes is an order of magnitude more than any upload here has honestly
+    # taken, and a flat ceiling rather than `--speed-time` because curl stops
+    # counting bytes while GitHub digests 200MB and answers -- which is
+    # exactly the silence a rate floor would kill a good upload during.
     if curl -sS -f -X POST \
+         --connect-timeout 30 --max-time 600 \
          -H "Authorization: Bearer $GITHUB_TOKEN" \
          -H "Content-Type: application/octet-stream" \
          --data-binary "@$STAGE/$asset" \
@@ -137,9 +149,34 @@ upload_asset() {
 
 upload_assets() {
   local into="$1"
-  for asset in "$TARBALL" "$TARBALL.sha256"; do
+  for asset in "${ASSETS[@]}"; do
     echo "uploading $asset"
     upload_asset "$into" "$asset"
+  done
+}
+
+# Put on a release only what is not already on it. A RELEASE IS PUBLISHED WHEN
+# ITS ASSETS ARE THERE, NOT WHEN ITS ROW EXISTS: run 35260586435 put both
+# assets on `engine-nightly` in seven seconds, created the immutable release
+# beside it, and then hung with nothing on it, and `already published; leaving
+# it alone` would have meant that tag never got its tarball however many times
+# anybody re-ran the workflow.
+#
+# `uploaded` and not merely present, because the wreck an interrupted upload
+# leaves behind is an asset row in `starter` that nothing can download.
+# Anything already `uploaded` is left exactly as it is: something may be
+# pinned to it, and that is the whole reason this release exists.
+complete_assets() {
+  local into="$1" landed
+  landed="$(api "$API/releases/$into/assets" |
+              jq -r '.[] | select(.state == "uploaded") | .name')"
+  for asset in "${ASSETS[@]}"; do
+    if printf '%s\n' "$landed" | grep -qxF "$asset"; then
+      echo "$asset is already there; left alone"
+    else
+      echo "uploading $asset"
+      upload_asset "$into" "$asset"
+    fi
   done
 }
 
@@ -151,11 +188,14 @@ echo "published $(echo "$release" | jq -r .html_url)"
 # url that does not move. The nightly stays because it is the useful thing to
 # hand somebody who just wants the newest build.
 if [ -n "$PINNABLE" ]; then
-  if api "$API/releases/tags/$PINNABLE" >/dev/null 2>&1; then
-    # Re-running a release for a commit that already has one. Left alone rather
-    # than replaced: something may already be pinned to it, and the whole point
-    # of this release is that what it points at does not move.
-    echo "$PINNABLE already published; leaving it alone"
+  if pinned=$(api "$API/releases/tags/$PINNABLE" 2>/dev/null); then
+    # Re-running a release for a commit that already has one. Never deleted and
+    # recreated -- something may already be pinned to it, and the whole point of
+    # this release is that what it points at does not move -- but a run that
+    # died between creating it and filling it leaves a tag with nothing behind
+    # it, and only another run can finish that.
+    echo "$PINNABLE already exists; adding whatever is missing from it"
+    complete_assets "$(echo "$pinned" | jq -r .id)"
   else
     echo "creating release $PINNABLE"
     pinnable=$(jq -n --arg tag "$PINNABLE" --arg sha "$GITHUB_SHA" \
