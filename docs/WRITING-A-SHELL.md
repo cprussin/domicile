@@ -161,6 +161,44 @@ that follows its own window, and a shell has no way to describe a two-screen
 desktop. The compositor's side is built and the shell's side is not
 wired; that is a gap rather than a decision.
 
+Two of the things it can say about a desktop are different in kind, and which
+one a shell generates depends on whether there is hardware under it:
+
+- `output.displays` **states a desktop outright** — a name, a size, a position,
+  a scale per display. A nested run has no monitors to enumerate, so this is
+  the desktop, and nothing overrules it.
+- `output.profiles` **places the monitors that are actually plugged in**. Each
+  profile names exactly the displays it is for and says what to do with each
+  one (`enabled`, `position`, a fractional `scale`, a `transform`); the first
+  profile whose set is connected wins, and the match is made again on every
+  hotplug and every reload. A display is named by the `wl_output` name, which
+  on a tty is `drm-<id>` — the id ozone derives from the panel's EDID, so it
+  survives being unplugged.
+
+```jsonc
+{
+  "output": {
+    "profiles": [
+      {
+        "name": "desk",
+        "displays": [
+          { "display": "drm-1", "enabled": false },
+          { "display": "drm-2", "position": [0, 0], "scale": 1.2,
+            "transform": "rotate-270" }
+        ]
+      },
+      { "name": "laptop-only",
+        "displays": [{ "display": "drm-1", "scale": 1.5 }] }
+    ]
+  }
+}
+```
+
+A profile reaches what the compositor *advertises* — `wl_output`, the
+`xdg_output` logical size, and the displays a shell is told about. It does not
+yet reach the scanout, so a monitor a profile turns is laid out turned and
+still scans out the way it did.
+
 `@domicile/chrome-sdk` does not parse that file. Its schema is the
 `domicile-config` crate's, and there is no published TypeScript parser for it
 today.

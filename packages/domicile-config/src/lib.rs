@@ -16,8 +16,10 @@
 //! configuration. All of this is pure logic and unit-tested.
 
 mod desktop;
+mod profile;
 
 pub use desktop::{Desktop, Display};
+pub use profile::{Connected, DisplayPlacement, Layout, Placed, Profile, Transform};
 
 use std::path::{Path, PathBuf};
 
@@ -304,6 +306,17 @@ pub struct OutputConfig {
     /// applies only while [`displays`](OutputConfig::displays) is empty: a
     /// described display states its own `scale` and has no ratio to cap.
     pub max_scale: u32,
+    /// The arrangements of *real* monitors, and what to do with each.
+    ///
+    /// The third way a desktop gets described, and the only one that is a
+    /// function of the hardware: [`displays`](OutputConfig::displays) states a
+    /// desktop outright and the nested size follows a window, while a profile
+    /// states a placement and the monitor states its mode. So this is the one
+    /// that is re-read on every hotplug — see [`OutputConfig::layout`].
+    ///
+    /// Empty is a config that says nothing about placement, which leaves the
+    /// monitors wherever the engine's own reading put them.
+    pub profiles: Vec<Profile>,
 }
 
 impl Default for OutputConfig {
@@ -314,6 +327,7 @@ impl Default for OutputConfig {
         OutputConfig {
             displays: Vec::new(),
             max_scale: 2,
+            profiles: Vec::new(),
         }
     }
 }
@@ -334,6 +348,25 @@ impl OutputConfig {
     /// once; not something to put on a frame path.
     pub fn desktop(&self) -> Option<Desktop> {
         Desktop::of(&self.displays)
+    }
+
+    /// The first profile `connected` is the set for, applied to them.
+    ///
+    /// `Ok(None)` is no profile matching, which is not an empty desktop but a
+    /// config that says nothing about this arrangement of monitors — the
+    /// displays then stay wherever the engine's own reading put them, which is
+    /// the behavior that existed before profiles did.
+    ///
+    /// The `Err` arm is a matched profile that cannot be applied to the
+    /// monitors it matched: a scale that leaves one with no logical pixels, or
+    /// a placement that spans further than a desktop can. Neither is
+    /// reachable at parse time, because both need a mode that arrives with the
+    /// monitor.
+    ///
+    /// Rebuilt on each call. That is the point rather than a cost: this is
+    /// what a hotplug calls, and the answer is supposed to change.
+    pub fn layout(&self, connected: &[Connected]) -> Result<Option<Layout>, ConfigError> {
+        profile::layout(&self.profiles, connected)
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
@@ -367,7 +400,8 @@ impl OutputConfig {
         //
         // Only observable with two or more: a lone display's extent is its own
         // size, which `DisplayConfig::validate` bounds first anyway.
-        self.validate_extent()
+        self.validate_extent()?;
+        profile::validate(&self.profiles)
     }
 
     /// Whether the displays together span a desktop that is a coordinate space.

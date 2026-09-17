@@ -1,15 +1,28 @@
 //! What the compositor advertises as `wl_output`s, and who decides the desktop.
 //!
-//! Two answers, and which one applies is the whole of it. With displays
-//! described in the config, the desktop is what the config says and Domicile's
-//! own window only shows it. With none, the window *is* the desktop — the
-//! original behavior, and all a nested compositor can manage without being
-//! told otherwise.
+//! Four answers, and which one applies is the whole of it.
+//!
+//! - **Described.** `output.displays` states a desktop outright, and Domicile's
+//!   own window only shows it. Nothing overrules a user who said what their
+//!   screens are.
+//! - **Placed.** `output.profiles` states where the *real* monitors go — how
+//!   dense, which way up, in what order — and the engine's reading of DRM says
+//!   which of them are plugged in. The one answer that is a function of the
+//!   hardware, so it is re-matched on every hotplug and on every reload.
+//! - **The engine's reading, untouched.** A desk no profile names: the monitors
+//!   stay wherever ozone laid them out, unscaled and unturned.
+//! - **The window.** Nothing described and no monitors read, which is a nested
+//!   run: the window *is* the desktop, the original behavior, and all a nested
+//!   compositor can manage without being told otherwise.
+//!
+//! [`Screens::reloaded_into`] and [`Screens::replugged_into`] are the two ways
+//! in, and they ask one question between them: this config, these monitors,
+//! which desktop.
 //!
 //! Kept apart from the Smithay wiring so it can be tested: everything here is
 //! arithmetic and naming, and none of it needs a `wl_display`.
 
-use domicile_config::Desktop;
+use domicile_config::{ConfigError, Connected, Desktop, Layout, OutputConfig, Transform};
 use domicile_protocol::DisplayInfo;
 use domicile_scene::{Bounds, Point};
 
@@ -36,17 +49,35 @@ pub const UNKNOWN_PHYSICAL_MM: (i32, i32) = (0, 0);
 pub const UNKNOWN_REFRESH_MHZ: i32 = 0;
 
 /// One `wl_output`, in the form the compositor advertises it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Advertised {
     /// The `wl_output` name, which is also what the chrome addresses.
     pub name: String,
     /// Its top-left corner in desktop coordinates.
     pub position: (i32, i32),
-    /// Its size in logical units. The mode is this multiplied by `scale`.
+    /// Its size in logical units: the mode, turned by `transform`, over
+    /// `scale`.
     pub logical: (i32, i32),
-    /// What clients on it draw at. The `wl_output` scale, and the reason the
-    /// mode is bigger than the logical size rather than equal to it.
-    pub scale: i32,
+    /// The mode in physical pixels, as `wl_output.mode` states one — which is
+    /// the hardware's own and so is *not* turned by `transform`. A monitor on
+    /// its side scans out exactly as it did lying down.
+    ///
+    /// Carried rather than derived from the logical size. For the two desktops
+    /// that are arithmetic it is that multiplication; for a real monitor it is
+    /// the mode the connector is running, and multiplying a rounded logical
+    /// size back up would land a pixel or two off the CRTC's own rectangle.
+    pub mode: (i32, i32),
+    /// Device pixels per logical pixel on this display.
+    ///
+    /// Fractional, because the scales a desk is used at are. `wl_output.scale`
+    /// is an integer and is this rounded *up* —
+    /// [`wl_output_scale`](Advertised::wl_output_scale) — so a client on a 1.2
+    /// display draws at 2 and is downscaled, which is sharp, rather than at 1
+    /// and stretched, which is the blurriness scaling exists to remove.
+    /// `xdg_output` carries the logical size this made.
+    pub scale: f64,
+    /// Which way up the monitor is, as `wl_output.geometry` states it.
+    pub transform: Transform,
     /// The panel's own size in millimetres, or [`UNKNOWN_PHYSICAL_MM`] where
     /// this output is not a panel at all.
     ///
@@ -62,32 +93,32 @@ pub struct Advertised {
 }
 
 impl Advertised {
-    /// The `wl_output` mode: the logical size in physical pixels.
+    /// The integer `wl_output.scale` for this display's density.
     ///
-    /// Checked rather than multiplied, for the reason `Desktop::of` gives one
-    /// layer down: a plain `*` would wrap in release into a mode that is a
-    /// plausible screen of the wrong size.
+    /// Rounded *up*: a client asked for a scale draws that many pixels per
+    /// logical one, and one drawing more than the display has is downscaled by
+    /// the compositor and stays sharp, while one drawing fewer is stretched.
+    /// The fractional value is not lost — `xdg_output` carries the logical
+    /// size it produced, which is what a toolkit lays out against.
     ///
-    /// No production caller can reach the panic, on either path.
-    /// `DisplayConfig::validate` bounds a described display's size times its
-    /// own scale; `Screens::nested` uses scale 1 on a size `Config::validate`
-    /// bounds; and `adopt_window_scale` divides the window's physical size by
-    /// the scale before multiplying it back, so the product is at most the
-    /// window's own size. What the assertion is for is that `Advertised` is
-    /// publicly constructible and nothing validates one — the check is here so
-    /// that a future caller building its own gets a panic rather than a
-    /// negative screen.
-    pub fn mode(&self) -> (i32, i32) {
-        (
-            self.logical
-                .0
-                .checked_mul(self.scale)
-                .expect("a display's mode fits a coordinate"),
-            self.logical
-                .1
-                .checked_mul(self.scale)
-                .expect("a display's mode fits a coordinate"),
-        )
+    /// Asserted rather than cast, for the same reason everything else here is:
+    /// a density is validated positive and finite before it reaches an
+    /// `Advertised`, so a scale that is not a positive integer is a bug one
+    /// layer up rather than a display to advertise.
+    pub fn wl_output_scale(&self) -> i32 {
+        let ceiled = self.scale.ceil();
+        if (1.0..=f64::from(i32::MAX)).contains(&ceiled) {
+            ceiled as i32
+        } else {
+            // Carries the density, and not only because it is useful: a bare
+            // `assert!` panics with a `&str` rather than a `String`, and every
+            // other assertion here is an `expect` — so the message a caller
+            // catching one has to reach for would depend on which one it was.
+            panic!(
+                "a display's density is a positive number a coordinate can hold, not {}",
+                self.scale
+            )
+        }
     }
 
     /// The rectangle this output occupies on the desktop.
@@ -131,7 +162,7 @@ impl Advertised {
         DisplayInfo {
             name: self.name.clone(),
             position: [self.position.0, self.position.1],
-            scale: as_measure(self.scale),
+            scale: as_measure(self.wl_output_scale()),
             size: [as_measure(self.logical.0), as_measure(self.logical.1)],
         }
     }
@@ -175,7 +206,7 @@ pub struct Rearrangement {
 }
 
 /// Every output the compositor advertises, and the desktop they make up.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Screens {
     outputs: Vec<Advertised>,
     size: (i32, i32),
@@ -192,13 +223,23 @@ impl Screens {
             follows_the_window: false,
             outputs: desktop
                 .displays()
-                .map(|display| Advertised {
-                    logical: (as_coordinate(display.size.0), as_coordinate(display.size.1)),
-                    name: display.name.clone(),
-                    position: display.position,
-                    scale: as_coordinate(display.scale),
-                    physical_mm: UNKNOWN_PHYSICAL_MM,
-                    refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                .map(|display| {
+                    let logical = (as_coordinate(display.size.0), as_coordinate(display.size.1));
+                    let scale = as_coordinate(display.scale);
+                    Advertised {
+                        logical,
+                        mode: multiplied(logical, scale),
+                        name: display.name.clone(),
+                        position: display.position,
+                        scale: f64::from(scale),
+                        // A config describes a desktop rather than a monitor,
+                        // and nothing in one is bolted to a desk sideways: a
+                        // described display states the size it *is*, so there
+                        // is no mode to turn into it.
+                        transform: Transform::Normal,
+                        physical_mm: UNKNOWN_PHYSICAL_MM,
+                        refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                    }
                 })
                 .collect(),
             size: (
@@ -228,13 +269,21 @@ impl Screens {
     pub fn from_the_engine(displays: &[Display]) -> Screens {
         let outputs: Vec<Advertised> = displays
             .iter()
-            .map(|display| Advertised {
-                logical: (as_coordinate(display.size.0), as_coordinate(display.size.1)),
-                name: format!("drm-{}", display.id),
-                position: display.position,
-                scale: 1,
-                physical_mm: display.physical_mm,
-                refresh_mhz: display.refresh_mhz,
+            .map(|display| {
+                let logical = (as_coordinate(display.size.0), as_coordinate(display.size.1));
+                Advertised {
+                    logical,
+                    // Unscaled and unturned, so the mode is the logical size:
+                    // this is the engine's reading with nothing applied to it,
+                    // which is what a desk no profile describes gets.
+                    mode: logical,
+                    name: name_of(display),
+                    position: display.position,
+                    scale: 1.0,
+                    transform: Transform::Normal,
+                    physical_mm: display.physical_mm,
+                    refresh_mhz: display.refresh_mhz,
+                }
             })
             .collect();
         // `checked_add` for the reason `Advertised::bounds` gives one layer
@@ -293,13 +342,60 @@ impl Screens {
             follows_the_window: true,
             outputs: vec![Advertised {
                 logical,
+                mode: multiplied(logical, scale),
                 name: "domicile-0".to_string(),
                 position: (0, 0),
-                scale,
+                scale: f64::from(scale),
+                transform: Transform::Normal,
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,
             }],
             size: logical,
+        }
+    }
+
+    /// The outputs a matched profile makes of the monitors it matched.
+    ///
+    /// The fourth source of a display list, and the only one built from two:
+    /// the *placement* is the config's — where each monitor goes, how dense it
+    /// is, which way up — and everything about the panel itself is the
+    /// engine's reading, carried through untouched. A profile says where a
+    /// monitor is, not what it is.
+    ///
+    /// Not window-following, for the reason `described` and `from_the_engine`
+    /// are not: these are the user's actual monitors, placed the way the user
+    /// asked.
+    pub fn from_the_layout(layout: &Layout, displays: &[Display]) -> Screens {
+        Screens {
+            follows_the_window: false,
+            outputs: layout
+                .placed()
+                .map(|placed| {
+                    // Present because the layout was built from these very
+                    // displays, one entry per name that matched.
+                    let display = displays
+                        .iter()
+                        .find(|display| name_of(display) == placed.name)
+                        .expect("a layout only places displays the engine reported");
+                    Advertised {
+                        logical: (
+                            as_coordinate(placed.logical.0),
+                            as_coordinate(placed.logical.1),
+                        ),
+                        mode: (as_coordinate(placed.mode.0), as_coordinate(placed.mode.1)),
+                        name: placed.name.clone(),
+                        position: placed.position,
+                        scale: placed.scale,
+                        transform: placed.transform,
+                        physical_mm: display.physical_mm,
+                        refresh_mhz: display.refresh_mhz,
+                    }
+                })
+                .collect(),
+            size: (
+                as_coordinate(layout.size().0),
+                as_coordinate(layout.size().1),
+            ),
         }
     }
 
@@ -327,15 +423,30 @@ impl Screens {
     /// A desktop that *stopped* being described is the other direction and does
     /// change: it was the config's, the config no longer claims it, and
     /// `nested_size` is where the window takes over again.
+    ///
+    /// `displays` is the engine's last reading of the monitors, empty on every
+    /// nested run and on a tty before the first display event. It is here
+    /// because the profiles are matched against it and an edit to them has to
+    /// take effect now: the way a profile gets written is by saving it against
+    /// the desk it is being written for, and one that waited for a monitor to
+    /// be unplugged would be unusable. With no monitors read there is nothing
+    /// to match, and the two rules above are the whole answer, as they were
+    /// before profiles existed.
     pub fn reloaded_into(
         &self,
-        described: Option<&Desktop>,
+        output: &OutputConfig,
         nested: (u32, u32),
-    ) -> Option<Screens> {
-        match described {
-            Some(desktop) => Some(Screens::described(desktop)),
-            None if self.follows_the_window() => None,
-            None => Some(Screens::nested(nested)),
+        displays: &[Display],
+    ) -> Result<Option<Screens>, ConfigError> {
+        match output.desktop() {
+            Some(desktop) => Ok(Some(Screens::described(&desktop))),
+            // Straight to the hotplug path, which is the same question from
+            // the other side: these monitors, this config, which profile. That
+            // it has already established the desktop is not described is why
+            // this arm cannot come back `None`.
+            None if !displays.is_empty() => self.replugged_into(displays, output),
+            None if self.follows_the_window() => Ok(None),
+            None => Ok(Some(Screens::nested(nested))),
         }
     }
 
@@ -383,9 +494,49 @@ impl Screens {
     /// lean on: a Wayland engine's screen is the *host's* monitors, which are
     /// not this desktop's displays, and adopting them would take the desktop
     /// away from the window that defines it.
-    pub fn replugged_into(&self, displays: &[Display]) -> Option<Screens> {
-        self.follows_the_window
-            .then(|| Screens::from_the_engine(displays))
+    ///
+    /// **Asked of the config and not of this desktop, and that is the fix
+    /// rather than a tidy-up.** This used to ask whether the desktop still
+    /// followed Domicile's own window, which the *first* reading off DRM makes
+    /// false -- so every hotplug after that one was read, matched and thrown
+    /// away, and the desktop went on describing a monitor that had been
+    /// unplugged. Whether a desktop is the config's to define is a fact about
+    /// the config, which does not change when a monitor does.
+    ///
+    /// Three answers rather than two, because a profile brings a third:
+    ///
+    /// - `Err` is a profile that matched these monitors and cannot be applied
+    ///   to them -- a scale that leaves one with no logical pixels, a
+    ///   placement that spans further than a desktop can. Neither is reachable
+    ///   at parse time, since both need a mode that arrives with the monitor.
+    ///   The caller keeps the desktop that is up and surfaces the complaint,
+    ///   which is the bargain `ConfigStore` already makes for an edit that
+    ///   does not parse.
+    /// - `Ok(None)` is a desktop the config describes outright, which DRM does
+    ///   not overrule.
+    /// - `Ok(Some(_))` is the desktop these monitors make: placed by the first
+    ///   profile they are the set for, or left where the engine put them when
+    ///   no profile names them.
+    pub fn replugged_into(
+        &self,
+        displays: &[Display],
+        output: &OutputConfig,
+    ) -> Result<Option<Screens>, ConfigError> {
+        if output.desktop().is_some() {
+            Ok(None)
+        } else {
+            let connected: Vec<Connected> = displays
+                .iter()
+                .map(|display| Connected {
+                    name: name_of(display),
+                    mode: display.size,
+                })
+                .collect();
+            Ok(Some(match output.layout(&connected)? {
+                Some(layout) => Screens::from_the_layout(&layout, displays),
+                None => Screens::from_the_engine(displays),
+            }))
+        }
     }
 
     /// Which outputs a window with these bounds is on, in [`outputs`] order.
@@ -445,6 +596,36 @@ impl Screens {
     pub fn follows_the_window(&self) -> bool {
         self.follows_the_window
     }
+}
+
+/// What the `wl_output` for one of the engine's displays is called.
+///
+/// The id ozone derives from the EDID, so it survives a hotplug: a monitor
+/// unplugged and plugged back in keeps the output its clients are on, and a
+/// profile that names it goes on naming it.
+fn name_of(display: &Display) -> String {
+    format!("drm-{}", display.id)
+}
+
+/// A logical size in physical pixels, for the two desktops whose mode is that
+/// multiplication rather than a monitor's own.
+///
+/// Checked rather than multiplied, for the reason `Desktop::of` gives one
+/// layer down: a plain `*` would wrap in release into a mode that is a
+/// plausible screen of the wrong size.
+///
+/// No production caller can reach the panic. `DisplayConfig::validate` bounds
+/// a described display's size times its own scale; `Screens::nested` uses
+/// scale 1 on a size `Config::validate` bounds; and `adopt_window_scale`
+/// divides the window's physical size by the scale before multiplying it back,
+/// so the product is at most the window's own size.
+fn multiplied(logical: (i32, i32), scale: i32) -> (i32, i32) {
+    let times = |measure: i32| {
+        measure
+            .checked_mul(scale)
+            .expect("a display's mode fits a coordinate")
+    };
+    (times(logical.0), times(logical.1))
 }
 
 /// A `u32` from the config as the `i32` every coordinate here is.
@@ -518,9 +699,11 @@ mod tests {
             vec![
                 Advertised {
                     logical: (1920, 1080),
+                    mode: (1920, 1080),
                     name: "left".into(),
                     position: (0, 0),
-                    scale: 1,
+                    scale: 1.0,
+                    transform: Transform::Normal,
                     // A described display is a config's arithmetic rather
                     // than millimetres of glass, and no config states a rate.
                     // Both stay the protocol's own word for "no such number",
@@ -530,9 +713,11 @@ mod tests {
                 },
                 Advertised {
                     logical: (2560, 1440),
+                    mode: (5120, 2880),
                     name: "right".into(),
                     position: (1920, 0),
-                    scale: 2,
+                    scale: 2.0,
+                    transform: Transform::Normal,
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
@@ -563,7 +748,7 @@ mod tests {
 }"#,
         ));
         let retina = screens.outputs().next().expect("the one display");
-        assert_eq!(retina.mode(), (5120, 2880));
+        assert_eq!(retina.mode, (5120, 2880));
     }
 
     #[test]
@@ -572,10 +757,9 @@ mod tests {
         // window-following path takes whatever size the window is — so the
         // multiplication asserts rather than assumes. Wrapping would advertise
         // a negative screen, in release, with nothing to say so.
-        let huge = Screens::following_the_window((2_000_000_000, 1080), 2);
-        let output = huge.outputs().next().expect("the one output").clone();
-        let panicked = std::panic::catch_unwind(move || output.mode())
-            .expect_err("a mode past a coordinate must not be advertised");
+        let panicked =
+            std::panic::catch_unwind(|| Screens::following_the_window((2_000_000_000, 1080), 2))
+                .expect_err("a mode past a coordinate must not be advertised");
         assert_eq!(
             panicked.downcast_ref::<String>().map(String::as_str),
             Some("a display's mode fits a coordinate"),
@@ -643,9 +827,11 @@ mod tests {
         // up and what this refuses on the way out.
         let bogus = Advertised {
             logical: (-1920, 1080),
+            mode: (-1920, 1080),
             name: "impossible".into(),
             position: (0, 0),
-            scale: 1,
+            scale: 1.0,
+            transform: Transform::Normal,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -670,9 +856,11 @@ mod tests {
         // never be reached.
         let squashed = Advertised {
             logical: (1920, -1080),
+            mode: (1920, -1080),
             name: "impossible".into(),
             position: (0, 0),
-            scale: 1,
+            scale: 1.0,
+            transform: Transform::Normal,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -686,25 +874,28 @@ mod tests {
             panicked.downcast_ref::<String>()
         );
 
-        // And the scale. `described` reaches `as_measure` three times and a
-        // mutation at any one of them is its own wrong answer — a negative
-        // scale folded to its magnitude is a display the chrome draws at some
-        // enormous density.
+        // And the density, which `described` rounds up into the scale it
+        // sends. It is caught one step earlier than the two sizes are —
+        // `wl_output_scale` refuses it before `as_measure` ever sees it — and
+        // the wrong answer it refuses is the worse of the two: a negative
+        // density folded to its magnitude is a display the chrome draws every
+        // client on at some enormous scale.
         let inverted = Advertised {
             logical: (1920, 1080),
+            mode: (1920, 1080),
             name: "impossible".into(),
             position: (0, 0),
-            scale: -2,
+            scale: -2.0,
+            transform: Transform::Normal,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
         let panicked = std::panic::catch_unwind(move || inverted.described())
-            .expect_err("a negative scale must not be described to the chrome");
+            .expect_err("a negative density must not be described to the chrome");
         assert!(
-            panicked
-                .downcast_ref::<String>()
-                .is_some_and(|said| said.starts_with("a size or a scale is never negative")),
-            "the scale half asserts the same invariant, and it said {:?}",
+            panicked.downcast_ref::<String>().is_some_and(|said| said
+                .starts_with("a display's density is a positive number a coordinate can hold")),
+            "the density asserts before the sizes do, and it said {:?}",
             panicked.downcast_ref::<String>()
         );
     }
@@ -825,9 +1016,11 @@ mod tests {
         // land on every screen with nothing to show why.
         let past_the_end = Advertised {
             logical: (1920, 1080),
+            mode: (1920, 1080),
             name: "impossible".into(),
             position: (i32::MAX - 1, 0),
-            scale: 1,
+            scale: 1.0,
+            transform: Transform::Normal,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -853,8 +1046,8 @@ mod tests {
         // Scale 1, so the mode is the size: the window has not said otherwise
         // yet, and inventing a density here would make every fresh run sharp
         // or blurry by default.
-        assert_eq!(only.scale, 1);
-        assert_eq!(only.mode(), (1280, 800));
+        assert_eq!(only.scale, 1.0);
+        assert_eq!(only.mode, (1280, 800));
     }
 
     #[test]
@@ -906,9 +1099,11 @@ mod tests {
             vec![
                 Advertised {
                     logical: (2880, 1920),
+                    mode: (2880, 1920),
                     name: "drm-1".into(),
                     position: (0, 0),
-                    scale: 1,
+                    scale: 1.0,
+                    transform: Transform::Normal,
                     // The panel's own, carried rather than invented -- and the
                     // second display's zeros carried just as faithfully,
                     // because a connector that reports no millimetres and no
@@ -918,9 +1113,11 @@ mod tests {
                 },
                 Advertised {
                     logical: (1920, 1080),
+                    mode: (1920, 1080),
                     name: "drm-2".into(),
                     position: (2880, 0),
-                    scale: 1,
+                    scale: 1.0,
+                    transform: Transform::Normal,
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
@@ -941,22 +1138,188 @@ mod tests {
         refresh_mhz: 59_997,
     }];
 
+    /// The output settings `text` configures.
+    fn output(text: &str) -> OutputConfig {
+        Config::parse(text).expect("the config should parse").output
+    }
+
+    /// A config that describes no desktop and names no profiles — the one the
+    /// engine's own reading of DRM is the whole answer under.
+    fn unconfigured() -> OutputConfig {
+        output("{}")
+    }
+
     #[test]
     fn a_described_desktop_is_not_overruled_by_what_the_engine_sees() {
         // The user said what their screens are. A reading off DRM is the same
         // kind of claim `reloaded_into` refuses to let the config make about a
         // window-following desktop, from the other side.
-        assert_eq!(described(LEFT).replugged_into(PLUGGED_IN), None);
+        let described_in_the_config =
+            output(&format!(r#"{{ "output": {{ "displays": [{LEFT}] }} }}"#));
+        assert_eq!(
+            described(LEFT)
+                .replugged_into(PLUGGED_IN, &described_in_the_config)
+                .expect("a described desktop is not a layout that failed"),
+            None
+        );
     }
 
     #[test]
     fn a_desktop_nothing_described_is_the_engines_to_define() {
         let taken = Screens::nested((1280, 800))
-            .replugged_into(PLUGGED_IN)
+            .replugged_into(PLUGGED_IN, &unconfigured())
+            .expect("nothing here can fail to be applied")
             .expect("an undescribed desktop takes the engine's displays");
         assert_eq!(taken.size(), (2880, 1920));
         assert!(!taken.follows_the_window());
     }
+
+    #[test]
+    fn every_hotplug_is_applied_and_not_only_the_first() {
+        // The requirement the whole mechanism rests on, and the one thing that
+        // was wrong before it: this asked whether the desktop still followed
+        // Domicile's own window, which the *first* reading off DRM makes false
+        // — so a monitor unplugged after that was read, matched and thrown
+        // away, and the desktop kept describing a screen that was no longer
+        // plugged in.
+        let one_monitor = Screens::nested((1280, 800))
+            .replugged_into(PLUGGED_IN, &unconfigured())
+            .expect("nothing here can fail to be applied")
+            .expect("an undescribed desktop takes the engine's displays");
+        let both = one_monitor
+            .replugged_into(TWO_PLUGGED_IN, &unconfigured())
+            .expect("nothing here can fail to be applied")
+            .expect("a desktop the engine defined is still the engine's");
+        assert_eq!(both.size(), (4800, 1920));
+    }
+
+    #[test]
+    fn a_profile_places_the_monitors_it_matched() {
+        // The panel at 1.5 and the monitor at 1.2, the monitor stood on its
+        // side, and the panel centered underneath it — the arrangement this
+        // exists for. Everything the engine read that the config says nothing
+        // about is carried through: the mode, the millimetres and the rate are
+        // the panel's own and no profile invents them.
+        let placed = Screens::nested((1280, 800))
+            .replugged_into(TWO_PLUGGED_IN, &output(HOME_OFFICE))
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert_eq!(
+            placed.outputs().cloned().collect::<Vec<_>>(),
+            vec![
+                Advertised {
+                    // The mode stood on its side and divided by 1.2: 1080 and
+                    // 1920 become 900 and 1600. The mode itself does not turn,
+                    // because the connector scans out exactly as it did before
+                    // the monitor was bolted to the desk sideways.
+                    logical: (900, 1600),
+                    mode: (1920, 1080),
+                    name: "drm-2".into(),
+                    position: (0, 0),
+                    // The density, not `wl_output.scale`, which is an integer
+                    // and is what this is rounded up to: a client drawing at 2
+                    // on a 1.2 display is downscaled and stays sharp, and
+                    // `xdg_output` carries the 1.2 the logical size came from.
+                    scale: 1.2,
+                    transform: Transform::Rotate270,
+                    physical_mm: UNKNOWN_PHYSICAL_MM,
+                    refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                },
+                Advertised {
+                    logical: (1920, 1280),
+                    mode: (2880, 1920),
+                    name: "drm-1".into(),
+                    position: (0, 1920),
+                    scale: 1.5,
+                    transform: Transform::Normal,
+                    physical_mm: (597, 336),
+                    refresh_mhz: 59_997,
+                },
+            ]
+        );
+        assert_eq!(placed.size(), (1920, 3200));
+        assert!(!placed.follows_the_window());
+    }
+
+    #[test]
+    fn monitors_no_profile_names_are_left_where_the_engine_put_them() {
+        // A config with profiles in it is not a config that has a profile for
+        // *this* desk. The answer is the engine's own reading rather than an
+        // error or an empty desktop: a monitor plugged into a laptop on a
+        // train is a desktop, it is just not one anybody wrote down.
+        let unplanned = Screens::nested((1280, 800))
+            .replugged_into(PLUGGED_IN, &output(HOME_OFFICE))
+            .expect("a profile that does not match cannot fail to apply")
+            .expect("an undescribed desktop is still the engine's to define");
+        assert_eq!(unplanned, Screens::from_the_engine(PLUGGED_IN));
+    }
+
+    #[test]
+    fn a_profile_that_cannot_be_applied_leaves_the_desktop_alone() {
+        // The positions are the config's and the modes are the hardware's, so
+        // a profile can only be found unapplicable once a monitor is plugged
+        // in. The desktop that is up keeps working and the complaint names
+        // what is wrong with the config, which is the same bargain
+        // `ConfigStore` makes for an edit that does not parse.
+        let err = Screens::nested((1280, 800))
+            .replugged_into(
+                PLUGGED_IN,
+                &output(
+                    r#"{ "output": { "profiles": [{ "name": "too-small", "displays": [
+                         { "display": "drm-1", "scale": 4000 }] }] } }"#,
+                ),
+            )
+            .expect_err("a profile that cannot be applied says so");
+        assert!(
+            err.to_string().contains("too-small"),
+            "the complaint should name the profile: {err}"
+        );
+    }
+
+    const TWO_PLUGGED_IN: &[Display] = &[
+        Display {
+            id: 1,
+            position: (0, 0),
+            size: (2880, 1920),
+            physical_mm: (597, 336),
+            refresh_mhz: 59_997,
+        },
+        Display {
+            id: 2,
+            position: (2880, 0),
+            size: (1920, 1080),
+            physical_mm: (0, 0),
+            refresh_mhz: 0,
+        },
+    ];
+
+    /// The desk the engine reports as `TWO_PLUGGED_IN`, arranged: the monitor
+    /// on its side above, the laptop panel centered below it.
+    ///
+    /// Written with the monitor first, so that the order the outputs come back
+    /// in is the profile's rather than the engine's.
+    const HOME_OFFICE: &str = r#"{
+  "output": {
+    "profiles": [
+      {
+        "name": "desk",
+        "displays": [
+          {
+            "display": "drm-2",
+            "position": [0, 0],
+            "scale": 1.2,
+            "transform": "rotate-270"
+          },
+          {
+            "display": "drm-1",
+            "position": [0, 1920],
+            "scale": 1.5
+          }
+        ]
+      }
+    ]
+  }
+}"#;
 
     #[test]
     #[should_panic(expected = "the engine reports at least one display")]
@@ -976,11 +1339,13 @@ mod tests {
             screens.outputs().cloned().collect::<Vec<_>>(),
             vec![Advertised {
                 logical: (1280, 800),
+                mode: (2560, 1600),
                 // The name every client that has only ever seen one output has
                 // already seen.
                 name: "domicile-0".into(),
                 position: (0, 0),
-                scale: 2,
+                scale: 2.0,
+                transform: Transform::Normal,
                 // A window is not a panel: the desktop this output describes is
                 // whatever box the host gave Domicile, which has no millimetres
                 // and no mode of its own to report.
@@ -1114,11 +1479,31 @@ mod tests {
     #[test]
     fn a_reload_that_describes_displays_replaces_the_window_desktop() {
         let now = Screens::following_the_window((1280, 800), 2);
+        let config = output(&format!(r#"{{ "output": {{ "displays": [{LEFT}] }} }}"#));
         let described = desktop(&format!(r#"{{ "output": {{ "displays": [{LEFT}] }} }}"#));
         assert_eq!(
-            now.reloaded_into(Some(&described), (1280, 800)),
+            now.reloaded_into(&config, (1280, 800), NOTHING_PLUGGED_IN)
+                .expect("a described desktop cannot fail to be applied"),
             Some(Screens::described(&described))
         );
+    }
+
+    #[test]
+    fn a_reload_re_matches_the_monitors_the_engine_last_read() {
+        // Editing the profiles is the other way the layout changes, and
+        // waiting for a monitor to be unplugged before it takes effect would
+        // make the file unusable: the way a profile gets written is by
+        // reloading it against the desk it is being written for.
+        //
+        // The monitors are the engine's last reading rather than anything the
+        // config knows, which is why this needs them passed in at all. With
+        // none -- a nested run, or a tty before the first display event -- the
+        // rules below are the ones that were here before profiles existed.
+        let placed = Screens::from_the_engine(TWO_PLUGGED_IN)
+            .reloaded_into(&output(HOME_OFFICE), (1280, 800), TWO_PLUGGED_IN)
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert_eq!(placed.size(), (1920, 3200));
     }
 
     #[test]
@@ -1135,7 +1520,11 @@ mod tests {
         // merely lives beside the config: the watcher watches the directory,
         // because that is how an atomic rename is caught.
         let now = Screens::following_the_window((1920, 1200), 2);
-        assert_eq!(now.reloaded_into(None, (1280, 800)), None);
+        assert_eq!(
+            now.reloaded_into(&unconfigured(), (1280, 800), NOTHING_PLUGGED_IN)
+                .expect("an undescribed config cannot fail to be applied"),
+            None
+        );
     }
 
     #[test]
@@ -1147,8 +1536,13 @@ mod tests {
         // exactly what an undescribed desktop is.
         let now = described(&format!("{LEFT}, {RIGHT}"));
         assert_eq!(
-            now.reloaded_into(None, (1280, 800)),
+            now.reloaded_into(&unconfigured(), (1280, 800), NOTHING_PLUGGED_IN)
+                .expect("an undescribed config cannot fail to be applied"),
             Some(Screens::nested((1280, 800)))
         );
     }
+
+    /// A run the engine has never reported displays for: every nested one, and
+    /// a tty before the first display event arrives.
+    const NOTHING_PLUGGED_IN: &[Display] = &[];
 }

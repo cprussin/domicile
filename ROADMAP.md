@@ -614,9 +614,27 @@ costs nothing.
 - **A frame in which the chrome repainted reports the whole output damaged.**
   The chrome is one layer covering the desktop, so its commit counter moving
   damages all of it — and it repaints for a clock, a caret, a hover.
-- **A mixed-density desktop is drawn at one density**, and **fractional scaling
+- **A mixed-density desktop is drawn at one density**, and **`wl_output.scale`
   rounds up**: a client rendering at 2× downscaled is sharper than one rendering
-  at 1× stretched, which is the deliberate choice rather than a bug.
+  at 1× stretched, which is the deliberate choice rather than a bug. A profile's
+  own scale is fractional and is not rounded — it is what the logical size is
+  divided out of, and `xdg_output` carries it — so what rounds is only the
+  integer a client is handed.
+- **A monitor profile is advertised but not scanned out, and states no mode.**
+  `output.profiles` places the real monitors — `enabled`, `position`,
+  fractional `scale`, `transform` — and is re-matched on every hotplug and
+  every config reload. There is no mode field: the mode arrives with the
+  monitor, so a profile's positions are sums of sizes it does not control.
+  What it reaches is the desktop the compositor *advertises*: `wl_output`,
+  `xdg_output`, and the `DisplayInfo` the chrome lays its `<Screen>` regions
+  out from. The scanout is the engine's and is untouched, so a rotated monitor
+  is laid out rotated and still scans out the way it did.
+  `A-DESKTOP-ON-A-TTY.md`, *Outputs*, carries what closing that needs.
+- **A profile can only name a monitor `drm-<id>`.** The id ozone derives from
+  the EDID, not the make, model and serial kanshi matches on — so two identical
+  panels are told apart but cannot be told which is which without reading a log
+  line. `DisplaySnapshot::display_name()` has the string; carrying it is the
+  route the millimetres already take.
 - **A 3D transform or a `zoom` *above* a window is invisible to the SDK.**
   `defaultMeasure` walks the flat tree and reads each ancestor's computed style,
   but an ancestor's perspective does not reach the child's matrix, and `zoom`
