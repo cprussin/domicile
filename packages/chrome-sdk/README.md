@@ -52,6 +52,13 @@ It provides these:
   module adds is the TypeScript for all of that plus the names of the two
   events the browser process dispatches on it,
   `domicile-guest-focus` and `domicile-history-change`.
+- **`connectToHost`** (`./connect-to-host`) — the `DomicileHost` off the
+  document, or a stand-in that does nothing when there is none. `hasHost` is
+  beside it for code that needs the answer rather than the object.
+- **`reportDesktopSize`** (`./desktop-size`) — tell the host how big the page
+  is, and keep telling it. The desktop spans every display and the page is what
+  measures it, so a shell that never reported would leave the compositor
+  laying windows out against a size it guessed.
 - **`reportDevicePixelRatio`** (`./device-pixel-ratio`) — tell the host what
   density the page is drawing at, and keep telling it. The ratio changes when
   the window moves to another display or the page is zoomed, and the page is
@@ -61,10 +68,17 @@ It provides these:
   `domicile-scene::Transform`, `./domicile-host` mirroring the engine's IDL,
   `./host-message` for what the client delivers and how an event becomes one,
   `./cursor-shape` for the keyword set a client can ask for, and `./input`
-  keycode mapping. `./protocol`, `./chrome-message`, `./newline-frames` and
-  `./host-stream` are the compositor's own JSON wire, which **a page no longer
-  speaks**: they are there for `@domicile/e2e-harness`, a headless stand-in for
-  a chrome that talks to the compositor's socket directly.
+  keycode mapping.
+- **The routing parts, published so they can be substituted** — `./measure`
+  and `./observe-placement` are what `registerElements` takes overrides of,
+  `./element-transform` and `./surface-coordinates` turn a layout box into
+  what a client is told, `./sample-window` is one window's report and
+  `./placement-timing` is what that costs per frame. A shell needs none of
+  them; a test of one does.
+- **The compositor's own JSON wire**, which **a page no longer speaks** —
+  `./protocol`, `./chrome-message`, `./newline-frames` and `./host-stream` are
+  there for `@domicile/e2e-harness`, a headless stand-in for a chrome that
+  talks to the compositor's socket directly.
 
 ## Usage
 
@@ -126,8 +140,8 @@ only the keys pressed while a client held the keyboard. A modifier pressed
 while the chrome held it never reaches the seat, and the next forwarded key
 makes the message deny it: a shell that believed the message over its own
 keystrokes read a held Alt as let go of. The message is still sent, and is what
-will say so on the day input comes off DRM rather than out of the browser; it
-cannot know more than this page until then.
+will say so on the day the compositor reads input itself rather than being
+handed it by this page; it cannot know more than this page until then.
 
 ## Dependencies
 
@@ -149,7 +163,7 @@ ordinary absence.
 ## Test
 
 ```sh
-bun run --filter @domicile/chrome-sdk test
+bun run turbo test --filter @domicile/chrome-sdk
 ```
 
 DOM-dependent suites run against happy-dom via

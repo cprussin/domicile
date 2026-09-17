@@ -57,6 +57,7 @@ window the pointer moves into — focus follows the cursor here.
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<webview>`. |
 | `src/window-management/useHistoryAvailability.ts` | Where that window's page can be sent, read off the view's own properties rather than learned from the event that says to read them. |
+| `src/window-management/useReclaimFocus.ts` | Keeping the document's focus on the window being worked in, but only when it landed on nothing at all — the address bar, a tab and the theme switch are the user reaching for focus, and a closing window's own control leaves it on the body. |
 | `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
 | `src/window-management/window-styles.ts` | What every window on the stage shares, and where a floating one is placed. |
 | `src/window-management/floating/float.ts` | A window that has left the rail: where it sits on the stage and how big. Its own module because floating is not a kind of window. |
@@ -359,7 +360,7 @@ and not checked in.
 ## Test
 
 ```sh
-bun run --filter @domicile/shell-manganese test
+bun run turbo test --filter @domicile/shell-manganese
 ```
 
 runs the type check, the unit tests, and the Vite build. The components render

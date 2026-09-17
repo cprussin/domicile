@@ -139,14 +139,20 @@ typechecking, and unit tests, and builds the shells' Vite bundles so a green
 run means they actually build. If code is failing, first try
 `bun run turbo fix -- --ui stream` to apply auto-fixes.
 
-**Important:** the `bun run turbo` alias may resolve to a package-scoped turbo
-invocation that only runs a subset of tasks. To run the full test suite across
-all packages **and** root-level tasks (lint, dependency checks), use
-`node_modules/.bin/turbo test` directly, or verify that the output shows all
-tasks (including `//#test:lint` and `//#test:dependencies`). The root-level
-`biome check` (run by `//#test:lint`) enforces formatting, import ordering, and
-lint rules across the entire monorepo — always verify it passes before
-considering tests complete.
+**Run it from the repo root.** The root `package.json`'s `turbo` script
+installs if it has to and then shells `node_modules/.bin/turbo`, which is what
+`scripts/check.sh` runs; from inside a package directory the same words select
+that package alone. Either way, verify the output shows the root-level tasks
+(`//#test:lint` and `//#test:dependencies`) and not only the per-package ones.
+The root-level `biome check` (run by `//#test:lint`) enforces formatting,
+import ordering, and lint rules across the entire monorepo — always verify it
+passes before considering tests complete.
+
+A package's own tasks are reached the same way:
+`bun run turbo test --filter @domicile/chrome-sdk`. Note that
+`bun run --filter <pkg> test` is *not* the same thing and does not work — no
+package here declares a `test` script, only `test:types` and `test:unit`, and
+bun answers "No packages matched the filter".
 
 The Rust side has its own required checks; see
 [/docs/guidelines/RUST.md](/docs/guidelines/RUST.md). A change that touches

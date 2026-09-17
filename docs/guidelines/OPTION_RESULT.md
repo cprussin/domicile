@@ -83,13 +83,17 @@ object. Tests assert on outcomes the same way: build the expected
 ## Domain error unions
 
 An `E` that crosses a real boundary is a tagged union with a factory object,
-not a bare `Error`: each variant carries a `kind` discriminant and a factory
-(`SomeError.Execution`, `SomeError.Aborted`, …).
+not a bare `Error`: each variant carries a discriminant and a factory
+(`SomeError.Execution`, `SomeError.Aborted`, …). It is built the way every
+other discriminated union here is — see
+[DISCRIMINATED_UNIONS.md](./DISCRIMINATED_UNIONS.md), which is what decides
+whether the discriminant is an enum or a wire string and what the field is
+called.
 
 - When the error crosses the wire, back the union with a Zod schema (as
   `ToolError` does) so it parses at the boundary per
   [/docs/guidelines/DATA.md](/docs/guidelines/DATA.md). Loop-only variants that never serialize
   don't need a schema.
-- Branch on the error with a `switch` on `error.type` and **no `default`
+- Branch on the error with a `switch` on its discriminant and **no `default`
   arm**, so adding a variant is a compile error until every consumer handles
   it (see [/docs/guidelines/CONTROL_FLOW.md](/docs/guidelines/CONTROL_FLOW.md#prefer-switch-over-ifelse-if-chains)).

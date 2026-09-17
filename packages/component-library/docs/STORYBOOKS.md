@@ -50,13 +50,13 @@ pattern.
 The `title` MUST start with one of these prefixes (or live under
 `Showcase/` for cross-component compositions):
 
-| Category | Use for | Examples |
+| Category | Use for | Filed under it today |
 |---|---|---|
-| `Layout/` | Page structure and container components | AppRoot |
-| `Navigation/` | Components for navigating between views | MenuBar, Tabs |
-| `Forms & Inputs/` | Interactive input and control components | Button, Field, Input, Textarea |
-| `Data Display/` | Components for presenting data | Badge, StatusMessage |
-| `Overlays/` | Components that render over other content | ModalDialog, Popover, Toast |
+| `Layout/` | Page structure and container components | Card, Provider, Screen |
+| `Navigation/` | Components for navigating between views | TabRail, Tabs |
+| `Forms & Inputs/` | Interactive input and control components | Button, Field, Input, Select, Textarea |
+| `Data Display/` | Components for presenting data | Avatar, Kbd |
+| `Overlays/` | Components that render over other content | ModalDialog, SlideOver |
 
 ## Showcases
 
