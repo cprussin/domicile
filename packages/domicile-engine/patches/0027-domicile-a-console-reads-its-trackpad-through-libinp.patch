@@ -1,0 +1,391 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 17 Sep 2026 20:00:00 +0000
+Subject: [PATCH] domicile: a console reads its trackpad through libinput
+
+Patch 0026 put a pointer on the screen and the trackpad still did not
+move it. This is why, and it is the sixth time this shape has appeared.
+
+A CORRECTION TO PATCH 0026 FIRST. That patch's message says "the
+trackpad works and always did", on the evidence that
+`the first pointer event reached the window` was logged before the first
+key. That inference was wrong. Patch 0025 gates that line on
+`event->IsLocatedEvent()`, and two things produce a located event at
+startup with no trackpad involved: `DrmCursor::CommitBoundsChange` ->
+`DrmWindowHost::SynthesizeMouseMove` ->
+`EventFactoryEvdev::SynthesizeMouseMove`
+(`ui/ozone/platform/drm/host/drm_cursor.cc:152`,
+`ui/ozone/platform/drm/host/drm_window_host.cc:150`,
+`ui/events/ozone/evdev/event_factory_evdev.cc:578`), which patch 0018's
+fullscreen `SetBoundsInPixels` drives on every startup; and a click on
+the pad, which is a `BTN_LEFT` key event dispatched at
+`cursor_->GetLocation()`. Neither is motion.
+
+NOTHING IN THIS TREE TURNS A TOUCHPAD INTO POINTER MOTION. The converter
+a device gets is chosen by `CreateConverter`
+(`ui/events/ozone/evdev/input_device_opener_evdev.cc:42-103`), and its
+touchpad branch is `#if defined(USE_EVDEV_GESTURES)` -- the ChromeOS
+gestures library, whose gn flag is `use_evdev_gestures =
+is_chromeos_device` (`ui/events/ozone/evdev/BUILD.gn:15`). A laptop pad
+is not a touchscreen either: `HasTouchscreen()` is
+`HasAbsXY() && HasDirect()` and `INPUT_PROP_POINTER` makes `HasDirect()`
+false (`ui/events/ozone/evdev/event_device_info.cc:898,1019`). So it
+falls through to `EventConverterEvdevImpl`, whose `ProcessEvents`
+handles `EV_MSC`, `EV_KEY`, `EV_REL`, `EV_SYN` and `EV_SW`
+(`event_converter_evdev_impl.cc:215-247`) and has no `EV_ABS` case at
+all. A pad's `ABS_MT_*` are read off the descriptor and dropped;
+`x_offset_` and `y_offset_` stay zero; `FlushEvents` returns at its
+first line (`:397`) and never reaches
+`cursor_->MoveCursor` on the next (`:400`). Nothing logs, because
+nothing failed. Ozone/drm's own cursor plumbing is complete and
+platform-neutral, and was never the problem: `DrmCursor::OnWindowAdded`
+is called from `DrmWindowHost::Initialize()` for every platform
+(`drm_window_host.cc:56`).
+
+The fifth instance was `BitmapCursorFactory`; this is the sixth, and the
+ash-only piece is in `//ui/events/ozone/evdev` rather than
+`//ui/ozone/platform/drm`.
+
+SO THE TOUCHPAD GOES TO libinput, which upstream already has a converter
+for and which this build can have for a gn argument:
+`libinput-dev` and `libinput10` are in Chromium's own bullseye sysroot
+(`build/linux/sysroot_scripts/generated_package_lists/bullseye.amd64`),
+so `use_libinput = true` needs no sysroot surgery. Tap, two-finger
+scroll, acceleration and palm rejection come with it, maintained by
+people who do that for a living, and the alternative was writing a
+gesture engine in this repository.
+
+AND THE ONE THING THAT STOPS IT WORKING HERE IS THE DESCRIPTOR. Every
+other branch of `CreateConverter` is handed the `fd` the opener already
+obtained; the libinput branch dropped it on the floor and let libinput
+open the path itself, through an `open_restricted` that was a bare
+`open(path, flags)`. On a console this browser is not root and owns no
+device node -- that is the whole reason patch 0020 exists, and
+`DrmLogindInput::OpenDeviceFd` is where a descriptor comes from. An
+`open()` by name there answers EACCES and the pad is simply never
+opened.
+
+So `LibInputContext::Create` now takes the descriptor, parks it where
+`OpenRestricted` can find it, and hands it over instead of opening
+anything. The park is a heap allocation and not a member address on
+purpose: libinput keeps the pointer as its user data for the life of the
+context, and the context is moved on its way out of `Create`, so
+anything addressed relative to `this` would dangle by the time libinput
+asked for it. One device per context is this class's own documented
+rule, so there is exactly one descriptor to give and a second ask is a
+bug -- it answers `-EACCES` and says so, rather than falling back to the
+`open()` that cannot work.
+
+AND THIS FILE HAD NEVER BEEN COMPILED. `use_libinput` was only ever set
+by ChromeOS device builds, so turning it on here put
+`libinput_event_converter.{h,cc}` in front of two checks it had never
+met, and the first build failed on eleven errors, none of them in code
+this patch wrote:
+
+  chromium-rawptr                            5 pointer members
+  -Wunsafe-buffer-usage-in-format-attr-call  3 `base::StringPrintV` calls
+
+Both are fixed rather than switched off. The pointer members become
+`raw_ptr`, which costs nothing on handles libinput allocated and frees
+-- the protection it adds applies to memory this process allocated --
+and the two that are Chromium's own, the dispatcher and the cursor, get
+what every other pointer member in this directory has. The log handler's
+format calls are wrapped in `UNSAFE_BUFFERS` with the reason: `format`
+and `args` are libinput's own, its contract is a null-terminated printf
+format and the arguments that go with it, and the callback is reachable
+from nowhere else. The alternative was
+`configs -= [ "//build/config/clang:find_bad_constructs" ]`, which would
+have turned the plugin off for all of `//ui/events/ozone/evdev` to avoid
+five conversions.
+
+AND THEN THE BUILD RAN ONE OF ITS OWN BINARIES. `use_libinput = true`
+links libinput into `libcontent.so`, and `v8_context_snapshot_generator`
+is a host tool the build LINKS AND THEN EXECUTES. The link was fine --
+the sysroot has the library -- and the exec was not:
+
+  ././v8_context_snapshot_generator: error while loading shared
+  libraries: libinput.so.10: cannot open shared object file
+
+`tools/nix/make-shell-for-system.nix` is the build shell, and it already
+carries a list of libraries headed by that exact error text and that
+exact binary's name: X11, mesa, libgbm, libdrm, alsa, pango, dbus. A
+library the browser links is a library the build has to be able to load.
+So libinput joins the list it was always going to belong to, one line
+and a reason.
+
+Routing is a runtime flag rather than a patch:
+`EventDeviceInfo::UseLibinput` honours an overridden
+`kLibinputHandleTouchpad` above its own heuristics
+(`event_device_info.cc:792-806`), and `domicile-launch` passes
+`--enable-features=LibinputHandleTouchpad`. That keeps the decision
+where a person can see and change it.
+---
+diff --git a/tools/nix/make-shell-for-system.nix b/tools/nix/make-shell-for-system.nix
+index c87e1b5..69372e1 100644
+--- a/tools/nix/make-shell-for-system.nix
++++ b/tools/nix/make-shell-for-system.nix
+@@ -96,6 +96,13 @@ in
+       xorg.libXfixes # libXfixes.so.3
+       xorg.libXrandr # libXrandr.so.2
+       xorg.libXtst # libXtst.so.6
++      # libinput.so.10, which `use_libinput = true` links into libcontent.so
++      # and so into every host binary the build runs. The list above is this
++      # one's own precedent: a generator that links the browser's libraries
++      # needs them present to EXECUTE, not merely to link against, and the
++      # sysroot that satisfied the linker is not on the loader's path. See
++      # patch 0027.
++      libinput # libinput.so.10
+       mesa
+       libgbm # libgbm.so.1
+       libdrm # libdrm.so.2
+diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.cc b/ui/events/ozone/evdev/input_device_opener_evdev.cc
+index e9b64c7..93c5dd1 100644
+--- a/ui/events/ozone/evdev/input_device_opener_evdev.cc
++++ b/ui/events/ozone/evdev/input_device_opener_evdev.cc
+@@ -48,8 +48,13 @@ std::unique_ptr<EventConverterEvdev> CreateConverter(
+ #if defined(USE_LIBINPUT)
+   // Use LibInputEventConverter for odd touchpads
+   if (devinfo.UseLibinput()) {
+-    return LibInputEventConverter::Create(params.path, params.id, devinfo,
+-                                          params.cursor, params.dispatcher);
++    // THE DESCRIPTOR GOES WITH IT. Every other converter below is handed the
++    // `fd` this function was called with; this branch used to drop it and let
++    // libinput open the path itself, which on a console is the one thing that
++    // cannot work -- see `LibInputContext::OpenRestricted`.
++    return LibInputEventConverter::Create(std::move(fd), params.path, params.id,
++                                          devinfo, params.cursor,
++                                          params.dispatcher);
+   }
+ #endif
+ 
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
+index cfe335e..160a98c 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.cc
++++ b/ui/events/ozone/evdev/libinput_event_converter.cc
+@@ -4,11 +4,15 @@
+ 
+ #include "ui/events/ozone/evdev/libinput_event_converter.h"
+ 
++#include <errno.h>
+ #include <fcntl.h>
+ 
++#include <memory>
+ #include <ostream>
+ #include <string>
++#include <utility>
+ 
++#include "base/compiler_specific.h"
+ #include "base/logging.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/stringprintf.h"
+@@ -168,12 +172,14 @@ void LibInputEventConverter::LibInputDevice::SetTapToClickEnabled(
+ 
+ LibInputEventConverter::LibInputContext::LibInputContext(
+     LibInputContext&& other)
+-    : li_(other.li_) {
++    : li_(other.li_), opened_(std::move(other.opened_)) {
+   other.li_ = nullptr;
+ }
+ 
+-LibInputEventConverter::LibInputContext::LibInputContext(libinput* const li)
+-    : li_(li) {
++LibInputEventConverter::LibInputContext::LibInputContext(
++    libinput* const li,
++    std::unique_ptr<OpenedDevice> opened)
++    : li_(li), opened_(std::move(opened)) {
+   DCHECK(li_);
+   libinput_log_set_handler(li_, LogHandler);
+   libinput_log_set_priority(li_, LIBINPUT_LOG_PRIORITY_DEBUG);
+@@ -186,14 +192,22 @@ LibInputEventConverter::LibInputContext::~LibInputContext() {
+ }
+ 
+ std::optional<LibInputEventConverter::LibInputContext>
+-LibInputEventConverter::LibInputContext::Create() {
+-  libinput* const li = libinput_path_create_context(&interface_, nullptr);
++LibInputEventConverter::LibInputContext::Create(base::ScopedFD fd) {
++  // THE POINTER, NOT THE CONTEXT, IS WHAT libinput KEEPS. It stores this as
++  // its user data and hands it back to `OpenRestricted` below; the context
++  // that owns the allocation is moved out of this function, so anything
++  // addressed relative to `this` would dangle by the time libinput asked.
++  auto opened = std::make_unique<OpenedDevice>();
++  opened->fd = std::move(fd);
++
++  libinput* const li = libinput_path_create_context(&interface_, opened.get());
+   if (!li) {
+     LOG(ERROR) << "libinput_path_create_context failed";
+     return std::nullopt;
+   }
+ 
+-  return std::make_optional(LibInputEventConverter::LibInputContext(li));
++  return std::make_optional(
++      LibInputEventConverter::LibInputContext(li, std::move(opened)));
+ }
+ 
+ std::optional<LibInputEventConverter::LibInputDevice>
+@@ -234,9 +248,21 @@ LibInputEventConverter::LibInputContext::NextEvent() const {
+ int LibInputEventConverter::LibInputContext::OpenRestricted(const char* path,
+                                                             int flags,
+                                                             void* user_data) {
+-  VLOG(1) << "Open input: " << path;
+-  int fd = open(path, flags);
+-  return fd;
++  // NOT `open(path, flags)`, WHICH IS WHAT THIS USED TO BE. On a console the
++  // browser is not root and holds no device node: logind opened this one and
++  // passed the descriptor over, and opening it again by name answers EACCES.
++  // One device per context is this class's own rule -- its header says so --
++  // so there is exactly one descriptor to hand over and a second ask is a bug
++  // rather than a case to fall back for.
++  auto* const opened = static_cast<OpenedDevice*>(user_data);
++  if (!opened || !opened->fd.is_valid()) {
++    LOG(ERROR) << "libinput asked for " << path
++               << " and this context has no descriptor left to give it";
++    return -EACCES;
++  }
++
++  VLOG(1) << "Open input: " << path << " (on the descriptor logind gave us)";
++  return opened->fd.release();
+ }
+ 
+ void LibInputEventConverter::LibInputContext::CloseRestricted(int fd,
+@@ -249,17 +275,26 @@ void LibInputEventConverter::LibInputContext::LogHandler(
+     enum libinput_log_priority priority,
+     const char* format,
+     va_list args) {
++  // SAFETY: `format` and `args` are libinput's own, handed to the log handler
++  // it was given: libinput's contract is a null-terminated printf format and
++  // the arguments that go with it, and this callback is reachable from
++  // nowhere else. The compiler cannot see that, so it refuses a format
++  // function whose format is not a literal -- a refusal that had never fired
++  // here because this file had never been compiled outside ChromeOS.
+   switch (priority) {
+     case LIBINPUT_LOG_PRIORITY_DEBUG:
+-      VLOG(4) << "libinput: " << base::StringPrintV(format, args);
++      VLOG(4) << "libinput: "
++              << UNSAFE_BUFFERS(base::StringPrintV(format, args));
+       break;
+ 
+     case LIBINPUT_LOG_PRIORITY_INFO:
+-      VLOG(1) << "libinput: " << base::StringPrintV(format, args);
++      VLOG(1) << "libinput: "
++              << UNSAFE_BUFFERS(base::StringPrintV(format, args));
+       break;
+ 
+     case LIBINPUT_LOG_PRIORITY_ERROR:
+-      LOG(ERROR) << "libinput: " << base::StringPrintV(format, args);
++      LOG(ERROR) << "libinput: "
++                 << UNSAFE_BUFFERS(base::StringPrintV(format, args));
+       break;
+   }
+ }
+@@ -268,12 +303,13 @@ constexpr libinput_interface
+     LibInputEventConverter::LibInputContext::interface_;
+ 
+ std::unique_ptr<LibInputEventConverter> LibInputEventConverter::Create(
++    base::ScopedFD fd,
+     const base::FilePath& path,
+     int id,
+     const EventDeviceInfo& devinfo,
+     CursorDelegateEvdev* cursor,
+     DeviceEventDispatcherEvdev* dispatcher) {
+-  auto context = LibInputContext::Create();
++  auto context = LibInputContext::Create(std::move(fd));
+   if (!context) {
+     LOG(ERROR) << "LibInputContext::Create failed";
+     return nullptr;
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.h b/ui/events/ozone/evdev/libinput_event_converter.h
+index c030a34..9a9c2c0 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.h
++++ b/ui/events/ozone/evdev/libinput_event_converter.h
+@@ -7,9 +7,12 @@
+ 
+ #include <libinput.h>
+ 
++#include <memory>
+ #include <optional>
+ #include <ostream>
+ 
++#include "base/files/scoped_file.h"
++#include "base/memory/raw_ptr.h"
+ #include "ui/events/ozone/evdev/event_converter_evdev.h"
+ 
+ namespace ui {
+@@ -38,7 +41,12 @@ class LibInputEventConverter : public EventConverterEvdev {
+     libinput_event_type Type() const;
+ 
+    private:
+-    libinput_event* event_;
++    // `raw_ptr` on a handle libinput allocated and libinput frees: the
++    // checker asks for it on every pointer member, and it costs nothing here
++    // because the protection it adds only applies to memory this process
++    // allocated. This file had never been compiled outside ChromeOS, where
++    // the plugin does not run, which is why upstream reads as it does.
++    raw_ptr<libinput_event> event_;
+   };
+ 
+   // This class wraps the libinput_device struct from libinput library.
+@@ -60,14 +68,18 @@ class LibInputEventConverter : public EventConverterEvdev {
+     void SetTapToClickEnabled(const bool enabled) const;
+ 
+     const int device_id_;
+-    libinput_device* device_;
++    raw_ptr<libinput_device> device_;
+   };
+ 
+   // This class wraps the libinput struct from libinput library. Any operations
+   // that uses libinput struct are implemented here.
+   class LibInputContext {
+    public:
+-    static std::optional<LibInputContext> Create();
++    // `fd` is the device this context will read, ALREADY OPEN. On a console
++    // the browser does not own `/dev/input/*` and never opens one itself:
++    // logind does, and hands the descriptor over. See
++    // `ui/ozone/platform/drm/domicile/drm_logind_input.cc`.
++    static std::optional<LibInputContext> Create(base::ScopedFD fd);
+     LibInputContext(LibInputContext&& other);
+     LibInputContext(const LibInputContext& other) = delete;
+     LibInputContext& operator=(const LibInputContext& other) = delete;
+@@ -81,7 +93,15 @@ class LibInputEventConverter : public EventConverterEvdev {
+     std::optional<LibInputEventConverter::LibInputEvent> NextEvent() const;
+ 
+    private:
+-    explicit LibInputContext(libinput* const li);
++    // The descriptor logind handed this process, parked where the callback
++    // below can find it. On the heap because libinput keeps the pointer as its
++    // user data for the life of the context, and the context itself is moved
++    // on its way out of `Create`.
++    struct OpenedDevice {
++      base::ScopedFD fd;
++    };
++
++    LibInputContext(libinput* const li, std::unique_ptr<OpenedDevice> opened);
+ 
+     static int OpenRestricted(const char* path, int flags, void* user_data);
+     static void CloseRestricted(int fd, void* user_data);
+@@ -93,10 +113,12 @@ class LibInputEventConverter : public EventConverterEvdev {
+     static constexpr libinput_interface interface_ = {OpenRestricted,
+                                                       CloseRestricted};
+ 
+-    libinput* li_;
++    raw_ptr<libinput> li_;
++    std::unique_ptr<OpenedDevice> opened_;
+   };
+ 
+   static std::unique_ptr<LibInputEventConverter> Create(
++      base::ScopedFD fd,
+       const base::FilePath& path,
+       int id,
+       const EventDeviceInfo& devinfo,
+@@ -134,8 +156,8 @@ class LibInputEventConverter : public EventConverterEvdev {
+   void HandlePointerAxis(const LibInputEvent& evt);
+   base::TimeTicks Timestamp(const LibInputEvent& evt);
+ 
+-  DeviceEventDispatcherEvdev* const dispatcher_;
+-  CursorDelegateEvdev* const cursor_;
++  const raw_ptr<DeviceEventDispatcherEvdev> dispatcher_;
++  const raw_ptr<CursorDelegateEvdev> cursor_;
+ 
+   const bool has_keyboard_;
+   const bool has_mouse_;
+-- 
+2.54.0
+

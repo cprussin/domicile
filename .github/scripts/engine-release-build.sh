@@ -71,6 +71,13 @@ cd "$CHROMIUM" || exit 1
 # It is ordered after `DrmScreen` (patch 0013) and the modeset driver (patch
 # 0016) on purpose: a platform with no embedder behind it turns a clear refusal
 # into a crash. Both are in the series now.
+#
+# `use_libinput` IS NOT AN OZONE ARGUMENT, and it is here anyway. Without it
+# `CreateConverter` has no touchpad branch off ChromeOS, a pad falls through to
+# `EventConverterEvdevImpl`, and that class has no `EV_ABS` case -- a pointer
+# nothing can move, reported by nothing. libinput's headers and library are
+# already in Chromium's own bullseye sysroot, so this costs a line. Patch 0027
+# is what makes the descriptor logind opened reach it.
 gn gen "$OUT" --args='
   is_debug = false
   is_component_build = false
@@ -83,6 +90,7 @@ gn gen "$OUT" --args='
   ozone_platform_wayland = true
   ozone_platform_headless = true
   ozone_platform_drm = true
+  use_libinput = true
 ' || exit 1
 
 # `chrome` is the browser; `domicile_engine` is the library the compositor

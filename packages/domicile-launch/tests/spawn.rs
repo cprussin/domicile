@@ -366,3 +366,37 @@ fn a_run_that_wants_more_than_warnings_can_ask_for_them() {
         .collect();
     assert_eq!(levels, vec!["--log-level=1", "--log-level=0"], "{args:?}");
 }
+
+#[test]
+fn the_engine_is_told_a_touchpad_is_libinputs() {
+    // WITHOUT THIS THE POINTER DRAWS AND NOTHING MOVES IT. `CreateConverter`
+    // has exactly one touchpad branch and it is `#if defined(USE_EVDEV_
+    // GESTURES)`, whose gn flag is `is_chromeos_device`; a pad that misses it
+    // is not a touchscreen either, so it falls through to
+    // `EventConverterEvdevImpl`, which handles `EV_REL` and has no `EV_ABS`
+    // case at all. Every finger position is read off the descriptor and
+    // dropped, and `cursor_->MoveCursor` is never reached. Nothing logs,
+    // because nothing failed.
+    //
+    // `EventDeviceInfo::UseLibinput` takes an OVERRIDDEN
+    // `kLibinputHandleTouchpad` over its own heuristics, and the feature is
+    // `FEATURE_DISABLED_BY_DEFAULT`, so the override is the whole mechanism.
+    // Patch 0027 is what then lets libinput read a descriptor it is forbidden
+    // to open for itself.
+    //
+    // On every platform, not just the console: the nested runs share this
+    // engine, and a developer's pad should behave the same way in both.
+    for platform in ["drm", "wayland", "headless"] {
+        let args = args_of(&engine(
+            Path::new("/l/engine"),
+            &shell(),
+            platform,
+            &runtime(),
+            None,
+        ));
+        assert!(
+            args.contains(&"--enable-features=LibinputHandleTouchpad".to_string()),
+            "{platform}: {args:?}"
+        );
+    }
+}
