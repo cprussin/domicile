@@ -28,8 +28,9 @@
 # `OzonePlatformDrm::CreateScreen` was `NOTREACHED()` and nothing modesets
 # without `//ui/display/manager`. Patch `0013` answered the first and `0016` the
 # second, so the embedder exists and the argument goes on.
-# `docs/architecture/A-DESKTOP-ON-A-TTY.md` tracks what is left, which is a GPU
-# question rather than an embedder one.
+# `docs/architecture/A-DESKTOP-ON-A-TTY.md` tracks what is left, which is one
+# item: taking the card node from logind rather than opening it. A screen has
+# lit since.
 set -u
 
 CHROMIUM="${1:-}"
