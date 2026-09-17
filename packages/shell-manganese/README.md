@@ -9,7 +9,7 @@ pixel of it is ordinary web content, and each Wayland client on it is a real
 The chrome is a React tree built entirely from
 [`@domicile/component-library`](../component-library/README.md): the bar's
 launchers and a browser window's controls are its `Button`, the address bar its
-`Input`, the empty-desktop card its `Card`, the theme toggle its `ThemeSwitch`.
+`Input`, the empty-desktop card its `Card`.
 Styling is Panda CSS from the library's preset — the shell defines no
 stylesheet of its own.
 
@@ -250,9 +250,8 @@ the keyboard happens to be; exactly one path acts for any press.
 ## The top bar
 
 Transparent, across the top of the screen the chrome is on: the workspaces at
-one end, the clock in the middle, and at the other end the two launchers, the
-theme toggle, and the name of the binding mode whenever it is not the usual
-one.
+one end, the clock in the middle, and at the other end the two launchers and
+the name of the binding mode whenever it is not the usual one.
 
 It paints no background, so what is behind it is the wallpaper — and the
 windows are laid out in what is *left* of the screen under it, so nothing is
@@ -264,8 +263,7 @@ background to read against, so the theme's `foreground` would not do: it flips
 with the theme and the photograph does not, and half of any photograph is
 lighter than light text. The shadow is `shadows.textOverPhoto` from the
 component library's preset — tight and nearly opaque rather than soft, because
-a blurred shadow under ten-pixel type reads as a smudge. The theme switch keeps
-its own colours: colour is how it says which way it is set.
+a blurred shadow under ten-pixel type reads as a smudge.
 
 The workspaces on it are the ones with windows on them, plus the one being
 looked at — sway's own rule. The desktop keeps all ten all the time, which is
@@ -354,7 +352,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<webview>`. |
 | `src/window-management/useHistoryAvailability.ts` | Where that window's page can be sent, read off the view's own properties rather than learned from the event that says to read them. |
-| `src/window-management/useReclaimFocus.ts` | Keeping the document's focus on the window being worked in, but only when it landed on nothing at all — the address bar, the bar's own controls and the theme switch are the user reaching for focus, and a closing window's own control leaves it on the body. |
+| `src/window-management/useReclaimFocus.ts` | Keeping the document's focus on the window being worked in, but only when it landed on nothing at all — the address bar and the bar's own controls are the user reaching for focus, and a closing window's own control leaves it on the body. |
 | `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
 | `src/window-management/window-styles.ts` | What every window shares, and how one is placed at a rectangle. |
 | `src/window-management/floating/float.ts` | A window that has left the tiling: where it sits and how big. Its own module because floating is not a kind of window. |

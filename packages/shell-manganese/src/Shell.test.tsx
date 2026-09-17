@@ -448,6 +448,12 @@ describe("Shell", () => {
 
       expect(windowsOnScreen(container)).toEqual(["Browser"]);
     });
+
+    it("offers no theme toggle: the bar launches things, it does not set the page", () => {
+      renderShell();
+
+      expect(screen.queryByLabelText(/theme/i)).not.toBeInTheDocument();
+    });
   });
 
   describe("the windows", () => {
