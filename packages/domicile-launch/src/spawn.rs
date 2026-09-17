@@ -1,4 +1,4 @@
-//! The three commands a desktop is, as data.
+//! The two commands a desktop is -- the engine and the compositor -- as data.
 //!
 //! Built rather than run, so what each process is started with is a value a
 //! test can read. The flag lists were the part of the old shell script that
