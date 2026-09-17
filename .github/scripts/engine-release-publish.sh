@@ -97,15 +97,49 @@ release=$(jq -n --arg tag "$TAG" --arg sha "$GITHUB_SHA" --arg body "$BODY" \
   api -X POST "$API/releases" -d @-)
 id=$(echo "$release" | jq -r .id)
 
+# How many times one asset is offered before the run gives up. GITHUB'S UPLOAD
+# ENDPOINT 500s, and half a gigabyte is a long time to be exposed to it: run
+# 35252793831 built the engine, packaged it and passed the pixel guard, and then
+# lost all 27 minutes of it to `curl: (22) The requested URL returned error:
+# 500` 28 seconds into the tarball. Rebuilding Chromium to re-attempt an upload
+# is the most expensive no-op this repository has.
+UPLOAD_ATTEMPTS=4
+
+# NOT `curl --retry`: an upload that reached GitHub before it failed leaves the
+# asset on the release, and every later POST for that name answers 422
+# `already_exists` — so the retry that matters is the one that clears the name
+# first, which is what this does on every attempt.
+upload_asset() {
+  local into="$1" asset="$2" attempt=1
+  while :; do
+    api "$API/releases/$into/assets" |
+      jq -r --arg name "$asset" '.[] | select(.name == $name) | .id' |
+      while read -r stale; do
+        echo "  dropping what a failed upload left behind ($stale)"
+        api -X DELETE "$API/releases/assets/$stale" >/dev/null
+      done
+    if curl -sS -f -X POST \
+         -H "Authorization: Bearer $GITHUB_TOKEN" \
+         -H "Content-Type: application/octet-stream" \
+         --data-binary "@$STAGE/$asset" \
+         "$UPLOADS/releases/$into/assets?name=$asset" >/dev/null; then
+      return 0
+    fi
+    [ "$attempt" -lt "$UPLOAD_ATTEMPTS" ] || {
+      echo "$asset did not upload in $attempt attempts" >&2
+      return 1
+    }
+    echo "  that upload did not land; attempt $((attempt + 1)) in $((attempt * 15))s"
+    sleep $((attempt * 15))
+    attempt=$((attempt + 1))
+  done
+}
+
 upload_assets() {
   local into="$1"
   for asset in "$TARBALL" "$TARBALL.sha256"; do
     echo "uploading $asset"
-    curl -sS -f -X POST \
-      -H "Authorization: Bearer $GITHUB_TOKEN" \
-      -H "Content-Type: application/octet-stream" \
-      --data-binary "@$STAGE/$asset" \
-      "$UPLOADS/releases/$into/assets?name=$asset" >/dev/null
+    upload_asset "$into" "$asset"
   done
 }
 
