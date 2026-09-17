@@ -538,6 +538,52 @@ describe("Shell", () => {
     });
   });
 
+  describe("which window has the keyboard", () => {
+    it("marks the focused window's bar and leaves the others resting", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      expect(barFor(container, "app:two").dataset.focus).toBe("focused");
+      expect(barFor(container, "app:one").dataset.focus).toBe("resting");
+      // And the mark is a filled bar rather than a hairline: the one thing on
+      // a desktop of identical frames that says where the keystrokes go.
+      expect(barFor(container, "app:two").className).toContain(
+        css({ backgroundColor: "accent" }),
+      );
+      expect(barFor(container, "app:one").className).not.toContain(
+        css({ backgroundColor: "accent" }),
+      );
+    });
+
+    it("moves the mark with the focus", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      press("h");
+
+      expect(barFor(container, "app:one").dataset.focus).toBe("focused");
+      expect(barFor(container, "app:two").dataset.focus).toBe("resting");
+    });
+
+    it("draws the focused window's own frame in the accent as well", () => {
+      // The bar is one edge of the window; a frame that stayed the resting
+      // colour would say something different from the bar above it.
+      // Declarations rather than class names, because Panda hashes them.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      expect(appElement(container, "two").className).toContain(
+        css({ borderColor: "accent" }),
+      );
+      expect(appElement(container, "one").className).toContain(
+        css({ borderColor: "borderStrong" }),
+      );
+    });
+  });
+
   describe("the keys, as the sway config binds them", () => {
     it("claims every chord it answers from the compositor", () => {
       // Which is what answers a press while a `<webview>` has the keyboard:

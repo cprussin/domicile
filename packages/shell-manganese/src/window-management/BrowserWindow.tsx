@@ -19,7 +19,9 @@ import {
   clickThroughStyles,
   draggingStyles,
   edgeStyles,
+  focusedEdgeStyles,
   placedAt,
+  restingEdgeStyles,
   windowStyles,
 } from "./window-styles";
 import { withScheme } from "./with-scheme";
@@ -231,6 +233,8 @@ export const BrowserWindow = ({
         browserStyles,
         // The bar above carries the top edge; this picks up the other three.
         edgeStyles,
+        // And the same colour the bar is drawn in, for the same reason.
+        focused ? focusedEdgeStyles : restingEdgeStyles,
         noTopEdgeStyles,
         clickThrough && clickThroughStyles,
         dragging && draggingStyles,

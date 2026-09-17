@@ -15,7 +15,9 @@ import {
   clickThroughStyles,
   draggingStyles,
   edgeStyles,
+  focusedEdgeStyles,
   placedAt,
+  restingEdgeStyles,
   windowStyles,
 } from "./window-styles";
 
@@ -205,6 +207,9 @@ export const AppWindow = ({
         windowStyles,
         appStyles,
         edgeStyles,
+        // The frame says what the bar above it says: this is the window the
+        // keyboard is in.
+        focused ? focusedEdgeStyles : restingEdgeStyles,
         clickThrough && clickThroughStyles,
         dragging && draggingStyles,
       )}

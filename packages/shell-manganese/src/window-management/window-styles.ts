@@ -70,12 +70,27 @@ export const draggingStyles = css({ opacity: 0.6 });
  * On the page rather than on the client: the element is a hole and the border
  * is drawn around the hole, which is the one part of a window's frame the
  * compositor does not have to be told about.
+ *
+ * The colour is not here: it says which window the keyboard is in, so it comes
+ * from {@link focusedEdgeStyles} or {@link restingEdgeStyles}.
  */
 export const edgeStyles = css({
-  borderColor: "borderStrong",
   borderStyle: "solid",
   borderWidth: "1px",
 });
+
+/**
+ * What colour that line is, which is the window's share of saying where the
+ * keyboard is: the accent for the window being worked in, and the resting
+ * line for every other one.
+ *
+ * Two classes rather than one with an override, because two rules setting
+ * `border-color` on one element are decided by the order Panda happens to
+ * emit them in — so exactly one of these is ever applied.
+ */
+export const focusedEdgeStyles = css({ borderColor: "accent" });
+
+export const restingEdgeStyles = css({ borderColor: "borderStrong" });
 
 /**
  * A window the pointer goes straight through.
