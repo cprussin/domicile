@@ -43,6 +43,19 @@ git -C /home/user/chromium/chromium sparse-checkout set \
 A full `--depth 1` clone would not fit comfortably; `--filter=blob:none
 --sparse` is what makes this affordable.
 
+**For one file, skip the clone.** `raw.githubusercontent.com` is served and
+takes the revision, so the pin in `packages/domicile-engine/CHROMIUM_PIN` reads
+a file directly:
+
+```sh
+curl "https://raw.githubusercontent.com/chromium/chromium/$(tail -1 \
+  packages/domicile-engine/CHROMIUM_PIN)/components/viz/service/display/overlay_candidate_factory.cc"
+```
+
+That is how the overlay-promotion question in `WINDOW-COMPOSITING.md` was
+settled, and it costs nothing. The sparse clone is still what you want for
+grepping across directories.
+
 ## One trap worth keeping
 
 **Advertising a Wayland global is a promise to honor what clients say through
