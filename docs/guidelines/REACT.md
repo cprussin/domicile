@@ -58,8 +58,9 @@ accept and spread every prop the underlying component takes. Build from
 scratch only for components base-ui does not cover.
 
 The detailed wrapping rules for `@domicile/component-library` — props via
-`ExtendProps`, re-exporting `createHandle`, composing compound parts — belong
-in that package's own `docs/` once it exists.
+`ExtendProps`, re-exporting `createHandle`, composing compound parts — are in
+that package's own
+[`docs/COMPONENTS.md`](/packages/component-library/docs/COMPONENTS.md).
 
 ## Errors and error boundaries
 

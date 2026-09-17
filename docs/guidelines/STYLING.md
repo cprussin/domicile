@@ -65,7 +65,7 @@ exemption: a package with a product UI is not a worked example.
    class names the library's own `styled-system` produces at runtime are the
    same ones the app's build emitted rules for. Keep it on in every config.
 3. Wire the PostCSS plugin to your bundler. For Vite-based apps, add the
-   plugin in `vite.<entry>.config.ts`:
+   plugin in `vite.config.ts`:
    ```ts
    import pandacssPostcssPlugin from "@pandacss/dev/postcss";
    import { defineConfig } from "vite";
@@ -242,10 +242,11 @@ equivalent (`background`, `card`, `foreground`, …) instead.
 | `fontSize`, `fontWeight`, `letterSpacing`, `lineHeights` | Default Panda typography scales. `lineHeights.normal` (1.5), `lineHeights.tight` (1.25), etc. |
 | `borderRadius` | Named scale: `xs`, `sm`, `md`, `lg`, `xl`, `2xl`, `3xl`, `4xl`, `full`. Per-size radii that aren't in this scale can be expressed by interpolating spacing tokens (e.g. `borderRadius: "{spacing.4}"`). |
 | `shadows.md` | Default Panda shadow scale. |
-| `shadows.lifted`, `shadows.modal` | Domicile preset. `lifted` is a soft, broad drop shadow for floating surfaces (e.g. the message composer); `modal` is the heavier elevation used by dialogs. |
+| `shadows.lifted`, `shadows.modal` | Domicile preset. `lifted` is a soft, broad drop shadow for floating surfaces — the `Select` popup is what uses it; `modal` is the heavier elevation used by dialogs. |
 | `durations.fastest/faster/fast/normal/slow/slower/slowest/pulse` | Used in `transition` shorthands. |
 | `durations.crossfade` | Domicile preset. A 2s dissolve between two pictures — far longer than the scale above, which measures how long a control takes to answer. |
 | `easings.default/linear/in/out/in-out` | Used in `transition` shorthands. |
+| `easings.outBack`, `easings.outQuart` | Domicile preset. `outBack` is a back-out with a ~15% overshoot, for a landing that should bounce; `outQuart` is a settling ease-out for when `easings.out` reads too linear. |
 | `opacity.disabled` (0.6), `opacity.dragging` (0.4), `opacity.pulseMin` (0.3) | Domicile preset. |
 | `zIndex.modalBackdrop` / `zIndex.modal` | Domicile preset. Stacking for portaled overlays. |
 | `fonts.mono` | Domicile preset. |
