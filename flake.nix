@@ -337,6 +337,22 @@
       # whoever typed it to name the file. `shellPage`'s install check above is
       # what makes joining `shell.js` on here safe — a build that emitted
       # anything else never reaches this line.
+      #
+      # AND IT BRINGS THE TERMINAL IT PROMISES. Both of these shells bind
+      # Mod+Return to `domicile.spawn(["kitty"])`, and the compositor runs
+      # that through the environment it was started in -- so on a machine
+      # without kitty on `PATH` the desktop answers the chord with
+      # `failed to spawn client err=No such file or directory`, in a log the
+      # person pressing the key is not reading. It was on `PATH` for everyone
+      # who developed this, because `kitty` is in the dev shell's
+      # `buildInputs`; `nix run github:cprussin/domicile#manganese` is not the
+      # dev shell, and that is the whole of how it went unnoticed.
+      #
+      # `--suffix` rather than `--prefix`, so a person who has their own kitty
+      # gets theirs: this is a floor under a desktop somebody is trying out,
+      # not a choice being taken away from them. A shell of your own that
+      # spawns something else is unaffected either way -- `.#domicile` takes
+      # the page as an argument and wraps no `PATH` at all.
       desktop = { name, description }:
         pkgs.runCommand name
           {
@@ -348,7 +364,8 @@
             };
           } ''
           makeWrapper ${domicilePackage}/bin/domicile "$out/bin/${name}" \
-            --add-flags ${shellPage name}/shell.js
+            --add-flags ${shellPage name}/shell.js \
+            --suffix PATH : ${pkgs.lib.makeBinPath [ pkgs.kitty ]}
         '';
 
       # ── What a user installs ────────────────────────────────────────────
