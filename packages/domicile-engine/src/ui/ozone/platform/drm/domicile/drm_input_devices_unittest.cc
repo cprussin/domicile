@@ -547,5 +547,69 @@ TEST(DrmInputDevicesTest, ReleasingTwiceReleasesOnce) {
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 }
 
+TEST(DrmInputDevicesTest, AResumeForADeviceGivenBackAMomentAgoIsStillTaken) {
+  RecordedRelease release;
+  RecordedReopen reopen;
+  DrmTakenDevices devices(release.Bind(), reopen.Bind());
+  reopen.Watch(&devices);
+  reopen.Knows(kKeyboardPath, kKeyboard);
+
+  devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
+               DeviceLiveness::kRevoked);
+
+  // THE WINDOW A MEASURED DESKTOP DIED IN. `GiveBack` is on the way into
+  // every re-take, so a device is not held for as long as it takes to give it
+  // back and ask for it again -- and logind still has it down as this
+  // session's for the whole of that window, so a `ResumeDevice` can land in
+  // it. Answering that from the held table refuses a live descriptor and
+  // leaves the device dead for the rest of the run.
+  EXPECT_TRUE(devices.GiveBack(kKeyboard));
+
+  EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
+  EXPECT_EQ(reopen.calls(),
+            std::vector<Reopened>({Reopened{kKeyboardId, kKeyboardPath}}));
+  // The descriptor logind sent is the one the reopened device got, rather
+  // than one taken again from a session that is not in front of the user.
+  EXPECT_EQ(ReadOneByte(reopen.descriptor()), 1);
+}
+
+TEST(DrmInputDevicesTest, ADeviceResumedAfterBeingGivenBackIsOwedBackAgain) {
+  RecordedRelease release;
+  RecordedReopen reopen;
+  DrmTakenDevices devices(release.Bind(), reopen.Bind());
+  reopen.Watch(&devices);
+  reopen.Knows(kKeyboardPath, kKeyboard);
+
+  devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
+               DeviceLiveness::kRevoked);
+  EXPECT_TRUE(devices.GiveBack(kKeyboard));
+  EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
+
+  // A resume does not just hand a descriptor over, it says logind is holding
+  // this device for this session again -- so the shutdown owes it back. A
+  // resume that parked the descriptor without recording the hold would strand
+  // the device with a session that has exited.
+  EXPECT_TRUE(devices.Release());
+  EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard, kKeyboard}));
+}
+
+TEST(DrmInputDevicesTest, AResumeForAGoneDeviceIsStillRefused) {
+  RecordedRelease release;
+  RecordedReopen reopen;
+  DrmTakenDevices devices(release.Bind(), reopen.Bind());
+  reopen.Watch(&devices);
+
+  devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
+               DeviceLiveness::kLive);
+  EXPECT_EQ(devices.Pause(kKeyboard, "gone"), PauseAnswer::kNothingToSay);
+
+  // THE ONE PAUSE THAT MEANS THE NODE IS NOT COMING BACK, so it is the one
+  // that forgets the name as well as the hold. Everything else that empties
+  // the held table is a step on the way to taking the device again, and a
+  // resume in that window is answered rather than refused.
+  EXPECT_FALSE(devices.Resume(kKeyboard, OpenZero()));
+  EXPECT_TRUE(reopen.calls().empty());
+}
+
 }  // namespace
 }  // namespace ui

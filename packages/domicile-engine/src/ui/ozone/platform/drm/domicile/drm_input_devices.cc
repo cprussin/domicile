@@ -58,6 +58,18 @@ void DrmTakenDevices::Take(DeviceNumber number,
                            const base::FilePath& path,
                            DeviceLiveness liveness) {
   devices_[number] = Device{id, path, liveness};
+
+  // RECORDED WHERE A RELEASE DOES NOT REACH. `devices_` answers "is this
+  // device held right now", and a `GiveBack` empties the entry on the way
+  // into every re-take. `names_` answers "what does the factory call this
+  // number", which stays true for as long as the node is there and is what a
+  // `ResumeDevice` arriving in that window has to be answered from.
+  names_[number] = Device{id, path, liveness};
+
+  VLOG(1) << "domicile: took input device " << number.major << ":"
+          << number.minor << " (" << path.value() << "), "
+          << (liveness == DeviceLiveness::kLive ? "live" : "revoked")
+          << "; holding " << devices_.size();
 }
 
 base::ScopedFD DrmTakenDevices::Resumed(const base::FilePath& path) {
@@ -79,8 +91,13 @@ PauseAnswer DrmTakenDevices::Pause(DeviceNumber number,
   if (type == kPauseTypeGone) {
     // The node is unplugged. There is nothing left to give back, and udev's
     // own removal is what takes the converter down -- so forgetting it is the
-    // whole of the handling.
+    // whole of the handling. The name goes with it: this is the one pause
+    // that says the device is not coming back, so a later resume for this
+    // number really would be one nothing could reopen.
     devices_.erase(number);
+    names_.erase(number);
+    VLOG(1) << "domicile: input device " << number.major << ":" << number.minor
+            << " is gone; holding " << devices_.size();
     return PauseAnswer::kNothingToSay;
   }
 
@@ -126,23 +143,42 @@ PauseAnswer DrmTakenDevices::Pause(DeviceNumber number,
 }
 
 bool DrmTakenDevices::Resume(DeviceNumber number, base::ScopedFD descriptor) {
-  const auto taken = devices_.find(number);
-  if (taken == devices_.end()) {
+  // ANSWERED FROM THE NAMES AND NOT FROM THE HOLD. logind sends this only for
+  // a device in `s->devices`, so a resume is logind saying it holds this
+  // device for this session and has just re-opened it live -- a fact about
+  // logind's table, which is the one that decides. Asking `devices_` whether
+  // to believe it is how thirteen live descriptors were dropped on the floor
+  // in a measured run: every device came up revoked, logind force-paused the
+  // whole set a moment later, and by the time the activation's resumes
+  // arrived the held table no longer named any of them.
+  const auto named = names_.find(number);
+  if (named == names_.end()) {
     LOG(ERROR) << "logind resumed device " << number.major << ":"
                << number.minor << ", which this session never took";
     return false;
   }
 
+  // COPIED OUT BEFORE ANYTHING ELSE, because `Take` writes `names_` and the
+  // reopen below runs `OpenInputDevice` synchronously, which comes straight
+  // back here for `Resumed` -- so nothing may be standing on an iterator into
+  // any of the three tables from here down.
+  const int id = named->second.id;
+  const base::FilePath path = named->second.path;
+
+  const bool forgotten = devices_.find(number) == devices_.end();
+  if (forgotten) {
+    LOG(WARNING) << "logind resumed input device " << number.major << ":"
+                 << number.minor << " (" << path.value()
+                 << "), which this session was holding a moment ago and is "
+                    "not holding now; taking logind's word for it, because "
+                    "the descriptor it sent is a live one and dropping it "
+                    "leaves this device dead for the rest of the run";
+  }
+
   // THE DESCRIPTOR A RESUME CARRIES IS A LIVE ONE, so the device stops being
   // one an activation has to give back and take again.
-  taken->second.liveness = DeviceLiveness::kLive;
+  Take(number, id, path, DeviceLiveness::kLive);
 
-  // COPIED OUT BEFORE THE REOPEN, because the reopen runs `OpenInputDevice`
-  // synchronously and that comes straight back here for `Resumed` -- so
-  // nothing may be standing on an iterator into either table when it is
-  // called.
-  const int id = taken->second.id;
-  const base::FilePath path = taken->second.path;
   resumed_[path] = std::move(descriptor);
 
   // A resume for a device that was never paused lands here too, and is taken
@@ -172,6 +208,8 @@ size_t DrmTakenDevices::Reclaim() {
     reopen_.Run(device.id, device.path);
   }
 
+  VLOG(1) << "domicile: reclaimed " << revoked.size() << " of "
+          << devices_.size() << " held input device(s)";
   return revoked.size();
 }
 
@@ -189,8 +227,12 @@ bool DrmTakenDevices::GiveBack(DeviceNumber number) {
 
   // FORGOTTEN EVEN WHEN THE RELEASE WAS REFUSED. A device logind would not
   // take back is one this session cannot take again either, and leaving it in
-  // the table would have the shutdown name it a second time.
+  // the table would have the shutdown name it a second time. `names_` is left
+  // alone: the node has not gone anywhere, and a `ResumeDevice` that lands
+  // between this and the `TakeDevice` that follows is answered from it.
   devices_.erase(taken);
+  VLOG(1) << "domicile: gave back input device " << number.major << ":"
+          << number.minor << "; holding " << devices_.size();
   return true;
 }
 
@@ -209,8 +251,11 @@ bool DrmTakenDevices::Release() {
   }
 
   // Emptied rather than left, because the destructor releases too and a
-  // shutdown that releases explicitly is the ordinary path.
+  // shutdown that releases explicitly is the ordinary path. The names go with
+  // them: this is the session letting go of every device it has, so there is
+  // nothing left for a resume to be about.
   devices_.clear();
+  names_.clear();
   resumed_.clear();
   return every_device_agreed;
 }
