@@ -79,7 +79,7 @@ fi
 # what cost two wrong diagnoses. These two lines are the difference between
 # "nothing is being read" and "it arrives and something above drops it".
 for said in "the first key event reached the window" \
-            "the first pointer event reached the window"; do
+            "the first pointer event a hand caused"; do
   if in_patches "$said"; then
     ok "the log names $said"
   else
@@ -87,6 +87,54 @@ for said in "the first key event reached the window" \
       "DispatchEvent says nothing, so a desktop that answers nothing cannot say which half is broken"
   fi
 done
+
+# AND A SYNTHESIZED EVENT MUST NOT SATISFY THE POINTER ONE. `SetFullscreen`
+# reaches `SynthesizeMouseMove`, which posts a `kMouseMoved` carrying
+# `EF_IS_SYNTHESIZED` about 200ms into every startup, from inside
+# `CommitBoundsChange` -- the one instant when the cursor's rect and `bounds_`
+# are equal by construction, so it always passes the bounds test. Gated on
+# `IsLocatedEvent()` alone the one-shot is spent before a hand touches
+# anything, which is exactly how patch 0026's message came to say "the
+# trackpad works and always did" about a trackpad nothing was reading. The
+# guard is here because that is not a mistake anybody makes once.
+if in_patches "EF_IS_SYNTHESIZED"; then
+  ok "the startup's own synthesized move cannot spend the pointer log"
+else
+  fail "the startup's own synthesized move cannot spend the pointer log" \
+    "the one-shot is gated on IsLocatedEvent alone again, so it fires 200ms in and answers nothing"
+fi
+
+# A PRESS AND A MOVE FAIL SEPARATELY, so they are asked about separately: a
+# move can reach the page while a press is swallowed by a non-client hit test,
+# and a drawn cursor is evidence for neither -- that is the cursor plane, moved
+# from the evdev thread, which never reaches a renderer.
+if in_patches "the first mouse press reached the window"; then
+  ok "a press is reported apart from a move"
+else
+  fail "a press is reported apart from a move" \
+    "only motion is reported, so a click that never arrives and one that arrives unwanted look the same"
+fi
+
+# AND WHAT VIEWS SAID ABOUT IT. `DispatchEventFromNativeUiEvent` returns an
+# `EventResult` and the call used to drop it on the floor, which made "the
+# click arrived" and "the click arrived and nothing wanted it" the same
+# observation from outside the process. They have different fixes.
+if in_patches "const EventResult result = DispatchEventFromNativeUiEvent"; then
+  ok "the answer views gives is read rather than discarded"
+else
+  fail "the answer views gives is read rather than discarded" \
+    "the EventResult is thrown away again, so ER_UNHANDLED cannot be told from never arriving"
+fi
+
+# A REFUSAL IS THE OTHER HALF. `CanDispatchEvent`'s located branch is a bare
+# `bounds_.Contains(...)` whose false costs the event with no trace, and the
+# `TODO(spang): For non-ash builds` three lines below says whose policy it is.
+if in_patches "so it was refused"; then
+  ok "a pointer event dropped for being out of bounds says so"
+else
+  fail "a pointer event dropped for being out of bounds says so" \
+    "CanDispatchEvent still refuses located events in silence, which is indistinguishable from never reading one"
+fi
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

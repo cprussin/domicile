@@ -1,0 +1,166 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Wed, 17 Sep 2026 23:30:00 +0000
+Subject: [PATCH] domicile: a refused click says so
+
+The desktop on a tty draws a pointer and the trackpad moves it, and
+clicking does nothing -- on the pad and on a USB mouse both. Those take
+different routes into the browser (`BTN_LEFT` through
+`EventConverterEvdevImpl`, the pad's through libinput), so a fault that
+takes both is downstream of both, and the next question is simply
+whether a click reaches the window at all.
+
+THE LOG THAT WAS SUPPOSED TO ANSWER THAT CANNOT. Patch 0025 logs `the
+first pointer event reached the window` once, gated on
+`event->IsLocatedEvent()`. `SetFullscreen` -> `SetBoundsInPixels` ->
+`SendBoundsChange` -> `DrmCursor::CommitBoundsChange` ->
+`DrmWindowHost::SynthesizeMouseMove` -> `EventFactoryEvdev::
+SynthesizeMouseMove` posts a `kMouseMoved` carrying `EF_IS_SYNTHESIZED`
+(`ui/events/ozone/evdev/event_factory_evdev.cc:583`) on every startup,
+and it is posted from inside `CommitBoundsChange` -- the one instant when
+the cursor's rect and `bounds_` are equal by construction, so it always
+passes the bounds test. In the log from the machine it fired 222ms in, a
+full second before the first key:
+
+  155032.990310  domicile: the first pointer event reached the window
+  155034.050269  domicile: the first key event reached the window
+
+Nobody had touched anything. Patch 0026's message read that ordering as
+proof the trackpad worked -- "the trackpad works and always did" -- and
+it was proof of nothing. A one-shot a synthesized event always spends is
+not a diagnostic, it is a trap, and it caught its own author twice.
+
+So three things this window can now say, and between them they separate
+the candidates in one run:
+
+A REFUSED POINTER EVENT. `CanDispatchEvent`'s located branch is
+`return bounds_.Contains(located_event->location())`
+(`drm_window_host.cc:397-399`) with no log on the way out, and the
+function's own `TODO(spang): For non-ash builds we would need smarter
+keyboard focus.` three lines later says whose policy it is. A click
+dropped there and a click never read off the device look identical from
+outside the process and want opposite fixes. Now it says so once, with
+the location AND the bounds, because a window whose rect and whose
+cursor have drifted apart is the interesting case and the difference
+between those two numbers is the whole answer.
+
+THE FIRST PRESS, ASKED ABOUT SEPARATELY from motion, because they fail
+separately: motion can reach the page while a press is swallowed by a
+non-client hit test. And the cursor being drawn says nothing about
+either -- that is the cursor plane, moved from the evdev thread by
+`DrmCursor`, which never reaches a renderer.
+
+WHAT VIEWS ANSWERED. `DispatchEventFromNativeUiEvent` returns the
+`EventResult` and this call discarded it (`:243-245` at the pin), so a
+press that arrived and a press that arrived and was wanted by nothing
+were the same observation. `ER_UNHANDLED` on the first press means the
+event got to the widget and no view claimed it, which is a different bug
+from never arriving and has a different fix.
+
+The existing pointer line keeps its name but not its meaning: it now
+fires for the first located event NOT carrying `EF_IS_SYNTHESIZED`, so
+it answers the question it was always supposed to.
+
+No behaviour changes. Every addition is a VLOG(1) and a bool, and the
+one non-logging edit -- reading `DispatchEventFromNativeUiEvent`'s return
+value instead of dropping it -- does not alter what is dispatched or what
+this returns.
+---
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
+index d010fb5..5b0eddf 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host.cc
+@@ -396,7 +396,19 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
+     return display_bounds == bounds_;
+   } else if (event->IsLocatedEvent()) {
+     LocatedEvent* located_event = event->AsLocatedEvent();
+-    return bounds_.Contains(located_event->location());
++    const bool inside = bounds_.Contains(located_event->location());
++    // A LOCATED EVENT REFUSED HERE IS REFUSED IN SILENCE, and that silence is
++    // indistinguishable from one that was never read off a device at all.
++    // Both look like a desktop that ignores the mouse, and they want opposite
++    // fixes. Said once, with both numbers, because the interesting case is a
++    // window whose bounds and whose cursor have drifted apart -- and if they
++    // have, the difference is the whole diagnosis.
++    if (!inside && !std::exchange(said_a_pointer_was_refused_, true)) {
++      VLOG(1) << "domicile: a pointer event at "
++              << located_event->location().ToString() << " is outside this "
++              << "window's " << bounds_.ToString() << ", so it was refused";
++    }
++    return inside;
+   }
+ 
+   // TODO(spang): For non-ash builds we would need smarter keyboard focus.
+@@ -419,8 +431,34 @@ uint32_t DrmWindowHost::DispatchEvent(const PlatformEvent& event) {
+   if (event->IsKeyEvent() && !std::exchange(said_a_key_arrived_, true)) {
+     VLOG(1) << "domicile: the first key event reached the window";
+   } else if (event->IsLocatedEvent() &&
++             !(event->flags() & EF_IS_SYNTHESIZED) &&
+              !std::exchange(said_a_pointer_arrived_, true)) {
+-    VLOG(1) << "domicile: the first pointer event reached the window";
++    VLOG(1) << "domicile: the first pointer event a hand caused reached the "
++            << "window";
++  }
++
++  // NOT `IsLocatedEvent()` ALONE, WHICH IS WHAT THIS USED TO BE, AND IT COST A
++  // WRONG DIAGNOSIS. `SetFullscreen` -> `SetBoundsInPixels` ->
++  // `SendBoundsChange` -> `DrmCursor::CommitBoundsChange` ->
++  // `SynthesizeMouseMove` posts a `kMouseMoved` carrying `EF_IS_SYNTHESIZED`
++  // (`ui/events/ozone/evdev/event_factory_evdev.cc:583`) about 200ms into
++  // every startup -- and at the one instant when the cursor's rect and
++  // `bounds_` are equal by construction, so it always passes the test above.
++  // A one-shot gated only on `IsLocatedEvent()` is therefore spent before
++  // anybody has touched anything, and patch 0026's message read its presence
++  // as proof the trackpad worked. It was not proof of anything.
++  //
++  // A PRESS IS ASKED ABOUT SEPARATELY because motion and buttons fail
++  // separately: motion can reach the page while a press is swallowed by a
++  // non-client hit test, and the cursor being drawn says nothing about either
++  // -- that is the cursor plane, driven from the evdev thread, which never
++  // reaches the renderer.
++  const bool first_press = event->type() == EventType::kMousePressed &&
++                           !std::exchange(said_a_press_arrived_, true);
++  if (first_press) {
++    VLOG(1) << "domicile: the first mouse press reached the window at "
++            << event->AsLocatedEvent()->location().ToString()
++            << ", in a window at " << bounds_.ToString();
+   }
+ 
+   if (event->IsLocatedEvent()) {
+@@ -439,9 +477,19 @@ uint32_t DrmWindowHost::DispatchEvent(const PlatformEvent& event) {
+     located_event->set_location_f(location);
+     located_event->set_root_location_f(location);
+   }
+-  DispatchEventFromNativeUiEvent(
++  // THE ANSWER WAS ALWAYS HERE AND NOBODY READ IT. This returns the
++  // `EventResult` views came back with, and the call discarded it, so a click
++  // that arrived and a click that arrived and was wanted by nothing looked
++  // identical from outside the process. `ER_UNHANDLED` on the first press
++  // means the event got all the way to the widget and no view claimed it,
++  // which is a different bug from never arriving.
++  const EventResult result = DispatchEventFromNativeUiEvent(
+       event, base::BindOnce(&PlatformWindowDelegate::DispatchEvent,
+                             base::Unretained(delegate_)));
++  if (first_press) {
++    VLOG(1) << "domicile: views answered the first mouse press with "
++            << (result == ER_HANDLED ? "ER_HANDLED" : "ER_UNHANDLED");
++  }
+   return POST_DISPATCH_STOP_PROPAGATION;
+ }
+ 
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
+index a0d9a09..b29db82 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.h
++++ b/ui/ozone/platform/drm/host/drm_window_host.h
+@@ -142,6 +142,8 @@ class DrmWindowHost : public PlatformWindow,
+   // everything under this line is silent when it works.
+   bool said_a_key_arrived_ = false;
+   bool said_a_pointer_arrived_ = false;
++  bool said_a_press_arrived_ = false;
++  bool said_a_pointer_was_refused_ = false;
+   std::optional<gfx::Rect> restored_bounds_;
+   // What this window last told views it is. Upstream answers kUnknown forever,
+   // which makes DesktopWindowTreeHostPlatform::IsFullscreen() permanently
+-- 
+2.54.0
+
