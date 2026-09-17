@@ -118,6 +118,11 @@
         # the list called "what a prebuilt Chromium needs" did not have it —
         # which `autoPatchelfHook` said the first time anything asked.
         libgbm
+        # libinput.so.10, which the engine reads a trackpad through as of patch
+        # 0027 and `use_libinput = true`. It is a hard link, not a `dlopen`:
+        # `autoPatchelfHook` would refuse the package without it, which is the
+        # cheapest possible place for this to be noticed.
+        libinput
         libxshmfence
         # libudev.so.1, which Chromium opens to enumerate input and GPU
         # devices. `udev` is an alias of this in nixpkgs; naming the package it

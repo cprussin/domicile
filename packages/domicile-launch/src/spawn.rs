@@ -137,6 +137,31 @@ pub fn engine(
         // given twice.
         "--enable-logging=stderr".into(),
         "--log-level=1".into(),
+        // A TOUCHPAD IS NOBODY'S UNTIL THIS SAYS SO. `CreateConverter` has one
+        // touchpad branch and it is `#if defined(USE_EVDEV_GESTURES)`, whose
+        // gn flag is `is_chromeos_device`; a pad that misses it is not a
+        // touchscreen either, so it falls through to
+        // `EventConverterEvdevImpl`, which handles `EV_REL` and has no
+        // `EV_ABS` case. Every finger position is read off the descriptor and
+        // dropped, `cursor_->MoveCursor` is never reached, and nothing logs
+        // because nothing failed: a pointer on the screen that no amount of
+        // swiping moves.
+        //
+        // `EventDeviceInfo::UseLibinput` prefers an OVERRIDDEN
+        // `kLibinputHandleTouchpad` to its own heuristics, and the feature is
+        // `FEATURE_DISABLED_BY_DEFAULT`, so this override is the whole
+        // mechanism. It is a flag rather than a patch so that the decision is
+        // somewhere a person can see it and turn it off; patch 0027 is the
+        // half that cannot be a flag, because libinput's `open_restricted` has
+        // to be handed the descriptor logind opened rather than open a device
+        // node this browser has no right to.
+        //
+        // A SECOND `--enable-features` IN `extra` REPLACES THIS ONE RATHER
+        // THAN ADDING TO IT, because `CommandLine::AppendSwitchNative` keeps
+        // the last value of a switch given twice -- the same rule
+        // `--log-level` above relies on, working against us here. A run that
+        // wants another feature has to name this one alongside it.
+        "--enable-features=LibinputHandleTouchpad".into(),
         "--password-store=basic".into(),
         "--no-first-run".into(),
         format!("--user-data-dir={}", runtime.profile.display()).into(),

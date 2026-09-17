@@ -58,6 +58,26 @@ for platform in headless wayland drm; do
   fi
 done
 
+# A TOUCHPAD IS ONLY READ IN A BUILD THAT CARRIES libinput. Without this,
+# `CreateConverter` has no touchpad branch at all off ChromeOS -- the one it has
+# is `#if defined(USE_EVDEV_GESTURES)`, and `use_evdev_gestures` is
+# `is_chromeos_device` -- so a pad falls through to `EventConverterEvdevImpl`,
+# which has no `EV_ABS` case and drops every finger position on the floor. That
+# was a desktop with a pointer that nothing could move, and it was silent,
+# because nothing failed. See patch 0027.
+#
+# In BOTH blocks or the measurement build and the shipped build disagree about
+# whether the machine has a working trackpad, which is the drift this file
+# exists to catch.
+for build in $BUILDS; do
+  if grep -q "^  use_libinput = true$" "$build"; then
+    ok "$(basename "$build") can read a trackpad"
+  else
+    fail "$(basename "$build") can read a trackpad" \
+      "no 'use_libinput = true', so a touchpad gets a converter that ignores it"
+  fi
+done
+
 # `ozone_auto_platforms = false` is what makes the list above exhaustive. With
 # it true, is_linux turns on x11 and wayland regardless of what is written here.
 for build in $BUILDS; do
