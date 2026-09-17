@@ -1,5 +1,4 @@
 import { Button } from "@domicile/component-library/Button";
-import { ThemeSwitch } from "@domicile/component-library/ThemeSwitch";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { TerminalWindowIcon } from "@phosphor-icons/react/dist/ssr/TerminalWindow";
 
@@ -80,7 +79,6 @@ export const TopBar = ({
       <Button label="New window" onClick={onNew} size="sm" variant="ghost">
         <PlusIcon size={14} />
       </Button>
-      <ThemeSwitch />
     </div>
   </header>
 );
@@ -88,8 +86,7 @@ export const TopBar = ({
 const barStyles = grid({
   // The bar's own controls come from the component library, whose recipes
   // set their own colour; this is what puts the workspace numbers and the
-  // launchers' icons on the same footing as the text beside them. The theme
-  // switch keeps its own: colour is how it says which way it is set.
+  // launchers' icons on the same footing as the text beside them.
   "& button": { color: "white" },
   alignItems: "center",
   // White with a shadow under it, in both themes. The bar paints no
