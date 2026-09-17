@@ -717,7 +717,7 @@ What does assume one fixed output:
 |---|---|
 | a window-following desktop has exactly one output | `main.rs:2170, 2196, 2217, 2222` — four `.expect("a window-following desktop advertises its one output")` |
 | refresh is the display's, or unknown | `Advertised::refresh_mhz`, which the engine's displays carry and the other two desktops leave at `UNKNOWN_REFRESH_MHZ` — said rather than invented; the latency run's own frame budget keeps a `SPIKE_REFRESH_MHZ` of its own |
-| scale is an integer | `Scale::Integer(...)` at `main.rs:2224` and `main.rs:3294` |
+| scale is an integer | **No longer.** `Advertised::scale` is an `f64` and a profile's is fractional; `restate_output` hands Smithay `Scale::Fractional`, which sends `wl_output.scale` rounded up and lets `xdg_output` carry the logical size the density made. The window-following path is still `Scale::Integer` at `main.rs:2224`, because a window's density arrives as an integer |
 | physical size is the panel's, or unknown | `Advertised::physical_mm`, off the engine's reading of the EDID, and `UNKNOWN_PHYSICAL_MM` where there is no panel — a described desktop is arithmetic and a nested one is a window |
 | the display list comes from the config, or from Domicile's own window | `screens.rs` has exactly two constructors, `described` and `following_the_window` |
 
@@ -736,6 +736,83 @@ A hotplug rearranges rather than restarts: `Screens::rearranged_into` matches on
 the `wl_output` name, and the name is `drm-<display id>`, which ozone derives from
 the EDID — so a monitor unplugged and plugged back in keeps the output its
 clients are on.
+
+### The layout is the config's, and it is applied again on every hotplug
+
+`output.profiles` is the fourth source of a display list and the only one that is
+a function of the hardware. It is kanshi's model without kanshi's file format:
+a profile names exactly the displays it is for, and the first profile whose set
+is plugged in wins.
+
+```jsonc
+{ "name": "home-office-full", "displays": [
+    { "display": "drm-1", "enabled": false },
+    { "display": "drm-2", "position": [0, 0],    "scale": 1.2, "transform": "rotate-270" },
+    { "display": "drm-3", "position": [1800, 0], "scale": 1.2, "transform": "rotate-270" } ] }
+```
+
+| Source | Constructor | Decided by |
+|---|---|---|
+| `output.displays` | `Screens::described` | the config, outright |
+| `output.profiles` | `Screens::from_the_layout` | the config, over what DRM reports |
+| the engine's reading | `Screens::from_the_engine` | ozone, where no profile matches |
+| Domicile's own window | `Screens::following_the_window` | the host, on a nested run |
+
+The matching and the placement are `domicile-config`'s `profile.rs` — pure logic
+and unit-tested, like the rest of that crate. `scale` is fractional because the
+scales a desk is used at are: 1.5 on a 2880x1920 panel is the 1920x1280 desktop
+it is readable at, and `Scale::Fractional` is what lets `wl_output` round it up
+for clients while `xdg_output` reports the size it actually made.
+
+Two events reach it and they are the same question from opposite sides. A
+**hotplug** is the monitors changing under one config, and a **reload** is the
+config changing over one set of monitors — so `main.rs` keeps the engine's last
+display list on `engine_displays`, and `Screens::reloaded_into` re-matches
+against it. Without that a profile would take effect only the next time a
+monitor was unplugged, which would make the file unwritable: the way a profile
+gets written is by saving it against the desk it is being written for.
+
+**`replugged_into` used to drop every hotplug after the first**, and this is
+where that was found. It asked whether the desktop still followed Domicile's own
+window — which the *first* reading off DRM makes false — so a monitor unplugged
+after that was read, matched and thrown away, and the desktop went on describing
+a screen that was no longer there. Whether a desktop is the config's to define
+is a fact about the config and does not change when a monitor does, so that is
+what it asks now.
+
+**A profile states no mode**, and the positions in one are sums of sizes it
+therefore does not control: the mode arrives with the monitor and the scale
+divides it into the logical size. kanshi pins one per output (`mode =
+"3840x2160@60Hz"`), which is the other real difference between the two. It
+costs nothing today, because `ModesetParamsFromSnapshots` lights a connector
+at its native mode and that is the mode anyone would pin — but a
+monitor that negotiated something else would move every display placed after
+it, with nothing in the config to correct it with. The field belongs with the
+scanout work below, which is what would give it something to do.
+
+**What a profile does not yet do is turn a pixel.** Everything above is the
+desktop the compositor *advertises*: `wl_output`'s position, mode, transform and
+scale, the `xdg_output` logical size a toolkit lays out against, and the
+`DisplayInfo` the chrome places its `<Screen>` regions from. The scanout is the
+engine's and is unchanged — `ModesetParamsFromSnapshots` still lights every
+connector that reports a mode at its native mode at the snapshot's own origin,
+skipping the ones that report none, and
+`DrmWindowHost::SetFullscreen` still puts one window on one display. So a
+rotated monitor is advertised rotated and laid out rotated, and the glass still
+scans out the way it always did. Closing that is the next step and is two
+things: the profile's mode and origin reaching `DisplayConfigurationParams`, and
+a rotation reaching the DRM plane — which on ChromeOS is `DisplayConfigurator`,
+`//ui/display/manager`, the 478 lines this fork deliberately does not port.
+
+**A profile can only name a monitor by `drm-<id>`**, which is the opaque i64
+ozone derives from the EDID rather than the make, model and serial kanshi
+matches on. Two identical panels are distinguishable — the id carries the
+serial — but not *nameable*: which of the two is on the left is something the
+user has to discover from a log line. `DisplaySnapshot::display_name()` has the
+string and `display::Display` has a `label` to carry it in, so the route is the
+one the millimetres already take (*[The physical size is in the
+snapshot](#the-physical-size-is-in-the-snapshot-and-it-leaves-as-a-dpi)*); it is
+not wired.
 
 The event carries the panel too: `physical_width_mm`, `physical_height_mm` and
 `refresh_mhz` on `DomicileDisplay`, off the same snapshot, by the route

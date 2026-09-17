@@ -1070,6 +1070,20 @@ struct DomicileCompositor {
     config: ConfigStore,
     /// What the outputs above are, and who gets to change them.
     screens: Screens,
+    /// The engine's last reading of the monitors, empty until it sends one.
+    ///
+    /// Empty forever on a nested run, because a nested engine is not asked to
+    /// watch displays at all -- its screens are the *host's* monitors, and a
+    /// desktop built from those would be taken away from the window that
+    /// defines it.
+    ///
+    /// Held rather than consumed because two things are matched against it and
+    /// only one of them is the event that brings it: a hotplug is the
+    /// monitors changing under one config, and a reload is the config changing
+    /// over one set of monitors. Without this the second could not be
+    /// answered, and a profile would take effect only when a monitor was next
+    /// unplugged.
+    engine_displays: Vec<engine::Display>,
     /// The chrome's `devicePixelRatio`, as it last reported it.
     ///
     /// Only one thing reads it, and it is not the output's density: Blink lays
@@ -1568,8 +1582,31 @@ impl DomicileCompositor {
                 // last one said -- which is what a hotplug the modeset driver
                 // caused reports.
                 engine::Event::Displays(displays) => {
-                    if let Some(screens) = self.screens.replugged_into(&displays) {
-                        self.adopt_the_desktop(dh, screens);
+                    // Kept, because a config reload has to be matched against
+                    // the monitors that are plugged in and the event carrying
+                    // them is long gone by then. The whole list every time,
+                    // which is what the engine sends: what is absent from it
+                    // has been unplugged.
+                    self.engine_displays = displays.clone();
+                    match self
+                        .screens
+                        .replugged_into(&displays, &self.config.current().output)
+                    {
+                        // A desktop the config describes outright, which DRM
+                        // does not overrule.
+                        Ok(None) => {}
+                        Ok(Some(screens)) => self.adopt_the_desktop(dh, screens),
+                        // A profile that matched these monitors and cannot be
+                        // applied to them. The desktop that is up keeps
+                        // working -- the same bargain `ConfigStore` makes for
+                        // an edit that does not parse -- and the complaint
+                        // names what is wrong with the config, which is the
+                        // only place this can be fixed.
+                        Err(err) => tracing::warn!(
+                            %err,
+                            "the profile these monitors matched cannot be applied to them; \
+                             keeping the desktop that is up"
+                        ),
                     }
                 }
             }
@@ -2168,7 +2205,7 @@ impl DomicileCompositor {
             .outputs()
             .next()
             .expect("a window-following desktop advertises its one output")
-            .scale;
+            .wl_output_scale();
         self.set_output(logical, scale);
     }
 
@@ -2194,7 +2231,7 @@ impl DomicileCompositor {
             .outputs()
             .next()
             .expect("a window-following desktop advertises its one output");
-        if self.screens.size() == logical && advertised.scale == scale {
+        if self.screens.size() == logical && advertised.wl_output_scale() == scale {
             return;
         }
         info!(
@@ -3290,8 +3327,14 @@ fn restate_output(output: &Output, advertised: &Advertised) {
     let mode = current_mode(advertised);
     output.change_current_state(
         Some(mode),
-        Some(Transform::Normal),
-        Some(Scale::Integer(advertised.scale)),
+        Some(as_wl_transform(advertised.transform)),
+        // Fractional, so `xdg_output` reports the logical size the density
+        // actually makes: Smithay divides the mode by this and rounds the
+        // `wl_output.scale` it sends clients *up* from it, which is the split
+        // a 1.2 display needs. `Scale::Integer` here advertised a 3200-wide
+        // monitor as 3840 logical and laid the chrome out against a desktop
+        // nothing was the size of.
+        Some(Scale::Fractional(advertised.scale)),
         Some(advertised.position.into()),
     );
     output.set_preferred(mode);
@@ -3306,8 +3349,23 @@ fn restate_output(output: &Output, advertised: &Advertised) {
 /// screen that appears to have changed hardware.
 fn current_mode(advertised: &Advertised) -> OutputMode {
     OutputMode {
-        size: advertised.mode().into(),
+        size: advertised.mode.into(),
         refresh: advertised.refresh_mhz,
+    }
+}
+
+/// A configured transform as the `wl_output` one Smithay states.
+///
+/// Two spellings of one thing, and neither package is going to adopt the
+/// other's: `screens.rs` is kept clear of Smithay so that it can be tested
+/// without a `wl_display`, and `domicile-config` is pure logic with serde and
+/// nothing else. Rotations only, because that is all a profile can ask for.
+fn as_wl_transform(transform: domicile_config::Transform) -> Transform {
+    match transform {
+        domicile_config::Transform::Normal => Transform::Normal,
+        domicile_config::Transform::Rotate90 => Transform::_90,
+        domicile_config::Transform::Rotate180 => Transform::_180,
+        domicile_config::Transform::Rotate270 => Transform::_270,
     }
 }
 
@@ -3977,6 +4035,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         output_manager_state,
         outputs,
         config: ConfigStore::new(config.clone()),
+        engine_displays: Vec::new(),
         // Modern toolkits ask for cursors by name through this global, which
         // maps straight onto CSS cursor keywords.
         cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
@@ -4174,19 +4233,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         tracing::warn!(%err, "keeping the last config that parsed");
                         return;
                     }
-                    // `None` means the reload has nothing to say about the
-                    // desktop — an undescribed config, where the window is the
-                    // authority and rebuilding from the file would undo the
-                    // density it negotiated.
-                    let config = data.state.config.current();
-                    let Some(screens) = data.state.screens.reloaded_into(
-                        config.output.desktop().as_ref(),
-                        config.compositor.nested_size,
-                    ) else {
-                        return;
-                    };
-                    let dh = data.display.handle();
-                    data.state.adopt_the_desktop(&dh, screens);
+                    let rebuilt = data.state.screens.reloaded_into(
+                        &data.state.config.current().output,
+                        data.state.config.current().compositor.nested_size,
+                        &data.state.engine_displays,
+                    );
+                    match rebuilt {
+                        // Nothing to say about the desktop: an undescribed
+                        // config with no monitors read, where the window is
+                        // the authority and rebuilding from the file would
+                        // undo the density it negotiated.
+                        Ok(None) => {}
+                        Ok(Some(screens)) => {
+                            let dh = data.display.handle();
+                            data.state.adopt_the_desktop(&dh, screens);
+                        }
+                        // An edit whose profile matches the monitors that are
+                        // plugged in and cannot be applied to them. It parsed,
+                        // so the store has taken it; what it cannot do is
+                        // describe a desktop, and the one that is up keeps
+                        // working while the user fixes it.
+                        Err(err) => tracing::warn!(
+                            %err,
+                            "keeping the desktop that is up; the reloaded profile does not \
+                             describe one these monitors can make"
+                        ),
+                    }
                 })?;
             }
             Err(err) => {
