@@ -33,12 +33,11 @@ engine and the compositor, in the one order they can start in — the engine
 first, because it serves the shell over `domicile://` and opens the broker
 socket the compositor connects to as a producer. It builds nothing and wraps
 nothing: both components ship beside it, the way a multi-binary program like
-postfix does, and it finds them from its own path. There were three, and the
-bridge that served the page over a loopback HTTP port is gone with the port.
-It also answers a control socket of its own — `domicile-ipc.<pid>.sock` under
-`$XDG_RUNTIME_DIR`, announced to its apps as `DOMICILE_SOCK` — which is how a
-desktop is asked a question rather than restarted, and how one of several is
-asked rather than another.
+postfix does, and it finds them from its own path. It also answers a control
+socket of its own — `domicile-ipc.<pid>.sock` under `$XDG_RUNTIME_DIR`,
+announced to its apps as `DOMICILE_SOCK` — which is how a desktop is asked a
+question rather than restarted, and how one of several is asked rather than
+another.
 
 It also chooses the engine's ozone platform itself: `WAYLAND_DISPLAY`, then
 `DISPLAY`, then `XDG_VTNR`. A console login therefore gets `drm` without being
@@ -132,14 +131,22 @@ decides whether an item is waiting or workable.
    fails if a header does not say its own type. No Chromium tree, so it runs in
    the shell group on every push rather than only when the fork is touched.
 
-   Then the subtraction it exists for: delete the placement machinery —
-   `measure.ts`, `observe-placement.ts`, `element-transform.ts`, `matrix.ts`,
-   `placement-timing.ts` — because an `<app>`'s layout box *is* the
-   `xdg_toplevel.configure` and patch 0007 reports it natively.
-   `ExternalSurfaceProvider::Embed` already carries the size, so `resizeApp`
-   from the chrome is redundant once the tag is native, and `offsetX`/`offsetY`
-   on the `<app>` is the engine answering the other half of `measure`'s job with
-   the real transform. That step is the one with the measurements behind it.
+   Then the subtraction it exists for: delete the *reporting* half of the
+   placement machinery — `observe-placement.ts`, `placement-timing.ts`,
+   `report-app-sizes.ts` and `resizeApp` — because an `<app>`'s layout box *is*
+   the `xdg_toplevel.configure`, patch 0007 reports it natively, and
+   `ExternalSurfaceProvider::Embed` already carries the size. That step is the
+   one with the measurements behind it.
+
+   **`measure.ts`, `element-transform.ts` and `matrix.ts` stay**, which narrows
+   the deletion from what it first looked like: `measure` is not only the
+   placement path. `pointer-input.ts` asks it for the element's
+   `{size, transform}` and inverts that affine in `surfaceLocal`, which is what
+   makes a click land correctly on a window under a CSS rotation rather than be
+   approximated by its axis-aligned box. `offsetX`/`offsetY` from the engine
+   answer where a window is, not what it is transformed by, so those three stay
+   until something answers the pointer's question. Splitting it that way is
+   also what makes the first half verifiable in one guard run rather than two.
 
    **The placement deletion is unblocked, and the numbers under it are now
    the right numbers.** It was waiting on the embed working, and a guard shows
@@ -160,7 +167,8 @@ decides whether an item is waiting or workable.
    **What is not yet arranged is the thing that would catch it going wrong.**
    `guard-shell.sh` is the only check that drives the native tag end to end,
    and it runs in `engine.yml`, whose path filter is
-   `packages/domicile-engine/**` plus this workflow and its scripts.
+   `packages/domicile-engine/**` plus this workflow and its scripts, less that
+   package's markdown and its release pin.
    `packages/chrome-sdk/**` is not in it -- so the deletion, which is entirely
    inside the SDK, would merge with the unit tests and nothing that puts a
    window on a screen. That is the same hole the missing `GetElementType`
@@ -175,18 +183,6 @@ decides whether an item is waiting or workable.
    deletion, and merge on that. The second is the shape the repository has
    already chosen once; the first is the only one that keeps working when
    somebody forgets.
-
-   A FOURTH THING IS ALSO TRUE and narrows what can be deleted: `measure` is
-   not only the placement path. `pointer-input.ts` asks it for the element's
-   `{size, transform}` and inverts that affine in `surfaceLocal`, which is what
-   makes a click land correctly on a window under a CSS rotation rather than be
-   approximated by its axis-aligned box. `offsetX`/`offsetY` from the engine
-   answer where a window is, not what it is transformed by. So the deletion is
-   `observe-placement.ts`, `placement-timing.ts`, `report-app-sizes.ts` and
-   `resizeApp` -- the reporting path, which the engine has genuinely replaced
-   -- while `measure.ts`, `element-transform.ts` and `matrix.ts` stay until
-   something answers the pointer's question. Splitting it that way is also what
-   makes the first half verifiable in one guard run rather than two.
 
    Two things are deliberately still on the canvas path and neither blocks the
    deletion. `scripts/spike-iframe.sh` compares an `<app>` against an
@@ -234,10 +230,10 @@ decides whether an item is waiting or workable.
    What is left is three things in `domicile-launch`:
    `--domicile-command-socket` on the engine's command line in `spawn`, a
    `load-shell` verb in `cli` and `control`, and `answer` dialing the engine
-   instead of holding the answer itself. **None of it works before an engine
-   release carries the socket** — `engine-release.nix` pins an engine built
-   from an older commit than `main`, and the running one has never heard of the
-   switch, so a supervisor that dialed it now would find nothing listening.
+   instead of holding the answer itself. **The wait for an engine release is
+   over**: the socket landed in the engine on 2026-09-12 and every release
+   pinned since carries it, so a supervisor that dialed it now would find
+   something listening. Nothing blocks this item.
 
    **Dev reload comes back with `load-shell` and not before.** The poller the
    bridge wrote into every served document went with the bridge, the C++ that
@@ -250,10 +246,11 @@ decides whether an item is waiting or workable.
    none of it is in `A-DESKTOP-ON-A-TTY.md` -- that document audits getting a
    desktop *up*, and these are all about keeping one.
 
-   - **Suspend and resume are unhandled.** Nothing re-establishes DRM master
-     or re-modesets on the way back, and nothing in this repository mentions
-     either. Close a lid and the honest expectation is a desktop that does not
-     come back.
+   - **Suspend and resume are unhandled.** Nothing subscribes to logind's
+     `PrepareForSleep`, and nothing re-modesets on the way back. The pieces
+     exist now — `DrmMaster` takes and drops, `DrmModeset` configures — but
+     nothing drives either one from a sleep, so closing a lid is a desktop
+     that honestly should not be expected to come back.
    - **Nothing restarts a component that dies.** `domicile-launch`'s
      `supervise` watches for an exit and *reports* it; there is no respawn. An
      engine crash is the whole desktop, which also makes a shell author's
@@ -568,12 +565,16 @@ which question a run would answer rather than guessing between two.
   buffer.
 - Re-measuring latency or CSS parity after a change that could move either.
 
-### Undecided
+### Expected, and unmeasured
 
-- **Translucent chrome over a window, unmeasured.** A `backdrop-filter` on
-  chrome stacked above an `<app>` is EXPECTED TO WORK, the way one over a
-  hardware-composited `<video>` does, and nobody has run it. It is here because
-  it is unproven, not because it is thought to be impossible.
+Believed to work on a mechanism this project already relies on, with nobody
+having run it. Not proven, not open work, and not a decision waiting to be
+taken.
+
+- **Translucent chrome over a window.** A `backdrop-filter` on chrome stacked
+  above an `<app>` is EXPECTED TO WORK, the way one over a hardware-composited
+  `<video>` does, and nobody has run it. It is here because it is unproven, not
+  because it is thought to be impossible.
 
   This entry used to say the opposite -- that the page cannot see the window's
   pixels so there is nothing to blur, and that raster-per-band is where it
@@ -596,9 +597,6 @@ which question a run would answer rather than guessing between two.
   could fail, and it is exactly the optimisation this architecture is proud
   of. `guard-css-and-resize.sh` is where the answer belongs, beside the seven
   properties already bit-exact there.
-- **`wl_shm` clients.** A client that draws into shared memory has no dmabuf to
-  import, so its window is blank and the compositor says so once per client.
-  The upload that would give it one does not exist — `ENGINE-FORK.md`, phase 2.
 
 ---
 
@@ -607,6 +605,12 @@ which question a run would answer rather than guessing between two.
 True, understood, and not scheduled. Each is here so that finding it again
 costs nothing.
 
+- **A `wl_shm` client's window is blank.** A client that draws into shared
+  memory has no dmabuf to import, so `publish_frame` refuses the buffer and
+  the compositor says so once per client. Not undecided: the upload was
+  deliberately deferred so that there would be one path to write it against
+  rather than an interim tree that works — `ENGINE-FORK.md`, phase 2, which is
+  where the open box lives.
 - **A frame in which the chrome repainted reports the whole output damaged.**
   The chrome is one layer covering the desktop, so its commit counter moving
   damages all of it — and it repaints for a clock, a caret, a hover.
@@ -627,10 +631,10 @@ costs nothing.
   actually went is the browser process's, `WebViewGuestClient` carries only
   `HistoryChanged(can_go_back, can_go_forward)`, and `src` is the author's
   attribute rather than a report — so a chrome can show where it *sent* a
-  window and not where the page then went. `domicile-navigate` used to look
-  like the answer and was not: the SDK synthesized it from Electron's
-  `did-navigate` and it had fired for nothing since the fork landed, so it is
-  deleted rather than left looking available.
+  window and not where the page then went. There is no `domicile-navigate`
+  event to reach for: the SDK once synthesized one, it had fired for nothing
+  since the fork landed, and it was deleted rather than left looking
+  available.
 - **Two things configure a client, and they disagree by a border.** The
   engine states an `<app>`'s box from `ReplacedContentRect` — the *content*
   box — and the chrome's `resize_app` reports `offsetWidth`/`offsetHeight`,
