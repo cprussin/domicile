@@ -6,26 +6,21 @@ runs.
 
 ## Problem
 
-Starting a desktop today goes through three layers of bash:
-
-| Layer | Lines | What it does |
-|---|---|---|
-| `flake.nix`'s `domicileCli` | 30 | refuses no-args, sets four store paths, `exec`s the next layer |
-| `scripts/run-engine.sh` | 365 | the whole orchestration |
-| `scripts/dev-shell.sh` | 106 | the same, plus a watch build |
-
-And ~470 more lines of bash test that bash: `test-run-engine-inputs.sh`,
-`test-run-engine-shell.sh`, `test-run-engine-platform.sh`, `test-dev-shell.sh`.
-Each extracts a block out of the script with `awk` and evals it, because a copy
-is a thing that passes while the script it stands for does not — which is a
-good technique and an expensive one, and it exists because the logic is in bash
-rather than somewhere it could be called.
-
-The orchestration is not shell-shaped work. It resolves a path against three
-rules, decides an ozone platform from three environment variables, starts three
+Starting a desktop is not shell-shaped work. It resolves a path against three
+rules, decides an ozone platform from four environment variables, starts two
 processes in a forced order, waits on a line of stdout and a socket, and cleans
 up. Every one of those is easier to state, and far easier to test, in the
 language the compositor is already written in.
+
+It was ~500 lines of bash in three layers — a `writeShellApplication` in
+`flake.nix`, `run-engine.sh`, and `dev-shell.sh` — and ~470 more lines of bash
+testing them, each test `awk`ing a block out of a script and eval-ing it
+because a copy is a thing that passes while the script it stands for does not.
+That is a good technique and an expensive one, and the only thing that makes it
+necessary is logic sitting where nothing can call it. **That is the rule this
+doc is really about**: the scripts here arrange and observe, and decide
+nothing. `dev-shell.sh` is the one that came closest to deciding again, and
+what it does now is build, then call the binary.
 
 ## Design
 
@@ -47,8 +42,13 @@ The modules, and the split is by what each needs to be tested:
 | `cli` | yes | the arguments, and every refusal a bad one earns |
 | `components` | yes | the engine and the compositor, from the binary's own path or the environment |
 | `shell_path` | yes | a name or a path to a module → the module to load, and the directory it is served out of |
-| `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` → the ozone platform, or the refusal that names what to do instead |
+| `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` / `XDG_VTNR` → the ozone platform (a console login takes `drm` on its own), or the refusal that names what to do instead |
 | `control` | yes | what a running desktop can be asked, and what it answers |
+| `arguments` | yes | the compositor's command line, every value stated and nothing defaulted |
+| `spawn` | yes | the commands the engine and the compositor are, built as data so a flag list is an assertion |
+| `session` | yes | what the compositor publishes once it is up, and the shell's wait for it |
+| `milestones` | yes | what a run has to reach before it is a desktop, and the sentence it prints when it does not |
+| `handshake` | yes | whether a page ever reached the compositor, and what to say when none did |
 | `supervise` | no | temp dirs, two children in order, the broker socket, teardown |
 | `control_socket` | no | where a desktop answers, taking it from whatever is there, and carrying a line each way |
 
@@ -59,12 +59,12 @@ thin enough to read.
 
 ## Key decisions
 
-- **`domicile` builds nothing.** `run-engine.sh` reads an unset
-  `DOMICILE_COMPOSITOR` as "build it with cargo" and an unset `DOMICILE_PAGE`
-  as "build a workspace shell with turbo". That is a developer's convenience
-  sitting in the entry point every user runs, and it is why the script needs a
-  checkout to make sense of itself. The binary requires both its components
-  and names the missing one. Whatever built them ran first.
+- **`domicile` builds nothing.** It requires both its components and names the
+  missing one; whatever built them ran first. The rejected alternative was a
+  developer's convenience — an unset `DOMICILE_COMPOSITOR` meaning "build it
+  with cargo", an unset page meaning "build a workspace shell with turbo" —
+  which puts a build in the entry point every user runs and leaves it needing
+  a checkout to make sense of itself.
 
 - **There is no watch mode.** A bundler in the supervisor is the same mistake
   one level up. Instead the desktop takes commands, the way `swaymsg` sends
@@ -80,13 +80,13 @@ thin enough to read.
   `manganese` without stopping the desktop, and the windows survive either way
   because the compositor never hears about it.
 
-  **It is strictly less machinery than what it replaces.** Dev reload was a
-  token endpoint on the bridge plus a poller written into every served
+  **It is strictly less machinery than the dev reload it replaces**, which was
+  a token endpoint on the bridge plus a poller written into every served
   document, asking twice a second, for the life of the desktop, whether the
-  bundle changed. `DEV_RELOAD_PATH`, `buildToken` and `shellDocument`'s
-  injected script went with the bridge; the C++ that writes the document now
-  has nothing in their place, so there is no reload in a dev desktop until this
-  lands. See *What `load-shell` still needs* below.
+  bundle changed. All of it went with the bridge, and the C++ that writes the
+  document has nothing in its place — **so a dev desktop has no reload at all
+  until this lands**, and a rebuilt shell needs the desktop restarted. See
+  *The engine's half, which is in* below.
 
 - **The two components ship beside the binary and are found there.** Not
   passed, and not wrapped in: `domicile` resolves them from its own location,
@@ -108,10 +108,10 @@ thin enough to read.
   remaining job**: place two files and let the binary find them. No
   `wrapProgram`, no exported paths, no `writeShellApplication`.
 
-  `OUT` goes with it. `run-engine.sh` takes a Chromium *checkout* and appends
-  `out/Domicile` or `.` depending on whether the engine was built or published;
-  the variable names the directory holding `chrome` and there is nothing to
-  append.
+  `DOMICILE_ENGINE` names the directory holding `chrome`, with nothing appended
+  to it — not a Chromium checkout that the reader would have to know is
+  completed with `out/Domicile` or with nothing depending on how the engine was
+  obtained.
 
 ## The control socket
 
@@ -194,13 +194,10 @@ either.
 
 **What is left is the supervisor's half**: `--domicile-command-socket` on the
 engine's command line in `spawn`, a `load-shell` verb in `cli` and `control`,
-and `answer` dialing the engine rather than holding the answer itself. Nothing
-of this reaches a desktop before an engine release carrying it is cut and
-`engine-release.nix` is moved onto it — until then the running engine is one
-that has never heard of the switch.
-
-Either way the poller did not survive the bridge — see the dev-reload note
-under *Key decisions* — so a dev desktop has no reload until this lands.
+and `answer` dialing the engine rather than holding the answer itself. The
+engine side is no longer the thing to wait for — the release `engine-release.nix`
+pins is built past it, so the switch is there on the engine a desktop actually
+runs, and nothing is asking for it.
 
 ## Plan
 
@@ -226,13 +223,6 @@ under *Key decisions* — so a dev desktop has no reload until this lands.
 
 ## Open questions
 
-- **~~Whether the bridge survives long enough to be worth compiling.~~**
-  Answered by events: it did not. The question was whether to spend
-  `bun build --compile` on `libexec/domicile/bridge` so a packaged desktop
-  would not need `bun` on its `PATH` at run time. `domicile://` landed first,
-  the bridge was deleted rather than compiled, and a packaged desktop needs no
-  JavaScript runtime at all.
-
 - **Whether `load-shell` restarts anything.** It switches the shell; the
   desktop underneath it does not move. `announce_open_apps` already tells a
   page that has just loaded the desktop and every window open on it, so
@@ -240,17 +230,15 @@ under *Key decisions* — so a dev desktop has no reload until this lands.
   changed the *compositor's* configuration is a different question and this
   command does not pretend to answer it.
 
-- **What becomes of the spikes.** ~~Settled.~~ Five of the eight are the only
-  end-to-end checks this project has and `engine.yml` runs them, so they are
-  named for what they do: `under-wayland.sh` and the four guards
-  (`guard-client-window`, `guard-two-windows`, `guard-shell` four times over,
-  `guard-css-and-resize`). A check that gates every engine change is not a
-  spike. The other three — `spike-engine`, `spike-dmabuf`, `spike-iframe` —
-  keep their names and stay: they are run by hand rather than by CI, but
-  ENGINE-FORK.md cites their results as evidence, so deleting them would orphan
-  the citations and lose the ability to re-derive the numbers. `spike.sh` and
-  its pages stay too — `guard-css-and-resize.sh` runs the spike driver twice,
-  which is what it is.
+- **What becomes of the spikes.** Settled, and the rule has held as the set
+  grew. Anything `engine.yml` runs is a **guard**, named for what it gates —
+  `under-wayland.sh` and ten `guard-*.sh` now, where there were four. A check
+  that gates every engine change is not a spike. `spike-engine`,
+  `spike-dmabuf` and `spike-iframe` keep their names and stay: they are run by
+  hand rather than by CI, but ENGINE-FORK.md cites their results as evidence,
+  so deleting them would orphan the citations and lose the ability to
+  re-derive the numbers. `spike.sh` and its pages stay too —
+  `guard-css-and-resize.sh` runs the spike driver twice, which is what it is.
 
 - **Whether `guard-shell.sh` can use the binary at all.** It needs a long
   `DOMICILE_REACH_MS` and its own log capture, and it runs on `crux` where the
