@@ -3,11 +3,19 @@
 ## Component directory layout
 
 Every new component lives in a directory under `src/` named for the component,
-with three files:
+with at least these three files:
 
 - `./src/ComponentName/ComponentName.tsx` — the component entry point.
 - `./src/ComponentName/ComponentName.stories.tsx` — storybook stories.
 - `./src/ComponentName/ComponentName.test.tsx` — unit tests.
+
+Anything else the component needs goes beside them in its own focused file
+rather than into the entry point or a `utils.ts` — `Avatar/initials.ts` and
+`Avatar/gradient.ts`, `Screen/display-source.ts`, `ThemeSwitch/theme-core.ts`.
+That is [/docs/guidelines/FILES.md](/docs/guidelines/FILES.md)'s rule about
+grab-bag names, applied inside a component directory. A second component that
+only ever appears with the first lives there too (`Screen/DisplayProvider.tsx`,
+`ThemeSwitch/ThemeProvider.tsx`), with its own test beside it.
 
 There are no `.module.scss`, `.css`, or other style files — styles live in
 the `.tsx` next to the component that uses them.

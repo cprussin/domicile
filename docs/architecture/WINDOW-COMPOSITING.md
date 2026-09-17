@@ -11,11 +11,20 @@ follows from it.
   the page: <app> ──SurfaceLayer(SurfaceId)──▶ cc layer tree ──▶ viz ────────┴─▶ display
 ```
 
-The compositor imports the client's dmabuf as a `SharedImage` and submits it
-into a viz surface. The page's `<app>` element embeds that surface. Viz
-aggregates both into one display frame — the same single composite any Wayland
-compositor performs — and its `OverlayProcessor` can promote the quad to direct
-scanout. No pixel is copied by the CPU, and no frame crosses a socket.
+The compositor hands the client's dmabuf to the browser, which imports it as a
+`SharedImage`; the compositor adopts the result with
+`gpu::ClientSharedImage::ImportUnowned` and submits its own `CompositorFrame`,
+carrying a `TextureDrawQuad`, into a viz surface. The page's `<app>` element
+embeds that surface. Viz aggregates both into one display frame — the same
+single composite any Wayland compositor performs. No pixel is copied by the
+CPU, and no frame crosses a socket.
+
+Viz's `OverlayProcessor` can promote a texture quad to direct scanout, and
+nothing here stops it from promoting a window's — but no run has: a
+`SharedImage` may claim `SCANOUT` only if the buffer was allocated for it, and
+nothing that has run these measurements had a display to allocate against. See
+`ENGINE-FORK.md`, *What the port measures*. Treat promotion as a property of
+viz rather than a measured property of this design.
 
 `docs/architecture/ENGINE-FORK.md` is the engine side: the design, the patch
 series, and the measurements.
@@ -53,15 +62,38 @@ layer, so there is no list of supported properties to keep in step with CSS.
 
 - **Translucent chrome over a window.** A `backdrop-filter` on chrome stacked
   above an `<app>` should blur the window beneath it, the way one over a
-  `<video>` does — the backdrop is read from the page's own render surface, and
-  the window is in it. Nobody has run it. Until someone does, treat it as
-  likely-correct and unmeasured rather than promised.
+  hardware-composited `<video>` does. `SkiaRenderer` applies a backdrop filter
+  with `saveLayer(SkCanvasPriv::ScaledBackdropLayer(...))` on the canvas of the
+  render pass the filtered quad sits in (`skia_renderer.cc:1785` at the pin),
+  and by then aggregation has drawn the window's quad into that same pass. So
+  the filter has the window's pixels to read. **Nobody has run it.** Until
+  someone does, treat it as likely-correct and unmeasured rather than promised.
+
+  **The way it could fail is overlay promotion** — the optimization named at
+  the top of this doc. A quad viz puts on a hardware plane is not in the render
+  pass a backdrop filter reads from, so a promoted window would leave the
+  filter nothing to blur. Read at the pin, viz declines exactly that:
+  `OverlayCandidateFactory::IsOccludedByFilteredQuad`
+  (`components/viz/service/display/overlay_candidate_factory.cc:280`) calls a
+  quad occluded when any `AggregatedRenderPassDrawQuad` above it carries
+  non-empty `backdrop_filters`, and `OverlayStrategyUnderlay`
+  (`overlay_strategy_underlay.cc:61`) skips a candidate that answers yes —
+  "filters read back the framebuffer", in its own comment.
+  `OverlayStrategySingleOnTop` never proposes one either, because `IsOccluded`
+  refuses any candidate an earlier visible quad overlaps at all. So the
+  expected answer is still that it works, and the check is the reason rather
+  than luck. One exception to know: the underlay test is
+  `!candidate.requires_overlay && ...`, so a quad viz *must* scan out —
+  protected content — is promoted under a filter anyway.
 - **`wl_shm` clients.** A client that draws into shared memory has no dmabuf to
   import, so its window is blank and the compositor says so once per client.
   The upload that would give it one does not exist — `ENGINE-FORK.md`, phase 2.
-- **Damage.** A frame reports which rectangles changed, and the chrome's own
-  repaint damages the whole output because the chrome is one layer covering the
-  desktop. Acting on damage properly wants a DRM backend and a screen.
+- **Damage.** The seam carries a rectangle —
+  `domicile_surface_submit(surface, buffer, damage)`, where an empty one means
+  the whole surface — and `publish_frame` passes an empty one for every commit,
+  so every client frame damages its window entire. Mapping a client's reported
+  damage onto it is its own correctness question: a wrong rectangle leaves
+  stale pixels on screen, and judging that wants a screen.
 
 ## Why the engine is forked at all
 

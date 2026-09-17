@@ -1,22 +1,20 @@
 import { describe, expect, it } from "bun:test";
 
-import { floatPlacement } from "./window-styles";
+import { placedAt } from "./window-styles";
 
-const BOX = { height: 200, width: 300, x: 10, y: 20 };
+const RECT = { height: 200, width: 300, x: 10, y: 20 };
 
-describe("floatPlacement", () => {
-  it("places a floating window in the desktop's own coordinates", () => {
-    // `fixed`, not `absolute`. A float laid out against the stage cannot leave
-    // it, and the stage begins where the rail ends — so a window could never
-    // be dragged over the rail, which is most of the left-hand edge of the
-    // screen. The page spans the whole desktop, so the viewport *is* the
-    // desktop: a float at 0 is at the desktop's own corner, over the rail,
-    // which is where a floating window is allowed to be.
-    expect(floatPlacement(BOX, 0).position).toBe("fixed");
+describe("placedAt", () => {
+  it("places a window in the desktop's own coordinates", () => {
+    // `fixed`, not `absolute`. The page spans the whole desktop, so the
+    // viewport *is* the desktop: a window at 0 is at the desktop's own
+    // corner, over the top bar, which is where a fullscreen window goes and
+    // where a floating one is allowed to be dragged.
+    expect(placedAt(RECT, 0).position).toBe("fixed");
   });
 
-  it("puts the window where the box says", () => {
-    expect(floatPlacement(BOX, 0)).toMatchObject({
+  it("puts the window where the rectangle says", () => {
+    expect(placedAt(RECT, 0)).toMatchObject({
       blockSize: "200px",
       inlineSize: "300px",
       insetBlockStart: "20px",
@@ -24,10 +22,9 @@ describe("floatPlacement", () => {
     });
   });
 
-  it("stacks a float above the stage, and each above the one below", () => {
-    const under = Number(floatPlacement(BOX, 0).zIndex);
-    const over = Number(floatPlacement(BOX, 1).zIndex);
-    expect(under).toBeGreaterThan(0);
-    expect(over).toBeGreaterThan(under);
+  it("writes the depth as the element's own z-index", () => {
+    // Which is what the compositor stacks the client's surface by, so it has
+    // to be on the element rather than on anything wrapping it.
+    expect(placedAt(RECT, 3).zIndex).toBe(3);
   });
 });

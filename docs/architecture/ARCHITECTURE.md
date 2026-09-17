@@ -40,8 +40,10 @@ requirements the project exists for.
 
 A fork costs rebases and a four-hour build. What makes it affordable is that it
 is mostly *new* files against a pinned revision, and new files do not conflict:
-21 of Chromium's own are edited, 15 of them Blink's, and eleven of those went on
-defining `<app>` and `<webview>` as real elements.
+the series carries 133 files of its own under `packages/domicile-engine/src`
+and edits 78 of Chromium's, 23 of those a `BUILD.gn`, a `.gni` or a `.json5`
+list that a new file has to be named in. Recount them rather than quoting this
+— the number grew with the Ozone DRM port and will grow again.
 [ENGINE-FORK.md](ENGINE-FORK.md) is the design, the series and the
 measurements.
 
@@ -120,8 +122,9 @@ a GPU, an engine or Smithay:
   is told. No Wayland.
 - `domicile-launch` — `domicile` itself: which page to serve, which ozone
   platform, where the two components are, and what each is started with. The
-  binary that reads the world is ninety lines; everything with a decision in it
-  is a module here.
+  `[[bin]]` is only the part that reads the world and starts things; everything
+  with a decision in it is a module here, tested against strings and a temp
+  directory.
 - `domicile-test-chrome`, `domicile-test-client` — a chrome and a Wayland
   client the integration tests drive, as libraries so their own behavior is
   testable without Smithay.
@@ -142,6 +145,14 @@ Web side:
   `docs/WRITING-A-SHELL.md`.
 - `packages/e2e-harness`, `packages/test-support` — the fixtures the end-to-end
   scripts and the DOM suites run against.
+
+Neither, and in the tree all the same:
+
+- `packages/domicile-engine` — the fork. A Chromium pin, the patch series
+  applied on top of it, the guards and spikes that measure it, and the pin of
+  the published build the flake fetches. Nothing here builds from this
+  checkout; `README.md` there says how to get an engine without spending four
+  hours on one.
 
 ## Testing
 

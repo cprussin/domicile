@@ -192,8 +192,12 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
   // waiting here and falls through.
   base::ScopedFD resumed = devices_.Resumed(params.path);
   if (resumed.is_valid()) {
+    VLOG(1) << "domicile: " << params.path.value()
+            << " is opening on the descriptor a resume left for it";
     return resumed;
   }
+
+  VLOG(1) << "domicile: asking logind for " << params.path.value();
 
   const std::optional<DeviceNumber> number = NumberOfDevice(params.path);
   if (!number.has_value()) {
@@ -439,7 +443,17 @@ void DrmLogindInput::OnPropertiesChanged(dbus::Signal*) {
   // list depending on which property it is, and asking for the one value that
   // matters is cheaper than being right about that. A property this does not
   // care about costs one round trip and no decision.
-  if (!SessionIsActive()) {
+  const bool active = SessionIsActive();
+
+  // TRACED ON BOTH ARMS. This is the only edge that brings a revoked device
+  // back when no resume is coming, so "did it fire, and what did logind say"
+  // is the first question of any run that came up deaf -- and a handler that
+  // spoke only when it had something to reclaim could not be told apart from
+  // one that was never called.
+  VLOG(1) << "domicile: logind changed a session property; this session is "
+          << (active ? "in front of the user" : "not in front of the user");
+
+  if (!active) {
     return;
   }
 

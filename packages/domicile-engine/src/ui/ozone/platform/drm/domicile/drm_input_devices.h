@@ -172,9 +172,22 @@ class DrmTakenDevices {
 
   // Follows a `ResumeDevice`: parks `descriptor` for the device's path and
   // asks the factory to close the device and open it again, which is what
-  // re-arms the watch. False when this session never took the device -- the
-  // one case with no path and no id to reopen under, and one where asking the
-  // factory would build a converter on a descriptor nobody owns.
+  // re-arms the watch. False only when this session has never been handed
+  // this device at all -- the one case with no path and no id to reopen
+  // under, and one where asking the factory would build a converter on a
+  // descriptor nobody owns.
+  //
+  // A RESUME IS AUTHORITATIVE AND THE HELD TABLE IS NOT, which is the whole
+  // reason `names_` exists beside `devices_`. logind sends `ResumeDevice`
+  // only for a device in `s->devices`, and the descriptor it carries is one
+  // it has just re-opened live -- so a resume is logind stating a fact about
+  // a device it holds for this session. A desktop was measured throwing
+  // thirteen of those away, keyboard and trackpad among them, because
+  // `devices_` no longer had the number: every device came up revoked, was
+  // force-paused a moment later, and the activation that followed brought
+  // thirteen live descriptors to a table that had forgotten them. Refusing a
+  // resume on the strength of this process's own bookkeeping is how a
+  // desktop stays deaf while logind is handing it working input.
   bool Resume(DeviceNumber number, base::ScopedFD descriptor);
 
   // Puts every device whose descriptor logind has revoked back through the
@@ -220,6 +233,19 @@ class DrmTakenDevices {
   //
   // Ordered, so that a failure is reported against the same device every time.
   std::map<DeviceNumber, Device> devices_;
+
+  // What the evdev factory calls every device logind has EVER handed this
+  // session, whether or not it is still held.
+  //
+  // SEPARATE FROM `devices_` BECAUSE IT OUTLIVES A RELEASE. `GiveBack` is
+  // called on the way into every re-take -- a force pause's reopen, an
+  // activation's reclaim -- so a device is absent from `devices_` for as long
+  // as it takes to give it back and ask for it again, and a `ResumeDevice`
+  // that lands in that window names a device the held table cannot identify.
+  // The id and the path are what a reopen needs and neither changes while the
+  // node is there, so they are kept until the node goes: a "gone" pause, or
+  // the release on the way out.
+  std::map<DeviceNumber, Device> names_;
 
   // Descriptors a `ResumeDevice` left, waiting for the reopen it asked for.
   // Keyed by path because that is what `OpenInputDevice` comes back with.

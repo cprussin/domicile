@@ -4,7 +4,14 @@ import { act, fireEvent, renderHook } from "@testing-library/react";
 import type { Float } from "./float";
 import { useFloatDrag } from "./useFloatDrag";
 
-const FLOAT: Float = { height: 200, id: "w1", width: 300, x: 10, y: 20 };
+const FLOAT: Float = {
+  height: 200,
+  id: "w1",
+  scratchpad: false,
+  width: 300,
+  x: 10,
+  y: 20,
+};
 
 /** A press, carrying what the hook actually reads off a pointer event. */
 const press = (x = 0, y = 0, button = 0) =>

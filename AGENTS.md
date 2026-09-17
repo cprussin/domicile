@@ -5,8 +5,9 @@ languages share one package tree: `packages/*` holds the Rust crates that make
 up the compositor and host (`domicile-*`) alongside the TypeScript libraries
 for the chrome and the shell packages that use them (`shell-*`). A package is a
 cargo crate or a bun workspace depending on whether it carries a `Cargo.toml`
-or a `package.json`. Each entry below is tagged with an authority level so its
-weight is unambiguous.
+or a `package.json`; `packages/domicile-engine` is neither, and holds the
+Chromium pin and the patch series that make the fork. Each entry below is
+tagged with an authority level so its weight is unambiguous.
 
 ## Authority levels
 
@@ -114,9 +115,9 @@ working in its area; it is context, not compliance.
 | [/docs/architecture/ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md) | Why Domicile is a compositor whose renderer is a web engine, the decisions that follow from it, and what each crate and package is for. Start here. |
 | [/docs/architecture/WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) | How a window reaches the screen: the compositor submits the client's dmabuf into a viz surface and the page's `<app>` embeds it, so what CSS does to a window is what CSS does to a layer. What is still open is at the bottom. |
 | [/docs/architecture/STACKING-PARITY.md](/docs/architecture/STACKING-PARITY.md) | Why an unforked engine cannot do this, measured: every route to stacking parity that was tried and the evidence that closed it. The record behind the fork decision, not a design. |
-| [/docs/architecture/THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md) | Replacing the three layers of bash between `domicile` and a running desktop with one binary: what moves into `domicile-launch`, what stays in the flake, and the order it lands in. |
+| [/docs/architecture/THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md) | `domicile` itself: how `domicile-launch` is split, why the flake only places files, the control socket a running desktop answers, and what is left before `domicile load-shell` works. |
 | [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The fork itself: the design, the C ABI between the compositor and the engine, the measurements, and the plan — phase 1 shipped, phases 2 and 3 have items left. |
-| [/docs/architecture/A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md) | A desktop that comes up on a tty, audited against the Chromium pin, with one item still open: the assert on Ozone DRM is a patch and the embedder behind it is a port, both landed, and the screen lights. Who opens the card and holds master, why input needs no new route, and what changes when outputs come from DRM. |
+| [/docs/architecture/A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md) | A desktop draws on a bare tty, and this is how: the Ozone DRM embedder that had to be written, who opens the card and holds DRM master, where input comes from, and what a console switch does. Read it before touching the DRM platform, `platform.rs`, or anything that assumes a display server. |
 
 [`/ROADMAP.md`](/ROADMAP.md) carries the current state and the ordered plan;
 read it before starting anything substantial.
@@ -128,7 +129,7 @@ work on it, and carry no authority level.
 
 | Doc | Covers |
 |---|---|
-| [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | How to write a shell that lives outside this repo: that a shell is one built module `domicile` is pointed at, the document Domicile writes rather than the shell, the config a shell owns, the handshake, and the bundling rules that fail quietly. Read it before changing anything a shell can see — the module's name, the document, the SDK's public surface — because it is the contract those changes break. Its worked example is `examples/minimal-shell`. |
+| [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | How to write a shell that lives outside this repo: that a shell is one built module `domicile` is pointed at, the document Domicile writes rather than the shell, the config a shell owns, why there is nothing to await, who gets the keyboard, and the bundling rules that fail quietly. Read it before changing anything a shell can see — the module's name, the document, the SDK's public surface — because it is the contract those changes break. Its worked example is `examples/minimal-shell`. |
 
 ## Checking your work
 

@@ -26,8 +26,8 @@ type Drag = {
  * The secondary button, which resizes whatever it takes hold of.
  *
  * The other way to a resize, and the one that needs no second modifier held:
- * whatever handed the pointer to the shell — Alt, Ctrl — the right button
- * means the corner rather than the whole window.
+ * whatever handed the pointer to the shell, the right button means the corner
+ * rather than the whole window.
  */
 const SECONDARY_BUTTON = 2;
 
@@ -71,7 +71,7 @@ type Options = {
  * **Only the press is the element's. The rest of the drag is the window's.**
  * A drag that reads its moves off the element it started on ends wherever that
  * element stops receiving them, and the pointer leaves it constantly: over the
- * window in front, over the rail, off the edge of the screen.
+ * window in front, over the top bar, off the edge of the screen.
  * `setPointerCapture` is the usual answer and is still set below, but it is
  * not one to rely on here — a browser releases capture when the capturing
  * element is moved in the document, and taking hold of a window raises it.

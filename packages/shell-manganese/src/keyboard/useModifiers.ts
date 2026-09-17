@@ -3,18 +3,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 /**
  * The modifiers the shell reacts to.
  *
- * Alt and Ctrl both hand the pointer to the shell, which is what makes a drag
- * catchable in the page at all; Shift makes that drag a resize, as does taking
- * hold with the secondary button.
+ * Alt is the desktop's modifier — sway's `floating_modifier $mod` is the same
+ * key as its bindings — and holding it hands the pointer to the shell, which
+ * is what makes a drag catchable in the page at all; Shift makes that drag a
+ * resize, as does taking hold with the secondary button.
  */
 export type Modifiers = {
   alt: boolean;
-  ctrl: boolean;
   shift: boolean;
 };
 
 /** Nothing held, which is what the shell assumes until it is told otherwise. */
-const NONE: Modifiers = { alt: false, ctrl: false, shift: false };
+const NONE: Modifiers = { alt: false, shift: false };
 
 /**
  * What the keyboard has down, and whether the desktop has already spent it.
@@ -55,7 +55,7 @@ type HeldModifiers = {
  * chrome's window: every key the compositor's seat has ever seen arrived as a
  * `key` the SDK forwarded from this document, and the SDK forwards only while
  * a client holds the keyboard. So a modifier pressed while the chrome holds it
- * — the Alt of the Alt+Enter that spawned the terminal, before there was a
+ * — the Alt of the Alt+Return that spawned the terminal, before there was a
  * window to hold anything — never reaches the seat, and the next forwarded key
  * makes the compositor broadcast a set that denies it.
  *
@@ -99,11 +99,7 @@ export const useModifiers = (): HeldModifiers => {
 
   useEffect(() => {
     const follow = (event: KeyboardEvent) => {
-      settle({
-        alt: event.altKey,
-        ctrl: event.ctrlKey,
-        shift: event.shiftKey,
-      });
+      settle({ alt: event.altKey, shift: event.shiftKey });
     };
     document.addEventListener("keydown", follow);
     document.addEventListener("keyup", follow);
@@ -124,4 +120,4 @@ export const useModifiers = (): HeldModifiers => {
 
 /** Whether these are the same keys down, which is all a re-render turns on. */
 const same = (held: Modifiers, next: Modifiers): boolean =>
-  held.alt === next.alt && held.ctrl === next.ctrl && held.shift === next.shift;
+  held.alt === next.alt && held.shift === next.shift;

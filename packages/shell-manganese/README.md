@@ -1,20 +1,20 @@
 # @domicile/shell-manganese
 
-The bundled reference chrome: a rail carrying a tab per open window, the
-launchers, the theme toggle and a clock, beside a stage that shows one window at
-a time. It is the app Domicile ships to prove the model end to end — every pixel
-of it is ordinary web content, and each Wayland client on the stage is a real
+The bundled reference chrome: a tiling desktop keyed like [sway](https://swaywm.org),
+under a transparent bar carrying the workspaces, a clock and the two things it
+can launch. It is the app Domicile ships to prove the model end to end — every
+pixel of it is ordinary web content, and each Wayland client on it is a real
 `<app>` element that takes ordinary CSS.
 
 The chrome is a React tree built entirely from
-[`@domicile/component-library`](../component-library/README.md): the
-rail is its `TabRail`, the launchers and a browser window's controls are its
-`Button`, the address bar its `Input`, the empty stage its `Card` and `Kbd`, the
-theme toggle its `ThemeSwitch`. Styling is Panda CSS from the library's preset —
-the shell defines no stylesheet of its own.
+[`@domicile/component-library`](../component-library/README.md): the bar's
+launchers and a browser window's controls are its `Button`, the address bar its
+`Input`, the empty-desktop card its `Card`, the theme toggle its `ThemeSwitch`.
+Styling is Panda CSS from the library's preset — the shell defines no
+stylesheet of its own.
 
-The page is the whole desktop, however many displays that is. The chrome goes on
-the first display the config names — the names are the user's, so the shell
+The page is the whole desktop, however many displays that is. The chrome goes
+on the first display the config names — the names are the user's, so the shell
 cannot pick one — and every other display gets a clock, which is what makes a
 screen the config describes visibly there. Nothing is drawn until a desktop has
 been described, which is the handshake's worth of blank window: a chrome laid
@@ -26,204 +26,100 @@ is a third thing again — there is nowhere to lay the chrome out — and the pa
 says so rather than staying blank.
 
 A window is either a Wayland client the host announced or a browser window the
-shell opened itself; both get a tab, and the rail is what switches between them.
-Only the window on the stage has a box, so the SDK reports the rest to the host
-as no longer composited. The window that takes the stage takes the keyboard with
-it, so what the user just opened or switched to is typeable without a click: a
-client's keyboard goes to the host, a browser window's to its page. So does the
-window the pointer moves into — focus follows the cursor here.
+shell opened itself. Both are tiled on the workspace being looked at, both have
+a title bar, and both are moved, floated and closed by the same keys.
 
-## Layout
+## Window management
 
-| Path | What |
+**The layout is sway's**, and so are the keys: the config it was written
+against is `config/modules/ui/sway` in the author's dotfiles, and what is not
+bound there is bound by `lib.mkOptionDefault` — sway's own defaults — so both
+halves are in the table below.
+
+**The modifier is Alt**, which is the one thing here the config does not
+decide: it sets `Mod4`, the Super key, and this desktop answers `Mod1`. Every
+`Mod+` below is Alt.
+
+A workspace holds a tree. A window is a leaf; every layout is a container of
+them; opening a window puts it beside the one being worked in, and closing one
+gives its space back to what is left. Ten workspaces, the scratchpad, floating
+windows over the tiling, and one window at a time filling the screen.
+
+| Keys | What |
 |---|---|
-| `src/index.tsx` | Entry point: applies the theme, builds the `DomicileClient`, binds the SDK to it, mounts `<Shell>`, prints the diagnostics line. |
-| `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
-| `src/Desktop.tsx` | What is on the desktop: the window state, the keybindings, the rail beside the stage, and which screen each of them is on. |
-| `src/Clock.tsx` | The live clock: in the rail's footer, and alone on every display the rail is not on. |
-| `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
-| `src/placement-line.ts` | What the chrome has to say about its own timings, which is what measuring every window on every frame costs. |
-| `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
-| `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
-| `src/screens/viewport-displays.ts` | The same, for a shell with no host: the window is the only display there is. |
-| `src/screens/FirstScreen.tsx`, `OtherScreens.tsx`, `NoScreens.tsx` | The screen the chrome goes on, the screens it is not on, and what the page says for a desktop with no screens at all. |
-| `src/screens/IdleScreen.tsx` | What a screen with no chrome on it shows: the clock. |
-| `src/window-management/` | The windows: what one is, everything that changes them, and how they are drawn. |
-| `src/window-management/window.ts` | The window model: a client's portal or a browser window. |
-| `src/window-management/window-state.ts` | Every change the window list can undergo, as one pure reduction. |
-| `src/window-management/useWindows.ts` | Wires host events and user actions into that reduction. |
-| `src/window-management/WindowRail.tsx` | A tab per window, the launchers, the theme toggle and the clock. |
-| `src/window-management/Stage.tsx` | The windows on screen: the one the rail selected, and every float over it. |
-| `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
-| `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<webview>`. |
-| `src/window-management/useHistoryAvailability.ts` | Where that window's page can be sent, read off the view's own properties rather than learned from the event that says to read them. |
-| `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
-| `src/window-management/window-styles.ts` | What every window on the stage shares, and where a floating one is placed. |
-| `src/window-management/floating/float.ts` | A window that has left the rail: where it sits on the stage and how big. Its own module because floating is not a kind of window. |
-| `src/window-management/floating/useFloatDrag.ts`, `FloatGrab.tsx`, `FloatTitleBar.tsx` | Dragging and resizing a floating window, and the furniture that offers it. |
-| `src/keyboard/useShortcuts.ts` | The combinations the desktop answers, claimed from the host as well as listened for in the page. |
-| `src/keyboard/useModifiers.ts` | Which modifiers are held, from both of the places that can know. |
-| `src/wallpaper/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
-| `src/wallpaper/photos.ts` | Which photographs those are, and where they come from. |
-| `src/global.css`, `src/css.d.ts` | The document-level styling, and the type for importing it. |
-| `src/domicile-elements.d.ts` | The engine's `<app>`, as JSX. `<webview>` needs no entry — React has had one since Electron. |
+| **Mod+Return** | Launch a terminal (`kitty`), which the compositor spawns. |
+| **Mod+Space**, **Mod+D** | Open a browser window. The config's launcher keys — this shell has no launcher to run, and a window of its own is the nearest thing it has. |
+| **Mod+Shift+Q** | Close the window being worked in. |
+| **Mod+H / J / K / L**, **Mod+←↓↑→** | Move the focus. Wrapping at the ends of a container, which is what `focus.wrapping = "yes"` asks for. |
+| **Mod+Shift+** the same | Move the window. Past its neighbour, out of the container it is in, or — pushed across the grain — into a new split of the workspace. |
+| **Mod+B / Mod+V** | `splith` / `splitv`: wrap the focus in a container of one, so the next window opens beside or below it. |
+| **Mod+W / Mod+S / Mod+E** | `layout tabbed` / `layout stacking` / `layout toggle split` on the container the focus is in. |
+| **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. |
+| **Mod+F / Mod+Shift+F** | Fill the screen with the window being worked in, or every screen there is. |
+| **Mod+Tab** | `focus mode_toggle`: swap the keyboard between the floating windows and the tiled ones. |
+| **Mod+Shift+Tab** | `floating toggle`: take the window out of the tiling, or put it back. |
+| **Mod+Minus / Mod+Shift+Minus** | `scratchpad show` / `move scratchpad`. |
+| **Mod+R** | Resize mode — see below. |
+| **Mod+( ) } + { ] [ ! = \*** | Go to a workspace. **With Shift**, send the window being worked in there and stay. |
 
-There is no main process and no preload. The engine is the display compositor
-and serves this page over `domicile://`, and the channel to it is
-`window.domicile`, so what is here is the chrome and nothing else.
+The window being worked in is the one with the accented title bar, and it is
+the one everything keyed acts on.
 
-React owns this DOM, so the chrome writes the tags in JSX: `<app>` and
-`<webview>`, both the engine's own. React has had a `webview` tag and an
-`HTMLWebViewElement` to go with it since Electron, which the SDK fills in with
-what the fork puts on it; `app` it has never heard of, so `domicile-elements.d.ts`
-declares it. Neither has a hyphen in its name, so React treats both as ordinary
-HTML elements — it writes no property it does not recognize and binds no `on…`
-prop for their events, which is why `AppWindow` and `BrowserWindow` both bind
-theirs with `addEventListener` on a ref.
+### The keys are physical, and the layout is written down
 
-## Launching windows
+sway binds *keysyms* and resolves them through the active keymap. Nothing here
+can: a chord claimed from the compositor is an evdev keycode and a press this
+page hears is a `KeyboardEvent.code`, both of which name the physical key, and
+the engine does not tell a shell what the keymap is. So the layout is written
+down in `keyboard/programmers-dvorak.ts` — `dvp`, which is what this desktop
+comes up on when the config names no keyboard — and the bindings name the
+keysyms the sway config names. `mod+h` is the key a US keyboard calls J,
+because that is where Programmer's Dvorak puts `h`; the workspace chords are
+the number row, because `parenleft` is on it. Configure a different layout and
+the chords stay on these *keys*.
 
-- **Terminal** in the rail footer, or **Alt+Enter** — ask the compositor to
-  spawn a terminal (`kitty`) onto Domicile.
-- **+** in the rail header, or **Alt+Shift+Enter** — open a browser window on
-  the stage. Its address bar navigates on Enter (an address typed without a
-  scheme is loaded over https) and follows the page wherever it goes; the
-  window's tab is labeled with the site it is showing. Back and forward are
-  live only while the page's history reaches that way.
-- **Alt+Shift+Tab** — float the window you are working in, or put it back.
-  **Alt+drag** moves a floating window; **Alt+Shift+drag** resizes it. See
-  below.
+### Resize mode needs the modifier, where sway's does not
 
-## Focus follows the cursor
+`mod+r` enters it and `mod+Return` or `mod+Escape` leaves it, as in the config
+— but inside it the resize keys are `mod+h/j/k/l` rather than bare `h/j/k/l`.
+A bare claim is not something this shell can take back: `grabShortcut` is
+never given up, so a mode that claimed `h` on the way in would take it from
+every client for the rest of the session. A tiled window resizes by a
+fiftieth of its container per press (sway says `10 px`, which a share of a
+container cannot mean); a floating one by ten pixels.
 
-**The window under the pointer is the window the keyboard is in.** Move onto a
-window and it is the one you are typing into — a client's keystrokes to the
-host, a browser window's to its page — the one the rail highlights, and the one
-Alt+Shift+Tab acts on. No click anywhere. It is one arm of `reduceWindows`,
-because it is a policy rather than a mechanism: a shell that would rather the
-user clicked writes a different one and changes nothing else.
+### Floating windows
 
-**It does not raise.** A window that came to the front for being crossed would
-cover the one you were heading for, and the pointer would rearrange the desktop
-on its way anywhere. A click is still what raises — so every click is reported,
-including one in the window the pointer has already made the active one. A
-window that answered only the clicks which found it inactive could never be
-raised by one under this policy. What keeps that from re-rendering the desktop
-on every press is the reduction, where a reach that moves nothing returns the
-state it was given, rather than a window deciding which of its own clicks are
-worth reporting.
-
-**The chrome is not a window.** The rail, the wallpaper, a float's title bar
-and the sheet an Alt+drag is caught on leave the keyboard where it was: there
-is nothing better to point it at, and handing it back would make the desktop
-untypeable whenever the pointer came to rest on furniture. It is the rule
-`focus_changed` already followed for a seat that lands anywhere but a window.
-
-**A browser window hears the pointer where it hears a click: on its own
-chrome.** A pointer inside the page is the guest's, the same way a click there
-is, and whether one that lands straight in the page reaches the element the
-guest hangs off is the browser process's to say — nothing here has measured it,
-so treat a window entered over its page alone as one that may take the keyboard
-only when it is clicked. Every focus this shell puts *into* a guest — the one a window
-takes for becoming active, and the one it takes back when the chrome drops it
-— is announced exactly the way a click there is, because the element says so
-whichever route the focus came by, so the window spends the announcements it
-causes — without
-that, the pointer arriving over a browser window would raise it as well.
-
-## Floating a window
-
-**Alt+Shift+Tab** takes the window you are working in out of the rail, where it
-floats over the stage in a box of its own; pressing it again puts the window
-back. Each float opens cascaded past the ones already out, and comes to the
-front when you click it or pick its tab.
+**Mod+Shift+Tab** takes the window being worked in out of the tiling, where it
+floats over the rest in a box of its own; pressing it again puts it back where
+the tiling focus is. Each float opens cascaded past the ones already out, and
+comes to the front when it is clicked.
 
 The Shift that floats a window is spent on the chord. Shift is also the resize
 modifier, and you are still holding both when the window lands — so until you
-let go of Shift and press it again, an Alt+drag moves the window rather than
+let go of Shift and press it again, a Mod+drag moves the window rather than
 driving its corner.
 
-**A browser window comes to the front from a click anywhere in it**, its
-address bar and its page alike, and the two halves say so differently. The
-chrome sends the shell a pointer event like any other page furniture. The page
-does not: it is a guest with a browsing context of its own, so nothing about a
-pointer inside it ever crosses back out — a click there used to leave the
-window under whatever was covering it, while the rail went on highlighting the
-window before it and the keyboard stayed there too.
-
-Nor does the focus that click takes, which was the obvious way for it to
-cross and is not available: upstream Blink dispatches no focus event across a
-remote frame's process boundary, and even with the fork focusing the element
-(patch 0011, the way upstream already does for a fenced frame) there is still
-no `focusin` — Blink dispatches focus events only while the page is focused,
-and a guest taking focus is the moment the chrome's page loses it. So **the
-element says so itself**, in an event that is not a focus event, and the window
-listens for that as well as for its own chrome's pointer events. Either one
-brings it to the front and makes it the window everything keyed acts on,
-whether or not the pointer had already made it the one being worked in.
-`guard-webview-click.sh` is what says a real click in a real guest arrives
-here — it is also what found that the focus alone did not.
-
-A client's window arrives at the same place by a different road. The SDK would
-focus a clicked client by itself, and the shell stops it: the SDK asks
-first, with a cancelable `domicile-focus-requested`, and this shell answers
-every one of them. So both kinds of window are reached the same way — the shell
-decides, and `focus_changed` comes back afterward to say where the keyboard
-actually is.
-
-That is also what `focus_requested` is for: a client asking for the keyboard
-over `xdg-activation`, which the compositor forwards without granting.
-Manganese grants it, by the same path picking a tab takes — one arm of
-`reduceWindows`, because it is a policy rather than a mechanism. A shell that
-would rather refuse a window the user has not touched changes that arm and
-nothing else.
-
-The float order is the stacking order, and the shell writes it as the
-`z-index` of the window's *own* element — which is what stacks the window,
-because the window is a layer in this page's own layer tree, and what the SDK
-reports with the placement so the compositor hit-tests in the same order. A floating window
-is drawn over the stage rather than on it, so the stage falls back to the last
-window still in the rail rather than going blank.
-
-A floating window has a **title bar**: what it is called, and an X that closes
-it. Dragging the bar moves the window, with no modifier held — the bar is
-chrome, so the pointer over it belongs to the page, which is exactly what is
-not true of the rest of the window. The bar comes *out* of the window's box
-rather than being added to it, so a window dragged to a size is that size, bar
-included, and a resize does not have to reason about a frame that grows with
-it.
-
-**And the press on the bar is the bar's**, because the page is what hit-tests
-it: a bar lies across whatever the window it names cascades over, the DOM gives
-the press to the bar, and the `<app>` under it never hears one — so
-nothing about the window below is focused or raised. That is the browser's own
-hit-testing rather than a rectangle the compositor was told about, which is why
-it sees corner radius, transforms and stacking.
-
-A floating window's corners are the frame's rather than its own, and square:
-the compositor's shader takes one radius for all four (it is the element's
-`border-top-left-radius` the SDK reports), so a window cannot be square under
-its bar and round at the bottom. The bar carries the rounding.
-
-**Alt+drag** moves a floating window and **Alt+Shift+drag** resizes it from the
-bottom-right corner. Which of the two a drag is, is read when it starts and
-then kept, so letting go of Shift half way through does not turn a resize into
-a move with the window jumping to wherever the pointer got to. A window is
-never dragged smaller than the grab it is dragged by, and its top-left corner
-stays on the stage — the two edges a window dragged past could not be dragged
-back from.
+**Mod+drag** moves a floating window and **Mod+Shift+drag** (or Mod+right-drag)
+resizes it from the bottom-right corner — sway's `floating_modifier $mod`, and
+the same key as the bindings, so it is Alt as well.
+Which of the two a drag is, is read when it starts and then kept, so letting go
+of Shift half way through does not turn a resize into a move with the window
+jumping to wherever the pointer got to. A window is never dragged smaller than
+the grab it is dragged by, and its top-left corner stays on the desktop — the
+two edges a window dragged past could not be dragged back from.
 
 Two things have to be true for that drag to be seen at all, and both are worth
 knowing about:
 
 - **The pointer over a window belongs to the client behind it.** That is the
   point of Domicile, and it means the shell cannot handle a drag on the window
-  itself. While Alt is held a floating window is given
+  itself. While the modifier is held a floating window is given
   `pointer-events: none` — the compositor reports it as taking no pointer and
   routes to the chrome instead — and a transparent sheet over the window
   catches what falls through. The same mechanism that stops a window
   swallowing the clicks meant for a menu drawn over it.
-- **The page cannot see Alt while a window has the keyboard.**
+- **The page cannot see the modifier while a window has the keyboard.**
   `wl_keyboard.modifiers` goes to the focused surface, so the compositor
   broadcasts the held set instead and the shell listens (`modifiers`). The
   page's own keyboard events are the fallback for a shell opened in a plain
@@ -235,12 +131,97 @@ element's `opacity` with the placement and the shader applies it to the
 client's own buffer, so what shows through a dragged window is the desktop
 behind it.
 
-A floated window keeps its tab. The tab is how it is reached when it is behind
-something, and a window with no tab and nothing selected is a window you have
-lost — so picking the tab of a floating window brings it to the front rather
-than putting it back on the stage. Alt+Shift+Tab is what changes the mode.
+The float order is the stacking order, and the shell writes it as the
+`z-index` of the window's *own* element — which is what stacks the window,
+because the window is a layer in this page's own layer tree, and what the SDK
+reports with the placement so the compositor hit-tests in the same order.
 
-Both combinations are claimed twice over, because two different things can be
+### Every window has a title bar
+
+Floating or tiled, a window is a title bar over its contents: what it is
+called, and an X that closes it. The bar comes *out* of the window's box
+rather than being added to it, so a window dragged or tiled to a size is that
+size, bar included, and a resize does not have to reason about a frame that
+grows with it.
+
+**And the press on the bar is the bar's**, because the page is what hit-tests
+it: the DOM gives the press to the bar and the `<app>` under it never hears
+one, so nothing about the window below is focused or raised by the shell's own
+chrome. That is the browser's own hit-testing rather than a rectangle the
+compositor was told about, which is why it sees corner radius, transforms and
+stacking.
+
+A window in a **tabbed** or **stacking** container has its tab *as* its title
+bar — one bar rather than two — so the row of tabs across the top of such a
+container is the same component at a different rectangle. A tab that stands
+for a whole container is named after the window that container last had the
+focus in.
+
+### Focus follows the cursor
+
+**The window under the pointer is the window the keyboard is in.** Move onto a
+window and it is the one you are typing into — a client's keystrokes to the
+host, a browser window's to its page — the one whose bar is accented, and the
+one everything keyed acts on. No click anywhere. It is one arm of
+`reduceWindows`, because it is a policy rather than a mechanism: a shell that
+would rather the user clicked writes a different one and changes nothing else.
+
+**It does not raise.** A window that came to the front for being crossed would
+cover the one you were heading for, and the pointer would rearrange the desktop
+on its way anywhere. A click is still what raises — so every click is reported,
+including one in the window the pointer has already made the active one. What
+keeps that from re-rendering the desktop on every press is the reduction, where
+a reach that moves nothing returns the state it was given.
+
+**The chrome is not a window.** The top bar, the wallpaper, a float's title bar
+and the sheet a Mod+drag is caught on leave the keyboard where it was: there is
+nothing better to point it at, and handing it back would make the desktop
+untypeable whenever the pointer came to rest on furniture.
+
+**A browser window hears the pointer where it hears a click: on its own
+chrome.** A pointer inside the page is the guest's, the same way a click there
+is, and whether one that lands straight in the page reaches the element the
+guest hangs off is the browser process's to say — nothing here has measured it,
+so treat a window entered over its page alone as one that may take the keyboard
+only when it is clicked. Every focus this shell puts *into* a guest — the one a
+window takes for becoming active, and the one it takes back when the chrome
+drops it — is announced exactly the way a click there is, because the element
+says so whichever route the focus came by, so the window spends the
+announcements it causes.
+
+**A browser window comes to the front from a click anywhere in it**, its
+address bar and its page alike, and the two halves say so differently. The
+chrome sends the shell a pointer event like any other page furniture. The page
+does not: it is a guest with a browsing context of its own, so nothing about a
+pointer inside it ever crosses back out.
+
+Nor does the focus that click takes, which was the obvious way for it to cross
+and is not available: upstream Blink dispatches no focus event across a remote
+frame's process boundary, and even with the fork focusing the element (patch
+0011, the way upstream already does for a fenced frame) there is still no
+`focusin` — Blink dispatches focus events only while the page is focused, and a
+guest taking focus is the moment the chrome's page loses it. So **the element
+says so itself**, in an event that is not a focus event, and the window listens
+for that as well as for its own chrome's pointer events. `guard-webview-click.sh`
+is what says a real click in a real guest arrives here — it is also what found
+that the focus alone did not.
+
+A client's window arrives at the same place by a different road. The SDK would
+focus a clicked client by itself, and the shell stops it: the SDK asks first,
+with a cancelable `domicile-focus-requested`, and this shell answers every one
+of them. So both kinds of window are reached the same way — the shell decides,
+and `focus_changed` comes back afterward to say where the keyboard actually is.
+
+That is also what `focus_requested` is for: a client asking for the keyboard
+over `xdg-activation`, which the compositor forwards without granting.
+Manganese grants it, and goes to the workspace the window is on to do it — one
+arm of `reduceWindows`, because it is a policy rather than a mechanism. A shell
+that would rather refuse a window the user has not touched changes that arm and
+nothing else.
+
+### Two claims for every chord
+
+Every binding is claimed twice over, because two different things can be
 holding the keyboard when the user presses one. The page listens for its own
 `keydown`, which is what answers for every press that lands on this document —
 the shell's own chrome, and a focused Wayland window too, since an `<app>` is an
@@ -253,17 +234,42 @@ the layer inside the engine is the only one above it.
 That claim is also what keeps the two from both firing. The SDK forwards this
 document's keystrokes to whichever window has the keyboard, and a chord it did
 not know was spoken for went to the window as well as to the handler here —
-Alt+Enter opening a terminal and typing a newline into the one already
-open. It reads the claim now, so the chord stops at the page. One ask, honored
-wherever the keyboard happens to be; exactly one path acts for any press.
+Mod+Return opening a terminal and typing a newline into the one already open. It
+reads the claim now, so the chord stops at the page. One ask, honored wherever
+the keyboard happens to be; exactly one path acts for any press.
 
-A tab reorders by drag, or by Alt+Up / Alt+Shift+Up (and their Down
-counterparts) on a focused row. Every tab closes its window — by its X, or by a
-middle-click anywhere on the row. A browser window goes at once, because the
-shell owns it; a client's window is the client's, so the X *asks* it to close —
-a terminal exits, an editor with unsaved work is free to put a dialog up and
-stay. That tab leaves the rail when the host says the client actually went
-(`app_closed`), not when the close is asked for.
+## The top bar
+
+Transparent, across the top of the screen the chrome is on: the workspaces at
+one end, the clock in the middle, and at the other end the two launchers, the
+theme toggle, and the name of the binding mode whenever it is not the usual
+one.
+
+It paints no background, so what is behind it is the wallpaper — and the
+windows are laid out in what is *left* of the screen under it, so nothing is
+behind it but the wallpaper. A window that covers it is one the user put there:
+a float dragged up, or a window filling the screen.
+
+**Its text is white with a black shadow under it, in both themes.** There is no
+background to read against, so the theme's `foreground` would not do: it flips
+with the theme and the photograph does not, and half of any photograph is
+lighter than light text. The shadow is `shadows.textOverPhoto` from the
+component library's preset — tight and nearly opaque rather than soft, because
+a blurred shadow under ten-pixel type reads as a smudge. The theme switch keeps
+its own colours: colour is how it says which way it is set.
+
+The workspaces on it are the ones with windows on them, plus the one being
+looked at — sway's own rule. The desktop keeps all ten all the time, which is
+the one place that difference from sway could show, and it does not: an empty
+workspace nobody is looking at is not on the bar either.
+
+The clock reads `Wednesday 2026-09-16 20:53:40` and ticks every second, in the
+middle of the *bar* rather than in the middle of what the workspaces and the
+buttons leave — so the reading does not shift along as windows open. The day is
+named in English beside an ISO date because the format is a decision rather
+than a locale's default: a locale's own is a different width every hour and a
+different order in every language, which is not something to put in the middle
+of a bar and expect to stay put.
 
 ## The wallpaper
 
@@ -289,13 +295,6 @@ rotation the photograph coming in is the *earlier* element of the two, and
 stacking context — where it would be a wallpaper painted over the chrome, level
 with a floating window.
 
-**A background element used to fill in the windows**, and the note here that
-said so was out of date: where the compositor drew a client's buffer over the
-page, a window was a hole and anything behind it filled the hole in — a desktop
-of windows hidden behind their own wallpaper. A window is a `cc::SurfaceLayer` in
-this page's layer tree now (`/docs/architecture/WINDOW-COMPOSITING.md`), so an
-element behind one is simply behind it.
-
 The photographs are [Wikimedia Commons](https://commons.wikimedia.org) files, by
 title: `Special:FilePath` serves the file a title names and `?width=` has
 Wikimedia's thumbnailer scale it, so they are the same six every time and the
@@ -306,6 +305,89 @@ and three from the ground, all six public domain, so showing one owes no credit
 line that this surface has nowhere to put. A desktop with no network comes up on
 the theme's own `background`, which is what it came up on before this existed. A
 shell that wants its own pictures owns its own list.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `src/index.tsx` | Entry point: applies the theme, builds the `DomicileClient`, binds the SDK to it, mounts `<Shell>`, prints the diagnostics line. |
+| `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
+| `src/Desktop.tsx` | What is on the desktop: the window state, the keys, the bar over the windows, and the rectangles each screen offers them. |
+| `src/clock/` | The live clock, and what it says: in the middle of the bar, and alone on every display the bar is not on. |
+| `src/top-bar/` | The bar: the workspaces, the clock and the launchers. |
+| `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
+| `src/placement-line.ts` | What the chrome has to say about its own timings, which is what measuring every window on every frame costs. |
+| `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
+| `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
+| `src/screens/viewport-displays.ts` | The same, for a shell with no host: the window is the only display there is. |
+| `src/screens/FirstScreen.tsx`, `OtherScreens.tsx`, `NoScreens.tsx` | The screen the chrome goes on, the screens it is not on, and what the page says for a desktop with no screens at all. |
+| `src/screens/IdleScreen.tsx` | What a screen with no chrome on it shows: the clock. |
+| `src/keyboard/bindings.ts` | The desktop's keys, as the sway config binds them: one table from a key to an action. |
+| `src/keyboard/programmers-dvorak.ts` | Which physical key each keysym is on, which is what the table above is resolved through. |
+| `src/keyboard/useShortcuts.ts` | The two paths a press can arrive by, and the claim that decides which one answers. |
+| `src/keyboard/useModifiers.ts` | Which modifiers are held, from both of the places that can know. |
+| `src/window-management/` | The windows: what one is, everything that changes them, and where they are drawn. |
+| `src/window-management/window.ts` | The window model: a client's portal or a browser window. |
+| `src/window-management/window-state.ts` | Every change the desktop can undergo, as one pure reduction — and sway's commands as the actions it takes. |
+| `src/window-management/workspace.ts` | One workspace: the tiling, the floats over it, and which of the two the keyboard is in. |
+| `src/window-management/tree/` | The layout tree: sway's own model, one module per thing that can happen to it. |
+| `src/window-management/tree/node.ts` | What a node is: a window, or a container in one of the four layouts. |
+| `src/window-management/tree/tiling.ts` | The tree plus where the focus is in it, which is one chain and a depth along it. |
+| `src/window-management/tree/path.ts` | Where a node is, and how one is replaced without rebuilding the rest. |
+| `src/window-management/tree/insert.ts`, `remove.ts`, `move.ts`, `layout.ts`, `resize.ts` | Opening a window, closing one, carrying one through the tree, rearranging the container around it, and its share of that container. |
+| `src/window-management/tree/focus-direction.ts` | `focus left` and the other three: the outward walk that finds the next window. |
+| `src/window-management/tree/frames.ts` | The tree as rectangles: every visible window's frame, and the tabs of any container. |
+| `src/window-management/placement.ts` | What is on screen right now: the tiling, the floats over it or the one window filling everything, and the order they stack in. |
+| `src/window-management/rect.ts` | A rectangle of the desktop, and the bar the top of one carries. |
+| `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it. |
+| `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
+| `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
+| `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<webview>`. |
+| `src/window-management/useHistoryAvailability.ts` | Where that window's page can be sent, read off the view's own properties rather than learned from the event that says to read them. |
+| `src/window-management/useReclaimFocus.ts` | Keeping the document's focus on the window being worked in, but only when it landed on nothing at all — the address bar, the bar's own controls and the theme switch are the user reaching for focus, and a closing window's own control leaves it on the body. |
+| `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
+| `src/window-management/window-styles.ts` | What every window shares, and how one is placed at a rectangle. |
+| `src/window-management/floating/float.ts` | A window that has left the tiling: where it sits and how big. Its own module because floating is not a kind of window. |
+| `src/window-management/floating/useFloatDrag.ts`, `FloatGrab.tsx`, `FloatTitleBar.tsx` | Dragging and resizing a floating window, and the furniture that offers it. |
+| `src/wallpaper/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
+| `src/wallpaper/photos.ts` | Which photographs those are, and where they come from. |
+| `src/global.css`, `src/css.d.ts` | The document-level styling, and the type for importing it. |
+| `src/domicile-elements.d.ts` | The engine's `<app>`, as JSX. `<webview>` needs no entry — React has had one since Electron. |
+
+There is no main process and no preload. The engine is the display compositor
+and serves this page over `domicile://`, and the channel to it is
+`window.domicile`, so what is here is the chrome and nothing else.
+
+React owns this DOM, so the chrome writes the tags in JSX: `<app>` and
+`<webview>`, both the engine's own. React has had a `webview` tag and an
+`HTMLWebViewElement` to go with it since Electron, which the SDK fills in with
+what the fork puts on it; `app` it has never heard of, so `domicile-elements.d.ts`
+declares it. Neither has a hyphen in its name, so React treats both as ordinary
+HTML elements — it writes no property it does not recognize and binds no `on…`
+prop for their events, which is why `AppWindow` and `BrowserWindow` both bind
+theirs with `addEventListener` on a ref.
+
+## What is not sway
+
+The parts of the config this shell cannot answer, and why:
+
+- **Everything `exec`s a command.** The launcher, the password manager, the
+  lock screen, the volume and brightness keys are all paths into the user's own
+  nix store, and a shell has nowhere to read them from — the compositor spawns
+  what it is told to spawn, and nothing tells it. `mod+Return` and the
+  launcher keys are what is left: a terminal, and a window of the shell's own.
+- **Per-window rules.** `for_window [app_id="launcher"] floating enable` and
+  the rest of the config's `window.commands` have no equivalent here: every
+  window opens tiled, and floating one is a key away.
+- **`reload` and `exit`.** There is no config to re-read and no session to
+  end from the page.
+- **Outputs, inputs, and the bar's own config.** The compositor owns the
+  displays and the keyboard — `manganese.json` is where those are set, below —
+  and the bar is this page rather than a swaybar process.
+- **Mouse warping, per-window borders, `hideEdgeBorders`.** A window's frame
+  is CSS here; there is no pointer to warp from a page.
+- **`Mod4` as the modifier.** The config sets Super and this desktop answers
+  Alt. Every chord is otherwise the config's.
 
 ## Configure
 
@@ -325,10 +407,11 @@ shell owns the file, and what the compositor needs is derived from it.
 Everything is optional; a missing file is a first run rather than a mistake.
 `keyboard` is the exception worth knowing about: unset, this desktop comes up
 on Programmer's Dvorak with Caps Lock and Escape swapped, which is a preference
-rather than a neutral default. Naming one replaces it whole rather than merging
-into it — a variant belongs to a layout, so `{ "layout": "de" }` is a German
-keyboard and not a German one with `dvp` still under it. For an ordinary US
-layout, say so: `{ "layout": "us" }`.
+rather than a neutral default — and it is the layout the keys above were
+written for. Naming one replaces it whole rather than merging into it — a
+variant belongs to a layout, so `{ "layout": "de" }` is a German keyboard and
+not a German one with `dvp` still under it. For an ordinary US layout, say so:
+`{ "layout": "us" }`.
 
 ## Build & run
 
@@ -359,9 +442,10 @@ and not checked in.
 ## Test
 
 ```sh
-bun run --filter @domicile/shell-manganese test
+bun run turbo test --filter @domicile/shell-manganese
 ```
 
-runs the type check, the unit tests, and the Vite build. The components render
-against happy-dom via
+runs the type check, the unit tests, and the Vite build. The layout tree and
+the reduction are tested on their own — they are pure functions over a tree and
+a state — and the components render against happy-dom via
 [`@domicile/test-support`](../test-support/README.md).

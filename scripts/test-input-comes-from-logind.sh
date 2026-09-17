@@ -239,6 +239,28 @@ else
     "OpenDeviceFd parks an inactive device and waits for PropertiesChanged, which never comes for a session that was already active"
 fi
 
+# A RESUME IS ANSWERED FROM THE NAMES, NOT FROM THE HOLD. `GiveBack` is on the
+# way into every re-take, so a device is absent from the held table for as long
+# as it takes to give it back and ask for it again -- and logind still has it
+# down as this session's throughout, so a `ResumeDevice` can land in that
+# window. A measured run dropped thirteen live descriptors that way, keyboard
+# and trackpad among them: every device came up revoked, the whole set was
+# force-paused a moment later, and the activation's resumes reached a table
+# that no longer named any of them. `names_` is what answers a resume, and only
+# a "gone" pause -- the node unplugged -- takes a device out of it.
+if grep -q 'names_.find(number)' "$DOMICILE/drm_input_devices.cc" &&
+  ! grep -q 'const auto taken = devices_.find(number);'     <(sed -n '/^bool DrmTakenDevices::Resume/,/^}/p' "$DOMICILE/drm_input_devices.cc"); then
+  ok "a resume is answered from the names rather than from the held table"
+else
+  fail "a resume is answered from the names rather than from the held table"     "Resume consults devices_, so a resume arriving between a GiveBack and its TakeDevice throws a live descriptor away"
+fi
+
+if grep -q 'names_.erase(number)'   <(sed -n '/kPauseTypeGone/,/kNothingToSay;/p' "$DOMICILE/drm_input_devices.cc"); then
+  ok "a device whose node is gone is forgotten by name too"
+else
+  fail "a device whose node is gone is forgotten by name too"     "a resume for an unplugged device would be answered with a path that is not there any more"
+fi
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

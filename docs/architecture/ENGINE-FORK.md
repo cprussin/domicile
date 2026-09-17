@@ -34,7 +34,7 @@ layout.
 
 **The embedder allocates, the producer adopts.** This is not our invention —
 it is what `RemoteFrame` does for every OOPIF today
-(`third_party/blink/renderer/core/frame/remote_frame.cc:1004`):
+(`third_party/blink/renderer/core/frame/remote_frame.cc:1003`):
 
 ```cpp
 viz::SurfaceId surface_id(frame_sink_id_,
@@ -63,10 +63,12 @@ allocation group does not match its submitter. The browser's remaining job is
 narrow: allocate Domicile a `FrameSinkId`, register the frame-sink hierarchy so
 `BeginFrame`s flow, and carry the id between the two.
 
-And the embedding itself, whole, from `child_frame_compositing_helper.cc:60`:
+And the embedding itself, from
+`third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc:60`:
 
 ```cpp
 surface_layer_ = cc::SurfaceLayer::Create();
+// … SetMasksToBounds, SetSurfaceHitTestable, SetBackgroundColor …
 surface_layer_->SetSurfaceId(surface_id, cc::DeadlinePolicy::UseDefaultDeadline());
 child_frame_compositor_->SetCcLayer(surface_layer_, /*is_surface_layer=*/true);
 ```
@@ -167,8 +169,8 @@ Two constraints on the transport, neither of them documented upstream:
 
 Not killed. **Registering the frame sink and registering the hierarchy do
 different jobs, and neither of them is what draws the surface.** Each of the
-embedder's three jobs was switched off in turn
-(`--domicile-spike-skip-hierarchy`, `--domicile-spike-skip-surface-layer`):
+embedder's three jobs was switched off in turn, on the spike as it stood; the
+switches are gone and the finding is what is left:
 
 | | | |
 |---|---|---|
@@ -213,7 +215,7 @@ The proof is the same pixel as step 2, read through the page instead of the
 browser's window:
 
 ```
-$ ... scripts/spike.sh /build/chromium/src -- --color=FF00C853
+$ ... packages/domicile-engine/scripts/spike.sh /build/chromium/src -- --color=FF00C853
 brokered frame sink: FrameSinkId(0, 2)
 waiting for a page to embed it...
 a page embedded us: LocalSurfaceId(1, 1, E8F6...) at 1024x681
@@ -280,8 +282,9 @@ function. The cost is one more edited file, and it is not a spike's to pay.
 Nothing it does not do to a `<div>`. Each property is applied to an `<app>` and
 to an ordinary element laid out identically beside it, so the question is
 whether one half of a cell is a pixel-for-pixel copy of the other half —
-a comparison rather than a judgment. `scripts/guard-css-and-resize.sh`, 53,200 pixels
-per cell, and the same numbers to the pixel on every run:
+a comparison rather than a judgment.
+`packages/domicile-engine/scripts/guard-css-and-resize.sh`, 53,200 pixels per
+cell, and the same numbers to the pixel on every run:
 
 | | differing | interior | worst Δ | |
 |---|---|---|---|---|
@@ -311,8 +314,8 @@ changed, **every cell is 0** — `transform` included, and resize with it:
 
 So an `<app>` is not "a `<div>` up to a one-pixel outline"; it is a `<div>`.
 The outline was two software raster passes disagreeing in the last bit, and it
-is gone on the hardware a user would have. `GPU=1 scripts/guard-css-and-resize.sh` is
-that run.
+is gone on the hardware a user would have.
+`GPU=1 packages/domicile-engine/scripts/guard-css-and-resize.sh` is that run.
 
 **Both tables were re-taken through the native `<app>`, and not one number
 moved.** Every figure above was first measured through
@@ -359,7 +362,8 @@ producer never submits, so a diff that cannot see a difference fails there.
 differs from a `<div>` only the way any surface-backed element does, an OOPIF
 included — was read off `child_frame_compositing_helper.cc` and never measured.
 Measured, on the GPU, under the same `transform`, with a cross-site `<iframe>`
-in a renderer of its own (`scripts/spike-iframe.sh`, 7 renderer processes at
+in a renderer of its own
+(`packages/domicile-engine/scripts/spike-iframe.sh`, 7 renderer processes at
 peak):
 
 | | differ | interior | worst Δ | |
@@ -400,11 +404,12 @@ available after the fact: on an attached layer in layer-list mode it fails
 `DCHECK(!IsAttached() || !IsUsingLayerLists())`, which is a renderer crash
 rather than a difference in a pixel.
 
-### What it costs
+### What the producer's half costs
 
-
-
-One display frame — which is what it costs to ask the question at all.
+One display frame — which is what it costs to ask the question at all. This is
+the producer's half, from a submit to the display compositor's output. What a
+user waits for is longer and is measured separately, by `guard-latency.sh`; see
+*Keystroke to pixel* below.
 
 The producer changes the color it is submitting and then polls the browser for
 the pixel where the page put the `<app>`, until that pixel is the new color.
@@ -446,15 +451,47 @@ what says so is the two columns moving as one, not either of them landing on
 16.67 ms. A future reading of 2.0 here is the machine, and the way to tell is
 whether the control moved with it.
 
-**This is not latency parity with a plain Wayland compositor, and it cannot be
-measured on `crux`.** There is no display server, no GPU and no compositor to
-compare against — `--ozone-platform=headless` and `--disable-gpu` are why the
-spike runs at all. What the number does establish is the thing the design
-claims structurally: no readback, no socket, no extra composite, no frame held
-for a stage of its own. What it does not touch is presentation: everything here
-is measured out of a `CopyOutputRequest` that forces the draw it then reads,
-which is the only way to see what the display compositor drew and is itself the
-16.67 ms.
+**What this is not is latency parity with a plain Wayland compositor.** There
+is no Wayland compositor here to compare against. What the number does
+establish is the thing the design claims structurally: no readback, no socket,
+no extra composite, no frame held for a stage of its own. What it does not
+touch is presentation: everything here is measured out of a
+`CopyOutputRequest` that forces the draw it then reads, which is the only way
+to see what the display compositor drew and is itself the 16.67 ms.
+
+### Keystroke to pixel
+
+**Measured, on `crux`, and it is 1.7 display frames.** The section above times
+the producer's half from inside the browser.
+`packages/domicile-engine/scripts/guard-latency.sh` times the whole of what a
+user waits for — a key into a client's seat, the client drawing, the pixel
+arriving on the page — from outside it, with a real Wayland client under
+`under-wayland.sh`. Four CI runs:
+
+| | commit to pixel | frame | ratio |
+|---|---|---|---|
+| run 1 | 29.18 ms | 48.71 ms (floor sample) | 0.60 |
+| run 2 | 27.99 ms | 16.67 ms | 1.70 |
+| run 3 | 28.18 ms | 16.67 ms | 1.69 |
+| run 4 | 28.24 ms | 16.67 ms | 1.71 |
+
+`commit to pixel` moves by four percent across all four. The guard's bar is a
+count of display frames — `MOST_FRAMES=2`, where a stage of its own is one more
+frame — and never a millisecond figure, because a millisecond threshold is a
+threshold on whatever else the runner was doing. Run 1 is why the denominator
+is the run's own reported frame rather than the sampled floor: a floor of
+48.71 ms is not merely noisy but impossible, since `commit to pixel` is
+quantized to probe round trips and that run's was 29.18. `guard-latency.sh`'s
+header carries the whole argument.
+
+**Two instruments agree on the frame.** In the same CI job as run 4,
+`css_parity.cc` — which runs inside the browser and can ask viz — reported a
+`BeginFrameArgs` interval of 16.67 ms and a probe round trip with a median of
+16.75 ms, against the 16.67 ms this compositor advertises.
+
+**What is still not measured is presentation.** These runs are in a nested
+compositor with nothing on a screen, and the probe's own round trip is inside
+every figure.
 
 ### Rust: the bindings exist, the crate is not the seam
 
@@ -484,7 +521,7 @@ a cargo build, for three reasons, measured in that order:
    `//services/viz/public/mojom` means turning it on for every mojom it imports,
    transitively: **24 mojom targets across 14 `BUILD.gn` files Chromium owns**,
    plus one `visibility` list to widen. Against a design whose whole carrying
-   argument is how few Chromium-owned files it edits — 21 across the series —
+   argument is how few Chromium-owned files it edits — 21 for this design —
    that is the number that matters.
 2. **The generator does not yet survive the viz graph.** With all 24 enabled,
    GN resolves and 50 crates build, then `media/mojo/mojom:media_types` fails
@@ -520,20 +557,15 @@ known and it is a build-system cost, not a language one.
 | Brokering a `FrameSinkId` and sink to a non-renderer process | `components/domicile/`, modeled on `content/browser/renderer_host/embedded_frame_sink_provider_impl.cc` | **done** — new files + 4 lines across two `BUILD.gn`. Not `render_process_host_impl_receiver_bindings.cc` as first guessed: nothing about it hangs off a `RenderProcessHost` |
 | Getting the producer to the broker | `mojo::NamedPlatformChannel` + a real invitation | **done** — see *How the producer reaches the broker*. One edited file: the socket opens at browser startup, because a shell's page cannot embed until a window exists and no window exists until a producer has connected over it |
 | Pushing the `SurfaceId` to the page | `components/domicile/mojom/external_surface.mojom`, modeled on the `RemoteFrame` path | **done** — new files, plus one binder line in `render_process_host_impl_receiver_bindings.cc` |
-| An element that embeds it | `HTMLCanvasElement`, which already owns a `SurfaceLayerBridge` and a `cc::SurfaceLayer` for `transferControlToOffscreen` | **done** — `canvas.embedExternalSurface()`, 2 files + IDL as guessed, plus the feature entry and one `BUILD.gn` |
+| An element that embeds it | `HTMLAppElement`, patch `0007`, with `LayoutAppSurface` reporting its box and `ExternalSurfaceEmbedder` resolving the `SurfaceId` | **done** — `<app app-id="…">`. `HTMLCanvasElement::embedExternalSurface()` came first and is still in the series (patch `0002`), because the spike's pages measure through it |
 
 ## Why this meets the requirements
 
 | Requirement | How |
 |---|---|
-| **Latency parity** | The client's dmabuf becomes a `SharedImage` and rides in a texture quad. Viz aggregates it into the display frame — the same single composite any Wayland compositor does — and its `OverlayProcessor` can promote the quad to direct scanout. No readback, no socket, no `putImageData`. **Measured** as far as `crux` allows: one display frame, indistinguishable from the probe's own floor. See *What it costs* |
+| **Latency parity** | The client's dmabuf becomes a `SharedImage` and rides in a texture quad. Viz aggregates it into the display frame — the same single composite any Wayland compositor does. No readback, no socket, no `putImageData`. **Measured** twice: the producer's half at one display frame, indistinguishable from the probe's own floor, and keystroke to pixel at 1.7 frames against a bar of 2. Viz's `OverlayProcessor` could take the quad further, to direct scanout, but nothing has run with a display to try it. See *What the producer's half costs* and *Keystroke to pixel* |
 | **CSS parity** | The window is a `cc::Layer`. Whatever CSS works on a hardware-composited `<video>` works, because it is the same layer type through the same property trees. This is the requirement's own wording — "just like a `<webview>` or `<iframe>` or `<video>`" — met by using literally that mechanism. **Measured on a GPU through the fork's own tag: seven properties, every one bit-exact against an ordinary element**, and an `<app>` is closer to a `<div>` than an out-of-process `<iframe>` is. See *What CSS does to an `<app>`* and *Whether an `<app>` is an out-of-process `<iframe>`* |
-| **Shell simplicity** | `<app>` is a tag the fork defines, and a shell writes it. It began as a custom element wrapping a `<canvas>` — the SDK's `<domicile-app>` — and that wrapper is gone: patch 0007's `HTMLAppElement` owns the embed, so a shell writes `<app app-id="…">` and the SDK supplies the tag-name map rather than a class |
-
-The third row moved twice. The shell-side API barely changed when the frame
-plumbing went; it changed again when the tag became the engine's, and that
-second move DELETED the SDK's element rather than rewriting it. What a shell
-writes is now a tag, not a component.
+| **Shell simplicity** | `<app>` is a tag the fork defines, and a shell writes it. Patch `0007`'s `HTMLAppElement` owns the embed, so a shell writes `<app app-id="…">` and the SDK supplies the tag-name map rather than a class. What a shell writes is a tag, not a component |
 
 ## Key decisions
 
@@ -548,16 +580,18 @@ writes is now a tag, not a component.
   and there is a single `static_library("exo")` target, so there is no core to
   lift. What we want from it is `buffer.cc`, whose only ChromeOS dependency is
   two calls to `aura::Env::GetInstance()->context_factory()`.
-- **Reuse `<canvas>`'s layer rather than adding an element.** A new HTML element
-  costs edits to `html_tag_names.json5`, `runtime_enabled_features.json5` and
-  the element factory — generated lists that rebase noisily every release.
-  `HTMLCanvasElement` already creates a `cc::SurfaceLayer` and already handles
-  its sizing, opacity and attachment; one method points it at a
-  browser-brokered `SurfaceId` instead of an OffscreenCanvas placeholder.
+- **`<app>` is a real element, and that decision was taken twice.** Reusing
+  `HTMLCanvasElement`'s layer came first, to stay out of `html_tag_names.json5`,
+  `runtime_enabled_features.json5` and the element factory — generated lists
+  that rebase noisily every release. Patch `0007` reversed it and paid the
+  eleven edited files below. What it bought is a tag a shell author writes,
+  with `app-id` reflection and default styling, rather than a canvas with a
+  method on it. The method is still there, in patch `0002`, because the spike's
+  measurement pages go through it.
 - **Minimize edited files, not added ones.** A fork's carrying cost is conflicts,
-  and new files do not conflict. "Roughly four places" was the estimate before
-  the page half existed. Measured across the whole series it is **21 files, 15
-  of them Blink's** — and where the other eleven went is the story:
+  and new files do not conflict. Counted over patches `0001`–`0007`, which are
+  this design and nothing else, it is **21 files, 15 of them Blink's** — and
+  where the other eleven went is the story:
 
   | | |
   |---|---|
@@ -574,13 +608,25 @@ writes is now a tag, not a component.
   `runtime_enabled_features.json5`, the two `json5` name lists, the `.gni`
   bindings lists and the `BUILD.gn` source lists.
 
-  The last row is a decision reversed, and it should be read as one. Reusing
-  `HTMLCanvasElement` was chosen to keep out of exactly those lists — "one entry
-  in one generated list instead of three" — and defining the elements properly
-  cost eleven more edited files. It bought `<app>` and `<webview>` as tags a
-  shell author writes rather than a canvas with a method on it, plus the
-  `app-id` reflection and the default styling that go with being an element. The
-  carrying cost is real and was paid deliberately.
+  The last row is the reversal in the bullet above, priced. Eleven files is
+  what defining `<app>` and `<webview>` properly cost, and it was paid
+  deliberately.
+
+  **The whole series is bigger than this design, and the split is worth
+  keeping.** At `0024` it edits **78 files, 23 of them Blink's**:
+
+  | patches | edited | Blink's | |
+  |---|---|---|---|
+  | `0001`–`0007` | 21 | 15 | this design |
+  | `0008`–`0009` | 15 | 6 | `domicile://` and the control channel |
+  | `0010`–`0011` | 6 | 4 | `<webview>` and its guest |
+  | `0012`–`0024` | 42 | 0 | Ozone/DRM — `A-DESKTOP-ON-A-TTY.md` |
+
+  Nothing in the last row touches Blink, and nothing in the first four rows
+  overlaps much: the tty work is a port of an embedder into
+  `ui/ozone/platform/drm`, not more of this. Re-count it with
+  `git format-patch`'s own headers rather than trusting this table after a
+  rebase.
 
 ## Getting started
 
@@ -639,51 +685,41 @@ gn gen out/Domicile --args='
   ozone_auto_platforms = false
   ozone_platform_wayland = true
   ozone_platform_headless = true
+  ozone_platform_drm = true
 '
 autoninja -C out/Domicile chrome
 ./out/Domicile/chrome --ozone-platform=wayland
 ```
 
-**Phase 3 is not a build argument, and this is measured rather than assumed.**
-Setting `ozone_platform_drm = true` on this pin fails at configure time:
-
-```
-ERROR at //ui/ozone/platform/drm/BUILD.gn:14:1: Assertion failed.
-assert(is_chromeos, "Ozone DRM platform is ChromeOS-only")
-See //ui/ozone/BUILD.gn:45:28: which caused the file to be included.
-  ozone_platform_deps += [ "platform/drm:gbm" ]
-```
-
-(run 34152521286). `//ui/ozone` makes `platform/drm:gbm` a dependency the
-moment the argument is true, so gn loads that file and evaluates the assert
-before anything is compiled. There is no companion argument that satisfies it;
-`is_chromeos` is `current_os == "chromeos"`, which is a different product.
-
-So a tty needs one of two things, and both are their own piece of work: a patch
-in the series that makes the DRM platform build on Linux — which is what a fork
-is for, and the series already carries five — or a `target_os = "chromeos"`
-build, which brings a great deal else with it.
-
-Until then the build is `wayland` and `headless`, and a desktop is a window
-inside an existing session. `--ozone-platform` still chooses at runtime between
-what is built.
+**`ozone_platform_drm = true` is a patch, and it is in the series.** At this
+pin `ui/ozone/platform/drm/BUILD.gn:14` opens with `assert(is_chromeos, "Ozone
+DRM platform is ChromeOS-only")`, and `ui/ozone/BUILD.gn:45` makes
+`platform/drm:gbm` a dependency of `//ui/ozone` the moment the argument is
+true, so `gn gen` refused before anything was compiled. Patch `0012` relaxed
+that assert; `0013` and `0016` put an embedder behind the platform, because a
+platform with no embedder turns a clear refusal into a crash. Adding a platform
+does not change the default one — `ozone_platform` is unset, so
+`//ui/ozone/BUILD.gn`'s own order stands and headless is still first.
+`docs/architecture/A-DESKTOP-ON-A-TTY.md` is that work; this doc stops at the
+argument.
 
 **A failed `gn gen` wedges the tree it failed in.** The argument is written to
-`args.gn` before the assert fires, and ninja re-runs gn on every build, so
+`args.gn` before an assert fires, and ninja re-runs gn on every build, so
 every later build in that output directory fails with `rebuild manifest
 failed` — on `crux`, which keeps one warm tree for every branch, that is every
-engine run until the arguments are written again. `scripts/build.sh` passes
-`--args` unconditionally now, which is both what makes an edit to it take
-effect and what repairs a tree somebody else's failure left behind.
+engine run until the arguments are written again.
+`packages/domicile-engine/scripts/build.sh` passes `--args` unconditionally
+now, which is both what makes an edit to it take effect and what repairs a tree
+somebody else's failure left behind.
 
 `ozone_platform_headless` is not part of the design — it is what the
 measurement machine needs. `crux` has no display server and no Wayland
 compositor, so with Wayland alone the engine cannot be started at all and step
 2 has nothing to talk to. Two other flags are load-bearing for the same reason
-and are documented in `scripts/spike.sh`: `--disable-gpu`, which is half of why
-step 2 submits solid colors rather than textures, and `--password-store=basic`,
-without which Chrome blocks on a keyring that is not there and never creates a
-window.
+and are documented in `packages/domicile-engine/scripts/spike.sh`:
+`--disable-gpu`, which is half of why step 2 submits solid colors rather than
+textures, and `--password-store=basic`, without which Chrome blocks on a
+keyring that is not there and never creates a window.
 
 **The spike**, each step naming what would kill it:
 
@@ -698,7 +734,7 @@ window.
       it takes to get a surface on the screen*, which also separates what
       hierarchy registration does (BeginFrames) from what embedding does
       (aggregation). `components/domicile/spike/` in the series, run with
-      `scripts/spike.sh`
+      `packages/domicile-engine/scripts/spike.sh`
 - [x] `canvas.embedExternalSurface()`, calling `SurfaceLayer::SetSurfaceId`
       with the brokered id — **not killed**. The
       canvas does not refuse a surface it did not allocate, and neither does
@@ -711,9 +747,10 @@ window.
       and the latency — **passed**, every property bit-exact on the GPU, and a
       submitted frame reaching the display compositor's output in one display
       frame. Taken through the canvas, **re-taken through the native `<app>`
-      with no number moving**. See *What CSS does to an `<app>`* and *What it
-      costs*. `components/domicile/spike/css_parity.cc` in the series, run with
-      `scripts/guard-css-and-resize.sh`
+      with no number moving**. See *What CSS does to an `<app>`* and *What the
+      producer's half costs*. `components/domicile/spike/css_parity.cc` in the
+      series, run with
+      `packages/domicile-engine/scripts/guard-css-and-resize.sh`
 
 The last one was the whole point. The three before it were plumbing that either
 worked or named its own blocker. **Nothing was deleted from Domicile until the
@@ -747,16 +784,21 @@ the loop the compositor already runs.
 
 | C ABI | Wayland concept it already implements |
 |---|---|
-| `domicile_surface_create(engine, app_id)` → `FrameSinkId` | a window appearing — the browser holds the page's `embedExternalSurface()` until this is called |
-| `domicile_surface_import(surface, dmabuf)` → `BufferId` | `zwp_linux_dmabuf_v1` — the fds the client already sent |
-| `domicile_surface_submit(surface, buffer, damage)` | `wl_surface.commit` |
-| `released(buffer_id)` | **`wl_buffer.release`** — viz returning a `TransferableResource` is exactly the client's cue to reuse |
-| `frame(deadline_us)` | **`wl_surface.frame`** — a viz `BeginFrame` is the callback the client is waiting on |
-| `configure(width, height)` | **`xdg_toplevel.configure`** — the page bumped `parent_sequence_number` because its layout box changed |
+| `domicile_surface_create(engine, app_id)` → `DomicileSurfaceId` | a window appearing — the browser holds the page's embed until this is called |
+| `domicile_surface_import(surface, dmabuf)` → `DomicileBufferId` | `zwp_linux_dmabuf_v1` — the fds the client already sent |
+| `domicile_surface_submit(surface, buffer, damage)` | `wl_surface.commit` — an empty rectangle means the whole surface |
+| `released(surface, buffer)` | **`wl_buffer.release`** — viz returning a `TransferableResource` is exactly the client's cue to reuse |
+| `frame(surface, deadline_us)` | **`wl_surface.frame`** — a viz `BeginFrame` is the callback the client is waiting on |
+| `configure(surface, width, height)` | **`xdg_toplevel.configure`** — the page bumped `parent_sequence_number` because its layout box changed |
+| `displays(displays, count)` | **`wl_output`** — the whole list, primary first, and never empty |
+
+`domicile_engine.h` is the whole ABI; the lifetime calls
+(`domicile_engine_connect` / `_destroy`, `domicile_surface_destroy`,
+`domicile_buffer_destroy`) are there too and map onto nothing in particular.
 
 **The right column is why this is small.** The ABI is not a new protocol to
 design and then teach the compositor; it is a translation table between viz and
-five Wayland requests `domicile-compositor` already speaks. Every callback has
+Wayland requests `domicile-compositor` already speaks. Every callback has
 somewhere obvious to go, and the release path in particular is not a detail:
 without it the compositor would reuse a dmabuf viz is still sampling, which is
 a tear rather than an error.
@@ -779,8 +821,9 @@ first thing phase 1 did was check the machine rather than the assumption:
 a GPU.** ANGLE dlopens `libEGL.so.1`, which is glvnd's, and Chromium's own
 toolchain shell does not carry it; NixOS keeps the vendor libraries in
 `/run/opengl-driver/lib` and the dispatch library somewhere else again.
-`GPU=1 scripts/spike.sh` sets that path, and everything downstream of it — the
-whole of step 4, and the iframe cell — runs on the hardware.
+`GPU=1 packages/domicile-engine/scripts/spike.sh` sets that path, and
+everything downstream of it — the whole of step 4, and the iframe cell — runs
+on the hardware.
 
 That matters beyond convenience: **step 4's one imperfect cell was an artifact
 of software rasterization**, and on the GPU there is no imperfect cell.
@@ -791,7 +834,7 @@ The platform is no longer the blocker. The producer is.
 
 **`exo::Buffer` is browser-process code.** It reaches its `SharedImageInterface`
 through `aura::Env::GetInstance()->context_factory()`
-(`components/exo/buffer.cc:95`), and `aura::Env` exists only in the browser.
+(`components/exo/buffer.cc:97`), and `aura::Env` exists only in the browser.
 `libdomicile_engine.so` runs in a process the browser did not launch: it holds a
 `FrameSinkBroker` pipe and a `CompositorFrameSink`, and **nothing that can make
 a `SharedImage`**. A `CompositorFrame` cannot carry a raw dmabuf fd — a
@@ -803,7 +846,7 @@ mention. Two ways, and this is a design decision rather than a detail:
 
 | | | |
 |---|---|---|
-| **broker the channel** | the browser gives the producer a `viz.mojom.Gpu` — `viz::GpuClient` is exactly this, and is what a renderer gets (`render_process_host_impl_receiver_bindings.cc:256`) — and the producer creates its own `SharedImage`s | zero extra hops; hands an external process unrestricted GPU authority, and pulls the whole `gpu::` client stack into the library |
+| **broker the channel** | the browser gives the producer a `viz.mojom.Gpu` — `viz::GpuClient` is exactly this, and is what a renderer gets (`render_process_host_impl_receiver_bindings.cc:247`) — and the producer creates its own `SharedImage`s | zero extra hops; hands an external process unrestricted GPU authority, and pulls the whole `gpu::` client stack into the library |
 | **broker the import** | the producer sends the dmabuf over the socket it already has; the browser does what `exo::Buffer` does and returns a mailbox and sync token | GPU authority stays in the browser, the port lands in `components/domicile/browser/` beside the broker, and the library keeps its small dependency set. One extra hop per *buffer*, not per frame — buffers are imported once and reused, which is what `released` exists to make safe |
 
 **Settled: broker the import.** The cost is paid once per buffer rather than
@@ -815,7 +858,7 @@ and it puts the `exo::Buffer` port in the process that already has everything
 
 Two things settle it beyond the recommendation. `exo::Buffer` takes its
 `SharedImageInterface` from `aura::Env::GetInstance()->context_factory()`
-(`components/exo/buffer.cc:95`), so brokering the import ports it *into the
+(`components/exo/buffer.cc:97`), so brokering the import ports it *into the
 environment it was written for* rather than adapting it to a new one — strictly
 less work and less risk. And `released` already exists, so the per-buffer hop is
 amortized by a mechanism that is built rather than hoped for.
@@ -862,37 +905,11 @@ types for a supported handoff is not the same as taking a command buffer, and
 what it buys is a hop off the path of the one requirement that cannot be
 traded.
 
-So `domicile-compositor` submits its own frames, and the browser-owned sink
-stays only as the shape a producer gets by passing no receiver to
-`CreateFrameSink`. What follows was true while that was the only path:
-
-**The browser can own the `CompositorFrameSink` too.** If the producer never sees a mailbox
-then it cannot assemble the `CompositorFrame` either, so `domicile_surface_submit`
-names a `BufferId` and the browser builds the frame around the matching
-`TransferableResource`. That makes the per-frame path go through the browser,
-where the table above says only the import would. A producer that submits its
-own frames — the spike's solid-color ones — still talks to viz directly, and
-`CreateFrameSink` takes a null client and receiver to ask for the other shape.
-That is no longer the path the design takes — see *Whether the producer can
-submit its own frames*, directly above — and it is kept because it is what a
-producer with no GPU types at all would use.
-
-**The premise of that consequence should be tested before it hardens.** "If the
-producer never sees a mailbox" is the load-bearing clause, and the decision this
-sits under says the browser returns *a mailbox and sync token*. A
-`gpu::SyncToken` is a POD of four fields — `verified_flush_`, `namespace_id_`,
-`command_buffer_id_`, `release_count_` (`gpu/command_buffer/common/sync_token.h:101`)
-— so once the browser has verified one it is bytes, and a producer can carry it
-in a `TransferableResource` without a GPU channel of its own. If viz accepts a
-resource whose `SharedImage` a different client created, the producer can build
-and submit its own frames: the per-buffer hop stays, the per-frame hop goes, and
-no GPU authority moves.
-
-That is worth an experiment rather than an assumption, because requirement 1 is
-the one that cannot be traded and this hop is on its path. The copy path it
-would once have been compared against is gone, so the comparison is now against
-the latency guard's own floor — which is what makes that guard a prerequisite
-for answering this rather than a separate errand.
+So `domicile-compositor` submits its own frames. The browser-owned sink is
+still reachable — a producer that passes no client and no receiver to
+`CreateFrameSink` gets one, and the browser assembles its frames around the
+`BufferId`s it named — and it stays for a producer with no GPU types at all.
+Nothing in this design takes it.
 
 ### A client's window on the page
 
@@ -904,8 +921,8 @@ display compositor:
 
 ```
 $ nix develop .#full --command \
-    scripts/under-wayland.sh /build/chromium/src \
-    scripts/guard-client-window.sh /build/chromium/src
+    packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
+    packages/domicile-engine/scripts/guard-client-window.sh /build/chromium/src
 the engine is listening on /tmp/domicile-client-window-broker
 driving kitty, drawing #3366CC
 the engine drew #FF3366CC; the client drew #3366CC
@@ -931,7 +948,8 @@ and refuses a format it cannot name rather than guessing.
 
 ### What the port measures
 
-`scripts/spike-dmabuf.sh`, under `under-wayland.sh` because nothing else can:
+`packages/domicile-engine/scripts/spike-dmabuf.sh`, under `under-wayland.sh`
+because nothing else can:
 
 ```
 allocated two 992x639 dmabufs as rendering, 1 plane(s), modifier 0x300000000cdb014
@@ -1005,8 +1023,9 @@ already in phase 3:
   NVIDIA proprietary driver plus dmabuf import is the least traveled of the
   three.
 
-**Measured, and the answer is yes.** `scripts/under-wayland.sh` nests the
-engine in a headless wlroots compositor and runs any other check under
+**Measured, and the answer is yes.**
+`packages/domicile-engine/scripts/under-wayland.sh` nests the engine in a
+headless wlroots compositor and runs any other check under
 `--ozone-platform=wayland` on the GPU. Every gate in
 `WaylandBufferManagerGpu::GetGbmDevice()` is satisfied on `crux`:
 
@@ -1028,15 +1047,16 @@ unless the *host* supports dmabuf, so under weston the device is never created
 however capable the GPU is. A wlroots headless backend advertises it, because
 it builds a renderer on the render node whether or not anything is on screen.
 
-### The open part
-
-
+### One engine, N surfaces
 
 One `DomicileEngine` and N surfaces, not one engine per app: one socket to the
-browser is one authority to hold. The "one surface per document" question that
-used to be attached to this is settled and was never the chrome protocol's —
-the renderer keeps one `LocalSurfaceId` per app id, because viz will not let it
-do otherwise. See *Open questions*.
+browser is one authority to hold. Which surface an `<app>` shows is settled by
+app id and not by document — the renderer holds one `LocalSurfaceId` allocator
+per app id, so several elements naming one app show one producer and elements
+naming different apps get different surfaces. Viz refuses two frame sinks under
+one embed token outright, so there was never a choice.
+`third_party/blink/renderer/platform/graphics/external_surface_embedder.h`
+carries the reasoning next to the code.
 
 ## Plan
 
@@ -1044,8 +1064,8 @@ Phase 1 — real pixels. **Done.** `libdomicile_engine.so` behind the C ABI
 above, the brokered frame sink, the dmabuf import ported from `exo::Buffer`,
 `released` → `wl_buffer.release`, and the compositor submitting a client's
 buffer. `components/domicile/` in the series is the engine half and the
-`scripts/spike-*.sh` are its assertions; *A client's window on the page* is
-what it does at run time.
+`packages/domicile-engine/scripts/spike-*.sh` are its assertions; *A client's
+window on the page* is what it does at run time.
 
 The compositor **`dlopen`s** that library rather than linking it, so `cargo
 build` does not need a Chromium checkout — CI has none and cannot get one. It
@@ -1060,15 +1080,13 @@ copy path before the compositor can submit leaves nothing drawing at all.
 - [x] the copy path, `AppFrame`, the hand-over pass, the over-window pass and
       the measure loop's frame half — 5,238 lines
 - [x] bands, and the readback that labeled them
-- [x] `<domicile-app>` embeds a surface: the element creates a canvas and calls
-      `canvas.embedExternalSurface(appId)`. **The app id is the change under
-      it** — a broker that hands every embedder the sink it made most recently
-      is right for one window and silently wrong for two
+- [x] **one surface per app id.** A broker that hands every embedder the sink
+      it made most recently is right for one window and silently wrong for two,
+      so the embed is keyed on the app id the page names
 - [x] **a real client's window shown through the native `<app>`.**
       `guard-shell.sh` on `crux`, with both shells: `engine found #FF19B36B
-      over (0,63) 640x473 of the browser's 1600x1200 window`. The line above is
-      the canvas path and the SDK no longer takes it — the shells write the
-      fork's own tag, so the embed runs through `HTMLAppElement::Embed`.
+      over (0,63) 640x473 of the browser's 1600x1200 window`. The shells write
+      the fork's own tag, so the embed runs through `HTMLAppElement::Embed`.
 
       **It took a fix to get there, and the fix was one line per element.**
       Neither `HTMLAppElement` nor `HTMLWebViewElement` overrode
@@ -1079,7 +1097,9 @@ copy path before the compositor can submit leaves nothing drawing at all.
       never called, and `Embed()` returned at its empty-size guard on every
       layout. Everything a page can see was right: the element parsed, took a
       box at the right size, and reflected `app-id`. Nothing in any log said
-      otherwise, because nothing had failed
+      otherwise, because nothing had failed.
+      `scripts/test-fork-elements-know-their-type.sh` is what stops the next
+      element from shipping the same way
 - [x] **the parity table re-taken through that tag.** The line above closed the
       element; this closes the evidence, which was the same gap one level up.
       `spike-css-page.html` and `spike-resize-page.html` write
@@ -1113,123 +1133,90 @@ copy path before the compositor can submit leaves nothing drawing at all.
       plausible hop, which is how the deleted instrument printed `ipc_ms=0`
       every interval. The SDK's window for it is still gone; rebuilding an
       instrument is the item below, and this is the number it was missing.
-- [ ] **rebuild the latency measurement** in the compositor. It is the one
-      process that both puts the key into the client's seat and holds the
-      engine connection that knows when viz presented; a page can see the
-      first and a producer the second. **Written and unit-tested (#206);
-      it has never run on hardware** — every engine run so far has been
-      refused at the `crux` tree lock. The box closes on a number, not on
-      the guard existing.
+- [x] **rebuild the latency measurement** in the compositor (#206). It is the
+      one process that both puts the key into the client's seat and holds the
+      engine connection that knows when viz presented; a page can see the first
+      and a producer the second. `latency.rs` is the compositor half and
+      `guard-latency.sh` drives it. **The box closed on a number**: 28–29 ms
+      commit to pixel against a 16.67 ms display frame, 1.7 frames, on every
+      run there has been. See *Keystroke to pixel*. What is left is presentation
+      on a screen, which is phase 3's.
 
 Phase 3 — be the display server:
 
-- [ ] Ozone/DRM instead of a nested backend
+- [x] **Ozone/DRM instead of a nested backend.** `ozone_platform_drm = true` is
+      in the build, a connector modesets, and the desktop draws on it —
+      `engine-9dd6e30` is the release that first did, and #379 is the patch
+      that made it happen at startup rather than after a console switch. That
+      work is `docs/architecture/A-DESKTOP-ON-A-TTY.md`, patches `0012`–`0024`,
+      and it is where what remains of it is tracked — not here.
+- [ ] **presentation, measured.** Everything in this doc reads pixels back out
+      of a `CopyOutputRequest`. Nothing yet reads a lit CRTC, so overlay
+      promotion, damage and the presentation half of latency are all still
+      unmeasured.
 
-## The page was served over a TCP port, and it is not any more
+## `domicile://` serves the shell, and no port is open
 
-**Found by a user asking why the bridge binds an HTTP port at all**, and it was
-the fork's work rather than the bridge's. **Done** — patches 0008 and 0009,
-and `engine-chrome-host` is deleted. What follows is the record of why.
+A shell is a page inside our Chromium, and its JavaScript needs an origin:
+`file:` has none — no WebSocket, restricted `fetch` — and JavaScript cannot
+open a unix socket. The answer is a scheme, not a server. Patches `0008` and
+`0009`.
 
-A shell is a page inside our Chromium. For the engine to load it, and for the
-page's JavaScript to open a channel to the compositor, it needs a URL with a
-real origin: `file:` has no origin — no WebSocket, restricted `fetch` — and
-JavaScript cannot open a unix socket. So `engine-chrome-host` served both from
-`http://127.0.0.1:<kernel-chosen>`, and `connectToHost` derived the socket's URL
-from the page's own.
+**`domicile://shell/` is a standard scheme, deliberately neither web-safe nor
+CORS-enabled**, so it has a real origin and ordinary web content can neither
+navigate to it nor fetch it. `ContentClient::AddAdditionalSchemes` is the
+registry seam. The loader takes two `ContentBrowserClient` hooks that do not
+have the same shape as each other:
 
-That works, and it costs more than it looks.
+- navigation: `CreateNonNetworkNavigationURLLoaderFactory(const std::string&
+  scheme, FrameTreeNodeId)`, which is asked about *one* scheme and returns a
+  single `PendingRemote`.
+- subresources: `RegisterNonNetworkSubresourceURLLoaderFactories`, which takes
+  a map and fills it.
 
-**What is reachable on that port.** The WebSocket at `/domicile-session` is a
-byte pipe to the compositor's control socket, and `ChromeMessage` carries
-`Spawn { command }` — arbitrary commands on the machine running the desktop —
-plus synthetic `Key` and `PointerButton` into any window. Coming back are
-`AppTitled`, `Displays` and `Modifiers`: every window title and every keystroke.
-It is not a page server with a socket beside it. **It is the desktop's control
-plane.**
+`--domicile-shell-root` and `--domicile-shell-module` say what to serve, the
+same shape as `--domicile-broker-socket`.
+
+**The shell's document is written by the fork**, in
+`components/domicile/browser/shell_url_loader_factory.cc`, and it has three
+properties on purpose: a charset, because a page without one is decoded by
+guesswork; a viewport, because without it the engine lays out for a phone; and
+a root with no margin, because *eight pixels of default body margin is eight
+pixels the compositor believes it has and does not*.
+
+**The control channel is a binding, not a socket the page opens.** The engine
+process already holds a unix socket to the compositor —
+`--domicile-control-socket`, beside `--domicile-broker-socket` — and the page
+reaches it through `window.domicile` rather than through a channel of its own.
+Patch `0002` is the precedent for exposing something to the page at all, and
+`0004` for opening a unix socket at browser startup.
+
+### Why there is no port, and why an origin check would not have done
+
+This is the reason not to put a loopback server back the next time something
+needs a page and a channel at once.
+
+The shell used to be served from `http://127.0.0.1:<kernel-chosen>` with a
+WebSocket beside it, and that WebSocket was a byte pipe to the compositor's
+control socket. `ChromeMessage` carries `Spawn { command }` — arbitrary
+commands on the machine running the desktop — plus synthetic `Key` and
+`PointerButton` into any window, and returns `AppTitled`, `Displays` and
+`Modifiers`: every window title and every keystroke. **It was the desktop's
+control plane**, not a page server with a socket beside it.
 
 A WebSocket is not stopped by CORS — the browser sends `Origin` and the server
-has to refuse it — so until an origin check was added, any page in any browser
-on the machine could scan a few thousand ephemeral ports, find this one, and
+has to refuse it — so before an origin check existed, any page in any browser
+on the machine could scan a few thousand ephemeral ports, find this one and
 take the desktop. Measured, against the real `serveShell`: an upgrade carrying
-`Origin: https://evil.example` was accepted and `{"type":"spawn",…}` reached the
-compositor socket unaltered.
+`Origin: https://evil.example` was accepted and `{"type":"spawn",…}` reached
+the compositor socket unaltered. **And the origin check only closed half**: a
+loopback port is reachable by every process on the machine and `curl` forges
+any header in one flag. No header fixes that; not having a port does.
 
-**The origin check is a stopgap and only closes half.** A loopback port is
-reachable by every process on the machine, and `curl` forges any header in one
-flag. No header can fix that. What fixes it is not having a port.
-
-### What replaces it
-
-Two halves, and *both* have to move. Serving the page over a custom scheme
-while the page still opens a WebSocket to a TCP port improves nothing.
-
-1. **`domicile://` serves the shell.** Registered as a *standard* scheme so it
-   has a real origin, and deliberately **not** web-safe and **not**
-   CORS-enabled, so ordinary web content can neither navigate to it nor fetch
-   it. The seams are `ContentClient::AddAdditionalSchemes` for the registry
-   and, for the loader, two `ContentBrowserClient` hooks that **no longer have
-   the same shape as each other**:
-
-   - navigation: `CreateNonNetworkNavigationURLLoaderFactory(const std::string&
-     scheme, FrameTreeNodeId)`, which is asked about *one* scheme and returns a
-     single `PendingRemote`.
-   - subresources: `RegisterNonNetworkSubresourceURLLoaderFactories`, which
-     still takes a map and fills it.
-
-   So the two halves are written differently: one answers a question about a
-   named scheme, the other contributes to a collection. Read at the pinned
-   revision on `crux` — an earlier version of this section named
-   `RegisterNonNetworkNavigationURLLoaderFactories` for the navigation half,
-   which does not exist there.
-
-   The engine already takes the shell's location on its command line in spirit — `--domicile-shell-root` and
-   `--domicile-shell-module` are the same shape as
-   `--domicile-broker-socket`.
-
-   This moves `shellDocument` into the fork. That is a real consequence and not
-   a detail: the document is currently written in TypeScript and tested there,
-   and the C++ that replaces it needs the same three properties — a charset, a
-   viewport, and a root with no margin, because *eight pixels of default body
-   margin is eight pixels the compositor believes it has and does not*.
-
-2. **The control channel becomes a binding, not a socket the page opens.** The
-   engine process *already holds a unix socket to the compositor* —
-   `--domicile-broker-socket`, how client dmabufs are handed over. The
-   WebSocket is a second, parallel channel carrying a different protocol on a
-   different socket, and it exists only because the page's JavaScript cannot
-   reach a socket its own browser process already has.
-
-   Patch 0002 is the precedent: it adds an IDL method to `HTMLCanvasElement`,
-   so exposing something to the page is established practice in this series
-   rather than a new kind of change. Patch 0004 is the other half of the
-   precedent — it opens a unix socket at browser startup for exactly this sort
-   of reason.
-
-Together those deleted `engine-chrome-host`'s HTTP server, the WebSocket, the
-port, and the origin check that guarded it — not by hardening them but by
-leaving nothing to harden, and the package went with them. The only thing left
-to connect to is the compositor's socket under `XDG_RUNTIME_DIR`, which is mode
-700 and the user's.
-
-### Why it waited on a checkout
-
-It is browser-process Chromium C++ against a pinned revision, and the two APIs
-it turns on — the scheme registry and the non-network loader factories — have
-both churned across versions and are used nowhere in this series, so there is
-no local example to follow. Writing it without the Chromium source to hand
-means writing it from memory and finding out four hours later on `crux`.
-
-**Which is what happened to this section.** It named the navigation seam from
-memory, got a function that does not exist at the pin, and said in this very
-paragraph that this was the risk. The signature above is now the one read off
-the tree; treat every other name here as recalled until someone with the
-checkout has confirmed it.
-
-So the prerequisite was not a decision, it was a checkout: a session on a
-machine with the tree. The design above was settled long before the signatures
-were, and the signatures had to be read rather than recalled — which is what a
-session on `crux` finally did.
+So `engine-chrome-host` — the HTTP server, the WebSocket, the port and the
+origin check guarding it — was deleted rather than hardened, and the package
+went with it. The only thing left to connect to is the compositor's socket
+under `XDG_RUNTIME_DIR`, which is mode 700 and the user's.
 
 ## Open questions
 
@@ -1251,16 +1238,16 @@ session on `crux` finally did.
 
   Net of the floor that is ~1m to lay the series down — `gn` regen, the mojom
   generation, three objects, and relinking `libcontent.so` and `chrome` — and
-  ~6s per subsequent edit. The series is additive, so it widens nothing's
-  blast radius: the one dep it adds runs `//content/browser` →
-  `//components/domicile:browser`, and the header behind it is included by
-  exactly one file.
+  ~6s per subsequent edit. **The series has grown since those four figures were
+  taken**, so read them as the shape rather than today's stopwatch. What has
+  not changed is that it is additive and its deps run one way, from Chromium's
+  targets into `//components/domicile:*`.
 
-  **The rebase number is still not measured** — that needs the pin rolled onto
-  a later revision, which has not happened. But it is now clear it will be
-  upstream's number rather than the fork's: whatever a six-week upstream diff
-  costs to rebuild, carrying this adds seconds to it. This repo's CI still will
-  not carry either.
+  **The rebase number is still not measured** — `CHROMIUM_PIN` has not moved
+  since the series was written, so nothing has rebased. But it is now clear it
+  will be upstream's number rather than the fork's: whatever a six-week
+  upstream diff costs to rebuild, carrying this adds seconds to it. This repo's
+  CI still will not carry either.
 - **Nothing invalidates a renderer's token when a producer goes away.** The map
   above is keyed on an app id, and app ids are minted from a counter that
   starts over when the compositor restarts. So a compositor restarting under a

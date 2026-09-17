@@ -3,9 +3,9 @@ import { defineConfig } from "@pandacss/dev";
 
 export default defineConfig({
   exclude: [],
-  // The page is the desktop and nothing in it scrolls: the rail and the stage
-  // divide a screen's height between them, and a window fills the stage. That
-  // has to be said on the elements React does not render.
+  // The page is the desktop and nothing in it scrolls: every window is placed
+  // at a rectangle worked out from the screen it is on. That has to be said on
+  // the elements React does not render.
   //
   // `clip` rather than `hidden`, and on the root rather than the body, because
   // the desktop is not the viewport: it spans every display, so it is wider

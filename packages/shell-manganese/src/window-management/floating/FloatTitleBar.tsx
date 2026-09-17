@@ -1,76 +1,67 @@
-import { Button } from "@domicile/component-library/Button";
-import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
-
-import { css, cx } from "../../../styled-system/css";
-import { hstack } from "../../../styled-system/patterns";
-import type { Floating } from "../window-state";
-import { floatEdgeStyles, floatPlacement } from "../window-styles";
-import { barBox } from "./float";
+import { barOf } from "../rect";
+import { TitleBar } from "../TitleBar";
+import type { Float } from "./float";
+import { rectOf } from "./float";
 import { useFloatDrag } from "./useFloatDrag";
 
 type Props = {
-  floating: Floating;
+  /** How it stacks, which is the depth of the window it names. */
+  depth: number;
+  float: Float;
   /** Whether the user is working in this window, so its bar looks like it. */
   focused: boolean;
-  /** Close the window this bar belongs to — what the X does. */
   onClose: () => void;
   onDrop: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
+  onReach: () => void;
   title: string;
 };
 
 /**
- * A floating window's title bar: what it is called, and the way out of it.
+ * A floating window's title bar: the same bar every window has, and draggable.
  *
- * Page pixels at the depth of the window they name, so the bar of a window
- * behind another is drawn under the window in front — which is what a bar
- * painted over the whole page could not be.
+ * Draggable with no modifier held, for the same reason it is chrome at all:
+ * the pointer over a client's surface belongs to the client, and the pointer
+ * over this belongs to the page. The desktop's modifier is only needed for the
+ * rest of the window. A bar never resizes — the corner a resize is driven from
+ * is the opposite one.
  *
- * Draggable without a modifier, for the same reason it is chrome at all: the
- * pointer over a client's surface belongs to the client, and the pointer over
- * this belongs to the page. Alt is only needed for the rest of the window. A
- * bar never resizes — the corner a resize is driven from is the opposite one.
+ * Its own component rather than a prop on {@link TitleBar} because the drag is
+ * a hook, and a hook cannot be called for some of a list and not the rest: a
+ * tiled window's bar has nowhere to be dragged to, and this is the one that
+ * has the drag.
  */
 export const FloatTitleBar = ({
-  floating,
+  depth,
+  float,
   focused,
   onClose,
+  onDrop,
+  onGrab,
+  onMove,
+  onReach,
   title,
-  ...moves
 }: Props) => {
   const { drag: _drag, ...handlers } = useFloatDrag({
-    float: floating.float,
+    float,
+    onDrop,
+    onGrab,
+    onMove,
     onResize: doesNotResize,
     resizes: false,
-    ...moves,
   });
   return (
-    <div
-      className={cx(barStyles, floatEdgeStyles, focused && focusedStyles)}
-      // The window this bar belongs to, for the reason `FloatGrab` carries the
-      // same attribute: a press on it is a reach for that window, and the SDK
-      // has no other way to know.
-      data-window={floating.float.id}
-      style={floatPlacement(barBox(floating.float), floating.depth)}
+    <TitleBar
+      depth={depth}
+      focused={focused}
+      onClose={onClose}
+      onReach={onReach}
+      rect={barOf(rectOf(float))}
+      title={title}
+      window={float.id}
       {...handlers}
-    >
-      <span className={titleStyles}>{title}</span>
-      {/*
-        The press that closes a window must not also take hold of it: the
-        pointer capture a drag takes retargets everything after the press, and
-        the click that follows would be the bar's rather than the button's.
-      */}
-      <span
-        onPointerDown={(event) => {
-          event.stopPropagation();
-        }}
-      >
-        <Button label="Close" onClick={onClose} size="sm" variant="ghost">
-          <XIcon size={14} />
-        </Button>
-      </span>
-    </div>
+    />
   );
 };
 
@@ -78,31 +69,3 @@ export const FloatTitleBar = ({
 const doesNotResize = () => {
   throw new Error("float title bar: a bar does not resize its window");
 };
-
-const barStyles = hstack({
-  background: "card",
-  // The frame's line is one line: the bar carries the top and the sides down
-  // to where the surface picks them up, and the seam between them is not one.
-  borderBlockEndWidth: 0,
-  // Rounded at the top only: the client's surface under this has the other two
-  // corners, and a bar rounded all the way round would show the desktop
-  // through the seam between them.
-  borderStartEndRadius: "lg",
-  borderStartStartRadius: "lg",
-  // The window under it is what says which window is which, so a bar that is
-  // not the one being worked in recedes rather than competing with it.
-  color: "muted",
-  gap: 2,
-  justify: "space-between",
-  paddingInlineStart: 3,
-  position: "absolute",
-});
-
-const focusedStyles = css({ color: "foreground" });
-
-const titleStyles = css({
-  fontSize: "sm",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-});

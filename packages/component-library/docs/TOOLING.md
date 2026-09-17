@@ -27,9 +27,12 @@ What we use, and the workflow rules that go with it.
   // wrong — barrel import
   import { XIcon } from "@phosphor-icons/react";
   ```
-- **Styling** — [Panda CSS](https://panda-css.com). The build pipeline runs
-  Panda through PostCSS (see `postcss.config.cjs`), extracting atomic CSS at
-  build time. See [STYLING.md](./STYLING.md).
+- **Styling** — [Panda CSS](https://panda-css.com). Panda runs as a PostCSS
+  plugin, extracting atomic CSS at build time. There is no
+  `postcss.config.cjs`: each bundler is handed the plugin directly —
+  `.storybook/main.ts` merges it into Storybook's vite config through
+  `viteFinal`, and an app does the same in its own `vite.config.ts`. See
+  [STYLING.md](./STYLING.md).
 - **Tests** — `bun:test` + `@testing-library/react`. See
   [TESTING.md](./TESTING.md).
 - **Storybooks** — `@storybook/react-vite`. See
@@ -51,5 +54,7 @@ when iterating locally on the preset.
 
 ## Required checks before merging
 
-Linting and type checks must pass. The standard runner is
-`node_modules/.bin/turbo test` from the repo root.
+Linting and type checks must pass. `./scripts/check.sh` from the repo root is
+the whole answer and runs both languages; `./scripts/check.sh typescript` is
+this side of it alone, and that is `biome check .` plus `bun run turbo test`.
+See [/docs/guidelines/WORKSPACE.md](/docs/guidelines/WORKSPACE.md).

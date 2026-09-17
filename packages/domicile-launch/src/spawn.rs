@@ -115,6 +115,28 @@ pub fn engine(
             runtime.chrome_socket.display()
         )
         .into(),
+        // WHAT THE ENGINE SAYS ABOUT A DEAF DESKTOP IS ONE SEVERITY BELOW
+        // WHAT IT PRINTS. `base/logging.cc` writes a message to stderr when
+        // `LOG_TO_STDERR` is in the destination OR when the message is at
+        // least `kAlwaysPrintErrorLevel`, which is `LOGGING_ERROR` -- and a
+        // release build that was never given `--enable-logging` has
+        // `LOG_TO_STDERR` clear. Every line the fork writes about an input
+        // device logind handed over already revoked, about a force pause that
+        // took every keyboard at once, about a console it has just taken
+        // back, is a `LOG(WARNING)`, and every one of them went nowhere.
+        //
+        // That is not a missing feature, it is a wrong diagnosis: a run that
+        // came up with no keyboard and no trackpad produced a log with not
+        // one line about input in it, and an empty log reads as "none of that
+        // code ran" rather than "it ran and said so quietly".
+        //
+        // WARNING and above, not INFO. This is the engine's account of its
+        // own console, not a trace of the browser; `--log-level=0` through
+        // `extra` is how a run asks for the rest, and it wins because
+        // `CommandLine::AppendSwitchNative` keeps the last value of a switch
+        // given twice.
+        "--enable-logging=stderr".into(),
+        "--log-level=1".into(),
         "--password-store=basic".into(),
         "--no-first-run".into(),
         format!("--user-data-dir={}", runtime.profile.display()).into(),

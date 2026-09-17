@@ -28,6 +28,19 @@ registers them and nothing can: a custom element's name must contain a hyphen,
 per spec, which is exactly why the fork defines these two as real HTML elements.
 Write them as you write a `<div>`.
 
+**And style them as you style a `<div>`**, which is the whole point of the
+thing. A window is a `cc::SurfaceLayer` in your page's own layer tree, so the
+page's compositor applies CSS to it because it applies CSS to a layer — not
+because anyone reimplemented a property. `z-index`, `transform`,
+`border-radius`, `opacity`, `filter: blur()` and `mix-blend-mode` are each
+measured bit-exact against an ordinary element laid out beside it, on a GPU,
+and a submitted frame reaches the screen in one display frame
+([the measurements](/docs/architecture/ENGINE-FORK.md)). Two things are not
+promised: a client that draws in shared memory rather than on the GPU gets a
+blank window, and a `backdrop-filter` over an `<app>` should work and has not
+been run — [WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md)
+keeps that list.
+
 ```sh
 nix run github:cprussin/domicile -- ./my-desktop/dist/shell.js
 ```
@@ -93,20 +106,21 @@ Do not develop against that, though: it is the chrome with every window in it
 missing, and a desktop's interesting behavior is all on the other side of the
 channel. Point `domicile` at your shell's module and let your own bundler watch
 it — `vite build --watch` beside `domicile ./dist/shell.js` is the whole dev
-loop, and
-it is a real desktop rather than a page pretending to be one.
+loop, and it is a real desktop rather than a page pretending to be one.
+**Nothing reloads it**: a desktop runs under `--app`, where there is no reload
+to press, so a rebuilt bundle needs the desktop restarted until
+`domicile load-shell` lands
+([why](/docs/architecture/THE-DOMICILE-BINARY.md)).
 
-## There is no handshake
+## There is nothing to await
 
-There used to be one — `hello` with a version number, `welcome` with the
-host's, and everything a shell said before that on the floor. **A shell does
-nothing about versions now.** The channel is a typed surface rather than a
-message pipe: the compositor's protocol version is checked in the browser
-process, which logs a disagreement and carries on, and a page has no part in it
-and nothing to await. `DomicileClient` has no `connect()` — say what you have to
-say as soon as you have a client, and the first call is what binds the channel.
+**A shell does nothing about versions, and waits for nothing.** The channel is
+a typed surface rather than a message pipe: the compositor's protocol version
+is checked in the browser process, which logs a disagreement and carries on,
+and a page has no part in it. Say what you have to say as soon as you have a
+client, and the first call is what binds the channel.
 
-What replaces the handshake as a *shell's* concern is registration order, and
+What a shell *does* have to think about is registration order, and
 `DomicileClient` is what handles it: it registers its own listeners in its
 constructor and holds anything that arrives before your `on` does. A React
 shell registers in its first effect flush, tens of milliseconds late, and every
@@ -205,10 +219,18 @@ That is a working desktop: every window full-screen, newest on top. A real
 shell differs from it only in where it puts the elements.
 
 `app_closed` is in there rather than left out because without it every window
-leaks an element. One thing the snippet abbreviates, and the example does in
-full: the example's `app_closed` *throws* on an app it never mounted, because a
-close for something never announced means the page and the compositor disagree
-about what is on screen.
+leaks an element. Two things the snippet leaves out and the example does in
+full:
+
+- its `app_closed` *throws* on an app it never mounted, because a close for
+  something never announced means the page and the compositor disagree about
+  what is on screen;
+- it calls `reportDevicePixelRatio(domicile, window)` from
+  `@domicile/chrome-sdk/device-pixel-ratio`. The page is the only part of
+  Domicile that can see the display's density — it changes when the window
+  moves display or the page zooms — and a compositor never told it has every
+  client drawing at the wrong resolution, blurry or oversized, with nothing
+  said.
 
 There is no document to write. **Domicile writes it**: a charset, a
 viewport, and a `<body>` that fills the window with no margin. That last one is
@@ -219,11 +241,10 @@ pixels out looks like the seam rather than like a stylesheet.
 **Nothing else, and in particular no element to mount into.** The body and the
 script tag that loads you are the whole of it, so a shell that renders into a
 container makes its own — `document.body.append` on the first line, as the
-example above does. Worth stating because the vaguer wording this sentence used
-to have ("a root that fills the window") cost a desktop: `shell-manganese` read
-it as an element with that id, looked one up, got `null`, and threw before it
-rendered anything. Under `--app` there is no console to read, so the whole
-failure was a white window.
+example above does. Stated this bluntly because the failure is silent: a shell
+that looks up a mount point gets `null` and throws before it renders anything,
+and under `--app` there is no console to read, so the whole failure is a white
+window. It has cost a desktop here once already.
 
 What is left to you is the background: make it transparent wherever an app
 shows through, because an `<app>` is a hole in your page and a background
@@ -260,11 +281,10 @@ arrives, and you are welcome to it — `shell-simple` uses it to take a "nothing
 here yet" placeholder down — but you do not have to route it anywhere: the SDK
 records it off the channel as the message goes past, because scaling a pointer
 position into the client's own pixels is the only use anyone has for it. A shell
-that used to hold that size was a courier.
+that holds that size is a courier.
 
-This used to be `element.setSurfaceSize(…)` and `element.applyCursor(…)`, on a
-`<domicile-app>` the SDK registered. The element is the engine's now and has no
-such methods; nothing replaced them because nothing needed to.
+The element is the engine's, and it has no methods of its own for either of
+these: a cursor is a style and a size is something the SDK already has.
 
 ## Who gets the keyboard
 
@@ -280,6 +300,8 @@ alone, focuses the client — which is what you want when your shell has no
 opinion. Call `preventDefault()` on it and nothing moves until you say so:
 
 ```ts
+import type { AppFocusRequest } from "@domicile/chrome-sdk/app-element";
+import { APP_FOCUS_REQUESTED_EVENT } from "@domicile/chrome-sdk/app-element";
 import { focusApp } from "@domicile/chrome-sdk/focus-app";
 
 document.addEventListener(APP_FOCUS_REQUESTED_EVENT, (event) => {
@@ -375,7 +397,9 @@ export default defineConfig({
 });
 ```
 
-Three things there are not vite's defaults, and each fails quietly:
+`outDir` is yours — Domicile is handed a module, not a directory it expects a
+name in, and the example uses a different one. Three things there are *not*
+vite's defaults, and each fails quietly:
 
 - **The entry is a `.ts` file**, so nothing emits a document for Domicile to
   have to ignore.
