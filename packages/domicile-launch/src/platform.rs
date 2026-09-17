@@ -22,11 +22,25 @@
 //! with one function choosing both. `docs/architecture/A-DESKTOP-ON-A-TTY.md`
 //! carries it.
 //!
-//! WHICH IS WHY A MACHINE WITH NO SESSION STILL GETS A REFUSAL RATHER THAN A
-//! TTY. Auto-selecting `drm` here would turn a clear refusal into whatever the
-//! GPU process does on an unproven path, and that trade -- a message for a
-//! black screen -- is the one this file exists to avoid. It becomes the right
-//! default the day a screen lights, and not before.
+//! AND THEN A SCREEN LIT, SO A TTY IS NO LONGER REFUSED. This file used to say
+//! `drm` became the right default the day that happened and not before; that
+//! day is `engine-9dd6e30`. What had been missing was DRM master: nothing in
+//! the fork ever asked the kernel for it, so the first modeset got `EACCES`
+//! and the first `drmSetMaster` a desktop ever ran was the one a console
+//! switch asked for. `DrmMaster::Add` takes it as a card arrives now.
+//!
+//! WHAT IS ASKED IS `XDG_VTNR`, BECAUSE LOGIND IS WHAT ANSWERS IT. pam_systemd
+//! sets it for a session that owns a VT, and that is the same logind the
+//! engine then asks for `TakeControl` and `TakeDevice`. A session without one
+//! is a session those calls would fail on, so the variable that says "there is
+//! a VT here" is also the variable that says "the calls that need one will
+//! work" -- which is why this is not `isatty` on a descriptor somebody may
+//! have redirected.
+//!
+//! IT IS READ LAST OF THE THREE, and that ordering is the whole of the care
+//! here: a Wayland session has a VT too, and an X11 one does. Reading the VT
+//! first would take the console out from under the very session the desktop
+//! was supposed to be a window inside of.
 
 /// A machine this engine cannot draw on, and what the person does about it.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -38,12 +52,13 @@ pub enum PlatformError {
     )]
     X11Session,
     #[error(
-        "there is no display server here. This engine does carry the drm ozone \
-         platform now, so a tty is something it can be told to try — \
-         OZONE=drm — but nothing has yet got a lit screen out of it, so it is \
-         not what a machine with no session gets by default. See \
-         docs/architecture/A-DESKTOP-ON-A-TTY.md. Start this from a Wayland \
-         session for a window; OZONE=headless runs it with no display."
+        "there is no display server here and no VT either — no WAYLAND_DISPLAY, \
+         no DISPLAY, no XDG_VTNR. A console login has XDG_VTNR and gets the drm \
+         platform on its own; this looks like ssh, a container or a job with no \
+         seat, and drm there fails further in with a worse message than this \
+         one. OZONE=drm forces it anyway and \
+         docs/architecture/A-DESKTOP-ON-A-TTY.md says what it needs; \
+         OZONE=headless runs with no display at all."
     )]
     NoDisplayServer,
 }
@@ -53,21 +68,27 @@ pub enum PlatformError {
 /// `OZONE` wins outright, because `headless` is a real answer on a machine
 /// with no display and no environment variable says so.
 ///
-/// `WAYLAND_DISPLAY` is the question for the case that does work: it is what a
-/// Wayland client uses to find its compositor, so unset means there is nothing
-/// to be a window inside of. Empty is unset — `WAYLAND_DISPLAY=` is what a
-/// shell leaves behind when something cleared it badly, and taking it for a
-/// session starts an engine that cannot connect to anything.
+/// `WAYLAND_DISPLAY` is the question for a window: it is what a Wayland client
+/// uses to find its compositor, so unset means there is nothing to be a window
+/// inside of. `XDG_VTNR` is the question for a console, and it is asked last,
+/// because a session has a VT as well as a display and the session is what the
+/// person is looking at.
+///
+/// Empty is unset throughout — `WAYLAND_DISPLAY=` is what a shell leaves
+/// behind when something cleared it badly, and taking it for a session starts
+/// an engine that cannot connect to anything.
 pub fn platform(
     ozone: Option<&str>,
     wayland_display: Option<&str>,
     x11_display: Option<&str>,
+    vt: Option<&str>,
 ) -> Result<String, PlatformError> {
-    match (set(ozone), set(wayland_display), set(x11_display)) {
-        (Some(named), _, _) => Ok(named.to_string()),
-        (None, Some(_), _) => Ok("wayland".to_string()),
-        (None, None, Some(_)) => Err(PlatformError::X11Session),
-        (None, None, None) => Err(PlatformError::NoDisplayServer),
+    match (set(ozone), set(wayland_display), set(x11_display), set(vt)) {
+        (Some(named), _, _, _) => Ok(named.to_string()),
+        (None, Some(_), _, _) => Ok("wayland".to_string()),
+        (None, None, Some(_), _) => Err(PlatformError::X11Session),
+        (None, None, None, Some(_)) => Ok("drm".to_string()),
+        (None, None, None, None) => Err(PlatformError::NoDisplayServer),
     }
 }
 

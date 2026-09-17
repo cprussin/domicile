@@ -578,11 +578,8 @@ decides whether an item is waiting or workable.
    `scripts/test-the-keymap-reaches-the-browser.sh` is what compares the tag
    and the field across the two languages that spell them separately.
 
-   What is left of step 2 after a screen lights: a **`drm` arm in
-   `domicile-launch`'s `platform()`**
-   so a machine with no `WAYLAND_DISPLAY` gets a tty rather than a refusal,
-   which is auto-detection only and blocks nothing because `OZONE=drm`
-   overrides outright; and **taking the card node from logind too**, which is
+   What is left of step 2 after a screen lights: **taking the card node from
+   logind too**, which is
    how wlroots does VT switching and would supersede `0019`'s `dup`, remove
    the browser's own `open()` of the card, and close the one gap `0022` leaves:
    with no `PauseDevice` for the card there is nothing to hold a switch open
