@@ -66,16 +66,18 @@ echo "$method $url" >> "$state/calls"
 if [ -n "$upload" ]; then
   # `.../releases/<id>/assets?name=<file>`
   id="${url#*/releases/}"; id="${id%%/assets*}"
-  echo "$id ${url##*name=}" >> "$state/assets"
-  # An upload GitHub drops is not a no-op. It records the asset and answers
-  # 500 anyway, so the next POST for that name comes back 422 `already_exists`
-  # -- which is why a plain retry is not enough. `$STATE/fail-uploads` is how
-  # many of the next uploads do that.
+  name="${url##*name=}"
+  # An upload GitHub drops is not a no-op. It records the asset, leaves it in
+  # `starter` rather than `uploaded`, and answers 500 anyway -- so the next
+  # POST for that name comes back 422 `already_exists` and a plain retry is not
+  # enough. `$STATE/fail-uploads` is how many of the next uploads do that.
   left="$(cat "$state/fail-uploads" 2>/dev/null || echo 0)"
   if [ "$left" -gt 0 ]; then
     echo "$((left - 1))" > "$state/fail-uploads"
+    echo "$id $name starter" >> "$state/assets"
     exit 22
   fi
+  echo "$id $name uploaded" >> "$state/assets"
   exit 0
 fi
 
@@ -86,10 +88,10 @@ case "$method" in
       # the release and the name back out of.
       (*/assets)
         id="${url#*/releases/}"; id="${id%%/assets}"
-        awk -v id="$id" '$1 == id { print $2 }' "$state/assets" |
+        awk -v id="$id" '$1 == id { print $2, $3 }' "$state/assets" |
           jq -R -s -c --arg id "$id" \
-            'split("\n") | map(select(length > 0)) |
-             map({id: ($id + "!" + .), name: .})'
+            'split("\n") | map(select(length > 0)) | map(split(" ")) |
+             map({id: ($id + "!" + .[0]), name: .[0], state: .[1]})'
         ;;
       (*)
         tag="${url##*/}"
@@ -112,7 +114,8 @@ case "$method" in
       (*/releases/assets/*)
         asset="${url##*/releases/assets/}"
         echo "${asset#*!}" >> "$state/deleted-assets"
-        grep -vxF "${asset%%!*} ${asset#*!}" "$state/assets" > "$state/left"
+        awk -v rel="${asset%%!*}" -v name="${asset#*!}" \
+          '!($1 == rel && $2 == name)' "$state/assets" > "$state/left"
         mv "$state/left" "$state/assets"
         ;;
       # By id, which the fake made from the tag, so the tag is recoverable.
@@ -120,6 +123,9 @@ case "$method" in
         id="${url##*/}"
         echo "${id#id-}" >> "$state/deleted"
         rm -f "$state/rel-${id#id-}"
+        # A deleted release takes its assets with it.
+        awk -v rel="$id" '$1 != rel' "$state/assets" > "$state/left"
+        mv "$state/left" "$state/assets"
         ;;
     esac
     ;;
@@ -149,10 +155,12 @@ fail() { echo "  FAIL: $*" >&2; FAILED=1; }
 publish() {
   local state="$1"; shift
   mkdir -p "$state"
-  : > "$state/calls"
-  : > "$state/assets"
-  : > "$state/deleted"
-  : > "$state/deleted-assets"
+  # Created rather than truncated: a caller pre-seeds these to say what GitHub
+  # already holds, and a run that wiped that would be answering its own
+  # question.
+  for ledger in calls assets deleted deleted-assets; do
+    [ -f "$state/$ledger" ] || : > "$state/$ledger"
+  done
   # `env`, not a bare prefix: an assignment that arrives by expansion is a
   # command name, not an assignment, so `"$@"` in front of `bash` ran
   # `GITHUB_REF_TYPE=tag: command not found` and the tag case tested nothing.
@@ -194,13 +202,39 @@ echo "publishing again leaves an already published commit alone"
 again="$WORK/again"
 mkdir -p "$again"
 cp "$state/rel-engine-nightly" "$state/rel-$PINNABLE" "$again/" 2>/dev/null
+printf '%s\n%s\n' "id-$PINNABLE $TARBALL uploaded" \
+                   "id-$PINNABLE $TARBALL.sha256 uploaded" > "$again/assets"
 publish "$again" || { cat "$again/out" >&2; fail "publisher exited nonzero"; }
 grep -qx "$PINNABLE" "$again/deleted" &&
   fail "$PINNABLE was deleted; a pin to it would have broken"
 [ -f "$again/created-$PINNABLE.json" ] &&
   fail "$PINNABLE was recreated rather than left alone"
+grep -q "^id-$PINNABLE " "$again/deleted-assets" 2>/dev/null &&
+  fail "an asset was taken off $PINNABLE; a pin to it would have broken"
 grep -qx "engine-nightly" "$again/deleted" ||
   fail "engine-nightly was not replaced; it must always mean the newest build"
+
+echo "a release whose upload died is finished, not skipped"
+# Run 35260586435 put both assets on engine-nightly in seven seconds, created
+# the immutable release beside it, and then hung with nothing on it. `already
+# published; leaving it alone` would have meant that tag NEVER got its tarball:
+# a release is published when its assets are there, not when its row exists.
+half="$WORK/half"
+mkdir -p "$half"
+cp "$state/rel-engine-nightly" "$state/rel-$PINNABLE" "$half/" 2>/dev/null
+# The digest landed; the tarball is the wreck of an upload that did not.
+printf '%s\n%s\n' "id-$PINNABLE $TARBALL starter" \
+                   "id-$PINNABLE $TARBALL.sha256 uploaded" > "$half/assets"
+publish "$half" || { cat "$half/out" >&2; fail "publisher exited nonzero"; }
+
+[ -f "$half/created-$PINNABLE.json" ] &&
+  fail "$PINNABLE was recreated rather than finished"
+grep -q "^id-$PINNABLE $TARBALL uploaded$" "$half/assets" ||
+  fail "$PINNABLE never got its tarball"
+grep -qx "$TARBALL" "$half/deleted-assets" ||
+  fail "the half-uploaded tarball was counted as present and left in place"
+grep -qx "$TARBALL.sha256" "$half/deleted-assets" &&
+  fail "the digest was already there and should not have been touched"
 
 echo "a pushed tag is published once, under the name that was pushed"
 # An `engine-v*` tag is already immutable. A second copy under another name
