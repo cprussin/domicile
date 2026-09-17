@@ -40,6 +40,12 @@ It also answers a control socket of its own — `domicile-ipc.<pid>.sock` under
 desktop is asked a question rather than restarted, and how one of several is
 asked rather than another.
 
+It also chooses the engine's ozone platform itself: `WAYLAND_DISPLAY`, then
+`DISPLAY`, then `XDG_VTNR`. A console login therefore gets `drm` without being
+told, and `OZONE=drm` is a force rather than a requirement. The VT is read last
+on purpose — a Wayland session has one too, and reading it first would take the
+console out from under the session the desktop was to be a window inside of.
+
 The wire protocol is at `PROTOCOL_VERSION = 1`.
 
 ### What is proven, and by what
@@ -58,6 +64,7 @@ The wire protocol is at `PROTOCOL_VERSION = 1`.
 | What the browser-to-renderer hop costs | Every `ControlChannelClient` method carries a `mojo_base.mojom.TimeTicks arrival`, stamped once per socket read rather than per parsed message — a read can carry several, and stamping at parse time would price the JSON parse into the second and later ones, so a batch read would report a hop that grows with position in the batch. Converted through `WindowPerformance`, so `event.timeStamp - event.arrival` is the stage and not arithmetic in the renderer. Measured at 0.300 ms and 0.200 ms. **On the socket path only**: `ShortcutPressed` and `Modifiers` also have a registry path stamped elsewhere that nothing measures, and `Displays` dispatches a bare `Event` and is deliberately unstamped |
 | A client's dmabuf imports on AMD | Patch 0005, confirmed on a Radeon 890M on 2026-09-08: kitty survives being floated and resized, on the DCC modifier that used to be refused, with no `gbm_bo_import` failure in the run |
 | The desktop a user runs contains all of it | `packages/domicile-engine/engine-release.nix` pins the published engine; `nix run github:cprussin/domicile#manganese` runs it |
+| A desktop lights the screen on a bare tty | `engine-9dd6e30`, on real hardware on a laptop panel, with no `OZONE=drm` and no trip to another console: `platform()` chose `drm` off `XDG_VTNR`, the DRM thread confirmed a modeset on the panel's own mode, and the desktop drew. **That build could not be typed into** — see *A desktop on a tty* below for what is still unexercised, which is most of the input and console path |
 
 ---
 
@@ -191,9 +198,11 @@ decides whether an item is waiting or workable.
    window costs the user nothing a plain Wayland compositor would not.
    `guard-latency.sh` has run on `crux` now — it reads `commit to pixel` at
    28–29 ms against a 16.67 ms display frame on every run so far, which is 1.7
-   frames and no stage of its own. What is left is a machine with a screen: the
-   runs are in a nested compositor with nothing presenting, and the probe's own
-   round trip is inside every figure.
+   frames and no stage of its own. What is left is a screen: those runs are in
+   a nested compositor with nothing presenting, and the probe's own round trip
+   is inside every figure. A desktop that lights a panel now exists, so this is
+   no longer waiting on hardware that does not — what it waits on is arranging
+   the probe on one.
 
    The chrome-side instruments are gone rather than empty. `roundTrip`, `hop`
    and manganese's `drawTiming` were deleted with the diagnostic line they fed,
@@ -258,334 +267,278 @@ decides whether an item is waiting or workable.
 
 ### In the engine fork — the agent on `crux`
 
-1. **A desktop on a tty.** Audited against the pin in
-   `docs/architecture/A-DESKTOP-ON-A-TTY.md`. Getting `gn gen` to accept
-   `ozone_platform_drm = true` is a **patch**: nine edits, eight of them around
-   the DRM platform rather than inside it, because its 49 `.cc` files hold two
-   ChromeOS references between them and no `BUILDFLAG(IS_CHROMEOS)` at all — the
-   assert is conservative about the platform. Getting a lit screen out of it is
-   a **port**, of the embedder ozone/drm has never had off ChromeOS: no
-   `PlatformScreen` (`CreateScreen()` is `NOTREACHED()`), nothing that calls the
-   modeset seam, no VT handling or input revocation, and no route by which a
-   display list reaches the compositor. It is **not a fork**.
+1. **A desktop on a tty — the screen lights, and nothing can be typed into
+   it.** `docs/architecture/A-DESKTOP-ON-A-TTY.md` carries the step list, the
+   tables and the audit against the pin; this is the state and what is left of
+   it.
 
-   That the patched tree configures **and compiles and links** is now
-   **measured, not reasoned**: `.github/workflows/engine-drm-probe.yml` builds
-   `//ui/ozone` with the argument on and the patch applied, on the engine
-   runner, and it is green -- `ozone_platform_drm = true configures and
-   //ui/ozone compiles at this pin`. It earned its keep immediately: three of
-   the eight edits exist only because it ran, and one of them was a link error
-   that no `git grep` and no compiler could have reached. Five edits was the
-   reading; eight is the count, and the gap between those two numbers is the
-   argument for owning a runner.
+   Two pieces of work, and both have landed. Getting `gn gen` to accept
+   `ozone_platform_drm = true` was a **patch**: nine edits, eight of them
+   around the DRM platform rather than inside it, because its 49 `.cc` files
+   hold two ChromeOS references between them and no `BUILDFLAG(IS_CHROMEOS)`
+   at all — the assert was conservative about the platform. Getting a lit
+   screen out of it was a **port**, of the embedder ozone/drm has never had
+   off ChromeOS: a `PlatformScreen`, a modeset driver, the `NOTREACHED()`s a
+   views browser hits, DRM master, input, and the console. It was never a
+   fork. `.github/workflows/engine-drm-probe.yml` is what measured the patch
+   half — `//ui/ozone` configures, compiles and links with the argument on at
+   this pin — and it earned its keep immediately: three of the eight edits
+   exist only because it ran, and one of those was a link error that no `git
+   grep` and no compiler could have reached. **Treat any costing here as a
+   floor**: the audit read five edits, the probe found eight, and building
+   `chrome` rather than `//ui/ozone` found a ninth — `drm_util.h` declared two
+   constants whose initializers call `FeatureList::IsEnabled()`, which every
+   including translation unit then runs during static initialization, and that
+   is fatal. Both are functions now (patch `0014`).
 
-   What has *not* been measured is a lit screen. The probe builds `//ui/ozone`,
-   not `chrome`, so nothing here says a display comes up -- only that the tree
-   the display would come out of builds.
+   **What a bare tty does, measured on hardware.** On `engine-9dd6e30`, on a
+   laptop panel, with no `OZONE=drm` and no trip to another console:
+   `platform()` picks `drm` off `XDG_VTNR`, the DRM thread confirms a modeset
+   on the panel's own mode, and the desktop draws. That is `0013`, `0015`,
+   `0016`, `0018`, `0023` and `DrmMaster::Add` all doing what they were
+   written to do at once, and it is the first time any of them has done it
+   anywhere.
 
-   **`DrmScreen` has landed -- patch `0013`, 12 unit tests in
-   `ozone_unittests`, all 733 of that suite green.** It answers
-   `CreateScreen()` and `InitScreen()`, which were both `NOTREACHED()`, over
-   `display::DisplayList` and `display_finder.h`, and none of
-   `//ui/display/manager` was ported. What is **not** measured is any of it
-   running: nothing has started `chrome` under the platform, so the screen is
-   correct against its tests and unexercised against a browser. The modeset
-   driver beside it is the next item -- it landed the same night, and both of
-   those sentences are answered below.
+   **What it does not do is take a keystroke.** That build was deaf from its
+   first frame — internal keyboard, trackpad and `Ctrl+Alt+F<n>` together, the
+   last of those because `0022` reads the chord off the same evdev stream.
+   #384 is the fix and is published as `engine-6ac6dbc`; **no hardware run has
+   seen it.** So `0020`'s logind path, `0022`'s chord, `0024`'s keymap and
+   `0019`'s drop across a console switch still rest on source read at the pin
+   and on unit tests — `DrmInputDevicesTest` 19 cases, `DrmVtSwitcherTest` 17,
+   `DrmMasterTest` 7, `DrmModesetTest` 16, `DrmScreenTest` 18,
+   `DrmFullscreenTest` 4 — plus the shell-group guards that read the series
+   where a gtest cannot reach. `drm_logind_input.cc` talks to D-Bus and has no
+   in-tree unit test by design; `scripts/test-input-comes-from-logind.sh` is
+   what asserts that protocol. The next run on that laptop is what answers
+   them, and every one is a candidate to be wrong there in a way nothing here
+   can see.
 
-   **Step 2 was costed as two files rather than a port of
-   `//ui/display/manager`, and both came in at that size.** Only that target's *caller* is ChromeOS-only:
-   `DrmNativeDisplayDelegate` already implements `GetDisplays`, `Configure`,
-   `TakeDisplayControl`/`RelinquishDisplayControl` and a two-method observer,
-   and every one of those seams is ungated. `PlatformScreen` has nine pure
-   virtuals of which six are delegations to `display::DisplayList` and
-   `display_finder.h`; the model is `HeadlessScreen` at 306 lines, not
-   `WaylandScreen` at 737. `A-DESKTOP-ON-A-TTY.md` has the tables, read at the
-   pin.
+   **The four root causes behind the lit screen are worth keeping**, because
+   each was invisible in a log and three were reported as something else
+   entirely.
 
-   **The next measurable step is a run, not a reading -- and `crux` can now
-   make it.** In order: `chrome` builds with the argument, then `chrome
-   --ozone-platform=drm` *starts* without hitting a `NOTREACHED()`, then a CRTC
-   lights. **The first two have now been run, and they answer differently.**
+   - **Nothing ever asked the kernel for DRM master.** The browser's `open` of
+     a card takes it only if the card was free, and no caller checks the
+     outcome; both processes then record the answer they wanted —
+     `DrmWrapper::has_master_` is initialized `true` and
+     `DrmDisplayHostManager::display_externally_controlled_` `false`. On
+     ChromeOS `DisplayConfigurator::TakeControl` closes that during startup
+     and `//ui/display/manager` is behind `assert(is_chromeos)`, so the only
+     `drmSetMaster` in this tree was `DrmVtSwitcher`'s take arm — and
+     `DRM_IOCTL_MODE_ATOMIC` is a `DRM_MASTER` ioctl, so every modeset got
+     `EACCES` until the user had been to another console and back. **That is
+     the whole of "I have to VT switch away and back to see anything."**
+     `DrmMaster::Add` takes it as a card arrives now: the one place that has a
+     card, in the process the kernel permits, before anything can commit on
+     it. The ask is idempotent, and a card that arrives on somebody else's
+     console is recorded and not taken.
+   - **A modeset the browser answered itself was recorded as confirmed.**
+     `DrmModeset::Start()` runs at `InitScreen` time, before a GPU process
+     exists, so `DrmDisplayHostManager::UpdateDisplays` answers synchronously
+     out of the dummy snapshots its own constructor built, and
+     `ConfigureDisplays` reads `is_dummy()` and runs the callback with `true`
+     without leaving the process. `confirmed_` was taken from that, and
+     `ModesetWouldChangeAnything` compares the next reading against it — so on
+     a single-card machine whose dummy reading matches its real one, **nothing
+     ever modesets at all.** An answer that arrives inside the call is by
+     construction one no hardware saw, which is how the two are told apart
+     now: the shape of the answer rather than its value.
+   - **logind never sends the polite pause on a seat with VTs**, which is
+     every laptop. `session_device_try_pause_all` is the only thing that sends
+     `PauseDevice` of type "pause", its only caller is `session_activate`, and
+     `session_activate` returns `chvt(s->vtnr)` before it reaches that line
+     when the seat has VTs. What arrives is "force", and "force" is not a
+     request: `session_device_pause_all` has already run `EVIOCREVOKE` over
+     every device before it says a word — which is why the keyboard and the
+     trackpad died in the same instant with no log line. "force" fell through
+     as `kNothingToSay`, and the only thing that re-armed a watch was a
+     `ResumeDevice` that a relinquish with no seat transition behind it never
+     sends. HELD and LIVE are kept apart now, the way back is `ReleaseDevice`
+     then `TakeDevice`, and re-acquisition hangs off the session's `Active`
+     property rather than off a signal that may never arrive.
+   - **A device parked revoked waited for an edge that never comes**, which
+     was that fix's own regression. Honouring `TakeDevice`'s second return
+     value is right — logind revokes the descriptor before handing it over for
+     a session that is not in front of the user — but the only thing that
+     un-parked the device was `PropertiesChanged`, which is emitted on a
+     *change*. A session already in front of the user when the startup scan
+     runs never gets one, so every device sat revoked for the life of the
+     process. The answer is checked against the session instead of believed,
+     and retried twice at most, because a race that does not settle in one
+     more ask will not settle in ten.
 
-   `chrome` builds with the argument -- but only after a ninth edit, which the
-   build found the way it found the eighth. `drm_util.h` declared two constants
-   whose initializers call `FeatureList::IsEnabled()`, which every including
-   translation unit then runs during static initialization; that is fatal, and
-   it killed `v8_context_snapshot_generator`. Both are functions now.
+   And one in the launcher, which is the worst thing that binary can do: **a
+   `SIGINT` or `SIGTERM` during startup was ignored** for up to the milestone
+   patience, thirty seconds each and sixty for the two. The whole of teardown
+   is in `Running::drop`, and whatever sends a `SIGTERM` sends a `SIGKILL`
+   after it — so a launcher killed before `drop` runs orphans an engine still
+   holding `Session.TakeControl`, every evdev node logind handed it, DRM
+   master on the card, and a console in `K_OFF`, `KD_GRAPHICS` and
+   `VT_PROCESS`. logind restores the VT only when the controller's bus name
+   drops, and the controller is still running: no keyboard, no pointer, no
+   `Ctrl+Alt+F<n>`, and the power switch is the only way out.
 
-   The trap on the way there is worth keeping even though the milestone moved
-   past it: `out/Agent` took the argument into its `args.gn` a day after its
-   `chrome` was linked, and that binary aborted in `GetOzonePlatformId` with
-   `Invalid ozone platform: drm` before a line of fork code ran. **An `args.gn`
-   carrying an argument is not a binary built with it**, and comparing the two
-   timestamps is what says which.
+   **The patches, and the finding each one is.** Every one of these is a stub
+   or a premise that was true on ChromeOS and false for a views browser on a
+   tty, and reading them as a group is what makes the next one cheap to find.
 
-   `chrome --ozone-platform=drm` got as far as `DrmWindowHost::GetBoundsInDIP()`
-   under `WindowTreeHost::InitHost()` -- the same ChromeOS-shaped refusal as the
-   `CreateScreen()` one just cleared, twenty frames out. **That box is closed,
-   and it was seven boxes rather than one.** `DrmWindowHost` holds seven
-   `NOTREACHED()`s; answering the two the costing named moves the crash to
-   `SizeConstraintsChanged()` under `DesktopNativeWidgetAura::InitNativeWidget()`,
-   and a run on the build host established that with bodies in all seven **the
-   browser process stops failing entirely** -- it creates its window and goes on
-   to ask viz for a root compositor frame sink. So all seven landed together
-   (patch `0015`) rather than one four-hour build at a time.
+   - `0017` was the VT switcher — `VT_SETMODE` in `VT_PROCESS` mode, a signal
+     per edge. **`0022` took every VT ioctl in it back out.** `TakeControl`
+     runs logind's `session_prepare_vt`, so the session's VT is already
+     `K_OFF`, `KD_GRAPHICS` and `VT_PROCESS` before the first key arrives.
+     `K_OFF` is the kernel's own `Ctrl+Alt+F<n>`, off — so on real hardware
+     the chord did nothing at all while the log said `VT switching is on` —
+     and a second `VT_SETMODE` does not conflict with logind's, it silently
+     takes it, leaving logind waiting for a release signal that never comes.
+     So the fork has no VT ioctl now: the chord is read in
+     `PlatformEventObserver::WillProcessEvent` on `EventFactoryEvdev` (the
+     browser holds every keyboard descriptor; the compositor advertises a
+     `wl_seat` and reads no evdev node), it calls `Seat.SwitchTo(u)`, and the
+     display follows the session's `Active` property. `0017`'s table of
+     orderings survived it; the ioctls under it did not.
+   - `0018` is **the black screen, and it was never the display list.**
+     `ScreenManager::FindWindowAt` compares a window's rectangle to
+     `gfx::Rect(controller->origin(), controller->GetModeSize())` for *exact*
+     equality, and Chromium's default window is `kWindowMaxDefaultWidth` wide
+     inset by ten pixels — 1050x1900 at (10,10) on a 2880x1920 panel. No match
+     means no controller, and every frame is dropped before the kernel sees
+     it, with nothing wrong in any log because nothing went wrong.
+     `domicile-launch` passes `--start-fullscreen` on the scanout platform
+     only, and `DrmWindowHost` answers `SetFullscreen` and
+     `GetPlatformWindowState`, both of which were stubs on `0015`'s premise
+     that ash sizes its own root window. **Its `chrome/` half was wrong and a
+     hardware run is what found it**: the `--app=` path already reaches
+     `StartupBrowserCreatorImpl::MaybeToggleFullscreen`, because
+     `MaybeLaunchAppShortcutWindow` calls
+     `web_app::startup::FinalizeWebAppLaunch` and that function's last
+     statement is exactly it. So the patch's extra
+     `chrome::ToggleFullscreenMode` ran on a window that had *just* gone
+     fullscreen, `enter_fullscreen = !context->IsFullscreen()` read false, and
+     `DrmWindowHost` put the window back on its `restored_bounds_`. A patch
+     that made a stub work and then undid the only thing calling it.
+     `scripts/test-the-fullscreen-flag-is-honoured-once.sh` reads both halves
+     out of the series.
+   - `0019` is **the browser dropping DRM master, because the GPU process
+     never could.** Not a sandbox and not a permission bit: `drm_set_master`
+     marks the fd `was_master` when the browser's open takes master on a bare
+     tty, `drm_file_update_pid` then refuses to refresh the recorded pid for
+     any fd that was ever master — deliberately, so `drm_master_check_perm`
+     keeps working — and `SCM_RIGHTS` hands the GPU the same `struct drm_file`
+     with that frozen pid in it. A `dup` kept in the browser shares the one
+     `drm_file`, so the drop takes effect for the GPU's copy and the caller's
+     tgid is the recorded one. The GPU keeps honest `has_master()` bookkeeping
+     without the ioctl, which is load-bearing rather than tidy: left saying
+     yes, `DrmWindow::SchedulePageFlip` commits a frame while the console
+     belongs to somebody else, the atomic plane manager has no `EACCES`
+     exemption, and `PageFlipWatchdog` ends fifteen seconds later in
+     `LOG(FATAL)`.
+   - `0020` is **input from logind, so no user is ever in the `input` group.**
+     `TakeControl`, `TakeDevice` per device, `PauseDevice`/`ResumeDevice`,
+     over Chromium's own `dbus::Bus` rather than libseat — D-Bus is already
+     compiled into this engine and in use by the browser process, so it adds
+     no dependency. The seam was already there: `InputDeviceOpener` is a
+     one-method interface the factory takes as a constructor argument, and the
+     whole bug was one bare `open()`. **A resume is a reopen, not a `dup2`**:
+     the kernel drops the epoll registration with the description behind it,
+     and `AttachInputDevice` is the only caller of `Start()` — so without that
+     this and `0019`'s working `Ctrl+Alt+F<n>` would have shipped together as
+     "switch away, switch back, keyboard dead", which is worse than the group
+     membership they replace.
+   - `0021` is **a widget teardown taking the desktop with it.**
+     `DrmWindowHost::Close()` was `{}` — upstream's, not the fork's, and the
+     only Ozone platform whose `Close()` does not end in
+     `PlatformWindowDelegate::OnClosed()`, which is the call that nulls the
+     platform window and destroys the host. Without it
+     `DesktopWindowTreeHostPlatform::CloseNow()` destroys the compositor, asks
+     the platform window to close and is told nothing, so the host survives
+     half-destroyed and the widget's own later destruction dereferences a
+     compositor that is already gone. **The crash trace named
+     `StatusIconWidget`, and that is an ICF fold rather than the widget**: the
+     deleting destructor of any `views::Widget` subclass that adds no members
+     folds with `views::Widget`'s own, `symbol_level = 0` leaves the
+     symbolizer naming the folded address from whichever symbol it meets, and
+     that class is the only anonymous-namespace `views::Widget` subclass a
+     Linux build has to meet. It cannot have been the status icon:
+     `supports_system_tray_windowing` is false on ozone/drm. **Read a folded
+     frame as a fact about the group, not the name.** The fix is one call with
+     no decision in it, so what guards it is
+     `scripts/test-a-closed-drm-window-says-so.sh` reading the series, not a
+     gtest.
+   - `0023` is **the fullscreen that lasted 1.37 seconds.** Entering browser
+     fullscreen puts up the "press Esc to exit" bubble, whose `Show()` arms a
+     1500ms `presentation_watchdog_timer_` against a wedged GPU and on timeout
+     calls `ExclusiveAccessManager::ExitExclusiveAccess()` — which for
+     browser-mode fullscreen ends in `DrmWindowHost::SetFullscreen(false)` and
+     `restored_bounds_`. **The bubble is a top-level window of its own, and on
+     ozone/drm that means it is never presented**:
+     `SubtleNotificationView::CreatePopupWidget` asks for
+     `ui::ZOrderLevel::kSecuritySurface`, a security surface is always
+     `kDesktopNativeWidgetAura`, a second window is bound to no CRTC,
+     `DrmWindow::SchedulePageFlip` answers `PresentationFeedback::Failure()`,
+     and a failed presentation keeps the successful-presentation callbacks
+     pending rather than running them. So the watchdog was not a hang detector
+     here, it was a timer, and it fired on a healthy machine. The arm above it
+     in the same function says exactly this about headless, down to naming
+     `--start-fullscreen` as what it would revert; the new one asks Ozone
+     instead of guessing, through
+     `PlatformRuntimeProperties::presents_every_window` — true by default,
+     because everywhere else a window system is answerable for a frame once it
+     is handed over, and false on the platform that *is* the window system.
+   - `0024` is **the keymap, and every run logged `No current XKB state`
+     before every keypress.** `xkb_state_` is set only by
+     `XkbKeyboardLayoutEngine::SetKeymap`, whose reachable callers are
+     `SetCurrentLayoutByName` — `#if BUILDFLAG(IS_CHROMEOS)` around a
+     `NOTIMPLEMENTED()`, with `CanSetCurrentLayout()` answering false to match
+     — and `SetCurrentLayoutFromBuffer`, which is not gated and whose one
+     caller in the tree is `WaylandKeyboard::OnKeymap`. A non-ChromeOS
+     DRM/Ozone build runs neither, so the browser process held a null xkb
+     state for its whole life. `Lookup` still returns true: it falls back to
+     `DomCodeToNonPrintableDomKey`, a static table, so Escape, the function
+     keys and `Ctrl+Alt+F<n>` decoded correctly and the log line read as
+     noise. **A printable key is not in that table** — it came out as
+     `DomKey::UNIDENTIFIED` with the US-QWERTY `KeyboardCode` for wherever the
+     key physically sits, with `xkb_layout` and `xkb_variant` ignored in the
+     browser process entirely. The keymap is the compositor's, so it travels
+     compositor → engine, riding the handshake as `keymap` in the text the
+     compositor hands every Wayland client, so the shell and the windows on it
+     read one layout rather than each reading that config for itself.
+     `ControlChannel::DispatchLine` takes it before the page's client is
+     looked at and never relays it: the compositor has already resolved the
+     modifiers against it, and a document holding 40 kilobytes of xkb has
+     nothing to do with it.
 
-   **The modeset driver landed beside it (patch `0016`), and the shipped engine
-   now carries the platform.** `scripts/build.sh` and `engine-release-build.sh`
-   both name `ozone_platform_drm = true`, which is the last item of step 2 that
-   is not about a screen. Four patches went in tonight -- `0014` a feature flag
-   read during static initialization, `0015` the seven methods, `0016` the
-   modeset driver, and the build argument on top of them.
+   **What `crux` can answer and what it cannot, at any cost in code.** Its
+   `card0` is vkms, whose `Virtual-1` connector reads `connected` at a
+   preferred 1024x768@60 — and vkms takes a GBM device and then refuses an EGL
+   window surface (`EGL_BAD_MATCH`), while `renderD128` renders fine and
+   belongs to `card1`, whose four connectors all read `disconnected`. Putting
+   a frame on the lit connector would mean rendering on one card and scanning
+   out on another, which ozone/drm cannot do. So **"does the modeset path run"
+   needs no new hardware there and "does a desktop appear" is unreachable on
+   that machine.** The same split is the one thing past the seven
+   `NOTREACHED()`s that is not an embedder method at all:
+   `GetPreferredEGLDevice()` chooses a render device,
+   `GetPrimaryDisplayCardPath()` chooses a scanout card, and both ask
+   `GetPreferredDrmDrivers()` — which upstream can do because on ChromeOS they
+   are the same device. It is a device question rather than a porting one.
+   One trap from that machine outlives the milestone: **an `args.gn` carrying
+   an argument is not a binary built with it.** `out/Agent` took
+   `ozone_platform_drm` into its `args.gn` a day after its `chrome` was
+   linked, and that binary aborted in `GetOzonePlatformId` with `Invalid ozone
+   platform: drm` before a line of fork code ran. Comparing the two timestamps
+   is what says which.
 
-   **What stands next is not an embedder method, and that is the finding.**
-   Past the seven, the GPU process dies: ozone/drm refuses software compositing
-   by design and the run had fallen back to it after three GPU process restarts
-   on an incomplete GL framebuffer. `GetPreferredEGLDevice()` chooses a render
-   device and `GetPrimaryDisplayCardPath()` chooses a scanout card, and both ask
-   the same `GetPreferredDrmDrivers()` -- which upstream can do because on
-   ChromeOS they are the same device. On `crux` they cannot be: the card with a
-   connected connector has no render node, and the card with the render node has
-   nothing plugged into it. The build host has since confirmed the render-node
-   mismatch. `A-DESKTOP-ON-A-TTY.md` step 2 carries it, and it is a device
-   question rather than a porting one.
-
-   Both of those runs were made without taking the engine tree lock, and CI
-   reset the checkout twice inside the build window, so **repeat them under the
-   lock before quoting them as measurements** -- as a dispatched CI job, which
-   takes the lock by construction and ends in a run URL a doc can cite. What
-   each finding rests on is readable in the source either way; what is in doubt
-   is the binary, not the diagnosis.
-
-   `0014` was repeated under the lock and is a measurement. The seven-methods
-   finding and the GPU trace were not, and the patches they drove are in main
-   on the strength of the source rather than of those runs -- which is the
-   trade this paragraph describes, taken deliberately rather than forgotten.
-   What would settle them is one build of `chrome` under the lock with the
-   series applied, and that is cheaper now than it was: the shipped build
-   carries the platform, so an ordinary engine run compiles it.
-
-   The two steps after that were blocked on a card node, and
-   `crux` has one -- `/dev/dri/card0` is **vkms**, whose `Virtual-1` connector
-   reads `connected` at a preferred 1024x768@60, with GBM up and a 256x256
-   XRGB8888 scanout bo allocated on it (`drmprobe/probe`, read-only: it calls
-   neither `drmModeSetCrtc` nor `drmSetMaster`). `card1` is the nvidia GPU and
-   all four of its connectors read `disconnected`.
-
-   A vkms CRTC presents to nobody, so it answers "does the modeset path run"
-   and not "does a desktop appear". That reading survives -- but the second half
-   is now known to be **unreachable on this machine at any cost in code**, which
-   it was not when this was written. vkms takes a GBM device and then refuses an
-   EGL window surface (`EGL_BAD_MATCH`), so nothing renders on the card that has
-   the connected connector; `renderD128` renders fine and belongs to the card
-   with four disconnected ones. Putting a frame on the lit connector would mean
-   rendering on one card and scanning out on another, which ozone/drm cannot do.
-   So "does the modeset path run" needs no new hardware and "does a desktop
-   appear" needs a monitor on `card1` or a different machine.
-   `A-DESKTOP-ON-A-TTY.md` carries the numbers. Treat the costing as a floor:
-   the last audit read five edits and the compiler found eight.
-
-   **Step 2's code is done -- four more patches -- and of it only the modeset
-   has run on a screen**, in the run recorded below. Keep those two halves
-   together; the rest of this item is the first and the paragraph after it is
-   the second.
-
-   `0017` was the VT switcher: `VT_SETMODE` in `VT_PROCESS` mode, a signal
-   per edge, and the handshake as a free function. `0022` took every VT ioctl
-   in it back out -- see below.
-
-   `0018` is **the black screen, and it was never the display list.**
-   `ScreenManager::FindWindowAt` compares a window's rectangle to
-   `gfx::Rect(controller->origin(), controller->GetModeSize())` for *exact*
-   equality, and Chromium's default window is `kWindowMaxDefaultWidth` wide
-   inset by ten pixels -- 1050x1900 at (10,10) on a 2880x1920 panel. No match
-   means no controller, and every frame is dropped before the kernel sees it,
-   with nothing wrong in any log because nothing went wrong. `domicile-launch`
-   passes `--start-fullscreen` on the scanout platform only, and `DrmWindowHost`
-   answers `SetFullscreen` and `GetPlatformWindowState`, both of which were
-   stubs on `0015`'s premise that ash sizes its own root window. Nothing in
-   `chrome/` is touched, and the revision of `0018` that touched it is what the
-   second tty run below found: the `--app=` path already reaches
-   `MaybeToggleFullscreen`, through the `FinalizeWebAppLaunch` call
-   `MaybeLaunchAppShortcutWindow` already makes.
-
-   `0019` is **the browser dropping DRM master, because the GPU process never
-   could.** Not a sandbox and not a permission bit: `drm_set_master` marks the
-   fd `was_master` when the browser's open takes master on a bare tty,
-   `drm_file_update_pid` then refuses to refresh the recorded pid for any fd
-   that was ever master -- deliberately, so `drm_master_check_perm` keeps
-   working -- and `SCM_RIGHTS` hands the GPU the same `struct drm_file` with
-   that frozen pid in it. A `dup` kept in the browser shares the one
-   `drm_file`, so the drop takes effect for the GPU's copy and the caller's
-   tgid is the recorded one. The GPU keeps honest `has_master()` bookkeeping
-   without the ioctl, which is load-bearing rather than tidy: left saying yes,
-   `DrmWindow::SchedulePageFlip` commits a frame while the console belongs to
-   somebody else, the atomic plane manager has no EACCES exemption, and
-   `PageFlipWatchdog` ends fifteen seconds later in `LOG(FATAL)`.
-
-   `0020` is **input from logind, so no user is ever in the `input` group.**
-   `TakeControl`, `TakeDevice` per device, `PauseDevice`/`ResumeDevice`, over
-   Chromium's own `dbus::Bus` rather than libseat -- D-Bus is already compiled
-   into this engine and in use by the browser process, so it adds no
-   dependency. The seam was already there: `InputDeviceOpener` is a one-method
-   interface the factory takes as a constructor argument, and the whole bug was
-   one bare `open()`. A resume is a **reopen**, not a `dup2`: the kernel drops
-   the epoll registration with the description behind it, and
-   `AttachInputDevice` is the only caller of `Start()` -- so without that,
-   `0019`'s working `Ctrl+Alt+F<n>` and this would have shipped together as
-   "switch away, switch back, keyboard dead", which is worse than the group
-   membership they replace.
-
-   `0022` is **logind owning the console, and the chord that starts a switch.**
-   `TakeControl` runs logind's `session_prepare_vt`, so the session's VT is
-   already `K_OFF`, `KD_GRAPHICS` and `VT_PROCESS` before the first key
-   arrives. `K_OFF` is the kernel's own `Ctrl+Alt+F<n>`, off -- so on real
-   hardware the chord did nothing at all while the log said `VT switching is
-   on` -- and a second `VT_SETMODE` does not conflict with logind's, it
-   silently takes it, leaving logind waiting for a release signal that never
-   comes. So the fork has no VT ioctl now: the chord is read in
-   `PlatformEventObserver::WillProcessEvent` on `EventFactoryEvdev` (the
-   browser holds every keyboard descriptor; the compositor advertises a
-   `wl_seat` and reads no evdev node), it calls `Seat.SwitchTo(u)`, and the
-   display follows the session's `Active` property. `0017`'s table of
-   orderings survived it; the ioctls under it did not.
-
-   **None of those five had been exercised when they landed**, and the run
-   below has since exercised none of them either. They rest on source read at
-   the pin, unit tests (`DrmFullscreenTest`, `DrmMasterTest`, `DrmInputDevicesTest`,
-   `DrmVtSwitcherTest`), and an engine build that compiles and links. `crux`
-   still cannot answer the other half -- vkms has the connected connector and
-   refuses an EGL window surface, `renderD128` renders and belongs to the card
-   with four disconnected ones -- so the first real evidence will be a run on a
-   machine with a monitor, and every one of these four is a candidate to be
-   wrong there in a way no test here can see. The black screen `0018` fixes is
-   exactly that shape: three prior patches were correct and the desktop was
-   still dark.
-
-   **The first run on a tty with a connected panel has now happened, and the
-   modeset worked.** `the DRM thread confirmed the modeset` on a 2880x1920@120
-   connector -- `0016` doing what it was written to do, on hardware, for the
-   first time. Nothing drew, because the browser process SEGV'd about 200ms
-   later, and `0021` is that crash. `0017`, `0018`, `0019` and `0020` are still
-   unexercised: the run ended before anything could ask them anything.
-
-   `DrmWindowHost::Close()` was `{}` -- upstream's, not the fork's, and the
-   only Ozone platform whose `Close()` does not end in
-   `PlatformWindowDelegate::OnClosed()`. That call is what completes a close:
-   it nulls the platform window and destroys the host. Without it
-   `DesktopWindowTreeHostPlatform::CloseNow()` destroys the compositor, asks
-   the platform window to close, and is told nothing -- so the host survives
-   half-destroyed, and the widget's own destruction later dereferences the
-   compositor that is already gone. **The same species as `0015` and `0018`: a
-   stub whose premise is that ash never routes a window through
-   `DesktopWindowTreeHostPlatform`, reached by a views browser on a tty.** It
-   is one call with no decision in it, so what guards it is
-   `scripts/test-a-closed-drm-window-says-so.sh` reading the series, not a
-   gtest.
-
-   The crash trace named `StatusIconWidget`, and **that is an ICF fold rather
-   than the widget**: the deleting destructor of any `views::Widget` subclass
-   that adds no members folds with `views::Widget`'s own, `symbol_level = 0`
-   leaves the symbolizer naming the folded address from whichever symbol it
-   meets, and on a Linux build that class is the only anonymous-namespace
-   `views::Widget` subclass there is to meet. It cannot have been the status
-   icon: `supports_system_tray_windowing` is false on ozone/drm and
-   `StatusIconButtonLinux` refuses to build its widget without it. Read a
-   folded frame as a fact about the *group*, not the name.
-
-   **The second run got all the way up and still drew nothing**, and `0018`
-   was why. Modeset confirmed, compositor serving, chrome connected and
-   handshaken -- and the chrome reported a desktop of 1050x1900, which is
-   Chromium's default app window on that panel to the pixel. `0018`'s ozone
-   half was right and its `chrome/` half was a second caller: the `--app=`
-   path does reach `StartupBrowserCreatorImpl::MaybeToggleFullscreen`, because
-   `MaybeLaunchAppShortcutWindow` calls `web_app::startup::FinalizeWebAppLaunch`
-   and that function's last statement is exactly it. So `--start-fullscreen`
-   was never being dropped, the patch's extra `chrome::ToggleFullscreenMode`
-   ran on a window that had *just* gone fullscreen, and
-   `FullscreenController::ToggleFullscreenModeInternal` reads
-   `enter_fullscreen = !context->IsFullscreen()` -- so it exited, and
-   `DrmWindowHost` put the window back on the `restored_bounds_` it had
-   recorded a moment earlier. A patch that made a stub work, and then undid
-   the only thing calling it. What guards it now is
-   `scripts/test-the-fullscreen-flag-is-honoured-once.sh`, reading the series:
-   the DRM window must answer a fullscreen request with new bounds, and the
-   series must add no second toggle to startup. `0019`, `0020` and `0022`
-   remain unexercised.
-
-   **The third run went fullscreen and stayed there for 1.37 seconds**, and
-   `0023` is what ended it. `--start-fullscreen` reached the window once, the
-   desktop reported 2880x1920, and then it reported 1050x1900 again. What asks
-   is `ExclusiveAccessBubbleViews`: entering browser fullscreen puts up the
-   "press Esc to exit" bubble, `Show()` arms a 1500ms
-   `presentation_watchdog_timer_` against a wedged GPU, and on timeout it
-   calls `ExclusiveAccessManager::ExitExclusiveAccess()` -- which for
-   browser-mode fullscreen ends in `DrmWindowHost::SetFullscreen(false)` and
-   `restored_bounds_`. **The bubble is a top-level window of its own and on
-   ozone/drm that means it is never presented**:
-   `SubtleNotificationView::CreatePopupWidget` asks for
-   `ui::ZOrderLevel::kSecuritySurface` and a security surface is always
-   `kDesktopNativeWidgetAura`, a second window is bound to no CRTC,
-   `DrmWindow::SchedulePageFlip` answers `PresentationFeedback::Failure()`,
-   and a failed presentation keeps the successful-presentation callbacks
-   pending rather than running them. So the watchdog was not a hang detector
-   here, it was a timer, and it fired on a healthy machine. The arm above it
-   in the same function says exactly this about headless, down to naming
-   `--start-fullscreen` as what it would revert; the new one asks Ozone
-   instead of guessing, through
-   `PlatformRuntimeProperties::presents_every_window` -- true by default,
-   because everywhere else a window system is answerable for a frame once it
-   is handed over, and false on the platform that *is* the window system.
-   What guards it is
-   `scripts/test-the-fullscreen-bubble-does-not-undo-fullscreen.sh`: the
-   bubble has to ask and ozone/drm has to answer, and either alone compiles
-   and does nothing. Unexercised like the four before it, and for the same
-   reason: it is read at the pin rather than off a screen.
-
-   **Every run logged `No current XKB state` before every keypress**, and what
-   that line costs was hidden by the fallback behind it. `xkb_state_` is set
-   only by `XkbKeyboardLayoutEngine::SetKeymap`, whose reachable callers are
-   `SetCurrentLayoutByName` -- `#if BUILDFLAG(IS_CHROMEOS)` around a
-   `NOTIMPLEMENTED()`, with `CanSetCurrentLayout()` answering false to match --
-   and `SetCurrentLayoutFromBuffer`, which is *not* gated and whose one caller
-   in the tree is `WaylandKeyboard::OnKeymap`. A non-ChromeOS DRM/Ozone build
-   runs neither, so the browser process held a null xkb state for its whole
-   life. `Lookup` still returns true: it falls back to
-   `DomCodeToNonPrintableDomKey`, a static table, so Escape, the function keys
-   and `Ctrl+Alt+F<n>` decoded correctly and the log line read as noise. **A
-   printable key is not in that table.** It came out as
-   `DomKey::UNIDENTIFIED` with the US-QWERTY `KeyboardCode` for wherever the
-   key physically sits -- no `key`, no text, and `xkb_layout` / `xkb_variant`
-   ignored in the browser process entirely. It had not been hit only because
-   nothing had drawn yet.
-
-   **The keymap is the compositor's, so it travels compositor -> engine**,
-   which is the direction `displays` already runs on the chrome control
-   socket. It rides the handshake as `keymap`, carrying the text the
-   compositor compiled from `input.keyboard` and hands every Wayland client,
-   so the shell and the windows on it read one layout rather than each reading
-   that config for itself -- the class of disagreement `0018` and `0022` both
-   were. `ControlChannel::DispatchLine` takes it before the page's client
-   is looked at and never relays it: the compositor has already resolved the
-   modifiers against it, and a document holding 40 kilobytes of xkb has
-   nothing to do with it. The layout engine belongs to the UI thread and that
-   socket is read on the IO thread, so the binder -- which runs on the UI
-   thread -- binds the sink and hands it in, which is what keeps
-   `//components/domicile:control_channel` free of `//content`. Three gtest
-   cases in `components/domicile/browser/keyboard_layout_unittest.cc` are the
-   bug written down, and
-   `scripts/test-the-keymap-reaches-the-browser.sh` is what compares the tag
-   and the field across the two languages that spell them separately.
-
-   What is left of step 2 after a screen lights: **taking the card node from
-   logind too**, which is
-   how wlroots does VT switching and would supersede `0019`'s `dup`, remove
-   the browser's own `open()` of the card, and close the one gap `0022` leaves:
+   **What is left of step 2: taking the card node from logind too.**
+   `TakeDevice` on `/dev/dri/card0` plus `PauseDevice`/`ResumeDevice`, which
+   is how wlroots does VT switching. It supersedes `0019`'s `dup`, removes the
+   browser's own `open()` of the card, and closes the one gap `0022` leaves:
    with no `PauseDevice` for the card there is nothing to hold a switch open
    with `PauseDeviceComplete`, so the drop trails the console change by a
-   D-Bus round trip.
-
+   D-Bus round trip. Late is not wedged — the kernel restores its own
+   framebuffer when the last master goes, so the console is stale for that
+   width rather than black — but it is a real gap, and it is the last `[ ]` in
+   `A-DESKTOP-ON-A-TTY.md`'s step 2.
 2. **What the engine ships that a desktop never runs.** Chrome carries a tab
    strip, a New Tab page, a settings UI, sign-in and sync. A desktop can reach
    none of it, all of it is built, and all of it is in the ~216 MB release
@@ -601,9 +554,15 @@ decides whether an item is waiting or workable.
 
 ### Needs a machine with a screen
 
-Nothing here can see one. Say which question a run would answer rather than
-guessing between two.
+No agent and no CI runner here can see one; `crux` has a card but no panel it
+can render to. A person with a laptop is the whole of this channel, so say
+which question a run would answer rather than guessing between two.
 
+- **Does a tty desktop take a keystroke?** The first question, because the last
+  hardware run lit the screen and was deaf. `engine-6ac6dbc` or later, on a
+  bare tty: a printable key in the shell, and `Ctrl+Alt+F<n>` away and back
+  with the keyboard still alive afterwards. That one run exercises `0020`,
+  `0022`, `0024` and `0019`'s drop at once.
 - The first real `./scripts/dev-shell.sh <name>`.
 - Anything about orientation, presentation, or what a display does with a
   buffer.
