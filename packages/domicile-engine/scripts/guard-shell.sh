@@ -10,14 +10,14 @@
 # harness can compute a probe point, and name app ids the harness chose. They
 # measure the seam. None of them measures the thing the seam is *for* — a shell
 # nobody wrote for this, built by its own vite config, joined to the compositor
-# by the SDK's own `connectToHost`, mounting `<domicile-app>` elements for
-# windows it learns about from the host.
+# by the SDK's own `connectToHost`, mounting `<app>` elements for windows it
+# learns about from the host.
 #
 # That is three things at once and each has failed on its own: the engine
 # serving the shell over `domicile://` and writing the document that loads it,
-# the SDK reaching the compositor through `navigator.domicile` rather than an
-# Electron preload, and `<domicile-app>` calling `embedExternalSurface` for an
-# app id the shell was told about rather than one a query string named.
+# the SDK reaching the compositor through `navigator.domicile`, and `<app>`
+# calling `embedExternalSurface` for an app id the shell was told about rather
+# than one a query string named.
 #
 # The first two used to be a bridge process serving the page and a session on
 # one TCP port, with the SDK reaching it over a WebSocket. Both are gone -- see
