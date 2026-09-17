@@ -611,11 +611,32 @@ guessing between two.
 
 ### Undecided
 
-- **Translucent chrome over a window with anything painted behind it.** The
-  page cannot see the window's pixels, so a `backdrop-filter` on chrome stacked
-  over a window has nothing to blur. Four ways out are costed in
-  `WINDOW-COMPOSITING.md`; raster-per-band is where it goes, and its open part
-  is transport rather than rendering.
+- **Translucent chrome over a window, unmeasured.** A `backdrop-filter` on
+  chrome stacked above an `<app>` is EXPECTED TO WORK, the way one over a
+  hardware-composited `<video>` does, and nobody has run it. It is here because
+  it is unproven, not because it is thought to be impossible.
+
+  This entry used to say the opposite -- that the page cannot see the window's
+  pixels so there is nothing to blur, and that raster-per-band is where it
+  goes -- and both halves were wrong. The page does not need to see those
+  pixels: a backdrop filter is applied by viz on a render pass, AFTER surface
+  aggregation has inlined the window's quads into it, which is the same path
+  that makes it work over a `<video>`. And raster-per-band is costed in
+  `WINDOW-COMPOSITING.md` as the REJECTED answer to a different question --
+  interleaving chrome with a window on an unforked engine that hands out one
+  flat raster -- so quoting it here read as a plan for a problem that does not
+  exist. `WINDOW-COMPOSITING.md` has said "likely-correct and unmeasured" for
+  as long as this said "has nothing to blur"; the architecture document was the
+  right one.
+
+  WHAT A MEASUREMENT WOULD ACTUALLY TEST is overlay promotion. Viz's
+  `OverlayProcessor` can promote a window's quad to direct scanout, and a quad
+  on an overlay plane is not in the render pass a backdrop filter reads from.
+  Promotion checks occlusion and should decline under a filter, so the expected
+  result is that it works -- but that check is the mechanism by which this
+  could fail, and it is exactly the optimisation this architecture is proud
+  of. `guard-css-and-resize.sh` is where the answer belongs, beside the seven
+  properties already bit-exact there.
 - **`wl_shm` clients.** A client that draws into shared memory has no dmabuf to
   import, so its window is blank and the compositor says so once per client.
   The upload that would give it one does not exist — `ENGINE-FORK.md`, phase 2.
