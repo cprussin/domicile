@@ -75,7 +75,7 @@ describe("useReclaimFocus", () => {
 
   // The chrome is full of things that take the focus on purpose, and every one
   // of them is the user reaching for it: the address bar over the page, a tab
-  // in the rail, the theme switch. A window that took the focus back from those
+  // on the top bar, the theme switch. A window that took the focus back from those
   // is a window whose address bar cannot be typed in.
   it("leaves the focus where the chrome deliberately put it", async () => {
     const view = page();

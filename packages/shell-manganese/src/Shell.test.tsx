@@ -3,17 +3,18 @@ import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { css } from "../styled-system/css";
+import { codeFor } from "./keyboard/programmers-dvorak";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
+import { TITLE_BAR } from "./window-management/rect";
 
 // The desktop as the *engine* describes it: a corner and an extent as four
-// numbers, which `screens/host-displays.ts` is what regroups into the rectangle the
-// component library lays out against. The double below holds this shape rather
-// than that one, so the mapping is exercised by every render here.
+// numbers, which `screens/host-displays.ts` is what regroups into the rectangle
+// the component library lays out against. The double below holds this shape
+// rather than that one, so the mapping is exercised by every render here.
 const LEFT: DomicileDisplay = {
   height: 1080,
   name: "left",
@@ -31,6 +32,9 @@ const RIGHT: DomicileDisplay = {
   x: 1920,
   y: 0,
 };
+
+/** How tall the top bar is, which the windows below it start under. */
+const TOP_BAR = 32;
 
 /** The region a `<Screen>` renders for the display of this name. */
 const screenNamed = (container: HTMLElement, name: string): Element | null =>
@@ -91,9 +95,8 @@ class FakeDomicile {
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
   }
-  // The portal forwards the keys a focused window is given, and a window that
-  // has just been floated is focused — so the shell's own keystrokes reach
-  // this once one is on screen.
+  // The portal forwards the keys a focused window is given, so the shell's own
+  // keystrokes reach this once a window has the keyboard.
   key(appId: string, keycode: number, pressed: boolean): void {
     this.calls.push(["key", appId, keycode, pressed]);
   }
@@ -110,37 +113,6 @@ class FakeDomicile {
     this.calls.push(["closeApp", appId]);
   }
 }
-
-/**
- * What the page hears while these modifiers are held down.
- *
- * A key event rather than a `modifiers` message from the host, because the
- * page is the only thing that hears this keyboard: the desktop is the chrome's
- * window, and every key the compositor's seat knows about is one the SDK
- * forwarded from this very document. The shell reads the set off the flags
- * every key event carries rather than tracking the modifier keys themselves,
- * so which key this is does not matter.
- */
-const pageHolds = (held: {
-  alt?: boolean;
-  ctrl?: boolean;
-  shift?: boolean;
-}): void => {
-  fireEvent.keyDown(document, {
-    altKey: held.alt ?? false,
-    ctrlKey: held.ctrl ?? false,
-    key: "Alt",
-    shiftKey: held.shift ?? false,
-  });
-};
-
-const tabNames = (): string[] =>
-  screen.getAllByRole("listitem").map((row) => row.textContent ?? "");
-
-const shownWindowIds = (container: HTMLElement): (string | null)[] =>
-  [...(container.querySelector("main")?.children ?? [])]
-    .filter((element) => !element.hasAttribute("hidden"))
-    .map((element) => element.getAttribute("app-id") ?? element.tagName);
 
 let domicile: FakeDomicile;
 
@@ -174,11 +146,120 @@ const renderShell = (desktop: readonly DomicileDisplay[] = [LEFT]) =>
 /**
  * The chrome before any desktop has been described — the gap between the page
  * loading and the host answering, and the whole of a shell that has no host.
- *
- * Its own function rather than `renderUndescribedShell()`, which a default
- * parameter would quietly turn back into a described desktop.
  */
 const renderUndescribedShell = () => renderingShell(undefined);
+
+/** A client the host announces, which is a window on the desktop. */
+const clientAppears = (appId: string, title = appId): void => {
+  domicile.emit("app_appeared", { app_id: appId, title });
+};
+
+/**
+ * A chord pressed on this page, which is where every press the desktop's own
+ * chrome or a focused Wayland window hears arrives.
+ *
+ * By the *key* rather than by the letter on it: the bindings are physical, so
+ * a test presses `codeFor("h")` — the key Programmer's Dvorak puts `h` on —
+ * exactly as the shell reads it.
+ */
+const press = (keysym: string, shift = false): void => {
+  fireEvent.keyDown(document, {
+    code: codeFor(keysym),
+    metaKey: true,
+    shiftKey: shift,
+  });
+};
+
+/** The same chord, handed back by the host — what a focused `<webview>` does. */
+const hostPress = (keysym: string, shift = false): void => {
+  const keycode = KEYCODES[keysym];
+  if (keycode === undefined) {
+    throw new Error(`test: no evdev code written down for ${keysym}`);
+  } else {
+    domicile.emit("shortcut", {
+      altKey: false,
+      ctrlKey: false,
+      keycode,
+      metaKey: true,
+      shiftKey: shift,
+    });
+  }
+};
+
+/**
+ * The evdev codes of the keys these tests hand back through the host.
+ *
+ * Written out rather than read off the bindings: what this checks is that the
+ * shell answers the code the compositor was given, so taking the number from
+ * the same table would check nothing.
+ */
+const KEYCODES: Readonly<Record<string, number>> = {
+  Return: 28,
+  Tab: 15,
+};
+
+/** What the page holds down, which is what hands the shell the pointer. */
+const pageHolds = (held: { meta?: boolean; shift?: boolean }): void => {
+  fireEvent.keyDown(document, {
+    code: "MetaLeft",
+    key: "Meta",
+    metaKey: held.meta ?? false,
+    shiftKey: held.shift ?? false,
+  });
+};
+
+/** The windows on screen, by the client or the kind of window each one is. */
+const windowsOnScreen = (container: HTMLElement): string[] =>
+  [
+    ...container.querySelectorAll(
+      `main ${APP_TAG_NAME}:not([hidden]), main section:not([hidden])`,
+    ),
+  ].map(
+    (element) =>
+      element.getAttribute("app-id") ??
+      element.getAttribute("aria-label") ??
+      "",
+  );
+
+/** Every window's title bar, in the order the windows were opened. */
+const titleBars = (container: HTMLElement): HTMLElement[] => [
+  ...container.querySelectorAll<HTMLElement>(
+    "[data-window]:not([aria-hidden])",
+  ),
+];
+
+const barFor = (container: HTMLElement, id: string): HTMLElement => {
+  const bar = titleBars(container).find((found) => found.dataset.window === id);
+  if (bar === undefined) {
+    throw new Error(`test: no title bar for ${id}`);
+  } else {
+    return bar;
+  }
+};
+
+/** The sheet a drag is caught on, over one floating window. */
+const grabSheets = (container: HTMLElement): HTMLElement[] => [
+  ...container.querySelectorAll<HTMLElement>("[data-window][aria-hidden]"),
+];
+
+const appElement = (container: HTMLElement, appId: string): HTMLElement => {
+  const element = container.querySelector<HTMLElement>(
+    `${APP_TAG_NAME}[app-id="${appId}"]`,
+  );
+  if (element === null) {
+    throw new Error(`test: no window for ${appId}`);
+  } else {
+    return element;
+  }
+};
+
+/** Where an element was placed, as the numbers the layout worked out. */
+const boxOf = (element: HTMLElement) => ({
+  height: element.style.blockSize,
+  width: element.style.inlineSize,
+  x: element.style.insetInlineStart,
+  y: element.style.insetBlockStart,
+});
 
 beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
@@ -206,10 +287,6 @@ describe("Shell", () => {
     });
 
     it("says so when the host describes a desktop with no screens", () => {
-      // `undefined` and `[]` are different things, and without this they look
-      // identical from the outside: a blank window. The `domicile` daemon
-      // serves the chrome protocol from a bare `Session` and describes no
-      // displays at all, so this is what a chrome pointed at it gets.
       renderShell([]);
 
       expect(
@@ -218,9 +295,6 @@ describe("Shell", () => {
     });
 
     it("says nothing of the kind before the host has described anything", () => {
-      // Not having been told yet is a moment, not a desktop with no screens on
-      // it — and a "no screens" card for the length of the handshake would be
-      // on screen every time the shell starts.
       renderUndescribedShell();
 
       expect(
@@ -229,10 +303,6 @@ describe("Shell", () => {
     });
 
     it("renders nothing until the desktop is described", () => {
-      // A chrome laid out over the page and then moved onto a screen is two
-      // different elements in that slot, and the switch takes the whole
-      // subtree with it. Waiting costs the handshake's worth of blank window;
-      // a shell that will never be told has `viewport-displays` instead.
       const { container } = renderUndescribedShell();
 
       expect(container.querySelector("main")).toBeNull();
@@ -244,13 +314,8 @@ describe("Shell", () => {
       // chrome built before the desktop and rebuilt after it would take those
       // windows down with it — every portal re-created blank, every embedded
       // page reloaded to the URL its window was opened at.
-      //
-      // What is checked is that the window announced before the desktop is on
-      // screen after it. A portal torn down and made again used to be visible
-      // as a `remove_portal` the host was sent, and there is no such message
-      // any more.
       const { container } = renderUndescribedShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      clientAppears("term", "Terminal");
 
       domicile.describes([LEFT]);
 
@@ -260,9 +325,6 @@ describe("Shell", () => {
     });
 
     it("follows the desktop when it changes", () => {
-      // The desktop is re-described whenever it changes — with no displays
-      // configured it is Domicile's own window, so every resize produces
-      // another description — and the chrome moves to whatever is first now.
       const { container } = renderShell([LEFT, RIGHT]);
 
       const stage = screenNamed(container, "left")?.querySelector("main");
@@ -283,12 +345,6 @@ describe("Shell", () => {
 
   describe("the wallpaper", () => {
     it("hangs behind every screen rather than inside one", () => {
-      // Outside the regions and before them: the viewport is the desktop, so
-      // one fixed sheet is the wallpaper of every screen on it, and a
-      // positioned sibling that comes first in the document is painted under
-      // all of them. A `<Screen>` of its own would put a second region on
-      // every display, which is one region too many for anything that looks a
-      // display up by `data-screen` — the helper above included.
       const { container } = renderShell([LEFT, RIGHT]);
 
       expect(
@@ -300,1125 +356,496 @@ describe("Shell", () => {
     });
 
     it("is up before the host has described a desktop", () => {
-      // The chrome waits for a desktop because a chrome moved onto a screen is
-      // a chrome remounted. The wallpaper is on no screen and so has nothing to
-      // wait for, which makes the handshake a photograph rather than a blank
-      // window.
       const { container } = renderUndescribedShell();
 
       expect(container.querySelector("[data-wallpaper]")).toBeInTheDocument();
     });
   });
 
-  describe("filling the space it is given", () => {
-    // A `<Screen>` is a region of the page at the display's own rectangle, so
-    // everything inside it has to reach that rectangle's edges — nothing below
-    // here has a size of its own to fall back on. This has come apart more than
-    // once, and each time it looks the same from outside: content in a corner
-    // of a screen that is the right size.
-    //
-    // Declarations rather than class names, because Panda hashes them: the
-    // check is that the element carries *this rule*, which is what
-    // `Screen.test.tsx` does for the region itself.
+  describe("the top bar", () => {
+    it("reads the date and the time down to the second", () => {
+      renderShell();
 
-    it("gives the chrome the whole of the screen it is on", () => {
-      const { container } = renderShell([LEFT]);
-      const root = screenNamed(container, "left")?.firstElementChild;
-
-      expect(root?.className).toContain(css({ blockSize: "100%" }));
-    });
-
-    it("gives the stage what the rail leaves of it", () => {
-      const { container } = renderShell([LEFT]);
-      const stage = screenNamed(container, "left")?.querySelector("main");
-
-      expect(stage?.className).toContain(css({ flexGrow: 1 }));
-    });
-
-    it("gives a window the whole of the stage", () => {
-      // The portal is a hole in the page and has no pixels of its own to size
-      // it, so without this a client's surface is composited into whatever box
-      // the element happened to get — which for an empty replaced element is
-      // nothing at all.
-      renderShell([LEFT]);
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-
-      // One declaration per assertion: `css` with two of them returns two
-      // space-joined class names, and Panda emits them in the source object's
-      // key order — so a single `toContain` would need them adjacent and in
-      // that order, and any declaration inserted between the two in
-      // `window-styles.ts` would fail a rule that had not changed.
-      const portal = document.querySelector(APP_TAG_NAME);
-      expect(portal?.className).toContain(css({ position: "absolute" }));
-      // Four declarations rather than `inset: 0`, because a floating window
-      // overrides them one at a time — see `window-styles`.
-      expect(portal?.className).toContain(css({ insetBlockStart: 0 }));
-      expect(portal?.className).toContain(css({ insetInlineStart: 0 }));
-      expect(portal?.className).toContain(css({ blockSize: "100%" }));
-      expect(portal?.className).toContain(css({ inlineSize: "100%" }));
-    });
-
-    it("gives an idle screen's clock the whole of that screen", () => {
-      const { container } = renderShell([LEFT, RIGHT]);
-      const idle = screenNamed(container, "right")?.firstElementChild;
-
-      expect(idle?.className).toContain(css({ blockSize: "100%" }));
-    });
-  });
-
-  describe("with nothing open", () => {
-    it("says nothing at all", () => {
-      // The stage is bare until something is opened onto it. It used to carry
-      // a card of keybinding hints, which is a thing to read once and then
-      // look past for ever.
-      const { container } = renderShell();
-      expect(container.querySelector("main")?.children).toHaveLength(0);
-    });
-  });
-
-  describe("app portals", () => {
-    it("mounts a portal when the host announces an app", () => {
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
       expect(
-        container.querySelector(APP_TAG_NAME)?.getAttribute("app-id"),
-      ).toBe("term");
-      expect(tabNames()).toStrictEqual(["Terminal"]);
+        screen.getByText(/^\w+ \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/),
+      ).toBeInTheDocument();
     });
 
-    it("takes the portal down when the app closes", () => {
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      domicile.emit("app_closed", { app_id: "term" });
-      expect(container.querySelector(APP_TAG_NAME)).toBeNull();
-    });
-
-    it("renames the tab when the client says what its window is called", () => {
-      // The one place the wire message meets the reducer. A toplevel is
-      // announced when the client creates it, which is before `set_title`, so
-      // the tab opens showing the app id and is renamed afterward.
+    it("shows the workspace on screen and the ones with windows on them", () => {
+      // sway's own bar: an empty workspace nobody is looking at is not on it.
       renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: undefined });
-      expect(tabNames()).toStrictEqual(["term"]);
+      clientAppears("term");
+      press("parenright");
 
-      domicile.emit("app_titled", { app_id: "term", title: "~/domicile" });
-
-      expect(tabNames()).toStrictEqual(["~/domicile"]);
+      const workspaces = screen.getByRole("navigation", {
+        name: "Workspaces",
+      });
+      expect(
+        [...workspaces.querySelectorAll("button")].map(
+          (button) => button.textContent,
+        ),
+      ).toEqual(["1", "2"]);
     });
 
-    it("shows one window at a time, the newest of them", () => {
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "a", title: "A" });
-      domicile.emit("app_appeared", { app_id: "b", title: "B" });
-      expect(shownWindowIds(container)).toStrictEqual(["b"]);
-    });
-  });
-
-  describe("the tab rail", () => {
-    it("puts the window whose tab was clicked on the stage", async () => {
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "a", title: "A" });
-      domicile.emit("app_appeared", { app_id: "b", title: "B" });
-      await userEvent.click(screen.getByRole("button", { name: "A" }));
-      expect(shownWindowIds(container)).toStrictEqual(["a"]);
-    });
-
-    it("asks the client to close its window, and waits for it to go", async () => {
-      // The client owns the window, so the X is a request: it stays on the
-      // rail until the host says the client actually went away. A tab that
-      // vanished on the click would take an editor's unsaved-work dialog off
-      // the stage with nothing that ever puts it back.
+    it("marks the workspace on screen", () => {
       renderShell();
-      domicile.emit("app_appeared", { app_id: "a", title: "A" });
+      clientAppears("term");
+      press("parenright");
 
-      await userEvent.click(screen.getByRole("button", { name: "Close A" }));
-
-      expect(domicile.calls).toContainEqual(["closeApp", "a"]);
-      expect(tabNames()).toStrictEqual(["A"]);
-
-      domicile.emit("app_closed", { app_id: "a" });
-      expect(screen.queryAllByRole("listitem")).toStrictEqual([]);
-    });
-  });
-
-  describe("launchers", () => {
-    it("asks the compositor for a terminal", async () => {
-      renderShell();
-      await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
-      expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
-    });
-
-    it("opens a browser window on the stage, with a tab that closes it", async () => {
-      renderShell();
-      await userEvent.click(screen.getByRole("button", { name: "New tab" }));
-      expect(tabNames()).toStrictEqual(["www.google.com"]);
-      await userEvent.click(
-        screen.getByRole("button", { name: "Close www.google.com" }),
+      expect(screen.getByRole("button", { name: "2" })).toHaveAttribute(
+        "aria-current",
+        "true",
       );
-      expect(screen.queryAllByRole("listitem")).toStrictEqual([]);
     });
-  });
 
-  describe("keybindings", () => {
-    it("opens a terminal on Alt+Enter", async () => {
+    it("switches workspace when one is picked", async () => {
+      const user = userEvent.setup();
+      const { container } = renderShell();
+      clientAppears("term");
+      press("parenright");
+
+      await user.click(screen.getByRole("button", { name: "1" }));
+
+      expect(windowsOnScreen(container)).toEqual(["term"]);
+    });
+
+    it("says when the keys are in resize mode", () => {
       renderShell();
-      await userEvent.keyboard("{Alt>}{Enter}{/Alt}");
+      clientAppears("term");
+
+      press("r");
+
+      expect(screen.getByText("resize")).toBeInTheDocument();
+    });
+
+    it("launches a terminal", async () => {
+      const user = userEvent.setup();
+      renderShell();
+
+      await user.click(screen.getByRole("button", { name: "Terminal" }));
+
       expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
     });
 
-    it("claims Alt+Enter from the compositor, with and without Shift", () => {
-      // The page only hears a keystroke while it holds the keyboard. Once a
-      // window is on screen it does not, which is exactly when the user reaches
-      // for the shortcut that opens another one — so the compositor has to be
-      // asked to take these before the window is given them.
+    it("opens a browser window", async () => {
+      const user = userEvent.setup();
+      const { container } = renderShell();
+
+      await user.click(screen.getByRole("button", { name: "New window" }));
+
+      expect(windowsOnScreen(container)).toEqual(["Browser"]);
+    });
+  });
+
+  describe("the windows", () => {
+    it("tiles a client's window over the whole workspace", () => {
+      // One window, so `gaps.smartGaps` leaves it the screen — under the bar,
+      // which is what the desktop takes off the top before laying anything
+      // out.
+      const { container } = renderShell();
+      clientAppears("term");
+
+      expect(boxOf(appElement(container, "term"))).toEqual({
+        height: `${(1080 - TOP_BAR - TITLE_BAR).toString()}px`,
+        width: "1920px",
+        x: "0px",
+        y: `${(TOP_BAR + TITLE_BAR).toString()}px`,
+      });
+    });
+
+    it("gives every window a title bar with what it is called on it", () => {
+      const { container } = renderShell();
+      clientAppears("term", "Terminal");
+
+      const bar = barFor(container, "app:term");
+      expect(bar).toHaveTextContent("Terminal");
+      expect(boxOf(bar)).toMatchObject({
+        height: `${TITLE_BAR.toString()}px`,
+        y: `${TOP_BAR.toString()}px`,
+      });
+    });
+
+    it("renames the bar when the client renames its window", () => {
+      const { container } = renderShell();
+      clientAppears("term", "Terminal");
+
+      domicile.emit("app_titled", { app_id: "term", title: "vim ~/notes" });
+
+      expect(barFor(container, "app:term")).toHaveTextContent("vim ~/notes");
+    });
+
+    it("splits the workspace between two windows, with the config's gap", () => {
+      // `gaps.inner = 20`: 1900 of the 1920 is shared out.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      expect(boxOf(appElement(container, "one"))).toMatchObject({
+        width: "950px",
+        x: "0px",
+      });
+      expect(boxOf(appElement(container, "two"))).toMatchObject({
+        width: "950px",
+        x: "970px",
+      });
+    });
+
+    it("asks a client to close its own window", async () => {
+      // `closeApp` is a request: an editor with unsaved work may put a dialog
+      // up and stay, so the window goes when the host says it went.
+      const user = userEvent.setup();
+      const { container } = renderShell();
+      clientAppears("term");
+
+      await user.click(screen.getByRole("button", { name: "Close" }));
+
+      expect(domicile.calls).toContainEqual(["closeApp", "term"]);
+      expect(windowsOnScreen(container)).toEqual(["term"]);
+    });
+
+    it("takes the window away when the client goes", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+
+      domicile.emit("app_closed", { app_id: "term" });
+
+      expect(windowsOnScreen(container)).toEqual([]);
+    });
+
+    it("keeps a window that is on another workspace mounted and hidden", () => {
+      // Hidden rather than unmounted: a portal re-created is a portal blank,
+      // and an embedded page remounted is a page reloaded.
+      const { container } = renderShell();
+      clientAppears("term");
+
+      press("parenright");
+
+      expect(windowsOnScreen(container)).toEqual([]);
+      expect(appElement(container, "term")).toBeInTheDocument();
+    });
+  });
+
+  describe("the keys, as the sway config binds them", () => {
+    it("claims every chord it answers from the compositor", () => {
+      // Which is what answers a press while a `<webview>` has the keyboard:
+      // the browser process is the only layer above a guest.
       renderShell();
 
       expect(domicile.calls).toContainEqual([
         "grabShortcut",
         {
-          altKey: true,
+          altKey: false,
           ctrlKey: false,
-          keycode: 28,
-          metaKey: false,
+          keycode: KEYCODES.Return,
+          metaKey: true,
           shiftKey: false,
         },
       ]);
-      expect(domicile.calls).toContainEqual([
-        "grabShortcut",
-        {
-          altKey: true,
-          ctrlKey: false,
-          keycode: 28,
-          metaKey: false,
-          shiftKey: true,
-        },
-      ]);
     });
 
-    it("opens a terminal when the compositor hands back a claimed Alt+Enter", () => {
+    it("spawns a terminal on the chord the config names", () => {
       renderShell();
 
-      domicile.emit("shortcut", {
-        altKey: true,
-        ctrlKey: false,
-        keycode: 28,
-        metaKey: false,
-        shiftKey: false,
-      });
+      press("Return");
 
       expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
     });
 
-    // There were three tests here for a third claim, on an Electron host: a
-    // `<webview>` is a browsing context of its own, so a key pressed in a
-    // browser window on the stage went to the site showing there, and the host
-    // was the only layer above it. Under the fork the compositor takes the
-    // combination first whichever window has the keyboard, so that layer — and
-    // the claim, and its tests — are gone. The two paths left are the two
-    // above.
-
-    it("opens one terminal for a held Alt+Enter, not one per repeat", async () => {
-      // A held key repeats tens of times a second. The compositor never sees a
-      // repeat, so it delivers one press — and a page that opened a window for
-      // each would be the only path that did.
+    it("answers the same chord handed back by the host", () => {
+      // A browser window has the keyboard, so the press never reaches this
+      // document: it arrives as a `shortcut` message instead.
       renderShell();
-      await userEvent.keyboard("{Alt>}{Enter}{/Alt}");
-      const repeat = new KeyboardEvent("keydown", {
-        altKey: true,
-        cancelable: true,
-        key: "Enter",
-        repeat: true,
-      });
-      act(() => {
-        document.dispatchEvent(repeat);
-      });
 
-      expect(domicile.calls.filter(([kind]) => kind === "spawn")).toHaveLength(
-        1,
+      hostPress("Return");
+
+      expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
+    });
+
+    it("moves the focus with the direction keys", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      press("h");
+
+      // The bar of the window being worked in is the one drawn as focused,
+      // which is the only thing on screen that says where the keyboard is.
+      expect(domicile.calls).toContainEqual(["focusApp", "one"]);
+      expect(barFor(container, "app:one").className).not.toBe(
+        barFor(container, "app:two").className,
       );
-      // Answered by nobody, but still not passed on: the chord belongs to the
-      // desktop for as long as it is held, which is what the other two paths
-      // do with a repeat.
-      expect(repeat.defaultPrevented).toBe(true);
     });
 
-    it("leaves a chord the desktop never claimed alone", async () => {
-      // The page hears every key, so it is the one path that can answer a
-      // combination nobody claimed. Neither of these is Alt+Enter to the
-      // compositor or to the host, and neither is one here either.
-      renderShell();
-      await userEvent.keyboard("{Control>}{Alt>}{Enter}{/Alt}{/Control}");
-      await userEvent.keyboard("{Meta>}{Alt>}{Enter}{/Alt}{/Meta}");
+    it("moves a window through the tiling with Shift held", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
 
-      expect(domicile.calls).not.toContainEqual(["spawn", ["kitty"]]);
+      press("h", true);
+
+      expect(boxOf(appElement(container, "two"))).toMatchObject({ x: "0px" });
+      expect(boxOf(appElement(container, "one"))).toMatchObject({ x: "970px" });
     });
 
-    it("opens a browser on Alt+Shift+Enter", async () => {
+    it("lays the container out in tabs, which are the windows' own bars", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      press("w");
+
+      // One tab each across the top, and only the focused window's contents
+      // under them.
+      expect(boxOf(barFor(container, "app:one"))).toMatchObject({
+        width: "960px",
+        x: "0px",
+      });
+      expect(windowsOnScreen(container)).toEqual(["two"]);
+    });
+
+    it("fills the screen with the window being worked in", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+
+      press("f");
+
+      // Over the bar as well, which is what a fullscreen window covers.
+      expect(boxOf(appElement(container, "term"))).toMatchObject({
+        height: `${(1080 - TITLE_BAR).toString()}px`,
+        y: `${TITLE_BAR.toString()}px`,
+      });
+    });
+
+    it("spreads a global fullscreen across every screen", () => {
+      const { container } = renderShell([LEFT, RIGHT]);
+      clientAppears("term");
+
+      press("f", true);
+
+      expect(boxOf(appElement(container, "term"))).toMatchObject({
+        width: `${(1920 + 1280).toString()}px`,
+      });
+    });
+
+    it("sends a window to another workspace and stays put", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      press("parenright", true);
+
+      expect(windowsOnScreen(container)).toEqual(["one"]);
+      press("parenright");
+      expect(windowsOnScreen(container)).toEqual(["two"]);
+    });
+
+    it("goes back to the last workspace when the same key is pressed", () => {
+      // `workspaceAutoBackAndForth = true`.
+      const { container } = renderShell();
+      clientAppears("term");
+
+      press("parenright");
+      press("parenright");
+
+      expect(windowsOnScreen(container)).toEqual(["term"]);
+    });
+
+    it("resizes the tiling in the mode the config's `mod+r` enters", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      press("r");
+      press("l");
+
+      // The window being worked in grows and the one beside it gives way.
+      expect(
+        Number.parseFloat(appElement(container, "two").style.inlineSize),
+      ).toBeGreaterThan(950);
+      press("Return");
+      expect(screen.queryByText("resize")).not.toBeInTheDocument();
+    });
+
+    it("closes the window being worked in", () => {
       renderShell();
-      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
-      expect(tabNames()).toStrictEqual(["www.google.com"]);
+      clientAppears("term");
+
+      press("q", true);
+
+      expect(domicile.calls).toContainEqual(["closeApp", "term"]);
     });
   });
 
   describe("floating windows", () => {
-    const portalFor = (container: HTMLElement, appId: string) =>
-      container.querySelector<HTMLElement>(
-        `${APP_TAG_NAME}[app-id="${appId}"]`,
-      );
+    it("takes a window out of the tiling and puts it back", () => {
+      const { container } = renderShell();
+      clientAppears("term");
 
-    it("claims Alt+Shift+Tab from the compositor", () => {
-      // The same reason Alt+Enter is claimed: the window being floated is the
-      // one holding the keyboard, so the page hears nothing.
+      press("Tab", true);
+
+      // A box of its own rather than the whole workspace, and over it.
+      const floated = boxOf(appElement(container, "term"));
+      expect(floated.width).not.toBe("1920px");
+      expect(
+        Number(appElement(container, "term").style.zIndex),
+      ).toBeGreaterThan(0);
+
+      press("Tab", true);
+      expect(boxOf(appElement(container, "term"))).toMatchObject({
+        width: "1920px",
+      });
+    });
+
+    it("swaps the keyboard between the floating window and the tiling", () => {
       renderShell();
+      clientAppears("one");
+      clientAppears("two");
 
-      expect(domicile.calls).toContainEqual([
-        "grabShortcut",
-        {
-          altKey: true,
-          ctrlKey: false,
-          keycode: 15,
-          metaKey: false,
-          shiftKey: true,
-        },
-      ]);
-    });
-
-    it("floats on an Alt+Shift+Tab the compositor hands back", () => {
-      // The path that matters most: once a window has the keyboard the page
-      // hears nothing, so this is the only one that fires in a real desktop.
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      act(() => {
-        domicile.emit("shortcut", {
-          altKey: true,
-          ctrlKey: false,
-          keycode: 15,
-          metaKey: false,
-          shiftKey: true,
-        });
-      });
-
-      expect(portalFor(container, "term")?.style.zIndex).toBe("1");
-    });
-
-    it("takes the window the user is working in out of the rail", async () => {
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-
-      const portal = portalFor(container, "term");
-      // A box of its own rather than the stage's, and above the stage. The
-      // `z-index` is on the element itself because that is what the SDK
-      // reports and what the compositor stacks the client's surface by.
-      expect(portal?.style.insetInlineStart).not.toBe("");
-      expect(portal?.style.zIndex).toBe("1");
-      // And still on screen: a float is drawn over the stage whatever the
-      // stage is showing.
-      expect(portal).toBeVisible();
-    });
-
-    it("puts a floating window back on the stage", async () => {
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-
-      const portal = portalFor(container, "term");
-      // No box of its own, so `window-styles` has it filling the stage again.
-      expect(portal?.style.insetInlineStart).toBe("");
-      expect(portal?.style.zIndex).toBe("");
-    });
-
-    it("leaves a bare Alt+Tab to the page, the way the compositor does", async () => {
-      // The chord is claimed with Shift held, and the page's own branch has to
-      // answer the same one or the keys do one thing when a window holds the
-      // keyboard and another when the shell does.
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-
-      await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
-
-      expect(portalFor(container, "term")?.style.zIndex).toBe("");
-    });
-
-    it("stacks each float above the one before it", async () => {
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "one", title: "One" });
-      domicile.emit("app_appeared", { app_id: "two", title: "Two" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      // A click on the other window is what the compositor reports, and it is
-      // what says which window the next Alt+Shift+Tab is about.
-      domicile.emit("focus_changed", { app_id: "one" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-
-      expect(portalFor(container, "two")?.style.zIndex).toBe("1");
-      expect(portalFor(container, "one")?.style.zIndex).toBe("2");
-    });
-  });
-
-  describe("a click in a browser window", () => {
-    /** The `at`th browser window on the stage, in the order they opened. */
-    const browserWindow = (at: number): HTMLElement => {
-      const window = screen.getAllByRole("region", { name: "Browser" })[at];
-      if (window === undefined) {
-        throw new Error(`no browser window ${at} on the stage`);
-      } else {
-        return window;
-      }
-    };
-
-    /** Where each browser window sits in the stack, oldest window first. */
-    const depths = (): string[] =>
-      screen
-        .getAllByRole("region", { name: "Browser" })
-        .map((window) => window.style.zIndex);
-
-    /** The page inside the browser window `window` takes the focus. */
-    const focusPageIn = (window: HTMLElement): void => {
-      const view = window.querySelector("webview");
-      if (view === null) {
-        throw new Error("the browser window rendered no view");
-      } else {
-        fireEvent.focusIn(view);
-      }
-    };
-
-    /** Two browser windows floating, the second cascaded over the first. */
-    const twoBrowsers = async () => {
-      const rendered = renderShell();
-      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      return rendered;
-    };
-
-    it("brings the window to the front when the user clicks into the page", async () => {
-      // The click itself is not an event the shell is given — the page is a
-      // guest, and nothing about a pointer inside it crosses back out — so
-      // the focus it takes is the whole of what a click looks like here.
-      await twoBrowsers();
-      expect(depths()).toStrictEqual(["1", "2"]);
-
-      focusPageIn(browserWindow(0));
-
-      // Restacked, and in place: the document order is what a drag reads
-      // pointer capture against, so a raise moves `z-index` and nothing else.
-      expect(depths()).toStrictEqual(["2", "1"]);
-    });
-
-    it("brings it to the front from the chrome as well as the page", async () => {
-      // The half of the window that does send the shell a pointer event. A
-      // window is reached by being clicked anywhere in it — the user reaching
-      // for the address bar of the window behind is reaching for that window.
-      await twoBrowsers();
-
-      await userEvent.click(
-        within(browserWindow(0)).getByRole("textbox", { name: "Address" }),
-      );
-
-      expect(depths()).toStrictEqual(["2", "1"]);
-    });
-
-    it("makes it the window Alt+Shift+Tab acts on", async () => {
-      // Raising it is half the answer; the other half is that it becomes the
-      // window the user is working in, which is what everything keyed acts
-      // on. Without it the shell would put back the window they had left
-      // rather than the one they are typing into.
-      await twoBrowsers();
-
-      focusPageIn(browserWindow(0));
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-
-      // Back in the rail, on the stage, and the other one still floating.
-      expect(browserWindow(0).style.zIndex).toBe("");
-      expect(browserWindow(1).style.zIndex).toBe("1");
-    });
-  });
-
-  describe("the keyboard and the window the user is working in", () => {
-    /** Two terminals, the second of them the one being worked in. */
-    const twoTerminals = () => {
-      const rendered = renderShell();
-      domicile.emit("app_appeared", { app_id: "one", title: "One" });
-      domicile.emit("app_appeared", { app_id: "two", title: "Two" });
-      domicile.emit("focus_changed", { app_id: "two" });
+      press("Tab", true);
       domicile.calls.length = 0;
-      return rendered;
-    };
-
-    it("keeps it through a click on the active window's own tab", () => {
-      // The whole path, wired: a press on the rail lands off every `<app>`, so
-      // the SDK hands the keyboard back to the page, and the compositor says
-      // so. The tab of the window *already* being worked in moves nothing else
-      // the shell watches — `activeId` is what it was — so before this the
-      // keyboard went to the chrome and stayed there, with the rail still
-      // highlighting the terminal every keystroke was now missing.
-      //
-      // And the reason this shows up with more than one terminal open:
-      // reaching for the rail at all means there is something else in it.
-      twoTerminals();
-
-      fireEvent.pointerDown(screen.getByRole("button", { name: "Two" }), {
-        pointerId: 1,
-      });
-      domicile.emit("focus_changed", { app_id: undefined });
-
-      expect(domicile.calls).toContainEqual(["focusApp", "two"]);
-    });
-
-    it("moves it to the window the pointer arrives over", async () => {
-      // Focus follows the cursor, wired end to end: the page hears the pointer
-      // arrive over a window, the shell names that window the one being worked
-      // in, and the keyboard follows it to the client. No click anywhere.
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "one", title: "One" });
-      // Floated, so that both windows are on screen at once and there is
-      // somewhere for the pointer to arrive from.
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      domicile.emit("app_appeared", { app_id: "two", title: "Two" });
-      domicile.emit("focus_changed", { app_id: "two" });
-      domicile.calls.length = 0;
-
-      const window = container.querySelector(`${APP_TAG_NAME}[app-id="one"]`);
-      if (window === null) {
-        throw new Error("no window one on the stage");
-      } else {
-        fireEvent.pointerOver(window);
-      }
+      press("Tab");
 
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
     });
 
-    it("leaves it with the chrome while a browser window is the active one", async () => {
-      // A browser window's page holds the focus itself, so there is no client
-      // to point the compositor at — and the address bar is a real text box
-      // the user types into. A shell that took the keyboard back for it would
-      // be one where the address bar cannot be typed in.
-      renderShell();
-      domicile.emit("app_appeared", { app_id: "one", title: "One" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
-      domicile.calls.length = 0;
-
-      domicile.emit("focus_changed", { app_id: undefined });
-
-      expect(domicile.calls).toStrictEqual([]);
-    });
-
-    // THE OTHER HALF OF THAT, AND THE ONE THE CHROME HAS TO ANSWER ITSELF. A
-    // client's window recovers from the chrome taking the keyboard on its own:
-    // the seat is the compositor's, the shell is told where it went, and the
-    // window it is still working in asks for it back. A browser window's
-    // keyboard *is* the page's focus, and there is no message when that lands
-    // on nothing — which is exactly what closing a tab does, because the X
-    // takes the focus on the press and is unmounted before the press ends.
-    it("puts a browser window's page back in focus when closing a tab drops it", async () => {
+    it("puts a sheet over a float to catch a drag while the modifier is held", () => {
+      // The pointer over a client's surface belongs to the client, so the
+      // shell has to be handed it back before it can be told where a window
+      // is being dragged to.
       const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "one", title: "One" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Enter}{/Shift}{/Alt}");
-      const view = container.querySelector("webview");
+      clientAppears("term");
+      press("Tab", true);
 
-      await userEvent.click(screen.getByRole("button", { name: "Close One" }));
-      domicile.emit("app_closed", { app_id: "one" });
+      // Let go of the chord that floated it: the sheet is up while the
+      // modifier is held, and the chord held it.
+      pageHolds({});
+      expect(grabSheets(container)).toHaveLength(0);
 
-      expect(document.activeElement).toBe(view);
+      pageHolds({ meta: true });
+      expect(grabSheets(container)).toHaveLength(1);
     });
-  });
 
-  describe("a floating window's title bar", () => {
-    const barIn = (container: HTMLElement) =>
-      container.querySelector<HTMLElement>("main > div:not([aria-hidden])");
-
-    const floated = async () => {
-      const rendered = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      return rendered;
-    };
-
-    it("gives a window in the rail no bar at all", () => {
+    it("moves a floating window by its title bar, with no modifier held", () => {
       const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      clientAppears("term");
+      press("Tab", true);
+      const bar = barFor(container, "app:term");
+      const was = Number.parseFloat(bar.style.insetInlineStart);
 
-      expect(barIn(container)).toBeNull();
-    });
+      fireEvent.pointerDown(bar, { clientX: 100, clientY: 100 });
+      fireEvent.pointerMove(window, { clientX: 140, clientY: 100 });
+      fireEvent.pointerUp(window, { clientX: 140, clientY: 100 });
 
-    it("names the window it belongs to", async () => {
-      const { container } = await floated();
-
-      expect(barIn(container)?.textContent).toContain("Terminal");
-    });
-
-    it("sits above the window, which starts below it", async () => {
-      // The bar comes out of the window's box rather than being added to it,
-      // and it is chrome at the window's own depth, which is the reason
-      // this is a bar and not a border.
-      const { container } = await floated();
-      const bar = barIn(container);
-      const portal = container.querySelector<HTMLElement>(APP_TAG_NAME);
-
-      expect(bar?.style.insetBlockStart).toBe("48px");
-      expect(bar?.style.zIndex).toBe("1");
-      expect(portal?.style.insetBlockStart).toBe("78px");
-      expect(portal?.style.zIndex).toBe("1");
-    });
-
-    it("closes the window from its X", async () => {
-      await floated();
-      await userEvent.click(screen.getByRole("button", { name: "Close" }));
-
-      expect(domicile.calls).toContainEqual(["closeApp", "term"]);
-    });
-
-    it("moves the window when the bar is dragged, with no modifier held", async () => {
-      // The pointer over a client's surface belongs to the client, and the
-      // pointer over the bar belongs to the page — which is what Alt is for
-      // everywhere else on the window and is not needed here.
-      const { container } = await floated();
-      const bar = barIn(container);
-      if (bar === null) {
-        throw new Error("no title bar to drag");
-      }
-      bar.setPointerCapture = () => undefined;
-      fireEvent.pointerDown(bar, { clientX: 0, clientY: 0, pointerId: 1 });
-      fireEvent.pointerMove(bar, { clientX: 70, clientY: 30, pointerId: 1 });
-
-      expect(barIn(container)?.style.insetInlineStart).toBe("118px");
       expect(
-        container.querySelector<HTMLElement>(APP_TAG_NAME)?.style
-          .insetInlineStart,
-      ).toBe("118px");
+        Number.parseFloat(barFor(container, "app:term").style.insetInlineStart),
+      ).toBe(was + 40);
     });
-  });
 
-  describe("moving and resizing a floating window", () => {
-    const portalFor = (container: HTMLElement, appId: string) =>
-      container.querySelector<HTMLElement>(
-        `${APP_TAG_NAME}[app-id="${appId}"]`,
+    it("keys a floating window around the desktop instead of retiling it", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+      const was = Number.parseFloat(
+        appElement(container, "term").style.insetInlineStart,
       );
 
-    /** The sheet the pointer lands on: presentational, so it is `aria-hidden`. */
-    const sheetIn = (container: HTMLElement) =>
-      container.querySelector<HTMLElement>("main > div[aria-hidden]");
+      press("l", true);
 
-    /** The same, for the tests that go on to drag it. */
-    const grabbing = (container: HTMLElement): HTMLElement => {
-      const sheet = sheetIn(container);
-      if (sheet === null) {
-        throw new Error("no grab sheet to drag");
-      } else {
-        return sheet;
-      }
-    };
+      expect(
+        Number.parseFloat(appElement(container, "term").style.insetInlineStart),
+      ).toBeGreaterThan(was);
+    });
 
-    /** A floating terminal, with the host saying which modifiers are held. */
-    const floated = async (held: { alt: boolean; shift: boolean }) => {
-      const rendered = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      pageHolds({ alt: held.alt, ctrl: false, shift: held.shift });
-      return rendered;
-    };
-
-    // Two events, not one batch: taking hold is a state change, and a move
-    // dispatched in the same `act` would be handled by a sheet that has not
-    // seen it yet — which is a drag that never starts.
-    const drag = (sheet: HTMLElement, by: { x: number; y: number }): void => {
-      // `setPointerCapture` is not implemented by the test DOM, and a drag
-      // that threw there would never reach the assertions below.
-      sheet.setPointerCapture = () => undefined;
-      fireEvent.pointerDown(sheet, { clientX: 0, clientY: 0, pointerId: 1 });
-      fireEvent.pointerMove(sheet, {
-        clientX: by.x,
-        clientY: by.y,
-        pointerId: 1,
-      });
-    };
-
-    it("leaves a floating window alone while no modifier is held", () => {
-      // A window is an ordinary window the rest of the time: the pointer over
-      // it belongs to the client behind it, which is the whole point.
+    it("stacks each float over the one behind it", () => {
       const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
+      clientAppears("one");
+      clientAppears("two");
+      press("Tab", true);
+      press("Tab");
+      press("Tab", true);
 
-      expect(sheetIn(container)).toBeNull();
-    });
-
-    it("hands the pointer to the page while Alt is held", async () => {
-      // The compositor hit-tests a rectangle and gives the pointer to the
-      // window under it, so the shell cannot see a drag over one until the
-      // window says it takes no pointer.
-      const { container } = await floated({ alt: true, shift: false });
-
-      expect(portalFor(container, "term")?.className).toContain(
-        css({ pointerEvents: "none" }),
-      );
-      expect(sheetIn(container)).not.toBeNull();
-    });
-
-    it("moves the window with an Alt+drag", async () => {
-      const { container } = await floated({ alt: true, shift: false });
-      const before = portalFor(container, "term")?.style.insetInlineStart;
-
-      drag(grabbing(container), { x: 120, y: 60 });
-
-      const after = portalFor(container, "term")?.style.insetInlineStart;
-      expect(after).not.toBe(before);
-      expect(portalFor(container, "term")?.style.inlineSize).toBe("640px");
-    });
-
-    it("moves the window with the chord's own Shift still down", async () => {
-      // The chord that floats a window is Alt+Shift+Tab, and Shift over a
-      // floating window is the resize modifier — so without this the first
-      // drag after a float drove the window's corner rather than moving it,
-      // for as long as the user had not let go of the Shift they floated it
-      // with. Which is most of the time: Alt has to stay down for the shell
-      // to have the pointer at all, and nobody lets go of half a chord.
-      //
-      // Answering the chord spends it. Shift means resize again once it has
-      // been let go of and pressed afresh, which is what the test above does.
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}");
-
-      drag(grabbing(container), { x: 120, y: 60 });
-
-      const portal = portalFor(container, "term");
-      expect(portal?.style.insetInlineStart).toBe("168px");
-      expect(portal?.style.inlineSize).toBe("640px");
-      await userEvent.keyboard("{/Shift}{/Alt}");
-    });
-
-    it("resizes the window with an Alt+Shift+drag", async () => {
-      const { container } = await floated({ alt: true, shift: true });
-      const before = portalFor(container, "term")?.style.insetInlineStart;
-
-      drag(grabbing(container), { x: 120, y: 60 });
-
-      const portal = portalFor(container, "term");
-      // The corner moved, not the window.
-      expect(portal?.style.insetInlineStart).toBe(before);
-      expect(portal?.style.inlineSize).toBe("760px");
-      // 450 of the frame's 480: the title bar comes out of the window's box
-      // rather than being added to it, so a window dragged to a height is
-      // that height, bar included.
-      expect(portal?.style.blockSize).toBe("450px");
-    });
-
-    it("keeps an Alt the compositor's seat never heard go down", () => {
-      // Alt+Enter spawns a terminal, and the Alt of it goes down before there
-      // is a window to forward it to — so the seat, which knows only the keys
-      // this page forwarded, never hears that Alt at all. The first key
-      // forwarded afterwards makes the compositor broadcast a set that denies
-      // it, and while the shell took that broadcast over its own keystrokes
-      // the grab sheet came down: Alt read as let go of with the user holding
-      // it, and the window they had just floated would not drag.
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      pageHolds({ alt: true });
-      pageHolds({ alt: true, shift: true });
-      // What the seat has, and all it can have: the Shift, which went down
-      // with the terminal focused and so was forwarded, and no Alt.
-      domicile.emit("modifiers", {
-        altKey: false,
-        ctrlKey: false,
-        metaKey: false,
-        shiftKey: true,
-      });
-      fireEvent.keyDown(document, { altKey: true, key: "Tab", shiftKey: true });
-      pageHolds({ alt: true });
-      // And the echo of the Shift coming back up, which arrives after the page
-      // has already heard it go: a socket round trip is slower than a
-      // listener. This is the one that used to land last and win.
-      domicile.emit("modifiers", {
-        altKey: false,
-        ctrlKey: false,
-        metaKey: false,
-        shiftKey: false,
-      });
-
-      drag(grabbing(container), { x: 120, y: 60 });
-
-      const portal = portalFor(container, "term");
-      expect(portal?.style.insetInlineStart).toBe("168px");
-      expect(portal?.style.inlineSize).toBe("640px");
-    });
-
-    it("resizes after a chord the page never heard the Shift of", () => {
-      // The other path into a float: a browser window's page is a browsing
-      // context of its own, so a chord pressed inside one reaches neither this
-      // page nor the compositor, and the browser process hands the whole thing
-      // back as one message. There is no held Shift to spend in that case —
-      // the shell was never told of one — and spending it anyway would swallow
-      // the first Shift the user pressed afterwards, leaving Alt+Shift+drag
-      // moving the window for as long as they held it.
-      const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "term", title: "Terminal" });
-      domicile.emit("shortcut", {
-        altKey: true,
-        ctrlKey: false,
-        keycode: 15,
-        metaKey: false,
-        shiftKey: true,
-      });
-      pageHolds({ alt: true, ctrl: false, shift: true });
-
-      drag(grabbing(container), { x: 120, y: 60 });
-
-      const portal = portalFor(container, "term");
-      expect(portal?.style.insetInlineStart).toBe("48px");
-      expect(portal?.style.inlineSize).toBe("760px");
-    });
-
-    it("goes on resizing after Shift is let go mid-drag", async () => {
-      // Which it is, is read when the drag starts and then kept: letting go
-      // half way through must not turn a resize into a move, with the window
-      // jumping to wherever the pointer has got to.
-      const { container } = await floated({ alt: true, shift: true });
-      const sheet = grabbing(container);
-      sheet.setPointerCapture = () => undefined;
-      fireEvent.pointerDown(sheet, { clientX: 0, clientY: 0, pointerId: 1 });
-      pageHolds({ alt: true, ctrl: false, shift: false });
-      fireEvent.pointerMove(sheet, { clientX: 100, clientY: 40, pointerId: 1 });
-
-      const portal = portalFor(container, "term");
-      expect(portal?.style.inlineSize).toBe("740px");
-      expect(portal?.style.insetInlineStart).toBe("48px");
-    });
-
-    it("keeps the keyboard on the window the user takes hold of", async () => {
-      // The press that takes hold of a floating window lands on the shell's
-      // own chrome, and the SDK gives the keyboard back to the page for any
-      // press that lands off every `<app>` — it cannot tell a float's grab
-      // sheet from the wallpaper behind it. So it asks, and the shell answers
-      // that this is a reach *for* the window: the keyboard never leaves, so
-      // there is nothing to put back.
-      const { container } = await floated({ alt: true, shift: false });
-      domicile.calls.length = 0;
-
-      drag(grabbing(container), { x: 40, y: 20 });
-
-      expect(domicile.calls.map(([kind]) => kind)).not.toContain("focusChrome");
-    });
-
-    it("keeps it for a press on the window's title bar too", async () => {
-      // The bar is the other half of a float's chrome and is dragged with no
-      // modifier at all, so it is the press a user makes most often.
-      const { container } = await floated({ alt: false, shift: false });
-      const bar = container.querySelector<HTMLElement>(
-        "main > div:not([aria-hidden])",
-      );
-      if (bar === null) {
-        throw new Error("no title bar to press");
-      }
-      domicile.calls.length = 0;
-
-      bar.setPointerCapture = () => undefined;
-      fireEvent.pointerDown(bar, { clientX: 0, clientY: 0, pointerId: 1 });
-
-      expect(domicile.calls.map(([kind]) => kind)).not.toContain("focusChrome");
-    });
-
-    it("gives it up for a press that is not on the window at all", async () => {
-      // The rule the one above is the exception to: a press on the desktop is
-      // a reach away from every window, and the chrome takes the keyboard.
-      const { container } = await floated({ alt: true, shift: false });
-      domicile.calls.length = 0;
-
-      fireEvent.pointerDown(container.querySelector("main") ?? container, {
-        clientX: 0,
-        clientY: 0,
-        pointerId: 1,
-      });
-
-      expect(domicile.calls.map(([kind]) => kind)).toContain("focusChrome");
-    });
-
-    it("makes the window see-through while it is being dragged", async () => {
-      // Drawn by the compositor rather than by the page: the SDK reports the
-      // element's `opacity` and the shader applies it to the client's own
-      // buffer, so what shows through is the desktop behind the window.
-      const { container } = await floated({ alt: true, shift: false });
-      drag(grabbing(container), { x: 10, y: 10 });
-
-      expect(portalFor(container, "term")?.className).toContain(
-        css({ opacity: 0.6 }),
-      );
-    });
-
-    it("puts the window back to normal when the drag ends", async () => {
-      const { container } = await floated({ alt: true, shift: false });
-      const sheet = grabbing(container);
-
-      drag(sheet, { x: 10, y: 10 });
-      fireEvent.pointerUp(sheet, { pointerId: 1 });
-
-      expect(portalFor(container, "term")?.className).not.toContain(
-        css({ opacity: 0.6 }),
+      expect(Number(appElement(container, "one").style.zIndex)).toBeGreaterThan(
+        Number(appElement(container, "two").style.zIndex),
       );
     });
   });
 
-  describe("two floating windows that overlap", () => {
-    /** Every grab sheet on the stage, in the order the page lays them out. */
-    const sheetsIn = (container: HTMLElement) => [
-      ...container.querySelectorAll<HTMLElement>("main > div[aria-hidden]"),
-    ];
-
-    const portalFor = (container: HTMLElement, appId: string) =>
-      container.querySelector<HTMLElement>(
-        `${APP_TAG_NAME}[app-id="${appId}"]`,
-      );
-
-    /** Where the window `appId` has its left edge, as a number of pixels. */
-    const leftOf = (container: HTMLElement, appId: string): string => {
-      const portal = portalFor(container, appId);
-      if (portal === null) {
-        throw new Error(`no window ${appId} on the stage`);
-      } else {
-        return portal.style.insetInlineStart;
-      }
-    };
-
-    /**
-     * Two floating terminals, with Alt held so both are grabbable.
-     *
-     * `one` is floated first, so it cascades above and to the left of `two`
-     * and the two boxes overlap — which is the whole point: the bugs this
-     * covers only appear when a grab has another window to be confused with.
-     */
-    const twoFloats = async (held = { alt: true, shift: false }) => {
-      const rendered = renderShell();
-      domicile.emit("app_appeared", { app_id: "one", title: "One" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      domicile.emit("app_appeared", { app_id: "two", title: "Two" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      pageHolds({ alt: held.alt, ctrl: false, shift: held.shift });
-      return rendered;
-    };
-
-    /** The sheet over the window `appId`, found by the box it is placed in. */
-    const sheetOver = (container: HTMLElement, appId: string): HTMLElement => {
-      const at = leftOf(container, appId);
-      const found = sheetsIn(container).find(
-        (sheet) => sheet.style.insetInlineStart === at,
-      );
-      if (found === undefined) {
-        throw new Error(`no grab sheet over ${appId}`);
-      } else {
-        return found;
-      }
-    };
-
-    const press = (sheet: HTMLElement, x: number, y: number): void => {
-      // The test DOM does not implement pointer capture, and a drag that threw
-      // there would never reach the assertions below.
-      sheet.setPointerCapture = () => undefined;
-      fireEvent.pointerDown(sheet, { clientX: x, clientY: y, pointerId: 1 });
-    };
-
-    it("floats both windows, each in a box of its own", async () => {
-      const { container } = await twoFloats();
-
-      expect(sheetsIn(container)).toHaveLength(2);
-      expect(leftOf(container, "one")).not.toBe(leftOf(container, "two"));
-    });
-
-    it("moves the window that was grabbed, not the one on top of it", async () => {
-      const { container } = await twoFloats();
-      const before = leftOf(container, "two");
-
-      const sheet = sheetOver(container, "one");
-      press(sheet, 0, 0);
-      fireEvent.pointerMove(sheet, { clientX: 90, clientY: 0, pointerId: 1 });
-
-      // The grabbed window moved by exactly the drag, and the other one did
-      // not move at all — a raise reorders the stack, and a drag that read its
-      // box back out of that order would move whichever window landed in the
-      // grabbed one's old place.
-      expect(leftOf(container, "one")).toBe("138px");
-      expect(leftOf(container, "two")).toBe(before);
-    });
-
-    it("keeps the float chrome in a stable order when a window is raised", async () => {
-      // A raise restacks the windows, and restacking must not reorder the
-      // elements: a browser releases pointer capture when the capturing
-      // element is moved in the document, and the rest of the drag — every
-      // move and the release that ends it — is delivered to whatever the
-      // pointer happens to be over instead.
-      const { container } = await twoFloats();
-      const before = sheetsIn(container);
-
-      press(sheetOver(container, "one"), 0, 0);
-
-      // Where each sheet was before, by identity. A DOM node deep-compares
-      // through its own parent, so matching the arrays themselves never
-      // returns — and the indices say which way an order changed.
-      const after = sheetsIn(container).map((sheet) => before.indexOf(sheet));
-      expect(after).toStrictEqual([0, 1]);
-    });
-
-    it("raises the grabbed window over the one it was under", async () => {
-      // Restacking still has to happen — it is just expressed as `z-index`
-      // rather than as document order.
-      const { container } = await twoFloats();
-      const under = Number(portalFor(container, "one")?.style.zIndex);
-      const over = Number(portalFor(container, "two")?.style.zIndex);
-      expect(under).toBeLessThan(over);
-
-      press(sheetOver(container, "one"), 0, 0);
-
-      expect(Number(portalFor(container, "one")?.style.zIndex)).toBeGreaterThan(
-        Number(portalFor(container, "two")?.style.zIndex),
-      );
-    });
-
-    it("ends the drag when the release lands on the other window", async () => {
-      // Which is where it lands whenever the pointer has left the window being
-      // dragged — the case pointer capture exists to cover, and the one that
-      // leaves a window grabbed for ever when it does not.
-      const { container } = await twoFloats();
-      const dragged = sheetOver(container, "one");
-      press(dragged, 0, 0);
-      fireEvent.pointerMove(dragged, { clientX: 90, clientY: 0, pointerId: 1 });
-
-      fireEvent.pointerUp(sheetOver(container, "two"), { pointerId: 1 });
-
-      expect(portalFor(container, "one")?.className).not.toContain(
-        css({ opacity: 0.6 }),
-      );
-    });
-
-    it("ends the drag when the release lands on the chrome around it", async () => {
-      const { container } = await twoFloats();
-      const dragged = sheetOver(container, "one");
-      press(dragged, 0, 0);
-      fireEvent.pointerMove(dragged, { clientX: 90, clientY: 0, pointerId: 1 });
-
-      const rail = container.querySelector("main");
-      if (rail === null) {
-        throw new Error("no stage to release over");
-      }
-      fireEvent.pointerUp(rail, { pointerId: 1 });
-
-      expect(portalFor(container, "one")?.className).not.toContain(
-        css({ opacity: 0.6 }),
-      );
-    });
-
-    it("hands the pointer to the page while Ctrl is held", async () => {
-      // Ctrl does what Alt does — gives the shell the pointer — and it is what
-      // makes a resize reachable without a second modifier, because the
-      // secondary button is the resize.
-      const { container } = await twoFloats({ alt: false, shift: false });
-      act(() => {
-        pageHolds({ alt: false, ctrl: true, shift: false });
-      });
-
-      expect(sheetsIn(container)).toHaveLength(2);
-      expect(portalFor(container, "one")?.className).toContain(
-        css({ pointerEvents: "none" }),
-      );
-    });
-
-    it("hands the pointer over a window on the stage to the page mid-drag", async () => {
-      // The window being dragged is not the only one the pointer crosses. A
-      // window still on the stage takes the pointer the moment the drag passes
-      // over it, and the compositor hands it to that client — so the page
-      // stops seeing the drag and never sees the release that ends it. The
-      // window is then left grabbed with the mouse already let go, which is
-      // what dragging quickly across the desktop produces.
+  describe("the scratchpad", () => {
+    it("takes a window off the desktop and brings it back floating", () => {
       const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "stage", title: "Stage" });
-      domicile.emit("app_appeared", { app_id: "float", title: "Float" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      act(() => {
-        pageHolds({ alt: true, ctrl: false, shift: false });
-      });
+      clientAppears("term");
 
-      press(sheetOver(container, "float"), 0, 0);
+      press("minus", true);
+      expect(windowsOnScreen(container)).toEqual([]);
 
-      expect(portalFor(container, "stage")?.className).toContain(
-        css({ pointerEvents: "none" }),
-      );
+      press("minus");
+      expect(windowsOnScreen(container)).toEqual(["term"]);
+      expect(
+        Number(appElement(container, "term").style.zIndex),
+      ).toBeGreaterThan(0);
     });
+  });
 
-    it("gives the stage window its pointer back once the drag ends", async () => {
-      // Only for the length of the drag: a window on the stage is there to be
-      // used, and a click that fell through it would cost the user that click.
+  describe("focus follows the cursor", () => {
+    it("gives the keyboard to the window the pointer moves into", () => {
       const { container } = renderShell();
-      domicile.emit("app_appeared", { app_id: "stage", title: "Stage" });
-      domicile.emit("app_appeared", { app_id: "float", title: "Float" });
-      await userEvent.keyboard("{Alt>}{Shift>}{Tab}{/Shift}{/Alt}");
-      // Alt stays held, so the float keeps its sheet and only the drag can be
-      // what makes the *stage* window let the pointer through.
+      clientAppears("one");
+      clientAppears("two");
+      domicile.calls.length = 0;
+
       act(() => {
-        pageHolds({ alt: true, ctrl: false, shift: false });
+        appElement(container, "one").dispatchEvent(
+          new MouseEvent("pointerover", { bubbles: true }),
+        );
       });
-      const sheet = sheetOver(container, "float");
-      press(sheet, 0, 0);
 
-      fireEvent.pointerUp(sheet, { pointerId: 1 });
+      expect(domicile.calls).toContainEqual(["focusApp", "one"]);
+    });
 
-      expect(portalFor(container, "stage")?.className).not.toContain(
-        css({ pointerEvents: "none" }),
+    it("leaves the keyboard where it is when the pointer lands on the chrome", () => {
+      // The bar, the wallpaper and a float's own furniture are not windows:
+      // handing the keyboard back for them would make the desktop untypeable
+      // whenever the pointer came to rest on anything.
+      const { container } = renderShell();
+      clientAppears("term");
+      domicile.calls.length = 0;
+
+      act(() => {
+        barFor(container, "app:term").dispatchEvent(
+          new MouseEvent("pointerover", { bubbles: true }),
+        );
+      });
+
+      expect(domicile.calls).toEqual([]);
+    });
+
+    it("grants a client that asks for the keyboard over xdg-activation", () => {
+      renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("parenright");
+      domicile.calls.length = 0;
+
+      domicile.emit("focus_requested", { app_id: "one" });
+
+      // Granted, and on the workspace the window is on — which is what makes
+      // granting it mean anything.
+      expect(domicile.calls).toContainEqual(["focusApp", "one"]);
+      expect(screen.getByRole("button", { name: "1" })).toHaveAttribute(
+        "aria-current",
+        "true",
       );
     });
 
-    it("keeps every float click-through after Alt is let go of mid-drag", async () => {
-      // The pointer belongs to the shell only where a window says it takes
-      // none. Alt is what says so, and a drag routinely outlives it: the user
-      // presses Alt, takes hold, and lets the key go while still dragging. A
-      // window that took its pointer back then would swallow the moves the
-      // drag crosses it with, and the release that should have ended it.
-      const { container } = await twoFloats();
-      press(sheetOver(container, "one"), 0, 0);
+    it("follows the seat when the compositor moves the keyboard itself", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
 
-      act(() => {
-        pageHolds({ alt: false, ctrl: false, shift: false });
-      });
+      domicile.emit("focus_changed", { app_id: "one" });
 
-      expect(portalFor(container, "two")?.className).toContain(
-        css({ pointerEvents: "none" }),
-      );
-    });
-
-    it("ends a drag that outlived the Alt that started it", async () => {
-      const { container } = await twoFloats();
-      const dragged = sheetOver(container, "one");
-      press(dragged, 0, 0);
-      act(() => {
-        pageHolds({ alt: false, ctrl: false, shift: false });
-      });
-
-      fireEvent.pointerMove(dragged, { clientX: 90, clientY: 0, pointerId: 1 });
-      fireEvent.pointerUp(dragged, { pointerId: 1 });
-
-      expect(leftOf(container, "one")).toBe("138px");
-      expect(portalFor(container, "one")?.className).not.toContain(
-        css({ opacity: 0.6 }),
-      );
-    });
-
-    it("leaves a window alone after a click that never moved it", async () => {
-      // A press and a release with nothing in between: the window is grabbed
-      // and must be let go of again, or it stays see-through, stays
-      // click-through, and follows the very next move the pointer makes.
-      const { container } = await twoFloats();
-      const before = leftOf(container, "one");
-      const sheet = sheetOver(container, "one");
-
-      press(sheet, 0, 0);
-      fireEvent.pointerUp(sheet, { pointerId: 1 });
-      fireEvent.pointerMove(sheet, {
-        clientX: 300,
-        clientY: 300,
-        pointerId: 1,
-      });
-
-      expect(leftOf(container, "one")).toBe(before);
-      expect(portalFor(container, "one")?.className).not.toContain(
-        css({ opacity: 0.6 }),
+      expect(barFor(container, "app:one").className).not.toBe(
+        barFor(container, "app:two").className,
       );
     });
   });

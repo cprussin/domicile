@@ -785,7 +785,7 @@ Clients, for testing:
 | `packages/domicile-engine` | the Chromium fork: the patch series, the pin, the published engine | — |
 | `packages/chrome-sdk` | the shell-facing API: elements, `DomicileClient`, measurement, input | bun |
 | `packages/component-library` | shared React components, the Panda preset, `shellBuild` | bun |
-| `packages/shell-manganese` | the reference desktop: tabs, stage, rail, address bar | bun |
+| `packages/shell-manganese` | the reference desktop: tiling keyed like sway, a top bar, address bar | bun |
 | `packages/shell-simple` | the minimal desktop: floating windows | bun |
 | `packages/domicile-test-client` | the stand-in Wayland client the checks open a window with | core |
 | `packages/domicile-test-chrome` | the stand-in chrome the compositor's own tests drive | core |
