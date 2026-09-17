@@ -2,16 +2,17 @@ import { Button } from "@domicile/component-library/Button";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
-import { css, cx } from "../../styled-system/css";
+import { css, cva } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import type { Rect } from "./rect";
-import { edgeStyles, placedAt } from "./window-styles";
+import type { TitleFocus } from "./title-focus";
+import { placedAt } from "./window-styles";
 
 type Props = {
   /** How it stacks: the depth of the window it names. */
   depth: number;
-  /** Whether this is the window being worked in, so its bar looks like it. */
-  focused: boolean;
+  /** What this bar says about the keyboard — see `title-focus.ts`. */
+  focus: TitleFocus;
   /** Close the window this bar belongs to — what the X does. */
   onClose: () => void;
   onContextMenu?: ((event: { preventDefault: () => void }) => void) | undefined;
@@ -46,7 +47,7 @@ type Props = {
  */
 export const TitleBar = ({
   depth,
-  focused,
+  focus,
   onClose,
   onContextMenu,
   onPointerDown,
@@ -58,7 +59,11 @@ export const TitleBar = ({
   // biome-ignore lint/a11y/noStaticElementInteractions: a title bar is not a control and is not being made into one — the press says the user reached for the window it names, which is what raises a window in any desktop, and the X inside it is the button a keyboard reaches
   // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same press, and the same reason: what it reports is which window the user is working in
   <div
-    className={cx(barStyles, edgeStyles, focused && focusedStyles)}
+    className={barStyles({ focus })}
+    // Which of the three this is, as an attribute as well as a colour: the
+    // desktop's own state is worth being able to read off the element, in
+    // devtools and in a test, rather than only off a hashed class name.
+    data-focus={focus}
     // The window this bar belongs to: a press on it lands off every `<app>`,
     // and left unanswered that is the chrome taking the keyboard off the
     // window the user has just taken hold of. See `AppWindow`.
@@ -88,26 +93,57 @@ export const TitleBar = ({
   </div>
 );
 
-const barStyles = hstack({
-  background: "card",
-  // The frame's line is one line: the bar carries the top and the sides down
-  // to where the window picks them up, and the seam between them is not one.
-  borderBlockEndWidth: 0,
-  // The window under it is what says which window is which, so a bar that is
-  // not the one being worked in recedes rather than competing with it.
-  color: "muted",
-  gap: 2,
-  justify: "space-between",
-  overflow: "hidden",
-  paddingInlineStart: 3,
-  position: "absolute",
-});
-
-const focusedStyles = css({
-  // The accent, because the bar is the only thing that says which of several
-  // windows the keyboard is in — sway draws the same line round the border.
-  borderColor: "accent",
-  color: "foreground",
+/**
+ * sway's three client colours, in the one place a window says which it is.
+ *
+ * **The focused window's bar is filled**, not merely tinted: it is the one
+ * thing on a desktop of identical frames that says where the keystrokes are
+ * going, and a border a pixel wide is not enough to find at a glance. The fill
+ * is the accent and the text on it is the page's own `background`, which is
+ * what the component library's own filled controls do — so the pairing is
+ * already known to work in both themes.
+ *
+ * Every state names all three colours rather than overriding one of them.
+ * Two rules setting `border-color` on one element are decided by the order
+ * Panda happens to emit them in, which is not a thing to make a desktop's
+ * focus indicator depend on.
+ */
+const barStyles = cva({
+  base: hstack.raw({
+    // The frame's line is one line: the bar carries the top and the sides down
+    // to where the window picks them up, and the seam between them is not one.
+    borderBlockEndWidth: 0,
+    borderStyle: "solid",
+    borderWidth: "1px",
+    gap: 2,
+    justify: "space-between",
+    overflow: "hidden",
+    paddingInlineStart: 3,
+    position: "absolute",
+  }),
+  variants: {
+    focus: {
+      focused: {
+        backgroundColor: "accent",
+        borderColor: "accent",
+        color: "background",
+      },
+      // And every other bar recedes rather than competing: the window under it
+      // is what the user is looking at.
+      resting: {
+        backgroundColor: "card",
+        borderColor: "borderStrong",
+        color: "muted",
+      },
+      // A container's open tab, with the keyboard somewhere else: marked as
+      // open by its edge and its text, and not mistakable for the fill above.
+      selected: {
+        backgroundColor: "card",
+        borderColor: "accent",
+        color: "foreground",
+      },
+    },
+  },
 });
 
 const titleStyles = css({

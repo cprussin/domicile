@@ -62,8 +62,9 @@ windows over the tiling, and one window at a time filling the screen.
 | **Mod+R** | Resize mode — see below. |
 | **Mod+( ) } + { ] [ ! = \*** | Go to a workspace. **With Shift**, send the window being worked in there and stay. |
 
-The window being worked in is the one with the accented title bar, and it is
-the one everything keyed acts on.
+The window being worked in is the one whose title bar is **filled with the
+accent**, and it is the one everything keyed acts on. Its frame is drawn in
+the same colour, so the bar and the three edges below it say one thing.
 
 ### The keys are physical, and the layout is written down
 
@@ -156,6 +157,14 @@ bar — one bar rather than two — so the row of tabs across the top of such a
 container is the same component at a different rectangle. A tab that stands
 for a whole container is named after the window that container last had the
 focus in.
+
+**Three states, which are sway's three client colours.** The window the
+keyboard is in has the filled bar; a container's open tab with the keyboard
+somewhere else is marked by its edge and its text rather than a fill
+(`focused_inactive`, and without it two bars on one screen would look like the
+focused window); every other bar recedes to a card fill and muted text,
+because the window under it is what the user is looking at. Which of the three
+a bar is, is on the element as `data-focus` as well as in its colours.
 
 ### Focus follows the cursor
 
@@ -341,6 +350,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/rect.ts` | A rectangle of the desktop, and the bar the top of one carries. |
 | `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it. |
 | `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
+| `src/window-management/title-focus.ts` | Which of sway's three client colours a bar is drawn in, and why a tab needs the third. |
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<webview>`. |
 | `src/window-management/useHistoryAvailability.ts` | Where that window's page can be sent, read off the view's own properties rather than learned from the event that says to read them. |

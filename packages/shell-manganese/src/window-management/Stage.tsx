@@ -9,6 +9,7 @@ import { FloatTitleBar } from "./floating/FloatTitleBar";
 import type { Float } from "./floating/float";
 import type { Placement, Screenful } from "./placement";
 import { TitleBar } from "./TitleBar";
+import { titleFocus } from "./title-focus";
 import type { ShellWindow } from "./window";
 import { WindowKind } from "./window";
 
@@ -175,7 +176,13 @@ export const Stage = ({
         return (
           <TitleBar
             depth={placement.depth}
-            focused={window.id === activeId}
+            // A window's own bar has two states rather than three: the
+            // keyboard is in the window or it is not. The third belongs to a
+            // container's tab, below.
+            focus={titleFocus({
+              hasKeyboard: window.id === activeId,
+              shownByContainer: false,
+            })}
             key={window.id}
             onClose={onCloseThis}
             onReach={onReachThis}
@@ -190,7 +197,10 @@ export const Stage = ({
             <FloatTitleBar
               depth={placement.depth}
               float={floating}
-              focused={window.id === activeId}
+              focus={titleFocus({
+                hasKeyboard: window.id === activeId,
+                shownByContainer: false,
+              })}
               onClose={onCloseThis}
               onDrop={onDrop}
               onGrab={onGrabThis}
@@ -224,7 +234,13 @@ export const Stage = ({
     {tabs.map((tab) => (
       <TitleBar
         depth={0}
-        focused={tab.active}
+        // The tab of a container the keyboard is not in is still the open
+        // one, and saying so with the fill would be a second window claiming
+        // the keystrokes.
+        focus={titleFocus({
+          hasKeyboard: tab.id === activeId,
+          shownByContainer: tab.active,
+        })}
         key={tab.id}
         onClose={() => {
           onClose(tab.id);
