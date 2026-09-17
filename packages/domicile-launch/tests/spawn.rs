@@ -315,3 +315,54 @@ fn the_compositor_is_given_a_log_level_it_can_be_debugged_at() {
     );
     assert_eq!(env_of(&spawned, "RUST_LOG").unwrap(), "warn");
 }
+
+#[test]
+fn the_engine_is_asked_to_say_what_it_did_about_input() {
+    // THE LOG WAS QUIET BECAUSE OF A THRESHOLD, NOT BECAUSE OF SILENCE.
+    // `base/logging.cc` prints to stderr when `LOG_TO_STDERR` is set or when
+    // the message is at least `kAlwaysPrintErrorLevel` (`LOGGING_ERROR`), and
+    // a release build with no `--enable-logging` has the flag clear. The
+    // fork's account of a desktop that came up deaf -- a device handed over
+    // revoked, a force pause, a console taken back -- is written at WARNING,
+    // so a run with no keyboard produced a log with nothing about input in
+    // it. Asked for on every platform: a nested developer run has the same
+    // engine and the same warnings.
+    for platform in ["drm", "wayland", "headless"] {
+        let args = args_of(&engine(
+            Path::new("/l/engine"),
+            &shell(),
+            platform,
+            &runtime(),
+            None,
+        ));
+        assert!(
+            args.contains(&"--enable-logging=stderr".to_string()),
+            "{platform}: {args:?}"
+        );
+        assert!(
+            args.contains(&"--log-level=1".to_string()),
+            "{platform}: {args:?}"
+        );
+    }
+}
+
+#[test]
+fn a_run_that_wants_more_than_warnings_can_ask_for_them() {
+    // The default is a floor rather than a ceiling. `extra` is appended after
+    // the built list, and `CommandLine::AppendSwitchNative` overwrites the
+    // value of a switch it has already seen -- so the last `--log-level` on
+    // the line is the one the engine reads, and a run that wants INFO gets it
+    // without the launcher knowing anything about it.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "drm",
+        &runtime(),
+        Some("--log-level=0"),
+    ));
+    let levels: Vec<&String> = args
+        .iter()
+        .filter(|arg| arg.starts_with("--log-level="))
+        .collect();
+    assert_eq!(levels, vec!["--log-level=1", "--log-level=0"], "{args:?}");
+}
