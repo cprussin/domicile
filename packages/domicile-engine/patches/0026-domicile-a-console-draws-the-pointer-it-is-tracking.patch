@@ -1,0 +1,137 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 17 Sep 2026 17:00:00 +0000
+Subject: [PATCH] domicile: a console draws the pointer it is tracking
+
+With patch 0025 the desktop on a tty took the keyboard and answered
+chords. It also logged `the first pointer event reached the window`
+before it logged the first key -- the trackpad works and always did --
+and drew no pointer at all.
+
+THE ARROW IS IN THE BINARY. `ui_lottie_resources.grd:10` gates the
+cursor block on `use_aura`, not on ChromeOS; `chrome/chrome_paks.gni:152`
+puts that pak in `chrome_extra_paks` unconditionally; and
+`skia_support_skottie` is `!is_android`, so the rasteriser is here too.
+Nothing asks for it.
+
+`wm::CursorLoader::CursorFromType` asks the platform's factory first and
+returns any non-null answer (`ui/wm/core/cursor_loader.cc:194-203`), so
+`LoadCursorFromAsset` on the next line runs only when the platform
+answers nothing. `BitmapCursorFactory` never answers nothing. It hands
+back a `BitmapCursor` carrying the TYPE and an empty bitmap vector, and
+its own comment says why:
+
+    // Return a cursor not backed by a bitmap to preserve the type
+    // information. It can still be used to request the compositor to
+    // draw a server-side cursor for the given type.
+
+Which is exactly right for a platform whose compositor draws a cursor
+from a name, and exactly wrong for one that hands a CRTC a buffer. The
+empty vector goes to `DrmCursor::SendCursorShowLocked`
+(`drm_cursor.cc:273-281`), to `HardwareDisplayController::SetCursor`
+with a bitmap that `drawsNothing()` (`:427-436`), to `UpdateCursorImage`
+leaving `handle = 0` (`:698-711`), to
+`drmModeSetCursor(fd, crtc, 0, 0, 0)`. Handle zero is the kernel's word
+for TURN THE CURSOR OFF. The ioctl succeeds, so the `PLOG(ERROR)` at
+`crtc_controller.cc:86` never fires and the whole thing is silent.
+
+ASH HAS THE SAME FACTORY AND NOT THE SAME BUG, AND THE DIFFERENCE IS
+ONE DEFAULT ARGUMENT. `ash::NativeCursorManagerAsh` holds
+`wm::CursorLoader cursor_loader_{/*use_platform_cursors=*/false}`
+(`native_cursor_manager_ash.h:64`), so on ChromeOS the factory is never
+asked and the assets are always loaded.
+`views::DesktopNativeCursorManager` holds a plain `wm::CursorLoader`
+(`desktop_native_cursor_manager.h:73`) and that parameter defaults to
+true (`cursor_loader.h:31`). ozone/drm's only upstream consumer is ash.
+This is the fifth thing in this series that ash supplies and a views
+browser does not, after `Close()`, `Activate()`, DRM master and
+`DisplayConfigurator::TakeControl`.
+
+So the DRM platform gets a factory that answers nothing, and the loader
+reaches the arrow.
+
+`kNone` IS THE ONE THAT MUST STILL BE ANSWERED. `CursorLoader` routes it
+through the platform whatever `use_platform_cursors_` says, because an
+invisible cursor is made differently on every platform -- and here
+`SendCursorShowLocked` reads `type() == kNone` as "hide", which needs
+the typed, bitmapless object the base class makes. Answering nothing for
+it would send the loader to assets that have no art for an invisible
+cursor and fall back to the pointer: an arrow drawn exactly where
+something asked for no cursor at all.
+
+NOT A GLOBAL FLIP OF `use_platform_cursors`, WHICH WOULD BE THE OBVIOUS
+ONE-LINER. `build.sh` builds one binary carrying
+`ozone_platform_wayland`, `ozone_platform_headless` and
+`ozone_platform_drm`, and Wayland's factory supplies real theme bitmaps
+-- it overrides both `GetDefaultCursor` arities. Turning the parameter
+off in `DesktopNativeCursorManager` would take the system cursor theme
+away from every nested run to fix the one platform that has no theme.
+
+`cursor_loader.cc:201` now logs `Failed to load a platform cursor of
+type N` once per type. That is the loader narrating the fallback this
+exists to reach, and it is not a failure.
+
+WHAT THIS DOES NOT CLAIM. Every link above is read at the pin, and the
+two ends are independently pinned by upstream's own unit test
+(`bitmap_cursor_factory_unittest.cc:26-44` asserts the bitmapless
+answer) and by ash's `false`. What has never been executed by this
+project on any machine is `drmModeSetCursor` with a real buffer --
+`crux` has no panel. If a pointer still does not draw after this, the
+cursor plane is the next thing to look at and
+`crtc_controller.cc:86`'s `PLOG` is the line that will say so.
+
+---
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 303195b..07f08aa 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -120,6 +120,8 @@ source_set("gbm") {
+     "host/drm_window_host.cc",
+     "host/drm_window_host.h",
+     "host/drm_window_host_manager.cc",
++    "domicile/drm_cursor_factory.cc",
++    "domicile/drm_cursor_factory.h",
+     "domicile/drm_fullscreen.cc",
+     "domicile/drm_fullscreen.h",
+     "domicile/drm_input_devices.cc",
+@@ -250,6 +252,7 @@ source_set("gbm_unittests") {
+     "gpu/mock_drm_modifiers_filter.cc",
+     "gpu/mock_drm_modifiers_filter.h",
+     "gpu/proxy_helpers_unittest.cc",
++    "domicile/drm_cursor_factory_unittest.cc",
+     "domicile/drm_fullscreen_unittest.cc",
+     "domicile/drm_input_devices_unittest.cc",
+     "domicile/drm_master_unittest.cc",
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index dff327e..d4c5eee 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -46,6 +46,7 @@
+ #include "ui/ozone/platform/drm/host/drm_display_host_manager.h"
+ #include "ui/ozone/platform/drm/host/drm_native_display_delegate.h"
+ #include "ui/ozone/platform/drm/host/drm_window_host.h"
++#include "ui/ozone/platform/drm/domicile/drm_cursor_factory.h"
+ #include "ui/ozone/platform/drm/domicile/drm_logind_input.h"
+ #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
+ #include "ui/ozone/platform/drm/domicile/drm_screen.h"
+@@ -291,7 +292,19 @@ class OzonePlatformDrm : public OzonePlatform {
+     display_manager_ = std::make_unique<DrmDisplayHostManager>(
+         adapter, device_manager_.get(), &host_properties_,
+         event_factory_ozone_->input_controller());
+-    cursor_factory_ = std::make_unique<BitmapCursorFactory>();
++    // A CONSOLE'S CURSOR COMES FROM THE ASSETS, AND ONLY A NULL GETS IT
++    // THERE. `BitmapCursorFactory` answers every type with a cursor that
++    // carries the type and no bitmap -- right for a platform whose
++    // compositor draws a cursor from a name, and wrong for one that hands a
++    // CRTC a buffer. `wm::CursorLoader` takes that non-null answer and never
++    // reaches `LoadCursorFromAsset`, so the arrow that is in this binary is
++    // never loaded and `drmModeSetCursor` is called with handle 0, which
++    // turns the cursor plane off. ash does not hit it because
++    // `NativeCursorManagerAsh` builds its loader with
++    // `use_platform_cursors=false`; `views::DesktopNativeCursorManager` takes
++    // that parameter's default, which is true. See
++    // `domicile/drm_cursor_factory.h`.
++    cursor_factory_ = std::make_unique<DrmCursorFactory>();
+ 
+     host_drm_device_->SetDisplayManager(display_manager_.get());
+ 
