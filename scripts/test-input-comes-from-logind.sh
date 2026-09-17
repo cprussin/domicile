@@ -224,6 +224,21 @@ else
     "DrmInputDevicesTest.* is not in the --gtest_filter"
 fi
 
+# AN INACTIVE TAKE IS A RACE AS OFTEN AS IT IS A BACKGROUND CONSOLE, and
+# parking the device to wait for an `Active` edge answers only one of those.
+# `Reclaim` has exactly one caller -- `OnPropertiesChanged` -- and logind emits
+# that on a CHANGE. A session that was already in front of the user when the
+# startup scan ran, and that never goes away and comes back, gets no edge ever:
+# every device sits revoked for the life of the process and the desktop is deaf
+# from the first frame, with no keyboard to switch console with either. So the
+# inactive answer has to be checked against the session rather than believed.
+if in_sources "SessionIsActive()" && [ "$(grep -c 'SessionIsActive()' "$DOMICILE/drm_logind_input.cc")" -ge 3 ]; then
+  ok "an inactive take asks the session rather than waiting for an edge"
+else
+  fail "an inactive take asks the session rather than waiting for an edge" \
+    "OpenDeviceFd parks an inactive device and waits for PropertiesChanged, which never comes for a session that was already active"
+fi
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

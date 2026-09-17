@@ -200,48 +200,95 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
     return base::ScopedFD();
   }
 
-  // GIVEN BACK BEFORE IT IS ASKED FOR AGAIN. `TakeDevice` for a device this
-  // session still holds is refused with `Device is taken`, and a descriptor
-  // logind has revoked is replaced by nothing else -- so a device that is
-  // here for a second time (a "force" pause, or an activation after one) has
-  // to go back to logind first. An ordinary open holds nothing and this is a
-  // no-op for it.
-  devices_.GiveBack(*number);
+  // TWICE AT MOST, AND THE SECOND TIME ONLY FOR A RACE. logind can answer
+  // `TakeDevice` with a descriptor it has already revoked -- the `inactive`
+  // half of the reply below -- and the fix for that is an `Active` edge, which
+  // `OnPropertiesChanged` follows. But logind emits `PropertiesChanged` on a
+  // CHANGE, and a session that was already in front of the user when this scan
+  // ran never changes: there is no edge, `Reclaim` is never called, and every
+  // device stays revoked for the life of the process. That is a desktop that
+  // draws and is deaf from its first frame, with no keyboard to leave the
+  // console with either. So an inactive answer is checked against the session
+  // instead of believed, and a stale one is simply asked again.
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    // GIVEN BACK BEFORE IT IS ASKED FOR AGAIN. `TakeDevice` for a device this
+    // session still holds is refused with `Device is taken`, and a descriptor
+    // logind has revoked is replaced by nothing else -- so a device that is
+    // here for a second time (a "force" pause, an activation after one, or
+    // the retry below) has to go back to logind first. An ordinary open holds
+    // nothing and this is a no-op for it.
+    devices_.GiveBack(*number);
 
-  dbus::MethodCall take_device(kSessionInterface, kTakeDevice);
-  WriteDeviceNumber(&take_device, *number);
-  std::unique_ptr<dbus::Response> taken = CallAndBlock(session_, &take_device);
-  if (!taken) {
-    LOG(ERROR) << "logind refused device " << number->major << ":"
-               << number->minor << " for " << params.path.value();
-    return base::ScopedFD();
-  }
+    dbus::MethodCall take_device(kSessionInterface, kTakeDevice);
+    WriteDeviceNumber(&take_device, *number);
+    std::unique_ptr<dbus::Response> taken =
+        CallAndBlock(session_, &take_device);
+    if (!taken) {
+      LOG(ERROR) << "logind refused device " << number->major << ":"
+                 << number->minor << " for " << params.path.value();
+      return base::ScopedFD();
+    }
 
-  dbus::MessageReader reader(taken.get());
-  base::ScopedFD fd;
-  if (!reader.PopFileDescriptor(&fd)) {
-    LOG(ERROR) << "logind answered " << kTakeDevice << " for "
-               << params.path.value() << " without a descriptor";
-    return base::ScopedFD();
-  }
+    dbus::MessageReader reader(taken.get());
+    base::ScopedFD fd;
+    if (!reader.PopFileDescriptor(&fd)) {
+      LOG(ERROR) << "logind answered " << kTakeDevice << " for "
+                 << params.path.value() << " without a descriptor";
+      return base::ScopedFD();
+    }
 
-  // THE REPLY IS `hb` AND THE `b` IS `inactive`, NOT `active`. logind writes
-  // `!sd->active` there, and it is not decoration: for a session that is not
-  // the one in front of the user, `session_device_new` opens the node with
-  // `session_device_open`'s `active` argument false, which `EVIOCREVOKE`s the
-  // descriptor before handing it over. logind's own comment there says the
-  // caller must not trust the descriptor and must read this boolean instead.
-  // Popping only the descriptor is how a startup scan that lands during an
-  // inactive moment ends up with a desktop full of dead devices and no
-  // complaint anywhere.
-  bool inactive = false;
-  if (!reader.PopBool(&inactive)) {
-    LOG(FATAL) << "logind answered " << kTakeDevice << " for "
-               << params.path.value()
-               << " without saying whether the device is live";
-  }
+    // THE REPLY IS `hb` AND THE `b` IS `inactive`, NOT `active`. logind writes
+    // `!sd->active` there, and it is not decoration: for a session that is not
+    // the one in front of the user, `session_device_new` opens the node with
+    // `session_device_open`'s `active` argument false, which `EVIOCREVOKE`s
+    // the descriptor before handing it over. logind's own comment there says
+    // the caller must not trust the descriptor and must read this boolean
+    // instead. Popping only the descriptor is how a startup scan that lands
+    // during an inactive moment ends up with a desktop full of dead devices
+    // and no complaint anywhere.
+    bool inactive = false;
+    if (!reader.PopBool(&inactive)) {
+      LOG(FATAL) << "logind answered " << kTakeDevice << " for "
+                 << params.path.value()
+                 << " without saying whether the device is live";
+    }
 
-  if (inactive) {
+    if (!inactive) {
+      // THE DESCRIPTOR IS ANOTHER PROCESS'S OPEN, so the flags the evdev
+      // converters need are asserted here rather than assumed: a blocking
+      // read on this thread is every input device in the desktop stopping
+      // together.
+      if (HANDLE_EINTR(fcntl(fd.get(), F_SETFL, O_NONBLOCK)) < 0) {
+        PLOG(ERROR) << "cannot make " << params.path.value()
+                    << " non-blocking";
+        return base::ScopedFD();
+      }
+
+      devices_.Take(*number, params.id, params.path, DeviceLiveness::kLive);
+      return fd;
+    }
+
+    // RECORDED, NOT TRUSTED, AND RECORDED BEFORE THE RETRY. logind holds the
+    // device for this session either way, so it is still owed back; what it
+    // is not is something to build a converter on. Recording it is also what
+    // makes the `GiveBack` at the top of the next turn release it rather than
+    // find nothing. The descriptor goes out of scope here, unread by anyone.
+    devices_.Take(*number, params.id, params.path, DeviceLiveness::kRevoked);
+
+    // ASKED, NOT ASSUMED. If logind says this session is in front of the user
+    // right now, the answer above was stale and there is no edge coming to
+    // correct it -- so the one retry is spent here. If the session really is
+    // in the background, the device is correctly parked and the activation
+    // will reclaim it.
+    if (attempt == 0 && SessionIsActive()) {
+      LOG(WARNING) << "logind handed over " << params.path.value() << " ("
+                   << number->major << ":" << number->minor
+                   << ") revoked while also saying this session is active; "
+                      "taking it again, because no Active edge will arrive to "
+                      "do it later";
+      continue;
+    }
+
     LOG(WARNING) << "logind handed over " << params.path.value() << " ("
                  << number->major << ":" << number->minor
                  << ") already revoked, because this session is not the one "
@@ -249,23 +296,16 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
                     "the desktop until the session goes Active, which is "
                     "answered by taking it again -- switch back to this "
                     "console (Ctrl+Alt+F<n>) if it does not.";
-    // RECORDED, NOT TRUSTED. logind holds the device for this session either
-    // way, so it is still owed back; what it is not is something to build a
-    // converter on. The descriptor goes out of scope here, unread by anyone.
-    devices_.Take(*number, params.id, params.path, DeviceLiveness::kRevoked);
     return base::ScopedFD();
   }
 
-  // THE DESCRIPTOR IS ANOTHER PROCESS'S OPEN, so the flags the evdev
-  // converters need are asserted here rather than assumed: a blocking read on
-  // this thread is every input device in the desktop stopping together.
-  if (HANDLE_EINTR(fcntl(fd.get(), F_SETFL, O_NONBLOCK)) < 0) {
-    PLOG(ERROR) << "cannot make " << params.path.value() << " non-blocking";
-    return base::ScopedFD();
-  }
-
-  devices_.Take(*number, params.id, params.path, DeviceLiveness::kLive);
-  return fd;
+  // Both turns answered inactive with the session active: logind is saying two
+  // things that cannot both be true, and a third ask would not settle it.
+  LOG(ERROR) << "logind kept handing over " << params.path.value()
+             << " revoked while saying this session is active, so this device "
+                "stays dead. `loginctl session-status` names what else holds "
+                "the session.";
+  return base::ScopedFD();
 }
 
 void DrmLogindInput::ReopenDevice(int id, const base::FilePath& path) {
