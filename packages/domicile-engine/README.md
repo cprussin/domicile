@@ -9,9 +9,11 @@ of being reimplemented in a shader.
 
 ## Why a series and not a fork
 
-The design is deliberately **additive** — a browser-side broker, a mojo
-interface, and one method on `HTMLCanvasElement` — so most of it is new files,
-and new files never conflict. Carrying that as a 40 GB fork of `chromium/src`
+The compositing half is deliberately **additive** — a browser-side broker, a
+mojo interface, `<app>` and `<webview>` as elements of their own — so most of
+it is new files, and new files never conflict. The DRM half cannot be: an
+ozone platform is edits to `ui/ozone/platform/drm` and `ui/events/ozone/evdev`,
+and those are Chromium's. Carrying either as a 40 GB fork of `chromium/src`
 would hide the only number that matters, which is how much of it *does*
 conflict when Chromium moves. Here that number is countable: bump
 `CHROMIUM_PIN`, run `apply.sh`, count what rejects.
@@ -25,7 +27,8 @@ same reason.
 |---|---|
 | `CHROMIUM_PIN` | the exact revision the series applies to. One line |
 | `src/` | new files, laid into the checkout as-is. The bulk of the fork |
-| `patches/` | `git format-patch` output for edits to files Chromium already owns. Kept small on purpose |
+| `patches/` | `git format-patch` output for edits to files Chromium already owns |
+| `upstream/` | bugs found in Chromium itself, written to be filed and not yet filed. One today: `setoverridechildpaintflags.md`, which `HTMLAppElement`'s own `SurfaceLayerBridge` runs into — see `ENGINE-FORK.md`'s *Whether an `<app>` is an out-of-process `<iframe>`* |
 | `scripts/apply.sh` | series → checkout |
 | `scripts/extract.sh` | checkout → series. Run before every push |
 | `scripts/build.sh` | `gn gen` + `autoninja` with the args the spike is measured under |
@@ -40,6 +43,10 @@ same reason.
 | `scripts/guard-webview-guest-page.py` | the page a browser window shows for the keyboard and click guards, saying what it was given |
 | `scripts/guard_webview_devtools.py` | driving a key or a press at a running engine over the debugging port, which is the only keyboard and pointer `crux` has. Imported, which is why it is the one file here with underscores |
 | `scripts/guard-css-and-resize.sh` | the measurement: seven CSS properties, the resize, and the latency |
+| `scripts/guard-latency.sh` | keystroke to pixel with a real client — the whole of what a user waits for, read out of the compositor's own `latency` lines. Under `under-wayland.sh` |
+| `scripts/guard-control-arrival.sh`, `guard-control-arrival.js`, `guard-control-arrival-compositor.py` | the hop from the compositor's socket into the page, measured off the `arrival` stamp every `ControlChannelClient` method carries, and the cursor keyword set read end to end |
+| `scripts/lib-latency.sh` | what a latency run means, read out of a log. Sourced by `guard-latency.sh` and by `/scripts/test-latency-report.sh`, so the reading is exercised without starting a browser |
+| `scripts/lib-annotate.sh` | how a guard says where it stopped, as a GitHub annotation rather than a line in a thousand-line job log |
 | `scripts/spike.sh` | run one step of the spike end to end; the producer's exit code is the verdict. What `guard-css-and-resize.sh` runs twice |
 | `scripts/spike-page.html` | steps 2 and 3's page: a `<canvas>` that embeds instead of drawing |
 | `scripts/spike-css-page.html` | the CSS half's page — each property on an `<app>` and on a `<div>` beside it |
@@ -84,7 +91,8 @@ a new message.
 `set_device_pixel_ratio`, `grab_shortcut`, `key`, `pointer_motion`,
 `pointer_leave`, `pointer_button`, `pointer_axis`. Inbound: `welcome`,
 `app_appeared`, `app_titled`, `app_resized`, `app_closed`, `app_cursor`,
-`shortcut`, `modifiers`, `focus_changed`, `displays`, `keymap`.
+`shortcut`, `modifiers`, `focus_changed`, `focus_requested`, `displays`,
+`keymap`.
 
 `keymap` is the one inbound message that stops in the browser process. It
 carries the keymap the compositor compiled from `input.keyboard`, in the text
@@ -184,25 +192,23 @@ carries no number because both of its ends are one binary.
 
 | | |
 |---|---|
-| `components/domicile/browser/command_protocol.{h,cc}` | the wire. A line in, a line out, the applying injected — which is what makes it eight unit tests rather than a browser |
+| `components/domicile/browser/command_protocol.{h,cc}` | the wire. A line in, a line out, the applying injected — which is what makes it unit tests rather than a browser |
 | `chrome/browser/domicile/domicile_command_socket.{h,cc}` | the socket, and the shell's window. In `//chrome` because reloading the shell needs `GlobalBrowserCollection`, which belongs to `//chrome/browser/ui` |
 | `components/domicile/browser/shell_source.{h,cc}` | which shell this process is serving. Seeded from the two switches, replaced by a `load_shell` |
 
-### The dev-reload poller does not survive the scheme
+### There is no dev reload, and this is where one goes
 
-`shellDocument` used to inject a poller in dev mode: a `fetch` of a token from
-the bridge every 400ms, reloading when the token changed. It existed because a
-desktop runs under `--app`, which drops the browser's own keyboard shortcuts,
-so there is no reload in it — without something in the page, a one-character
-change to a shell means killing the desktop and starting it again.
+A desktop runs under `--app`, which drops the browser's own keyboard
+shortcuts, so there is no reload in it: a one-character change to a shell
+means killing the desktop and starting it again. `scripts/dev-shell.sh` says
+so, and `scripts/test-dev-shell.sh` asserts that it hands the engine no
+`DOMICILE_DEV_RELOAD` — the variable switches nothing on anywhere.
 
-It polled the HTTP server that this work deletes, so it is not in the C++ port
-and there is nothing in its place. **What replaces it is the command socket
-above**, once the supervisor dials it: a watch script that runs
-`domicile load-shell` after each build is the whole of dev reload, and it lives
-outside the runtime rather than inside every served document.
-`DOMICILE_DEV_RELOAD` is read outside this package, so the two halves have to
-agree before either moves.
+**The command socket above is what replaces it**, once the supervisor dials
+it: a watch script running `domicile load-shell` after each build is the whole
+of dev reload, and it lives outside the runtime rather than inside every
+served document. Nothing in the document the fork writes should grow a poller
+again.
 
 ## Working on it
 
@@ -225,10 +231,14 @@ The loop above is right when one person is on the box. It is a trap when two
 are, and both of these have already happened rather than been imagined:
 
 - **CI resets that tree.** `engine.yml` and `engine-release.yml` reset
-  `/build/chromium/src` to the pin and lay the series over it, and they trigger
-  on any push touching `packages/domicile-engine/**` — which is every push
-  either agent makes to the fork. Uncommitted work in the checkout is taken
-  without warning. Take the lock around builds:
+  `/build/chromium/src` to the pin and lay the series over it. `engine.yml`
+  fires on any push or pull request touching `packages/domicile-engine/**`
+  *except* Markdown under it and `engine-release.nix` — prose cannot change
+  what the build produces and the job never reads the repin, and the exclusions
+  are asserted by `/scripts/test-engine-path-filter.sh`. `engine-release.yml`
+  fires on an `engine-v*` tag or a dispatch. So most pushes to the fork take
+  the tree, and uncommitted work in the checkout is taken without warning. Take
+  the lock around builds:
   `.github/scripts/engine-tree-lock.sh take /build/chromium/src "<who>"`, and
   drop it with the same owner string when you are done.
 - **A file in the checkout with no counterpart in `src/` wedges the next run.**
@@ -303,12 +313,42 @@ per subsequent edit. The rebase number is still missing: it needs
 
 ## State
 
-The spike in `ENGINE-FORK.md` is finished and **phase 1 is under way**: the C
-ABI library is built and proven, and the dmabuf import behind it is blocked on
-a named thing rather than an unknown one. See `ENGINE-FORK.md`'s *Why
-`domicile_surface_import` cannot be written yet*.
+The spike in `ENGINE-FORK.md` is finished and **phase 1 is done**: the C ABI
+library, the brokered frame sink, the dmabuf import ported from `exo::Buffer`,
+`released` → `wl_buffer.release`, and the compositor submitting a client's
+buffer. Phase 2 has two boxes left — an shm→dmabuf upload, and the latency
+measurement rebuilt in the compositor — and phase 3 is the DRM work below.
+`ENGINE-FORK.md`'s *Plan* is the current list; this section is what the fork
+knows about the machine it runs on.
 
-Two things that were assumed and are not true:
+### A desktop draws on a bare tty
+
+Patches `0012` through `0024` are the DRM half, and they are why the series
+edits as many of Chromium's own files as it does: everything before them was
+additive, and an ozone platform cannot be.
+
+**A screen lights.** Confirmed on hardware. What was missing the whole time was
+DRM master: nothing in the fork ever asked the kernel for it, so the first
+modeset got `EACCES` and the first `drmSetMaster` a desktop ever ran was the
+one a console switch asked for. `DrmMaster::Add` takes master as a card
+arrives (patch `0019`).
+
+**Nothing has to be told it is on a tty.** `domicile-launch`'s `platform()`
+reads `XDG_VTNR` and chooses `drm` on its own, after `WAYLAND_DISPLAY` and
+`DISPLAY` so that a session with both a display and a VT stays a window inside
+that session. `OZONE=drm` still forces it and is no longer something to set;
+`packages/domicile-launch/src/platform.rs` is the order and the reasons.
+
+**Input from the first frame is written, not measured.** A tty desktop drew
+its first frame deaf: logind hands a device back with an `inactive` flag, the
+device was parked on it, and the only thing that un-parks one is a
+`PropertiesChanged` edge that a session already in front of the user never
+gets. `src/ui/ozone/platform/drm/domicile/drm_logind_input.cc` asks logind
+whether the session is active rather than believing the flag, and
+`/scripts/test-input-comes-from-logind.sh` is the guard. **It has not been
+confirmed on hardware.** Treat it as written, not as proven.
+
+Three things that were assumed and are not true:
 
 - **`crux` has a GPU** — a GTX 970 on the proprietary driver, and Chromium
   drives it. `--disable-gpu` everywhere was a missing `libEGL.so.1` on the
@@ -324,6 +364,8 @@ Two things that were assumed and are not true:
   wlroots compositor. NVIDIA ships its own GBM backend and its EGL imports
   dmabufs, so Chromium's GBM path does not assume Mesa. Weston's headless
   backend cannot be used for it: it advertises no `zwp_linux_dmabuf_v1`.
+
+Two things about how a frame gets there:
 
 - **The producer submits its own frames.** The browser imports the dmabuf and
   hands back a `gpu::ExportedSharedImage` — a mailbox and a verified sync token
@@ -408,9 +450,9 @@ Kept:
 | `components/domicile/browser/frame_sink_broker.{h,cc}` | the service. Takes its `HostFrameSinkManager` and its `FrameSinkId` allocator from the embedder, so it needs no `//content` and no browser to test |
 | `components/domicile/browser/brokered_frame_sink.{h,cc}` | one registered `FrameSinkId`, held for as long as the producer submits to it |
 | `components/domicile/browser/external_surface_provider.{h,cc}` | the renderer-facing shim over the broker |
-| `components/domicile/browser/frame_sink_broker_unittest.cc` | nine tests, against a real `HostFrameSinkManager` and an in-process `FrameSinkManagerImpl` |
-| `components/domicile/spike/window_diff_unittest.cc` | six, over the rule step 4's verdicts come out of: what counts as a difference, and what counts as an edge rather than a region |
-| `components/domicile/engine/engine_event_queue_unittest.cc` | five, over the fd the compositor polls: that an idle queue does not wake it, that a burst arrives whole, and that a push racing a drain is not lost |
+| `components/domicile/browser/frame_sink_broker_unittest.cc` | the broker's own tests, against a real `HostFrameSinkManager` and an in-process `FrameSinkManagerImpl` |
+| `components/domicile/spike/window_diff_unittest.cc` | the rule step 4's verdicts come out of: what counts as a difference, and what counts as an edge rather than a region |
+| `components/domicile/engine/engine_event_queue_unittest.cc` | the fd the compositor polls: that an idle queue does not wake it, that a burst arrives whole, and that a push racing a drain is not lost |
 | `content/browser/domicile/domicile_frame_sink_broker.{h,cc}` | the browser process's one instance, wired to `content::GetHostFrameSinkManager()` and `content::AllocateFrameSinkId()`, and the named socket a producer reaches it over |
 | `third_party/blink/renderer/platform/graphics/external_surface_embedder.{h,cc}` | the page's half: allocates the `LocalSurfaceId`, asks the browser for the `FrameSinkId`, pairs them |
 
@@ -419,7 +461,7 @@ Phase 1's library, which is not throwaway — it is the seam:
 | | |
 |---|---|
 | `components/domicile/engine/domicile_engine.{h,cc}` | `libdomicile_engine.so`. The C ABI, the invitation, the broker pipe, and the pollable fd. The header is C, and `engine_smoke.c` is the compiler checking that |
-| `components/domicile/engine/engine_event_queue.{h,cc}` | mojo's thread pushes, the compositor's thread drains, an eventfd in between. Five tests |
+| `components/domicile/engine/engine_event_queue.{h,cc}` | mojo's thread pushes, the compositor's thread drains, an eventfd in between |
 | `components/domicile/engine/engine_smoke.c` | what the library has to be able to do, asserted from C. Throwaway |
 | `components/domicile/engine/engine_dmabuf_smoke.cc` | the same for a real dmabuf: allocate on the render node, import, submit twice, see the release. Throwaway |
 | `components/domicile/browser/brokered_frame_sink.{h,cc}` | the `exo::Buffer` port. A dmabuf becomes a `SharedImage` and a `TransferableResource` here, in the browser, because that is where `aura::Env` is |
@@ -431,7 +473,7 @@ Phase 1's library, which is not throwaway — it is the seam:
 | `components/domicile/spike/surface_producer.{h,cc}` | the external producer. C++, in-tree, and that is a measured choice — see `ENGINE-FORK.md`'s *Rust: the bindings exist, the crate is not the seam* |
 | `components/domicile/spike/solid_color_submitter.cc` | steps 2 and 3's assertion over it: one pixel at the center of the window |
 | `components/domicile/spike/css_parity.cc`, `css_parity_layout.h` | step 4's. The latency loop and the page's geometry, which has to stay in step with `scripts/spike-css-page.html` |
-| `components/domicile/spike/window_diff.{h,cc}` | the rule that turns a picture of the window into step 4's verdicts. Separate from the process that takes the picture because every "pass" in the measurement is this code's opinion, and it has six tests |
+| `components/domicile/spike/window_diff.{h,cc}` | the rule that turns a picture of the window into step 4's verdicts. Separate from the process that takes the picture because every "pass" in the measurement is this code's opinion, and it is unit tested |
 | `components/domicile/spike/spike_color.{h,cc}` | comparing what viz drew with what was submitted, which every step ends in |
 | `components/domicile/spike/mojom/spike_probe.mojom`, `content/browser/domicile/domicile_spike_probe.{h,cc}` | the pixel probe. A `CopyOutputRequest` on the browser's window, because the embedding layer belongs to the page now and there is no other way to keep the proof a pixel |
 | `scripts/spike-page.html`, `spike-css-page.html`, `spike-resize-page.html` | the pages |
@@ -446,16 +488,34 @@ first `embedExternalSurface()` was a deadlock. The browser still holds an
 embed until a producer connects — an `<app>` element exists before the client
 window behind it does — which is what makes it safe for a page to ask early.
 
-The series edits nine files Chromium owns; `ENGINE-FORK.md`'s *Minimize edited
-files* has the list and what each is for.
-
-Run the tests with:
+The series edits files Chromium owns in `patches/`; everything else is new
+files under `src/`. What that costs is the number to watch, and it is countable
+rather than remembered:
 
 ```sh
-autoninja -C out/Domicile components_unittests
-./out/Domicile/components_unittests \
-  --gtest_filter='FrameSinkBroker*:WindowDiff*:EngineEventQueue*'
+grep -h '^diff --git' patches/*.patch | awk '{print $3}' | sed 's|^a/||' | sort -u | wc -l
 ```
+
+`ENGINE-FORK.md`'s *Minimize edited files, not added ones* is the decision and
+what the largest groups are for. The number has grown with the DRM work —
+patches 0012 onward are mostly `ui/ozone/platform/drm` and `ui/events/ozone/evdev`,
+which are files Chromium owns and which no additive design could have avoided.
+
+The series' unit tests live in two targets. `components_unittests` holds
+everything under `components/domicile/`, and `ozone_unittests` holds the DRM
+platform's, which had nowhere else to run:
+
+```sh
+autoninja -C out/Domicile components_unittests ozone_unittests
+./out/Domicile/components_unittests --gtest_filter='FrameSinkBrokerTest.*:…'
+./out/Domicile/ozone_unittests --gtest_filter='DrmScreenTest.*:…'
+```
+
+**`.github/workflows/engine.yml` carries the two filters in full, and it is the
+list to copy from rather than this one** — a filter matching nothing exits 0,
+so a suite that stopped linking is a silent pass, and that job counts the
+matched tests against a floor for exactly that reason. A new suite goes in the
+filter and in the floor in the same change.
 
 Neither the Blink half nor the probe has a unit test. Chromium does not unit
 test `SurfaceLayerBridge` either — there is no `surface_layer_bridge_test.cc` —

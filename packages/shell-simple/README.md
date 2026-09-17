@@ -135,7 +135,7 @@ nothing reloads the page for you until `domicile load-shell` lands, see
 ## Test
 
 ```sh
-bun run --filter @domicile/shell-simple test
+bun run turbo test --filter @domicile/shell-simple
 ```
 
 runs the type check, the unit tests, and the Vite build. `Shell.test.tsx`
