@@ -368,6 +368,13 @@
               platforms = [ system ];
             };
           } ''
+          # `--add-flags`, which puts the page in FRONT -- and here that is
+          # right, unlike in the home-manager module next door. This binary is
+          # called `manganese`, not `domicile`: it is one desktop and nothing
+          # else, so there is no `manganese which-shell` for a leading
+          # argument to get in the way of. The module installs a `domicile`,
+          # where the verbs are the whole point, and supplies the shell at the
+          # end for exactly that reason.
           makeWrapper ${domicilePackage}/bin/domicile "$out/bin/${name}" \
             --add-flags ${shellPage name}/shell.js \
             --suffix PATH : ${pkgs.lib.makeBinPath [ pkgs.kitty ]}
@@ -602,6 +609,30 @@
         desktops;
     in
     {
+      # DOMICILE AS A HOME-MANAGER MODULE, so a desk is described where the
+      # rest of a person's environment is rather than in a file they write by
+      # hand and remember to keep somewhere.
+      #
+      # NOT under `${system}`, because a module is not a build product: the
+      # thing home-manager imports is the same expression on every machine,
+      # and it reads `pkgs` from the configuration importing it. What IS
+      # system-bound is the default package, so the module is given this
+      # flake's `packages` for one and takes an override for everything else.
+      #
+      # No NixOS module beside it yet. What a NixOS one would add is the part
+      # this deliberately leaves out -- a session, a unit, a way for the
+      # machine to boot into a desk -- and that is a decision about a machine
+      # rather than about a home directory.
+      homeManagerModules = rec {
+        domicile = import ./nix/home-manager.nix {
+          domicilePackages = self.packages.${system};
+        };
+        # `default` so `imports = [domicile.homeManagerModules.default]` works,
+        # and the name beside it so a configuration importing several flakes'
+        # modules can say which one this is.
+        default = domicile;
+      };
+
       # No `default`. `nix build` on its own has nothing to build here on
       # purpose: which desktop you want is the only question this flake cannot
       # answer for you, and `.#domicile` is the runner rather than a desktop.
@@ -632,6 +663,156 @@
       # source, and leaves you in your own directory — and the honest answer
       # to that is `git clone`, not seventy lines of staging that nothing
       # exercises.
+
+      # WHAT `nix flake check` IS FOR HERE: the home-manager module, which
+      # nothing else evaluates.
+      #
+      # `scripts/test-the-home-manager-module-agrees.sh` compares its option
+      # NAMES against the Rust schema without nix, which is the half a Claude
+      # web session can run. This is the other half -- the types, the
+      # defaults, and that the whole thing produces the TOML somebody's desk
+      # is -- and it needs an evaluator.
+      #
+      # `evalModules` WITH A STUB RATHER THAN home-manager AS AN INPUT. The
+      # module sets exactly two things outside its own namespace, `home.packages`
+      # and `xdg.configFile`, so declaring those two is the whole of what it
+      # takes to evaluate it. Taking home-manager as a flake input to check one
+      # module would put its whole closure behind every `nix flake check`, and
+      # a stub that has drifted fails loudly here rather than silently passing.
+      checks.${system}.home-manager-module =
+        let
+          stub = { lib, ... }: {
+            options = {
+              home.packages = lib.mkOption {
+                type = lib.types.listOf lib.types.package;
+                default = [ ];
+              };
+              xdg.configFile = lib.mkOption {
+                type = lib.types.attrsOf (lib.types.submodule {
+                  options.source = pkgs.lib.mkOption { type = pkgs.lib.types.path; };
+                });
+                default = { };
+              };
+            };
+          };
+          # A desk with one of everything the schema has, so the check covers
+          # the shapes rather than the happy path: a turned monitor at a
+          # fractional scale, one turned off, a described display, a keyboard
+          # and a nested size.
+          desk = { ... }: {
+            programs.domicile = {
+              enable = true;
+              shell = "${desktops.simple}/shell.js";
+              settings = {
+                compositor.nested_size = [ 1600 900 ];
+                input.keyboard = {
+                  xkb_layout = "us";
+                  xkb_variant = "dvp";
+                  xkb_options = [ "caps:escape" ];
+                };
+                output = {
+                  max_scale = 2;
+                  displays = [{
+                    name = "nested";
+                    position = [ 0 0 ];
+                    size = [ 1920 1080 ];
+                    scale = 1;
+                  }];
+                  profiles = [{
+                    name = "desk";
+                    displays = [
+                      { display = "drm-1"; enabled = false; }
+                      {
+                        display = "DEL DELL U3219Q 2ZLS413";
+                        position = [ 0 0 ];
+                        scale = 1.2;
+                        transform = "rotate-270";
+                      }
+                    ];
+                  }];
+                };
+              };
+            };
+          };
+          evaluated = pkgs.lib.evalModules {
+            modules = [ stub self.homeManagerModules.domicile desk ];
+            specialArgs = { inherit pkgs; };
+          };
+          written = evaluated.config.xdg.configFile."domicile/domicile.toml".source;
+
+          # THE SAME MODULE OVER A `domicile` THAT ONLY PRINTS ITS ARGUMENTS,
+          # so the command lines the wrapper builds can be read back.
+          #
+          # Running the real one here would need a desktop to answer
+          # `which-shell` and a compositor to start, neither of which a
+          # sandbox has -- and what is under test is which words reach the
+          # binary, which a stand-in shows exactly.
+          sawArgs = pkgs.lib.evalModules {
+            modules = [
+              stub
+              self.homeManagerModules.domicile
+              desk
+              { programs.domicile.package = pkgs.writeShellScriptBin "domicile" ''printf '%s\n' "$@"''; }
+            ];
+            specialArgs = { inherit pkgs; };
+          };
+        in
+        pkgs.runCommand "home-manager-module-evaluates" { } ''
+          # The generated file has to be the config file domicile parses, so
+          # this asserts the keys rather than just that something was written.
+          # `grep -F` on whole lines: `pkgs.formats.toml` decides the layout
+          # and this check is not the place to pin it.
+          cp ${written} config.toml
+          for line in \
+            'xkb_variant = "dvp"' \
+            'xkb_options = ["caps:escape"]' \
+            'max_scale = 2' \
+            'name = "desk"' \
+            'display = "drm-1"' \
+            'enabled = false' \
+            'scale = 1.2' \
+            'transform = "rotate-270"'
+          do
+            grep -qxF "  $line" config.toml || grep -qxF "$line" config.toml || {
+              echo "the module did not write: $line" >&2
+              echo "--- what it wrote ---" >&2
+              cat config.toml >&2
+              exit 1
+            }
+          done
+          # THE OTHER HALF OF WHAT THIS MODULE DOES, and the half that is
+          # invisible in the config file: which words the installed `domicile`
+          # is actually run with.
+          #
+          # `domicile which-shell` IS THE ONE THAT USED TO BREAK. The wrapper
+          # was `wrapProgram --add-flags`, which puts the shell in FRONT --
+          # and a verb is only a verb as the first word, so installing this
+          # module turned the one command it must not break into
+          # `too many arguments: which-shell`.
+          domicile=${sawArgs.config.programs.domicile.finalPackage}/bin/domicile
+
+          saw() { # what was typed -> what reached the binary
+            want="$1"; shift
+            got="$("$domicile" "$@" | tr '\n' ' ')"
+            [ "$got" = "$want " ] || {
+              echo "domicile $* reached the binary as: $got" >&2
+              echo "and it should have been: $want" >&2
+              exit 1
+            }
+          }
+
+          # Nothing typed: the configured shell, which is the point of this.
+          saw "${desktops.simple}/shell.js"
+          # A verb, handed over untouched.
+          saw "which-shell" which-shell
+          # A shell typed out: what was said beats what was configured.
+          saw "./other.js" ./other.js
+          # And a config flag is not a shell -- the path after it is skipped,
+          # so the configured shell still goes on the end.
+          saw "--config /tmp/x ${desktops.simple}/shell.js" --config /tmp/x
+
+          touch "$out"
+        '';
 
       apps.${system} = {
         # A bare `nix run github:cprussin/domicile` is Domicile itself, taking

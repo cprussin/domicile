@@ -181,6 +181,34 @@ config: ./desk.toml, because --config names it
 config: none -- no /home/you/.config/domicile/domicile.toml -- so the compositor's defaults
 ```
 
+**On NixOS, the home-manager module writes it for you.** `programs.domicile`
+declares an option for every field of that schema, so a desk is described
+where the rest of your environment is rather than in a file you keep by hand:
+
+```nix
+{
+  imports = [domicile.homeManagerModules.default];
+
+  programs.domicile = {
+    enable = true;
+    shell = "${domicile.packages.${system}.manganese}/shell.js";
+    settings.output.profiles = [{
+      name = "desk";
+      displays = [
+        {display = "DEL DELL U3219Q 2ZLS413"; scale = 1.2; transform = "rotate-270";}
+      ];
+    }];
+  };
+}
+```
+
+It writes the same file to the same path, puts `domicile` on `PATH` with your
+shell already baked in, and installs no session or unit — making domicile a
+machine's login session is a decision about how it boots rather than about
+where the monitors are, so it is not one a home-manager module makes on the
+way past. `settings` is freeform, so a key newer than the module is written
+through rather than refused.
+
 The flag may come on either side of the shell, and no file at all is a real
 answer rather than a missing one — a desktop with no monitors written down
 runs a single output that follows the engine's own window, which is what a
