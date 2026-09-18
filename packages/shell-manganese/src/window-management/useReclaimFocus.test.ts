@@ -92,6 +92,46 @@ describe("useReclaimFocus", () => {
     expect(document.activeElement).toBe(reached);
   });
 
+  // THE SAME CASE AS THE ONE ABOVE, AS THE ENGINE ACTUALLY DELIVERS IT, and
+  // the difference is the whole of this: `focusout` is dispatched from inside
+  // the focus change, with the focus off the element that had it and not yet
+  // on the one taking it, so the body is what `document.activeElement` answers
+  // for the length of that dispatch. Deferring the read does not get past it —
+  // the engine runs the microtask checkpoint as soon as a listener called from
+  // its own dispatch returns, which is still inside the change. Happy-dom
+  // settles the focus first and so cannot show this: the case above passes
+  // either way.
+  //
+  // What it cost: a window took the focus back off its own address bar on the
+  // press that reached for it, and Blink treats a handler that moves the focus
+  // mid-change as a refusal — so the bar could not be clicked into at all.
+  it("leaves a focus that is on its way to another element alone", async () => {
+    const view = page();
+    const reaching = control();
+    // What the window was asked for rather than where the focus ended up: the
+    // engine's own state during this dispatch is a document with nothing
+    // focused, and a double that leaves it that way is what holds the case
+    // still long enough to ask the question twice.
+    const asked: Element[] = [];
+    renderHook(() => {
+      useReclaimFocus(view, true, (element) => {
+        asked.push(element);
+      });
+    });
+    // The mount finds a document with nothing focused at all, which is this
+    // hook's own case and not the one under test.
+    expect(asked).toStrictEqual([view]);
+
+    act(() => {
+      view.dispatchEvent(
+        new FocusEvent("focusout", { bubbles: true, relatedTarget: reaching }),
+      );
+    });
+    await settled();
+
+    expect(asked).toStrictEqual([view]);
+  });
+
   it("stays out of it while the user is working in another window", () => {
     const view = page();
     renderHook(() => {

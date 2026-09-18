@@ -376,7 +376,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar (back / forward / stop / reload) over a `<webview>`. |
 | `src/window-management/useHistoryAvailability.ts` | Where that window's page can be sent, read off the view's own properties rather than learned from the event that says to read them. |
-| `src/window-management/useReclaimFocus.ts` | Keeping the document's focus on the window being worked in, but only when it landed on nothing at all — the address bar and the bar's own controls are the user reaching for focus, and a closing window's own control leaves it on the body. |
+| `src/window-management/useReclaimFocus.ts` | Keeping the document's focus on the window being worked in, but only when it landed on nothing at all — the address bar and the bar's own controls are the user reaching for focus, and a closing window's own control leaves it on the body. Which of the two a `focusout` is comes off the event's `relatedTarget`, because the document is mid-change while it is dispatched. |
 | `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
 | `src/window-management/window-styles.ts` | What every window shares, and how one is placed at a rectangle. |
 | `src/window-management/floating/float.ts` | A window that has left the tiling: where it sits and how big. Its own module because floating is not a kind of window. |
