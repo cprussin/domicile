@@ -76,6 +76,22 @@ struct Display {
   // of that one conversion.
   gfx.mojom.Size physical_size_mm;
 
+  // What to call this monitor: "<MAKE> <MODEL> <SERIAL>", off its EDID, or an
+  // empty string for one that says none of the three.
+  //
+  // The id above is identity and this is a NAME, and a producer needs both.
+  // The id is what survives a hotplug and what an output is keyed by; this is
+  // what a person writes in a config file to say which monitor they mean,
+  // because an int64 derived from an EDID is not something anyone can predict
+  // from looking at a desk. It is the same string kanshi and sway match a
+  // profile on.
+  //
+  // display::Display carries it as `label`, and
+  // ui/ozone/platform/drm/domicile/edid_name.cc is what builds it -- including
+  // the serial, which is the one part display::EdidParser keeps only a hash
+  // of.
+  string name;
+
   // What the CRTC is running at, in mHz, or zero for a display with no mode to
   // report.
   //

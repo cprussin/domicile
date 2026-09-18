@@ -5,6 +5,7 @@
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -47,6 +48,18 @@ class SnapshotBuilder {
     name_ = std::move(name);
     return *this;
   }
+  // The packed manufacturer and product ids, which is where the three-letter
+  // make comes from. `0x10AC` is "DEL".
+  SnapshotBuilder& ProductCode(int64_t product_code) {
+    product_code_ = product_code;
+    return *this;
+  }
+  // The raw EDID, which is the only place the printed serial survives:
+  // display::EdidParser keeps a hash of it and nothing else.
+  SnapshotBuilder& Edid(std::vector<uint8_t> edid) {
+    edid_ = std::move(edid);
+    return *this;
+  }
   SnapshotBuilder& NativeMode(const gfx::Size& size, float refresh_hz) {
     native_mode_size_ = size;
     native_refresh_hz_ = refresh_hz;
@@ -75,8 +88,8 @@ class SnapshotBuilder {
         display::PrivacyScreenState::kNotSupported,
         /*has_content_protection_key=*/false, display::DisplaySnapshot::ColorInfo(),
         name_, base::FilePath(), std::move(modes),
-        display::PanelOrientation::kNormal, /*edid=*/std::vector<uint8_t>(),
-        /*current_mode=*/native, native, /*product_code=*/0,
+        display::PanelOrientation::kNormal, edid_,
+        /*current_mode=*/native, native, product_code_,
         /*year_of_manufacture=*/0, gfx::Size(),
         display::VariableRefreshRateState::kVrrNotCapable,
         display::DrmFormatsAndModifiers());
@@ -89,7 +102,92 @@ class SnapshotBuilder {
   std::string name_ = "a panel";
   std::optional<gfx::Size> native_mode_size_ = gfx::Size(1920, 1080);
   float native_refresh_hz_ = 60.f;
+  int64_t product_code_ = display::DisplaySnapshot::kInvalidProductCode;
+  std::vector<uint8_t> edid_;
 };
+
+// An EDID carrying `serial` in its first display descriptor, which is all
+// these tests need out of one. edid_name_unittest.cc is where the descriptor
+// walk itself is argued.
+std::vector<uint8_t> EdidWithSerial(const std::string& serial) {
+  std::vector<uint8_t> edid(128, 0);
+  constexpr size_t kFirstDescriptor = 0x36;
+  edid[kFirstDescriptor + 3] = 0xFF;
+  for (size_t i = 0; i < 13; ++i) {
+    edid[kFirstDescriptor + 5 + i] =
+        i < serial.size() ? static_cast<uint8_t>(serial[i]) : 0x20;
+  }
+  return edid;
+}
+
+// 'D', 'E', 'L' packed five bits to a letter, which is what a Dell's EDID
+// carries and what `ManufacturerIdToString` decodes.
+constexpr int64_t kDellProductCode = (int64_t{0x10AC} << 16) | 0x41A0;
+
+// WHY A DISPLAY HAS A NAME AT ALL. `display_id()` is already good identity --
+// EDID-derived, stable across a hotplug, and different for two identical
+// monitors. What it is not is something a person can predict: it is an int64,
+// so writing "put the left-hand monitor here" means reading one off a log and
+// typing a number that means nothing. The label is the same panel spelled the
+// way it is labelled, and it is the string kanshi and sway match a profile on.
+TEST(DrmScreenTest, ADisplayIsNamedByItsPanel) {
+  auto snapshot = SnapshotBuilder()
+                      .ProductCode(kDellProductCode)
+                      .Name("DELL U3219Q")
+                      .Edid(EdidWithSerial("2ZLS413"))
+                      .Build();
+
+  EXPECT_EQ(DisplayNameFromSnapshot(*snapshot), "DEL DELL U3219Q 2ZLS413");
+  EXPECT_EQ(DisplayFromSnapshot(*snapshot).label(), "DEL DELL U3219Q 2ZLS413");
+}
+
+// The case the whole change exists for: three of the same monitor on one desk.
+// Make and model are identical, so the serial is the only thing that tells
+// them apart -- and it is the one part display::EdidParser throws away, since
+// it keeps a hash of the serial rather than the serial.
+TEST(DrmScreenTest, ThreeIdenticalMonitorsGetThreeDifferentNames) {
+  auto left = SnapshotBuilder()
+                  .ProductCode(kDellProductCode)
+                  .Name("DELL U3219Q")
+                  .Edid(EdidWithSerial("2ZLS413"))
+                  .Build();
+  auto center = SnapshotBuilder()
+                    .ProductCode(kDellProductCode)
+                    .Name("DELL U3219Q")
+                    .Edid(EdidWithSerial("G3MS413"))
+                    .Build();
+  auto right = SnapshotBuilder()
+                   .ProductCode(kDellProductCode)
+                   .Name("DELL U3219Q")
+                   .Edid(EdidWithSerial("H8KF413"))
+                   .Build();
+
+  EXPECT_EQ(DisplayNameFromSnapshot(*left), "DEL DELL U3219Q 2ZLS413");
+  EXPECT_EQ(DisplayNameFromSnapshot(*center), "DEL DELL U3219Q G3MS413");
+  EXPECT_EQ(DisplayNameFromSnapshot(*right), "DEL DELL U3219Q H8KF413");
+}
+
+// A snapshot nobody set a product code on: `kInvalidProductCode` decodes to
+// three backticks, which is a name that looks like a name. The make is dropped
+// and the rest of it still reads.
+TEST(DrmScreenTest, ADisplayWithNoProductCodeIsNotNamedAfterTheArithmetic) {
+  auto snapshot = SnapshotBuilder()
+                      .Name("DELL U3219Q")
+                      .Edid(EdidWithSerial("2ZLS413"))
+                      .Build();
+
+  EXPECT_EQ(DisplayNameFromSnapshot(*snapshot), "DELL U3219Q 2ZLS413");
+}
+
+// A monitor with nothing to say about itself. The label is left unset rather
+// than set to the empty string: a display list where every entry is named ""
+// looks like an answer, and the id is still there to fall back on.
+TEST(DrmScreenTest, ADisplayThatNamesItselfNothingIsLeftUnnamed) {
+  auto snapshot = SnapshotBuilder().Name("").Build();
+
+  EXPECT_EQ(DisplayNameFromSnapshot(*snapshot), "");
+  EXPECT_TRUE(DisplayFromSnapshot(*snapshot).label().empty());
+}
 
 TEST(DrmScreenTest, ADisplayTakesItsBoundsFromTheSnapshotsNativeMode) {
   auto snapshot = SnapshotBuilder()

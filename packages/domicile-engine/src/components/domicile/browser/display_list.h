@@ -19,6 +19,11 @@ namespace domicile {
 // protocol's: millimeters rather than the density display::Display carries
 // them as, and mHz rather than Hz.
 //
+// The name is carried straight through: `drm_screen.cc` built it from the
+// panel's EDID and put it on `label`, and nothing here is in a position to
+// improve on it. See that file for what it is made of and why the serial in it
+// had to be parsed rather than read off display::EdidParser.
+//
 // Here rather than beside its one caller in //content/browser because the
 // millimeters are arithmetic and arithmetic gets a test. The DENSITY is not
 // this file's choice: display::Display has no physical size, and

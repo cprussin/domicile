@@ -54,7 +54,7 @@ std::vector<mojom::DisplayPtr> DisplayListFor(
   // shadowing it makes the next line anyone adds here mean something else.
   for (const display::Display& screen : displays) {
     list.push_back(mojom::Display::New(
-        screen.id(), screen.bounds(), PhysicalSizeMm(screen),
+        screen.id(), screen.bounds(), PhysicalSizeMm(screen), screen.label(),
         base::ClampRound(screen.display_frequency() * kMillihertzPerHertz)));
   }
   return list;

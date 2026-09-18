@@ -95,6 +95,20 @@ typedef struct DomicileDisplay {
   // names its wl_output after this, so a monitor unplugged and plugged back in
   // keeps the output its clients are on.
   int64_t id;
+  // What to call this monitor: "<MAKE> <MODEL> <SERIAL>", off its EDID, or an
+  // empty string -- never null -- for one that states none of the three.
+  //
+  // The id above is identity and this is a NAME, and the compositor needs
+  // both. An int64 derived from an EDID cannot be predicted from looking at a
+  // desk, so it is no use to somebody writing down which monitor a layout
+  // means; this is the string kanshi and sway match on.
+  //
+  // BORROWED FOR THE DURATION OF THE CALL, like the array itself: the library
+  // owns the characters and may free them once the callback returns, so a
+  // caller that keeps one copies it.  (It in fact holds them a little longer
+  // -- they live in the event the engine is draining -- but that is an
+  // implementation detail and not something to write a caller against.)
+  const char* name;
   int32_t x;
   int32_t y;
   int32_t width;

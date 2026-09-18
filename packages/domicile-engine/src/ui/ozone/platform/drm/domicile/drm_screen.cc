@@ -9,6 +9,8 @@
 #include "ui/display/display_finder.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
+#include "ui/display/util/edid_parser.h"
+#include "ui/ozone/platform/drm/domicile/edid_name.h"
 #include "ui/ozone/platform/drm/host/drm_window_host.h"
 #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
 
@@ -69,7 +71,42 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot) {
         display::kInchInMm * native_mode->size().height() /
             millimeters.height());
   }
+
+  // THE PANEL'S NAME LEAVES HERE OR IT DOES NOT LEAVE AT ALL, for the same
+  // reason the millimeters above do: this display::Display is everything the
+  // browser process ever learns about a snapshot, and the DisplaySnapshot
+  // itself is inside //ui/ozone/platform/drm where //content cannot see it.
+  // `label` is the field display::Display has for exactly this -- "a
+  // user-friendly label, determined by the platform" -- and nothing on this
+  // platform was setting it.
+  //
+  // Set only when there is something to say. An empty label is what every
+  // display already has, and a display list where three monitors are all named
+  // "" is worse than one where they are named by id: it looks like an answer.
+  const std::string name = DisplayNameFromSnapshot(snapshot);
+  if (!name.empty()) {
+    screen.set_label(name);
+  }
   return screen;
+}
+
+std::string DisplayNameFromSnapshot(const display::DisplaySnapshot& snapshot) {
+  uint16_t manufacturer_id = 0;
+  uint16_t product_id = 0;
+  display::EdidParser::SplitProductCodeInManufacturerIdAndProductId(
+      snapshot.product_code(), &manufacturer_id, &product_id);
+  const std::string make =
+      display::EdidParser::ManufacturerIdToString(manufacturer_id);
+
+  // Three accessors and a join, and every decision in it is next door in
+  // edid_name.cc -- which has no Chromium types in it and can therefore be
+  // compiled and run outside a Chromium tree. That is the whole reason it is a
+  // separate file: this one cannot be, and the parts of this worth testing are
+  // the off-by-one in the descriptor walk and the four ways a name can be
+  // partly missing.
+  return DisplayNameFrom(IsPnpId(make) ? make : std::string(),
+                         snapshot.display_name(),
+                         SerialNumberFromEdid(snapshot.edid()));
 }
 
 gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot) {

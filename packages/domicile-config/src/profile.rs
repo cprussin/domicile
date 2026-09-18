@@ -47,16 +47,36 @@ impl Profile {
     /// merely overlap would put the three-monitor arrangement up on two and
     /// place windows on a screen that is not there.
     ///
-    /// Counting and then looking each one up is set equality because neither
-    /// list repeats a name: [`validate`] refuses a profile that names a
-    /// display twice, and the connected list is one entry per display the
-    /// engine reported, which it identifies by an id derived from the EDID.
-    fn matches(&self, connected: &[Connected]) -> bool {
-        self.displays.len() == connected.len()
-            && self
-                .displays
-                .iter()
-                .all(|placement| placement.connected_in(connected).is_some())
+    /// Resolved rather than counted, because a display answers to two names.
+    /// An entry may name a monitor by its output (`drm-3`) or by its panel
+    /// (`DEL DELL U3219Q G3MS413`), so two entries of one profile can resolve
+    /// to the *same* monitor — and then the profile has as many entries as
+    /// there are monitors, every entry finds one, and a whole monitor is
+    /// unaccounted for. Counting says that matches. It is the two-monitor
+    /// layout applied with one screen left dark.
+    ///
+    /// So the resolution is checked for being a pairing: every entry finds a
+    /// monitor, no two entries find the same one, and nothing is left over.
+    /// The last of those is what the count was standing in for and is now
+    /// implied — distinct resolutions of the same length as `connected` cover
+    /// it.
+    fn resolve<'a>(&self, connected: &'a [Connected]) -> Option<Vec<&'a Connected>> {
+        if self.displays.len() != connected.len() {
+            return None;
+        }
+        let mut resolved: Vec<&Connected> = Vec::with_capacity(self.displays.len());
+        for placement in &self.displays {
+            let display = placement.connected_in(connected)?;
+            // By name rather than by value: two monitors of the same model
+            // with no serial between them are equal as far as their
+            // description goes, and the question here is whether this is the
+            // same *entry* of the connected list.
+            if resolved.iter().any(|taken| taken.name == display.name) {
+                return None;
+            }
+            resolved.push(display);
+        }
+        Some(resolved)
     }
 
     fn validate(&self, index: usize, earlier: &[Profile]) -> Result<(), ConfigError> {
@@ -148,10 +168,23 @@ pub struct DisplayPlacement {
 impl DisplayPlacement {
     /// The connected display this entry places, or `None` where it is not
     /// plugged in.
+    ///
+    /// Either name, which is kanshi's rule and for kanshi's reason: the output
+    /// name is always there and is no use to a person, and the panel's name is
+    /// what a person can write down and is not always there. Matching both
+    /// means a desk can be named a monitor at a time, as each one's name is
+    /// read off a running desktop.
+    ///
+    /// An empty description matches nothing, and that is load-bearing rather
+    /// than incidental: every monitor whose EDID names it nothing shares the
+    /// same empty description, so treating that as identity would let one
+    /// entry match any of them. `validate` refuses an empty `display` from the
+    /// other side.
     fn connected_in<'a>(&self, connected: &'a [Connected]) -> Option<&'a Connected> {
-        connected
-            .iter()
-            .find(|display| display.name == self.display)
+        connected.iter().find(|display| {
+            display.name == self.display
+                || (!display.description.is_empty() && display.description == self.display)
+        })
     }
 
     fn validate(
@@ -237,9 +270,16 @@ impl Transform {
 /// matching and placing need is a name and a mode.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Connected {
-    /// What the compositor advertises this display as, which is what a
-    /// profile's `display` is matched against.
+    /// What the compositor advertises this display as: `drm-<id>` on a tty,
+    /// where the id is ozone's, off the EDID. Always present, and no use to
+    /// anybody writing a config.
     pub name: String,
+    /// The panel's own name — `"<MAKE> <MODEL> <SERIAL>"` off its EDID — or
+    /// empty for a monitor that states none of the three.
+    ///
+    /// The other name a profile may match, and the one a person can actually
+    /// write: see [`DisplayPlacement::connected_in`].
+    pub description: String,
     /// The mode the connector is scanning out, in physical pixels.
     pub mode: (u32, u32),
 }
@@ -297,6 +337,9 @@ impl Layout {
             .filter(|placement| placement.enabled)
             .map(|placement| placed(profile, placement, connected))
             .collect::<Result<Vec<_>, _>>()?;
+        // Unreachable: a profile that enables no display is refused at parse
+        // time, so there is always something here to take a corner from.
+        assert!(!placed.is_empty(), "a profile enables at least one display");
         let near = (
             nearest(&placed, |display| display.position.0),
             nearest(&placed, |display| display.position.1),
@@ -332,8 +375,11 @@ impl Layout {
 /// One display of an applied profile, placed in the desktop's own coordinates.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Placed {
-    /// The display's name: what the profile matched on, and what the chrome
-    /// addresses the screen by.
+    /// The display's output name — `drm-<id>` on a tty — which is what the
+    /// `wl_output` is called and what the chrome addresses the screen by.
+    ///
+    /// Not necessarily what the profile wrote: an entry may have named this
+    /// monitor by its panel instead, and this is the name it was found to be.
     pub name: String,
     /// Top-left corner, logical, relative to the desktop's own top-left.
     pub position: (i32, i32),
@@ -358,12 +404,16 @@ fn placed(
     placement: &DisplayPlacement,
     connected: &[Connected],
 ) -> Result<Placed, ConfigError> {
-    let mode = placement
+    let display = placement
         .connected_in(connected)
-        .expect("a profile is only applied to the displays it matched")
-        .mode;
+        .expect("a profile is only applied to the displays it matched");
+    let mode = display.mode;
     Ok(Placed {
-        name: placement.display.clone(),
+        // The OUTPUT's name, not what the config wrote. A profile may have
+        // named this monitor by its panel, and what comes out of here keys a
+        // `wl_output` that clients are already on -- so it has to be the name
+        // the compositor knows it by however the config found it.
+        name: display.name.clone(),
         position: placement.position,
         mode,
         logical: logical(mode, placement.transform, placement.scale)
@@ -474,7 +524,10 @@ pub(crate) fn layout(
     profiles: &[Profile],
     connected: &[Connected],
 ) -> Result<Option<Layout>, ConfigError> {
-    match profiles.iter().find(|profile| profile.matches(connected)) {
+    match profiles
+        .iter()
+        .find(|profile| profile.resolve(connected).is_some())
+    {
         None => Ok(None),
         Some(profile) => Layout::of(profile, connected).map(Some),
     }

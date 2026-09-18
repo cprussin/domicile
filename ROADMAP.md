@@ -630,11 +630,13 @@ costs nothing.
   out from. The scanout is the engine's and is untouched, so a rotated monitor
   is laid out rotated and still scans out the way it did.
   `A-DESKTOP-ON-A-TTY.md`, *Outputs*, carries what closing that needs.
-- **A profile can only name a monitor `drm-<id>`.** The id ozone derives from
-  the EDID, not the make, model and serial kanshi matches on — so two identical
-  panels are told apart but cannot be told which is which without reading a log
-  line. `DisplaySnapshot::display_name()` has the string; carrying it is the
-  route the millimetres already take.
+- **A monitor's name is the three-letter PNP id, not the vendor.** `DEL DELL
+  U3219Q 2ZLS413` rather than `Dell Inc. DELL U3219Q 2ZLS413`, which is one
+  word off what sway prints for the same panel: an EDID holds the PNP id, and
+  the vendor name behind it is hwdata's `pnp.ids`, a table libdisplay-info
+  carries and Chromium does not. A profile may still name the output
+  (`drm-<id>`) instead, which is what a monitor stating no make, model or
+  serial has to be named.
 - **A 3D transform or a `zoom` *above* a window is invisible to the SDK.**
   `defaultMeasure` walks the flat tree and reads each ancestor's computed style,
   but an ancestor's perspective does not reach the child's matrix, and `zoom`

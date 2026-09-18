@@ -53,6 +53,7 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
 
   EngineEvent pushed{.type = EngineEvent::Type::kDisplays};
   pushed.displays.push_back(EngineDisplay{.id = 7,
+                                          .name = "DEL DELL U3219Q 2ZLS413",
                                           .x = 0,
                                           .y = 0,
                                           .width = 2880,
@@ -75,6 +76,11 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
   EXPECT_EQ(drained[0].displays[0].physical_width_mm, 597);
   EXPECT_EQ(drained[0].displays[0].physical_height_mm, 336);
   EXPECT_EQ(drained[0].displays[0].refresh_mhz, 59997);
+  // The panel's own name, which the queue owns the characters of: what
+  // crosses the C ABI is a pointer into this string, so a queue that dropped
+  // it would hand the compositor a dangling one.
+  EXPECT_EQ(drained[0].displays[0].name, "DEL DELL U3219Q 2ZLS413");
+  EXPECT_EQ(drained[0].displays[1].name, "");
   EXPECT_EQ(drained[0].displays[1].id, 9);
   EXPECT_EQ(drained[0].displays[1].x, 2880);
 }

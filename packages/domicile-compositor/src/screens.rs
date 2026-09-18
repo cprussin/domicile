@@ -78,6 +78,16 @@ pub struct Advertised {
     pub scale: f64,
     /// Which way up the monitor is, as `wl_output.geometry` states it.
     pub transform: Transform,
+    /// The panel's own name — `"<MAKE> <MODEL> <SERIAL>"` off its EDID — or
+    /// empty for a display that has none.
+    ///
+    /// `wl_output.description`, and the other name an `output.profiles` entry
+    /// may match. The *name* beside it stays `drm-<id>`: short, always there,
+    /// and what clients are already on, so renaming outputs after their panels
+    /// would move every client on every desktop for a string that is sometimes
+    /// empty. Only the engine's displays have one — a config's arithmetic and
+    /// a host's window are not panels.
+    pub description: String,
     /// The panel's own size in millimetres, or [`UNKNOWN_PHYSICAL_MM`] where
     /// this output is not a panel at all.
     ///
@@ -237,6 +247,7 @@ impl Screens {
                         // described display states the size it *is*, so there
                         // is no mode to turn into it.
                         transform: Transform::Normal,
+                        description: String::new(),
                         physical_mm: UNKNOWN_PHYSICAL_MM,
                         refresh_mhz: UNKNOWN_REFRESH_MHZ,
                     }
@@ -281,6 +292,7 @@ impl Screens {
                     position: display.position,
                     scale: 1.0,
                     transform: Transform::Normal,
+                    description: display.description.clone(),
                     physical_mm: display.physical_mm,
                     refresh_mhz: display.refresh_mhz,
                 }
@@ -347,6 +359,7 @@ impl Screens {
                 position: (0, 0),
                 scale: f64::from(scale),
                 transform: Transform::Normal,
+                description: String::new(),
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,
             }],
@@ -387,6 +400,7 @@ impl Screens {
                         position: placed.position,
                         scale: placed.scale,
                         transform: placed.transform,
+                        description: display.description.clone(),
                         physical_mm: display.physical_mm,
                         refresh_mhz: display.refresh_mhz,
                     }
@@ -529,6 +543,7 @@ impl Screens {
                 .iter()
                 .map(|display| Connected {
                     name: name_of(display),
+                    description: display.description.clone(),
                     mode: display.size,
                 })
                 .collect();
@@ -704,6 +719,7 @@ mod tests {
                     position: (0, 0),
                     scale: 1.0,
                     transform: Transform::Normal,
+                    description: String::new(),
                     // A described display is a config's arithmetic rather
                     // than millimetres of glass, and no config states a rate.
                     // Both stay the protocol's own word for "no such number",
@@ -718,6 +734,7 @@ mod tests {
                     position: (1920, 0),
                     scale: 2.0,
                     transform: Transform::Normal,
+                    description: String::new(),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
@@ -832,6 +849,7 @@ mod tests {
             position: (0, 0),
             scale: 1.0,
             transform: Transform::Normal,
+            description: String::new(),
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -861,6 +879,7 @@ mod tests {
             position: (0, 0),
             scale: 1.0,
             transform: Transform::Normal,
+            description: String::new(),
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -887,6 +906,7 @@ mod tests {
             position: (0, 0),
             scale: -2.0,
             transform: Transform::Normal,
+            description: String::new(),
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -1021,6 +1041,7 @@ mod tests {
             position: (i32::MAX - 1, 0),
             scale: 1.0,
             transform: Transform::Normal,
+            description: String::new(),
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -1081,6 +1102,7 @@ mod tests {
         let screens = Screens::from_the_engine(&[
             Display {
                 id: 1,
+                description: "BOE NE135A1M-NY1".into(),
                 position: (0, 0),
                 size: (2880, 1920),
                 physical_mm: (597, 336),
@@ -1088,6 +1110,7 @@ mod tests {
             },
             Display {
                 id: 2,
+                description: String::new(),
                 position: (2880, 0),
                 size: (1920, 1080),
                 physical_mm: (0, 0),
@@ -1104,6 +1127,10 @@ mod tests {
                     position: (0, 0),
                     scale: 1.0,
                     transform: Transform::Normal,
+                    // The panel names itself and the second display does not,
+                    // which is the ordinary pair: a laptop panel carries an
+                    // EDID name and a projector carries none.
+                    description: "BOE NE135A1M-NY1".into(),
                     // The panel's own, carried rather than invented -- and the
                     // second display's zeros carried just as faithfully,
                     // because a connector that reports no millimetres and no
@@ -1118,6 +1145,7 @@ mod tests {
                     position: (2880, 0),
                     scale: 1.0,
                     transform: Transform::Normal,
+                    description: String::new(),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
@@ -1130,13 +1158,23 @@ mod tests {
         assert!(!screens.follows_the_window());
     }
 
-    const PLUGGED_IN: &[Display] = &[Display {
-        id: 1,
-        position: (0, 0),
-        size: (2880, 1920),
-        physical_mm: (597, 336),
-        refresh_mhz: 59_997,
-    }];
+    /// The laptop on its own, naming itself the way its EDID does.
+    ///
+    /// A function rather than a `const`, which is what carrying a panel's name
+    /// costs: a `String` that is not empty cannot be built in a constant.
+    fn plugged_in() -> Vec<Display> {
+        vec![Display {
+            id: 1,
+            description: LAPTOP_PANEL.into(),
+            position: (0, 0),
+            size: (2880, 1920),
+            physical_mm: (597, 336),
+            refresh_mhz: 59_997,
+        }]
+    }
+
+    /// What the laptop's EDID calls it, which is what a profile can name.
+    const LAPTOP_PANEL: &str = "BOE NE135A1M-NY1";
 
     /// The output settings `text` configures.
     fn output(text: &str) -> OutputConfig {
@@ -1158,7 +1196,7 @@ mod tests {
             output(&format!(r#"{{ "output": {{ "displays": [{LEFT}] }} }}"#));
         assert_eq!(
             described(LEFT)
-                .replugged_into(PLUGGED_IN, &described_in_the_config)
+                .replugged_into(&plugged_in(), &described_in_the_config)
                 .expect("a described desktop is not a layout that failed"),
             None
         );
@@ -1167,7 +1205,7 @@ mod tests {
     #[test]
     fn a_desktop_nothing_described_is_the_engines_to_define() {
         let taken = Screens::nested((1280, 800))
-            .replugged_into(PLUGGED_IN, &unconfigured())
+            .replugged_into(&plugged_in(), &unconfigured())
             .expect("nothing here can fail to be applied")
             .expect("an undescribed desktop takes the engine's displays");
         assert_eq!(taken.size(), (2880, 1920));
@@ -1183,11 +1221,11 @@ mod tests {
         // away, and the desktop kept describing a screen that was no longer
         // plugged in.
         let one_monitor = Screens::nested((1280, 800))
-            .replugged_into(PLUGGED_IN, &unconfigured())
+            .replugged_into(&plugged_in(), &unconfigured())
             .expect("nothing here can fail to be applied")
             .expect("an undescribed desktop takes the engine's displays");
         let both = one_monitor
-            .replugged_into(TWO_PLUGGED_IN, &unconfigured())
+            .replugged_into(&two_plugged_in(), &unconfigured())
             .expect("nothing here can fail to be applied")
             .expect("a desktop the engine defined is still the engine's");
         assert_eq!(both.size(), (4800, 1920));
@@ -1201,7 +1239,7 @@ mod tests {
         // about is carried through: the mode, the millimetres and the rate are
         // the panel's own and no profile invents them.
         let placed = Screens::nested((1280, 800))
-            .replugged_into(TWO_PLUGGED_IN, &output(HOME_OFFICE))
+            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE))
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         assert_eq!(
@@ -1222,6 +1260,9 @@ mod tests {
                     // `xdg_output` carries the 1.2 the logical size came from.
                     scale: 1.2,
                     transform: Transform::Rotate270,
+                    // Carried through from the engine's reading. A profile
+                    // placed this monitor; it did not rename it.
+                    description: DESK_MONITOR.into(),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
@@ -1232,6 +1273,7 @@ mod tests {
                     position: (0, 1920),
                     scale: 1.5,
                     transform: Transform::Normal,
+                    description: LAPTOP_PANEL.into(),
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
                 },
@@ -1242,16 +1284,48 @@ mod tests {
     }
 
     #[test]
+    fn a_profile_can_name_a_monitor_by_its_panel() {
+        // The whole point of carrying a description up to here. The profile
+        // below names neither monitor `drm-1` or `drm-2` -- it names them the
+        // way their EDIDs do, which is the way a person can.
+        let placed = Screens::nested((1280, 800))
+            .replugged_into(
+                &two_plugged_in(),
+                &output(&format!(
+                    r#"{{ "output": {{ "profiles": [{{ "name": "by-panel", "displays": [
+                         {{ "display": "{DESK_MONITOR}", "position": [0, 0], "scale": 1.2 }},
+                         {{ "display": "{LAPTOP_PANEL}", "position": [0, 1080], "scale": 1.5 }}] }}] }} }}"#
+                )),
+            )
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+
+        // The outputs keep the names their clients are on, however the config
+        // found them.
+        assert_eq!(
+            placed
+                .outputs()
+                .map(|o| o.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["drm-2", "drm-1"]
+        );
+        assert_eq!(
+            placed.outputs().map(|o| o.logical).collect::<Vec<_>>(),
+            vec![(1600, 900), (1920, 1280)]
+        );
+    }
+
+    #[test]
     fn monitors_no_profile_names_are_left_where_the_engine_put_them() {
         // A config with profiles in it is not a config that has a profile for
         // *this* desk. The answer is the engine's own reading rather than an
         // error or an empty desktop: a monitor plugged into a laptop on a
         // train is a desktop, it is just not one anybody wrote down.
         let unplanned = Screens::nested((1280, 800))
-            .replugged_into(PLUGGED_IN, &output(HOME_OFFICE))
+            .replugged_into(&plugged_in(), &output(HOME_OFFICE))
             .expect("a profile that does not match cannot fail to apply")
             .expect("an undescribed desktop is still the engine's to define");
-        assert_eq!(unplanned, Screens::from_the_engine(PLUGGED_IN));
+        assert_eq!(unplanned, Screens::from_the_engine(&plugged_in()));
     }
 
     #[test]
@@ -1263,7 +1337,7 @@ mod tests {
         // `ConfigStore` makes for an edit that does not parse.
         let err = Screens::nested((1280, 800))
             .replugged_into(
-                PLUGGED_IN,
+                &plugged_in(),
                 &output(
                     r#"{ "output": { "profiles": [{ "name": "too-small", "displays": [
                          { "display": "drm-1", "scale": 4000 }] }] } }"#,
@@ -1276,24 +1350,32 @@ mod tests {
         );
     }
 
-    const TWO_PLUGGED_IN: &[Display] = &[
-        Display {
-            id: 1,
-            position: (0, 0),
-            size: (2880, 1920),
-            physical_mm: (597, 336),
-            refresh_mhz: 59_997,
-        },
-        Display {
-            id: 2,
-            position: (2880, 0),
-            size: (1920, 1080),
-            physical_mm: (0, 0),
-            refresh_mhz: 0,
-        },
-    ];
+    /// The laptop and one monitor, both naming themselves.
+    fn two_plugged_in() -> Vec<Display> {
+        vec![
+            Display {
+                id: 1,
+                description: LAPTOP_PANEL.into(),
+                position: (0, 0),
+                size: (2880, 1920),
+                physical_mm: (597, 336),
+                refresh_mhz: 59_997,
+            },
+            Display {
+                id: 2,
+                description: DESK_MONITOR.into(),
+                position: (2880, 0),
+                size: (1920, 1080),
+                physical_mm: (0, 0),
+                refresh_mhz: 0,
+            },
+        ]
+    }
 
-    /// The desk the engine reports as `TWO_PLUGGED_IN`, arranged: the monitor
+    /// And what the monitor's does.
+    const DESK_MONITOR: &str = "DEL DELL U3219Q G3MS413";
+
+    /// The desk `two_plugged_in` reports, arranged: the monitor
     /// on its side above, the laptop panel centered below it.
     ///
     /// Written with the monitor first, so that the order the outputs come back
@@ -1346,6 +1428,7 @@ mod tests {
                 position: (0, 0),
                 scale: 2.0,
                 transform: Transform::Normal,
+                description: String::new(),
                 // A window is not a panel: the desktop this output describes is
                 // whatever box the host gave Domicile, which has no millimetres
                 // and no mode of its own to report.
@@ -1499,8 +1582,8 @@ mod tests {
         // config knows, which is why this needs them passed in at all. With
         // none -- a nested run, or a tty before the first display event -- the
         // rules below are the ones that were here before profiles existed.
-        let placed = Screens::from_the_engine(TWO_PLUGGED_IN)
-            .reloaded_into(&output(HOME_OFFICE), (1280, 800), TWO_PLUGGED_IN)
+        let placed = Screens::from_the_engine(&two_plugged_in())
+            .reloaded_into(&output(HOME_OFFICE), (1280, 800), &two_plugged_in())
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         assert_eq!(placed.size(), (1920, 3200));
