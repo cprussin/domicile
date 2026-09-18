@@ -155,12 +155,12 @@ rather than outcomes it has to handle.
 configuration and no well-known config path: your location, your schema, your
 names.
 
-The compositor takes a `--config` naming a JSON file that describes the
+The compositor takes a `--config` naming a TOML file that describes the
 desktop — the displays, their layout, the keyboard — and watches it for
 changes while it runs. **`domicile` passes one on:**
 
 ```
-domicile --config ./desk.json ./my-desktop/dist/shell.js
+domicile --config ./desk.toml ./my-desktop/dist/shell.js
 ```
 
 The flag may come on either side of the shell, and leaving it off is a real
@@ -198,24 +198,37 @@ one a shell generates depends on whether there is hardware under it:
   unplugged; the description is empty for a monitor that states none of the
   three.
 
-```jsonc
-{
-  "output": {
-    "profiles": [
-      {
-        "name": "desk",
-        "displays": [
-          { "display": "drm-1", "enabled": false },
-          { "display": "DEL DELL U3219Q 2ZLS413", "position": [0, 0],
-            "scale": 1.2, "transform": "rotate-270" }
-        ]
-      },
-      { "name": "laptop-only",
-        "displays": [{ "display": "drm-1", "scale": 1.5 }] }
-    ]
-  }
-}
+```toml
+[[output.profiles]]
+name = "desk"
+
+  [[output.profiles.displays]]
+  display = "drm-1"
+  enabled = false
+
+  [[output.profiles.displays]]
+  display = "DEL DELL U3219Q 2ZLS413"
+  position = [0, 0]
+  scale = 1.2
+  transform = "rotate-270"
+
+[[output.profiles]]
+name = "laptop-only"
+
+  [[output.profiles.displays]]
+  display = "drm-1"
+  scale = 1.5
 ```
+
+**TOML rather than JSON, and it used to be JSON.** The argument for JSON was
+that nobody writes this by hand — a shell generates it, and a generated file
+wants a writer that cannot get the escaping wrong rather than a syntax that is
+pleasant to type. That was about the writer, and there are two ends: a desk
+comes up in the wrong arrangement and somebody opens this file to find out
+why. A desk of six monitors and five profiles is a wall of braces to read one
+`transform` out of, and `[[output.profiles]]` says which profile a display
+belongs to on the line the display is on. The writer lost nothing — every
+language that generates one of these has a TOML writer too.
 
 A profile reaches what the compositor *advertises* — `wl_output`, the
 `xdg_output` logical size, and the displays a shell is told about. It does not

@@ -17,9 +17,11 @@ use domicile_protocol::{ChromeMessage, HostMessage};
 
 use crate::running::Compositor;
 
-const ONE_DISPLAY: &str = r#"{
-  "output": { "displays": [ { "name": "left", "size": [1920, 1080] } ] }
-}"#;
+const ONE_DISPLAY: &str = r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+"#;
 
 #[test]
 fn a_client_asks_for_the_keyboard_and_the_shell_is_what_gives_it() {

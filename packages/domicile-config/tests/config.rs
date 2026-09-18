@@ -10,7 +10,7 @@ use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig};
 
 #[test]
 fn empty_config_uses_defaults() {
-    let cfg = Config::parse("{}").expect("an empty object should parse to defaults");
+    let cfg = Config::parse("").expect("an empty file should parse to defaults");
     assert_eq!(cfg.compositor.nested_size, (1280, 800));
 }
 
@@ -21,7 +21,7 @@ fn a_desk_that_configured_no_keyboard_gets_nobodys_layout() {
     // configured nothing got a layout they never asked for, and the only
     // symptom is that every key is wrong. A shell that wants a layout states
     // one; saying nothing means the layout as it comes.
-    let keyboard = Config::parse("{}").unwrap().input.keyboard;
+    let keyboard = Config::parse("").unwrap().input.keyboard;
     assert_eq!(keyboard.xkb_layout, "us");
     assert_eq!(keyboard.xkb_variant, "");
     assert!(
@@ -38,10 +38,11 @@ fn a_desk_that_configured_no_keyboard_gets_nobodys_layout() {
 fn a_desk_that_states_a_keyboard_gets_that_one() {
     // The other half, and the one the default stopped being needed for: a
     // layout reaches the compositor because somebody wrote it down.
-    let text = r#"{ "input": { "keyboard": {
-        "xkb_variant": "dvp",
-        "xkb_options": ["caps:escape"]
-    } } }"#;
+    let text = r#"
+[input.keyboard]
+xkb_variant = "dvp"
+xkb_options = ["caps:escape"]
+"#;
     let keyboard = Config::parse(text)
         .expect("valid config should parse")
         .input
@@ -53,7 +54,10 @@ fn a_desk_that_states_a_keyboard_gets_that_one() {
 
 #[test]
 fn parses_a_full_config() {
-    let text = r#"{ "compositor": { "nested_size": [1920, 1080] } }"#;
+    let text = r#"
+[compositor]
+nested_size = [1920, 1080]
+"#;
     let cfg = Config::parse(text).expect("valid config should parse");
     assert_eq!(cfg.compositor.nested_size, (1920, 1080));
 }
@@ -62,17 +66,14 @@ fn parses_a_full_config() {
 
 #[test]
 fn parses_keyboard_settings() {
-    let text = r#"{
-        "input": {
-            "keyboard": {
-                "xkb_rules": "evdev",
-                "xkb_model": "pc105",
-                "xkb_layout": "us,de",
-                "xkb_variant": "dvp,",
-                "xkb_options": ["caps:swapescape", "grp:alt_shift_toggle"]
-            }
-        }
-    }"#;
+    let text = r#"
+[input.keyboard]
+xkb_rules = "evdev"
+xkb_model = "pc105"
+xkb_layout = "us,de"
+xkb_variant = "dvp,"
+xkb_options = ["caps:swapescape", "grp:alt_shift_toggle"]
+"#;
     let keyboard = Config::parse(text)
         .expect("valid keyboard config should parse")
         .input
@@ -95,16 +96,10 @@ fn parses_keyboard_settings() {
 #[test]
 fn joins_xkb_options_for_xkb() {
     let keyboard = Config::parse(
-        r#"{
-  "input": {
-    "keyboard": {
-      "xkb_options": [
-        "caps:swapescape",
-        "compose:ralt"
-      ]
-    }
-  }
-}"#,
+        r#"
+[input.keyboard]
+xkb_options = ["caps:swapescape", "compose:ralt"]
+"#,
     )
     .unwrap()
     .input
@@ -119,13 +114,10 @@ fn joins_xkb_options_for_xkb() {
 fn empty_xkb_options_disable_every_option() {
     // An explicitly empty list means "no options", not "use xkb's defaults".
     let keyboard = Config::parse(
-        r#"{
-  "input": {
-    "keyboard": {
-      "xkb_options": []
-    }
-  }
-}"#,
+        r#"
+[input.keyboard]
+xkb_options = []
+"#,
     )
     .unwrap()
     .input
@@ -136,13 +128,10 @@ fn empty_xkb_options_disable_every_option() {
 #[test]
 fn rejects_empty_keyboard_layout() {
     let err = Config::parse(
-        r#"{
-  "input": {
-    "keyboard": {
-      "xkb_layout": ""
-    }
-  }
-}"#,
+        r#"
+[input.keyboard]
+xkb_layout = ""
+"#,
     )
     .unwrap_err();
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
@@ -152,16 +141,10 @@ fn rejects_empty_keyboard_layout() {
 fn rejects_blank_keyboard_option() {
     // A stray comma in a hand-edited list would otherwise reach xkb as junk.
     let err = Config::parse(
-        r#"{
-  "input": {
-    "keyboard": {
-      "xkb_options": [
-        "caps:swapescape",
-        ""
-      ]
-    }
-  }
-}"#,
+        r#"
+[input.keyboard]
+xkb_options = ["caps:swapescape", ""]
+"#,
     )
     .unwrap_err();
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
@@ -169,7 +152,7 @@ fn rejects_blank_keyboard_option() {
 
 #[test]
 fn rejects_invalid_syntax() {
-    let err = Config::parse("{ this is not json").unwrap_err();
+    let err = Config::parse("{ this is not toml").unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
@@ -182,7 +165,13 @@ fn rejects_invalid_syntax() {
 #[test]
 fn rejects_a_key_nothing_reads() {
     // Misspelt in a section that exists, which is the shape a real one takes.
-    let err = Config::parse(r#"{ "compositor": { "nested_sixe": [800, 600] } }"#).unwrap_err();
+    let err = Config::parse(
+        r#"
+[compositor]
+nested_sixe = [800, 600]
+"#,
+    )
+    .unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
     assert!(
         format!("{err}").contains("nested_sixe"),
@@ -190,7 +179,12 @@ fn rejects_a_key_nothing_reads() {
     );
 
     // And at the top level, where a whole section could be misspelled.
-    let err = Config::parse(r#"{ "outputs": {} }"#).unwrap_err();
+    let err = Config::parse(
+        r#"
+[outputs]
+"#,
+    )
+    .unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 
     // Every section that carries the attribute, not only the two above. The
@@ -198,10 +192,23 @@ fn rejects_a_key_nothing_reads() {
     // guard that covered `Config` and `CompositorConfig` alone would have let
     // a misspelled `xkb_optoins` through while reading as though it did not.
     for section in [
-        r#"{ "input": { "keyboard": { "xkb_optoins": [] } } }"#,
-        r#"{ "input": { "keyboardd": {} } }"#,
-        r#"{ "output": { "max_scaale": 2 } }"#,
-        r#"{ "output": { "displays": [{ "name": "a", "size": [1, 1], "scaale": 2 }] } }"#,
+        r#"
+[input.keyboard]
+xkb_optoins = []
+"#,
+        r#"
+[input.keyboardd]
+"#,
+        r#"
+[output]
+max_scaale = 2
+"#,
+        r#"
+[[output.displays]]
+name = "a"
+size = [1, 1]
+scaale = 2
+"#,
     ] {
         let err = Config::parse(section).unwrap_err();
         assert!(
@@ -214,14 +221,10 @@ fn rejects_a_key_nothing_reads() {
 #[test]
 fn rejects_zero_nested_size() {
     let err = Config::parse(
-        r#"{
-  "compositor": {
-    "nested_size": [
-      0,
-      600
-    ]
-  }
-}"#,
+        r#"
+[compositor]
+nested_size = [0, 600]
+"#,
     )
     .unwrap_err();
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
@@ -234,14 +237,10 @@ fn store_reload_valid_swaps_current_and_clears_error() {
     let mut store = ConfigStore::new(Config::default());
     store
         .reload_from_str(
-            r#"{
-  "compositor": {
-    "nested_size": [
-      800,
-      600
-    ]
-  }
-}"#,
+            r#"
+[compositor]
+nested_size = [800, 600]
+"#,
         )
         .unwrap();
     assert_eq!(store.current().compositor.nested_size, (800, 600));
@@ -253,14 +252,10 @@ fn store_reload_invalid_keeps_last_good_and_records_error() {
     let mut store = ConfigStore::new(Config::default());
     store
         .reload_from_str(
-            r#"{
-  "compositor": {
-    "nested_size": [
-      800,
-      600
-    ]
-  }
-}"#,
+            r#"
+[compositor]
+nested_size = [800, 600]
+"#,
         )
         .unwrap();
 
@@ -283,14 +278,10 @@ fn store_recovers_after_fixing_a_bad_edit() {
 
     store
         .reload_from_str(
-            r#"{
-  "compositor": {
-    "nested_size": [
-      640,
-      480
-    ]
-  }
-}"#,
+            r#"
+[compositor]
+nested_size = [640, 480]
+"#,
         )
         .unwrap();
     assert_eq!(store.current().compositor.nested_size, (640, 480));
@@ -305,17 +296,13 @@ fn store_recovers_after_fixing_a_bad_edit() {
 #[test]
 fn loads_from_a_file() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("domicile.json");
+    let path = dir.path().join("domicile.toml");
     std::fs::write(
         &path,
-        r#"{
-  "compositor": {
-    "nested_size": [
-      1024,
-      768
-    ]
-  }
-}"#,
+        r#"
+[compositor]
+nested_size = [1024, 768]
+"#,
     )
     .unwrap();
 
@@ -325,24 +312,20 @@ fn loads_from_a_file() {
 
 #[test]
 fn missing_file_is_an_io_error() {
-    let err = Config::load("/no/such/domicile.json").unwrap_err();
+    let err = Config::load("/no/such/domicile.toml").unwrap_err();
     assert!(matches!(err, ConfigError::Io { .. }), "got {err:?}");
 }
 
 #[test]
 fn store_reload_from_path_keeps_last_good_on_bad_file() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("domicile.json");
+    let path = dir.path().join("domicile.toml");
     std::fs::write(
         &path,
-        r#"{
-  "compositor": {
-    "nested_size": [
-      1024,
-      768
-    ]
-  }
-}"#,
+        r#"
+[compositor]
+nested_size = [1024, 768]
+"#,
     )
     .unwrap();
 
@@ -361,7 +344,7 @@ fn store_reload_from_path_keeps_last_good_on_bad_file() {
 fn output_scaling_is_on_by_default_up_to_a_retina_display() {
     // A 2x display is the common case the default has to cover; beyond that a
     // frame costs more than the copy path can carry, so the default stops.
-    assert_eq!(Config::parse("{}").unwrap().output.max_scale, 2);
+    assert_eq!(Config::parse("").unwrap().output.max_scale, 2);
 }
 
 #[test]
@@ -371,11 +354,10 @@ fn max_scale_one_turns_hidpi_off() {
     // needs a way to say so without a rebuild.
     assert_eq!(
         Config::parse(
-            r#"{
-  "output": {
-    "max_scale": 1
-  }
-}"#
+            r#"
+[output]
+max_scale = 1
+"#
         )
         .unwrap()
         .output
@@ -387,11 +369,10 @@ fn max_scale_one_turns_hidpi_off() {
 #[test]
 fn max_scale_must_leave_a_usable_scale() {
     let err = Config::parse(
-        r#"{
-  "output": {
-    "max_scale": 0
-  }
-}"#,
+        r#"
+[output]
+max_scale = 0
+"#,
     )
     .unwrap_err();
     assert!(
@@ -406,19 +387,23 @@ fn max_scale_must_leave_a_usable_scale() {
 fn no_displays_configured_means_the_output_follows_domiciles_window() {
     // The nested backend's original behavior, and the only thing it can do
     // without being told: one output, sized by whatever window Domicile got.
-    assert_eq!(Config::parse("{}").unwrap().output.displays, vec![]);
+    assert_eq!(Config::parse("").unwrap().output.displays, vec![]);
 }
 
 #[test]
 fn parses_a_side_by_side_desktop() {
-    let text = r#"{
-        "output": {
-            "displays": [
-                { "name": "left", "position": [0, 0], "size": [1920, 1080] },
-                { "name": "right", "position": [1920, 0], "size": [2560, 1440], "scale": 2 }
-            ]
-        }
-    }"#;
+    let text = r#"
+[[output.displays]]
+name = "left"
+position = [0, 0]
+size = [1920, 1080]
+
+[[output.displays]]
+name = "right"
+position = [1920, 0]
+size = [2560, 1440]
+scale = 2
+"#;
     let displays = Config::parse(text)
         .expect("a described desktop should parse")
         .output
@@ -447,19 +432,11 @@ fn a_display_sits_at_the_origin_unless_placed() {
     // The one-display case, where there is nothing for a position to be
     // relative to.
     let displays = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "only",
-        "size": [
-          800,
-          600
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "only"
+size = [800, 600]
+"#,
     )
     .unwrap()
     .output
@@ -472,10 +449,16 @@ fn a_display_needs_a_name_the_shell_can_tell_apart() {
     // The name is how the chrome addresses one window rather than another, so
     // two displays answering to it is not a preference the shell can resolve.
     let err = Config::parse(
-        r#"{ "output": { "displays": [
-            { "name": "hdmi", "size": [800, 600] },
-            { "name": "hdmi", "position": [800, 0], "size": [800, 600] }
-        ] } }"#,
+        r#"
+[[output.displays]]
+name = "hdmi"
+size = [800, 600]
+
+[[output.displays]]
+name = "hdmi"
+position = [800, 0]
+size = [800, 600]
+"#,
     )
     .unwrap_err();
     assert!(
@@ -497,19 +480,11 @@ fn a_display_name_may_not_be_padded() {
     // the rejection rather than "these two do not both parse", which a
     // trim-and-deduplicate would satisfy just as well.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "left ",
-        "size": [
-          800,
-          600
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "left "
+size = [800, 600]
+"#,
     )
     .unwrap_err();
     assert!(
@@ -527,30 +502,16 @@ fn a_display_named_nothing_is_rejected() {
     // Reported by position: a display with no name has nothing else to be
     // called, and the entry still has to be findable in a file with five.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "real",
-        "size": [
-          800,
-          600
-        ]
-      },
-      {
-        "name": "",
-        "position": [
-          800,
-          0
-        ],
-        "size": [
-          800,
-          600
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "real"
+size = [800, 600]
+
+[[output.displays]]
+name = ""
+position = [800, 0]
+size = [800, 600]
+"#,
     )
     .unwrap_err();
     assert!(
@@ -568,7 +529,11 @@ fn a_display_with_no_pixels_is_rejected() {
     // Either axis: a display zero wide is as absent as one zero high.
     for size in ["[1920, 0]", "[0, 1080]"] {
         let err = Config::parse(&format!(
-            r#"{{ "output": {{ "displays": [{{ "name": "dead", "size": {size} }}] }} }}"#
+            r#"
+[[output.displays]]
+name = "dead"
+size = {size}
+"#
         ))
         .unwrap_err();
         assert!(
@@ -585,20 +550,12 @@ fn a_display_with_no_pixels_is_rejected() {
 #[test]
 fn a_display_must_have_a_usable_scale() {
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "tiny",
-        "size": [
-          800,
-          600
-        ],
-        "scale": 0
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "tiny"
+size = [800, 600]
+scale = 0
+"#,
     )
     .unwrap_err();
     assert!(
@@ -619,7 +576,12 @@ fn a_display_may_not_run_off_the_edge_of_the_desktop() {
     // is written rather than wrapping somewhere later.
     for position in ["[2147483000, 0]", "[0, 2147483000]"] {
         let err = Config::parse(&format!(
-            r#"{{ "output": {{ "displays": [{{ "name": "far", "position": {position}, "size": [1920, 1080] }}] }} }}"#
+            r#"
+[[output.displays]]
+name = "far"
+position = {position}
+size = [1920, 1080]
+"#
         ))
         .unwrap_err();
         assert!(
@@ -638,30 +600,16 @@ fn displays_may_not_cover_the_same_ground() {
     // Two outputs over one region has no answer for which one a point belongs
     // to, so it is a typo in the layout rather than a desktop.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "left",
-        "size": [
-          1920,
-          1080
-        ]
-      },
-      {
-        "name": "right",
-        "position": [
-          1900,
-          0
-        ],
-        "size": [
-          1920,
-          1080
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+
+[[output.displays]]
+name = "right"
+position = [1900, 0]
+size = [1920, 1080]
+"#,
     )
     .unwrap_err();
     assert!(
@@ -685,57 +633,29 @@ fn displays_that_only_touch_are_a_desktop_rather_than_a_collision() {
     // either axis — or closed the interval — reports one of them as a
     // collision and fails here.
     Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "left",
-        "size": [
-          1920,
-          1080
-        ]
-      },
-      {
-        "name": "right",
-        "position": [
-          1920,
-          0
-        ],
-        "size": [
-          1920,
-          1080
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+
+[[output.displays]]
+name = "right"
+position = [1920, 0]
+size = [1920, 1080]
+"#,
     )
     .expect("side-by-side displays should parse");
     Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "top",
-        "size": [
-          1920,
-          1080
-        ]
-      },
-      {
-        "name": "bottom",
-        "position": [
-          0,
-          1080
-        ],
-        "size": [
-          1920,
-          1080
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "top"
+size = [1920, 1080]
+
+[[output.displays]]
+name = "bottom"
+position = [0, 1080]
+size = [1920, 1080]
+"#,
     )
     .expect("stacked displays should parse");
 }
@@ -750,30 +670,16 @@ fn a_desktop_may_reach_exactly_as_far_as_a_position_can_and_no_further() {
     // would tip it over — which is the only way a test can tell a vertical
     // check that reads heights from one that reads widths.
     Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "here",
-        "size": [
-          1920,
-          1080
-        ]
-      },
-      {
-        "name": "far",
-        "position": [
-          2147479647,
-          2000
-        ],
-        "size": [
-          4000,
-          8000
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "here"
+size = [1920, 1080]
+
+[[output.displays]]
+name = "far"
+position = [2147479647, 2000]
+size = [4000, 8000]
+"#,
     )
     .expect("a desktop exactly as wide as a position can describe should parse");
     // One pixel past it, which is what pins the display's *length* as part of
@@ -782,34 +688,17 @@ fn a_desktop_may_reach_exactly_as_far_as_a_position_can_and_no_further() {
     // layout check is never asked. Without the length, the far position alone
     // is under the limit and this desktop is accepted.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "here",
-        "position": [
-          -1,
-          0
-        ],
-        "size": [
-          10,
-          10
-        ]
-      },
-      {
-        "name": "far",
-        "position": [
-          2147479647,
-          2000
-        ],
-        "size": [
-          4000,
-          8000
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "here"
+position = [-1, 0]
+size = [10, 10]
+
+[[output.displays]]
+name = "far"
+position = [2147479647, 2000]
+size = [4000, 8000]
+"#,
     )
     .unwrap_err();
     assert!(
@@ -817,30 +706,16 @@ fn a_desktop_may_reach_exactly_as_far_as_a_position_can_and_no_further() {
         "the layout check should be the one that answers, not the per-display one: {err}"
     );
     Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "here",
-        "size": [
-          1920,
-          1080
-        ]
-      },
-      {
-        "name": "below",
-        "position": [
-          3000,
-          2147482567
-        ],
-        "size": [
-          1920,
-          1080
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "here"
+size = [1920, 1080]
+
+[[output.displays]]
+name = "below"
+position = [3000, 2147482567]
+size = [1920, 1080]
+"#,
     )
     .expect("a desktop exactly as tall as a position can describe should parse");
 }
@@ -850,34 +725,17 @@ fn the_desktop_must_fit_the_coordinate_space_on_both_axes() {
     // Stacked rather than side by side. The horizontal case cannot tell
     // whether the vertical one reads the right fields — or is checked at all.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "north",
-        "position": [
-          0,
-          -2000000000
-        ],
-        "size": [
-          1920,
-          1080
-        ]
-      },
-      {
-        "name": "south",
-        "position": [
-          0,
-          2000000000
-        ],
-        "size": [
-          1920,
-          1080
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "north"
+position = [0, -2000000000]
+size = [1920, 1080]
+
+[[output.displays]]
+name = "south"
+position = [0, 2000000000]
+size = [1920, 1080]
+"#,
     )
     .unwrap_err();
     assert!(
@@ -903,23 +761,12 @@ fn a_display_too_big_on_its_own_is_reported_as_itself() {
     // answer for this one, leaving the branch this test is named after
     // reachable by nothing.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "huge",
-        "position": [
-          2000000000,
-          0
-        ],
-        "size": [
-          1000000000,
-          1080
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "huge"
+position = [2000000000, 0]
+size = [1000000000, 1080]
+"#,
     )
     .unwrap_err();
     let message = format!("{err}");
@@ -934,34 +781,17 @@ fn a_display_too_big_on_its_own_is_reported_as_itself() {
     // message. Per-display first, because "from west to far across" is a fact
     // about the pair and names `west`, which is not the one at fault.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "west",
-        "position": [
-          -2000000000,
-          0
-        ],
-        "size": [
-          1920,
-          1080
-        ]
-      },
-      {
-        "name": "far",
-        "position": [
-          2147483000,
-          0
-        ],
-        "size": [
-          1920,
-          1080
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "west"
+position = [-2000000000, 0]
+size = [1920, 1080]
+
+[[output.displays]]
+name = "far"
+position = [2147483000, 0]
+size = [1920, 1080]
+"#,
     )
     .unwrap_err();
     let message = format!("{err}");
@@ -978,34 +808,17 @@ fn the_desktop_as_a_whole_must_fit_the_coordinate_space() {
     // top-left corner, so that span is what everything downstream is sized
     // and positioned in.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "west",
-        "position": [
-          -2000000000,
-          0
-        ],
-        "size": [
-          1920,
-          1080
-        ]
-      },
-      {
-        "name": "east",
-        "position": [
-          2000000000,
-          0
-        ],
-        "size": [
-          1920,
-          1080
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "west"
+position = [-2000000000, 0]
+size = [1920, 1080]
+
+[[output.displays]]
+name = "east"
+position = [2000000000, 0]
+size = [1920, 1080]
+"#,
     )
     .unwrap_err();
     assert!(
@@ -1033,20 +846,12 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
     // size check to test — it was unreachable, and every input that would
     // have reached it arrives here instead.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "dense",
-        "size": [
-          1920,
-          1080
-        ],
-        "scale": 2000000
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "dense"
+size = [1920, 1080]
+scale = 2000000
+"#,
     )
     .unwrap_err();
     assert!(
@@ -1071,35 +876,19 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
     // the only way to land on it — at scale 2 the nearest mode below is one
     // short, which is why the earlier version of this case tested nothing.
     Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "exact",
-        "size": [
-          2147483647,
-          1080
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "exact"
+size = [2147483647, 1080]
+"#,
     )
     .expect("a mode exactly as wide as a coordinate should parse");
     Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "over",
-        "size": [
-          2147483648,
-          1080
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "over"
+size = [2147483648, 1080]
+"#,
     )
     .expect_err("one pixel more than a coordinate should not");
 
@@ -1107,20 +896,12 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
     // the bound: a case that trips both halves at once cannot tell whether
     // either is checked.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "wide",
-        "size": [
-          2147483647,
-          1
-        ],
-        "scale": 2
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "wide"
+size = [2147483647, 1]
+scale = 2
+"#,
     )
     .unwrap_err();
     assert!(
@@ -1128,20 +909,12 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
         "the width half is checked with a height that fits: {err}"
     );
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "tall",
-        "size": [
-          1,
-          2147483647
-        ],
-        "scale": 2
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "tall"
+size = [1, 2147483647]
+scale = 2
+"#,
     )
     .unwrap_err();
     assert!(
@@ -1157,20 +930,12 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
     // check that wrapped would still be rejected here — by that check, with
     // that reason. Only naming the mode pins the mode check.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "displays": [
-      {
-        "name": "huge",
-        "size": [
-          4294967295,
-          4294967295
-        ],
-        "scale": 4294967295
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.displays]]
+name = "huge"
+size = [4294967295, 4294967295]
+scale = 4294967295
+"#,
     )
     .unwrap_err();
     let ConfigError::Validation(message) = &err else {
@@ -1189,17 +954,13 @@ fn the_nested_desktops_mode_must_fit_the_coordinate_space() {
     // `output.max_scale` — so those two multiply into a mode exactly as the
     // described ones do, and the product has to be a coordinate.
     let err = Config::parse(
-        r#"{
-  "compositor": {
-    "nested_size": [
-      2000000000,
-      800
-    ]
-  },
-  "output": {
-    "max_scale": 10
-  }
-}"#,
+        r#"
+[compositor]
+nested_size = [2000000000, 800]
+
+[output]
+max_scale = 10
+"#,
     )
     .unwrap_err();
     assert!(
@@ -1215,72 +976,55 @@ fn the_nested_desktops_mode_must_fit_the_coordinate_space() {
     // Either alone is fine, which is why the check is on the product. The cap
     // has to be stated: it defaults to 2, and this desktop does not fit twice.
     Config::parse(
-        r#"{
-  "compositor": {
-    "nested_size": [
-      2000000000,
-      800
-    ]
-  },
-  "output": {
-    "max_scale": 1
-  }
-}"#,
+        r#"
+[compositor]
+nested_size = [2000000000, 800]
+
+[output]
+max_scale = 1
+"#,
     )
     .expect("a large desktop at scale 1 is representable");
     Config::parse(
-        r#"{
-  "output": {
-    "max_scale": 10
-  }
-}"#,
+        r#"
+[output]
+max_scale = 10
+"#,
     )
     .expect("a high cap on a small desktop is fine");
 
     // The boundary, exactly, and one past it.
     Config::parse(
-        r#"{
-  "compositor": {
-    "nested_size": [
-      2147483647,
-      1
-    ]
-  },
-  "output": {
-    "max_scale": 1
-  }
-}"#,
+        r#"
+[compositor]
+nested_size = [2147483647, 1]
+
+[output]
+max_scale = 1
+"#,
     )
     .expect("a mode exactly as wide as a coordinate should parse");
     Config::parse(
-        r#"{
-  "compositor": {
-    "nested_size": [
-      2147483648,
-      1
-    ]
-  },
-  "output": {
-    "max_scale": 1
-  }
-}"#,
+        r#"
+[compositor]
+nested_size = [2147483648, 1]
+
+[output]
+max_scale = 1
+"#,
     )
     .expect_err("one pixel more than a coordinate should not");
 
     // Each axis with the other comfortably inside the bound, so neither case
     // can pass on the strength of the half it is not about.
     let err = Config::parse(
-        r#"{
-  "compositor": {
-    "nested_size": [
-      2147483647,
-      1
-    ]
-  },
-  "output": {
-    "max_scale": 2
-  }
-}"#,
+        r#"
+[compositor]
+nested_size = [2147483647, 1]
+
+[output]
+max_scale = 2
+"#,
     )
     .unwrap_err();
     assert!(
@@ -1288,17 +1032,13 @@ fn the_nested_desktops_mode_must_fit_the_coordinate_space() {
         "the width half is checked with a height that fits: {err}"
     );
     let err = Config::parse(
-        r#"{
-  "compositor": {
-    "nested_size": [
-      1,
-      2147483647
-    ]
-  },
-  "output": {
-    "max_scale": 2
-  }
-}"#,
+        r#"
+[compositor]
+nested_size = [1, 2147483647]
+
+[output]
+max_scale = 2
+"#,
     )
     .unwrap_err();
     assert!(
@@ -1312,13 +1052,16 @@ fn the_nested_desktops_mode_must_fit_the_coordinate_space() {
     // size that was rejected a moment ago. Scoping the check to the
     // no-displays case passes every other test here.
     Config::parse(
-        r#"{
-            "compositor": { "nested_size": [2000000000, 800] },
-            "output": {
-                "max_scale": 10,
-                "displays": [{ "name": "only", "size": [1920, 1080] }]
-            }
-        }"#,
+        r#"
+[compositor]
+nested_size = [2000000000, 800]
+
+[output]
+max_scale = 10
+[[output.displays]]
+name = "only"
+size = [1920, 1080]
+"#,
     )
     .expect_err("an unrepresentable nested mode is rejected whatever else is configured");
 
@@ -1326,17 +1069,13 @@ fn the_nested_desktops_mode_must_fit_the_coordinate_space() {
     // panicked on. A panic here would also break `ConfigStore`'s guarantee
     // that a bad config can never take the compositor down.
     let err = Config::parse(
-        r#"{
-  "compositor": {
-    "nested_size": [
-      4294967295,
-      4294967295
-    ]
-  },
-  "output": {
-    "max_scale": 4294967295
-  }
-}"#,
+        r#"
+[compositor]
+nested_size = [4294967295, 4294967295]
+
+[output]
+max_scale = 4294967295
+"#,
     )
     .unwrap_err();
     assert!(

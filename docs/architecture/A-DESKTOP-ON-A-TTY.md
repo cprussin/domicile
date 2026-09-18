@@ -750,11 +750,25 @@ a function of the hardware. It is kanshi's model without kanshi's file format:
 a profile names exactly the displays it is for, and the first profile whose set
 is plugged in wins.
 
-```jsonc
-{ "name": "home-office-full", "displays": [
-    { "display": "drm-1", "enabled": false },
-    { "display": "drm-2", "position": [0, 0],    "scale": 1.2, "transform": "rotate-270" },
-    { "display": "drm-3", "position": [1800, 0], "scale": 1.2, "transform": "rotate-270" } ] }
+```toml
+[[output.profiles]]
+name = "home-office-full"
+
+  [[output.profiles.displays]]
+  display = "drm-1"
+  enabled = false
+
+  [[output.profiles.displays]]
+  display = "drm-2"
+  position = [0, 0]
+  scale = 1.2
+  transform = "rotate-270"
+
+  [[output.profiles.displays]]
+  display = "drm-3"
+  position = [1800, 0]
+  scale = 1.2
+  transform = "rotate-270"
 ```
 
 | Source | Constructor | Decided by |
