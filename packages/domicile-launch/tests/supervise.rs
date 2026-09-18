@@ -63,10 +63,11 @@ fn the_component_that_exited_is_named_however_late_it_was_started() {
     let exit = running.until_one_exits();
     assert_eq!(exit.what, "engine");
     assert!(exit.how.contains('4'), "{}", exit.how);
-    assert_eq!(
-        exit.ended_the_desktop(),
-        "the engine exited (exit status: 4), so the desktop is over."
-    );
+    // NO LONGER "so the desktop is over": what a component that exited earns
+    // is another desktop, up to the point `domicile_launch::restart` stops
+    // giving them, so the sentence this carries is the observation alone and
+    // what follows it is said by whatever decides.
+    assert_eq!(exit.to_string(), "the engine exited (exit status: 4)");
 }
 
 #[test]

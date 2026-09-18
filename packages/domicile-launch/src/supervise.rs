@@ -54,18 +54,6 @@ pub struct Exit {
     pub how: String,
 }
 
-impl Exit {
-    /// What to say when this happens to a desktop that was already up.
-    ///
-    /// Either component going takes the desktop with it — the engine holds the
-    /// window everything is drawn in, the compositor holds the display every
-    /// client is connected to — so the second half of the sentence is the same
-    /// whichever one it was.
-    pub fn ended_the_desktop(&self) -> String {
-        format!("{self}, so the desktop is over.")
-    }
-}
-
 /// How long a component gets to put the machine down tidily before it is
 /// taken down.
 ///
