@@ -171,6 +171,16 @@ nested developer run wants. What is refused is the half-stated form: a
 runs its defaults on a missing file and refuses a path it cannot load, and
 guessing between those picks one for somebody who meant the other.
 
+**The keyboard is one of the things a shell owns, and it is not optional in
+the way it looks.** `input.keyboard` takes the `xkb_*` fields sway names —
+`xkb_layout`, `xkb_variant`, `xkb_options` and the rest — and a config that
+says nothing about them gets a plain `us`: no variant, no remapped keys. That
+default is deliberately *nobody's* keyboard. It was one author's for a while
+(Programmer's Dvorak with Caps Lock and Escape swapped), which is a surprise
+nothing else in a desktop can produce — every key wrong, and no message
+anywhere saying why. So a shell whose users do not type US QWERTY has to carry
+their layout into this file; there is no layer below it that will.
+
 Two of the things it can say about a desktop are different in kind, and which
 one a shell generates depends on whether there is hardware under it:
 

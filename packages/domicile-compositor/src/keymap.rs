@@ -69,19 +69,34 @@ pub fn compiled_keymap(config: &KeyboardConfig) -> Result<String, UnknownLayout>
 mod tests {
     use super::*;
 
+    /// A keyboard somebody wrote down: programmer Dvorak with caps lock
+    /// swapped for escape.
+    ///
+    /// STATED RATHER THAN TAKEN FROM THE DEFAULT, which is what it used to be.
+    /// The default is nobody's layout now -- see
+    /// `a_desk_that_configured_no_keyboard_gets_nobodys_layout` in
+    /// domicile-config -- and a test about what a config NAMES should name
+    /// one anyway.
+    fn dvorak() -> KeyboardConfig {
+        KeyboardConfig {
+            xkb_variant: "dvp".into(),
+            xkb_options: vec!["caps:swapescape".into()],
+            ..KeyboardConfig::default()
+        }
+    }
+
     #[test]
     fn the_layout_the_config_names_is_the_keymap_that_comes_out() {
-        // The default is programmer Dvorak with caps lock swapped for escape,
-        // and both halves of that are in the text: on `dvp` the key a QWERTY
-        // keyboard has `q` printed on is a semicolon, and `caps:swapescape`
-        // is an option rather than a layout, so a keymap carrying the layout
-        // and not the options would pass on the first line and fail on the
-        // second.
+        // Both halves of that keyboard are in the text: on `dvp` the key a
+        // QWERTY keyboard has `q` printed on is a semicolon, and
+        // `caps:swapescape` is an option rather than a layout, so a keymap
+        // carrying the layout and not the options would pass on the first line
+        // and fail on the second.
         //
         // This is the bug, one layer down: the browser process decoded every
         // printable key off a positional US-QWERTY table, so what the config
         // said was a semicolon arrived as nothing at all.
-        let keymap = compiled_keymap(&KeyboardConfig::default()).expect("us(dvp) exists");
+        let keymap = compiled_keymap(&dvorak()).expect("us(dvp) exists");
 
         assert!(
             keymap.starts_with("xkb_keymap"),
@@ -94,6 +109,27 @@ mod tests {
         assert!(
             symbols_for(&keymap, "CAPS").contains("Escape"),
             "caps:swapescape reached xkb too"
+        );
+    }
+
+    #[test]
+    fn a_keyboard_nobody_configured_is_the_plain_one() {
+        // The other side of the same seam, and what the default stopped being:
+        // a desk that says nothing about its keyboard gets `us` as it comes.
+        // Asserted here rather than only on the struct because this is where
+        // it becomes a keymap -- an empty variant that xkb quietly read as
+        // something else would pass a test on the field and fail a user.
+        let keymap = compiled_keymap(&KeyboardConfig::default()).expect("plain us exists");
+
+        assert!(
+            symbols_for(&keymap, "AD01").contains('q'),
+            "the top-left letter key is qwerty's q: {}",
+            symbols_for(&keymap, "AD01")
+        );
+        assert!(
+            !symbols_for(&keymap, "CAPS").contains("Escape"),
+            "nothing remapped caps lock: {}",
+            symbols_for(&keymap, "CAPS")
         );
     }
 

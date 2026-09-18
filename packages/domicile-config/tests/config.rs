@@ -15,14 +15,40 @@ fn empty_config_uses_defaults() {
 }
 
 #[test]
-fn default_keymap_is_programmers_dvorak_with_caps_swapped() {
+fn a_desk_that_configured_no_keyboard_gets_nobodys_layout() {
+    // THIS USED TO BE PROGRAMMER'S DVORAK WITH CAPS LOCK AND ESCAPE SWAPPED,
+    // which is one author's desk and a surprise on anybody else's: a user who
+    // configured nothing got a layout they never asked for, and the only
+    // symptom is that every key is wrong. A shell that wants a layout states
+    // one; saying nothing means the layout as it comes.
     let keyboard = Config::parse("{}").unwrap().input.keyboard;
     assert_eq!(keyboard.xkb_layout, "us");
-    assert_eq!(keyboard.xkb_variant, "dvp");
-    assert_eq!(keyboard.xkb_options, vec!["caps:swapescape".to_string()]);
+    assert_eq!(keyboard.xkb_variant, "");
+    assert!(
+        keyboard.xkb_options.is_empty(),
+        "{:?}",
+        keyboard.xkb_options
+    );
     // Empty rules/model mean "whatever libxkbcommon defaults to".
     assert_eq!(keyboard.xkb_rules, "");
     assert_eq!(keyboard.xkb_model, "");
+}
+
+#[test]
+fn a_desk_that_states_a_keyboard_gets_that_one() {
+    // The other half, and the one the default stopped being needed for: a
+    // layout reaches the compositor because somebody wrote it down.
+    let text = r#"{ "input": { "keyboard": {
+        "xkb_variant": "dvp",
+        "xkb_options": ["caps:escape"]
+    } } }"#;
+    let keyboard = Config::parse(text)
+        .expect("valid config should parse")
+        .input
+        .keyboard;
+    assert_eq!(keyboard.xkb_layout, "us");
+    assert_eq!(keyboard.xkb_variant, "dvp");
+    assert_eq!(keyboard.xkb_options, vec!["caps:escape".to_string()]);
 }
 
 #[test]
