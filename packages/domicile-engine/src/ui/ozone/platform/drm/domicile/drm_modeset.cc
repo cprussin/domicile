@@ -125,6 +125,14 @@ void DrmModeset::SetLayout(std::vector<DomicileDisplayLayout> layout) {
       base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
 }
 
+void DrmModeset::Relight() {
+  // The header argues the whole of it: what the hardware confirmed before a
+  // sleep is not a state the reading after one can be compared to.
+  confirmed_.clear();
+  delegate_->GetDisplays(
+      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+}
+
 void DrmModeset::OnConfigurationChanged() {
   // A hotplug. Read the list again and light whatever is there now; the two
   // must come from one reading, which is why this does not reuse the last one.

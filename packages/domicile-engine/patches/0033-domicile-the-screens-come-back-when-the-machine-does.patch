@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile <domicile@invalid>
+Date: Thu, 18 Sep 2026 20:10:00 +0000
+Subject: [PATCH] domicile: the screens come back when the machine does
+
+A suspend takes almost nothing away from this session. logind's
+`session_device_pause_all` and `session_device_resume_all` have three
+callers between them and every one is a VT path; `DROP_MASTER` is asked
+for in one place and it is that same path. So the evdev descriptors this
+session took stay open, no `PauseDevice` arrives, DRM master is still
+this process's, and the session never leaves `Active`. There is nothing
+to hand back on the way down and nothing to take again on the way up --
+which is why this holds no delay inhibitor: an inhibitor buys a window
+to do pre-sleep work in, and there is no pre-sleep work.
+
+What a suspend does take is the state inside the GPU, and that is the
+one thing this driver has to answer for. The connectors come back
+reporting exactly what they reported going down -- same panels, same
+modes, same origins -- so `ModesetWouldChangeAnything`, which is right
+about every hotplug and exists because this driver used to modeset in a
+loop, answers "nothing changed" and the CRTCs stay dark.
+
+`PrepareForSleep(b)` is how the machine says which way it is going:
+`true` on the way down, `false` once it is back, broadcast on the logind
+manager rather than on a session, and emitted `false` even for a sleep
+that failed. `DrmSleep` follows it and asks `DrmModeset::Relight` for a
+modeset the reading cannot justify.
+
+Reasoned from logind's sources and not yet run: no runner suspends, so
+what CI reaches is the reading of the signal and the relight it drives.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+---
+ ui/ozone/platform/drm/BUILD.gn              |  3 +++
+ ui/ozone/platform/drm/ozone_platform_drm.cc | 13 +++++++++++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index bc0be3c..1b75cca 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -134,6 +134,8 @@ source_set("gbm") {
+     "domicile/drm_modeset.h",
+     "domicile/drm_screen.cc",
+     "domicile/drm_screen.h",
++    "domicile/drm_sleep.cc",
++    "domicile/drm_sleep.h",
+     "domicile/drm_vt_switcher.cc",
+     "domicile/drm_vt_switcher.h",
+     "domicile/edid_name.cc",
+@@ -260,6 +262,7 @@ source_set("gbm_unittests") {
+     "domicile/drm_master_unittest.cc",
+     "domicile/drm_modeset_unittest.cc",
+     "domicile/drm_screen_unittest.cc",
++    "domicile/drm_sleep_unittest.cc",
+     "domicile/drm_vt_switcher_unittest.cc",
+     "domicile/edid_name_unittest.cc",
+   ]
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 3bac6e5..6a07657 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -50,6 +50,7 @@
+ #include "ui/ozone/platform/drm/domicile/drm_logind_input.h"
+ #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
+ #include "ui/ozone/platform/drm/domicile/drm_screen.h"
++#include "ui/ozone/platform/drm/domicile/drm_sleep.h"
+ #include "ui/ozone/platform/drm/domicile/drm_vt_switcher.h"
+ #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
+ #include "ui/ozone/platform/drm/host/host_drm_device.h"
+@@ -128,6 +129,15 @@ class OzonePlatformDrm : public OzonePlatform {
+     // platform is.
+     vt_switcher_ = std::make_unique<DrmVtSwitcher>(
+         CreateNativeDisplayDelegate(), event_factory_ozone_.get());
++
++    // And the machine this console is on, which can go to sleep under it. A
++    // suspend takes nothing away from this session -- logind pauses no device
++    // and drops no master for one -- so unlike the console switch above there
++    // is nothing here to hand back. What it does take is the state inside the
++    // GPU, and the connectors say nothing about that: they report what they
++    // reported going down, which is what the driver's own hotplug guard reads
++    // as "no need to modeset". See `domicile/drm_sleep.h`.
++    sleep_ = std::make_unique<DrmSleep>(modeset_.get());
+   }
+ 
+   // DOMICILE: the compositor's answer about what the glass does, on its way to
+@@ -468,6 +478,9 @@ class OzonePlatformDrm : public OzonePlatform {
+   // And after event_factory_ozone_ for the same kind of reason: it observes
+   // that event source for as long as it lives.
+   std::unique_ptr<DrmVtSwitcher> vt_switcher_;
++  // And after modeset_, which it holds and asks to light the screens again
++  // when the machine wakes up.
++  std::unique_ptr<DrmSleep> sleep_;
+   PlatformRuntimeProperties host_properties_;
+ 
+   base::WeakPtrFactory<OzonePlatformDrm> weak_factory_{this};
