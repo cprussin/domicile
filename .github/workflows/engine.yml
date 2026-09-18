@@ -465,7 +465,7 @@ jobs:
         working-directory: /build/chromium/src/out/Domicile
         run: |
           set -euo pipefail
-          for suite_and_floor in 'DrmScreenTest:26' 'DrmModesetTest:20' 'DrmVtSwitcherTest:17' 'DrmFullscreenTest:4' 'DrmMasterTest:7' 'DrmInputDevicesTest:22' 'DrmCursorFactoryTest:4' 'DrmEdidSerialTest:18'; do
+          for suite_and_floor in 'DrmScreenTest:26' 'DrmModesetTest:22' 'DrmVtSwitcherTest:17' 'DrmSleepTest:2' 'DrmFullscreenTest:4' 'DrmMasterTest:7' 'DrmInputDevicesTest:22' 'DrmCursorFactoryTest:4' 'DrmEdidSerialTest:18'; do
             suite="${suite_and_floor%%:*}"
             floor="${suite_and_floor##*:}"
             count=$(nix develop "$GITHUB_WORKSPACE#full" --command \
@@ -478,7 +478,7 @@ jobs:
             }
           done
           nix develop "$GITHUB_WORKSPACE#full" --command \
-            ./ozone_unittests --gtest_filter='DrmScreenTest.*:DrmModesetTest.*:DrmVtSwitcherTest.*:DrmFullscreenTest.*:DrmMasterTest.*:DrmInputDevicesTest.*:DrmCursorFactoryTest.*:DrmEdidSerialTest.*'
+            ./ozone_unittests --gtest_filter='DrmScreenTest.*:DrmModesetTest.*:DrmVtSwitcherTest.*:DrmSleepTest.*:DrmFullscreenTest.*:DrmMasterTest.*:DrmInputDevicesTest.*:DrmCursorFactoryTest.*:DrmEdidSerialTest.*'
 
       # The guard's producer. Built here rather than by the script, which only
       # checks for it — and the runner deletes its work directory when the

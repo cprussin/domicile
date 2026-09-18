@@ -246,11 +246,17 @@ decides whether an item is waiting or workable.
    none of it is in `A-DESKTOP-ON-A-TTY.md` -- that document audits getting a
    desktop *up*, and these are all about keeping one.
 
-   - **Suspend and resume are unhandled.** Nothing subscribes to logind's
-     `PrepareForSleep`, and nothing re-modesets on the way back. The pieces
-     exist now — `DrmMaster` takes and drops, `DrmModeset` configures — but
-     nothing drives either one from a sleep, so closing a lid is a desktop
-     that honestly should not be expected to come back.
+   - **Suspend and resume are handled, and not yet run.** `DrmSleep` follows
+     logind's `PrepareForSleep` and asks `DrmModeset::Relight` for a modeset on
+     the way back. This turned out to be the fork's rather than the
+     compositor's: a suspend takes nothing from this session — logind pauses no
+     device and drops no master for one, both being VT paths in its sources —
+     and the one thing it does take is the state inside the GPU, which only the
+     process holding DRM master can put back. The connectors report what they
+     reported going down, so the relight exists to get past the hotplug guard
+     that is right about everything else. **No runner suspends**, so what CI
+     covers is the reading of the signal and the relight; the lid itself is
+     still unproven.
    - **A component that dies takes the windows with it, though no longer the
      session.** `domicile-launch`'s `restart` stands a whole new desktop up when
      either component stops — backing off 1s, 2s, 4s, 8s and giving up after
@@ -266,9 +272,10 @@ decides whether an item is waiting or workable.
    - **No idle, no lock, no DPMS.** A desktop you walk away from is one anybody
      can walk up to, and blanking a screen after a timeout is the same seam.
 
-   The order above is the order they bite. None of them is the fork's: the
-   first is the compositor's and the launcher's between them, and the other two
-   are this repository's outright.
+   The order above is the order they bite, and the first two are answered --
+   the first in the fork, which the audit had wrong about whose it was, and the
+   second in the launcher. What is left of them is a lid nobody has closed yet
+   and a window that does not come back. The third has not been started.
 
 ### In the engine fork — the agent on `crux`
 

@@ -146,6 +146,22 @@ class DrmModeset : public display::NativeDisplayObserver {
   // reading whichever of them moved.
   void SetLayout(std::vector<DomicileDisplayLayout> layout);
 
+  // Light every connector again, whatever the hardware reports.
+  //
+  // FOR THE ONE EVENT A READING CANNOT DESCRIBE. A GPU that has been through a
+  // suspend comes back with its CRTCs reset and its connectors reporting
+  // exactly what they reported going down, so `ModesetWouldChangeAnything` --
+  // which is right about every hotplug, and exists because this driver used to
+  // modeset in a loop -- answers "nothing changed" and leaves the panels dark.
+  // What this does is forget the confirmation that comparison is made against,
+  // so the next reading gets through. One confirmation, not the guard: the
+  // modeset this causes is confirmed in its turn and goes on suppressing its
+  // own echo.
+  //
+  // `DrmSleep` is the only caller. See `domicile/drm_sleep.h` for why a wake
+  // is the only part of a suspend this driver has to answer for.
+  void Relight();
+
   // display::NativeDisplayObserver:
   void OnConfigurationChanged() override;
   void OnDisplaySnapshotsInvalidated() override;

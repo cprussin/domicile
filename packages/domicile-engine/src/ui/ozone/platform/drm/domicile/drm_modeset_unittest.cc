@@ -517,5 +517,63 @@ TEST(DrmModesetTest, AnAnswerFromInsideTheAskIsNotAConfirmation) {
          "the first real reading must still get through";
 }
 
+
+// THE ONE A HOTPLUG CANNOT STAND IN FOR. logind pauses no session device and
+// drops no DRM master across a suspend -- both are VT paths in its sources, and
+// the session never leaves `Active` -- so the only thing lost to a sleep is the
+// state inside the GPU. The connectors come back reporting exactly what they
+// reported going down: same panels, same modes, same origins. Which means the
+// loop guard above, whose entire job is to answer "the report has not changed,
+// so asking again cannot help", is wrong for precisely this one event and would
+// leave every panel dark.
+TEST(DrmModesetTest, AWakeLightsTheScreensAgainThoughTheyReadTheSame) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+  DrmModeset modeset(std::move(owned), &screen);
+
+  modeset.Start();
+  ASSERT_EQ(fake->asks(), 1u);
+  fake->Answer(true);
+
+  modeset.Relight();
+  EXPECT_EQ(fake->asks(), 2u)
+      << "a GPU that came back with its CRTCs reset reports what it reported "
+         "before, so the reading cannot be what decides";
+}
+
+// And the relight does not cost the loop guard. Forgetting one confirmation is
+// the whole mechanism; forgetting it permanently would put this driver back to
+// answering its own hotplugs forever, which is the bug the guard exists for.
+TEST(DrmModesetTest, ARelitScreenStillSuppressesTheHotplugItCauses) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+  DrmModeset modeset(std::move(owned), &screen);
+
+  modeset.Start();
+  fake->Answer(true);
+  modeset.Relight();
+  ASSERT_EQ(fake->asks(), 2u);
+  fake->Answer(true);
+
+  modeset.OnConfigurationChanged();
+  EXPECT_EQ(fake->asks(), 2u)
+      << "the CHANGE the relight's own Configure emits is still this driver's "
+         "own echo";
+}
+
 }  // namespace
 }  // namespace ui

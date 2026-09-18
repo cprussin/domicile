@@ -39,6 +39,7 @@ covered a keyboard, and the first run on hardware said otherwise.
 | A click reaches the page under the pointer | **Hardware**, on `engine-f38ef3f`, with a mouse and with the pad |
 | `Ctrl+Alt+F<n>` reaches `Seat.SwitchTo` | **Reasoned from source since the fix.** The chord decoded on hardware and the call died on `/org/freedesktop/login1/seat/self`; reading the session's own `Seat` instead has not been run |
 | The display is dropped on the way out of the console and retaken on the way back | **Reasoned from source.** `DrmVtSwitcherTest` holds the ordering; no run has switched away and back |
+| The screens light again when the machine wakes up | **Reasoned from logind's sources.** No runner suspends, so nothing in CI sleeps; `DrmSleepTest` holds the reading of `PrepareForSleep` and `DrmModesetTest` the relight it drives past the hotplug guard |
 | A stop asked for during startup is a stop | **Unit tests.** `domicile-launch`'s milestone tests. It matters here and nowhere else — see [What a tty costs on the way out](#what-a-tty-costs-on-the-way-out) |
 
 Still open: [taking the card node from
@@ -319,6 +320,7 @@ What a normal Linux tty has to supply, and where each half now is:
 | start a VT switch | the kernel, on `Ctrl+Alt+F<n>` | the desktop, by `Seat.SwitchTo(u)`. The kernel's own chord handling is off from the moment input is taken — see below |
 | open `/dev/input/event*` | `Session.TakeDevice(major, minor)` on the evdev thread | `DrmLogindInput`. The bare `open()` is `Permission denied` (see [Input](#input)) |
 | revoke input on VT-away | logind, on `PauseDevice` | the same seam: logind `EVIOCREVOKE`s the fd it passed |
+| light the screens again after a suspend | `DisplayConfigurator`, driven by ChromeOS's own power manager | `DrmSleep`, on logind's `PrepareForSleep`. Nothing is handed back for a sleep: `session_device_pause_all` and `DROP_MASTER` are VT paths in logind's sources, so the devices and the master stay this session's and only the GPU's state is lost |
 
 **Domicile needs exactly one DRM master, and it is the engine.** The compositor
 never touches a card node: `dmabuf_import.rs`'s `headless_renderer` brings up
