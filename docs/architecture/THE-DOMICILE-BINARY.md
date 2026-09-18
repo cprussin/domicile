@@ -31,9 +31,19 @@ it publishes. The supervisor is the third. It needs no GPU and no display, so
 the crate stays in `default-members` and its tests stay cheap.
 
 ```
-domicile <shell>       # the built JavaScript module the shell is
-domicile <command>     # ...or a command for the desktop already running
+domicile <shell>                  # the built JavaScript module the shell is
+domicile --config <path> <shell>  # ...with the compositor's own file
+domicile <command>                # ...or a command for the desktop already running
 ```
+
+`--config` may come on either side of the shell, and leaving it off is an
+answer rather than a missing one: a desktop with no monitors written down runs
+the single output that follows the engine's own window. What is refused is the
+half-stated form — the flag with nothing behind it, or twice — because the
+compositor runs its defaults on a missing file and refuses one it cannot load,
+and guessing between those picks one answer for somebody who meant the other. A
+verb takes nothing, `--config` included: the desktop it questions read its
+config when it started.
 
 The modules, and the split is by what each needs to be tested:
 
