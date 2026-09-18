@@ -172,6 +172,30 @@ for seam in RelinquishDisplayControl TakeDisplayControl; do
   fi
 done
 
+# AND THE TAKE IS NOT THE WHOLE OF COMING BACK. Master says who may program
+# the card and nothing about what it is programmed to: the kernel restores its
+# own framebuffer when the last master goes, so a console handed back has been
+# modeset by whoever held it. Flipping into the controller state from before
+# the switch is a refused commit, and `PageFlipWatchdog` turns fifteen seconds
+# of those into `LOG(FATAL) ... Crashing GPU process` -- which is a desktop
+# that locks up on the way back. Nothing else sends that modeset either: the
+# connectors read the same as they did on the way out, which is what
+# `ModesetWouldChangeAnything` answers "asking again cannot help" to.
+if in_sources 'Relight'; then
+  ok "the screens are lit again when the console comes back"
+else
+  fail "the screens are lit again when the console comes back" \
+    "drm_vt_switcher never asks DrmModeset::Relight, so a VT round trip ends \
+on a card nothing in this process has modeset"
+fi
+
+if in_patches 'modeset_.get());'; then
+  ok "the DRM platform hands the switcher its modeset driver"
+else
+  fail "the DRM platform hands the switcher its modeset driver" \
+    "no patch gives DrmVtSwitcher the DrmModeset it relights through"
+fi
+
 for workflow in engine.yml engine-drm-probe.yml; do
   if grep -q "DrmVtSwitcherTest:" "$ROOT/.github/workflows/$workflow" 2>/dev/null; then
     ok "$workflow carries a floor for the suite"

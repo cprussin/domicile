@@ -16,6 +16,7 @@
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/types/event_type.h"
+#include "ui/ozone/platform/drm/domicile/drm_modeset.h"
 
 namespace ui {
 
@@ -156,8 +157,11 @@ VtStep StepVtSwitch(VtState state, VtEvent event, bool succeeded) {
     case VtEvent::kTakeFinished:
       switch (state) {
         case VtState::kTaking:
+          // THE RELIGHT IS PART OF COMING BACK, not a separate event. The
+          // card is programmable again and it is not programmed the way this
+          // session left it; see `VtAction::kRelightDisplay`.
           step = succeeded
-                     ? VtStep{VtState::kForeground, VtAction::kNothing}
+                     ? VtStep{VtState::kForeground, VtAction::kRelightDisplay}
                      : VtStep{VtState::kForegroundWithoutDisplay,
                               VtAction::kNothing};
           break;
@@ -183,8 +187,9 @@ VtStep StepVtSwitch(VtState state, VtEvent event, bool succeeded) {
 
 DrmVtSwitcher::DrmVtSwitcher(
     std::unique_ptr<display::NativeDisplayDelegate> delegate,
-    PlatformEventSource* events)
-    : delegate_(std::move(delegate)), events_(events) {
+    PlatformEventSource* events,
+    DrmModeset* modeset)
+    : delegate_(std::move(delegate)), events_(events), modeset_(modeset) {
   dbus::Bus::Options options;
   options.bus_type = dbus::Bus::SYSTEM;
   options.connection_type = dbus::Bus::PRIVATE;
@@ -410,6 +415,13 @@ void DrmVtSwitcher::Perform(VtAction action) {
             }
           },
           weak_factory_.GetWeakPtr()));
+      return;
+    case VtAction::kRelightDisplay:
+      // AFTER THE TAKE ANSWERED AND NOT BEFORE IT. `TakeDisplayControl` is
+      // what puts master back in this process and `has_master()` back in the
+      // GPU's, and a modeset asked for ahead of either is the `EACCES` this
+      // whole path exists to stop committing.
+      modeset_->Relight();
       return;
   }
 }

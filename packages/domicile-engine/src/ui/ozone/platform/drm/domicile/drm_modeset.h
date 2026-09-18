@@ -148,18 +148,22 @@ class DrmModeset : public display::NativeDisplayObserver {
 
   // Light every connector again, whatever the hardware reports.
   //
-  // FOR THE ONE EVENT A READING CANNOT DESCRIBE. A GPU that has been through a
-  // suspend comes back with its CRTCs reset and its connectors reporting
-  // exactly what they reported going down, so `ModesetWouldChangeAnything` --
-  // which is right about every hotplug, and exists because this driver used to
-  // modeset in a loop -- answers "nothing changed" and leaves the panels dark.
-  // What this does is forget the confirmation that comparison is made against,
-  // so the next reading gets through. One confirmation, not the guard: the
-  // modeset this causes is confirmed in its turn and goes on suppressing its
-  // own echo.
+  // FOR THE EVENTS A READING CANNOT DESCRIBE, and there are two of them. A GPU
+  // that has been through a suspend comes back with its CRTCs reset; a console
+  // handed back after a VT switch comes back with its CRTCs programmed by
+  // whoever held it. Either way the connectors report exactly what they
+  // reported going out, so `ModesetWouldChangeAnything` -- which is right
+  // about every hotplug, and exists because this driver used to modeset in a
+  // loop -- answers "nothing changed" and leaves the panels showing somebody
+  // else's frame. What this does is forget the confirmation that comparison is
+  // made against, so the next reading gets through. One confirmation, not the
+  // guard: the modeset this causes is confirmed in its turn and goes on
+  // suppressing its own echo.
   //
-  // `DrmSleep` is the only caller. See `domicile/drm_sleep.h` for why a wake
-  // is the only part of a suspend this driver has to answer for.
+  // `DrmSleep` and `DrmVtSwitcher` are the callers. See `domicile/drm_sleep.h`
+  // for why a wake is the only part of a suspend this driver has to answer
+  // for, and `domicile/drm_vt_switcher.h` for why taking DRM master back is
+  // not the same thing as having the screens back.
   void Relight();
 
   // display::NativeDisplayObserver:

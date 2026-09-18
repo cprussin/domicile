@@ -100,7 +100,13 @@ TEST(DrmVtSwitcherTest, ASessionGoingAwayDropsTheDisplay) {
   EXPECT_EQ(answered.state, VtState::kBackground);
 }
 
-TEST(DrmVtSwitcherTest, ASessionComingBackTakesTheDisplay) {
+// THE HAPPY PATH BACK, AND TAKING THE DISPLAY IS ONLY HALF OF IT. Master says
+// who may program the card and nothing about what the card is programmed to:
+// whoever had the panel in between programmed it, so what this session
+// resumes with is controller state describing hardware that has moved. The
+// screens are lit again rather than flipped into, which is what
+// `VtAction::kRelightDisplay` argues in full.
+TEST(DrmVtSwitcherTest, ASessionComingBackTakesTheDisplayAndLightsIt) {
   const VtStep told =
       StepVtSwitch(VtState::kBackground, VtEvent::kSessionActivated, false);
   EXPECT_EQ(told.action, VtAction::kTakeDisplay);
@@ -108,8 +114,35 @@ TEST(DrmVtSwitcherTest, ASessionComingBackTakesTheDisplay) {
 
   const VtStep answered =
       StepVtSwitch(told.state, VtEvent::kTakeFinished, true);
-  EXPECT_EQ(answered.action, VtAction::kNothing);
+  EXPECT_EQ(answered.action, VtAction::kRelightDisplay);
   EXPECT_EQ(answered.state, VtState::kForeground);
+}
+
+// AND EXACTLY ONE CELL ASKS FOR IT, which is the half a relight can get
+// wrong. A modeset is a commit on the card: asked for anywhere this session
+// does not hold the console it is a commit over somebody else's frame, and
+// asked for on an edge that repeats it is the modeset loop this driver
+// already had once. Only the take that succeeded lights anything.
+TEST(DrmVtSwitcherTest, NothingButTheConsoleComingBackLightsTheScreens) {
+  constexpr VtState kStates[] = {
+      VtState::kForeground, VtState::kRelinquishing, VtState::kBackground,
+      VtState::kTaking, VtState::kForegroundWithoutDisplay};
+  constexpr VtEvent kEvents[] = {
+      VtEvent::kSessionDeactivated, VtEvent::kRelinquishFinished,
+      VtEvent::kSessionActivated, VtEvent::kTakeFinished};
+
+  for (const VtState state : kStates) {
+    for (const VtEvent event : kEvents) {
+      for (const bool succeeded : {false, true}) {
+        const bool came_back = state == VtState::kTaking &&
+                               event == VtEvent::kTakeFinished && succeeded;
+        if (!came_back) {
+          EXPECT_NE(StepVtSwitch(state, event, succeeded).action,
+                    VtAction::kRelightDisplay);
+        }
+      }
+    }
+  }
 }
 
 // THE DIFFERENCE BETWEEN THIS TABLE AND THE ONE IT REPLACES, in one case. A

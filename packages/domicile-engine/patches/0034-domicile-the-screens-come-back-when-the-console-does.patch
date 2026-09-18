@@ -1,0 +1,92 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 18 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the screens come back when the console does
+
+`Ctrl+Alt+F2` and back locked the desktop up. The take on the way back put
+DRM master back in this process and stopped there, and master is a statement
+about who may program the card rather than about what the card is programmed
+to.
+
+WHAT PROGRAMMED IT IS WHOEVER HAD THE PANEL. The kernel restores its own
+framebuffer the moment the last master goes -- which is the same sentence
+`drm_vt_switcher.h` already used to argue that a late drop leaves a stale
+console rather than a black one -- so a VT round trip ends with the CRTCs in
+somebody else's mode and this process holding controller state that describes
+hardware from before the switch. Every page flip into it is refused, the
+atomic plane manager has no exemption for that, and `PageFlipWatchdog` answers
+a refused commit with a fifteen-second timer ending in `LOG(FATAL) << "Failed
+to modeset ... Crashing GPU process."` The desktop freezes and then dies, and
+`0019`'s note that "nothing modesets on the way back" was the description of
+this bug before it was reported.
+
+NOTHING ELSE WAS GOING TO SEND THAT MODESET. The connectors report exactly
+what they reported on the way out, so `ModesetWouldChangeAnything` -- which is
+right about every hotplug, and the reason this driver no longer modesets in a
+loop -- reads the next reading as "asking again cannot help". That is the same
+wall a wake from suspend hits, and `DrmModeset::Relight` is already the way
+past it: `0033` built it for `DrmSleep`, and a console switch back is the
+second caller it always needed.
+
+So `StepVtSwitch` grows one action and one cell: a take that succeeded from
+`kTaking` now answers `kRelightDisplay` instead of `kNothing`, and `Perform`
+runs `DrmModeset::Relight`. AFTER the take has answered and not before it,
+because `TakeDisplayControl` is what puts master back in this process and
+`has_master()` back in the GPU's -- a modeset ahead of either is the `EACCES`
+the rest of this path exists to stop committing.
+
+EXACTLY ONE CELL, AND THE TEST SAYS SO. A modeset is a commit on the card, so
+a relight asked for from any state that does not hold the console is a commit
+over somebody else's frame, and one asked for on an edge that repeats is the
+modeset loop again. `DrmVtSwitcherTest` walks the whole table and asserts no
+other cell lights anything.
+
+The wiring is this patch's whole edit to a file Chromium owns: `modeset_` is
+built ahead of `vt_switcher_` in `InitScreen` and declared ahead of it, so the
+pointer is live for the switcher's life and the switcher is destroyed first --
+the same seam `sleep_` already takes.
+
+Guidelines audited: docs/guidelines/TESTING.md, docs/guidelines/ERRORS.md,
+docs/guidelines/CONTROL_FLOW.md, docs/guidelines/FUNCTIONS.md,
+docs/guidelines/FILES.md. Change complies.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FHahS8JpYFNtfjYsdorEfp
+---
+ ui/ozone/platform/drm/ozone_platform_drm.cc | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 6a07657..b1d4e2f 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -127,9 +127,17 @@ class OzonePlatformDrm : public OzonePlatform {
+     // key in the desktop is dispatched through, and it exists by now:
+     // `InitializeUI` builds it and a screen is not initialized before a
+     // platform is.
++    //
++    // AND `modeset_`, because the console this session comes back to is not
++    // the one it left: whoever had the panel in between programmed the card,
++    // and master says nothing about what it is programmed to. The take is
++    // answered and then the screens are lit again, which is the difference
++    // between a desktop that survives `Ctrl+Alt+F<n>` and one that locks up
++    // on the way back. See `domicile/drm_vt_switcher.h`.
+     vt_switcher_ = std::make_unique<DrmVtSwitcher>(
+-        CreateNativeDisplayDelegate(), event_factory_ozone_.get());
++        CreateNativeDisplayDelegate(), event_factory_ozone_.get(),
++        modeset_.get());
+ 
+     // And the machine this console is on, which can go to sleep under it. A
+     // suspend takes nothing away from this session -- logind pauses no device
+     // and drops no master for one -- so unlike the console switch above there
+@@ -476,7 +484,8 @@ class OzonePlatformDrm : public OzonePlatform {
+   // delegate it holds.
+   std::unique_ptr<DrmModeset> modeset_;
+   // And after event_factory_ozone_ for the same kind of reason: it observes
+-  // that event source for as long as it lives.
++  // that event source for as long as it lives. And after modeset_, which it
++  // asks to light the screens again when the console comes back.
+   std::unique_ptr<DrmVtSwitcher> vt_switcher_;
+   // And after modeset_, which it holds and asks to light the screens again
+   // when the machine wakes up.

@@ -324,14 +324,24 @@ decides whether an item is waiting or workable.
    case (`0027`). The pattern is now the first thing to check — see
    `A-DESKTOP-ON-A-TTY.md`'s key decisions.
 
-   **What no run has done is leave the console and come back.** `0019`'s drop
-   across a switch and `0022`'s chord still rest on source read at the pin and
-   on unit tests — `DrmInputDevicesTest` 22 cases, `DrmVtSwitcherTest` 17,
-   `DrmMasterTest` 7, `DrmModesetTest` 16, `DrmScreenTest` 18,
-   `DrmFullscreenTest` 4, `DrmCursorFactoryTest` 4 — plus the shell-group
-   guards that read the series where a gtest cannot reach.
-   `drm_logind_input.cc` talks to D-Bus and has no in-tree unit test by design;
-   `scripts/test-input-comes-from-logind.sh` is what asserts that protocol.
+   **Leaving the console and coming back locked the desktop up**, which is the
+   first run that has done it. The take on the way back puts DRM master back
+   and nothing puts the mode back: the kernel restores its own framebuffer
+   when the last master goes, so the console handed back has been modeset by
+   whoever held it, and every flip into the controller state from before the
+   switch is refused until `PageFlipWatchdog` turns fifteen seconds of those
+   into `LOG(FATAL) ... Crashing GPU process`. Nothing else would send that
+   modeset either — the connectors read the same as on the way out, which is
+   exactly what `ModesetWouldChangeAnything` answers "asking again cannot
+   help" to, and exactly the wall a wake from suspend hits. Patch `0034`
+   answers a take that succeeded with `DrmModeset::Relight`. The rest of the
+   round trip still rests on source read at the pin and on unit tests —
+   `DrmInputDevicesTest` 22 cases, `DrmVtSwitcherTest` 18, `DrmMasterTest` 7,
+   `DrmModesetTest` 16, `DrmScreenTest` 18, `DrmFullscreenTest` 4,
+   `DrmCursorFactoryTest` 4 — plus the shell-group guards that read the series
+   where a gtest cannot reach. `drm_logind_input.cc` talks to D-Bus and has no
+   in-tree unit test by design; `scripts/test-input-comes-from-logind.sh` is
+   what asserts that protocol.
 
    **Nothing checks that the engine `main` pins satisfies the compositor `main`
    builds.** #411 landed both halves of a display-protocol change — a `name` on

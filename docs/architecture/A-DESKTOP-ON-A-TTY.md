@@ -38,13 +38,14 @@ covered a keyboard, and the first run on hardware said otherwise.
 | The trackpad moves it | **Hardware.** Patch `0027` and `use_libinput = true`. Off ChromeOS `CreateConverter` has no touchpad branch at all, so a pad falls to `EventConverterEvdevImpl`, which has no `EV_ABS` case and drops every finger position |
 | A click reaches the page under the pointer | **Hardware**, on `engine-f38ef3f`, with a mouse and with the pad |
 | `Ctrl+Alt+F<n>` reaches `Seat.SwitchTo` | **Reasoned from source since the fix.** The chord decoded on hardware and the call died on `/org/freedesktop/login1/seat/self`; reading the session's own `Seat` instead has not been run |
-| The display is dropped on the way out of the console and retaken on the way back | **Reasoned from source.** `DrmVtSwitcherTest` holds the ordering; no run has switched away and back |
+| The display is dropped on the way out of the console and retaken on the way back | **Reasoned from source.** `DrmVtSwitcherTest` holds the ordering |
+| The desktop is usable again after a console round trip | **Hardware for the failure.** A run switched away and back and the desktop locked up: the take put master back and nothing put the mode back, so every flip went into a card the console's last owner had modeset. The relight that answers it is reasoned from source — `DrmVtSwitcherTest` holds the cell, and no run has been through the fix |
 | The screens light again when the machine wakes up | **Reasoned from logind's sources.** No runner suspends, so nothing in CI sleeps; `DrmSleepTest` holds the reading of `PrepareForSleep` and `DrmModesetTest` the relight it drives past the hotplug guard |
 | A stop asked for during startup is a stop | **Unit tests.** `domicile-launch`'s milestone tests. It matters here and nowhere else — see [What a tty costs on the way out](#what-a-tty-costs-on-the-way-out) |
 
 Still open: [taking the card node from
 logind](#the-card-should-come-from-logind-too), and a console switch away and
-back, which no run has done.
+back on an engine carrying the relight.
 
 ## What the assert guards
 
@@ -317,6 +318,7 @@ What a normal Linux tty has to supply, and where each half now is:
 | open `/dev/dri/card0` | `open()` in the browser process | unchanged. A logind session on an active VT gives the session user an ACL on the card node, so the bare `open` works unprivileged. Root also works. This is the one place a tty desktop still leans on an ACL |
 | become DRM master | implicit: the first opener of an unused card is master | `DrmMaster::Add`, as a card arrives |
 | drop master on VT-away, retake on VT-back | `DisplayConfigurator`, on a ChromeOS signal | `DrmVtSwitcher`, driven by the logind session's `Active` property. `TakeDisplayControl` / `RelinquishDisplayControl` were already plumbed to the DRM thread; what was missing was a caller |
+| light the screens again on VT-back | `DisplayConfigurator`, which reconfigures after a take | `DrmVtSwitcher`, through `DrmModeset::Relight`. The take puts master back and nothing puts the mode back, so without it the desktop flips into a card somebody else modeset |
 | start a VT switch | the kernel, on `Ctrl+Alt+F<n>` | the desktop, by `Seat.SwitchTo(u)`. The kernel's own chord handling is off from the moment input is taken — see below |
 | open `/dev/input/event*` | `Session.TakeDevice(major, minor)` on the evdev thread | `DrmLogindInput`. The bare `open()` is `Permission denied` (see [Input](#input)) |
 | revoke input on VT-away | logind, on `PauseDevice` | the same seam: logind `EVIOCREVOKE`s the fd it passed |
@@ -409,9 +411,23 @@ the console belongs to somebody else it commits one; the atomic plane manager
 has no `EACCES` exemption (the legacy one does, atomic is what a modern driver
 uses), so the commit fails, arms `PageFlipWatchdog`, and its 15 s timer is
 `LOG(FATAL) << "Failed to modeset ... Crashing GPU process."` Only a modeset
-disarms it and nothing modesets on the way back. So the two loops call
-`DrmWrapper::AssumeMaster` instead: the flag without the ioctl, because the
-transition is decided in another process.
+disarms it. So the two loops call `DrmWrapper::AssumeMaster` instead: the flag
+without the ioctl, because the transition is decided in another process.
+
+**And the way back is a modeset, not a take** — which is the second half of the
+same fact and was missing until a console round trip locked a desktop up.
+Master says who may program the card and nothing about what the card is
+programmed to: the kernel restores its own framebuffer when the last master
+goes, so the console handed back has been modeset by whoever held it, and the
+controller state this process resumes with describes hardware that has moved.
+Every flip into it is refused, which is the watchdog again. Nothing else would
+send that modeset either — the connectors report exactly what they reported on
+the way out, so `ModesetWouldChangeAnything` reads the next reading as "asking
+again cannot help", the same wall a wake from suspend hits. So `StepVtSwitch`
+answers a take that succeeded with `kRelightDisplay` and `DrmModeset::Relight`
+runs, after the take has answered and never before it. One cell and no other:
+a modeset asked for from a state that does not hold the console is a commit
+over somebody else's frame.
 
 ### logind owns the console, and the desktop asks it for a switch
 
@@ -1160,6 +1176,7 @@ Step 2 — the embedder.
 - [x] take DRM master when a card arrives — `DrmMaster::Add`
 - [x] do the drop and the retake in the process that opened the card — patch `0019`
 - [x] follow the session's `Active` rather than the kernel's VT signals, and bind the chord that starts a switch — patch `0022`, superseding `0017`'s handshake; `scripts/test-logind-owns-the-console.sh` counts the ioctls
+- [x] light the screens again when the console comes back — patch `0034`. The take puts DRM master back and nothing puts the mode back, so a round trip ended with the desktop flipping into a card its last owner had modeset: a refused commit every frame and `PageFlipWatchdog` fifteen seconds later. `DrmModeset::Relight`, which a wake from suspend already needed, is the way past `ModesetWouldChangeAnything`
 - [x] read the seat off `Session.Seat` rather than `seat/self`
 - [x] the window fills the CRTC — patch `0018`, `--start-fullscreen` on the scanout platform only, and patch `0023` for the watchdog that undid it
 - [x] evdev fds from `Session.TakeDevice`, with `PauseDevice` / `ResumeDevice` — patch `0020`
