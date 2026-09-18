@@ -33,6 +33,16 @@ import { useCallback, useEffect } from "react";
  * `focusout`, and an element that is removed dispatches no focus event at all,
  * so the only sign of that one is the commit that removed it.
  *
+ * **Which of those a `focusout` is, is read off the event and not off the
+ * document.** `relatedTarget` names the element about to take the focus, and
+ * `null` is the focus landing on nothing — the only case here. The document
+ * cannot be asked instead, whenever it is asked: the event is dispatched from
+ * inside the focus change, with the focus off the element that had it and not
+ * yet on the one taking it, and the engine runs the microtask checkpoint as
+ * soon as a listener it called returns, which is still inside that change. So
+ * `document.activeElement` answers `body` for a focus that is on its way
+ * somewhere, and a deferred read answers it just the same.
+ *
  * `null` rather than `undefined` for the missing element because that is what
  * React's ref API hands a callback ref.
  */
@@ -58,12 +68,26 @@ export const useReclaimFocus = <Element extends HTMLElement>(
   });
 
   useEffect(() => {
-    const dropped = () => {
-      // `focusout` runs before the focus lands, and where it lands is the whole
-      // question — during it the body is focused whether or not anything is
-      // about to be. So the answer is read once the press has finished moving
-      // it.
-      queueMicrotask(reclaim);
+    const dropped = (event: FocusEvent) => {
+      // WHERE THE FOCUS IS GOING IS THE EVENT'S TO SAY, and nothing else here
+      // can. `focusout` is dispatched from inside the focus change, with the
+      // focus off the element that had it and not yet on the one taking it, so
+      // the body is what `document.activeElement` answers for the length of
+      // that dispatch — whether or not anything is about to take it. Deferring
+      // the read does not get past that: the engine runs the microtask
+      // checkpoint as soon as a listener called from its own dispatch returns,
+      // which is still inside the change. Reading it there took the focus back
+      // off a window's own address bar on the press that reached for it, and
+      // Blink treats a handler that moves the focus mid-change as a refusal —
+      // so the bar could not be clicked into at all.
+      //
+      // `relatedTarget` is the element about to take it, and `null` is the
+      // focus landing on nothing, which is the only case this hook is for. The
+      // deferral stays for that case: where nothing is arriving, where it
+      // finally settles is still worth reading once the press is over.
+      if (event.relatedTarget === null) {
+        queueMicrotask(reclaim);
+      }
     };
     document.addEventListener("focusout", dropped);
     return () => {
