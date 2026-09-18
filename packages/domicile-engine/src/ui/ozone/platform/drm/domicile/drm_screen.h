@@ -5,6 +5,8 @@
 #ifndef UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_SCREEN_H_
 #define UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_SCREEN_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -13,7 +15,9 @@
 #include "ui/display/display.h"
 #include "ui/display/display_list.h"
 #include "ui/display/types/display_snapshot.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/platform_screen.h"
 
 namespace ui {
@@ -34,9 +38,15 @@ inline constexpr gfx::Size kDisplaylessBounds{1024, 768};
 // This is the whole of what Domicile takes from `ui/display/manager`, whose
 // DisplayChangeObserver spends 478 lines turning snapshots into
 // ManagedDisplayInfo -- ChromeOS product surface that nothing here reads. The
-// bounds come from the snapshot's native mode, which is the mode the modeset
+// SIZE comes from the snapshot's native mode, which is the mode the modeset
 // driver will configure the CRTC at, so the two cannot disagree.
-display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot);
+//
+// The CORNER is passed in rather than read off the snapshot, because it is not
+// always the snapshot's: a matched output profile places the monitors and the
+// card's own stacking is not that arrangement. `DisplaysFromSnapshots` is
+// where the two are told apart.
+display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
+                                     const gfx::Point& origin);
 
 // What to call this monitor: "<MAKE> <MODEL> <SERIAL>", the identity kanshi
 // and sway match an output profile on.
@@ -71,9 +81,36 @@ std::string DisplayNameFromSnapshot(const display::DisplaySnapshot& snapshot);
 gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot);
 
 // Every snapshot, or the displayless fallback above when there are none.
+//
+// `layout` IS THE COMPOSITOR'S, and it reaches the display list as well as the
+// modeset because a dark connector is still a connector the browser has to
+// place somewhere. A display the layout names takes the corner the layout gave
+// it, lit or not: leaving a dark one where the CARD stacked it is how two
+// displays end up claiming one rectangle, and the first of those wins every
+// lookup `GetDisplayMatching` makes -- including the one that sizes a
+// fullscreen window, which would then be a window on a screen that is off.
 std::vector<display::Display> DisplaysFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
-        snapshots);
+        snapshots,
+    const std::vector<DomicileDisplayLayout>& layout);
+
+// Which of `snapshots` the display list calls primary: the first one the
+// layout lights, or the first there is where it says nothing.
+//
+// THIS IS THE DIFFERENCE BETWEEN A DESKTOP AND A BLACK SCREEN. A views browser
+// going fullscreen is sized from the display it is on, and the window it
+// starts at -- 1050x1900 at (10, 10) -- is on whichever display holds that
+// corner. A profile that turns the laptop panel off is the ordinary case on a
+// full desk, and a primary that is dark is a browser drawing correctly onto a
+// screen nobody can see, with every log line saying the modeset succeeded.
+//
+// A free function beside `DisplaysFromSnapshots` so it has a test of its own:
+// "which display is primary" and "where is each display" are two answers, and
+// a suite asserting only the second would not notice the first go wrong.
+size_t PrimaryIndexForLayout(
+    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+        snapshots,
+    const std::vector<DomicileDisplayLayout>& layout);
 
 // `PlatformScreen` over the displays DRM reports.
 //
@@ -95,7 +132,8 @@ class DrmScreen : public PlatformScreen {
   // its own here.
   void OnDisplaysChanged(
       const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
-        snapshots);
+        snapshots,
+      const std::vector<DomicileDisplayLayout>& layout);
 
   // PlatformScreen:
   const std::vector<display::Display>& GetAllDisplays() const override;

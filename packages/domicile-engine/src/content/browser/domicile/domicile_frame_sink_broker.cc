@@ -31,6 +31,7 @@
 #include "ui/display/display.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
+#include "ui/ozone/public/ozone_platform.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel_server_endpoint.h"
 #include "mojo/public/cpp/system/invitation.h"
@@ -133,6 +134,25 @@ class DomicileDisplayWatcher : public display::DisplayObserver {
   const raw_ptr<domicile::FrameSinkBroker> broker_;
 };
 
+// The producer's answer about the connectors, on its way to the platform that
+// owns them.
+//
+// Here rather than in //components/domicile/browser for the reason the two
+// getters above are there: the only route to a CRTC is //ui/ozone, and that
+// target deliberately depends on neither that nor //content. Every ozone
+// platform but DRM implements this as nothing, because every other one is a
+// window inside somebody else's session.
+void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
+  std::vector<ui::DomicileDisplayLayout> wanted;
+  wanted.reserve(layout.size());
+  for (const domicile::mojom::DisplayLayoutPtr& display : layout) {
+    wanted.push_back({.id = display->id,
+                      .enabled = display->enabled,
+                      .origin = display->origin});
+  }
+  ui::OzonePlatform::GetInstance()->SetDomicileDisplayLayout(wanted);
+}
+
 // The browser's frame sink broker and the socket a producer reaches it over.
 //
 // The socket path is the access control, and it is the whole of it. Holding a
@@ -145,7 +165,8 @@ class DomicileBrowserService {
   DomicileBrowserService()
       : broker_(GetHostFrameSinkManager(),
                 base::BindRepeating(&AllocateFrameSinkId),
-                base::BindRepeating(&GetSharedImageInterface)),
+                base::BindRepeating(&GetSharedImageInterface),
+                base::BindRepeating(&SetDisplayLayout)),
         provider_(&broker_) {
     const base::CommandLine& command_line =
         *base::CommandLine::ForCurrentProcess();

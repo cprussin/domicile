@@ -2368,6 +2368,19 @@ impl DomicileCompositor {
         }
         self.outputs = outputs;
         self.screens = screens;
+        // WHAT THE CONNECTORS BEHIND THOSE OUTPUTS HAVE TO BE DOING, which is
+        // the engine's to do because the engine is the process holding DRM
+        // master. Everything above is the desktop this compositor advertises;
+        // this is the glass, and a profile that turns a panel off is not a
+        // desktop with one fewer display on it unless something turns the
+        // panel off.
+        //
+        // Sent on every adoption, empty list included, for the reason
+        // `Screens::scanout` gives: an empty one is what undoes a profile
+        // whose displays are no longer plugged in.
+        if let Some(session) = self.engine.as_ref() {
+            session.configure_displays(self.screens.scanout());
+        }
         // The chrome is on every display, because it *is* the desktop — so a
         // display that just appeared is one it has to be told it is on, and a
         // toolkit picks its density from exactly this.

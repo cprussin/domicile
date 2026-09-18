@@ -118,6 +118,30 @@ typedef struct DomicileDisplay {
   int32_t refresh_mhz;
 } DomicileDisplay;
 
+// One display, as the compositor wants the connector behind it driven.
+//
+// THE OPPOSITE DIRECTION TO DomicileDisplay, and the opposite kind of fact.
+// That one is what the browser read off the hardware; this is what the
+// compositor's config says to do with it -- which connectors to light, and
+// where each one's mode goes on the browser's own desktop. The two halves are
+// in different processes because the config is the compositor's and DRM master
+// is the browser's, which is the whole reason this crosses at all.
+typedef struct DomicileDisplayLayout {
+  // Which display, as DomicileDisplay::id named it. The compositor cannot
+  // invent one: it is the id the browser derived from the EDID and sent.
+  int64_t id;
+  // Nonzero to light this connector. Zero leaves it dark, which is what a
+  // profile's `enabled: false` says -- the way a laptop panel is named so that
+  // shutting the lid on a full desk still matches the desk's profile, and
+  // turned off so nothing is drawn behind the lid.
+  int32_t enabled;
+  // Where its mode goes on the browser's desktop, in physical pixels. Not read
+  // where `enabled` is zero: a display that is not being lit has no corner, and
+  // zero is what to send instead of one.
+  int32_t x;
+  int32_t y;
+} DomicileDisplayLayout;
+
 // What the browser has to tell the compositor. Each maps onto a Wayland request
 // the compositor already speaks, which is why this is a translation table
 // rather than a protocol:
@@ -223,6 +247,31 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_submit(DomicileEngine* engine,
                                                     int32_t damage_y,
                                                     int32_t damage_width,
                                                     int32_t damage_height);
+
+// Tells the browser which connectors to light and where.
+//
+// THE ANSWER TO the `displays` callback, and the reason this ABI carries both
+// directions: what the browser reads off DRM is a fact, and what to do with it
+// is a config only the compositor holds.
+//
+// AN EMPTY LIST IS NOT "LIGHT NOTHING". It is the compositor having no
+// opinion, which is what every desktop but a matched profile's has, and the
+// browser answers it by going back to lighting what the hardware reports. That
+// is load-bearing rather than tidy: a profile that turned a panel off stops
+// matching the moment a monitor is unplugged, and something has to say the
+// panel comes back on.
+//
+// The records are borrowed for the duration of the call -- the library copies
+// what it needs before it returns.
+//
+// Nothing comes back, and not for want of trying: a modeset is committed on
+// the browser's own DRM thread and answered on a later task, so anything this
+// returned would be a guess. What the caller learns instead is the next
+// `displays` callback, which the modeset itself provokes.
+DOMICILE_ENGINE_EXPORT void domicile_displays_configure(
+    DomicileEngine* engine,
+    const DomicileDisplayLayout* layout,
+    uint32_t count);
 
 // Drops an imported buffer. Every buffer goes when its surface does, so this is
 // for a client that destroys one of its own.

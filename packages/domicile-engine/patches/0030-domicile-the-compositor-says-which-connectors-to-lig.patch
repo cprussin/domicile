@@ -1,0 +1,124 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile <domicile@invalid>
+Date: Fri, 18 Sep 2026 02:49:55 +0000
+Subject: [PATCH] domicile: the compositor says which connectors to light
+
+An output profile reached the desktop this compositor advertises and
+stopped there. The glass went on doing what the card decided: every
+connector that reported a mode, lit at the origin ozone stacked it at in
+connector order. So `enabled: false` -- the way a profile names a laptop
+panel so that shutting the lid still matches the desk's profile -- left
+the panel on, and three monitors were laid out in whatever order the
+card enumerated them rather than left to right across the desk.
+
+The config is the compositor's and the CRTCs are the browser's, because
+the browser is the process holding DRM master. So the answer crosses the
+engine's C ABI and arrives here as a list of DomicileDisplayLayout:
+which connectors to light, and where each one's mode goes.
+
+A virtual on OzonePlatform with an empty default, because only the DRM
+platform has a CRTC to lay out -- every other one is a window inside
+somebody else's session.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+---
+ ui/ozone/platform/drm/ozone_platform_drm.cc | 16 ++++++++++-
+ ui/ozone/public/ozone_platform.h            | 30 +++++++++++++++++++++
+ 2 files changed, 45 insertions(+), 1 deletion(-)
+
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index d4c5eee..3bac6e5 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -109,7 +109,7 @@ class OzonePlatformDrm : public OzonePlatform {
+     // the display list and lights what comes back; until that answer arrives
+     // DrmScreen reports the displayless fallback its header describes, which
+     // is why this seeds it rather than leaving the list empty.
+-    static_cast<DrmScreen*>(screen)->OnDisplaysChanged({});
++    static_cast<DrmScreen*>(screen)->OnDisplaysChanged({}, {});
+     modeset_ = std::make_unique<DrmModeset>(CreateNativeDisplayDelegate(),
+                                             static_cast<DrmScreen*>(screen));
+     modeset_->Start();
+@@ -130,6 +130,20 @@ class OzonePlatformDrm : public OzonePlatform {
+         CreateNativeDisplayDelegate(), event_factory_ozone_.get());
+   }
+ 
++  // DOMICILE: the compositor's answer about what the glass does, on its way to
++  // the driver that owns the CRTCs. Only this platform implements it; every
++  // other one is a window inside somebody else's session and has no CRTC to
++  // lay out.
++  void SetDomicileDisplayLayout(
++      const std::vector<DomicileDisplayLayout>& layout) override {
++    // Nothing to tell before `InitScreen`, and nothing lost by it: the
++    // compositor connects to a browser that is already running, and the driver
++    // reads the displays for itself when it starts.
++    if (modeset_) {
++      modeset_->SetLayout(layout);
++    }
++  }
++
+   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
+     return drm_device_connector_.get();
+   }
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index d1ce2d9..4869265 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -5,6 +5,8 @@
+ #ifndef UI_OZONE_PUBLIC_OZONE_PLATFORM_H_
+ #define UI_OZONE_PUBLIC_OZONE_PLATFORM_H_
+ 
++#include <stdint.h>
++
+ #include <memory>
+ #include <string>
+ #include <vector>
+@@ -17,6 +19,7 @@
+ #include "build/build_config.h"
+ #include "components/viz/common/resources/shared_image_format.h"
+ #include "ui/gfx/buffer_types.h"
++#include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/native_ui_types.h"
+ #include "ui/platform_window/platform_window.h"
+ #include "ui/platform_window/platform_window_delegate.h"
+@@ -55,6 +58,26 @@ class SystemInputInjector;
+ 
+ struct PlatformWindowInitProperties;
+ 
++// DOMICILE: one display, as the compositor wants the connector behind it
++// driven.
++//
++// Domicile's compositor holds the config that says which monitors are on and
++// which side of the desk each one is on; this process holds DRM master, so the
++// CRTCs are here. The answer crosses the engine's C ABI and arrives as a list
++// of these. See ui/ozone/platform/drm/domicile/drm_modeset.h, which is where
++// it is applied, and docs/architecture/A-DESKTOP-ON-A-TTY.md in the Domicile
++// repository.
++struct DomicileDisplayLayout {
++  // Which display, as `display::Display::id()` names it -- an id ozone derives
++  // from the EDID, so it survives a hotplug.
++  int64_t id;
++  // Whether to light this connector at all.
++  bool enabled;
++  // Where its mode goes on this process's own desktop, in physical pixels.
++  // Meaningless where `enabled` is false, and not read there.
++  gfx::Point origin;
++};
++
+ // Base class for Ozone platform implementations.
+ //
+ // Ozone platforms must override this class and implement the virtual
+@@ -315,6 +338,13 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+   // `screen` that was returned from CreateScreen.  They are separated to avoid
+   // observer recursion into display::Screen from inside CreateScreen.
+   virtual void InitScreen(PlatformScreen* screen) = 0;
++  // DOMICILE: what the compositor wants the connectors doing. An empty list
++  // means the hardware decides, which is what this did before a layout could
++  // be stated at all. Implemented by the DRM platform and nowhere else: every
++  // other platform is a window inside somebody else's session and has no CRTC
++  // to lay out. See `DomicileDisplayLayout` above.
++  virtual void SetDomicileDisplayLayout(
++      const std::vector<DomicileDisplayLayout>& layout) {}
+   virtual PlatformClipboard* GetPlatformClipboard();
+   virtual std::unique_ptr<InputMethod> CreateInputMethod(
+       ImeKeyEventDispatcher* ime_key_event_dispatcher,

@@ -346,6 +346,72 @@ fn a_disabled_display_has_to_be_connected_and_is_not_on_the_desktop() {
 }
 
 #[test]
+fn a_disabled_display_is_a_connector_to_leave_dark() {
+    // The other half of `enabled: false`, and the half the desktop cannot
+    // carry: `placed` drops a disabled display, so what is left of it is a
+    // name and an instruction. Without this the engine goes on lighting a
+    // panel the profile turned off -- it lights every connector that reports
+    // a mode -- and the lid comes down on a screen that is still on.
+    let layout = layout(
+        HOME_OFFICE_FULL,
+        &[
+            connected(LAPTOP, PANEL_MODE),
+            connected(LEFT, DESK_MODE),
+            connected(CENTER, DESK_MODE),
+            connected(RIGHT, DESK_MODE),
+        ],
+    );
+    assert_eq!(
+        layout
+            .scanout()
+            .iter()
+            .map(|display| (display.name.as_str(), display.enabled, display.origin))
+            .collect::<Vec<_>>(),
+        vec![
+            // The dark panel is named so it can be turned off -- and given a
+            // corner anyway, past the three that are lit. The engine's display
+            // list carries a dark connector as much as a lit one, and two
+            // displays claiming one rectangle is worse than one that is off.
+            (LAPTOP, false, (11520, 0)),
+            (LEFT, true, (0, 0)),
+            (CENTER, true, (3840, 0)),
+            (RIGHT, true, (7680, 0)),
+        ],
+        "the three lit ones are stepped across by the mode each of them scans \
+         out, and the dark one is put past the end of them"
+    );
+}
+
+#[test]
+fn the_connectors_are_stepped_across_in_the_order_the_profile_places_them() {
+    // NOT the order the entries are written in, and not the order the engine
+    // reported them: the order they are placed left to right. The engine's own
+    // arrangement is connector order, which is the card's business and has
+    // nothing to do with which monitor is on which side of the desk -- so a
+    // pointer leaving one screen arrives on whichever the card happened to
+    // enumerate next.
+    //
+    // The mode rather than the logical size, because this is the engine's
+    // desktop: what a connector scans out is what it occupies there, whatever
+    // the scale divides it into on ours.
+    let layout = layout(
+        CROSSED_DESK,
+        &[connected(LEFT, DESK_MODE), connected(CENTER, PANEL_MODE)],
+    );
+    assert_eq!(
+        layout
+            .scanout()
+            .iter()
+            .map(|display| (display.name.as_str(), display.origin))
+            .collect::<Vec<_>>(),
+        vec![(LEFT, (2880, 0)), (CENTER, (0, 0))],
+        "written first and placed second: the monitor the profile puts on the \
+         left takes the origin, and the one beside it starts where that one's \
+         mode ends"
+    );
+}
+
+#[test]
 fn a_layout_is_placed_about_its_own_top_left_corner() {
     // "Above and to the left of that one" is how a second monitor is
     // described, so negative coordinates are the natural way to write one —
@@ -726,6 +792,40 @@ const HOME_OFFICE_FULL: &str = r#"{
             ],
             "scale": 1.2,
             "transform": "rotate-270"
+          }
+        ]
+      }
+    ]
+  }
+}"#;
+
+/// Two monitors written in the opposite order to the one they are placed in:
+/// the entry for the monitor on the right comes first.
+///
+/// Which is ordinary rather than perverse -- a profile is written a monitor at
+/// a time as each one's name is read off a running desktop -- and it is what
+/// tells "the order they were written" apart from "the order they are placed".
+const CROSSED_DESK: &str = r#"{
+  "output": {
+    "profiles": [
+      {
+        "name": "crossed-desk",
+        "displays": [
+          {
+            "display": "drm-2",
+            "position": [
+              1920,
+              0
+            ],
+            "scale": 1.2
+          },
+          {
+            "display": "drm-3",
+            "position": [
+              0,
+              0
+            ],
+            "scale": 1.5
           }
         ]
       }

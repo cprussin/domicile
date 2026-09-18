@@ -26,7 +26,7 @@ use domicile_config::{ConfigError, Connected, Desktop, Layout, OutputConfig, Tra
 use domicile_protocol::DisplayInfo;
 use domicile_scene::{Bounds, Point};
 
-use crate::engine::Display;
+use crate::engine::{Connector, Display};
 
 /// What `wl_output` states for a screen whose physical size is not a number
 /// anybody has.
@@ -221,6 +221,10 @@ pub struct Screens {
     outputs: Vec<Advertised>,
     size: (i32, i32),
     follows_the_window: bool,
+    /// What the connectors behind these outputs have to be doing, where a
+    /// profile said. Empty for every other desktop -- see
+    /// [`Screens::scanout`].
+    scanout: Vec<Connector>,
 }
 
 impl Screens {
@@ -231,6 +235,7 @@ impl Screens {
     pub fn described(desktop: &Desktop) -> Screens {
         Screens {
             follows_the_window: false,
+            scanout: Vec::new(),
             outputs: desktop
                 .displays()
                 .map(|display| {
@@ -317,6 +322,7 @@ impl Screens {
             .expect("the engine reports at least one display");
         Screens {
             follows_the_window: false,
+            scanout: Vec::new(),
             outputs,
             size,
         }
@@ -352,6 +358,7 @@ impl Screens {
     pub fn following_the_window(logical: (i32, i32), scale: i32) -> Screens {
         Screens {
             follows_the_window: true,
+            scanout: Vec::new(),
             outputs: vec![Advertised {
                 logical,
                 mode: multiplied(logical, scale),
@@ -381,6 +388,20 @@ impl Screens {
     pub fn from_the_layout(layout: &Layout, displays: &[Display]) -> Screens {
         Screens {
             follows_the_window: false,
+            // By the engine's own id rather than the output's name. The
+            // name is this compositor's -- `drm-<id>`, which it made up out
+            // of the id to have something to call a `wl_output` -- and
+            // handing it back would be asking the engine to parse its way
+            // home through a format only this side knows.
+            scanout: layout
+                .scanout()
+                .iter()
+                .map(|display| Connector {
+                    id: id_of(&display.name, displays),
+                    enabled: display.enabled,
+                    origin: display.origin,
+                })
+                .collect(),
             outputs: layout
                 .placed()
                 .map(|placed| {
@@ -416,6 +437,21 @@ impl Screens {
     /// The outputs, in the order the config wrote them.
     pub fn outputs(&self) -> impl Iterator<Item = &Advertised> {
         self.outputs.iter()
+    }
+
+    /// What the connectors behind these outputs have to be doing: which of
+    /// them to light, and where each one's mode goes on the engine's own
+    /// desktop.
+    ///
+    /// EMPTY IS NOT "LIGHT NOTHING". It is this compositor having no opinion,
+    /// which is the case for every desktop but a profile's -- a described one
+    /// is arithmetic, a nested one is a window, and the engine's own reading
+    /// is already what the connectors are doing. The engine reads it as "the
+    /// hardware decides", and that is load-bearing rather than tidy: a
+    /// profile that turned a panel off stops matching the moment a monitor is
+    /// unplugged, and something has to say the panel comes back on.
+    pub fn scanout(&self) -> &[Connector] {
+        &self.scanout
     }
 
     /// The desktop a reloaded config makes, or `None` to leave this one be.
@@ -620,6 +656,19 @@ impl Screens {
 /// profile that names it goes on naming it.
 fn name_of(display: &Display) -> String {
     format!("drm-{}", display.id)
+}
+
+/// The engine's own id for the display this compositor calls `name`.
+///
+/// The inverse of [`name_of`], and looked up rather than parsed back out of
+/// the name: the format is this side's invention, so the list the names were
+/// built from is the authority on which id made which.
+fn id_of(name: &str, displays: &[Display]) -> i64 {
+    displays
+        .iter()
+        .find(|display| name_of(display) == name)
+        .expect("a layout only places displays the engine reported")
+        .id
 }
 
 /// A logical size in physical pixels, for the two desktops whose mode is that
@@ -1281,6 +1330,51 @@ mod tests {
         );
         assert_eq!(placed.size(), (1920, 3200));
         assert!(!placed.follows_the_window());
+    }
+
+    #[test]
+    fn a_profile_says_which_connectors_to_light_and_where() {
+        // The half of a profile the desktop above cannot carry. `outputs` is
+        // logical and turned and has the disabled displays already dropped;
+        // this is what a CRTC has to be set to for that desktop to exist at
+        // all, and it is the engine that owns the CRTCs.
+        let placed = Screens::nested((1280, 800))
+            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE))
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert_eq!(
+            placed.scanout(),
+            vec![
+                Connector {
+                    id: 2,
+                    enabled: true,
+                    origin: (0, 0),
+                },
+                Connector {
+                    id: 1,
+                    enabled: true,
+                    // Where the monitor's own mode ends. The profile stacks
+                    // these two vertically and the connectors are stepped
+                    // across: what is laid out on a desktop and what is
+                    // scanned out of a card are two arrangements.
+                    origin: (1920, 0),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_desktop_no_profile_placed_leaves_the_connectors_to_the_engine() {
+        // An empty scanout is not "light nothing": it is the compositor
+        // saying it has no opinion, which is what every desktop but a
+        // profile's has. It matters because it has to UNDO one -- a profile
+        // that turned a panel off stops matching the moment a monitor is
+        // unplugged, and the panel has to come back on.
+        let unplanned = Screens::nested((1280, 800))
+            .replugged_into(&plugged_in(), &output(HOME_OFFICE))
+            .expect("a profile that does not match cannot fail to apply")
+            .expect("an undescribed desktop is still the engine's to define");
+        assert!(unplanned.scanout().is_empty());
     }
 
     #[test]

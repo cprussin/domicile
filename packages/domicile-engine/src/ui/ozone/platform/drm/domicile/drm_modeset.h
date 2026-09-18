@@ -14,6 +14,7 @@
 #include "ui/display/types/display_configuration_params.h"
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/display/types/native_display_observer.h"
+#include "ui/ozone/public/ozone_platform.h"
 
 namespace display {
 class DisplaySnapshot;
@@ -36,9 +37,29 @@ class DrmScreen;
 // has to land somewhere, while a modeset must not invent a mode for a connector
 // that did not report one. Asking a CRTC for a mode the hardware never
 // advertised is how a screen goes black rather than wrong.
+//
+// `layout` IS THE COMPOSITOR'S ANSWER ABOUT WHAT THE GLASS DOES, and it is the
+// whole of why this takes two arguments. The config that says which monitors
+// are on and which side of the desk each is on lives in the compositor; the
+// CRTCs live here, because this is the process holding DRM master. So the
+// answer crosses the engine's C ABI and arrives as this.
+//
+// EMPTY MEANS THE HARDWARE DECIDES, which is what every desktop but a matched
+// profile's says and what this did before a layout could be stated at all:
+// every readable connector, at the origin the card stacked it at.
+//
+// A NON-EMPTY LAYOUT IS THE WHOLE TRUTH. A connector it does not name is left
+// dark rather than lit where the card put it, because an origin nothing chose
+// can land on top of one that was chosen -- and two controllers claiming one
+// rectangle is the exact-rect mismatch `ScreenManager::FindWindowAt` answers
+// by binding no window at all. That case is a monitor plugged in between the
+// reading the compositor answered and this one, and it lights on the next
+// round trip: this modeset makes the kernel emit a CHANGE, the display list
+// crosses again, and the answer that comes back names it.
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& snapshots);
+                              VectorExperimental>>& snapshots,
+    const std::vector<DomicileDisplayLayout>& layout);
 
 // What a reading of the displays says, in one line.
 //
@@ -115,6 +136,16 @@ class DrmModeset : public display::NativeDisplayObserver {
   // when that answer arrives, and again on every hotplug.
   void Start();
 
+  // What the compositor wants the connectors doing. See
+  // `ModesetParamsFromSnapshots`, which is where it is applied.
+  //
+  // Re-reads the displays rather than reusing the last reading, for the reason
+  // `OnConfigurationChanged` does: this holds no snapshots between callbacks --
+  // they are owned by the host manager and `OnDisplaySnapshotsInvalidated` is
+  // how it says so -- and the two halves of an answer must come from one
+  // reading whichever of them moved.
+  void SetLayout(std::vector<DomicileDisplayLayout> layout);
+
   // display::NativeDisplayObserver:
   void OnConfigurationChanged() override;
   void OnDisplaySnapshotsInvalidated() override;
@@ -131,6 +162,9 @@ class DrmModeset : public display::NativeDisplayObserver {
   // nothing is not mistaken for one that landed. See
   // `ModesetWouldChangeAnything`.
   std::vector<display::DisplayConfigurationParams> confirmed_;
+  // What the compositor last said the connectors should be doing, empty until
+  // it has said anything. See `ModesetParamsFromSnapshots`.
+  std::vector<DomicileDisplayLayout> layout_;
   // Whether control is still inside `delegate_->Configure`, which is how a
   // yes that reached hardware is told from one that did not: a real modeset is
   // committed on the DRM thread and answered on a later task, so the only

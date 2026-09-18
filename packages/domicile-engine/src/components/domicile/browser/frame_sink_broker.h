@@ -53,6 +53,14 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       BrokeredFrameSink::SharedImageInterfaceGetter;
   using EmbedCallback =
       base::OnceCallback<void(const std::optional<viz::FrameSinkId>&)>;
+  // How the producer's answer about the connectors reaches the platform that
+  // owns them. Injected for the reason the allocator and the shared image
+  // interface above are: the only route to a CRTC is //ui/ozone, and this
+  // target deliberately depends on neither that nor //content. An empty
+  // callback is every embedder that has no CRTC -- which is every one but a
+  // tty -- and the answer is dropped.
+  using DisplayLayoutSetter =
+      base::RepeatingCallback<void(std::vector<mojom::DisplayLayoutPtr>)>;
 
   // `get_shared_image_interface` is how an imported dmabuf reaches a GPU, and
   // is injected for the same reason the allocator is: the only route to one is
@@ -62,7 +70,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       viz::HostFrameSinkManager* host_frame_sink_manager,
       FrameSinkIdAllocator allocate_frame_sink_id,
       SharedImageInterfaceGetter get_shared_image_interface =
-          SharedImageInterfaceGetter());
+          SharedImageInterfaceGetter(),
+      DisplayLayoutSetter set_display_layout = DisplayLayoutSetter());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -126,6 +135,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
                     const gfx::Rect& damage) override;
   void DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
                      uint64_t buffer_id) override;
+  void ConfigureDisplays(
+      std::vector<mojom::DisplayLayoutPtr> layout) override;
   void ObserveDisplays(
       mojo::PendingRemote<mojom::DisplayListObserver> observer) override;
 
@@ -165,6 +176,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const raw_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   const FrameSinkIdAllocator allocate_frame_sink_id_;
   const SharedImageInterfaceGetter get_shared_image_interface_;
+  // Empty on every embedder with no CRTC of its own. See DisplayLayoutSetter.
+  const DisplayLayoutSetter set_display_layout_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
 

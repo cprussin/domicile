@@ -620,16 +620,27 @@ costs nothing.
   own scale is fractional and is not rounded — it is what the logical size is
   divided out of, and `xdg_output` carries it — so what rounds is only the
   integer a client is handed.
-- **A monitor profile is advertised but not scanned out, and states no mode.**
-  `output.profiles` places the real monitors — `enabled`, `position`,
-  fractional `scale`, `transform` — and is re-matched on every hotplug and
-  every config reload. There is no mode field: the mode arrives with the
-  monitor, so a profile's positions are sums of sizes it does not control.
-  What it reaches is the desktop the compositor *advertises*: `wl_output`,
-  `xdg_output`, and the `DisplayInfo` the chrome lays its `<Screen>` regions
-  out from. The scanout is the engine's and is untouched, so a rotated monitor
-  is laid out rotated and still scans out the way it did.
-  `A-DESKTOP-ON-A-TTY.md`, *Outputs*, carries what closing that needs.
+- **A monitor profile turns a connector on and off and places it, and states
+  no mode.** `output.profiles` places the real monitors — `enabled`,
+  `position`, fractional `scale`, `transform` — and is re-matched on every
+  hotplug and every config reload. `Layout::scanout` crosses the engine's ABI
+  as the other half of it: which connectors to light, and where each one's
+  mode goes on the engine's own desktop, stepped across in the order the
+  profile places them rather than the order the card enumerated them. There is
+  still no mode field — the mode arrives with the monitor, so a profile's
+  positions are sums of sizes it does not control.
+- **A rotated monitor is laid out rotated and still scans out the way it did.**
+  The transform reaches `wl_output`, `xdg_output` and the `DisplayInfo` the
+  chrome lays its `<Screen>` regions out from, and stops there:
+  `DisplayConfigurationParams` is `{id, origin, mode, enable_vrr}` and has no
+  field for a rotation. On ChromeOS that is `DisplayConfigurator` and
+  `//ui/display/manager`, the 478 lines this fork deliberately does not port.
+- **The chrome is on one display of a desk with several.**
+  `DrmWindowHost::SetFullscreen` puts one window on one display, and
+  `ScreenManager::FindWindowAt` binds a controller to a window only on an
+  exact rectangle match — so one window cannot span two CRTCs and the answer
+  is one browser window per CRTC. `A-DESKTOP-ON-A-TTY.md`, *Outputs*, carries
+  what that needs.
 - **A monitor's name is the three-letter PNP id, not the vendor.** `DEL DELL
   U3219Q 2ZLS413` rather than `Dell Inc. DELL U3219Q 2ZLS413`, which is one
   word off what sway prints for the same panel: an EDID holds the PNP id, and

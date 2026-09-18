@@ -19,7 +19,7 @@ mod desktop;
 mod profile;
 
 pub use desktop::{Desktop, Display};
-pub use profile::{Connected, DisplayPlacement, Layout, Placed, Profile, Transform};
+pub use profile::{Connected, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
 
 use std::path::{Path, PathBuf};
 

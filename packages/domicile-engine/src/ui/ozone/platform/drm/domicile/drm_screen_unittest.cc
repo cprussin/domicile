@@ -138,7 +138,7 @@ TEST(DrmScreenTest, ADisplayIsNamedByItsPanel) {
                       .Build();
 
   EXPECT_EQ(DisplayNameFromSnapshot(*snapshot), "DEL DELL U3219Q 2ZLS413");
-  EXPECT_EQ(DisplayFromSnapshot(*snapshot).label(), "DEL DELL U3219Q 2ZLS413");
+  EXPECT_EQ(DisplayFromSnapshot(*snapshot, snapshot->origin()).label(), "DEL DELL U3219Q 2ZLS413");
 }
 
 // The case the whole change exists for: three of the same monitor on one desk.
@@ -186,7 +186,7 @@ TEST(DrmScreenTest, ADisplayThatNamesItselfNothingIsLeftUnnamed) {
   auto snapshot = SnapshotBuilder().Name("").Build();
 
   EXPECT_EQ(DisplayNameFromSnapshot(*snapshot), "");
-  EXPECT_TRUE(DisplayFromSnapshot(*snapshot).label().empty());
+  EXPECT_TRUE(DisplayFromSnapshot(*snapshot, snapshot->origin()).label().empty());
 }
 
 TEST(DrmScreenTest, ADisplayTakesItsBoundsFromTheSnapshotsNativeMode) {
@@ -196,7 +196,7 @@ TEST(DrmScreenTest, ADisplayTakesItsBoundsFromTheSnapshotsNativeMode) {
                       .NativeMode(gfx::Size(2560, 1440), 144.f)
                       .Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot);
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
 
   EXPECT_EQ(display.id(), 7);
   EXPECT_EQ(display.bounds(), gfx::Rect(0, 0, 2560, 1440));
@@ -208,7 +208,7 @@ TEST(DrmScreenTest, ADisplayIsPlacedAtTheSnapshotsOrigin) {
                       .NativeMode(gfx::Size(1280, 1024), 60.f)
                       .Build();
 
-  EXPECT_EQ(DisplayFromSnapshot(*snapshot).bounds(),
+  EXPECT_EQ(DisplayFromSnapshot(*snapshot, snapshot->origin()).bounds(),
             gfx::Rect(1920, 0, 1280, 1024));
 }
 
@@ -218,7 +218,7 @@ TEST(DrmScreenTest, ADisplayIsPlacedAtTheSnapshotsOrigin) {
 TEST(DrmScreenTest, APhysicalSizeInMillimetersSurvivesTheConversion) {
   auto snapshot = SnapshotBuilder().PhysicalSizeMm(gfx::Size(597, 336)).Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot);
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
 
   EXPECT_EQ(display.native_origin(), gfx::Point());
   EXPECT_EQ(DisplayPhysicalSizeMm(*snapshot), gfx::Size(597, 336));
@@ -236,7 +236,7 @@ TEST(DrmScreenTest, APanelsMillimetersCrossAsTheDpiTheyMakeWithTheMode) {
                       .NativeMode(gfx::Size(1920, 1080), 60.f)
                       .Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot);
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
 
   // 1920 pixels across 597mm is 81.7 per inch, and 1080 across 336mm is 81.6.
   // Per axis rather than one number for both: a panel is not obliged to have
@@ -253,7 +253,7 @@ TEST(DrmScreenTest, ADisplayTakesItsRefreshRateFromTheNativeMode) {
   auto snapshot =
       SnapshotBuilder().NativeMode(gfx::Size(2560, 1440), 143.998f).Build();
 
-  EXPECT_FLOAT_EQ(DisplayFromSnapshot(*snapshot).display_frequency(), 143.998f);
+  EXPECT_FLOAT_EQ(DisplayFromSnapshot(*snapshot, snapshot->origin()).display_frequency(), 143.998f);
 }
 
 // A projector and a virtual output report no physical size at all, and that is
@@ -263,7 +263,7 @@ TEST(DrmScreenTest, ADisplayTakesItsRefreshRateFromTheNativeMode) {
 TEST(DrmScreenTest, AConnectorWithNoPhysicalSizeIsGivenNoDensity) {
   auto snapshot = SnapshotBuilder().PhysicalSizeMm(gfx::Size()).Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot);
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
 
   EXPECT_EQ(display.GetPixelsPerInchX(), 0.f);
   EXPECT_EQ(display.GetPixelsPerInchY(), 0.f);
@@ -279,7 +279,7 @@ TEST(DrmScreenTest, AConnectorWithNoModeHasNeitherARateNorADensity) {
                       .NoNativeMode()
                       .Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot);
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
 
   EXPECT_EQ(display.display_frequency(), 0.f);
   EXPECT_EQ(display.GetPixelsPerInchX(), 0.f);
@@ -288,7 +288,7 @@ TEST(DrmScreenTest, AConnectorWithNoModeHasNeitherARateNorADensity) {
 TEST(DrmScreenTest, ASnapshotWithNoNativeModeStillProducesAUsableDisplay) {
   auto snapshot = SnapshotBuilder().Id(3).NoNativeMode().Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot);
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
 
   EXPECT_EQ(display.id(), 3);
   EXPECT_FALSE(display.bounds().IsEmpty())
@@ -309,7 +309,7 @@ TEST(DrmScreenTest, NoSnapshotsAtAllStillYieldsOnePrimaryDisplay) {
   // nothing in the pull-request path compiled this file until the job that
   // found it.
   const std::vector<display::Display> displays = DisplaysFromSnapshots(
-      std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>());
+      std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>(), {});
 
   ASSERT_EQ(displays.size(), 1u)
       << "a tty with nothing plugged in still has to answer GetPrimaryDisplay";
@@ -340,6 +340,18 @@ class RecordingObserver : public display::DisplayObserver {
   std::vector<int64_t> added_;
 };
 
+// Where `id` ended up, for the tests that care about a display's corner and
+// not about where it sits in the list.
+gfx::Rect BoundsOf(const DrmScreen& screen, int64_t id) {
+  for (const display::Display& display : screen.GetAllDisplays()) {
+    if (display.id() == id) {
+      return display.bounds();
+    }
+  }
+  ADD_FAILURE() << "no display " << id << " in the list";
+  return gfx::Rect();
+}
+
 TEST(DrmScreenTest, TheFirstSnapshotIsThePrimaryDisplay) {
   DrmWindowHostManager window_manager;
   DrmScreen screen(&window_manager);
@@ -348,10 +360,98 @@ TEST(DrmScreenTest, TheFirstSnapshotIsThePrimaryDisplay) {
   snapshots.push_back(
       SnapshotBuilder().Id(12).Origin(gfx::Point(1920, 0)).Build());
 
-  screen.OnDisplaysChanged(Pointers(snapshots));
+  screen.OnDisplaysChanged(Pointers(snapshots), {});
 
   EXPECT_EQ(screen.GetAllDisplays().size(), 2u);
   EXPECT_EQ(screen.GetPrimaryDisplay().id(), 11);
+}
+
+// THE DIFFERENCE BETWEEN A DESKTOP AND A BLACK SCREEN. A profile that turns
+// the laptop panel off is the ordinary case on a full desk -- it is how
+// shutting the lid still matches the desk's profile -- and the panel is
+// usually the connector the card enumerated first. A browser whose primary
+// display is dark comes up drawing correctly onto a screen nobody can see,
+// with every log line saying the modeset succeeded.
+TEST(DrmScreenTest, ThePrimaryIsTheFirstDisplayTheLayoutLights) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Build());
+  snapshots.push_back(SnapshotBuilder().Id(12).Build());
+
+  screen.OnDisplaysChanged(
+      Pointers(snapshots),
+      {{.id = 11, .enabled = false, .origin = gfx::Point(1920, 0)},
+       {.id = 12, .enabled = true, .origin = gfx::Point(0, 0)}});
+
+  EXPECT_EQ(screen.GetPrimaryDisplay().id(), 12);
+}
+
+// THE CRASH THE TEST ABOVE FOUND, pinned so it cannot come back.
+// `DisplayList::AddDisplay` reads "the first display must be primary" and
+// DCHECKs it, and this build is `dcheck_always_on` -- so a list filled in
+// snapshot order with the primary somewhere in the middle took the browser
+// down on the FIRST reading. Not on a hotplug, where the list is no longer
+// empty, which is the sort of difference a desk does not show you.
+//
+// It is also what the display event's mojom says arrives: the whole list,
+// primary first. That was true by accident until a layout could move the
+// primary off snapshot zero.
+TEST(DrmScreenTest, TheListArrivesPrimaryFirst) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Build());
+  snapshots.push_back(SnapshotBuilder().Id(12).Build());
+
+  screen.OnDisplaysChanged(
+      Pointers(snapshots),
+      {{.id = 11, .enabled = false, .origin = gfx::Point(1920, 0)},
+       {.id = 12, .enabled = true, .origin = gfx::Point(0, 0)}});
+
+  ASSERT_EQ(screen.GetAllDisplays().size(), 2u);
+  EXPECT_EQ(screen.GetAllDisplays().front().id(), 12);
+}
+
+TEST(DrmScreenTest, WithNoLayoutThePrimaryIsStillTheFirstDisplay) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Build());
+  snapshots.push_back(SnapshotBuilder().Id(12).Build());
+
+  EXPECT_EQ(PrimaryIndexForLayout(Pointers(snapshots), {}), 0u);
+}
+
+// A dark connector is still a connector the browser has to place somewhere,
+// and leaving it where the CARD stacked it is how two displays end up claiming
+// one rectangle. The first of those wins every lookup GetDisplayMatching
+// makes, including the one that sizes a fullscreen window.
+TEST(DrmScreenTest, ADisplayTakesTheCornerTheLayoutGivesIt) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder()
+                          .Id(11)
+                          .Origin(gfx::Point(0, 0))
+                          .NativeMode(gfx::Size(2880, 1920), 120.f)
+                          .Build());
+  snapshots.push_back(SnapshotBuilder()
+                          .Id(12)
+                          .Origin(gfx::Point(0, 0))
+                          .NativeMode(gfx::Size(3840, 2160), 60.f)
+                          .Build());
+
+  screen.OnDisplaysChanged(
+      Pointers(snapshots),
+      {{.id = 11, .enabled = false, .origin = gfx::Point(3840, 0)},
+       {.id = 12, .enabled = true, .origin = gfx::Point(0, 0)}});
+
+  // By id rather than by position: the list arrives primary first, which is
+  // the lit one here, so an index would be asserting the order rather than
+  // the corners. `TheListArrivesPrimaryFirst` is what asserts the order.
+  ASSERT_EQ(screen.GetAllDisplays().size(), 2u);
+  EXPECT_EQ(BoundsOf(screen, 11), gfx::Rect(3840, 0, 2880, 1920))
+      << "the dark panel is placed out of the lit one's way";
+  EXPECT_EQ(BoundsOf(screen, 12), gfx::Rect(0, 0, 3840, 2160));
 }
 
 // What OzonePlatformDrm::InitScreen does before the modeset driver has run,
@@ -360,7 +460,7 @@ TEST(DrmScreenTest, AScreenToldOfNoDisplaysStillAnswersWithAPrimary) {
   DrmWindowHostManager window_manager;
   DrmScreen screen(&window_manager);
 
-  screen.OnDisplaysChanged({});
+  screen.OnDisplaysChanged({}, {});
 
   EXPECT_FALSE(screen.GetPrimaryDisplay().bounds().IsEmpty());
 }
@@ -372,11 +472,11 @@ TEST(DrmScreenTest, AHotplugReplacesTheListRatherThanAppendingToIt) {
   DrmScreen screen(&window_manager);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> unplugged;
   unplugged.push_back(SnapshotBuilder().Id(11).Build());
-  screen.OnDisplaysChanged(Pointers(unplugged));
+  screen.OnDisplaysChanged(Pointers(unplugged), {});
   std::vector<std::unique_ptr<display::DisplaySnapshot>> plugged;
   plugged.push_back(SnapshotBuilder().Id(12).Build());
 
-  screen.OnDisplaysChanged(Pointers(plugged));
+  screen.OnDisplaysChanged(Pointers(plugged), {});
 
   ASSERT_EQ(screen.GetAllDisplays().size(), 1u);
   EXPECT_EQ(screen.GetAllDisplays().front().id(), 12);
@@ -392,7 +492,7 @@ TEST(DrmScreenTest, AHotplugReachesADisplayObserver) {
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
 
-  screen.OnDisplaysChanged(Pointers(snapshots));
+  screen.OnDisplaysChanged(Pointers(snapshots), {});
 
   EXPECT_EQ(observer.added(), std::vector<int64_t>{11});
   screen.RemoveObserver(&observer);
@@ -409,7 +509,7 @@ TEST(DrmScreenTest, APointBelongsToTheDisplayItFallsOn) {
                           .Origin(gfx::Point(1920, 0))
                           .NativeMode(gfx::Size(1280, 1024), 60.f)
                           .Build());
-  screen.OnDisplaysChanged(Pointers(snapshots));
+  screen.OnDisplaysChanged(Pointers(snapshots), {});
 
   EXPECT_EQ(screen.GetDisplayNearestPoint(gfx::Point(2000, 10)).id(), 12);
 }
@@ -425,7 +525,7 @@ TEST(DrmScreenTest, ARectBelongsToTheDisplayItOverlapsMost) {
                           .Origin(gfx::Point(1920, 0))
                           .NativeMode(gfx::Size(1280, 1024), 60.f)
                           .Build());
-  screen.OnDisplaysChanged(Pointers(snapshots));
+  screen.OnDisplaysChanged(Pointers(snapshots), {});
 
   EXPECT_EQ(screen.GetDisplayMatching(gfx::Rect(1820, 0, 400, 200)).id(), 12);
 }
@@ -438,7 +538,7 @@ TEST(DrmScreenTest, AWidgetWithNoWindowGetsThePrimaryRatherThanACrash) {
   DrmScreen screen(&window_manager);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
-  screen.OnDisplaysChanged(Pointers(snapshots));
+  screen.OnDisplaysChanged(Pointers(snapshots), {});
 
   EXPECT_EQ(screen.GetDisplayForAcceleratedWidget(
                 static_cast<gfx::AcceleratedWidget>(7))
