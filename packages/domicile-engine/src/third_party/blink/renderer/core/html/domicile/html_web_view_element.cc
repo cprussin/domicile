@@ -35,6 +35,12 @@ constexpr char kGuestFocusEvent[] = "domicile-guest-focus";
 // and not this.
 constexpr char kHistoryChangeEvent[] = "domicile-history-change";
 
+// And what it says when a page starts or stops arriving. Carries nothing for
+// the same reason: `loading` is readable on the element at any moment, which
+// is what a chrome that mounted in the middle of a load needs and what an
+// event's detail cannot be.
+constexpr char kLoadingChangeEvent[] = "domicile-loading-change";
+
 HTMLWebViewElement::HTMLWebViewElement(Document& document)
     : HTMLFrameElementBase(html_names::kWebviewTag, document),
       // Null in a document with no window -- a template's, say -- and that is
@@ -245,6 +251,15 @@ void HTMLWebViewElement::HistoryChanged(bool can_go_back, bool can_go_forward) {
   // handler on the window it drew and hears everything that window's parts say
   // through it. See BrowserWindow.tsx in the Domicile repository.
   DispatchEvent(*Event::CreateBubble(AtomicString(kHistoryChangeEvent)));
+}
+
+// The same shape as the history answer above, and stored before it is
+// announced for the same reason: a handler that ran first would read the value
+// it was called about the change to.
+void HTMLWebViewElement::LoadingChanged(bool is_loading) {
+  loading_ = is_loading;
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kLoadingChangeEvent)));
 }
 
 }  // namespace blink

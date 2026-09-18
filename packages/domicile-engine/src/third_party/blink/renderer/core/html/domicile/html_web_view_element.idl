@@ -46,4 +46,18 @@
   // attribute is the author's to write.
   readonly attribute boolean canGoBack;
   readonly attribute boolean canGoForward;
+
+  // Whether a page is still arriving, so an address bar can show that it is.
+  //
+  // A READONLY PROPERTY for the reason the pair above are, and more plainly: a
+  // load is a span, so a chrome that mounts in the middle of one is ordinary
+  // rather than a race, and a state carried only by
+  // `domicile-loading-change` would leave that window looking settled until
+  // the next navigation.
+  //
+  // It is the browser's `should_show_loading_ui` and `IsLoading()` already
+  // resolved into one answer -- "a browser would be showing a spinner" -- so
+  // a same-document navigation does not set it. See
+  // components/domicile/browser/web_view_guest.cc.
+  readonly attribute boolean loading;
 };

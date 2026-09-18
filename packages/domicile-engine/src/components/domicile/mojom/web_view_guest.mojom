@@ -87,6 +87,25 @@ interface WebViewGuestClient {
   // first message is the first commit that gives the guest an entry to go back
   // to -- see components/domicile/browser/web_view_guest.cc.
   HistoryChanged(bool can_go_back, bool can_go_forward);
+
+  // Whether the guest is fetching a page, so an address bar can say so.
+  //
+  // THE SAME ANSWER CHROME'S OWN THROBBER IS DRIVEN BY.
+  // WebContentsDelegate::LoadingStateChanged carries `should_show_loading_ui`,
+  // which is false for a same-document navigation -- a fragment, a pushState
+  // -- because neither is a load a browser's UI spins for. So this is not
+  // "the WebContents is busy"; it is "a browser would be showing a spinner",
+  // which is exactly the question an address bar is asking.
+  //
+  // SENT ONLY WHEN IT CHANGES, like HistoryChanged above and for the same
+  // reason: the delegate call it comes from also fires for same-document
+  // navigations, which resolve to the answer already held, and an unfiltered
+  // forward would put a DOM event in the shell's page for each of them.
+  //
+  // A FRESH GUEST SENDS NOTHING. It is not loading, and neither is an element
+  // that has not heard from it -- so a guest's first message is its first
+  // load beginning.
+  LoadingChanged(bool is_loading);
 };
 
 // One guest, for as long as the element that asked for it lives.

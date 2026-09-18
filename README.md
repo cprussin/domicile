@@ -91,9 +91,10 @@ back.addEventListener("click", () => {
 });
 ```
 
-`canGoBack` / `canGoForward` say whether a control would do anything, and the
-element announces a click in the page and a change to either — nothing else
-crosses out of a guest. That is the whole of a browser:
+`canGoBack` / `canGoForward` say whether a control would do anything and
+`loading` says whether a page is still arriving, and the element announces a
+click in the page and a change to any of them — nothing else crosses out of a
+guest. That is the whole of a browser:
 [manganese's](packages/shell-manganese/src/window-management/BrowserWindow.tsx)
 is this plus the chrome it draws around it.
 

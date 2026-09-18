@@ -6,6 +6,7 @@ import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwis
 import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
+import { SpinnerGapIcon } from "@phosphor-icons/react/dist/ssr/SpinnerGap";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -14,6 +15,7 @@ import { css, cx } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import type { Rect } from "./rect";
 import { useHistoryAvailability } from "./useHistoryAvailability";
+import { useLoading } from "./useLoading";
 import { useReclaimFocus } from "./useReclaimFocus";
 import {
   clickThroughStyles,
@@ -64,9 +66,9 @@ type Props = {
    * Every navigation the shell can see, which is not every navigation: the
    * page inside is a guest in the browser process, and where a link or a
    * redirect takes it is not reported back — the engine pushes the guest's
-   * history *availability* onto the element and nothing else about it. So a
-   * tab named from this says where the user asked to go rather than where they
-   * ended up.
+   * history *availability* and whether it is *loading* onto the element, and
+   * nothing that names an address. So a tab named from this says where the
+   * user asked to go rather than where they ended up.
    */
   onNavigate: (url: string) => void;
   /**
@@ -127,6 +129,7 @@ export const BrowserWindow = ({
   const frame = useRef<HTMLElement>(null);
   const [address, setAddress] = useState(src);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
+  const loading = useLoading(view);
   // Whether the focus arriving in the page is the focus this window is putting
   // there, which is the one thing about it the announcements cannot say: the
   // element says a guest took focus whichever route the focus came by, and
@@ -341,7 +344,20 @@ export const BrowserWindow = ({
             onChange={(event) => {
               setAddress(event.target.value);
             }}
-            prefixIcon={<GlobeSimpleIcon size={14} />}
+            // What the window is doing rather than what it is showing, which
+            // is the one thing an address bar can say about a page that has
+            // not arrived: where the guest actually went is the browser
+            // process's and does not reach this document, so a spinner is the
+            // whole of what there is to report — see ROADMAP.md.
+            prefixIcon={
+              loading ? (
+                <span aria-label="Loading" className={spinnerStyles} role="img">
+                  <SpinnerGapIcon size={14} />
+                </span>
+              ) : (
+                <GlobeSimpleIcon size={14} />
+              )
+            }
             size="sm"
             spellCheck={false}
             value={address}
@@ -400,6 +416,18 @@ const addressBarStyles = hstack({
   gap: 1.5,
   paddingBlock: 1.5,
   paddingInline: 2,
+});
+
+// The turn that says a page is on its way, wrapped around the icon rather than
+// put on it: a `transform` does nothing to an inline box, which is what an
+// `<svg>` in a line of text is, and the icon is a third party's element either
+// way. No colour, so the spinner is drawn in whatever the globe it replaces was
+// — the control's own, inherited through the field's prefix stack. `spin` is
+// the preset's keyframe; one declared here would be a keyframe only this
+// shell's bundle had a rule for.
+const spinnerStyles = css({
+  animation: "spin {durations.spin} {easings.linear} infinite",
+  display: "inline-flex",
 });
 
 // The field grows into whatever the controls leave; the Input itself fills

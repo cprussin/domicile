@@ -31,6 +31,10 @@
 #     failure even though the value is right: that reading is the one that says
 #     a late-mounting chrome sees the state, and it says it only while the
 #     element has never had a listener
+#   in the control, the slow navigation must still be PENDING where it is
+#     read, even though the positive run wants it canceled a step later: it is
+#     what makes the positive run's pending reading a load in flight rather
+#     than a leftover from a page that had already landed
 #
 # The block is run out of the real script rather than copied, so a rewrite that
 # moves it fails here loudly instead of leaving this passing against a version
@@ -86,6 +90,15 @@ baseline() { # $1 NEGATIVE
   START_CAN="false/false"
   TWO_CAN="true/false"
   TWO_EVENTS=0
+  # Shared too, and for the same reason: the guest is on a page that arrived a
+  # whole step ago, and then on a navigation the fixture is still holding open.
+  # Neither run has driven anything by either point.
+  SETTLED_LOADING="false"
+  PENDING_LOADING="true"
+  # Any count but zero. The verdict asks only whether the element ever said its
+  # loading state changed — how many times is the schedule's business, and a
+  # number pinned here would be a second copy of it.
+  PENDING_LOADING_EVENTS=2
   if [ "$1" = "1" ]; then
     FIRST="/one"
     SECOND="/two"
@@ -98,6 +111,9 @@ baseline() { # $1 NEGATIVE
     BACK_CAN="true/false"
     FORWARD_CAN="true/false"
     FORWARD_EVENTS=0
+    # Not read in the control's verdict — nothing stopped the load, so the
+    # slow page lands on its own and this says only that it did.
+    STOPPED_LOADING="false"
   else
     FIRST="/one"
     SECOND="/two"
@@ -111,6 +127,9 @@ baseline() { # $1 NEGATIVE
     BACK_CAN="false/true"
     FORWARD_CAN="true/false"
     FORWARD_EVENTS=2
+    # stop() canceled the load, which the browser reports like any other one
+    # finishing.
+    STOPPED_LOADING="false"
   fi
 }
 
@@ -264,6 +283,35 @@ expect "no event at all names the chrome that would never re-read" "yes" \
   "$(blames "re-read" 0 FORWARD_EVENTS=0)"
 
 echo
+echo "whether a page is still arriving, which is the other new claim"
+# THE POSITIVE HERE TOO, and it is what an element answering `false` to
+# everything fails: with the fixture holding a navigation open, the element has
+# to say a page is on its way.
+expect "never saying a page is on its way is a failure" "fail" \
+  "$(verdict 0 PENDING_LOADING=false)"
+expect "never saying a page is on its way names the positive it rests on" \
+  "yes" "$(blames "THIS IS THE POSITIVE" 0 PENDING_LOADING=false)"
+# And the other end, which an element answering `true` to everything fails: a
+# page that arrived a step ago is not arriving.
+expect "a settled page still called loading is a failure" "fail" \
+  "$(verdict 0 SETTLED_LOADING=true)"
+expect "a settled page still called loading names the load finishing" "yes" \
+  "$(blames "answering yes to everything" 0 SETTLED_LOADING=true)"
+# The value can be right and the run still fail: a chrome renders from the
+# property and re-renders on the event, and an element with no event is an
+# address bar frozen at whatever its first render caught.
+expect "no loading event at all is a failure" "fail" \
+  "$(verdict 0 PENDING_LOADING_EVENTS=0)"
+expect "no loading event at all names the chrome that would never re-read" \
+  "yes" "$(blames "re-read" 0 PENDING_LOADING_EVENTS=0)"
+# stop() is read as the slow page never appearing; a spinner still turning
+# after it is the same cancellation not reaching the element.
+expect "a canceled load still called loading is a failure" "fail" \
+  "$(verdict 0 STOPPED_LOADING=true)"
+expect "a canceled load still called loading names the spinner" "yes" \
+  "$(blames "spinner" 0 STOPPED_LOADING=true)"
+
+echo
 echo "and the control, where the same readings invert"
 expect "back never becoming available is a failure in the control too" "fail" \
   "$(verdict 1 TWO_CAN=false/false)"
@@ -278,6 +326,15 @@ expect "an event with nothing driving it is a failure" "fail" \
   "$(verdict 1 FORWARD_EVENTS=1)"
 expect "an event with nothing driving it says the positive count is noise" \
   "yes" "$(blames "noise" 1 FORWARD_EVENTS=1)"
+# NOT INVERTED, and that is the point of reading it here: the positive run
+# cancels this load a step later, so the control is where "it was still in
+# flight when we looked" is established with nothing having touched it.
+expect "a slow navigation already landed is the control's failure" "fail" \
+  "$(verdict 1 PENDING_LOADING=false)"
+expect "a slow navigation already landed says the positive read a leftover" \
+  "yes" "$(blames "not about a load in flight" 1 PENDING_LOADING=false)"
+expect "a settled page still called loading is a failure in the control too" \
+  "fail" "$(verdict 1 SETTLED_LOADING=true)"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

@@ -37,12 +37,29 @@
 //   GUARD history-state …      what the element says back and forward can do,
 //                              at one point in the schedule, and how many
 //                              changes it had announced by then
+//   GUARD loading-state …      whether the element says a page is still
+//                              arriving, at one point in the schedule, and how
+//                              many changes it had announced by then
 //   GUARD done                 the schedule finished, so the readings below
 //                              are complete rather than caught mid-run
 //
 // The pages themselves say `GUARD guest-shown path=…`, from the fixture
-// server; the sequence of those lines, and the four `history-state` readings
-// beside it, are the whole verdict.
+// server; the sequence of those lines, and the four `history-state` and three
+// `loading-state` readings beside it, are the whole verdict.
+//
+// WHY `loading` IS READ HERE AND NOT IN A GUARD OF ITS OWN. Its claim needs a
+// page that is settled and a page that is still on its way, in one run, on one
+// element — and this guard already builds both: `/two` has been sitting there
+// for a whole STEP, and `/slow` is a navigation the fixture holds open for
+// longer than the step that follows it. A second guard would be a second copy
+// of that fixture and that schedule for one property.
+//
+// AND WHY THE CONTROL SAYS LESS ABOUT IT than about the four calls. `loading`
+// separates inside a single run: an element answering `true` to everything
+// fails the settled reading and one answering `false` to everything fails the
+// pending one, so neither needs a second run to be caught. What the control
+// adds is that the pending reading is the fixture's doing rather than the four
+// calls'.
 //
 // WHEN THIS STARTS LISTENING, AND WHY NOT AT THE TOP. `canGoBack` and
 // `canGoForward` are properties rather than the payload of an event, because a
@@ -142,10 +159,19 @@ const call = (name, drive) => {
 // what there is to report about it is that it happened.
 let announced = 0;
 
+// And every loading change, counted separately for the same reason and kept
+// apart from the history ones because they answer different questions: a run
+// can move a guest's history without a load a browser would spin for, and can
+// load without the history changing at all.
+let loadingAnnounced = 0;
+
 // Start hearing them. Called ONCE, and deliberately late — see the header.
 const listen = () => {
   view.addEventListener("domicile-history-change", () => {
     announced += 1;
+  });
+  view.addEventListener("domicile-loading-change", () => {
+    loadingAnnounced += 1;
   });
 };
 
@@ -156,6 +182,17 @@ const readState = (at) => {
   say(
     `history-state at=${at} can=${view.canGoBack}/${view.canGoForward}` +
       ` events=${announced}`,
+  );
+};
+
+// And whether it says a page is on its way, read the same way and at points
+// chosen for what the guest is doing rather than for what was driven at it:
+// one where a page has been sitting there for a whole step, one where a
+// navigation the fixture is holding open has been pending for one.
+const readLoading = (at) => {
+  say(
+    `loading-state at=${at} loading=${view.loading}` +
+      ` events=${loadingAnnounced}`,
   );
 };
 
@@ -201,9 +238,33 @@ const schedule = [
     },
     after: step,
   },
-  { act: () => navigate("/slow"), after: step },
-  { act: () => call("stop", (v) => v.stop()), after: step },
-  { act: () => say("done"), after: settle },
+  {
+    act: () => {
+      // A page that arrived a whole STEP ago, which is what makes this the
+      // settled half of the loading claim rather than a race with `reload()`.
+      readLoading("settled");
+      navigate("/slow");
+    },
+    after: step,
+  },
+  {
+    act: () => {
+      // And the pending half: the fixture holds `/slow` open for longer than
+      // this step, so the element is reading a navigation that is genuinely
+      // still in flight. BEFORE the stop, which is the only order in which
+      // there is a load left to report.
+      readLoading("pending");
+      call("stop", (v) => v.stop());
+    },
+    after: step,
+  },
+  {
+    act: () => {
+      readLoading("after-stop");
+      say("done");
+    },
+    after: settle,
+  },
 ];
 
 // Last, and this is the order that matters: `src` is what makes a <webview>

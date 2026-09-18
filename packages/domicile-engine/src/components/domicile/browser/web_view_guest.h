@@ -159,6 +159,19 @@ class WebViewGuest : public mojom::WebViewGuest,
   void NavigationStateChanged(content::WebContents* source,
                               content::InvalidateTypes changed_flags) override;
 
+  // AND WHERE AN ADDRESS BAR LEARNS A PAGE IS STILL ARRIVING. This is the call
+  // Chrome drives its own throbber from, and `should_show_loading_ui` is the
+  // reason it rather than WebContentsObserver::DidStartLoading: the flag is
+  // false for a same-document navigation -- a fragment, a pushState -- which
+  // is a load no browser spins for, and the observer pair cannot tell one from
+  // an ordinary navigation.
+  //
+  // READ TOGETHER WITH IsLoading(), the way Chrome's own browser window reads
+  // them: the flag says whether this kind of load is worth showing and
+  // IsLoading() says whether one is happening, and a spinner wants both.
+  void LoadingStateChanged(content::WebContents* source,
+                           bool should_show_loading_ui) override;
+
   // A page in a browser window cannot open a second one yet. Overridden rather
   // than left to the default because the default is content creating the
   // window itself, and for a guest with no guest SiteInstance that path CHECKs
@@ -204,6 +217,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   // interface exists to gray out.
   void ReportHistory();
 
+  // Tell the element whether a page is on its way, if that has changed.
+  //
+  // THE SAME DEDUPLICATION ReportHistory does, and it earns it twice over
+  // here: LoadingStateChanged is called for a load starting, for one
+  // finishing, and for navigations that change neither answer, so an
+  // unfiltered forward would put a DOM event in the shell's page for each of
+  // them.
+  void ReportLoading(bool should_show_loading_ui);
+
   // The second half of CreateAndAttach, once content has produced a frame that
   // is safe to swap. `outer_contents_frame` is null when the frame went away
   // or a beforeunload handler under it said no, and dropping `guest` is then
@@ -238,6 +260,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   // sends nothing, which is correct rather than a dropped first message.
   bool reported_can_go_back_ = false;
   bool reported_can_go_forward_ = false;
+
+  // And the last loading answer sent, false for the reason the pair above are:
+  // a guest that has not been asked for a page is not fetching one, and
+  // neither is the element that has not heard from it.
+  bool reported_loading_ = false;
 
   base::WeakPtrFactory<WebViewGuest> weak_factory_{this};
 };
