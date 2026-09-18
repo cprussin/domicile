@@ -37,13 +37,23 @@ domicile <command>                # ...or a command for the desktop already runn
 ```
 
 `--config` may come on either side of the shell, and leaving it off is an
-answer rather than a missing one: a desktop with no monitors written down runs
-the single output that follows the engine's own window. What is refused is the
-half-stated form — the flag with nothing behind it, or twice — because the
-compositor runs its defaults on a missing file and refuses one it cannot load,
-and guessing between those picks one answer for somebody who meant the other. A
-verb takes nothing, `--config` included: the desktop it questions read its
-config when it started.
+answer rather than a missing one: `$XDG_CONFIG_HOME/domicile/domicile.toml`
+(`~/.config/...` where that is unset), and the compositor's defaults where
+there is no such file — a single output that follows the engine's own window.
+What is refused is the half-stated form — the flag with nothing behind it, or
+twice — because the compositor runs its defaults on a missing file and refuses
+one it cannot load, and guessing between those picks one answer for somebody
+who meant the other. A verb takes nothing, `--config` included: the desktop it
+questions read its config when it started.
+
+**That default path is `domicile`'s, and deliberately not the compositor's.**
+`arguments` below states the compositor's rule — every value given, nothing
+read from the environment, nothing with a default location — and it is kept:
+`domicile` works out which file this run has and writes it onto the command
+line it builds. The compositor is still handed one path or none by a program
+that can be asked why. What pays for the guess is that the run prints which of
+the four answers it got, `--config` and found-by-looking included, before it
+starts anything.
 
 The modules, and the split is by what each needs to be tested:
 
@@ -55,6 +65,7 @@ The modules, and the split is by what each needs to be tested:
 | `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` / `XDG_VTNR` → the ozone platform (a console login takes `drm` on its own), or the refusal that names what to do instead |
 | `control` | yes | what a running desktop can be asked, and what it answers |
 | `arguments` | yes | the compositor's command line, every value stated and nothing defaulted |
+| `config_path` | yes | which config file a run has: `--config`, the one where a config lives, or none — and which of those it was |
 | `spawn` | yes | the commands the engine and the compositor are, built as data so a flag list is an assertion |
 | `session` | yes | what the compositor publishes once it is up, and the shell's wait for it |
 | `milestones` | yes | what a run has to reach before it is a desktop, and the sentence it prints when it does not |

@@ -8,11 +8,11 @@
 //!
 //! A run may also carry `--config`, which is the compositor's own file: the
 //! monitors, their scales, their turns and the profiles that choose between
-//! them. Optional, because a desktop with no monitors written down is the
-//! defaults and that is a desktop; named on the command line rather than found
-//! at a path of our own, for the reason `arguments.rs` gives for every value
-//! it reads — a program starts this, and a program that meant to say something
-//! can say it.
+//! them. Optional twice over — a desktop with no monitors written down is the
+//! defaults and that is a desktop, and a desktop whose monitors are written
+//! down in the usual place does not need telling. `config_path.rs` is where
+//! the usual place is and why the guess is made there and not in the
+//! compositor, which still has no default location for anything.
 
 use std::path::PathBuf;
 
@@ -24,7 +24,8 @@ pub enum CliError {
     #[error(
         "which shell? Give the JavaScript module your shell built:\n\n    \
          domicile ./my-desktop/dist/shell.js\n\n\
-         Add --config <path> to give the compositor your monitors.\n\
+         Your monitors come from ~/.config/domicile/domicile.toml, or from \
+         --config <path>.\n\
          Or a command for the desktop already running: which-shell.\n"
     )]
     NoShell,
@@ -37,8 +38,9 @@ pub enum CliError {
     Extra { verb: String, extra: String },
     #[error(
         "--config takes the path to the compositor's config file and was given \
-         nothing. A desktop with no monitors written down is that flag left \
-         off, not that flag left empty."
+         nothing. Leaving the flag off reads ~/.config/domicile/domicile.toml \
+         and runs the defaults when there is none, which is what an empty one \
+         looks like it means."
     )]
     ConfigWithoutPath,
     #[error(
@@ -54,8 +56,11 @@ pub enum CliError {
 pub enum Invocation {
     /// Run a desktop on this shell, with the compositor reading `config`.
     ///
-    /// `None` is the compositor's defaults, which is what a desktop with no
-    /// monitors written down runs.
+    /// `None` is nobody having named one, which `config_path` turns into the
+    /// file where a config lives or into the compositor's defaults. Not itself
+    /// "the defaults" any more: this is what the command line said, and where
+    /// else to look is a question about the machine rather than about the
+    /// words somebody typed.
     Run {
         shell: String,
         config: Option<PathBuf>,

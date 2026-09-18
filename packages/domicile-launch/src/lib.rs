@@ -3,7 +3,8 @@
 //! `domicile ./my-desktop/dist/shell.js` starts an engine and a compositor.
 //! What that takes is a handful of decisions, and each is a module here with
 //! tests of its own — which command line was given ([`cli`]), which module to
-//! load ([`shell_path`]), which ozone platform ([`platform`]), where the two
+//! load ([`shell_path`]), which config file the compositor reads
+//! ([`config_path`]), which ozone platform ([`platform`]), where the two
 //! components are ([`components`]), what each is started with ([`spawn`]),
 //! and the order they go up in ([`supervise`]).
 //!
@@ -27,6 +28,7 @@
 pub mod arguments;
 pub mod cli;
 pub mod components;
+pub mod config_path;
 pub mod control;
 pub mod control_socket;
 pub mod handshake;

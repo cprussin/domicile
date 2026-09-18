@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 
 use domicile_launch::cli::{invocation, Invocation};
 use domicile_launch::components::components;
+use domicile_launch::config_path::config_file;
 use domicile_launch::control::{answer, Request, Response};
 use domicile_launch::control_socket::{
     address, advertised, answer_one, ask, take, Control, PATIENCE as ANSWER_WITHIN, VARIABLE,
@@ -67,14 +68,18 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
 }
 
 /// Run a desktop on `shell` until one of its components stops, with the
-/// compositor reading `config`.
+/// compositor reading the config file `flag` names or the one where a config
+/// lives.
 ///
-/// The path is handed on rather than read here: what is in it is the
-/// compositor's business, and this process opening it first would be a second
-/// reader to disagree with — and the one whose complaint arrives before the
-/// compositor has said anything about its own file.
-fn desktop(shell: &str, config: Option<&Path>) -> Result<ExitCode, String> {
+/// Whichever it is, the path is handed on rather than read here: what is in it
+/// is the compositor's business, and this process opening it first would be a
+/// second reader to disagree with — and the one whose complaint arrives before
+/// the compositor has said anything about its own file. The one question asked
+/// of the filesystem is whether the default is there at all, which is the
+/// difference between a path to hand on and none.
+fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     let env = |name: &str| std::env::var(name).ok();
+    let config = config_file(flag, &env, &|path| path.exists());
 
     let binary = std::env::current_exe().map_err(|why| format!("cannot find myself: {why}"))?;
     let components =
@@ -111,11 +116,11 @@ fn desktop(shell: &str, config: Option<&Path>) -> Result<ExitCode, String> {
     // Said for the same reason the shell is: a desk that comes up in the wrong
     // arrangement is most often this file being a different one than the
     // person thinks, and the alternative to printing it is reading a process
-    // list to find out.
-    match config {
-        Some(path) => println!("config: {}", path.display()),
-        None => println!("config: none, so the compositor's defaults"),
-    }
+    // list to find out. Which of the four answers it is and not just the path,
+    // now that one of them is a file nobody typed: a `--config` that went to
+    // the wrong place and a default that was picked up instead are the same
+    // line otherwise.
+    println!("config: {config}");
 
     // Taken before anything is started, because the compositor is started with
     // this path in its environment and there is nothing to hand on if the bind
@@ -173,7 +178,7 @@ fn desktop(shell: &str, config: Option<&Path>) -> Result<ExitCode, String> {
                 &components.compositor,
                 &components.engine,
                 &places,
-                config,
+                config.path(),
                 &env,
             ),
         )
