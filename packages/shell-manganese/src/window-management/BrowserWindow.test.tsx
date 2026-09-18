@@ -4,6 +4,7 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import {
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_HISTORY_CHANGE_EVENT,
+  WEBVIEW_LOADING_CHANGE_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -65,6 +66,19 @@ const historyReaches = (
     canGoForward: { configurable: true, value: canGoForward },
   });
   fireEvent(element, new Event(WEBVIEW_HISTORY_CHANGE_EVENT));
+};
+
+/**
+ * The engine starting or finishing a load in the guest and saying so, which
+ * is the only way a chrome hears about one: the property is the state and the
+ * event carries nothing.
+ */
+const loads = (element: HTMLWebViewElement, loading: boolean): void => {
+  Object.defineProperty(element, "loading", {
+    configurable: true,
+    value: loading,
+  });
+  fireEvent(element, new Event(WEBVIEW_LOADING_CHANGE_EVENT));
 };
 
 // What a window's box resolves to is decided by the emitted stylesheet, not by
@@ -625,6 +639,32 @@ describe("BrowserWindow", () => {
       historyReaches(view(container), false, true);
       expect(control("Forward")).not.toBeDisabled();
       expect(control("Back")).toBeDisabled();
+    });
+  });
+
+  describe("the loading state", () => {
+    it("says the page is arriving until it has arrived", () => {
+      const { container } = render(
+        <BrowserWindow
+          clickThrough={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          onHover={noHover}
+          onNavigate={() => undefined}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+      // A window whose guest has said nothing is a window with nothing on the
+      // way: the element answers false until the browser says otherwise.
+      expect(screen.queryByRole("img", { name: "Loading" })).toBeNull();
+      loads(view(container), true);
+      expect(screen.getByRole("img", { name: "Loading" })).toBeVisible();
+      loads(view(container), false);
+      expect(screen.queryByRole("img", { name: "Loading" })).toBeNull();
     });
   });
 

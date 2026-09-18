@@ -48,10 +48,11 @@ It provides these:
   element is the engine's: `src` is the address it loads, `goBack` /
   `goForward` / `stop` / `reload` are what a chrome's address bar drives it
   with, `canGoBack` / `canGoForward` say whether the first two would do
-  anything, and `focus` puts the keyboard on the embedded page. What this
-  module adds is the TypeScript for all of that plus the names of the two
-  events the browser process dispatches on it,
-  `domicile-guest-focus` and `domicile-history-change`.
+  anything, `loading` says whether a page is still arriving, and `focus` puts
+  the keyboard on the embedded page. What this module adds is the TypeScript
+  for all of that plus the names of the three events the browser process
+  dispatches on it, `domicile-guest-focus`, `domicile-history-change` and
+  `domicile-loading-change`.
 - **`connectToHost`** (`./connect-to-host`) — the `DomicileHost` off the
   document, or a stand-in that does nothing when there is none. `hasHost` is
   beside it for code that needs the answer rather than the object.

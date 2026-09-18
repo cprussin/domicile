@@ -578,6 +578,29 @@ not where a link or a redirect then took it. There is no navigate event to
 reach for — the SDK once synthesized one, it had fired for nothing since the
 fork landed, and it was deleted rather than left looking available.
 
+### Whether a page is still arriving
+
+The same shape again, and for a sharper reason: a load is a span rather than an
+instant, so a shell that mounts in the middle of one is the ordinary case.
+`loading` is on the element and `domicile-loading-change` only says to read it.
+
+```ts
+import { WEBVIEW_LOADING_CHANGE_EVENT } from "@domicile/chrome-sdk/webview-element";
+
+const readLoading = () => {
+  spinner.hidden = !view.loading;
+};
+
+readLoading();
+view.addEventListener(WEBVIEW_LOADING_CHANGE_EVENT, readLoading);
+```
+
+It is the browser's own throbber question rather than "is the WebContents
+busy": a same-document navigation — a fragment, a `pushState` — does not set
+it, because neither is a load a browser spins for. And it says nothing about
+*what* is arriving, for the reason above: where the guest went is not yours to
+know either.
+
 ### A click in the page
 
 You never see it. The guest has a browsing context of its own, so no pointer

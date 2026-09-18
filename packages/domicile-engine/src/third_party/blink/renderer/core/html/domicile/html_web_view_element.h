@@ -112,6 +112,22 @@ class CORE_EXPORT HTMLWebViewElement final
   bool canGoBack() const { return can_go_back_; }
   bool canGoForward() const { return can_go_forward_; }
 
+  // WHETHER A PAGE IS STILL ARRIVING, so an address bar can say so.
+  //
+  // A PROPERTY FOR THE REASON THE PAIR ABOVE ARE, and the case for it is if
+  // anything sharper here: a load is a span rather than an instant, so a
+  // chrome that mounts in the middle of one is the ordinary case and not a
+  // race. A state carried only by `domicile-loading-change` would leave that
+  // window looking settled over a page that had not arrived, and it would go
+  // on looking settled until the next navigation.
+  //
+  // NOT `WebContents::IsLoading()` EITHER, which is the answer this is
+  // sometimes mistaken for: the browser reports `should_show_loading_ui`
+  // alongside it, which is false for a same-document navigation, and what
+  // arrives here is the pair already resolved -- "a browser would be showing
+  // a spinner". See WebViewGuest::ReportLoading.
+  bool loading() const { return loading_; }
+
   void Trace(Visitor*) const override;
 
  private:
@@ -198,6 +214,11 @@ class CORE_EXPORT HTMLWebViewElement final
   // change that is not one.
   void HistoryChanged(bool can_go_back, bool can_go_forward) override;
 
+  // And the browser saying whether a page is on its way. It arrives when it
+  // CHANGES, so the event below is never dispatched for a change that is not
+  // one.
+  void LoadingChanged(bool is_loading) override;
+
   // The guest, for as long as this element lives. Bound once, and not
   // rebuilt on a later `src`: the placeholder frame is destroyed by the
   // attach, so there would be nothing left to name in a second request.
@@ -216,6 +237,11 @@ class CORE_EXPORT HTMLWebViewElement final
   // does not spend a message saying so.
   bool can_go_back_ = false;
   bool can_go_forward_ = false;
+
+  // And whether a page is arriving. False until the browser says otherwise,
+  // which is not a guess either: a guest that has not been sent anywhere is
+  // fetching nothing, so the browser does not spend a message saying so.
+  bool loading_ = false;
 };
 
 }  // namespace blink

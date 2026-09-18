@@ -1,12 +1,11 @@
 // The fork's `<webview>`: web content in a browsing context of its own.
 //
 // There is no code here, and that is the point. The element belongs to the
-// engine — `src`, the four history controls and the two availability
-// properties are all `HTMLWebViewElement`'s, and the events below are
-// dispatched by the browser process rather than by anything in this package.
-// What is left for the SDK to say is the part TypeScript cannot read off the
-// fork: what the tag is, and what the engine calls the two events it fires on
-// it.
+// engine — `src`, the four history controls and the three state properties are
+// all `HTMLWebViewElement`'s, and the events below are dispatched by the
+// browser process rather than by anything in this package. What is left for the
+// SDK to say is the part TypeScript cannot read off the fork: what the tag is,
+// and what the engine calls the three events it fires on it.
 //
 // It used to be a `<domicile-webview>` custom element wrapping one of these,
 // because a custom element's name must contain a hyphen and the SDK predates
@@ -54,6 +53,29 @@ export const WEBVIEW_GUEST_FOCUS_EVENT = "domicile-guest-focus";
 export const WEBVIEW_HISTORY_CHANGE_EVENT = "domicile-history-change";
 
 /**
+ * Fired when the page inside the view starts or stops loading.
+ *
+ * THE ENGINE DISPATCHES THIS, and like the history event it carries nothing:
+ * what changed is readable on the element as
+ * {@link HTMLWebViewElement.loading}. The reason is the same one — a payload
+ * is a copy of the state that is correct only at the instant it was made — and
+ * so is the reason the state is a property rather than this event: a chrome
+ * that mounts after the guest has already started loading hears nothing, and
+ * an address bar that learned only from events would show a settled page while
+ * one was still arriving.
+ *
+ * NOT ONE EVENT PER NAVIGATION. The browser reports this when the answer
+ * changes, so a page that loads a hundred subresources says "loading" once and
+ * "not loading" once, and a same-document navigation — a fragment, a
+ * `pushState` — says nothing at all, because it is not a load a browser's UI
+ * spins for.
+ *
+ * It bubbles, so a chrome can listen on the window it drew rather than on the
+ * view.
+ */
+export const WEBVIEW_LOADING_CHANGE_EVENT = "domicile-loading-change";
+
+/**
  * What a `<webview>` is, to everything holding one.
  *
  * Global rather than exported, and merged rather than defined, because the name
@@ -83,6 +105,12 @@ declare global {
     readonly canGoBack: boolean;
     /** Whether {@link HTMLWebViewElement.goForward} would move the page. */
     readonly canGoForward: boolean;
+    /**
+     * Whether the page inside the view is loading, so an address bar can show
+     * that it is. Changes are announced in
+     * {@link WEBVIEW_LOADING_CHANGE_EVENT}.
+     */
+    readonly loading: boolean;
     goBack(): void;
     goForward(): void;
     stop(): void;

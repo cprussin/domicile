@@ -162,6 +162,15 @@ export const domicilePreset = definePreset({
           "50%": { opacity: "0.7" },
           "100%": { opacity: "0.3" },
         },
+        // A full turn, for a control saying something is on its way: a
+        // spinner reads as motion rather than as a state, which is what a
+        // page still arriving is. `pulse` beside it is the other half of the
+        // same vocabulary — it dims a control that is busy, where this turns
+        // an indicator that is waiting.
+        spin: {
+          "0%": { transform: "rotate(0deg)" },
+          "100%": { transform: "rotate(360deg)" },
+        },
         themeSwipeFromBottom: {
           "0%": { clipPath: "inset(100% 0 0 0)" },
           "100%": { clipPath: "inset(0 0 0 0)" },
@@ -372,6 +381,10 @@ export const domicilePreset = definePreset({
           // crossfades over it while the user carries on working.
           crossfade: { value: "2s" },
           pulse: { value: "1.5s" },
+          // One turn of `spin`. Faster than `pulse`, because a spinner that
+          // turns as slowly as a control pulses reads as stuck rather than as
+          // working.
+          spin: { value: "1s" },
         },
         easings: {
           // Back-out with a ~15% overshoot at the end of the curve.

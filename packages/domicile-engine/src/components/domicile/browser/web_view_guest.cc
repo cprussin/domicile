@@ -300,6 +300,11 @@ void WebViewGuest::NavigationStateChanged(
   ReportHistory();
 }
 
+void WebViewGuest::LoadingStateChanged(content::WebContents* source,
+                                       bool should_show_loading_ui) {
+  ReportLoading(should_show_loading_ui);
+}
+
 void WebViewGuest::ReportHistory() {
   // The same CHECK the four controls make: this object is destroyed with the
   // guest's WebContents, and content does not call a delegate of a WebContents
@@ -318,6 +323,29 @@ void WebViewGuest::ReportHistory() {
     reported_can_go_back_ = can_go_back;
     reported_can_go_forward_ = can_go_forward;
     client_->HistoryChanged(can_go_back, can_go_forward);
+  }
+}
+
+void WebViewGuest::ReportLoading(bool should_show_loading_ui) {
+  // The same CHECK ReportHistory makes, and for the same reason: content does
+  // not call a delegate of a WebContents it has already destroyed.
+  CHECK(guest_contents_);
+
+  // BOTH HALVES, which is how Chrome's own browser window reads this pair:
+  // `should_show_loading_ui` says whether a load of this kind is one a browser
+  // spins for -- false for a same-document navigation -- and `IsLoading()`
+  // says whether one is happening at all. A spinner driven by the flag alone
+  // would keep turning after the page arrived, because the call that says a
+  // load finished carries the same flag as the call that said it started.
+  const bool loading = guest_contents_->IsLoading() && should_show_loading_ui;
+
+  // A CHANGE, not a notification, exactly as ReportHistory is: this call
+  // arrives for navigations that start no load a browser would show, and a
+  // chrome that re-rendered its address bar for each of them would be
+  // re-rendering it for nothing.
+  if (loading != reported_loading_) {
+    reported_loading_ = loading;
+    client_->LoadingChanged(loading);
   }
 }
 

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# The four history controls of a <webview>, driven at the guest behind it.
+# What a browser window's address bar can drive and can know: the four history
+# controls of a <webview>, driven at the guest behind it, and the three answers
+# the element holds about that guest.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-history.sh /build/chromium/src
@@ -59,6 +61,21 @@
 # would satisfy every absence in that table, so the reading that has to hold
 # before any of them means anything is `two-pages`.
 #
+# AND WHETHER A PAGE IS STILL ARRIVING, which the same schedule already builds
+# both halves of and which is therefore read here rather than in a guard of its
+# own:
+#
+#   settled     false   /two arrived a whole STEP ago
+#   pending     true    THE POSITIVE: /slow is a navigation the fixture is
+#                        still holding open, driven one STEP ago
+#   after-stop  false   stop() canceled it, so nothing is arriving any more
+#
+# THAT PAIR SEPARATES INSIDE ONE RUN, which is why the control says less about
+# it than about the four calls: an element answering `true` to everything fails
+# `settled` and one answering `false` to everything fails `pending`. What the
+# control adds is that `pending` is the fixture holding a navigation open
+# rather than anything the four calls did.
+#
 # AND THAT READING IS TAKEN BEFORE THE MODULE EVER LISTENS, which is the second
 # thing this measures. A chrome renders from state, and a React shell registers
 # its listeners in its first effect flush — after the element is in the document
@@ -90,6 +107,10 @@
 #                                    nothing driving it, and the positive run's
 #                                    two events are noise rather than the two
 #                                    calls
+#   the slow page must still be     or `pending` is reading a navigation that
+#     pending when it is read        had already landed, and the positive run's
+#                                    reading of it is not about a load in
+#                                    flight either
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -268,6 +289,25 @@ BACK_CAN="$(can_at after-back)"
 FORWARD_CAN="$(can_at after-forward)"
 FORWARD_EVENTS="$(events_at after-forward)"
 
+# AND WHETHER IT SAID A PAGE WAS ARRIVING, at the three points the module reads
+# it. Parsed apart from the pair above because they answer different questions:
+# a guest's history can move without a load a browser would spin for, and a
+# guest can load without its history changing at all.
+LOADINGS="$(grep -o 'GUARD loading-state at=[^ ]* loading=[^ ]* events=[0-9]*' \
+  "$ENGINE_LOG")"
+loading_at() { # $1 point
+  printf '%s\n' "$LOADINGS" |
+    sed -n "s/^GUARD loading-state at=$1 loading=\([^ ]*\) .*\$/\1/p" | head -1
+}
+loading_events_at() { # $1 point
+  printf '%s\n' "$LOADINGS" |
+    sed -n "s/^GUARD loading-state at=$1 .* events=\([0-9]*\)\$/\1/p" | head -1
+}
+SETTLED_LOADING="$(loading_at settled)"
+PENDING_LOADING="$(loading_at pending)"
+PENDING_LOADING_EVENTS="$(loading_events_at pending)"
+STOPPED_LOADING="$(loading_at after-stop)"
+
 SAW_MODULE=$(grep -qF "GUARD driving" "$ENGINE_LOG" && echo 1 || echo 0)
 SAW_SLOW_SHOWN=$(printf '%s\n' "$SEQUENCE" | grep -qx "/slow" && echo 1 || echo 0)
 # Asked for, which is not the same as answered: the fixture records a request
@@ -281,6 +321,8 @@ echo "the guest showed: $(printf '%s' "$SEQUENCE" | tr '\n' ' ')"
 echo "module=$SAW_MODULE pages=$COUNT slow-asked=$SAW_SLOW_ASKED slow-shown=$SAW_SLOW_SHOWN"
 echo "the element said: start=$START_CAN two-pages=$TWO_CAN after-back=$BACK_CAN after-forward=$FORWARD_CAN"
 echo "history events: at two-pages=$TWO_EVENTS at after-forward=$FORWARD_EVENTS"
+echo "and it was loading: settled=$SETTLED_LOADING pending=$PENDING_LOADING after-stop=$STOPPED_LOADING"
+echo "loading events: at pending=$PENDING_LOADING_EVENTS"
 echo
 
 # WHICH END TO BLAME, and it is the whole of this script's judgment. Six
@@ -345,6 +387,16 @@ nothing driving it. The positive run reads its two as the two calls, so a run \
 that pushes unasked makes that count noise — a navigation the fixture caused, \
 a second send of the same src, or a push that does not check whether anything \
 changed"
+  elif [ "$SETTLED_LOADING" != "false" ]; then
+    FAILURE="the element said \"$SETTLED_LOADING\" where a page that arrived \
+a whole step ago is not arriving any more. Nothing was driven at this run, so \
+this is the browser's own answer stuck on — and the positive run's settled \
+reading measures the same thing"
+  elif [ "$PENDING_LOADING" != "true" ]; then
+    FAILURE="the slow navigation was not still in flight when it was read: \
+the element said \"$PENDING_LOADING\" with the fixture holding that page \
+open and nothing having stopped it. So the positive run's pending reading is \
+not about a load in flight either — check --slow-seconds against the schedule"
   else
     PASSED="the control is sharp: the same element, the same guest and the \
 same navigations with none of the four called show no third page — so the \
@@ -403,10 +455,34 @@ elif [ "$SAW_SLOW_ASKED" != "1" ]; then
   FAILURE="the last navigation never reached the server, so there was no \
 pending load for stop() to cancel and its reading below is about a navigation \
 that never started. This is the harness"
+elif [ "$SETTLED_LOADING" != "false" ]; then
+  FAILURE="the element said \"$SETTLED_LOADING\" where a page that arrived a \
+whole step ago is no longer arriving. This is the half of the loading claim \
+that catches an element answering yes to everything, so nothing below it is a \
+measurement: it is the browser never reporting the load finishing, or the \
+element never storing that it did"
+elif [ "$PENDING_LOADING" != "true" ]; then
+  FAILURE="the element never said a page was on its way: with the fixture \
+holding /slow open it said \"$PENDING_LOADING\". THIS IS THE POSITIVE the \
+loading readings rest on — an element answering no to everything satisfies \
+both absences around it — so it is the browser's push, the client pipe, or \
+should_show_loading_ui and IsLoading() disagreeing about a load that has \
+plainly started"
+elif [ "$PENDING_LOADING_EVENTS" = "0" ] || [ -z "$PENDING_LOADING_EVENTS" ]; then
+  FAILURE="the element never announced that its loading state changed, so a \
+chrome has nothing to re-read on. The value itself is right, which makes this \
+the half a shell cannot do without rather than the half it renders from: an \
+address bar would show whatever its first render caught and never move again"
 elif [ "$SAW_SLOW_SHOWN" = "1" ]; then
   FAILURE="the slow page arrived anyway, so stop() canceled nothing. The \
 fixture sits on that navigation for ${SLOW_SECONDS}s and stop() was driven \
 inside it, which is the only window in which a stop is a stop"
+elif [ "$STOPPED_LOADING" != "false" ]; then
+  FAILURE="stop() canceled the navigation — the slow page never arrived — and \
+the element went on saying \"$STOPPED_LOADING\". So a browser window that \
+stops a load keeps a spinner turning over a page that is not coming: the \
+browser reports a canceled load like any other finished one, and this is that \
+report not arriving or not being stored"
 elif [ "$COUNT" != "5" ]; then
   FAILURE="the guest showed $COUNT pages where five were driven. Every \
 reading here is a position in that sequence, so pages nobody asked for shift \
@@ -418,7 +494,9 @@ to the page before, forward to the one after, reloaded it into a fresh load, \
 and stop() canceled a navigation that would otherwise have landed. And the \
 element says what back and forward can do at each step — read at two pages \
 with no listener on it, which is what a chrome mounting late would read — \
-with an event behind every change for one to re-read on"
+with an event behind every change for one to re-read on. It also tells a page \
+that has arrived from one still on its way, and stops saying so the moment \
+the load is canceled"
 fi
 
 if [ -n "$PASSED" ]; then
