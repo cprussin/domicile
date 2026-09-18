@@ -25,6 +25,8 @@
 
 namespace ui {
 
+class DrmModeset;
+
 // The console this chord asks for, or nothing.
 //
 // `Ctrl+Alt+F<n>` and exactly that: both modifiers and neither more nor less,
@@ -96,6 +98,26 @@ enum class VtAction {
   kRelinquishDisplay,
   // Ask the delegate to take DRM master back.
   kTakeDisplay,
+  // Modeset every connector again, because the console this session is back on
+  // is not the one it left.
+  //
+  // THE TAKE IS NOT ENOUGH AND THAT IS WHAT LOCKED A DESKTOP UP. Master says
+  // who may program the card; it says nothing about what the card is
+  // programmed to. Whoever had the panel in between programmed it -- the
+  // kernel restores its own framebuffer the moment the last master goes -- so
+  // the controller state this process resumes with describes hardware that
+  // has since been reconfigured, and every page flip into it is refused.
+  // `PageFlipWatchdog` answers a refused commit with a fifteen-second timer
+  // that ends in `LOG(FATAL) << "Failed to modeset ... Crashing GPU process."`
+  // and only a modeset disarms it.
+  //
+  // NOTHING ELSE WOULD SEND ONE. The connectors report exactly what they
+  // reported on the way out, so `ModesetWouldChangeAnything` -- right about
+  // every hotplug, and the reason this driver no longer modesets in a loop --
+  // reads the next reading as "asking again cannot help". That is the same
+  // wall a wake from suspend hits, and `DrmModeset::Relight` is the way past
+  // it: see `domicile/drm_modeset.h`.
+  kRelightDisplay,
 };
 
 struct VtStep {
@@ -122,6 +144,11 @@ struct VtStep {
 // changes nothing here: logind owns the handshake and hands the console over
 // on its own schedule, so there is no refusing a switch, and the way out of a
 // display that would not drop is the take on the way back.
+//
+// A TAKE THAT SUCCEEDED IS THE ONE CELL THAT LIGHTS ANYTHING, and it is the
+// only one that may: a modeset is a commit on the card, so asking for one
+// from any state that does not hold the console is a commit over somebody
+// else's frame. See `VtAction::kRelightDisplay`.
 VtStep StepVtSwitch(VtState state, VtEvent event, bool succeeded);
 
 // Ctrl+Alt+F<n>, and the display following the console it moves.
@@ -163,13 +190,22 @@ VtStep StepVtSwitch(VtState state, VtEvent event, bool succeeded);
 // black: the kernel restores its own framebuffer when the last master goes.
 // Taking the card from logind too is what would close that gap, and
 // `A-DESKTOP-ON-A-TTY.md` carries it as its own item.
+//
+// AND THE WAY BACK IS A MODESET, NOT A TAKE. That framebuffer the kernel
+// restored is the reason: the console this session comes back to has been
+// programmed by whoever held it, so master alone leaves the desktop flipping
+// into controller state the hardware no longer matches. The take answers
+// first and then the screens are lit again -- see `VtAction::kRelightDisplay`
+// for what a desktop that skips it does instead, which is lock up.
 class DrmVtSwitcher : public PlatformEventObserver {
  public:
-  // `events` must outlive this, and does: `OzonePlatformDrm` builds the event
-  // factory in `InitializeUI` and this in `InitScreen`, so this is destroyed
-  // first. Everything else is asynchronous and starts here.
+  // `events` and `modeset` must both outlive this, and do: `OzonePlatformDrm`
+  // builds the event factory in `InitializeUI`, and the modeset driver ahead
+  // of this in `InitScreen`, so this is destroyed before either. Everything
+  // else is asynchronous and starts here.
   DrmVtSwitcher(std::unique_ptr<display::NativeDisplayDelegate> delegate,
-                PlatformEventSource* events);
+                PlatformEventSource* events,
+                DrmModeset* modeset);
 
   DrmVtSwitcher(const DrmVtSwitcher&) = delete;
   DrmVtSwitcher& operator=(const DrmVtSwitcher&) = delete;
@@ -206,6 +242,7 @@ class DrmVtSwitcher : public PlatformEventObserver {
 
   std::unique_ptr<display::NativeDisplayDelegate> delegate_;
   raw_ptr<PlatformEventSource> events_;
+  const raw_ptr<DrmModeset> modeset_;  // Not owned; outlives this.
   scoped_refptr<dbus::Bus> bus_;
   raw_ptr<dbus::ObjectProxy> session_ = nullptr;
   // Null until logind has answered which seat this session is on, which is two
