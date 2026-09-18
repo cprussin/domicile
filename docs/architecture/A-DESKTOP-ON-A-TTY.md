@@ -824,11 +824,25 @@ Layout::scanout  →  Screens::scanout  →  domicile_displays_configure
 
 **What a profile still does not do is turn a pixel.** A rotated monitor is
 advertised rotated, laid out rotated, and lit at the origin the profile gave
-it — and the glass still scans out the way it always did. Closing that is a
-rotation reaching the DRM plane, which on ChromeOS is `DisplayConfigurator`,
-`//ui/display/manager`, the 478 lines this fork deliberately does not port.
+it — and the glass still scans out the way it always did.
 `DisplayConfigurationParams` is `{id, origin, mode, enable_vrr}` and has no
-field for one.
+field for a rotation.
+
+**And a rotation does not belong there anyway.** This used to say the answer
+was `DisplayConfigurator` and `//ui/display/manager`, the 478 lines this fork
+does not port. That was wrong, and checkably so: `display_configurator.h` at
+the pin does not contain the string `rotat`. ChromeOS turns a screen in the
+**render tree**, not at the modeset and not on the plane —
+`ash::RootWindowTransformer::GetTransform` converts root-window DIP to host
+window coordinates and "normally includes rotation and scaling"
+(`ash/host/root_window_transformer.h`). The CRTC scans out its mode the way
+it always does; what changes is what is drawn into it.
+
+Which puts this behind *one browser window per CRTC* rather than beside it. A
+root transform belongs to a window, and one window here covers a desk whose
+monitors a profile may turn differently — so rotating before each display has
+a window of its own means doing it per-region inside a single page, in
+coordinates that stop being the desktop's, and deleting it afterwards.
 
 **And `DrmWindowHost::SetFullscreen` still puts one window on one display**, so
 a desk of three monitors shows the chrome on one of them. That is the other
