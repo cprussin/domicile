@@ -232,6 +232,60 @@ describe("BrowserWindow", () => {
       );
       expect(calls).toStrictEqual([]);
     });
+
+    // AND THE KEYBOARD IT TAKES IS ITS PAGE'S. Nothing else can put it there:
+    // the page is a guest with a browsing context of its own, so the window
+    // being worked in is what focuses it.
+    it("puts the keyboard in its page when it becomes the window being worked in", () => {
+      const windowProps = {
+        clickThrough: false,
+        depth: 0,
+        domicile: silentDomicile,
+        dragging: false,
+        onHover: noHover,
+        onNavigate: () => undefined,
+        onReach: () => undefined,
+        rect: ON_SCREEN,
+        src: "https://example.com",
+      } as const;
+      const { container, rerender } = render(
+        <BrowserWindow {...windowProps} focused={false} />,
+      );
+
+      rerender(<BrowserWindow {...windowProps} focused />);
+
+      expect(view(container)).toHaveFocus();
+    });
+
+    // EXCEPT WHEN THE KEYBOARD IS ALREADY IN THIS WINDOW, WHICH IS WHAT A
+    // PRESS IN THE ADDRESS BAR PUTS IT THERE FOR. A press on the chrome is a
+    // reach like any other — it is what makes this the window being worked in
+    // — so the effect above runs on the focus that same press just took. A
+    // window that focused its page there would spend the user's click on the
+    // bar: the caret lands in the address bar and is taken out of it a moment
+    // later, which is an address bar that cannot be typed into at all.
+    it("leaves the focus in its address bar when the press that reached it landed there", async () => {
+      const windowProps = {
+        clickThrough: false,
+        depth: 0,
+        domicile: silentDomicile,
+        dragging: false,
+        onHover: noHover,
+        onNavigate: () => undefined,
+        onReach: () => undefined,
+        rect: ON_SCREEN,
+        src: "https://example.com",
+      } as const;
+      const { rerender } = render(
+        <BrowserWindow {...windowProps} focused={false} />,
+      );
+      await userEvent.click(address());
+
+      // What the desktop does with that reach: this is the active window now.
+      rerender(<BrowserWindow {...windowProps} focused />);
+
+      expect(address()).toHaveFocus();
+    });
   });
 
   // A CLICK ANYWHERE IN THE WINDOW IS THE USER STARTING TO WORK IN IT, and the

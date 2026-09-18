@@ -119,6 +119,12 @@ export const BrowserWindow = ({
   // `null` rather than `undefined` because that is what React's ref API hands
   // a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
+  // The whole window, which is what says whether the keyboard is in it: the
+  // page is one half of this element's subtree and the chrome over it is the
+  // other. A ref rather than state like the view above, because nothing reads
+  // it as it arrives — it is read inside the effects, where the render that
+  // set it has already been committed.
+  const frame = useRef<HTMLElement>(null);
   const [address, setAddress] = useState(src);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   // Whether the focus arriving in the page is the focus this window is putting
@@ -168,10 +174,20 @@ export const BrowserWindow = ({
   // the focus a terminal was given stays with it while the user types into a
   // site, and every key they press is delivered to a window they have switched
   // away from.
+  //
+  // THE PAGE IS NOT WHERE IT GOES WHEN THIS WINDOW ALREADY HAS IT. A press in
+  // the address bar is a reach like any other — it is what makes this the
+  // window being worked in — so this runs on the focus that same press has
+  // just taken, and a window that focused its page here would spend it: the
+  // caret lands in the bar and is pulled into the page a moment later, which
+  // is an address bar that cannot be typed into at all. What the user reached
+  // for is already in this window, so there is nothing for this to move.
   useEffect(() => {
     if (focused && view !== null) {
       domicile.focusChrome();
-      focusPage(view);
+      if (!holdsFocus(frame.current)) {
+        focusPage(view);
+      }
     }
   }, [domicile, focused, focusPage, view]);
 
@@ -250,6 +266,7 @@ export const BrowserWindow = ({
       // starting to work in it — the page excepted, because a pointer in there
       // is the guest's, the same way a click in it is.
       onPointerOver={onHover}
+      ref={frame}
       // Inline because the box is a runtime number and Panda reads literals;
       // `window-styles` owns everything static. `undefined` is a window with no
       // rectangle, which is a window that is not on screen.
@@ -319,6 +336,21 @@ export const BrowserWindow = ({
     </section>
   );
 };
+
+/**
+ * Whether the keyboard is already somewhere in this window.
+ *
+ * Either half counts, and the page counts because of the fork: a `<webview>`
+ * whose guest has the focus is the embedder document's `activeElement` — that
+ * is what patch 0011 is for — so a window whose page is being typed into
+ * answers yes here the same way one whose address bar is answers yes.
+ *
+ * `null` for the window rather than `undefined` because that is what a React
+ * ref holds before it is attached, and a window that is not in the document
+ * holds nothing.
+ */
+const holdsFocus = (frame: HTMLElement | null): boolean =>
+  frame?.contains(document.activeElement) === true;
 
 const browserStyles = flex({
   // Its own, because `windowStyles` paints none: this window draws a page
