@@ -39,6 +39,28 @@ nix run github:cprussin/domicile#simple      # floating windows only
 - Launching a client into the desktop works the same under either:
   [how](packages/shell-simple/README.md#launch-an-app-into-it).
 
+On NixOS, `homeManagerModules.default` describes a desk where the rest of your
+environment is — an option per field of the compositor's config, and the shell
+baked into `domicile` so it is not typed twice:
+
+```nix
+{
+  imports = [domicile.homeManagerModules.default];
+
+  programs.domicile = {
+    enable = true;
+    shell = "${domicile.packages.${system}.manganese}/shell.js";
+    settings.output.profiles = [{
+      name = "desk";
+      displays = [{display = "DEL DELL U3219Q 2ZLS413"; scale = 1.2; transform = "rotate-270";}];
+    }];
+  };
+}
+```
+
+It writes the config and installs no session — booting into a desk is a
+machine's decision, not a home directory's.
+
 ## Write your own
 
 A shell is one built JavaScript module. Where you put an `<app>` is

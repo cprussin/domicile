@@ -47,6 +47,15 @@ jobs:
       - name: Build both shells
         run: nix build --print-build-logs .#manganese .#simple
 
+      # The home-manager module, which nothing else evaluates: not `cargo
+      # test`, not `turbo test`, and not the builds above. Its option names
+      # are compared against the Rust schema by
+      # `scripts/test-the-home-manager-module-agrees.sh` with no nix at all;
+      # what needs an evaluator is the types, the defaults and the file it
+      # actually writes.
+      - name: The home-manager module evaluates and writes a config
+        run: nix flake check --print-build-logs
+
       # After the build, which is what gives this something to compare
       # against: `--check` rebuilds an existing output, and errors rather
       # than building one that is not there yet.

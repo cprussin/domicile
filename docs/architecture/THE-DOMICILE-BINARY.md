@@ -66,6 +66,16 @@ The modules, and the split is by what each needs to be tested:
 | `control` | yes | what a running desktop can be asked, and what it answers |
 | `arguments` | yes | the compositor's command line, every value stated and nothing defaulted |
 | `config_path` | yes | which config file a run has: `--config`, the one where a config lives, or none — and which of those it was |
+
+**`nix/home-manager.nix` is that file's other end**, and the only part of this
+system that writes one rather than reading it: an option per field of the
+`domicile-config` schema, generated with `pkgs.formats.toml` to the path
+`config_path` looks in. Two guards keep the two from drifting —
+`scripts/test-the-home-manager-module-agrees.sh` compares the option names to
+the Rust structs with no nix at all, and `nix flake check` evaluates the module
+and reads back the file it wrote. The first matters because every config struct
+is `deny_unknown_fields`: one key the module writes and the crate does not know
+refuses the whole file, so the desk comes up on its defaults.
 | `spawn` | yes | the commands the engine and the compositor are, built as data so a flag list is an assertion |
 | `session` | yes | what the compositor publishes once it is up, and the shell's wait for it |
 | `milestones` | yes | what a run has to reach before it is a desktop, and the sentence it prints when it does not |
