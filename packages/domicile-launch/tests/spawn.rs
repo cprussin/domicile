@@ -228,6 +228,7 @@ fn the_compositor_is_a_producer_to_the_engine() {
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
         &runtime(),
+        None,
         &|_| None,
     );
     let args = args_of(&spawned);
@@ -265,6 +266,7 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
         &runtime(),
+        None,
         &|_| None,
     );
     assert_eq!(
@@ -283,6 +285,7 @@ fn the_engines_libraries_go_in_front_of_whatever_was_there() {
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
         &runtime(),
+        None,
         &inherited,
     );
     assert_eq!(
@@ -299,6 +302,7 @@ fn the_compositor_is_given_a_log_level_it_can_be_debugged_at() {
         Path::new("/b/c"),
         Path::new("/l/engine"),
         &runtime(),
+        None,
         &|_| None,
     );
     assert_eq!(
@@ -311,6 +315,7 @@ fn the_compositor_is_given_a_log_level_it_can_be_debugged_at() {
         Path::new("/b/c"),
         Path::new("/l/engine"),
         &runtime(),
+        None,
         &asked,
     );
     assert_eq!(env_of(&spawned, "RUST_LOG").unwrap(), "warn");
@@ -399,4 +404,52 @@ fn the_engine_is_told_a_touchpad_is_libinputs() {
             "{platform}: {args:?}"
         );
     }
+}
+
+#[test]
+fn the_compositor_is_given_the_config_it_was_started_with() {
+    // The whole point of the flag: the monitors, their scales and their turns
+    // are in that file, and the compositor is the process that reads it. It
+    // had no way to arrive — `--config` was parsed by this launcher and then
+    // never handed on — so a desk written down was a desk the compositor
+    // never saw.
+    let spawned = compositor(
+        Path::new("/b/domicile-compositor"),
+        Path::new("/l/engine"),
+        &runtime(),
+        Some(Path::new("/etc/domicile/desk.json")),
+        &|_| None,
+    );
+    let args = args_of(&spawned);
+    assert_eq!(
+        args,
+        [
+            "--chrome-socket",
+            "/run/d/chrome.sock",
+            "--session",
+            "/run/d/session.json",
+            "--engine-socket",
+            "/run/d/broker",
+            "--config",
+            "/etc/domicile/desk.json",
+        ]
+    );
+}
+
+#[test]
+fn a_desktop_with_no_config_is_given_no_flag_rather_than_an_empty_one() {
+    // `Config::load` on a path that will not open is fatal, deliberately, so
+    // an empty `--config` would turn "this desktop writes no monitors down"
+    // into a compositor that refuses to start.
+    let args = args_of(&compositor(
+        Path::new("/b/domicile-compositor"),
+        Path::new("/l/engine"),
+        &runtime(),
+        None,
+        &|_| None,
+    ));
+    assert!(
+        !args.iter().any(|arg| arg == "--config"),
+        "no config was asked for, so none should be named: {args:?}"
+    );
 }

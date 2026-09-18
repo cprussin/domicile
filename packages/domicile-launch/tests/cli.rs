@@ -1,5 +1,7 @@
 //! The command line, and the one line of the bridge's that is an interface.
 
+use std::path::PathBuf;
+
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::control::Request;
 
@@ -12,6 +14,7 @@ fn a_shell_is_the_whole_command_line() {
     assert_eq!(
         run(&["./my-desktop/dist/shell.js"]).unwrap(),
         Invocation::Run {
+            config: None,
             shell: "./my-desktop/dist/shell.js".to_string()
         }
     );
@@ -58,6 +61,18 @@ fn a_verb_given_an_argument_is_refused_and_named() {
             extra: "manganese".to_string()
         })
     );
+    // `--config` is not special here, and that is the assertion: a verb is a
+    // question put to a desktop that is already running, and that desktop
+    // read its config when it started. Hoisting the flag above this dispatch
+    // would hand a config to a process that will not read one -- worse than
+    // refused, because it looks like it worked.
+    assert_eq!(
+        run(&["which-shell", "--config", "/a.json"]),
+        Err(CliError::Extra {
+            verb: "which-shell".to_string(),
+            extra: "--config".to_string()
+        })
+    );
 }
 
 #[test]
@@ -69,7 +84,74 @@ fn a_shell_whose_name_is_a_verb_is_still_reachable_as_a_path() {
     assert_eq!(
         run(&["./which-shell"]).unwrap(),
         Invocation::Run {
+            config: None,
             shell: "./which-shell".to_string()
         }
     );
+}
+
+#[test]
+fn a_config_is_the_other_half_of_a_run() {
+    // The monitors, their scales and their turns. Without this the file a
+    // shell writes is read by nobody: the compositor takes `--config` and had
+    // no way to be given one.
+    assert_eq!(
+        run(&["./dist/shell.js", "--config", "/etc/domicile/desk.json"]).unwrap(),
+        Invocation::Run {
+            config: Some(PathBuf::from("/etc/domicile/desk.json")),
+            shell: "./dist/shell.js".to_string()
+        }
+    );
+}
+
+#[test]
+fn the_config_may_come_before_the_shell() {
+    // A run is two values and neither is positional against the other, so the
+    // order somebody types them in is not a thing to be right about. This is
+    // also the spelling a unit file or a wrapper script reaches for first,
+    // where the flags are fixed and the shell is the argument.
+    assert_eq!(
+        run(&["--config", "/etc/domicile/desk.json", "./dist/shell.js"]).unwrap(),
+        Invocation::Run {
+            config: Some(PathBuf::from("/etc/domicile/desk.json")),
+            shell: "./dist/shell.js".to_string()
+        }
+    );
+}
+
+#[test]
+fn a_config_flag_with_nothing_behind_it_is_refused() {
+    // Rather than read as "no config", which is a real and different answer:
+    // the compositor runs its defaults on a missing flag and refuses a path
+    // it cannot load, so guessing here picks one of those for somebody who
+    // meant the other.
+    assert_eq!(
+        run(&["./dist/shell.js", "--config"]),
+        Err(CliError::ConfigWithoutPath)
+    );
+}
+
+#[test]
+fn two_configs_are_refused_and_the_second_is_named() {
+    // A desktop is one config. Keeping either one quietly is how a desk comes
+    // up wearing settings nobody chose, which is the failure this whole file
+    // is written against.
+    assert_eq!(
+        run(&[
+            "./dist/shell.js",
+            "--config",
+            "/a.json",
+            "--config",
+            "/b.json"
+        ]),
+        Err(CliError::TwoConfigs {
+            second: "/b.json".to_string()
+        })
+    );
+}
+
+#[test]
+fn a_shell_is_still_refused_when_only_a_config_was_given() {
+    // The flag is the other half of a run, not a run on its own.
+    assert_eq!(run(&["--config", "/a.json"]), Err(CliError::NoShell));
 }

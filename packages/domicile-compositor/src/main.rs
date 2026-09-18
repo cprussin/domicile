@@ -1433,9 +1433,11 @@ impl DomicileCompositor {
         // layer and nothing else on this side needed the geometry — so the
         // narrowing has no input left and every surface takes the fallback.
         //
-        // It costs nothing on the one output a desktop has today: `domicile`
-        // starts the compositor with no `--config`, so there is a single
-        // output following the browser window. On a two-screen desktop a
+        // It costs nothing on a desktop with one output, which is what a run
+        // with no `--config` still is: a single output following the browser
+        // window. `domicile --config` can now hand one over, so a desk that
+        // writes its monitors down is no longer that -- and this is the gap
+        // that widens when it does. On a two-screen desktop a
         // client would be told it is on both and would draw at the larger
         // scale of the two. Wiring that back wants the shell naming a screen
         // — `<Screen name="left">`, which ARCHITECTURE.md already calls the

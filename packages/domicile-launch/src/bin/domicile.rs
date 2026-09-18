@@ -40,7 +40,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<ExitCode, String> {
     match invocation(std::env::args().skip(1)).map_err(|why| why.to_string())? {
-        Invocation::Run { shell } => desktop(&shell),
+        Invocation::Run { shell, config } => desktop(&shell, config.as_deref()),
         Invocation::Ask { request } => asked(&request),
     }
 }
@@ -66,8 +66,14 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
     }
 }
 
-/// Run a desktop on `shell` until one of its components stops.
-fn desktop(shell: &str) -> Result<ExitCode, String> {
+/// Run a desktop on `shell` until one of its components stops, with the
+/// compositor reading `config`.
+///
+/// The path is handed on rather than read here: what is in it is the
+/// compositor's business, and this process opening it first would be a second
+/// reader to disagree with — and the one whose complaint arrives before the
+/// compositor has said anything about its own file.
+fn desktop(shell: &str, config: Option<&Path>) -> Result<ExitCode, String> {
     let env = |name: &str| std::env::var(name).ok();
 
     let binary = std::env::current_exe().map_err(|why| format!("cannot find myself: {why}"))?;
@@ -102,6 +108,14 @@ fn desktop(shell: &str) -> Result<ExitCode, String> {
     // one — the whole of the bug `shell_path` describes was invisible in it.
     let module = page.root.join(&page.module);
     println!("shell: {}", module.display());
+    // Said for the same reason the shell is: a desk that comes up in the wrong
+    // arrangement is most often this file being a different one than the
+    // person thinks, and the alternative to printing it is reading a process
+    // list to find out.
+    match config {
+        Some(path) => println!("config: {}", path.display()),
+        None => println!("config: none, so the compositor's defaults"),
+    }
 
     // Taken before anything is started, because the compositor is started with
     // this path in its environment and there is nothing to hand on if the bind
@@ -155,7 +169,13 @@ fn desktop(shell: &str) -> Result<ExitCode, String> {
     running
         .start(
             "compositor",
-            &compositor(&components.compositor, &components.engine, &places, &env),
+            &compositor(
+                &components.compositor,
+                &components.engine,
+                &places,
+                config,
+                &env,
+            ),
         )
         .map_err(|why| why.to_string())?;
     wait_for(&session(&places.session), &places.session, &mut running)?;
