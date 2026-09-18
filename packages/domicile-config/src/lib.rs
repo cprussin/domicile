@@ -79,6 +79,14 @@ impl Default for CompositorConfig {
 /// `xkb_model` mean "whatever libxkbcommon defaults to". `xkb_options` is a
 /// list rather than a comma-separated string because the format has one; it
 /// carries the common keyswaps (`caps:swapescape`, `compose:ralt`, …).
+///
+/// **THE DEFAULTS ARE NOBODY'S KEYBOARD, WHICH IS THE POINT.** They were
+/// Programmer's Dvorak with Caps Lock and Escape swapped, which is one
+/// author's desk and a surprise on anybody else's: a user who configured
+/// nothing got a layout they never asked for, and the only symptom is that
+/// every key is wrong. A shell that wants a layout states one -- that is what
+/// the config is for -- and a desk that states nothing gets the plain `us`
+/// that saying nothing ought to mean.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct KeyboardConfig {
@@ -94,10 +102,15 @@ impl Default for KeyboardConfig {
         KeyboardConfig {
             xkb_rules: String::new(),
             xkb_model: String::new(),
+            // `us` rather than empty because `validate` refuses an empty
+            // layout, and it refuses one because xkb's own fallback for it is
+            // a build-time default this cannot see -- so a desktop would come
+            // up on a layout nothing here could name. The variant and the
+            // options have no such problem: empty is exactly "the layout as it
+            // comes", which is what a desk that said nothing means.
             xkb_layout: "us".into(),
-            // Programmer's Dvorak, with Caps Lock and Escape swapped.
-            xkb_variant: "dvp".into(),
-            xkb_options: vec!["caps:swapescape".into()],
+            xkb_variant: String::new(),
+            xkb_options: Vec::new(),
         }
     }
 }
