@@ -36,9 +36,8 @@ against is `config/modules/ui/sway` in the author's dotfiles, and what is not
 bound there is bound by `lib.mkOptionDefault` — sway's own defaults — so both
 halves are in the table below.
 
-**The modifier is Alt**, which is the one thing here the config does not
-decide: it sets `Mod4`, the Super key, and this desktop answers `Mod1`. Every
-`Mod+` below is Alt.
+**The modifier is Meta** — `Mod4`, the Super key, which is what the config
+sets. Every `Mod+` below is Meta.
 
 A workspace holds a tree. A window is a leaf; every layout is a container of
 them; opening a window puts it beside the one being worked in, and closing one
@@ -103,7 +102,7 @@ driving its corner.
 
 **Mod+drag** moves a floating window and **Mod+Shift+drag** (or Mod+right-drag)
 resizes it from the bottom-right corner — sway's `floating_modifier $mod`, and
-the same key as the bindings, so it is Alt as well.
+the same key as the bindings, so it is Meta as well.
 Which of the two a drag is, is read when it starts and then kept, so letting go
 of Shift half way through does not turn a resize into a move with the window
 jumping to wherever the pointer got to. A window is never dragged smaller than
@@ -455,8 +454,6 @@ The parts of the config this shell cannot answer, and why:
   and the bar is this page rather than a swaybar process.
 - **Mouse warping, per-window borders, `hideEdgeBorders`.** A window's frame
   is CSS here; there is no pointer to warp from a page.
-- **`Mod4` as the modifier.** The config sets Super and this desktop answers
-  Alt. Every chord is otherwise the config's.
 
 ## Configure
 

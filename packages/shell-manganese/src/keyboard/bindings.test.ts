@@ -125,14 +125,13 @@ describe("resize mode", () => {
 
 describe("what the compositor is asked to claim", () => {
   it("claims every chord with the desktop's modifier and no other", () => {
-    // Alt is the modifier — Mod1 rather than the config's Mod4, which is the
-    // one thing here the config does not decide.
+    // Meta is the modifier — Mod4, the key the sway config names.
     expect(CHORDS.length).toBeGreaterThan(0);
     for (const chord of CHORDS) {
       expect(chord).toMatchObject({
-        altKey: true,
+        altKey: false,
         ctrlKey: false,
-        metaKey: false,
+        metaKey: true,
       });
       expect(chord.keycode).toBeGreaterThan(0);
     }
