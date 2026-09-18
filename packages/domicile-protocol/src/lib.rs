@@ -359,6 +359,83 @@ pub struct DisplayInfo {
     /// It governs what *clients* draw at. The chrome is one page at one
     /// `devicePixelRatio`, so it is not what the chrome itself renders at.
     pub scale: u32,
+    /// The pixels the monitor scans out, un-turned.
+    ///
+    /// The one field here that is not logical, and it is not a second spelling
+    /// of `size`: a monitor on its side scans out exactly as it did lying
+    /// down, and `size` is that mode *turned* and divided by the density. A
+    /// portrait 4K panel is `mode: [3840, 2160]` and `size: [1800, 3200]`.
+    ///
+    /// Sent about every display, because it is a fact about the panel that a
+    /// shell may want to show. What makes it load-bearing is
+    /// [`fills_the_window`](DisplayInfo::fills_the_window), which says this
+    /// mode is also the page's own viewport.
+    #[serde(default)]
+    pub mode: [u32; 2],
+    /// Which way up the monitor is bolted to the desk.
+    #[serde(default)]
+    pub transform: DisplayTransform,
+    /// This display is the whole page, so the page has to fill it.
+    ///
+    /// **A DESK OF SEVERAL MONITORS IS SEVERAL PAGES.** Where the engine scans
+    /// out it opens one browser window per CRTC, each window is its monitor's
+    /// `mode` in CSS pixels, and each loads the same shell — so a page is told
+    /// this one display, at the origin, and has to draw its logical box over
+    /// the whole window. That is `mode` divided by `size`, turned by
+    /// `transform`: the two facts above stop being description and become the
+    /// map from what the shell lays out in to what the monitor shows.
+    ///
+    /// False for every desktop the page's window is the whole of — a nested
+    /// run, a developer window — where the page's CSS pixels already *are* the
+    /// desktop's logical ones and there is nothing to map.
+    #[serde(default)]
+    pub fills_the_window: bool,
+}
+
+/// Which way up a monitor is bolted to the desk.
+///
+/// Rotations only, which is all a config can ask for. The same four
+/// `wl_output.transform` values the compositor advertises to clients, spelled
+/// the way the config file writes them.
+///
+/// **NAMED FOR THE TURN THE CONTENT TAKES, NOT THE ONE THE PANEL DID.** That
+/// is the `wl_output` convention and `domicile-config`'s: `transform_90` is an
+/// output rotated a quarter turn anticlockwise, so what is drawn on it has to
+/// go a quarter turn *clockwise* to come out upright, and that clockwise turn
+/// is what this names. A page applies it as written.
+///
+/// The spelling is not `rename_all`: serde's kebab-case reads `Rotate270` as
+/// one word and writes `rotate270`, which is neither what the config file says
+/// nor what `wl_output` is called anywhere.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DisplayTransform {
+    /// The way the connector scans out, which is the way most monitors sit.
+    #[default]
+    #[serde(rename = "normal")]
+    Normal,
+    /// A quarter turn clockwise.
+    #[serde(rename = "rotate-90")]
+    Rotate90,
+    #[serde(rename = "rotate-180")]
+    Rotate180,
+    /// A quarter turn anticlockwise, which is how a monitor on a desk usually
+    /// ends up standing on its side.
+    #[serde(rename = "rotate-270")]
+    Rotate270,
+}
+
+impl DisplayTransform {
+    /// Whether this turn trades the monitor's width for its height.
+    ///
+    /// The one thing a transform changes about arithmetic; everything else it
+    /// changes is pixels. A page uses it to know which way `mode` divides into
+    /// `size`.
+    pub fn swaps_axes(self) -> bool {
+        match self {
+            Self::Normal | Self::Rotate180 => false,
+            Self::Rotate90 | Self::Rotate270 => true,
+        }
+    }
 }
 
 /// A cursor a client can ask for, named as the CSS `cursor` keyword the chrome

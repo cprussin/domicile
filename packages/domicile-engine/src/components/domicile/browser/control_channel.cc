@@ -14,6 +14,7 @@
 #include "base/task/bind_post_task.h"
 #include "base/values.h"
 #include "components/domicile/common/cursor_shape.h"
+#include "components/domicile/common/display_transform.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "net/base/net_errors.h"
 
@@ -208,6 +209,24 @@ double Number(const base::Value& value) {
     return *number;
   }
   return 0.0;
+}
+
+// Which way up a monitor is, by the name the compositor wrote.
+//
+// A missing field and a name nothing matches both come out kNormal, and NOT
+// because it is the tidy default. A cursor nobody knows is worth dropping the
+// message over -- `cursor_shape.h` says why -- but this message is the whole
+// desktop, and refusing it over one unreadable field would leave the shell
+// with no screens rather than with a monitor the wrong way up. `normal` is
+// the arrangement that is right whenever there is nothing to turn, and it is
+// what a page produces if it never hears of transforms at all, so it is what
+// a page gets when this cannot tell.
+mojom::DisplayTransform TransformNamed(const std::string* named) {
+  if (!named) {
+    return mojom::DisplayTransform::kNormal;
+  }
+  return DisplayTransformFromWire<mojom::DisplayTransform>(*named).value_or(
+      mojom::DisplayTransform::kNormal);
 }
 
 }  // namespace
@@ -616,12 +635,26 @@ void ControlChannel::DispatchLine(const std::string& line,
           size->size() != 2u) {
         continue;
       }
+      // The mode is OPTIONAL where the rest is required, and the two are
+      // required for different reasons. A display with no name or no
+      // rectangle is not a display and is dropped; a display with no mode is
+      // one from a host that predates the field, and 0x0 is what it gets --
+      // harmless, because `fills_the_window` is what decides whether anybody
+      // divides by it and that too defaults to the answer for a desktop that
+      // had no notion of any of this.
+      const base::ListValue* mode = display->FindList("mode");
+      const bool moded = mode && mode->size() == 2u;
+      const std::string* transform = display->FindString("transform");
       displays.push_back(mojom::DisplayInfo::New(
           *name, static_cast<int32_t>(Number((*position)[0])),
           static_cast<int32_t>(Number((*position)[1])),
           static_cast<uint32_t>(Number((*size)[0])),
           static_cast<uint32_t>(Number((*size)[1])),
-          static_cast<uint32_t>(display->FindInt("scale").value_or(1))));
+          static_cast<uint32_t>(display->FindInt("scale").value_or(1)),
+          moded ? static_cast<uint32_t>(Number((*mode)[0])) : 0u,
+          moded ? static_cast<uint32_t>(Number((*mode)[1])) : 0u,
+          TransformNamed(transform),
+          display->FindBool("fills_the_window").value_or(false)));
     }
     // Sent even when every entry was malformed, because an empty desktop is an
     // answer: a page told nothing and a page told there are no screens are

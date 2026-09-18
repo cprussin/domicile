@@ -37,4 +37,44 @@
   // page at one density however many screens it spans -- so multiplying the
   // sizes above by this gives a client's buffer, not anything to lay out with.
   readonly attribute unsigned long scale;
+
+  // The pixels the panel scans out, un-turned. The one geometry here that is
+  // not logical, and NOT a second spelling of the size above: a monitor on its
+  // side scans out exactly as it did lying down, so a portrait 4K panel is a
+  // 3840x2160 mode and an 1800x3200 box. Neither follows from the other --
+  // `scale` is the integer wl_output one, so 1800 times 2 is not 2160.
+  //
+  // Zero where the compositor said nothing, which is a desktop that has no
+  // notion of modes rather than a panel with no pixels. Nothing divides by it
+  // unless `fillsTheWindow` says to.
+  readonly attribute unsigned long modeWidth;
+  readonly attribute unsigned long modeHeight;
+
+  // Which way up the monitor is bolted to the desk: `normal`, `rotate-90`,
+  // `rotate-180` or `rotate-270`, the four wl_output rotations spelled the way
+  // the config file writes them.
+  //
+  // NAMED FOR THE TURN THE CONTENT TAKES, not the one the panel did. That is
+  // the wl_output convention: an output rotated a quarter turn anticlockwise
+  // needs what is drawn on it turned a quarter turn clockwise to come out
+  // upright, and `rotate-90` is that clockwise turn. A shell applies it as
+  // written.
+  //
+  // A DOMString rather than an enum because an enum attribute would be a
+  // second IDL file and a second entry in Chromium's own
+  // `bindings/idl_in_modules.gni`, which the fork carries as a patch. The set
+  // is closed all the same and a name outside it never reaches here: the
+  // browser parses it into four cases and anything else is `normal`.
+  readonly attribute DOMString transform;
+
+  // This screen is the whole page, so the page has to fill it: `modeWidth` and
+  // `modeHeight` are the window's own size in CSS pixels, and the logical box
+  // above has to be turned and scaled to cover them.
+  //
+  // True where the engine scans out, which is where it opens one window per
+  // CRTC and each one is told the single display it covers. False for every
+  // desktop the page's window is the whole of -- a nested run, a developer
+  // window -- where the page's CSS pixels already are the desktop's logical
+  // ones and there is nothing to map.
+  readonly attribute boolean fillsTheWindow;
 };

@@ -83,6 +83,17 @@ source_set("cursor_shape") {
   public_deps = [ "//base" ]
 }
 
+# Which way up a monitor is, and the wire names for it. The same shape as
+# :cursor_shape above and wanted by the same two places -- the browser reading
+# the compositor's socket, and Blink handing a name to the page. Header only,
+# and templated over the enum so the same list serves `mojom::DisplayTransform`
+# and its `-blink` variant without this depending on either.
+source_set("display_transform") {
+  sources = [ "common/display_transform.h" ]
+
+  public_deps = [ "//base" ]
+}
+
 # Serving the shell over domicile://.
 #
 # A target of its own rather than part of :browser, because this depends on
@@ -223,6 +234,7 @@ source_set("control_channel") {
   public_deps = [
     ":common",
     ":cursor_shape",
+    ":display_transform",
     ":shortcut_registry",
     "//base",
     "//components/domicile/mojom",
@@ -243,6 +255,7 @@ source_set("unit_tests") {
     "browser/shell_windows_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
     "common/cursor_shape_unittest.cc",
+    "common/display_transform_unittest.cc",
     "spike/window_diff_unittest.cc",
   ]
 
@@ -262,6 +275,7 @@ source_set("unit_tests") {
     ":browser",
     ":command_protocol",
     ":cursor_shape",
+    ":display_transform",
     ":keyboard_layout",
     ":shell_scheme",
     ":shell_source",

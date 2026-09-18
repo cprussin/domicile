@@ -16,19 +16,31 @@ import { TITLE_BAR } from "./window-management/rect";
 // numbers, which `screens/host-displays.ts` is what regroups into the rectangle
 // the component library lays out against. The double below holds this shape
 // rather than that one, so the mapping is exercised by every render here.
+//
+// Both lie down and neither is a window of its own, which is the desktop this
+// file is about: two monitors of one page. A screen that IS its window is
+// `host-displays.test.ts`.
 const LEFT: DomicileDisplay = {
+  fillsTheWindow: false,
   height: 1080,
+  modeHeight: 1080,
+  modeWidth: 1920,
   name: "left",
   scale: 1,
+  transform: "normal",
   width: 1920,
   x: 0,
   y: 0,
 };
 
 const RIGHT: DomicileDisplay = {
+  fillsTheWindow: false,
   height: 1024,
+  modeHeight: 1024,
+  modeWidth: 1280,
   name: "right",
   scale: 1,
+  transform: "normal",
   width: 1280,
   x: 1920,
   y: 0,

@@ -98,6 +98,43 @@ export type DomicileDisplay = {
    * sizes above by this gives a client's buffer, not anything to lay out with.
    */
   readonly scale: number;
+  /**
+   * The pixels the panel scans out, un-turned — the one geometry here that is
+   * not logical.
+   *
+   * **Not a second spelling of `width`/`height`.** A monitor on its side scans
+   * out exactly as it did lying down, so a portrait 4K panel is a 3840×2160
+   * mode and an 1800×3200 box. Neither follows from the other: `scale` is the
+   * integer `wl_output` one, so 1800 times 2 is not 2160.
+   *
+   * Zero where the compositor said nothing, which is a desktop with no notion
+   * of modes rather than a panel with no pixels. Nothing divides by it unless
+   * {@link fillsTheWindow} says to.
+   */
+  readonly modeWidth: number;
+  readonly modeHeight: number;
+  /**
+   * Which way up the monitor is bolted to the desk: `normal`, `rotate-90`,
+   * `rotate-180` or `rotate-270`.
+   *
+   * **Named for the turn the content takes, not the one the panel did** — the
+   * `wl_output` convention, which the config file and the host both follow. An
+   * output rotated a quarter turn anticlockwise needs what is drawn on it
+   * turned a quarter turn *clockwise* to come out upright, and `rotate-90` is
+   * that clockwise turn. A shell applies it as written.
+   */
+  readonly transform: string;
+  /**
+   * This screen is the whole page, so the page has to fill it: the mode above
+   * is the window's own size in CSS pixels, and the logical box has to be
+   * turned and scaled to cover it.
+   *
+   * True where the engine scans out — one window per CRTC, each told the
+   * single display it covers. False for every desktop the page's window is the
+   * whole of, where the page's CSS pixels already are the desktop's logical
+   * ones and there is nothing to map.
+   */
+  readonly fillsTheWindow: boolean;
 };
 
 /**

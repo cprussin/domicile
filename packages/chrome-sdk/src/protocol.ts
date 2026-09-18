@@ -23,6 +23,7 @@
 import { z } from "zod";
 
 import { cursorShapeSchema } from "./cursor-shape";
+import { displayTransformSchema } from "./display-transform";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
 export const PROTOCOL_VERSION = 1;
@@ -148,11 +149,36 @@ const focusRequestedSchema = z.looseObject({
   type: z.literal("focus_requested"),
 });
 
-// One display of the desktop. All logical — the CSS pixels the chrome lays out
-// in — and all in one desktop-wide space whose origin is the top-left of the
-// displays' bounding box, so `position` is directly where a `<Screen>` goes on
-// the page.
+// One display of the desktop. Logical — the CSS pixels the chrome lays out in
+// — but for `mode`, and all of it in one desktop-wide space whose origin is
+// the top-left of the displays' bounding box, so `position` is directly where
+// a `<Screen>` goes on the page.
 const displayInfoSchema = z.looseObject({
+  // This display is the whole page, so the page has to fill it: `mode` is the
+  // viewport, and the logical box has to be turned and scaled to cover it.
+  //
+  // False for every desktop the page's window is the whole of — a nested run,
+  // a developer window — where the page's CSS pixels already are the desktop's
+  // logical ones and there is nothing to map. False is therefore also the
+  // right answer for a host that does not send the field at all.
+  fills_the_window: z
+    .boolean()
+    .nullish()
+    .transform((fills) => fills ?? false),
+  // The pixels the monitor scans out, un-turned — the one field here that is
+  // not logical. NOT a second spelling of `size`: a monitor on its side scans
+  // out exactly as it did lying down, and `size` is that mode turned and
+  // divided by the density. Nothing can be derived from the other two, because
+  // `scale` is the integer `wl_output` one and a 1.2 display's is 2.
+  //
+  // Optional, and `[0, 0]` where the host has nothing to say — a message from
+  // before the fork scanned anything out, a captured session, a hand-written
+  // fixture. Neither is a divisor: `fills_the_window` is the field that
+  // decides whether anybody divides by this, and it is false in both cases.
+  mode: z
+    .tuple([z.int().nonnegative(), z.int().nonnegative()])
+    .nullish()
+    .transform((mode) => mode ?? ([0, 0] as const)),
   // Non-empty, as `DisplayConfig::validate` requires: the name is what a
   // `<Screen name="…">` matches on, and one that is not there matches nothing
   // and renders an empty region rather than an error.
@@ -173,6 +199,13 @@ const displayInfoSchema = z.looseObject({
   // validator would make tightening either wait on the other. Positive for the
   // same reason the config rejects a zero-sized display: it is not a screen.
   size: z.tuple([z.int().positive(), z.int().positive()]),
+  // Which way up the monitor is bolted to the desk, named for the turn the
+  // CONTENT takes rather than the one the panel did — the `wl_output`
+  // convention, which the config file and the host both follow. A page applies
+  // it as written.
+  transform: displayTransformSchema
+    .nullish()
+    .transform((transform) => transform ?? "normal"),
 });
 
 // Answered to `hello` after `welcome`, and sent again whenever the desktop
