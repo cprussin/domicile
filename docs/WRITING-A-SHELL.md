@@ -26,7 +26,9 @@ the clients, the input, the outputs and the pixels.
 `<app>` and `<webview>` are the **engine's own tags**, not the SDK's. Nothing
 registers them and nothing can: a custom element's name must contain a hyphen,
 per spec, which is exactly why the fork defines these two as real HTML elements.
-Write them as you write a `<div>`.
+Write them as you write a `<div>`. `<app>` is a client's window and is most of
+what follows; `<webview>` is a page, and has
+[a section of its own](#a-browser-window).
 
 **And style them as you style a `<div>`**, which is the whole point of the
 thing. A window is a `cc::SurfaceLayer` in your page's own layer tree, so the
@@ -426,6 +428,130 @@ because a keyboard pointed at a surface that is gone is a desktop that has
 stopped listening. That is a fallback and not a decision — the `app_closed` for
 that window reaches you first, so a shell that would rather move to the next
 window says so and has the last word.
+
+## A browser window
+
+`<webview src="…">` is the fork's other tag: a page in a browsing context of
+its own, with the chrome around it yours to draw. A browser window in a shell
+is an address bar over one of these, and that is all it is —
+[`BrowserWindow.tsx`](/packages/shell-manganese/src/window-management/BrowserWindow.tsx)
+is manganese's.
+
+```ts
+const view = document.createElement("webview");
+view.src = "https://example.com";
+document.body.append(view);
+
+back.addEventListener("click", () => {
+  view.goBack();
+});
+```
+
+`goBack`, `goForward`, `stop` and `reload` are the element's own methods, and
+so is `src` — reflected, so the attribute and the property are one value. Write
+the *attribute* when you navigate: on a browser without the fork the property
+is a value hung off an unknown element, and the DOM goes on reporting the
+address the window opened at.
+
+**Give it a size.** It is a replaced element with an intrinsic size, so a view
+left to itself is 300×150 inside however large a window you put it in.
+
+**It is a guest, not a frame.** The page inside has no ancestor, so a site
+sending `X-Frame-Options: DENY` or `frame-ancestors 'none'` loads in one where
+an `<iframe>` is refused. That boundary is also what the sections below are
+about: nothing inside a guest — not a pointer event, not the focus a click
+takes, not a keystroke — crosses back out into your page, so anything you want
+to know, the element has to say.
+
+### Back and forward
+
+The element is the state and `domicile-history-change` is only a nudge: it
+carries nothing, and what changed is `canGoBack` and `canGoForward` on the
+element.
+
+```ts
+import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile/chrome-sdk/webview-element";
+
+const readHistory = () => {
+  back.disabled = !view.canGoBack;
+  forward.disabled = !view.canGoForward;
+};
+
+readHistory();
+view.addEventListener(WEBVIEW_HISTORY_CHANGE_EVENT, readHistory);
+```
+
+Reading on mount is the half that cannot be dropped. A React shell registers
+its listeners in its first effect flush, tens of milliseconds after the guest's
+first commit, so an address bar that only ever listened grays out a live
+control until the user navigates again.
+
+**Where the page actually went is not yours to know.** The engine reports
+availability and nothing else, so a shell can show where it *sent* a window and
+not where a link or a redirect then took it. There is no navigate event to
+reach for — the SDK once synthesized one, it had fired for nothing since the
+fork landed, and it was deleted rather than left looking available.
+
+### A click in the page
+
+You never see it. The guest has a browsing context of its own, so no pointer
+event crosses out of it — and neither does the focus that click takes, because
+Blink dispatches `focus` and `focusin` only while the page is focused, and a
+guest taking focus is the moment your page loses it. So the element says so
+itself, in an event that is not a focus event:
+
+```ts
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
+
+// The window this shell drew, not the view: the event bubbles.
+frame.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, () => {
+  raise(frame);
+});
+```
+
+One listener on the window covers the page and the chrome around it alike.
+Read it as "the user is working in this window now": it is the only half of
+that click you get, and a shell without it is a desktop where clicking a site
+does not raise the window showing it.
+
+### The keyboard, which is the part that bites
+
+There is one seat and something is always in it, and a browser window names no
+client — its page is inside your own. Three things follow, none optional:
+
+- **Say the page has the keyboard** with `domicile.focusChrome()` when a
+  browser window becomes the window being worked in. Without it the terminal
+  that was focused keeps the seat while the user types into a site, and every
+  key they press is delivered to a window they have switched away from.
+- **Give it back when they move on**, by blurring whatever in the window holds
+  the focus. The SDK forwards *this document's* keystrokes to whichever client
+  the shell named, and a key pressed while a guest holds the focus never
+  arrives in this document at all — so `focusApp` alone moves nothing, and a
+  browser window left holding the focus makes every other window deaf. Open
+  one, and every terminal after it stops taking keystrokes.
+- **Claim your desktop chords** with `domicile.grabShortcut`. The browser
+  process is the only layer above a focused guest: a key pressed on a site
+  reaches neither this page nor the compositor. A claimed chord comes back as a
+  `shortcut` message rather than as a DOM event, carrying the fields it was
+  claimed with, because the page is not what received it.
+
+Whether the window holds the keyboard at all is one question over both halves,
+and the fork makes it one test: a `<webview>` whose guest has the focus is your
+document's `activeElement`, the same as an address bar being typed into. So
+`frame.contains(document.activeElement)` answers for the page and the chrome
+together.
+
+**And the page is not where focus goes when the window already has it.** A
+press in the address bar is what made this the window being worked in, so a
+shell that focuses the page on becoming focused spends the user's own press:
+the caret lands in the bar and is pulled into the page a moment later, which is
+an address bar that cannot be typed into at all.
+
+### What a guest refuses
+
+A page in one cannot open a second window, and permissions and dialogs are
+answered by the default, which is no. Each is a piece of work rather than a
+limit of the design; [ROADMAP.md](/ROADMAP.md) keeps the list.
 
 ## Bundling
 

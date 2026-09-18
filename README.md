@@ -5,6 +5,10 @@ A Wayland compositor whose renderer is a web engine.
 - All user chrome — panels, decorations, launchers — is web content.
 - An app window is a real Wayland client, composited *inside* the engine as a
   DOM element. `<app>` takes the same CSS as a `<div>`.
+- A web page is a window on the same terms: `<webview src="…">` is a
+  browsing context of its own, driven by `goBack` / `goForward` / `stop` /
+  `reload` on the element. A browser is an address bar you style yourself, and
+  a site that refuses framing loads in one.
 - A client rendering on the GPU has its buffer composited directly, no copy.
 - A client drawing in software gets a blank window: its pixels are in shared
   memory, and the engine can only take a GPU buffer. The upload that would
@@ -75,10 +79,29 @@ That is a desktop: every window full-screen, newest on top.
   `app_closed`, and call `reportDevicePixelRatio` so clients draw at the
   display's real resolution.
 
+A browser window is the other tag, with no Wayland client behind it:
+
+```js
+const view = document.createElement("webview");
+view.src = "https://example.com";
+document.body.append(view);
+
+back.addEventListener("click", () => {
+  view.goBack();
+});
+```
+
+`canGoBack` / `canGoForward` say whether a control would do anything, and the
+element announces a click in the page and a change to either — nothing else
+crosses out of a guest. That is the whole of a browser:
+[manganese's](packages/shell-manganese/src/window-management/BrowserWindow.tsx)
+is this plus the chrome it draws around it.
+
 **[docs/WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)** is the guide — the
-handshake, the bundling rules that fail quietly, and what the document Domicile
-writes contains. [examples/minimal-shell](examples/minimal-shell) is the above
-in full, built against the published SDK from outside this workspace.
+handshake, the keyboard a browser window has to hand back, the bundling rules
+that fail quietly, and what the document Domicile writes contains.
+[examples/minimal-shell](examples/minimal-shell) is the `<app>` shell above in
+full, built against the published SDK from outside this workspace.
 
 ## Work on Domicile
 
