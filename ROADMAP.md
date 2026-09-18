@@ -63,7 +63,7 @@ The wire protocol is at `PROTOCOL_VERSION = 1`.
 | What the browser-to-renderer hop costs | Every `ControlChannelClient` method carries a `mojo_base.mojom.TimeTicks arrival`, stamped once per socket read rather than per parsed message — a read can carry several, and stamping at parse time would price the JSON parse into the second and later ones, so a batch read would report a hop that grows with position in the batch. Converted through `WindowPerformance`, so `event.timeStamp - event.arrival` is the stage and not arithmetic in the renderer. Measured at 0.300 ms and 0.200 ms. **On the socket path only**: `ShortcutPressed` and `Modifiers` also have a registry path stamped elsewhere that nothing measures, and `Displays` dispatches a bare `Event` and is deliberately unstamped |
 | A client's dmabuf imports on AMD | Patch 0005, confirmed on a Radeon 890M on 2026-09-08: kitty survives being floated and resized, on the DCC modifier that used to be refused, with no `gbm_bo_import` failure in the run |
 | The desktop a user runs contains all of it | `packages/domicile-engine/engine-release.nix` pins the published engine; `nix run github:cprussin/domicile#manganese` runs it |
-| A desktop lights the screen on a bare tty | `engine-9dd6e30`, on real hardware on a laptop panel, with no `OZONE=drm` and no trip to another console: `platform()` chose `drm` off `XDG_VTNR`, the DRM thread confirmed a modeset on the panel's own mode, and the desktop drew. **That build could not be typed into** — see *A desktop on a tty* below for what is still unexercised, which is most of the input and console path |
+| A desktop on a bare tty can be used | `engine-f38ef3f`, on real hardware on a laptop panel, with no `OZONE=drm` and no trip to another console. `platform()` chooses `drm` off `XDG_VTNR`, the DRM thread confirms a modeset on the panel's own mode, the desktop draws, keys reach the shell, an arrow is drawn on the cursor plane, the trackpad moves it, and a click lands in the page under it. kitty launches. Six ash-only gaps stood between the lit screen and that — see *A desktop on a tty* below |
 
 ---
 
@@ -264,10 +264,9 @@ decides whether an item is waiting or workable.
 
 ### In the engine fork — the agent on `crux`
 
-1. **A desktop on a tty — the screen lights, and nothing can be typed into
-   it.** `docs/architecture/A-DESKTOP-ON-A-TTY.md` carries the step list, the
-   tables and the audit against the pin; this is the state and what is left of
-   it.
+1. **A desktop on a tty — it lights, and it can be used.**
+   `docs/architecture/A-DESKTOP-ON-A-TTY.md` carries the step list, the tables
+   and the audit against the pin; this is the state and what is left of it.
 
    Two pieces of work, and both have landed. Getting `gn gen` to accept
    `ozone_platform_drm = true` was a **patch**: nine edits, eight of them
@@ -296,20 +295,36 @@ decides whether an item is waiting or workable.
    written to do at once, and it is the first time any of them has done it
    anywhere.
 
-   **What it does not do is take a keystroke.** That build was deaf from its
-   first frame — internal keyboard, trackpad and `Ctrl+Alt+F<n>` together, the
-   last of those because `0022` reads the chord off the same evdev stream.
-   #384 is the fix and is published as `engine-6ac6dbc`; **no hardware run has
-   seen it.** So `0020`'s logind path, `0022`'s chord, `0024`'s keymap and
-   `0019`'s drop across a console switch still rest on source read at the pin
-   and on unit tests — `DrmInputDevicesTest` 19 cases, `DrmVtSwitcherTest` 17,
+   **It takes a keystroke, and a click.** Six more ash-only gaps stood between
+   the lit screen and a desktop somebody could use, and every one was silent —
+   the platform compiled, linked and ran while doing nothing, because the half
+   that drives it lives in ash. `DrmInputDevices` threw away 13 live
+   descriptors logind had handed it (#393); `DrmWindowHost::Activate()` was a
+   `NOTIMPLEMENTED_LOG_ONCE()`, so no view held focus and every key that
+   arrived was dropped (`0025`); `BitmapCursorFactory` answered every cursor
+   with a typed bitmapless one, which reaches the kernel as *turn the cursor
+   plane off* and succeeds (`0026`); and `CreateConverter` has no touchpad
+   branch at all off ChromeOS, so a pad landed on a converter with no `EV_ABS`
+   case (`0027`). The pattern is now the first thing to check — see
+   `A-DESKTOP-ON-A-TTY.md`'s key decisions.
+
+   **What no run has done is leave the console and come back.** `0019`'s drop
+   across a switch and `0022`'s chord still rest on source read at the pin and
+   on unit tests — `DrmInputDevicesTest` 22 cases, `DrmVtSwitcherTest` 17,
    `DrmMasterTest` 7, `DrmModesetTest` 16, `DrmScreenTest` 18,
-   `DrmFullscreenTest` 4 — plus the shell-group guards that read the series
-   where a gtest cannot reach. `drm_logind_input.cc` talks to D-Bus and has no
-   in-tree unit test by design; `scripts/test-input-comes-from-logind.sh` is
-   what asserts that protocol. The next run on that laptop is what answers
-   them, and every one is a candidate to be wrong there in a way nothing here
-   can see.
+   `DrmFullscreenTest` 4, `DrmCursorFactoryTest` 4 — plus the shell-group
+   guards that read the series where a gtest cannot reach.
+   `drm_logind_input.cc` talks to D-Bus and has no in-tree unit test by design;
+   `scripts/test-input-comes-from-logind.sh` is what asserts that protocol.
+
+   **Nothing checks that the engine `main` pins satisfies the compositor `main`
+   builds.** #411 landed both halves of a display-protocol change — a `name` on
+   the C ABI record and a compositor that asserts it is non-null — and the pin
+   stayed on an engine that predates it, so the desktop aborted on startup with
+   a core dump and drew nothing. CI was green throughout: `nix-build` builds the
+   flake without running a desktop, and the engine guard runs the *freshly
+   built* engine, never the pinned one. A guard belongs here, and until there is
+   one a C ABI change is two merges, not one.
 
    **The four root causes behind the lit screen are worth keeping**, because
    each was invisible in a log and three were reported as something else
