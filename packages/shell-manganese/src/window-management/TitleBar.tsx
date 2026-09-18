@@ -2,15 +2,24 @@ import { Button } from "@domicile/component-library/Button";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
-import { css, cva } from "../../styled-system/css";
+import { css, cva, cx } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import type { Rect } from "./rect";
 import type { TitleFocus } from "./title-focus";
-import { placedAt } from "./window-styles";
+import { openingStyles, placedAt, settlingStyles } from "./window-styles";
 
 type Props = {
   /** How it stacks: the depth of the window it names. */
   depth: number;
+  /**
+   * Whether the user has hold of the window this bar names.
+   *
+   * A window is two elements — this and the contents under it — and both are
+   * written at a new box on every move of a drag. So both take that box
+   * outright: a bar that eased towards each one instead would trail the
+   * pointer that is holding it, and pull away from the window it names.
+   */
+  dragging: boolean;
   /** What this bar says about the keyboard — see `title-focus.ts`. */
   focus: TitleFocus;
   /** Close the window this bar belongs to — what the X does. */
@@ -47,6 +56,7 @@ type Props = {
  */
 export const TitleBar = ({
   depth,
+  dragging,
   focus,
   onClose,
   onContextMenu,
@@ -59,7 +69,11 @@ export const TitleBar = ({
   // biome-ignore lint/a11y/noStaticElementInteractions: a title bar is not a control and is not being made into one — the press says the user reached for the window it names, which is what raises a window in any desktop, and the X inside it is the button a keyboard reaches
   // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same press, and the same reason: what it reports is which window the user is working in
   <div
-    className={barStyles({ focus })}
+    className={cx(
+      barStyles({ focus }),
+      openingStyles,
+      !dragging && settlingStyles,
+    )}
     // Which of the three this is, as an attribute as well as a colour: the
     // desktop's own state is worth being able to read off the element, in
     // devtools and in a test, rather than only off a hashed class name.

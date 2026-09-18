@@ -4,12 +4,14 @@ import { Fragment } from "react";
 import type { Modifiers } from "../keyboard/useModifiers";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
+import { ClosingWindow } from "./ClosingWindow";
 import { FloatGrab } from "./floating/FloatGrab";
 import { FloatTitleBar } from "./floating/FloatTitleBar";
 import type { Float } from "./floating/float";
 import type { Placement, Screenful } from "./placement";
 import { TitleBar } from "./TitleBar";
 import { titleFocus } from "./title-focus";
+import { useClosing } from "./useClosing";
 import type { ShellWindow } from "./window";
 import { WindowKind } from "./window";
 
@@ -55,6 +57,10 @@ type Props = {
  * blank and an embedded page reloaded to the URL it opened at. Where a window
  * is, is a rectangle; a window with no rectangle is hidden rather than
  * unmounted, for the same reason.
+ *
+ * And the windows that have closed, which are on the screen without being in
+ * the list at all: a close takes a window out of the state everywhere at once,
+ * so what is left to draw is a record of the frame it had. See `closing.ts`.
  */
 export const Stage = ({
   activeId,
@@ -73,188 +79,213 @@ export const Stage = ({
   onSelect,
   screenful: { placements, tabs },
   windows,
-}: Props) => (
-  <main>
-    {windows.map((window) => {
-      const placement = placementOf(placements, window.id);
-      const floating = floats.find((float) => float.id === window.id);
-      // While the desktop's modifier is held the pointer belongs to the shell
-      // rather than to the client, so a drag can be caught in the page. Only
-      // a floating window for that: nothing drags a tiled one, and taking the
-      // pointer off it would cost a click.
-      //
-      // While a drag runs it is every window, the tiled ones included. The
-      // compositor hands the pointer to whichever window is under it, and the
-      // windows a drag crosses are not the one being dragged: any of them that
-      // still takes the pointer swallows the moves passing over it and the
-      // release that should have ended the drag, leaving the window grabbed
-      // with the mouse already let go.
-      const clickThrough =
-        draggingId !== undefined || (floating !== undefined && alt);
-      // A window with no placement is not on screen, so what it would stack
-      // against is not a question: it is rendered hidden, which is what keeps
-      // its portal and its page alive across a workspace switch.
-      const depth = placement?.depth ?? 0;
-      switch (window.kind) {
-        case WindowKind.App: {
-          return (
-            <AppWindow
-              appId={window.appId}
-              clickThrough={clickThrough}
-              cursor={window.cursor}
-              depth={depth}
-              domicile={domicile}
-              dragging={window.id === draggingId}
-              focused={window.id === activeId}
-              hasKeyboard={window.id === focusedId}
-              key={window.id}
-              onHover={() => {
-                onHover(window.id);
-              }}
-              onReach={() => {
-                onSelect(window.id);
-              }}
-              rect={placement?.surface}
-            />
-          );
+}: Props) => {
+  const { closing, onGone } = useClosing(windows, placements);
+  return (
+    <main>
+      {windows.map((window) => {
+        const placement = placementOf(placements, window.id);
+        const floating = floats.find((float) => float.id === window.id);
+        // While the desktop's modifier is held the pointer belongs to the shell
+        // rather than to the client, so a drag can be caught in the page. Only
+        // a floating window for that: nothing drags a tiled one, and taking the
+        // pointer off it would cost a click.
+        //
+        // While a drag runs it is every window, the tiled ones included. The
+        // compositor hands the pointer to whichever window is under it, and the
+        // windows a drag crosses are not the one being dragged: any of them that
+        // still takes the pointer swallows the moves passing over it and the
+        // release that should have ended the drag, leaving the window grabbed
+        // with the mouse already let go.
+        const clickThrough =
+          draggingId !== undefined || (floating !== undefined && alt);
+        // A window with no placement is not on screen, so what it would stack
+        // against is not a question: it is rendered hidden, which is what keeps
+        // its portal and its page alive across a workspace switch.
+        const depth = placement?.depth ?? 0;
+        switch (window.kind) {
+          case WindowKind.App: {
+            return (
+              <AppWindow
+                appId={window.appId}
+                clickThrough={clickThrough}
+                cursor={window.cursor}
+                depth={depth}
+                domicile={domicile}
+                dragging={window.id === draggingId}
+                focused={window.id === activeId}
+                hasKeyboard={window.id === focusedId}
+                key={window.id}
+                onHover={() => {
+                  onHover(window.id);
+                }}
+                onReach={() => {
+                  onSelect(window.id);
+                }}
+                rect={placement?.surface}
+              />
+            );
+          }
+          case WindowKind.Browser: {
+            return (
+              <BrowserWindow
+                clickThrough={clickThrough}
+                depth={depth}
+                domicile={domicile}
+                dragging={window.id === draggingId}
+                focused={window.id === activeId}
+                key={window.id}
+                onHover={() => {
+                  onHover(window.id);
+                }}
+                onNavigate={(url) => {
+                  onRename(window.id, url);
+                }}
+                onReach={() => {
+                  onSelect(window.id);
+                }}
+                rect={placement?.surface}
+                src={window.src}
+              />
+            );
+          }
         }
-        case WindowKind.Browser: {
-          return (
-            <BrowserWindow
-              clickThrough={clickThrough}
-              depth={depth}
-              domicile={domicile}
-              dragging={window.id === draggingId}
-              focused={window.id === activeId}
-              key={window.id}
-              onHover={() => {
-                onHover(window.id);
-              }}
-              onNavigate={(url) => {
-                onRename(window.id, url);
-              }}
-              onReach={() => {
-                onSelect(window.id);
-              }}
-              rect={placement?.surface}
-              src={window.src}
-            />
-          );
-        }
-      }
-    })}
-    {/*
-      After every window, so that a window's chrome and the window itself tie
-      on `z-index` and the chrome wins on document order — while a window one
-      place further up the stack still covers both.
+      })}
+      {/*
+        After every window, so that a window's chrome and the window itself tie
+        on `z-index` and the chrome wins on document order — while a window one
+        place further up the stack still covers both.
 
-      In the windows' order rather than the stacking order, which moves every
-      time a float is raised. Stacking is expressed as `z-index` — see
-      `placedAt` — so nothing about what covers what needs these in stacking
-      order, and putting them in it costs a drag: a browser releases pointer
-      capture when the capturing element is moved in the document, and taking
-      hold of a window raises it.
-    */}
-    {windows.map((window) => {
-      const placement = placementOf(placements, window.id);
-      const floating = floats.find((float) => float.id === window.id);
-      const onCloseThis = () => {
-        onClose(window.id);
-      };
-      const onReachThis = () => {
-        onSelect(window.id);
-      };
-      const onMoveThis = (x: number, y: number) => {
-        onMove(window.id, x, y);
-      };
-      const onGrabThis = () => {
-        onGrab(window.id);
-      };
-      if (placement === undefined) {
-        return undefined;
-      } else if (floating === undefined) {
-        return (
-          <TitleBar
-            depth={placement.depth}
-            // A window's own bar has two states rather than three: the
-            // keyboard is in the window or it is not. The third belongs to a
-            // container's tab, below.
-            focus={titleFocus({
-              hasKeyboard: window.id === activeId,
-              shownByContainer: false,
-            })}
-            key={window.id}
-            onClose={onCloseThis}
-            onReach={onReachThis}
-            rect={placement.bar}
-            title={window.title}
-            window={window.id}
-          />
-        );
-      } else {
-        return (
-          <Fragment key={window.id}>
-            <FloatTitleBar
+        In the windows' order rather than the stacking order, which moves every
+        time a float is raised. Stacking is expressed as `z-index` — see
+        `placedAt` — so nothing about what covers what needs these in stacking
+        order, and putting them in it costs a drag: a browser releases pointer
+        capture when the capturing element is moved in the document, and taking
+        hold of a window raises it.
+      */}
+      {windows.map((window) => {
+        const placement = placementOf(placements, window.id);
+        const floating = floats.find((float) => float.id === window.id);
+        const onCloseThis = () => {
+          onClose(window.id);
+        };
+        const onReachThis = () => {
+          onSelect(window.id);
+        };
+        const onMoveThis = (x: number, y: number) => {
+          onMove(window.id, x, y);
+        };
+        const onGrabThis = () => {
+          onGrab(window.id);
+        };
+        if (placement === undefined) {
+          return undefined;
+        } else if (floating === undefined) {
+          return (
+            <TitleBar
               depth={placement.depth}
-              float={floating}
+              // Nothing drags a tiled window: the bar a window is dragged by
+              // is the floating one below.
+              dragging={false}
+              // A window's own bar has two states rather than three: the
+              // keyboard is in the window or it is not. The third belongs to a
+              // container's tab, below.
               focus={titleFocus({
                 hasKeyboard: window.id === activeId,
                 shownByContainer: false,
               })}
+              key={window.id}
               onClose={onCloseThis}
-              onDrop={onDrop}
-              onGrab={onGrabThis}
-              onMove={onMoveThis}
               onReach={onReachThis}
+              rect={placement.bar}
               title={window.title}
+              window={window.id}
             />
-            {(alt || window.id === draggingId) && (
-              <FloatGrab
+          );
+        } else {
+          return (
+            <Fragment key={window.id}>
+              <FloatTitleBar
                 depth={placement.depth}
+                dragging={window.id === draggingId}
                 float={floating}
+                focus={titleFocus({
+                  hasKeyboard: window.id === activeId,
+                  shownByContainer: false,
+                })}
+                onClose={onCloseThis}
                 onDrop={onDrop}
                 onGrab={onGrabThis}
                 onMove={onMoveThis}
-                onResize={(width, height) => {
-                  onResize(window.id, width, height);
-                }}
-                resizes={shift}
+                onReach={onReachThis}
+                title={window.title}
               />
-            )}
-          </Fragment>
-        );
-      }
-    })}
-    {/*
-      And the tabs of a tabbed or stacking container, which name a whole
-      container rather than a window: the window they are titled after is the
-      one that container last had the focus in, and picking one is reaching for
-      that window.
-    */}
-    {tabs.map((tab) => (
-      <TitleBar
-        depth={0}
-        // The tab of a container the keyboard is not in is still the open
-        // one, and saying so with the fill would be a second window claiming
-        // the keystrokes.
-        focus={titleFocus({
-          hasKeyboard: tab.id === activeId,
-          shownByContainer: tab.active,
-        })}
-        key={tab.id}
-        onClose={() => {
-          onClose(tab.id);
-        }}
-        onReach={() => {
-          onSelect(tab.id);
-        }}
-        rect={tab.rect}
-        title={titleOf(windows, tab.id)}
-        window={tab.id}
-      />
-    ))}
-  </main>
-);
+              {(alt || window.id === draggingId) && (
+                <FloatGrab
+                  depth={placement.depth}
+                  float={floating}
+                  onDrop={onDrop}
+                  onGrab={onGrabThis}
+                  onMove={onMoveThis}
+                  onResize={(width, height) => {
+                    onResize(window.id, width, height);
+                  }}
+                  resizes={shift}
+                />
+              )}
+            </Fragment>
+          );
+        }
+      })}
+      {/*
+        And the tabs of a tabbed or stacking container, which name a whole
+        container rather than a window: the window they are titled after is the
+        one that container last had the focus in, and picking one is reaching
+        for that window.
+      */}
+      {tabs.map((tab) => (
+        <TitleBar
+          depth={0}
+          // Nothing drags a tab: it is a container's, and a container is tiled.
+          dragging={false}
+          // The tab of a container the keyboard is not in is still the open
+          // one, and saying so with the fill would be a second window claiming
+          // the keystrokes.
+          focus={titleFocus({
+            hasKeyboard: tab.id === activeId,
+            shownByContainer: tab.active,
+          })}
+          key={tab.id}
+          onClose={() => {
+            onClose(tab.id);
+          }}
+          onReach={() => {
+            onSelect(tab.id);
+          }}
+          rect={tab.rect}
+          title={titleOf(windows, tab.id)}
+          window={tab.id}
+        />
+      ))}
+      {/*
+        And last, the windows that have closed. Over whatever has moved into
+        the place each of them had — the neighbour that grew to fill it is
+        already easing across, and a frame fading out from underneath it reads
+        as a flicker rather than as a window leaving.
+      */}
+      {closing.map(({ placement, title }) => (
+        <ClosingWindow
+          key={placement.id}
+          onGone={() => {
+            onGone(placement.id);
+          }}
+          placement={placement}
+          title={title}
+        />
+      ))}
+    </main>
+  );
+};
 
 const placementOf = (
   placements: readonly Placement[],

@@ -687,4 +687,46 @@ describe("BrowserWindow", () => {
     // accessible name left to match on — being the only region is enough.
     expect(screen.getByRole("region", { hidden: true })).not.toBeVisible();
   });
+
+  describe("the way it arrives and settles", () => {
+    /** The props every case here shares; each overrides the one it is about. */
+    const windowProps = {
+      clickThrough: false,
+      depth: 0,
+      domicile: silentDomicile,
+      dragging: false,
+      focused: false,
+      onHover: noHover,
+      onNavigate: () => undefined,
+      onReach: () => undefined,
+      rect: ON_SCREEN,
+      src: "https://example.com",
+    } as const;
+
+    it("grows into its box as it arrives", () => {
+      render(<BrowserWindow {...windowProps} />);
+
+      expect(globalThis.getComputedStyle(browser()).animation).toContain(
+        "windowOpening",
+      );
+    });
+
+    it("eases to a new box rather than jumping to it", () => {
+      render(<BrowserWindow {...windowProps} />);
+
+      expect(globalThis.getComputedStyle(browser()).transition).toContain(
+        "inline-size",
+      );
+    });
+
+    it("follows the pointer exactly while it is being dragged", () => {
+      // A drag writes a new box on every pointer move, and a window easing
+      // towards each of them trails the pointer instead of following it.
+      render(<BrowserWindow {...windowProps} dragging />);
+
+      expect(globalThis.getComputedStyle(browser()).transition).not.toContain(
+        "inline-size",
+      );
+    });
+  });
 });

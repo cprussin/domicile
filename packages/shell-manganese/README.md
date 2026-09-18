@@ -166,6 +166,40 @@ focused window); every other bar recedes to a card fill and muted text,
 because the window under it is what the user is looking at. Which of the three
 a bar is, is on the element as `data-focus` as well as in its colours.
 
+### Windows arrive, settle and leave
+
+A window is not simply *there* and then gone. One that appears fades up and
+grows into its box; one whose neighbours rearrange eases across to the new box
+rather than jumping to it; one that closes shrinks and fades away from where it
+was.
+
+**The arrival and the departure are a transform, and the settling is the box
+itself**, which is not a stylistic difference. The size of an `<app>` is the
+resolution its client is configured at — the SDK measures the element every
+animation frame and the host sends the client a `configure` — so a window that
+*grew* by laying out smaller would make its client redraw on every frame of the
+animation. A transform leaves the box alone: the page's own compositor scales
+the layer the client's buffer is already in. A settling window really is a
+different size afterwards and its client really does have to be told, which is
+the same stream of sizes dragging a floating window's corner already produces,
+over a sixth of a second instead of as long as the user holds it. **A window
+being dragged settles at nothing**: it takes the box each pointer move writes,
+because one easing towards each of them trails the pointer instead of
+following it.
+
+An arrival is played whenever a window appears on screen, not only when it
+opens: a window the desktop is not showing is hidden rather than unmounted —
+that is what keeps its client's surface and its page alive — and a hidden
+element runs no animation, so the one on it starts again when a workspace is
+switched to, a tab is picked, or a fullscreen is let go of.
+
+**What leaves is not the window.** A close ends the window everywhere at once
+— the list, its workspace, the layout — and for a client's window the pixels
+have gone with it, because `app_closed` is the host saying the client has
+exited. So what shrinks away is a record of the frame the window had, with its
+name still on it, held by `closing.ts` until it says it has finished; it takes
+no pointer while it goes.
+
 ### Focus follows the cursor
 
 **The window under the pointer is the window the keyboard is in.** Move onto a
@@ -370,7 +404,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/tree/frames.ts` | The tree as rectangles: every visible window's frame, and the tabs of any container. |
 | `src/window-management/placement.ts` | What is on screen right now: the tiling, the floats over it or the one window filling everything, and the order they stack in. |
 | `src/window-management/rect.ts` | A rectangle of the desktop, and the bar the top of one carries. |
-| `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it. |
+| `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it, and the ones still leaving. |
 | `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
 | `src/window-management/title-focus.ts` | Which of sway's three client colours a bar is drawn in, and why a tab needs the third. |
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
@@ -378,7 +412,10 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/useHistoryAvailability.ts` | Where that window's page can be sent, read off the view's own properties rather than learned from the event that says to read them. |
 | `src/window-management/useReclaimFocus.ts` | Keeping the document's focus on the window being worked in, but only when it landed on nothing at all — the address bar and the bar's own controls are the user reaching for focus, and a closing window's own control leaves it on the body. Which of the two a `focusout` is comes off the event's `relatedTarget`, because the document is mid-change while it is dispatched. |
 | `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
-| `src/window-management/window-styles.ts` | What every window shares, and how one is placed at a rectangle. |
+| `src/window-management/window-styles.ts` | What every window shares, how one is placed at a rectangle, and how one arrives, settles and leaves. |
+| `src/window-management/closing.ts` | A window that has closed: the box and the name it had, which is the one change the state cannot draw. |
+| `src/window-management/useClosing.ts` | Which windows those are, from the difference between two renders, held until each says it has finished leaving. |
+| `src/window-management/ClosingWindow.tsx` | The frame of a closed window, shrinking away from where it was. |
 | `src/window-management/floating/float.ts` | A window that has left the tiling: where it sits and how big. Its own module because floating is not a kind of window. |
 | `src/window-management/floating/useFloatDrag.ts`, `FloatGrab.tsx`, `FloatTitleBar.tsx` | Dragging and resizing a floating window, and the furniture that offers it. |
 | `src/wallpaper/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
