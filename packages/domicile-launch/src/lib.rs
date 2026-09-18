@@ -6,7 +6,8 @@
 //! load ([`shell_path`]), which config file the compositor reads
 //! ([`config_path`]), which ozone platform ([`platform`]), where the two
 //! components are ([`components`]), what each is started with ([`spawn`]),
-//! and the order they go up in ([`supervise`]).
+//! and the order they go up in ([`supervise`]) — and, when one of them stops
+//! being a component, whether there is another desktop in it ([`restart`]).
 //!
 //! `domicile which-shell` puts a command to a desktop that is already
 //! running. That is the same binary read the other way, and two more modules:
@@ -34,6 +35,7 @@ pub mod control_socket;
 pub mod handshake;
 pub mod milestones;
 pub mod platform;
+pub mod restart;
 pub mod session;
 pub mod shell_path;
 pub mod spawn;

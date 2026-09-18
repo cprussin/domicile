@@ -70,6 +70,7 @@ The modules, and the split is by what each needs to be tested:
 | `session` | yes | what the compositor publishes once it is up, and the shell's wait for it |
 | `milestones` | yes | what a run has to reach before it is a desktop, and the sentence it prints when it does not |
 | `handshake` | yes | whether a page ever reached the compositor, and what to say when none did |
+| `restart` | yes | whether a desktop that died gets another one, how long it waits, and when it stops getting them |
 | `supervise` | no | temp dirs, two children in order, the broker socket, teardown |
 | `control_socket` | no | where a desktop answers, taking it from whatever is there, and carrying a line each way |
 
@@ -108,6 +109,28 @@ thin enough to read.
   document has nothing in its place — **so a dev desktop has no reload at all
   until this lands**, and a rebuilt shell needs the desktop restarted. See
   *The engine's half, which is in* below.
+
+- **A component that dies restarts the desktop, not the component.** Neither
+  can be replaced under the other: the compositor dials the engine's broker
+  socket once (`Engine::load`, `packages/domicile-compositor/src/engine.rs:350`)
+  and nothing in that crate reconnects, and the page's control channel "deletes
+  itself when either end goes away"
+  (`components/domicile/browser/control_channel.h:49`), whose only retry is a
+  bounded reach at startup. So the death of either takes the other down —
+  `Running` is dropped, which signals each process group — and a whole desktop
+  is started in its place, with everything the last one bound or published
+  taken away first.
+
+  ```
+  the compositor exited (signal: 6 (SIGABRT))
+  starting the desktop again in 1s — that is failure 1 of 5 in a row.
+  ```
+
+  **The backoff doubles and the run gives up**: 1s, 2s, 4s, 8s, then five
+  failures in a row is a desktop that is not coming up and the tty is handed
+  back. A desktop that lived a minute is an incident rather than a crash loop
+  and starts the count over. Apps do not survive it — they were clients of a
+  Wayland display that is gone — and nothing pretends they do.
 
 - **The two components ship beside the binary and are found there.** Not
   passed, and not wrapped in: `domicile` resolves them from its own location,

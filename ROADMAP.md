@@ -251,10 +251,18 @@ decides whether an item is waiting or workable.
      exist now — `DrmMaster` takes and drops, `DrmModeset` configures — but
      nothing drives either one from a sleep, so closing a lid is a desktop
      that honestly should not be expected to come back.
-   - **Nothing restarts a component that dies.** `domicile-launch`'s
-     `supervise` watches for an exit and *reports* it; there is no respawn. An
-     engine crash is the whole desktop, which also makes a shell author's
-     mistake cost more than it should.
+   - **A component that dies takes the windows with it, though no longer the
+     session.** `domicile-launch`'s `restart` stands a whole new desktop up when
+     either component stops — backing off 1s, 2s, 4s, 8s and giving up after
+     five failures in a row — so a crash three milliseconds into a display
+     handshake is a desktop that comes back rather than a dead console. What
+     is restarted is the *desktop*: neither component can be replaced under
+     the other, because the compositor dials the engine's broker socket once
+     and the page's control channel deletes itself when its end goes away, so
+     the survivor is taken down deliberately. **The windows are what is still
+     lost.** Every app was a client of a Wayland display that went with the
+     compositor, and nothing re-launches one or reconnects it; a shell author's
+     mistake still costs the session's windows, just not the session.
    - **No idle, no lock, no DPMS.** A desktop you walk away from is one anybody
      can walk up to, and blanking a screen after a timeout is the same seam.
 
