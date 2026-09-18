@@ -287,6 +287,15 @@ impl Host {
             ChromeMessage::Hello { .. } => {
                 // The handshake is handled by the connection layer; nothing to do here.
             }
+            ChromeMessage::SetScreen { .. } => {
+                // PER CONNECTION, AND THE BRAIN IS SHARED. Which display a
+                // window covers is a fact about that one socket -- the desk
+                // has one brain and a window each -- so recording it here
+                // would be the last chrome to connect overwriting what every
+                // other one is. The compositor holds it beside the writer it
+                // belongs to and narrows that connection's desktop with
+                // `as_one_screen` on the way out.
+            }
             ChromeMessage::SetDevicePixelRatio { .. } => {
                 // The scene is described in logical units, which do not change
                 // when the display's pixel density does. This is the
@@ -359,4 +368,37 @@ impl Host {
 /// is a two-element array; this is the one place the two meet.
 fn wire_size((width, height): (f64, f64)) -> [f64; 2] {
     [width, height]
+}
+
+/// The desktop as one window sees it: the display it covers, at the origin.
+///
+/// **A DESK OF SEVERAL MONITORS IS SEVERAL WINDOWS.** One browser window
+/// cannot span two CRTCs — `ScreenManager::FindWindowAt` binds a window to a
+/// controller only on an exact rectangle match — so the engine opens one per
+/// display. Each of them loads the same shell, and without this each would be
+/// told the whole desktop and lay its `<Screen>` regions out in the desktop's
+/// coordinates: the desktop's top-left corner drawn on every monitor.
+///
+/// **MOVED TO THE ORIGIN, WHICH IS THE WHOLE POINT.** A window is its display,
+/// so within it that display starts at zero. A page goes on placing a region
+/// at `position` against the initial containing block exactly as it always
+/// has, and a shell needs to know nothing about any of this — which is what
+/// makes this the compositor's job rather than every shell author's.
+///
+/// **A NAME THAT MATCHES NOTHING IS AN EMPTY DESKTOP**, not the whole one.
+/// That is a window whose display went away between the engine naming it and
+/// the desktop being described, and the two readings are a blank screen and
+/// the wrong screen. A blank one is honest and lasts until the reconciliation
+/// closes the window; the wrong one is a monitor showing another monitor's
+/// desktop with nothing to say so.
+pub fn as_one_screen(displays: &[DisplayInfo], name: &str) -> Vec<DisplayInfo> {
+    displays
+        .iter()
+        .find(|display| display.name == name)
+        .map(|display| DisplayInfo {
+            position: [0, 0],
+            ..display.clone()
+        })
+        .into_iter()
+        .collect()
 }

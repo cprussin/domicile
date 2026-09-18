@@ -67,6 +67,24 @@ pub enum ChromeMessage {
     /// displays, or a browser zoom).
     SetDevicePixelRatio { ratio: f64 },
 
+    /// Which display this chrome's window covers, by the name the desktop
+    /// describes it under.
+    ///
+    /// **A DESK OF SEVERAL MONITORS IS SEVERAL WINDOWS, AND EACH ONE IS ONE
+    /// SCREEN.** One window cannot span two CRTCs, so the engine opens one per
+    /// display; without this every one of them would be told the whole desktop
+    /// and would lay its `<Screen>` regions out in the desktop's coordinates,
+    /// putting the desktop's top-left corner on every monitor.
+    ///
+    /// Sent once, on connecting, by a chrome that knows which display it is.
+    /// The answer is the desktop narrowed to that one display and moved to the
+    /// origin, so a page goes on laying out in the coordinates it always did
+    /// and a shell needs to know nothing about any of this.
+    ///
+    /// A chrome that never sends one is told the whole desktop, which is what
+    /// a nested run is and what every chrome was before this existed.
+    SetScreen { name: String },
+
     /// The chrome's own viewport, in CSS pixels: how big the desktop is.
     ///
     /// **The desktop is the chrome's window, and this is the only way the

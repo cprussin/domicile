@@ -847,19 +847,50 @@ coordinates that stop being the desktop's, and deleting it afterwards.
 **A desk of three monitors had the chrome on one of them**, because `--app=`
 opens one window and `FindWindowAt` binds a window to a controller only on an
 exact rectangle match — one window cannot be two rectangles. So the engine
-opens one per display now, and keeps doing it: `ShellWindowsFor` answers what
+opens one per display now, **on the platform that scans out and nowhere
+else**, and keeps doing it: `ShellWindowsFor` answers what
 has no window and what has no display, and a `display::DisplayObserver` asks
 it again on every add, removal and bounds change. Two rules in it are the
 difference between a desktop and a dead session — the last window is never
 closed, because closing it is the browser exiting, and windows open before
 they close, because a dock swapped at once would otherwise pass through zero.
 
-What is left is that every one of those windows draws the *same* thing. They
-all load the same shell and lay their `<Screen>` regions out in the desktop's
-own coordinates, so the second monitor shows the desktop's top-left corner
-rather than the region belonging to it. A window has to know which display it
-is, and `DisplayInfo` cannot say: it is one desktop-wide list and every
-connection gets the same one.
+Every one of those windows would otherwise draw the *same* thing — they all
+load the same shell, and a shell lays its `<Screen>` regions out in the
+desktop's own coordinates. So each window says which display it is, and the
+compositor answers that connection alone with the desktop narrowed to that
+display and moved to the origin.
+
+That gate is the same one `DomicileDisplayWatcher` is behind and is there for
+the same reason: **a nested run's screen is the host's monitors.** Windowing
+those would open a browser window per monitor of the desk a developer run is
+sitting on, and naming one would tell the compositor its desktop is a display
+it has never heard of — which it answers by narrowing to nothing, so the shell
+is told no screens at all and draws nothing. That is not a hypothetical: it is
+what `guard-shell.sh` and the client-window guards reported the first time this
+was written without the gate.
+
+**The browser says it, not the page.** It placed that window on that display;
+a page asked to work out which monitor it is could only guess from its own
+geometry, and a guess here is a monitor showing another monitor's desktop with
+nothing to say so. `ScreenOf` reads it off the frame's view on the UI thread
+and `ControlChannel` states it on the socket right after the handshake —
+second, because the compositor puts a connection on its list when it agrees
+the protocol and a `set_screen` before that names a window it has no record
+of.
+
+**`set_screen` is the one message whose answer differs per connection**, and
+the one the compositor cannot broadcast. The desk has one brain and a window
+each, so the display a window covers is held beside that socket's writer
+rather than on the `Host` they all drive, and the desktop is re-encoded per
+chrome on the way out. Everything else is encoded once for everybody, which is
+why the narrowing is a `Some`/`None` rather than a branch every message pays
+for.
+
+A shell does nothing about any of this. `<Screen name="left">` renders in the
+window on the left monitor and nowhere else, which is what it always meant,
+and `position` is still where the region goes on the page — it is just that
+the page is one screen now.
 
 **A profile names a monitor the way it is labelled.** The `wl_output` is still
 `drm-<id>` — short, always there, and what clients are already on — but every

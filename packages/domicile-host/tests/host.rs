@@ -463,3 +463,72 @@ fn a_desktop_described_again_replaces_the_one_before_it() {
         }
     );
 }
+
+/// A desk, as the compositor describes it to a chrome that has not said which
+/// window it is: three monitors side by side in the desktop's own coordinates.
+fn desk() -> Vec<DisplayInfo> {
+    vec![
+        DisplayInfo {
+            name: "drm-1".to_string(),
+            position: [0, 0],
+            scale: 2,
+            size: [1800, 3200],
+        },
+        DisplayInfo {
+            name: "drm-2".to_string(),
+            position: [1800, 0],
+            scale: 2,
+            size: [1800, 3200],
+        },
+        DisplayInfo {
+            name: "drm-3".to_string(),
+            position: [3600, 0],
+            scale: 2,
+            size: [1800, 3200],
+        },
+    ]
+}
+
+#[test]
+fn a_window_is_told_its_own_display_and_no_other() {
+    // Every window loads the same shell. Told the whole desk, each would lay
+    // its `<Screen>` regions out in the desktop's coordinates and draw the
+    // desktop's top-left corner on every monitor.
+    let one = domicile_host::as_one_screen(&desk(), "drm-2");
+
+    assert_eq!(one.len(), 1, "{one:?}");
+    assert_eq!(one[0].name, "drm-2");
+}
+
+#[test]
+fn the_display_a_window_covers_starts_at_the_origin() {
+    // The point of the whole exercise: a window IS its display, so within it
+    // that display begins at zero and a page places a region against the
+    // initial containing block exactly as it always has.
+    let one = domicile_host::as_one_screen(&desk(), "drm-3");
+
+    assert_eq!(one[0].position, [0, 0]);
+}
+
+#[test]
+fn nothing_but_the_corner_moves() {
+    // The size and the scale are the display's own and are not this function's
+    // to touch -- a window that was told a smaller screen than it covers would
+    // draw a margin it cannot fill.
+    let one = domicile_host::as_one_screen(&desk(), "drm-2");
+
+    assert_eq!(one[0].size, [1800, 3200]);
+    assert_eq!(one[0].scale, 2);
+}
+
+#[test]
+fn a_window_on_a_display_the_desk_no_longer_has_is_told_nothing() {
+    // The monitor went between the engine naming it and the desktop being
+    // described. The two readings are a blank screen and the WRONG screen:
+    // this one is blank until the reconciliation closes the window, where
+    // falling back to the whole desk would put another monitor's desktop on
+    // it with nothing to say so.
+    let gone = domicile_host::as_one_screen(&desk(), "drm-9");
+
+    assert!(gone.is_empty(), "{gone:?}");
+}
