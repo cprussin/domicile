@@ -152,7 +152,7 @@ rather than outcomes it has to handle.
 ## The configuration
 
 **The shell owns whatever a user edits.** Domicile has no user-facing
-configuration and no well-known config path: your location, your schema, your
+configuration beyond the one file below: your location, your schema, your
 names.
 
 The compositor takes a `--config` naming a TOML file that describes the
@@ -163,7 +163,25 @@ changes while it runs. **`domicile` passes one on:**
 domicile --config ./desk.toml ./my-desktop/dist/shell.js
 ```
 
-The flag may come on either side of the shell, and leaving it off is a real
+**And finds one when you leave the flag off:**
+`$XDG_CONFIG_HOME/domicile/domicile.toml`, or `~/.config/domicile/domicile.toml`
+where that is unset. A person who has written their monitors down should not
+have to type where — and a shell packaged as a wrapper script does not have to
+invent a location for a file that already has one.
+
+That is the one well-known path in the whole system, and it is the `domicile`
+binary's rather than the compositor's: `domicile-compositor` still takes every
+value on its command line and reads nothing from the environment, because it is
+started by a program. What is guessed here is guessed for a *person*, and the
+run says which of the four answers it got before it starts anything:
+
+```
+config: /home/you/.config/domicile/domicile.toml, found where a config lives
+config: ./desk.toml, because --config names it
+config: none -- no /home/you/.config/domicile/domicile.toml -- so the compositor's defaults
+```
+
+The flag may come on either side of the shell, and no file at all is a real
 answer rather than a missing one — a desktop with no monitors written down
 runs a single output that follows the engine's own window, which is what a
 nested developer run wants. What is refused is the half-stated form: a
