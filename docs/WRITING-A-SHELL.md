@@ -248,10 +248,27 @@ why. A desk of six monitors and five profiles is a wall of braces to read one
 belongs to on the line the display is on. The writer lost nothing — every
 language that generates one of these has a TOML writer too.
 
-A profile reaches what the compositor *advertises* — `wl_output`, the
-`xdg_output` logical size, and the displays a shell is told about. It does not
-yet reach the scanout, so a monitor a profile turns is laid out turned and
-still scans out the way it did.
+**A monitor a profile turns is drawn turned.** Not by the scanout, which the
+compositor still does not reach: a rotated panel scans out exactly as it did
+lying down. It is the *page* that turns, and on a tty that is the same thing —
+the engine opens one browser window per CRTC, so a page is one monitor and
+covering it is a CSS `transform` on the region.
+
+`<Screen>` does that for you and a shell writes nothing. What a display
+carries for it is `mode`, `transform` and `fills_the_window`: the pixels the
+panel scans out (un-turned — a 4K panel on its side is a 3840×2160 mode and an
+1800×3200 box), which way up it is, and whether this page is that monitor. The
+last is what turns the first two from description into an instruction, and it
+is false for every desktop your window is the whole of.
+
+The same arithmetic is what makes a display of a density your page does not
+render at come out the right size, so a 1.2 monitor no longer draws its
+desktop in the corner of a black screen.
+
+**`transform` names the turn the *content* takes**, which is the `wl_output`
+convention and the config file's: `rotate-90` is a quarter turn clockwise, for
+an output bolted a quarter turn anticlockwise. A shell reading it applies it as
+written.
 
 `@domicile/chrome-sdk` does not parse that file. Its schema is the
 `domicile-config` crate's, and there is no published TypeScript parser for it

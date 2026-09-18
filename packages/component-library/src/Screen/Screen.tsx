@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from "react";
 import { css } from "../../styled-system/css";
+import { coverTheWindow } from "./cover-the-window";
 import { useDisplays } from "./DisplayProvider";
 import type { Display } from "./display-source";
 
@@ -32,6 +33,14 @@ type Selection =
  *
  * The page spans the whole desktop, so a screen is a region of it: the
  * rectangle comes straight from the display's normalized position and size.
+ *
+ * **Except where the page IS one screen, which is every page on a tty.** The
+ * engine opens a browser window per CRTC there, so a region has to cover the
+ * whole of its window rather than a part of the page — turned if the monitor
+ * is on its side, and scaled if its pixels are denser than the box the shell
+ * lays out in. That is a CSS `transform` on the region and nothing a shell
+ * writes: `cover-the-window.ts` is the whole of it, and a shell goes on
+ * placing a `<Screen>` exactly as it did.
  *
  * **A region's identity is its position in the selection, not its display.**
  * The regions one `<Screen>` renders are the same children placed over
@@ -84,10 +93,21 @@ export const Screen = ({
           // size properties: this is desktop geometry, and the left-hand
           // monitor stays on the left and stays landscape in a right-to-left
           // or vertical-writing locale.
+          //
+          // `transform` is what makes a monitor on its side draw on its side,
+          // and it is `undefined` for every region that is a part of a page
+          // rather than the whole of one — see `cover-the-window.ts`.
+          //
+          // `top left` for the same reason the four above are physical, and
+          // it is load-bearing rather than a preference: every push in that
+          // file is measured from the region's own top-left corner, and the
+          // default origin is the centre.
           style={{
             height: `${String(display.size[1])}px`,
             left: `${String(display.position[0])}px`,
             top: `${String(display.position[1])}px`,
+            transform: coverTheWindow(display.size, display.scanout),
+            transformOrigin: "top left",
             width: `${String(display.size[0])}px`,
           }}
         >

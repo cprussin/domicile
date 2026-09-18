@@ -4780,12 +4780,7 @@ mod tests {
             compositor.try_clone().expect("the stream clones"),
         ));
 
-        let booted = vec![domicile_protocol::DisplayInfo {
-            name: "domicile-0".to_string(),
-            position: [0, 0],
-            size: [1280, 800],
-            scale: 1,
-        }];
+        let booted = vec![window_following("domicile-0", [1280, 800], 1)];
         hub.host.lock().unwrap().describe_displays(booted);
         let answers = vec![
             HostMessage::Welcome {
@@ -4796,12 +4791,7 @@ mod tests {
 
         // And now the desktop changes, after the answers were built and before
         // they are written — which is `set_output` landing in the gap.
-        let now = vec![domicile_protocol::DisplayInfo {
-            name: "domicile-0".to_string(),
-            position: [0, 0],
-            size: [1280, 800],
-            scale: 2,
-        }];
+        let now = vec![window_following("domicile-0", [1280, 800], 2)];
         hub.host.lock().unwrap().describe_displays(now.clone());
 
         assert!(
@@ -4841,24 +4831,14 @@ mod tests {
         // leaves the chrome on the desktop that is gone.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
-        let described = vec![domicile_protocol::DisplayInfo {
-            name: "domicile-0".to_string(),
-            position: [0, 0],
-            size: [1280, 800],
-            scale: 2,
-        }];
+        let described = vec![window_following("domicile-0", [1280, 800], 2)];
         hub.host
             .lock()
             .unwrap()
             .describe_displays(described.clone());
 
         let built_earlier = HostMessage::Displays {
-            displays: vec![domicile_protocol::DisplayInfo {
-                name: "domicile-0".to_string(),
-                position: [0, 0],
-                size: [1280, 800],
-                scale: 1,
-            }],
+            displays: vec![window_following("domicile-0", [1280, 800], 1)],
         };
 
         assert_eq!(
@@ -4888,24 +4868,39 @@ mod tests {
         );
     }
 
-    /// Two monitors side by side, as the desktop describes them to a chrome
-    /// that has not said which window it is.
+    /// The one display a desktop that follows Domicile's own window has: its
+    /// logical size is the window's, so the mode is that size and nothing is
+    /// turned.
+    fn window_following(name: &str, size: [u32; 2], scale: u32) -> domicile_protocol::DisplayInfo {
+        domicile_protocol::DisplayInfo {
+            name: name.to_string(),
+            position: [0, 0],
+            size,
+            scale,
+            mode: size,
+            transform: domicile_protocol::DisplayTransform::Normal,
+            fills_the_window: false,
+        }
+    }
+
+    /// Two 4K monitors on their sides, side by side, as the desktop describes
+    /// them to a chrome that has not said which window it is.
+    ///
+    /// Turned, because a chrome that DID say which window it is has to be told
+    /// the turn as well as the corner -- and a desk of monitors lying down
+    /// would pass either way.
     fn two_screens() -> HostMessage {
+        let sideways = |name: &str, x: i32| domicile_protocol::DisplayInfo {
+            name: name.to_string(),
+            position: [x, 0],
+            scale: 2,
+            size: [1800, 3200],
+            mode: [3840, 2160],
+            transform: domicile_protocol::DisplayTransform::Rotate270,
+            fills_the_window: false,
+        };
         HostMessage::Displays {
-            displays: vec![
-                domicile_protocol::DisplayInfo {
-                    name: "drm-1".to_string(),
-                    position: [0, 0],
-                    scale: 1,
-                    size: [1920, 1080],
-                },
-                domicile_protocol::DisplayInfo {
-                    name: "drm-2".to_string(),
-                    position: [1920, 0],
-                    scale: 1,
-                    size: [1920, 1080],
-                },
-            ],
+            displays: vec![sideways("drm-1", 0), sideways("drm-2", 1800)],
         }
     }
 

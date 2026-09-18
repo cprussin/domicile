@@ -2,9 +2,11 @@
  * A display the host described: where it sits on the desktop and how big it
  * is, in the desktop's own logical coordinates, which start at the origin.
  *
- * The same shape the host protocol's `DisplayInfo` carries. Declared here
- * rather than imported so this package stays framework- and protocol-free:
- * what `<Screen>` needs is a rectangle and a name, not a wire format.
+ * A regrouping of what the host protocol's `DisplayInfo` carries rather than a
+ * copy of it. Declared here rather than imported so this package stays
+ * framework- and protocol-free: what `<Screen>` needs is a rectangle, a name,
+ * and — where the page's window is one monitor — what covering that window
+ * takes.
  */
 export type Display = {
   /** What a `<Screen name>` matches. Unique across the desktop. */
@@ -15,7 +17,54 @@ export type Display = {
   scale: number;
   /** Logical width and height. */
   size: readonly [number, number];
+  /**
+   * The pixels the monitor scans out, un-turned, where its window is this
+   * monitor. `undefined` everywhere else, which is every desktop the page's
+   * window is the whole of.
+   *
+   * **Its presence is the claim, which is why it is one field rather than
+   * three.** A window that IS a monitor has to draw its logical box over the
+   * whole of itself, turned by `transform` and scaled by however many of these
+   * pixels a logical one is worth; a page that is the desktop has nothing to
+   * map and gets nothing to map it with. A `size` and a `transform` sitting
+   * there unconditionally would be description, and a region would have to be
+   * told separately whether to believe them.
+   *
+   * Not a second spelling of `size`: a monitor on its side scans out exactly
+   * as it did lying down, so a portrait 4K panel is a 3840×2160 mode and an
+   * 1800×3200 box.
+   */
+  scanout?: Scanout | undefined;
 };
+
+/**
+ * What a display's window is, for a region that has to cover it.
+ *
+ * @see Display.scanout
+ */
+export type Scanout = {
+  /** The window's size in CSS pixels: the monitor's mode, un-turned. */
+  size: readonly [number, number];
+  /**
+   * Which way up the monitor is, as the turn the content takes to come out
+   * upright — the `wl_output` convention. Applied as written.
+   */
+  transform: Transform;
+};
+
+/**
+ * The four rotations a monitor can be bolted to a desk at, spelled the way the
+ * host and the config file spell them.
+ *
+ * Its own list rather than `@domicile/chrome-sdk`'s, because this package has
+ * no protocol dependency — the same reason {@link Display} is declared here
+ * rather than imported. It is not a fifth list to keep honest by hand:
+ * `scripts/test-display-transforms-agree.sh` compares the ones that cross
+ * process boundaries, and the adapter that fills a {@link Scanout} assigns the
+ * SDK's type to this one, so a disagreement between the two is a type error at
+ * that seam rather than a monitor drawn the wrong way.
+ */
+export type Transform = "normal" | "rotate-90" | "rotate-180" | "rotate-270";
 
 /**
  * Where a `DisplayProvider` gets the desktop from.

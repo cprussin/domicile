@@ -17,7 +17,8 @@ namespace blink {
 // as the type of an attribute, and these are read off
 // `navigator.domicile.displays`.
 //
-// Its geometry is logical -- the CSS pixels a shell lays out in -- and `scale`
+// Its geometry is logical -- the CSS pixels a shell lays out in -- but for
+// `modeWidth`/`modeHeight`, which are the pixels the panel scans out. `scale`
 // is what *clients* on this screen draw at, not the shell's own density.
 //
 // Immutable. The compositor re-describes the whole desktop when any of it
@@ -33,7 +34,11 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
                   int32_t y,
                   uint32_t width,
                   uint32_t height,
-                  uint32_t scale);
+                  uint32_t scale,
+                  uint32_t mode_width,
+                  uint32_t mode_height,
+                  const String& transform,
+                  bool fills_the_window);
   ~DomicileDisplay() override;
 
   const String& name() const { return name_; }
@@ -42,6 +47,10 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
   uint32_t width() const { return width_; }
   uint32_t height() const { return height_; }
   uint32_t scale() const { return scale_; }
+  uint32_t modeWidth() const { return mode_width_; }
+  uint32_t modeHeight() const { return mode_height_; }
+  const String& transform() const { return transform_; }
+  bool fillsTheWindow() const { return fills_the_window_; }
 
   void Trace(Visitor*) const override;
 
@@ -52,6 +61,13 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
   uint32_t width_ = 0;
   uint32_t height_ = 0;
   uint32_t scale_ = 1;
+  // Zero, and deliberately not the logical size: a mode nobody stated is not
+  // a mode, and `fills_the_window_` is what decides whether anybody divides
+  // by it.
+  uint32_t mode_width_ = 0;
+  uint32_t mode_height_ = 0;
+  String transform_;
+  bool fills_the_window_ = false;
 };
 
 }  // namespace blink

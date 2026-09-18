@@ -23,7 +23,7 @@
 //! arithmetic and naming, and none of it needs a `wl_display`.
 
 use domicile_config::{ConfigError, Connected, Desktop, Layout, OutputConfig, Transform};
-use domicile_protocol::DisplayInfo;
+use domicile_protocol::{DisplayInfo, DisplayTransform};
 use domicile_scene::{Bounds, Point};
 
 use crate::engine::{Connector, Display};
@@ -160,21 +160,46 @@ impl Advertised {
 
     /// This output in the shape the chrome is told about it.
     ///
-    /// The same four facts, retyped for the wire — the compositor speaks
-    /// tuples and signed coordinates, the protocol speaks arrays and unsigned
-    /// measures, and neither is worth changing to match the other.
+    /// The same facts, retyped for the wire — the compositor speaks tuples and
+    /// signed coordinates, the protocol speaks arrays and unsigned measures,
+    /// and neither is worth changing to match the other.
     ///
     /// A size or a scale that is negative is asserted rather than folded to
     /// its magnitude: no output has one, `as_coordinate` is what refuses to
     /// build one, and turning a negative into a plausible positive here is the
     /// silent wrong answer that check exists to prevent.
+    ///
+    /// `fills_the_window` is FALSE HERE AND SET NOWHERE ELSE BUT
+    /// [`as_one_screen`](domicile_host::as_one_screen). This is the desktop as
+    /// a whole, told to whoever asked about the desktop as a whole; a window
+    /// that is one monitor is a narrowing of it, and the narrowing is the only
+    /// thing that knows one happened.
     pub fn described(&self) -> DisplayInfo {
         DisplayInfo {
             name: self.name.clone(),
             position: [self.position.0, self.position.1],
             scale: as_measure(self.wl_output_scale()),
             size: [as_measure(self.logical.0), as_measure(self.logical.1)],
+            mode: [as_measure(self.mode.0), as_measure(self.mode.1)],
+            transform: as_wire_transform(self.transform),
+            fills_the_window: false,
         }
+    }
+}
+
+/// A configured transform as the protocol spells it.
+///
+/// A third spelling of one thing, beside the compositor's `wl_output` one, and
+/// for the reason there are two already: `domicile-config` is pure logic with
+/// serde and nothing else, `domicile-protocol` is the wire and depends on
+/// serde and nothing else, and neither is going to take on the other to save a
+/// match arm. Rotations only, because that is all a profile can ask for.
+fn as_wire_transform(transform: Transform) -> DisplayTransform {
+    match transform {
+        Transform::Normal => DisplayTransform::Normal,
+        Transform::Rotate90 => DisplayTransform::Rotate90,
+        Transform::Rotate180 => DisplayTransform::Rotate180,
+        Transform::Rotate270 => DisplayTransform::Rotate270,
     }
 }
 
@@ -844,6 +869,17 @@ scale = 2
                 position: [1920, 120],
                 scale: 2,
                 size: [2560, 1440],
+                // The mode this output ADVERTISES, which on a described
+                // desktop is the arithmetic rather than a panel: the config
+                // asked for 2560x1440 at density 2, so the `wl_output` mode is
+                // 5120x2880 and nothing is scanning it out. It is a fact about
+                // the output either way, and it is only a viewport where
+                // `fills_the_window` says so.
+                mode: [5120, 2880],
+                transform: DisplayTransform::Normal,
+                // Not this function's to set. A desktop is not anybody's
+                // viewport -- `as_one_screen` is what narrows one to a window.
+                fills_the_window: false,
             }
         );
     }

@@ -21,6 +21,15 @@ const RIGHT: Display = {
   size: [2560, 1440],
 };
 
+/** A 4K panel on its side at density 1.2, whose window is itself. */
+const SIDEWAYS: Display = {
+  name: "sideways",
+  position: [0, 0],
+  scale: 2,
+  scanout: { size: [3840, 2160], transform: "rotate-270" },
+  size: [1800, 3200],
+};
+
 const describing = (
   displays: readonly Display[] | undefined,
 ): DisplaySource => ({
@@ -78,6 +87,37 @@ describe("Screen", () => {
         region.getAttribute("data-screen"),
       ),
     ).toEqual(["left", "right"]);
+  });
+
+  it("draws a region that is a whole window over the whole of it", () => {
+    // The tty case. The engine opens a browser window per CRTC and each is
+    // told one display at the origin, so the region's job is the window rather
+    // than a part of the page: a 4K panel on its side at density 1.2 is an
+    // 1800x3200 box that has to cover 3840x2160 of window.
+    //
+    // Asserted through the DOM rather than through `coverTheWindow`, which has
+    // its own tests: what this one is about is that a `<Screen>` reaches for
+    // it at all, and about `transform-origin`, which lives here and which the
+    // arithmetic over there assumes.
+    on([SIDEWAYS], <Screen name="sideways">stuff</Screen>);
+    const region = document.querySelector("[data-screen]") as HTMLElement;
+    expect(region.style.transform).toBe(
+      "translate(0, 2160px) rotate(-90deg) scale(1.2)",
+    );
+    expect(region.style.transformOrigin).toBe("top left");
+  });
+
+  it("leaves a region that is part of a page untransformed", () => {
+    // Every desktop the page's window is the whole of. A transform here would
+    // be an identity on every render and a stacking context to explain
+    // forever after -- and the two monitors of a nested run are laid out by
+    // their `left`/`top` exactly as they always were.
+    on([LEFT, RIGHT], <Screen everywhere>stuff</Screen>);
+    expect(
+      [...document.querySelectorAll("[data-screen]")].map(
+        (region) => (region as HTMLElement).style.transform,
+      ),
+    ).toEqual(["", ""]);
   });
 
   it("puts its children over the display it names", () => {

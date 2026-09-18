@@ -7,7 +7,8 @@
 //!     so we pin the tag/field names explicitly.
 
 use domicile_protocol::{
-    negotiate, ChromeMessage, CursorShape, DisplayInfo, HostMessage, PROTOCOL_VERSION,
+    negotiate, ChromeMessage, CursorShape, DisplayInfo, DisplayTransform, HostMessage,
+    PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -144,12 +145,18 @@ fn the_desktop_is_described_to_the_chrome() {
                 position: [0, 0],
                 size: [1920, 1080],
                 scale: 1,
+                mode: [1920, 1080],
+                transform: DisplayTransform::Normal,
+                fills_the_window: false,
             },
             DisplayInfo {
                 name: "right".into(),
                 position: [1920, 0],
                 size: [2560, 1440],
                 scale: 2,
+                mode: [5120, 2880],
+                transform: DisplayTransform::Normal,
+                fills_the_window: false,
             },
         ],
     };
@@ -163,6 +170,66 @@ fn the_desktop_is_described_to_the_chrome() {
     assert_eq!(v["displays"][1]["position"][0], 1920);
     assert_eq!(v["displays"][1]["size"][1], 1440);
     assert_eq!(v["displays"][1]["scale"], 2);
+    assert_eq!(v["displays"][1]["mode"], serde_json::json!([5120, 2880]));
+    assert_eq!(v["displays"][1]["transform"], "normal");
+    assert_eq!(v["displays"][1]["fills_the_window"], false);
+}
+
+#[test]
+fn a_monitor_on_its_side_says_so_and_says_what_it_scans_out() {
+    // The three fields a page turns into a CSS transform. `size` is the box
+    // the shell lays out in, `mode` is the pixels the panel has, and the two
+    // are not each other's units: 3840x2160 stood on its side at density 1.2
+    // is a 1800x3200 box. Nothing can be derived from the other two --
+    // `scale` on the wire is the INTEGER `wl_output` one, so 1800 times 2 is
+    // not 2160 and never was.
+    //
+    // Kebab-case, because that is what the config file writes and there is no
+    // second spelling of a transform anywhere in this system.
+    let v = serde_json::to_value(DisplayInfo {
+        name: "drm-3".into(),
+        position: [0, 0],
+        size: [1800, 3200],
+        scale: 2,
+        mode: [3840, 2160],
+        transform: DisplayTransform::Rotate270,
+        fills_the_window: true,
+    })
+    .unwrap();
+    assert_eq!(v["size"], serde_json::json!([1800, 3200]));
+    assert_eq!(v["mode"], serde_json::json!([3840, 2160]));
+    assert_eq!(v["transform"], "rotate-270");
+    assert_eq!(v["fills_the_window"], true);
+}
+
+#[test]
+fn a_display_that_predates_these_fields_still_reads() {
+    // Not a compatibility floor -- nothing can complete a handshake and then
+    // send a `displays` without them. It is that a captured session, a
+    // hand-written line, or a fixture from before the fork scanned anything
+    // out is still a thing this crate reads, and the answer it gives for the
+    // three is the desktop that had no notion of them: lying down, and not
+    // anybody's viewport.
+    let old: DisplayInfo =
+        serde_json::from_str(r#"{"name":"left","position":[0,0],"size":[1920,1080],"scale":1}"#)
+            .expect("it reads");
+    assert_eq!(old.transform, DisplayTransform::Normal);
+    assert!(!old.fills_the_window);
+    // `[0, 0]` and not the size: a mode nobody stated is not a mode, and
+    // `fills_the_window` is false, which is the field that decides whether
+    // anybody divides by it.
+    assert_eq!(old.mode, [0, 0]);
+}
+
+#[test]
+fn which_turns_trade_a_monitors_width_for_its_height() {
+    // The one thing a transform changes about arithmetic. A page needs it to
+    // know which way `mode` divides into `size`, and getting it backwards is a
+    // desktop drawn at the wrong scale rather than an error.
+    assert!(!DisplayTransform::Normal.swaps_axes());
+    assert!(!DisplayTransform::Rotate180.swaps_axes());
+    assert!(DisplayTransform::Rotate90.swaps_axes());
+    assert!(DisplayTransform::Rotate270.swaps_axes());
 }
 
 #[test]

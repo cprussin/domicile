@@ -32,6 +32,7 @@ blink_modules_sources("domicile") {
     # the wire name is how one becomes the other -- so the same list the
     # browser parsed the compositor's JSON with is the one that names it here.
     "//components/domicile:cursor_shape",
+    "//components/domicile:display_transform",
     "//components/domicile/mojom:mojom_blink",
   ]
 }

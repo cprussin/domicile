@@ -98,6 +98,19 @@ enum CursorShape {
   kZoomOut,
 };
 
+// Which way up a monitor is bolted to the desk.
+//
+// Named for the turn the CONTENT takes rather than the one the panel did,
+// which is the `wl_output` convention and the config file's: an output rotated
+// a quarter turn anticlockwise needs what is drawn on it turned a quarter turn
+// clockwise to come out upright, and kRotate90 is that clockwise turn.
+enum DisplayTransform {
+  kNormal,
+  kRotate90,
+  kRotate180,
+  kRotate270,
+};
+
 // One screen of the desktop.
 //
 // Integers, unlike the sizes above. Those come from a layout box, where a CSS
@@ -105,6 +118,12 @@ enum CursorShape {
 // names whole ones. Its geometry is logical all the same -- a `wl_output` mode
 // is `width`/`height` times `scale` -- and `scale` is what clients on the
 // screen draw at, not the shell's own density.
+//
+// EXCEPT `mode_width`/`mode_height`, which are the pixels the panel scans out
+// and are not a second spelling of the logical size: a monitor on its side
+// scans out exactly as it did lying down, so a portrait 4K panel is a
+// 3840x2160 mode and an 1800x3200 box. Neither is derivable from the other,
+// because `scale` here is the INTEGER wl_output one and a 1.2 display's is 2.
 struct DisplayInfo {
   string name;
   int32 x;
@@ -112,6 +131,15 @@ struct DisplayInfo {
   uint32 width;
   uint32 height;
   uint32 scale;
+  uint32 mode_width;
+  uint32 mode_height;
+  DisplayTransform transform;
+  // This display is the whole page, so the page has to fill it: the mode above
+  // is the window's own size in CSS pixels, and the logical box has to be
+  // turned and scaled to cover it. False for every desktop the page's window
+  // is the whole of, where the page's CSS pixels already are the desktop's
+  // logical ones.
+  bool fills_the_window;
 };
 
 // Page -> browser -> compositor.

@@ -836,11 +836,12 @@ Layout::scanout  →  Screens::scanout  →  domicile_displays_configure
 | **The mode, not the logical size** | This is the engine's desktop: a connector occupies what it scans out there, whatever the scale divides it into on ours |
 | **All on one row** | Nothing is ever drawn across two connectors, so the only thing this arrangement decides is where a pointer crosses. Two monitors stacked vertically is the one thing a profile can say that this does not carry |
 
-**What a profile still does not do is turn a pixel.** A rotated monitor is
-advertised rotated, laid out rotated, and lit at the origin the profile gave
-it — and the glass still scans out the way it always did.
+### Turning a monitor is the page's job, and it took a window each to get there
+
+**The modeset does not turn a pixel and never will.**
 `DisplayConfigurationParams` is `{id, origin, mode, enable_vrr}` and has no
-field for a rotation.
+field for a rotation, so a rotated monitor is lit exactly as it was lying
+down.
 
 **And a rotation does not belong there anyway.** This used to say the answer
 was `DisplayConfigurator` and `//ui/display/manager`, the 478 lines this fork
@@ -852,11 +853,49 @@ window coordinates and "normally includes rotation and scaling"
 (`ash/host/root_window_transformer.h`). The CRTC scans out its mode the way
 it always does; what changes is what is drawn into it.
 
-Which puts this behind *one browser window per CRTC* rather than beside it. A
-root transform belongs to a window, and one window here covers a desk whose
-monitors a profile may turn differently — so rotating before each display has
-a window of its own means doing it per-region inside a single page, in
-coordinates that stop being the desktop's, and deleting it afterwards.
+Which put it behind *one browser window per CRTC* rather than beside it. A
+root transform belongs to a window, and one window covering a desk whose
+monitors a profile may turn differently would have meant rotating per region
+inside a single page, in coordinates that stop being the desktop's. Each
+display has a window now, so the render tree is one region and the turn is a
+CSS `transform` on it:
+
+```
+translate(0, 2160px) rotate(-90deg) scale(1.2)
+```
+
+That is `packages/component-library/src/Screen/cover-the-window.ts`, and a
+shell writes none of it. `<Screen>` applies it, and it applies it only to a
+region that is a whole window — which is what `fills_the_window` says, and what
+is false on every desktop the page's window is the whole of.
+
+**Everything downstream already handled it**, which is why this is a table
+lookup and not a subsystem. A window is a layer in the page, so what CSS does
+to the page it does to the windows; `measure` reports the element→screen affine
+and `surfaceLocal` inverts it, so an app under any transform — rotated, scaled,
+skewed — still gets correct surface-local pointer coordinates. That was written
+for CSS the shell applies and it is the same seam.
+
+**The scale comes free and was a bug on its own.** The window is the mode in
+CSS pixels and the region is the logical box, so a 3840-wide panel at density
+1.2 is a 3200-wide region in a 3840-wide window — an upright desktop in the
+corner of a black screen, before any rotation. One `mode ÷ box`, read across
+the turn, is both.
+
+**What a desk still has to settle is which way round the two quarter turns
+are.** `rotate-90` is the turn the *content* takes, which is the `wl_output`
+convention and the config file's — an output bolted a quarter turn
+anticlockwise needs what is drawn on it turned clockwise — and every list from
+`domicile-config` to `TURNS` in `cover-the-window.ts` applies it as written.
+Reading agrees with itself all the way down; only glass can say whether the
+reading was right. Swapping two arms of one `switch` is the whole fix.
+
+**A client that pre-rotates its own buffer is still wrong**, and rotation is
+what makes that reachable. `wl_output.transform` is advertised so a client can
+draw pre-turned and save a pass, and the compositor does not read
+`wl_surface.set_buffer_transform` — so a toolkit that took the hint would be
+turned twice. Nothing in the desk does today, and the fix is in the dmabuf
+submit path rather than here.
 
 **A desk of three monitors had the chrome on one of them**, because `--app=`
 opens one window and `FindWindowAt` binds a window to a controller only on an

@@ -59,11 +59,18 @@ class Host implements DomicileHost {
   readonly spawn = ignored;
 }
 
-/** One screen, as the engine describes it. */
+/**
+ * One screen, as the engine describes it: a monitor of a desktop the page's
+ * window is the whole of, so nothing claims it is a window of its own.
+ */
 const LEFT: DomicileDisplay = {
+  fillsTheWindow: false,
   height: 1080,
+  modeHeight: 1080,
+  modeWidth: 1920,
   name: "left",
   scale: 1,
+  transform: "normal",
   width: 1920,
   x: 0,
   y: 0,
@@ -75,12 +82,30 @@ const LEFT_LAID_OUT: Display = {
   name: "left",
   position: [0, 0],
   scale: 1,
+  scanout: undefined,
   size: [1920, 1080],
 };
 const RIGHT_LAID_OUT: Display = {
   ...LEFT_LAID_OUT,
   name: "right",
   position: [1920, 0],
+};
+
+/**
+ * A 4K panel on its side at density 1.2, whose window is itself: what the
+ * engine sends for every monitor when it is scanning out.
+ */
+const SIDEWAYS: DomicileDisplay = {
+  fillsTheWindow: true,
+  height: 3200,
+  modeHeight: 2160,
+  modeWidth: 3840,
+  name: "drm-3",
+  scale: 2,
+  transform: "rotate-270",
+  width: 1800,
+  x: 0,
+  y: 0,
 };
 
 /** A domicile client and the compositor that describes desktops to it. */
@@ -101,6 +126,55 @@ describe("the desktop a shell lays out against", () => {
     host.describes([LEFT]);
 
     expect(hostDisplays(client).displays).toStrictEqual([LEFT_LAID_OUT]);
+  });
+
+  it("hands on a window to cover where the engine says this screen is one", () => {
+    // The tty case, and the one place the two shapes differ rather than
+    // regroup. The engine states the mode, the turn and the flag as three
+    // flat fields because WebIDL has no nullable dictionary attribute;
+    // `<Screen>` wants the one thing they add up to, which is a window to
+    // cover or nothing at all.
+    const [client, host] = connected();
+
+    host.describes([SIDEWAYS]);
+
+    expect(hostDisplays(client).displays).toStrictEqual([
+      {
+        name: "drm-3",
+        position: [0, 0],
+        scale: 2,
+        scanout: { size: [3840, 2160], transform: "rotate-270" },
+        size: [1800, 3200],
+      },
+    ]);
+  });
+
+  it("drops a mode nothing claimed was a window", () => {
+    // A desktop the page's window is the whole of still carries a mode and a
+    // turn -- they are facts about the panel -- and a region that took them
+    // for an instruction would scale a nested run by the density and draw it
+    // off its own window. The flag is what says which, and it is read here so
+    // that a region never has to.
+    const [client, host] = connected();
+
+    host.describes([{ ...SIDEWAYS, fillsTheWindow: false }]);
+
+    expect(hostDisplays(client).displays?.[0]?.scanout).toBeUndefined();
+  });
+
+  it("reads a turn it does not know as none at all", () => {
+    // The engine hands the name over as a `DOMString` rather than a WebIDL
+    // enum, so the set is closed on both sides of it and open in the middle.
+    // `normal` rather than a refusal, because this is one field of a whole
+    // desktop: discarding it would cost the shell every screen rather than
+    // one monitor's rotation.
+    const [client, host] = connected();
+
+    host.describes([{ ...SIDEWAYS, transform: "rotate270" }]);
+
+    expect(hostDisplays(client).displays?.[0]?.scanout?.transform).toBe(
+      "normal",
+    );
   });
 
   it("reads the domicile when asked, not when built", () => {

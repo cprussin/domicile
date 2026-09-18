@@ -8,7 +8,9 @@
 
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Host, HostError};
-use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, PROTOCOL_VERSION};
+use domicile_protocol::{
+    ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, PROTOCOL_VERSION,
+};
 use domicile_scene::KeyboardTarget;
 
 // ---- app lifecycle --------------------------------------------------------
@@ -396,12 +398,7 @@ fn the_displays_are_answered_after_the_welcome() {
     // broadcast reaches a connection that has not been welcomed, which is what
     // latest-wins retention is for.
     let mut host = Host::new();
-    host.describe_displays(vec![DisplayInfo {
-        name: "left".into(),
-        position: [0, 0],
-        size: [1920, 1080],
-        scale: 1,
-    }]);
+    host.describe_displays(vec![lying_down("left", [0, 0], [1920, 1080], 1)]);
     let mut ready = false;
     let answered = apply_chrome_message(
         &mut host,
@@ -417,12 +414,7 @@ fn the_displays_are_answered_after_the_welcome() {
                 protocol_version: PROTOCOL_VERSION,
             },
             HostMessage::Displays {
-                displays: vec![DisplayInfo {
-                    name: "left".into(),
-                    position: [0, 0],
-                    size: [1920, 1080],
-                    scale: 1,
-                }],
+                displays: vec![lying_down("left", [0, 0], [1920, 1080], 1)],
             },
         ]
     );
@@ -439,53 +431,53 @@ fn a_desktop_described_again_replaces_the_one_before_it() {
     // is a property of `describe_displays`, and driving it through
     // `apply_chrome_message` would make this fail for a handshake bug too.
     let mut host = Host::new();
-    host.describe_displays(vec![DisplayInfo {
-        name: "old".into(),
-        position: [0, 0],
-        size: [800, 600],
-        scale: 1,
-    }]);
-    host.describe_displays(vec![DisplayInfo {
-        name: "new".into(),
-        position: [0, 0],
-        size: [1920, 1080],
-        scale: 2,
-    }]);
+    host.describe_displays(vec![lying_down("old", [0, 0], [800, 600], 1)]);
+    host.describe_displays(vec![lying_down("new", [0, 0], [1920, 1080], 2)]);
     assert_eq!(
         host.describe_desktop(),
         HostMessage::Displays {
-            displays: vec![DisplayInfo {
-                name: "new".into(),
-                position: [0, 0],
-                size: [1920, 1080],
-                scale: 2,
-            }],
+            displays: vec![lying_down("new", [0, 0], [1920, 1080], 2)],
         }
     );
 }
 
+/// One monitor lying down and at its own pixels, which is the uninteresting
+/// case: `mode` is `size` and nothing is turned. A test that wants otherwise
+/// writes the `DisplayInfo` out, so the shape it is about is on the page.
+fn lying_down(name: &str, position: [i32; 2], size: [u32; 2], scale: u32) -> DisplayInfo {
+    DisplayInfo {
+        name: name.to_string(),
+        position,
+        size,
+        scale,
+        mode: size,
+        transform: DisplayTransform::Normal,
+        fills_the_window: false,
+    }
+}
+
 /// A desk, as the compositor describes it to a chrome that has not said which
-/// window it is: three monitors side by side in the desktop's own coordinates.
+/// window it is: three 4K monitors on their sides, side by side, in the
+/// desktop's own coordinates.
+///
+/// Turned rather than lying down because this is the desk `as_one_screen`
+/// exists for, and a turned monitor is where its two jobs come apart: the
+/// corner it moves, and the mode and transform it hands on unchanged for the
+/// page to draw itself over.
 fn desk() -> Vec<DisplayInfo> {
+    let sideways = |name: &str, x: i32| DisplayInfo {
+        name: name.to_string(),
+        position: [x, 0],
+        scale: 2,
+        size: [1800, 3200],
+        mode: [3840, 2160],
+        transform: DisplayTransform::Rotate270,
+        fills_the_window: false,
+    };
     vec![
-        DisplayInfo {
-            name: "drm-1".to_string(),
-            position: [0, 0],
-            scale: 2,
-            size: [1800, 3200],
-        },
-        DisplayInfo {
-            name: "drm-2".to_string(),
-            position: [1800, 0],
-            scale: 2,
-            size: [1800, 3200],
-        },
-        DisplayInfo {
-            name: "drm-3".to_string(),
-            position: [3600, 0],
-            scale: 2,
-            size: [1800, 3200],
-        },
+        sideways("drm-1", 0),
+        sideways("drm-2", 1800),
+        sideways("drm-3", 3600),
     ]
 }
 
@@ -514,11 +506,30 @@ fn the_display_a_window_covers_starts_at_the_origin() {
 fn nothing_but_the_corner_moves() {
     // The size and the scale are the display's own and are not this function's
     // to touch -- a window that was told a smaller screen than it covers would
-    // draw a margin it cannot fill.
+    // draw a margin it cannot fill. The mode and the turn likewise: they are
+    // the panel's, read off the hardware, and this only forwards them.
     let one = domicile_host::as_one_screen(&desk(), "drm-2");
 
     assert_eq!(one[0].size, [1800, 3200]);
     assert_eq!(one[0].scale, 2);
+    assert_eq!(one[0].mode, [3840, 2160]);
+    assert_eq!(one[0].transform, DisplayTransform::Rotate270);
+}
+
+#[test]
+fn a_window_is_told_that_its_display_is_the_whole_of_it() {
+    // The mode and the transform are on every display as description. This is
+    // what turns them into instructions: the page's viewport IS this mode, so
+    // the logical box it lays out in has to be turned and scaled to cover it.
+    // A desktop described to nobody in particular carries the same two facts
+    // and no such claim.
+    let one = domicile_host::as_one_screen(&desk(), "drm-2");
+
+    assert!(one[0].fills_the_window);
+    assert!(
+        desk().iter().all(|display| !display.fills_the_window),
+        "a desktop is not anybody's viewport"
+    );
 }
 
 #[test]

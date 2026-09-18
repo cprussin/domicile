@@ -9,6 +9,7 @@
 
 #include "base/check.h"
 #include "components/domicile/common/cursor_shape.h"
+#include "components/domicile/common/display_transform.h"
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h"
@@ -277,6 +278,22 @@ void DomicileHost::Modifiers(bool alt, bool ctrl, bool shift, bool meta,
       event_type_names::kModifiers, alt, ctrl, shift, meta, Arrival(arrival)));
 }
 
+// The wire name of a turn, as the page reads it off `DomicileDisplay`.
+//
+// THROUGH THE WIRE NAME, for the reason `AppCursor` above goes through one:
+// the only mapping in either direction is the X-macro in
+// components/domicile/common/display_transform.h, so there is no second list
+// to drift from the first. No `Create` and no `CHECK` here, because the
+// attribute is a `DOMString` rather than a generated enum -- the set is closed
+// on the compositor's side and on the page's schema, and this is the middle.
+namespace {
+
+String TransformName(domicile::mojom::blink::DisplayTransform transform) {
+  return String::FromUtf8(domicile::DisplayTransformToWire(transform));
+}
+
+}  // namespace
+
 void DomicileHost::Displays(
     Vector<domicile::mojom::blink::DisplayInfoPtr> displays) {
   HeapVector<Member<DomicileDisplay>> described;
@@ -284,7 +301,8 @@ void DomicileHost::Displays(
   for (const auto& display : displays) {
     described.push_back(MakeGarbageCollected<DomicileDisplay>(
         display->name, display->x, display->y, display->width, display->height,
-        display->scale));
+        display->scale, display->mode_width, display->mode_height,
+        TransformName(display->transform), display->fills_the_window));
   }
   displays_ = MakeGarbageCollected<FrozenArray<DomicileDisplay>>(
       std::move(described));

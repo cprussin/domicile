@@ -391,12 +391,22 @@ fn wire_size((width, height): (f64, f64)) -> [f64; 2] {
 /// the wrong screen. A blank one is honest and lasts until the reconciliation
 /// closes the window; the wrong one is a monitor showing another monitor's
 /// desktop with nothing to say so.
+///
+/// **AND IT IS THE WHOLE WINDOW, WHICH IS THE OTHER HALF.** Every display
+/// carries its `mode` and its `transform` as description; here they stop being
+/// description. A window whose display is stood on its side or laid out at a
+/// density its own pixels do not match has to turn and scale what it draws to
+/// cover itself, and `fills_the_window` is what tells the page so. Set only
+/// here, because this is the only place that knows a window is a monitor —
+/// `Advertised::described` describes a desktop, and a desktop is not anybody's
+/// viewport.
 pub fn as_one_screen(displays: &[DisplayInfo], name: &str) -> Vec<DisplayInfo> {
     displays
         .iter()
         .find(|display| display.name == name)
         .map(|display| DisplayInfo {
             position: [0, 0],
+            fills_the_window: true,
             ..display.clone()
         })
         .into_iter()
