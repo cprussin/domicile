@@ -844,9 +844,22 @@ monitors a profile may turn differently — so rotating before each display has
 a window of its own means doing it per-region inside a single page, in
 coordinates that stop being the desktop's, and deleting it afterwards.
 
-**And `DrmWindowHost::SetFullscreen` still puts one window on one display**, so
-a desk of three monitors shows the chrome on one of them. That is the other
-half of what is left, and it is one browser window per CRTC.
+**A desk of three monitors had the chrome on one of them**, because `--app=`
+opens one window and `FindWindowAt` binds a window to a controller only on an
+exact rectangle match — one window cannot be two rectangles. So the engine
+opens one per display now, and keeps doing it: `ShellWindowsFor` answers what
+has no window and what has no display, and a `display::DisplayObserver` asks
+it again on every add, removal and bounds change. Two rules in it are the
+difference between a desktop and a dead session — the last window is never
+closed, because closing it is the browser exiting, and windows open before
+they close, because a dock swapped at once would otherwise pass through zero.
+
+What is left is that every one of those windows draws the *same* thing. They
+all load the same shell and lay their `<Screen>` regions out in the desktop's
+own coordinates, so the second monitor shows the desktop's top-left corner
+rather than the region belonging to it. A window has to know which display it
+is, and `DisplayInfo` cannot say: it is one desktop-wide list and every
+connection gets the same one.
 
 **A profile names a monitor the way it is labelled.** The `wl_output` is still
 `drm-<id>` — short, always there, and what clients are already on — but every

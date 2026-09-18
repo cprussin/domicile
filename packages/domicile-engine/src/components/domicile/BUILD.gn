@@ -47,6 +47,23 @@ source_set("browser") {
 #
 # Header-only and dependency-free on purpose. chrome/common needs it to register
 # the scheme in every process, and must not acquire //content to do that.
+# Which displays want a shell window, and which windows are left over.
+#
+# A TARGET OF ITS OWN so that //chrome/browser/domicile can have the answer
+# without taking the frame sink broker with it: `browser` above pulls viz, gpu
+# and mojo, and this is a set difference over display ids. It is the same split
+# `command_protocol` is on the other side of -- the decision here where it has
+# tests, the window it is carried out on over in //chrome, which is the only
+# place a Browser can be made.
+source_set("shell_windows") {
+  sources = [
+    "browser/shell_windows.cc",
+    "browser/shell_windows.h",
+  ]
+
+  public_deps = [ "//ui/display" ]
+}
+
 source_set("common") {
   sources = [ "common/domicile_scheme.h" ]
 }
@@ -223,6 +240,7 @@ source_set("unit_tests") {
     "browser/frame_sink_broker_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
+    "browser/shell_windows_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
     "common/cursor_shape_unittest.cc",
     "spike/window_diff_unittest.cc",
@@ -247,6 +265,7 @@ source_set("unit_tests") {
     ":keyboard_layout",
     ":shell_scheme",
     ":shell_source",
+    ":shell_windows",
     ":shortcut_registry",
     "//components/domicile/mojom",
     "//components/domicile/engine:event_queue_unit_tests",

@@ -665,12 +665,18 @@ costs nothing.
   Doing this before the next item means rotating per-display inside a single
   page, in coordinates that stop being the desktop's, and deleting it when
   each display gets a window of its own. Hence the order.
-- **The chrome is on one display of a desk with several.**
-  `DrmWindowHost::SetFullscreen` puts one window on one display, and
+- **Every display has a window; each one still draws the whole desktop.**
   `ScreenManager::FindWindowAt` binds a controller to a window only on an
-  exact rectangle match — so one window cannot span two CRTCs and the answer
-  is one browser window per CRTC. `A-DESKTOP-ON-A-TTY.md`, *Outputs*, carries
-  what that needs.
+  exact rectangle match, so one window cannot span two CRTCs — and the engine
+  now opens one per display and reconciles that list on every hotplug
+  (`ShellWindowsFor` in `//components/domicile:shell_windows`, carried out in
+  `//chrome/browser/domicile`). What is left is the other half: every window
+  loads the same shell and lays its `<Screen>` regions out in the desktop's
+  coordinates, so a second monitor shows the desktop's top-left corner rather
+  than its own region. **A window has to know which display it is**, and
+  `DisplayInfo` has no way to say so — it is one desktop-wide list, identical
+  on every connection. That is the next piece, and rotation is behind it:
+  a page that knows it is one display can turn that display.
 - **A monitor's name is the three-letter PNP id, not the vendor.** `DEL DELL
   U3219Q 2ZLS413` rather than `Dell Inc. DELL U3219Q 2ZLS413`, which is one
   word off what sway prints for the same panel: an EDID holds the PNP id, and
