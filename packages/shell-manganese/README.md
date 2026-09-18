@@ -198,6 +198,16 @@ drops it — is announced exactly the way a click there is, because the element
 says so whichever route the focus came by, so the window spends the
 announcements it causes.
 
+**And it puts none there when it already has the keyboard.** A press in the
+address bar is a reach like any other, so it is what makes that window the one
+being worked in — and becoming that window is what focuses the page. A window
+that focused it here would spend the user's own press: the caret lands in the
+bar and is pulled into the page a moment later, so the address bar cannot be
+typed into at all. The window asks whether the focus is anywhere in itself
+before it moves it, and either half counts — a `<webview>` whose guest has the
+focus is this document's `activeElement`, which is the other thing patch 0011
+is for.
+
 **A browser window comes to the front from a click anywhere in it**, its
 address bar and its page alike, and the two halves say so differently. The
 chrome sends the shell a pointer event like any other page furniture. The page
