@@ -45,9 +45,11 @@ use domicile_protocol::{ChromeMessage, HostMessage};
 
 use crate::running::Compositor;
 
-const ONE_DISPLAY: &str = r#"{
-  "output": { "displays": [ { "name": "left", "size": [1920, 1080] } ] }
-}"#;
+const ONE_DISPLAY: &str = r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+"#;
 
 /// `a`, in the evdev code a chrome sends.
 const KEY_A: u32 = 30;

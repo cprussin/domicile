@@ -55,7 +55,7 @@ fn no_profiles_configured_is_no_layout() {
     // nothing about placement leaves the monitors where the engine put them,
     // which is the behavior that existed before profiles did.
     assert!(
-        Config::parse("{}")
+        Config::parse("")
             .unwrap()
             .output
             .layout(&[connected(LAPTOP, PANEL_MODE)])
@@ -109,22 +109,14 @@ fn a_profile_can_name_a_monitor_by_its_panel_rather_than_its_output() {
     // The panel's own name is what a person can write down, and it is the
     // string kanshi and sway already match on.
     let layout = layout(
-        r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "desk",
-        "displays": [
-          {
-            "display": "DEL DELL U3219Q G3MS413",
-            "scale": 1.2,
-            "transform": "rotate-270"
-          }
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.profiles]]
+name = "desk"
+[[output.profiles.displays]]
+display = "DEL DELL U3219Q G3MS413"
+scale = 1.2
+transform = "rotate-270"
+"#,
         &[described(CENTER, "DEL DELL U3219Q G3MS413", DESK_MODE)],
     );
     let placed = layout
@@ -139,38 +131,53 @@ fn a_profile_can_name_a_monitor_by_its_panel_rather_than_its_output() {
 }
 
 #[test]
+fn a_scale_of_exactly_one_may_be_written_as_an_integer() {
+    // TOML tells `1` from `1.0` where JSON did not, and an unscaled monitor
+    // is the commonest thing anybody configures -- so `scale = 1` is what
+    // gets typed, and a format that refused it would refuse the easy case
+    // first. Serde takes an integer into an `f64`; this is that stated rather
+    // than read out of the deserializer, because it is a property of the
+    // format change and not of this crate.
+    let layout = layout(
+        r#"
+[[output.profiles]]
+name = "desk"
+[[output.profiles.displays]]
+display = "drm-3"
+scale = 1
+"#,
+        &[connected(CENTER, DESK_MODE)],
+    );
+    assert_eq!(
+        layout
+            .placed()
+            .next()
+            .expect("the monitor should be placed")
+            .logical,
+        DESK_MODE,
+        "scale 1 is the mode itself"
+    );
+}
+
+#[test]
 fn a_profile_may_name_some_monitors_by_panel_and_others_by_output() {
     // A desk part-way through being written down: the monitor whose name has
     // been read off a running desktop, and the laptop panel that reports no
     // EDID name at all and can only be named by its output.
     let layout = layout(
-        r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "half-named",
-        "displays": [
-          {
-            "display": "DEL DELL U3219Q G3MS413",
-            "position": [
-              0,
-              0
-            ],
-            "scale": 1.2
-          },
-          {
-            "display": "drm-1",
-            "position": [
-              640,
-              1800
-            ],
-            "scale": 1.5
-          }
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.profiles]]
+name = "half-named"
+[[output.profiles.displays]]
+display = "DEL DELL U3219Q G3MS413"
+position = [0, 0]
+scale = 1.2
+
+[[output.profiles.displays]]
+display = "drm-1"
+position = [640, 1800]
+scale = 1.5
+"#,
         &[
             described(CENTER, "DEL DELL U3219Q G3MS413", DESK_MODE),
             connected(LAPTOP, PANEL_MODE),
@@ -191,9 +198,15 @@ fn two_entries_naming_one_monitor_two_ways_is_not_a_match() {
     // says the set matches when a whole monitor is unaccounted for. It would
     // apply the two-monitor layout with one screen left dark.
     let config = Config::parse(
-        r#"{ "output": { "profiles": [{ "name": "twice-over", "displays": [
-             { "display": "drm-3" },
-             { "display": "DEL DELL U3219Q G3MS413" }] }] } }"#,
+        r#"
+[[output.profiles]]
+name = "twice-over"
+[[output.profiles.displays]]
+display = "drm-3"
+
+[[output.profiles.displays]]
+display = "DEL DELL U3219Q G3MS413"
+"#,
     )
     .expect("the config should parse");
     assert!(
@@ -215,8 +228,12 @@ fn a_monitor_that_reports_no_panel_name_is_not_matched_by_an_empty_one() {
     // description is only an identity when there is one. `display` cannot be
     // empty -- the config refuses that -- and this is the other half of it.
     let config = Config::parse(
-        r#"{ "output": { "profiles": [{ "name": "anon", "displays": [
-             { "display": "drm-1" }] }] } }"#,
+        r#"
+[[output.profiles]]
+name = "anon"
+[[output.profiles.displays]]
+display = "drm-1"
+"#,
     )
     .expect("the config should parse");
     assert!(
@@ -235,28 +252,18 @@ fn the_first_profile_that_matches_is_the_one_that_applies() {
     // same set, and a desk with a "work" and a "play" arrangement of the same
     // monitors is the ordinary reason to write them.
     let layout = layout(
-        r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "first",
-        "displays": [
-          {
-            "display": "drm-1"
-          }
-        ]
-      },
-      {
-        "name": "second",
-        "displays": [
-          {
-            "display": "drm-1"
-          }
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.profiles]]
+name = "first"
+[[output.profiles.displays]]
+display = "drm-1"
+
+
+[[output.profiles]]
+name = "second"
+[[output.profiles.displays]]
+display = "drm-1"
+"#,
         &[connected(LAPTOP, PANEL_MODE)],
     );
     assert_eq!(layout.profile(), "first");
@@ -284,22 +291,14 @@ fn a_quarter_turn_swaps_a_displays_axes() {
     // rather than 3200x1800 relabelled — the desk below stands three monitors
     // on their sides and steps across them by 1800.
     let layout = layout(
-        r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "sideways",
-        "displays": [
-          {
-            "display": "drm-3",
-            "scale": 1.2,
-            "transform": "rotate-270"
-          }
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.profiles]]
+name = "sideways"
+[[output.profiles.displays]]
+display = "drm-3"
+scale = 1.2
+transform = "rotate-270"
+"#,
         &[connected(CENTER, DESK_MODE)],
     );
     let placed = layout
@@ -420,33 +419,19 @@ fn a_layout_is_placed_about_its_own_top_left_corner() {
     // reason, and it has to happen here too because a profile's origin moves
     // as monitors come and go.
     let layout = layout(
-        r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "above-and-left",
-        "displays": [
-          {
-            "display": "drm-1",
-            "position": [
-              -1920,
-              -1080
-            ],
-            "scale": 1.5
-          },
-          {
-            "display": "drm-3",
-            "position": [
-              0,
-              0
-            ],
-            "scale": 1.2
-          }
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.profiles]]
+name = "above-and-left"
+[[output.profiles.displays]]
+display = "drm-1"
+position = [-1920, -1080]
+scale = 1.5
+
+[[output.profiles.displays]]
+display = "drm-3"
+position = [0, 0]
+scale = 1.2
+"#,
         &[connected(LAPTOP, PANEL_MODE), connected(CENTER, DESK_MODE)],
     );
     assert_eq!(
@@ -463,29 +448,18 @@ fn a_gap_between_two_placed_displays_is_part_of_the_desktop() {
     // The page spans the hole, exactly as it does for a described desktop, so
     // the box is what the displays reach rather than what they cover.
     let layout = layout(
-        r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "apart",
-        "displays": [
-          {
-            "display": "drm-1",
-            "scale": 1.5
-          },
-          {
-            "display": "drm-3",
-            "position": [
-              4000,
-              0
-            ],
-            "scale": 1.2
-          }
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.profiles]]
+name = "apart"
+[[output.profiles.displays]]
+display = "drm-1"
+scale = 1.5
+
+[[output.profiles.displays]]
+display = "drm-3"
+position = [4000, 0]
+scale = 1.2
+"#,
         &[connected(LAPTOP, PANEL_MODE), connected(CENTER, DESK_MODE)],
     );
     assert_eq!(layout.size(), (7200, 1800));
@@ -499,27 +473,16 @@ fn a_layout_that_does_not_fit_the_coordinate_space_is_refused_rather_than_wrappe
     // An error rather than a panic, because the caller is a compositor holding
     // a working desktop and a config the user can edit again.
     let refused = Config::parse(
-        r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "unreachable",
-        "displays": [
-          {
-            "display": "drm-1"
-          },
-          {
-            "display": "drm-3",
-            "position": [
-              2147483647,
-              0
-            ]
-          }
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.profiles]]
+name = "unreachable"
+[[output.profiles.displays]]
+display = "drm-1"
+
+[[output.profiles.displays]]
+display = "drm-3"
+position = [2147483647, 0]
+"#,
     )
     .expect("the config should parse")
     .output
@@ -539,21 +502,13 @@ fn rejects_a_profile_that_would_leave_the_desktop_empty() {
     // the config can still be fixed, rather than on the hotplug that applies
     // it.
     let err = Config::parse(
-        r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "lid-shut",
-        "displays": [
-          {
-            "display": "drm-1",
-            "enabled": false
-          }
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.profiles]]
+name = "lid-shut"
+[[output.profiles.displays]]
+display = "drm-1"
+enabled = false
+"#,
     )
     .expect_err("a profile that enables nothing is refused");
     assert!(
@@ -564,38 +519,88 @@ fn rejects_a_profile_that_would_leave_the_desktop_empty() {
 
 #[test]
 fn rejects_a_profile_that_cannot_be_applied_as_written() {
-    // Each of these is a config that parses as JSON and describes no layout.
+    // Each of these is a config that parses as TOML and describes no layout.
     // Grouped rather than written out one per test because the assertion is
     // the same in every case — that the config is refused at parse time, when
     // the user is still looking at it.
     for text in [
         // A profile with no displays matches only a machine with no monitors,
         // which `DrmScreen` never reports.
-        r#"{ "output": { "profiles": [{ "name": "empty", "displays": [] }] } }"#,
+        r#"
+[[output.profiles]]
+name = "empty"
+displays = []
+"#,
         // Two entries for one display: which of the two places it?
-        r#"{ "output": { "profiles": [{ "name": "twice", "displays": [
-             { "display": "drm-1" }, { "display": "drm-1" }] }] } }"#,
+        r#"
+[[output.profiles]]
+name = "twice"
+[[output.profiles.displays]]
+display = "drm-1"
+
+[[output.profiles.displays]]
+display = "drm-1"
+"#,
         // Two profiles with one name: the log line that says which applied
         // would name both.
-        r#"{ "output": { "profiles": [
-             { "name": "desk", "displays": [{ "display": "drm-1" }] },
-             { "name": "desk", "displays": [{ "display": "drm-3" }] }] } }"#,
+        r#"
+[[output.profiles]]
+name = "desk"
+[[output.profiles.displays]]
+display = "drm-1"
+
+
+[[output.profiles]]
+name = "desk"
+[[output.profiles.displays]]
+display = "drm-3"
+"#,
         // A profile with no name, which is the name the log line has to print.
-        r#"{ "output": { "profiles": [{ "name": "", "displays": [{ "display": "drm-1" }] }] } }"#,
+        r#"
+[[output.profiles]]
+name = ""
+[[output.profiles.displays]]
+display = "drm-1"
+"#,
         // An unnamed display matches nothing, so the profile never applies.
-        r#"{ "output": { "profiles": [{ "name": "anon", "displays": [{ "display": "" }] }] } }"#,
+        r#"
+[[output.profiles]]
+name = "anon"
+[[output.profiles.displays]]
+display = ""
+"#,
         // A scale of zero divides the mode into a desktop of no size; a
         // negative one turns it inside out; neither is a density.
-        r#"{ "output": { "profiles": [{ "name": "flat", "displays": [
-             { "display": "drm-1", "scale": 0 }] }] } }"#,
-        r#"{ "output": { "profiles": [{ "name": "inside-out", "displays": [
-             { "display": "drm-1", "scale": -1.5 }] }] } }"#,
+        r#"
+[[output.profiles]]
+name = "flat"
+[[output.profiles.displays]]
+display = "drm-1"
+scale = 0
+"#,
+        r#"
+[[output.profiles]]
+name = "inside-out"
+[[output.profiles.displays]]
+display = "drm-1"
+scale = -1.5
+"#,
         // A transform nothing can apply.
-        r#"{ "output": { "profiles": [{ "name": "sideways", "displays": [
-             { "display": "drm-1", "transform": "rotate-45" }] }] } }"#,
+        r#"
+[[output.profiles]]
+name = "sideways"
+[[output.profiles.displays]]
+display = "drm-1"
+transform = "rotate-45"
+"#,
         // A field nobody reads, which is a typo in one that is read.
-        r#"{ "output": { "profiles": [{ "name": "typo", "displays": [
-             { "display": "drm-1", "scaale": 1.5 }] }] } }"#,
+        r#"
+[[output.profiles]]
+name = "typo"
+[[output.profiles.displays]]
+display = "drm-1"
+scaale = 1.5
+"#,
     ] {
         assert!(
             Config::parse(text).is_err(),
@@ -612,21 +617,13 @@ fn a_scale_that_leaves_a_monitor_no_logical_pixels_is_refused() {
     // number *this panel* can carry here. Refused rather than floored at one
     // pixel: a display one pixel across is a screen every window misses.
     let refused = Config::parse(
-        r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "vanishing",
-        "displays": [
-          {
-            "display": "drm-1",
-            "scale": 1e308
-          }
-        ]
-      }
-    ]
-  }
-}"#,
+        r#"
+[[output.profiles]]
+name = "vanishing"
+[[output.profiles.displays]]
+display = "drm-1"
+scale = 1e+308
+"#,
     )
     .expect("the config should parse")
     .output
@@ -666,51 +663,29 @@ fn a_profile_is_matched_again_on_every_reading_of_the_monitors() {
 
 /// The desk with one monitor on it and nothing beneath it, so that a set it
 /// turns away has no second profile to fall through to.
-const ONE_DESK: &str = r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "home-office-center",
-        "displays": [
-          {
-            "display": "drm-1",
-            "position": [
-              640,
-              1800
-            ],
-            "scale": 1.5
-          },
-          {
-            "display": "drm-3",
-            "position": [
-              0,
-              0
-            ],
-            "scale": 1.2
-          }
-        ]
-      }
-    ]
-  }
-}"#;
+const ONE_DESK: &str = r#"
+[[output.profiles]]
+name = "home-office-center"
+[[output.profiles.displays]]
+display = "drm-1"
+position = [640, 1800]
+scale = 1.5
+
+[[output.profiles.displays]]
+display = "drm-3"
+position = [0, 0]
+scale = 1.2
+"#;
 
 /// One display, scaled and nothing else — the laptop with its lid open and
 /// nothing plugged in.
-const ONE_PANEL: &str = r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "laptop-only",
-        "displays": [
-          {
-            "display": "drm-1",
-            "scale": 1.5
-          }
-        ]
-      }
-    ]
-  }
-}"#;
+const ONE_PANEL: &str = r#"
+[[output.profiles]]
+name = "laptop-only"
+[[output.profiles.displays]]
+display = "drm-1"
+scale = 1.5
+"#;
 
 /// The desk with one monitor on it, and the laptop-only profile beneath it, so
 /// that one config answers for both.
@@ -718,86 +693,53 @@ const ONE_PANEL: &str = r#"{
 /// The panel is centered under the monitor: 1920 logical wide against 3200, so
 /// (3200 - 1920) / 2 = 640 across, and 1800 down, which is the monitor's own
 /// logical height.
-const TWO_MONITORS: &str = r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "home-office-center",
-        "displays": [
-          {
-            "display": "drm-1",
-            "position": [
-              640,
-              1800
-            ],
-            "scale": 1.5
-          },
-          {
-            "display": "drm-3",
-            "position": [
-              0,
-              0
-            ],
-            "scale": 1.2
-          }
-        ]
-      },
-      {
-        "name": "laptop-only",
-        "displays": [
-          {
-            "display": "drm-1",
-            "scale": 1.5
-          }
-        ]
-      }
-    ]
-  }
-}"#;
+const TWO_MONITORS: &str = r#"
+[[output.profiles]]
+name = "home-office-center"
+[[output.profiles.displays]]
+display = "drm-1"
+position = [640, 1800]
+scale = 1.5
+
+[[output.profiles.displays]]
+display = "drm-3"
+position = [0, 0]
+scale = 1.2
+
+
+[[output.profiles]]
+name = "laptop-only"
+[[output.profiles.displays]]
+display = "drm-1"
+scale = 1.5
+"#;
 
 /// The full desk: three monitors on their sides and the laptop panel dark.
-const HOME_OFFICE_FULL: &str = r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "home-office-full",
-        "displays": [
-          {
-            "display": "drm-1",
-            "enabled": false
-          },
-          {
-            "display": "drm-2",
-            "position": [
-              0,
-              0
-            ],
-            "scale": 1.2,
-            "transform": "rotate-270"
-          },
-          {
-            "display": "drm-3",
-            "position": [
-              1800,
-              0
-            ],
-            "scale": 1.2,
-            "transform": "rotate-270"
-          },
-          {
-            "display": "drm-4",
-            "position": [
-              3600,
-              0
-            ],
-            "scale": 1.2,
-            "transform": "rotate-270"
-          }
-        ]
-      }
-    ]
-  }
-}"#;
+const HOME_OFFICE_FULL: &str = r#"
+[[output.profiles]]
+name = "home-office-full"
+[[output.profiles.displays]]
+display = "drm-1"
+enabled = false
+
+[[output.profiles.displays]]
+display = "drm-2"
+position = [0, 0]
+scale = 1.2
+transform = "rotate-270"
+
+[[output.profiles.displays]]
+display = "drm-3"
+position = [1800, 0]
+scale = 1.2
+transform = "rotate-270"
+
+[[output.profiles.displays]]
+display = "drm-4"
+position = [3600, 0]
+scale = 1.2
+transform = "rotate-270"
+"#;
 
 /// Two monitors written in the opposite order to the one they are placed in:
 /// the entry for the monitor on the right comes first.
@@ -805,30 +747,16 @@ const HOME_OFFICE_FULL: &str = r#"{
 /// Which is ordinary rather than perverse -- a profile is written a monitor at
 /// a time as each one's name is read off a running desktop -- and it is what
 /// tells "the order they were written" apart from "the order they are placed".
-const CROSSED_DESK: &str = r#"{
-  "output": {
-    "profiles": [
-      {
-        "name": "crossed-desk",
-        "displays": [
-          {
-            "display": "drm-2",
-            "position": [
-              1920,
-              0
-            ],
-            "scale": 1.2
-          },
-          {
-            "display": "drm-3",
-            "position": [
-              0,
-              0
-            ],
-            "scale": 1.5
-          }
-        ]
-      }
-    ]
-  }
-}"#;
+const CROSSED_DESK: &str = r#"
+[[output.profiles]]
+name = "crossed-desk"
+[[output.profiles.displays]]
+display = "drm-2"
+position = [1920, 0]
+scale = 1.2
+
+[[output.profiles.displays]]
+display = "drm-3"
+position = [0, 0]
+scale = 1.5
+"#;

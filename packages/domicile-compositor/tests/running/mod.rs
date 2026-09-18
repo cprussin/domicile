@@ -65,14 +65,14 @@ pub struct Session {
 }
 
 impl Compositor {
-    /// Start one on `config`, which is the JSON a shell would have generated.
+    /// Start one on `config`, which is the TOML a shell would have generated.
     ///
     /// Panics rather than returning a `Result`: every caller is a test, and a
     /// compositor that would not start is the end of that test either way —
     /// with the difference that a panic here carries its stderr.
     pub fn started_with(config: &str) -> Compositor {
         let directory = tempfile::tempdir().expect("a runtime directory");
-        let config_file = directory.path().join("config.json");
+        let config_file = directory.path().join("config.toml");
         std::fs::write(&config_file, config).expect("the config is written");
         let session_file = directory.path().join("session.json");
         let chrome_socket = directory.path().join("chrome.sock");
@@ -294,7 +294,7 @@ impl Compositor {
     /// ones in the middle are a truncated file that parses as a desktop with
     /// no displays in it.
     pub fn reconfigure(&self, config: &str) {
-        let staging = self.config_file.with_extension("json.new");
+        let staging = self.config_file.with_extension("toml.new");
         std::fs::write(&staging, config).expect("the new config is written");
         std::fs::rename(&staging, &self.config_file).expect("it replaces the old one");
     }

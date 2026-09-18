@@ -79,7 +79,10 @@ use crate::running::Compositor;
 /// Measured, since an earlier version of this sentence claimed the opposite:
 /// defaulted, the check *fails* — 1280x800 gives a 2560x1600 mode against a
 /// hardcoded 1800x1200. It does not go quietly vacuous.
-const FOLLOWING: &str = r#"{ "compositor": { "nested_size": [900, 600] } }"#;
+const FOLLOWING: &str = r#"
+[compositor]
+nested_size = [900, 600]
+"#;
 
 /// The density the chrome reports, and what the client should draw at.
 const DENSITY: f64 = 2.0;

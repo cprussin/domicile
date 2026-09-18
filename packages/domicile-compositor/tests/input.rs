@@ -47,18 +47,25 @@ use domicile_protocol::{ChromeMessage, HostMessage};
 
 use crate::running::Compositor;
 
-const ONE_DISPLAY: &str = r#"{
-  "output": { "displays": [ { "name": "left", "size": [1920, 1080] } ] }
-}"#;
+const ONE_DISPLAY: &str = r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+"#;
 
 /// A display, and a keyboard laid out deliberately unlike the default.
 ///
 /// `dvorak` rather than the `dvp` the config falls back to, so that the keymap
 /// this test reads off the wire can only have come from *this* file.
-const A_DVORAK_KEYBOARD: &str = r#"{
-  "output": { "displays": [ { "name": "left", "size": [1920, 1080] } ] },
-  "input": { "keyboard": { "xkb_layout": "us", "xkb_variant": "dvorak" } }
-}"#;
+const A_DVORAK_KEYBOARD: &str = r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+
+[input.keyboard]
+xkb_layout = "us"
+xkb_variant = "dvorak"
+"#;
 
 /// The left mouse button, as Linux names it and the protocol carries it.
 const BTN_LEFT: u32 = 0x110;

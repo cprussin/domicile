@@ -25,18 +25,22 @@ use domicile_test_chrome::{hear, say, ChromeError};
 
 use crate::running::Compositor;
 
-const ONE_DISPLAY: &str = r#"{
-  "output": { "displays": [ { "name": "left", "size": [1920, 1080] } ] }
-}"#;
+const ONE_DISPLAY: &str = r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+"#;
 
-const TWO_DISPLAYS: &str = r#"{
-  "output": {
-    "displays": [
-      { "name": "left", "size": [1920, 1080] },
-      { "name": "right", "position": [1920, 0], "size": [2560, 1440] }
-    ]
-  }
-}"#;
+const TWO_DISPLAYS: &str = r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+
+[[output.displays]]
+name = "right"
+position = [1920, 0]
+size = [2560, 1440]
+"#;
 
 /// How long to wait for a message that should not come.
 ///

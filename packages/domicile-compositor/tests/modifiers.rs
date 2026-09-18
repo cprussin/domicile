@@ -43,9 +43,11 @@ use domicile_protocol::{ChromeMessage, HostMessage};
 
 use crate::running::Compositor;
 
-const ONE_DISPLAY: &str = r#"{
-  "output": { "displays": [ { "name": "left", "size": [1920, 1080] } ] }
-}"#;
+const ONE_DISPLAY: &str = r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+"#;
 
 /// Left Alt, left Ctrl and Enter, in the evdev codes a chrome sends.
 const ALT: u32 = 56;
