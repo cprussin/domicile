@@ -1,0 +1,151 @@
+name: Pinned engine
+
+# Does the engine this checkout PINS satisfy the compositor this checkout
+# BUILDS?
+#
+# Nothing answered that until this job, and the night it cost us is #411: it
+# landed both halves of a display-protocol change — a `name` on the C ABI's
+# display record, and a compositor that asserts the pointer is non-null — while
+# `engine-release.nix` still pinned `engine-f38ef3f`, whose `DomicileDisplay`
+# is 40 bytes to the new one's 48 and carries no name at all. The compositor
+# read a name out of the old struct's `x` and `y`, which for a display at the
+# origin are zero, and aborted inside an `extern "C"` callback that cannot
+# unwind:
+#
+#   the engine names every display, even if it names it nothing
+#   domicile: the compositor exited (signal: 6 (SIGABRT) (core dumped))
+#
+# CI was green on that pull request and on every commit after it. It had to be:
+# `nix-build.yml` builds the flake and never starts a desktop, and
+# `engine.yml`'s pixel guard runs the engine it just built out of `patches/` —
+# which has the new field — never the tarball a user downloads. Every check
+# looked at one half. #413 records the gap and #415 paid for it with a repin.
+#
+# WHY THIS IS AFFORDABLE ON A ONE-SLOT MACHINE. It runs the same pixel guard
+# engine.yml runs, and the only difference is where the engine comes from:
+# `nix build .#engine` is `fetchurl` of the url and hash in
+# `engine-release.nix` plus `autoPatchelfHook` over what comes out — a ~210MB
+# download, and on a warm store not even that. No Chromium tree is touched, no
+# lock is taken, and `crux`'s slot is held for minutes rather than the 27 an
+# incremental engine build takes. That is the whole reason this is a workflow
+# of its own rather than a step in engine.yml, where it would sit behind both
+# that build and the `paths:` filter in front of it.
+#
+# NO `paths:` FILTER HERE, AND THAT IS THE POINT RATHER THAN AN OVERSIGHT.
+# Three independent things break this pair — the compositor's side of the ABI
+# in `packages/domicile-compositor/src/engine.rs`, the header the two agree on,
+# and the pin — and #411 moved the first two and left the pin alone. A filter
+# keyed on `engine-release.nix`, which is the one anybody would reach for,
+# would have skipped exactly the change that broke main.
+#
+# IT RUNS ON THE MERGE AS WELL AS THE PULL REQUEST, for engine.yml's reason
+# and one of its own. A `pull_request` run builds the head merged into main as
+# main was when the event fired, and main moving does not fire it again — so a
+# repin and an ABI change open at the same time are each green alone and broken
+# together, which is this failure's exact shape.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Keyed by ref and never cancelling, which is the rule every workflow that
+# reaches for `crux` follows; scripts/test-engine-concurrency.sh asserts it and
+# engine.yml explains what a shared group did to runs 176 and 177. Nothing here
+# leaves a half-linked build behind, but a cancelled run still holds the slot
+# while it tears down, and a group of depth one that discards work is worse
+# than a queue that makes it wait.
+concurrency:
+  group: pinned-engine-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    # THE DMABUF IMPORT NEEDS A DRM RENDER NODE, so this cannot be
+    # `ubuntu-latest`. AGENTS.md names it as one of the three things CI cannot
+    # reach, `scripts/e2e-dmabuf.sh` is the skip CI explicitly allows for it,
+    # and `under-wayland.sh` exists because `--ozone-platform=headless` has no
+    # `CreateNativePixmapFromHandle` to import into. `crux` has the card.
+    runs-on: [self-hosted, crux]
+
+    # Minutes, not hours, and that is the claim this job is making. Measured on
+    # `crux`, first run, warm store: 18s to fetch the engine, 39s to build the
+    # compositor, 64s for the guard — 2m07s end to end. A run that is still
+    # going at half an hour is stuck, and on a single-slot machine a stuck run
+    # is the cost.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # /tmp is the runner unit's, not this job's — PrivateTmp is per-service
+      # and the service outlives every job. Without this the failure dump below
+      # prints the last run's guard log, which engine.yml learned the hard way:
+      # numbers from a previous run are worse than no numbers.
+      - name: Forget the last run's logs
+        run: rm -f /tmp/domicile-*.log
+
+      # The bytes a user gets, by the only route that produces them. A build
+      # from the checkout would be a different binary however carefully it were
+      # configured, and it is the published one this job is about.
+      #
+      # The store path is printed because it is the evidence: it names the
+      # engine version in the log, so a failure here can be read against
+      # `engine-release.nix` without opening the flake.
+      - name: Fetch the engine this checkout pins
+        run: |
+          set -euo pipefail
+          ENGINE="$(nix build --no-link --print-out-paths .#engine)"
+          echo "the pin resolves to $ENGINE"
+          echo "ENGINE=$ENGINE" >> "$GITHUB_ENV"
+
+      # And the other half of the pair, from this tree. Without this the job
+      # would be guarding the pinned engine against whatever compositor was
+      # lying around, which is a question nobody asked.
+      - name: Build the compositor this checkout carries
+        run: nix develop .#full --command cargo build -p domicile-compositor
+
+      # `.#full` rather than Chromium's toolchain shell, and it is not a
+      # superset: `engineRuntimeLibs` in flake.nix puts Chromium's runtime
+      # libraries beside the GL stack and the guard needs both. The GL stack,
+      # or no client can hand the compositor a dmabuf at all; Chromium's, or
+      # `libdomicile_engine.so` will not load. `guard-client-window.sh` says so
+      # in its own header, and `engine-release.yml` invokes it exactly this way
+      # against the freshly packaged tree.
+      #
+      # `OUT: .` because the store path IS the out directory — `chrome` and
+      # `libdomicile_engine.so` sit directly inside it, which is what
+      # `libexec/domicile/engine` points at. The guard's default is
+      # `out/Domicile`, which does not exist under there.
+      #
+      # WHAT FAILS HERE WHEN THE TWO HALVES DISAGREE is not the pixel
+      # comparison: the compositor dispatches the engine's display list before
+      # it ever brokers a frame sink, so a record it cannot read aborts the
+      # process and the guard reports a compositor that did not start. The
+      # panic is in the log the next step prints.
+      #
+      # No negative control alongside this. `engine.yml` already runs this
+      # script with `NEGATIVE=1` to show it can fail, and that property belongs
+      # to the script rather than to either caller — a second copy here would
+      # buy nothing and spend the slot twice.
+      - name: The pinned engine draws a client's window on the page
+        env:
+          OUT: .
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/under-wayland.sh "$ENGINE" \
+            packages/domicile-engine/scripts/guard-client-window.sh "$ENGINE"
+
+      - name: What the guard wrote down
+        if: ${{ failure() }}
+        run: |
+          for log in /tmp/domicile-under-wayland.log \
+                     /tmp/domicile-client-window-compositor.log \
+                     /tmp/domicile-client-window-engine.log; do
+            echo "::group::$log"
+            tail -200 "$log" 2>&1 || true
+            echo "::endgroup::"
+          done
