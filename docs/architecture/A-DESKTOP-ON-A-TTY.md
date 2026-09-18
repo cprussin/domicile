@@ -1,9 +1,11 @@
 # A desktop on a tty
 
-**A desktop comes up on a bare console.** On a tty `domicile` starts the engine
-under `--ozone-platform=drm`, takes DRM master as the card arrives, modesets the
-panel at its native mode, fills that mode exactly, takes every keyboard and
-pointer from logind, and asks logind for a console switch on `Ctrl+Alt+F<n>`.
+**A desktop comes up on a bare console and can be used.** On a tty `domicile`
+starts the engine under `--ozone-platform=drm`, takes DRM master as the card
+arrives, modesets the panel at its native mode, fills that mode exactly, takes
+every keyboard and pointer from logind, and asks logind for a console switch on
+`Ctrl+Alt+F<n>`. Keys reach the shell, an arrow is drawn on the cursor plane,
+the trackpad moves it, and a click lands in the page under it.
 
 Two pieces of work got it there and the distinction is still the useful one.
 Letting `gn gen` accept `ozone_platform_drm = true` is a **patch**: nine edits,
@@ -30,14 +32,18 @@ covered a keyboard, and the first run on hardware said otherwise.
 | A connected panel modesets at its native mode | **Hardware.** 2880x1920@120, one `Configure`, confirmed by the DRM thread, and the self-caused hotplug behind it suppressed |
 | The screen lights at startup rather than after a VT round trip | **Hardware**, on `engine-9dd6e30`. Four runs before it drew nothing until the user had been to another console and back |
 | The desktop fills the CRTC and stays filling it | **Hardware for the failure**, which is a black screen with a clean log: a run reported a desktop of 2880x1920 and, 1.37 s later, one of 1050x1900. Patches `0018` and `0023` |
-| Keys reach the shell with the layout the config names | **Hardware.** Every tty run logged `No current XKB state` before every press — which is a press that arrived, through descriptors logind handed over. Patch `0024` |
-| A device logind force-pauses comes back | **Reasoned from source, not yet run.** Landed as #381 and #384 the same night; `DrmInputDevicesTest` (19 cases) and `scripts/test-input-comes-from-logind.sh` are what stand behind it |
+| Keys reach the shell with the layout the config names | **Hardware.** Patches `0024` and `0025`. The descriptors arrived from the start; what was missing was a window that told views it was active, so nothing held focus and every key was dropped |
+| A device logind force-pauses comes back | **Hardware.** `DrmInputDevices` answers a resume from `names_`, not from the descriptors it had already forgotten — a run handed back 13 live descriptors 0.93 s in and threw all 13 away before that |
+| An arrow is drawn where the pointer is | **Hardware.** Patch `0026`. `BitmapCursorFactory` answers every type with a typed, bitmapless cursor, so `wm::CursorLoader` never reaches the asset arrow and the empty bitmap becomes `drmModeSetCursor(fd, crtc, 0, 0, 0)` — the kernel's word for *off*, which succeeds, so nothing is logged |
+| The trackpad moves it | **Hardware.** Patch `0027` and `use_libinput = true`. Off ChromeOS `CreateConverter` has no touchpad branch at all, so a pad falls to `EventConverterEvdevImpl`, which has no `EV_ABS` case and drops every finger position |
+| A click reaches the page under the pointer | **Hardware**, on `engine-f38ef3f`, with a mouse and with the pad |
 | `Ctrl+Alt+F<n>` reaches `Seat.SwitchTo` | **Reasoned from source since the fix.** The chord decoded on hardware and the call died on `/org/freedesktop/login1/seat/self`; reading the session's own `Seat` instead has not been run |
 | The display is dropped on the way out of the console and retaken on the way back | **Reasoned from source.** `DrmVtSwitcherTest` holds the ordering; no run has switched away and back |
 | A stop asked for during startup is a stop | **Unit tests.** `domicile-launch`'s milestone tests. It matters here and nowhere else — see [What a tty costs on the way out](#what-a-tty-costs-on-the-way-out) |
 
-The one substantive item still open is [taking the card node from
-logind](#the-card-should-come-from-logind-too).
+Still open: [taking the card node from
+logind](#the-card-should-come-from-logind-too), and a console switch away and
+back, which no run has done.
 
 ## What the assert guards
 
@@ -978,6 +984,15 @@ of this — both selections land on that card and agree.
 - **Take input from logind, not from the `input` group, and never fall back to
   `open()`.** A silent fallback is a desktop that comes up deaf, which is the bug
   the seam exists to remove.
+- **Expect the gap wherever ash is ozone/drm's only consumer.** Six times now
+  the platform has compiled, linked and run while doing nothing, because the
+  thing that drives it lives in ash: `DisplayConfigurator::TakeControl` behind
+  an `is_chromeos` assert, DRM master never asked for, `DrmWindowHost::Close()`
+  empty, `Activate()` a `NOTIMPLEMENTED_LOG_ONCE()`, `BitmapCursorFactory`
+  answering with a bitmapless cursor, and `CreateConverter` having no touchpad
+  branch at all. Every one was silent — nothing failed, so nothing logged. When
+  a piece of ozone/drm appears to work and its effect never arrives, look for
+  ash supplying the other half before looking for a bug.
 - **Prove what a build can prove in CI.** The probe cost one engine-job slot and
   found three of the eight edits in the patch, one of them a link error no `git
   grep` and no compiler could have reached.
@@ -1018,6 +1033,10 @@ Step 2 — the embedder.
 - [x] a display-list event on the engine C ABI, and `Screens::from_the_engine`
 - [x] drive `adopt_the_desktop` from that event
 - [x] real physical size and refresh on `wl_output`, from the snapshot
+- [x] the window tells views it is active — patch `0025`. Descriptors were never the problem after `0020`: `DrmWindowHost::Activate()` was `NOTIMPLEMENTED_LOG_ONCE()`, so `DesktopWindowTreeHostPlatform::is_active_` stayed false, no view held focus, and every key that arrived was dropped
+- [x] a cursor factory that answers nothing — patch `0026`, 4 unit tests. `wm::CursorLoader` reaches the asset arrow only when the platform answers null, and ash gets that by holding its loader with `use_platform_cursors=false`, which views does not
+- [x] the touchpad goes to libinput — patch `0027` and `use_libinput = true` in both `gn gen` blocks, with libinput in `tools/nix/make-shell-for-system.nix` because the build runs host binaries that link it
+- [x] the window says what it did with a click — patch `0028`. A one-shot gated only on `IsLocatedEvent()` is spent by the startup's own synthesized move, so it answered nothing; it now excludes `EF_IS_SYNTHESIZED`, reports a press apart from a move, and reads the `EventResult` the dispatch used to discard
 - [ ] take the card node from logind too — `TakeDevice` on `/dev/dri/card0` plus `PauseDevice` / `ResumeDevice`. See [The card should come from logind too](#the-card-should-come-from-logind-too)
 
 ## Open questions
