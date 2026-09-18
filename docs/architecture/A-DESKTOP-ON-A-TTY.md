@@ -793,22 +793,46 @@ divides it into the logical size. kanshi pins one per output (`mode =
 costs nothing today, because `ModesetParamsFromSnapshots` lights a connector
 at its native mode and that is the mode anyone would pin — but a
 monitor that negotiated something else would move every display placed after
-it, with nothing in the config to correct it with. The field belongs with the
-scanout work below, which is what would give it something to do.
+it, with nothing in the config to correct it with.
 
-**What a profile does not yet do is turn a pixel.** Everything above is the
-desktop the compositor *advertises*: `wl_output`'s position, mode, transform and
-scale, the `xdg_output` logical size a toolkit lays out against, and the
-`DisplayInfo` the chrome places its `<Screen>` regions from. The scanout is the
-engine's and is unchanged — `ModesetParamsFromSnapshots` still lights every
-connector that reports a mode at its native mode at the snapshot's own origin,
-skipping the ones that report none, and
-`DrmWindowHost::SetFullscreen` still puts one window on one display. So a
-rotated monitor is advertised rotated and laid out rotated, and the glass still
-scans out the way it always did. Closing that is the next step and is two
-things: the profile's mode and origin reaching `DisplayConfigurationParams`, and
-a rotation reaching the DRM plane — which on ChromeOS is `DisplayConfigurator`,
+### A profile decides which connectors are lit, and in what order
+
+`Layout::scanout` is the other half of a profile, and it is the half the
+desktop above cannot carry. `Layout::placed` is logical, turned, and has the
+displays a profile disabled already dropped; this is the glass — which
+connectors to light at all, and where each one's mode goes on the *engine's*
+own desktop. A display dropped from a desktop still has to be turned off.
+
+It crosses because the two halves are in different processes: the config is the
+compositor's and DRM master is the browser's.
+
+```
+Layout::scanout  →  Screens::scanout  →  domicile_displays_configure
+  → FrameSinkBroker.ConfigureDisplays  →  OzonePlatform::SetDomicileDisplayLayout
+  → DrmModeset::SetLayout              →  ModesetParamsFromSnapshots
+```
+
+| Rule | Why |
+|---|---|
+| **An empty layout means the hardware decides** | What every desktop but a matched profile's says, and what this did before a layout could be stated. It is also what *undoes* one: a profile that turned a panel off stops matching the moment a monitor is unplugged, and something has to say the panel comes back on |
+| **A non-empty layout is the whole truth** | A connector it does not name is left dark rather than lit where the card put it. An origin nothing chose can land on top of one that was, and two controllers claiming one rectangle is the exact-rect mismatch `FindWindowAt` answers by binding no window at all. That case is a monitor plugged in between the reading the compositor answered and this one, and it lights on the next round trip |
+| **A dark connector still gets a corner** | It is in the browser's display list whether or not it is lit, and one left where the card stacked it lands on top of a monitor that is on. The compositor puts the dark ones past the end of the row |
+| **Primary is the first display the layout lights** | The difference between a desktop and a black screen. A views browser going fullscreen is sized from the display it is on, and the window it starts at is on whichever display holds `(10, 10)`. A profile that turns the laptop panel off is the ordinary case on a full desk, and a primary that is dark is a browser drawing correctly onto a screen nobody can see — with every log line saying the modeset succeeded |
+| **The connectors are stepped across in the order the displays are placed** | Ozone lays its own desktop out in connector order, which is the card's business and says nothing about which monitor is on which side of a desk — so a pointer leaving one screen arrived on whichever connector was numbered next |
+| **The mode, not the logical size** | This is the engine's desktop: a connector occupies what it scans out there, whatever the scale divides it into on ours |
+| **All on one row** | Nothing is ever drawn across two connectors, so the only thing this arrangement decides is where a pointer crosses. Two monitors stacked vertically is the one thing a profile can say that this does not carry |
+
+**What a profile still does not do is turn a pixel.** A rotated monitor is
+advertised rotated, laid out rotated, and lit at the origin the profile gave
+it — and the glass still scans out the way it always did. Closing that is a
+rotation reaching the DRM plane, which on ChromeOS is `DisplayConfigurator`,
 `//ui/display/manager`, the 478 lines this fork deliberately does not port.
+`DisplayConfigurationParams` is `{id, origin, mode, enable_vrr}` and has no
+field for one.
+
+**And `DrmWindowHost::SetFullscreen` still puts one window on one display**, so
+a desk of three monitors shows the chrome on one of them. That is the other
+half of what is left, and it is one browser window per CRTC.
 
 **A profile names a monitor the way it is labelled.** The `wl_output` is still
 `drm-<id>` — short, always there, and what clients are already on — but every

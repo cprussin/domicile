@@ -417,12 +417,13 @@ jobs:
             grep -cE '^  ' || true)
           echo "$count tests match $filter"
           # Every suite in the filter, counted rather than estimated:
-          # FrameSinkBroker 14, WindowDiff 7, EngineEventQueue 6,
+          # FrameSinkBroker 17, WindowDiff 7, EngineEventQueue 6,
           # ShortcutRegistry 7, ShellURLLoaderFactory 11, ShellDocument 11,
           # ShellSource 3, CursorShape 3, CommandProtocol 8,
           # DomicileDisplayList 6, DomicileKeyboardLayout 3.
           #
-          # 79, and it was 77 — the name a display list now carries, which is
+          # 82, and it was 79 — the layout a producer states back is three
+          # more FrameSinkBroker cases. Before that it was 77 — the name a display list now carries, which is
           # what an output profile matches a monitor on, is two more
           # DomicileDisplayList cases. Before that it was 74 — the keymap the compositor sends is three
           # DomicileKeyboardLayout cases, a suite of its own and so in the
@@ -434,7 +435,7 @@ jobs:
           # truth and a whole suite could have stopped linking with room to
           # spare. That is the failure this check exists to catch, so the
           # number is the real one.
-          [ "$count" -ge 79 ] || {
+          [ "$count" -ge 82 ] || {
             echo "::error::only $count tests matched; the suites were renamed or did not link" >&2
             exit 1
           }
@@ -462,7 +463,7 @@ jobs:
         working-directory: /build/chromium/src/out/Domicile
         run: |
           set -euo pipefail
-          for suite_and_floor in 'DrmScreenTest:22' 'DrmModesetTest:16' 'DrmVtSwitcherTest:17' 'DrmFullscreenTest:4' 'DrmMasterTest:7' 'DrmInputDevicesTest:22' 'DrmCursorFactoryTest:4' 'DrmEdidSerialTest:18'; do
+          for suite_and_floor in 'DrmScreenTest:26' 'DrmModesetTest:20' 'DrmVtSwitcherTest:17' 'DrmFullscreenTest:4' 'DrmMasterTest:7' 'DrmInputDevicesTest:22' 'DrmCursorFactoryTest:4' 'DrmEdidSerialTest:18'; do
             suite="${suite_and_floor%%:*}"
             floor="${suite_and_floor##*:}"
             count=$(nix develop "$GITHUB_WORKSPACE#full" --command \

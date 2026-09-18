@@ -102,6 +102,37 @@ struct Display {
   int32 refresh_mhz;
 };
 
+// One display, as the producer wants the connector behind it driven.
+//
+// The opposite direction to `Display`, and the opposite kind of fact. That one
+// is what the browser read off the hardware; this is what the compositor's
+// config says to do with it -- which connectors to light, and where each one's
+// mode goes on the browser's own desktop.
+//
+// It has to cross because the two halves live in different processes. The
+// config that says which monitors are on and which side of the desk each one
+// is on is the compositor's; the CRTCs are the browser's, because the browser
+// is the process holding DRM master. See
+// docs/architecture/A-DESKTOP-ON-A-TTY.md, "Outputs".
+struct DisplayLayout {
+  // Which display, as `Display.id` named it. The producer cannot invent one:
+  // it is the id the browser derived from the EDID and sent.
+  int64 id;
+
+  // Whether to light this connector at all.
+  //
+  // `false` is a profile's `enabled: false`, which is how a laptop panel is
+  // named so that shutting the lid on a full desk still matches the desk's
+  // profile and is turned off so nothing is drawn behind the lid.
+  bool enabled;
+
+  // Where its mode goes on the browser's desktop, in physical pixels. Not read
+  // where `enabled` is false, which is why it is a point rather than a
+  // nullable one: a display that is not being lit has no corner, and zero is
+  // the only honest thing to send instead of one.
+  gfx.mojom.Point origin;
+};
+
 // Tells a producer what the screens are.
 //
 // There is no Wayland request this answers, because a Wayland compositor is
@@ -220,6 +251,25 @@ interface FrameSinkBroker {
   // this interface brokered is destroyed anyway when the connection drops; this
   // is for a producer outliving one of its own surfaces.
   DestroyFrameSink(viz.mojom.FrameSinkId frame_sink_id);
+
+  // What the connectors behind the displays should be doing.
+  //
+  // THE ANSWER TO `OnDisplaysChanged`, and the reason this interface carries
+  // both directions: what the browser reads off DRM is a fact, and what to do
+  // with it is a config only the producer holds.
+  //
+  // AN EMPTY LIST IS NOT "LIGHT NOTHING". It is the producer having no
+  // opinion, which is what every desktop but a matched profile's has, and the
+  // browser answers it by going back to lighting what the hardware reports.
+  // That is load-bearing rather than tidy: a profile that turned a panel off
+  // stops matching the moment a monitor is unplugged, and something has to say
+  // the panel comes back on.
+  //
+  // Nothing comes back. A modeset is committed on the browser's own DRM thread
+  // and answered on a later task, so a reply here would be a lie; what the
+  // producer learns instead is the next `OnDisplaysChanged`, which the modeset
+  // itself provokes.
+  ConfigureDisplays(array<DisplayLayout> layout);
 
   // Registers `observer` for the display list, and sends it the current one.
   //

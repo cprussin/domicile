@@ -295,6 +295,7 @@ pub struct Layout {
     profile: String,
     placed: Vec<Placed>,
     size: (u32, u32),
+    scanout: Vec<Scanout>,
 }
 
 impl Layout {
@@ -316,6 +317,19 @@ impl Layout {
     /// [`Desktop::size`](crate::Desktop::size) states for a described desktop.
     pub fn size(&self) -> (u32, u32) {
         self.size
+    }
+
+    /// Every display the profile named, as the *connectors* behind them, in
+    /// the order the profile wrote them.
+    ///
+    /// The other half of a profile, and the half [`Layout::placed`] cannot
+    /// carry. That one is the desktop this compositor advertises: logical,
+    /// turned, and with the displays the profile disabled already dropped.
+    /// This one is what a connector does with its glass — which of them to
+    /// light at all, and where each one's mode goes — and a display that is
+    /// dropped from a desktop still has to be *turned off*.
+    pub fn scanout(&self) -> &[Scanout] {
+        &self.scanout
     }
 
     /// Apply `profile` to the monitors it matched.
@@ -352,24 +366,57 @@ impl Layout {
                 (display.position.1, display.logical.1)
             })?,
         );
+        let placed: Vec<Placed> = placed
+            .into_iter()
+            .map(|display| Placed {
+                // Non-negative because `near` is the smallest of them, and it
+                // fits an `i32` because `extent` has already refused a layout
+                // whose span between those two corners does not.
+                position: (
+                    normalized(display.position.0, near.0),
+                    normalized(display.position.1, near.1),
+                ),
+                ..display
+            })
+            .collect();
+        let scanout = scanout(profile, &placed, connected)?;
         Ok(Layout {
             profile: profile.name.clone(),
-            placed: placed
-                .into_iter()
-                .map(|display| Placed {
-                    // Non-negative because `near` is the smallest of them, and
-                    // it fits an `i32` because `extent` has already refused a
-                    // layout whose span between those two corners does not.
-                    position: (
-                        normalized(display.position.0, near.0),
-                        normalized(display.position.1, near.1),
-                    ),
-                    ..display
-                })
-                .collect(),
+            placed,
             size,
+            scanout,
         })
     }
+}
+
+/// One display of an applied profile, as the engine has to light it.
+///
+/// A monitor is in two arrangements at once and they are not the same
+/// arrangement. The compositor's is [`Placed`]: logical, so a mode divided by
+/// a scale, and turned, so a monitor on its side is as tall as its mode is
+/// wide. The engine's is this one: physical pixels, untuned and unturned,
+/// because that is what a CRTC scans out however the desktop above chooses to
+/// read it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Scanout {
+    /// The display's output name — `drm-<id>` on a tty — which is how the
+    /// engine that reported the monitor knows it.
+    ///
+    /// Not necessarily what the profile wrote: an entry may have named this
+    /// monitor by its panel, and this is the name it was found to be.
+    pub name: String,
+    /// Whether to light this connector at all.
+    pub enabled: bool,
+    /// Where this connector's mode goes on the engine's own desktop, in
+    /// physical pixels.
+    ///
+    /// STATED FOR A DARK DISPLAY TOO, which is not a contradiction: the
+    /// engine's own display list carries a connector whether or not it is
+    /// lit, and a dark one left where the card stacked it lands on top of a
+    /// lit one that was placed. Two displays claiming one rectangle is worse
+    /// than one that is merely off — the first of them wins every lookup,
+    /// including the one that sizes the window the desktop is drawn in.
+    pub origin: (i32, i32),
 }
 
 /// One display of an applied profile, placed in the desktop's own coordinates.
@@ -421,6 +468,96 @@ fn placed(
         scale: placement.scale,
         transform: placement.transform,
     })
+}
+
+/// Where each of the profile's connectors goes, in the pixels it scans out.
+///
+/// STEPPED ACROSS IN THE ORDER THE DISPLAYS ARE PLACED, each starting where
+/// the last one's mode ended. The engine lays its own desktop out in the order
+/// the card enumerated the connectors, which is the card's business and says
+/// nothing about which monitor is on which side of a desk — so a pointer
+/// leaving one screen arrives on whichever connector happened to be numbered
+/// next. The profile is the only thing that knows, and this is it saying so.
+///
+/// The mode rather than the logical size, because this is the engine's
+/// desktop: a connector occupies what it scans out there, whatever the scale
+/// divides it into on ours.
+///
+/// ALL ON ONE ROW, whatever the desktop above does with the second axis.
+/// Nothing is ever drawn across two connectors, so the only thing this
+/// arrangement decides is which screen a pointer leaving one arrives on — and
+/// a row answers that for every desk anyone puts monitors side by side on.
+/// Two monitors stacked vertically is the one thing a profile can say that
+/// this does not carry.
+///
+/// THE DARK ONES ARE IN THE ROW TOO, past the end of the lit ones. They have
+/// no place on the desktop to be ordered by — the profile turned them off —
+/// but they are still connectors the engine has to put somewhere, and the one
+/// place they must not be is on top of a monitor that is on.
+///
+/// Returned in the order the profile WROTE its entries, which is
+/// [`Layout::placed`]'s own order with the dropped ones back in their places.
+/// What is ordered by position is where the lit ones land, not the list.
+fn scanout(
+    profile: &Profile,
+    placed: &[Placed],
+    connected: &[Connected],
+) -> Result<Vec<Scanout>, ConfigError> {
+    let mut across = placed.iter().collect::<Vec<_>>();
+    across.sort_by_key(|display| (display.position.0, display.position.1));
+    let lit = across
+        .into_iter()
+        .map(|display| (display.name.as_str(), display.mode.0));
+    let dark = profile
+        .displays
+        .iter()
+        .filter(|placement| !placement.enabled)
+        .map(|placement| {
+            let display = found(placement, connected);
+            (display.name.as_str(), display.mode.0)
+        });
+
+    let mut origins: Vec<(&str, (i32, i32))> = Vec::with_capacity(profile.displays.len());
+    let mut edge: i64 = 0;
+    for (name, width) in lit.chain(dark) {
+        // `i64` for the reason `extent` widens: each mode fits a `u32` and a
+        // row of them need not fit the `i32` a corner is. Refused rather than
+        // saturated, which would put two connectors on top of each other.
+        if edge > i64::from(i32::MAX) {
+            return Err(unlightable(profile, name));
+        }
+        let start = i32::try_from(edge).expect("the row is bounded above just here");
+        origins.push((name, (start, 0)));
+        edge += i64::from(width);
+    }
+
+    Ok(profile
+        .displays
+        .iter()
+        .map(|placement| {
+            let display = found(placement, connected);
+            Scanout {
+                name: display.name.clone(),
+                enabled: placement.enabled,
+                origin: origins
+                    .iter()
+                    .find(|(name, _)| *name == display.name)
+                    .map(|(_, origin)| *origin)
+                    .expect("every display the profile names is in the row"),
+            }
+        })
+        .collect())
+}
+
+/// The connected display an entry of an applied profile names.
+///
+/// An assertion rather than a branch, for the reason [`placed`] gives: a
+/// layout is only ever built from a `connected` list [`Profile::matches`]
+/// accepted, so every entry named one of them.
+fn found<'a>(placement: &DisplayPlacement, connected: &'a [Connected]) -> &'a Connected {
+    placement
+        .connected_in(connected)
+        .expect("a profile is only applied to the displays it matched")
 }
 
 /// The logical size of `mode`, turned and then divided by `scale`.
@@ -503,6 +640,15 @@ fn unreachable(profile: &Profile, furthest: &Placed) -> ConfigError {
         "output profile {} reaches {} at ({}, {}), which puts the desktop's far \
          corner beyond what a position on one desktop can describe",
         profile.name, furthest.name, furthest.position.0, furthest.position.1
+    ))
+}
+
+/// The complaint for a row of connectors longer than a corner can describe.
+fn unlightable(profile: &Profile, display: &str) -> ConfigError {
+    ConfigError::Validation(format!(
+        "output profile {} spans so many pixels across that {} starts beyond \
+         what a corner of one desktop can describe",
+        profile.name, display
     ))
 }
 

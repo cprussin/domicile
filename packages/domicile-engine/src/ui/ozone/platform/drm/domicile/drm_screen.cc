@@ -4,6 +4,11 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <vector>
+
 #include "base/check.h"
 #include "base/containers/flat_set.h"
 #include "ui/display/display_finder.h"
@@ -16,7 +21,29 @@
 
 namespace ui {
 
-display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot) {
+namespace {
+
+// What `layout` says about the connector `id`, or nothing where it is silent.
+//
+// Duplicated from drm_modeset.cc rather than shared, for the reason
+// SnapshotBuilder is duplicated between the two suites: two callers in one
+// directory is the wrong trade for a header, and if a third arrives that is
+// when it moves.
+const DomicileDisplayLayout* WantedFor(
+    const std::vector<DomicileDisplayLayout>& layout,
+    int64_t id) {
+  for (const DomicileDisplayLayout& wanted : layout) {
+    if (wanted.id == id) {
+      return &wanted;
+    }
+  }
+  return nullptr;
+}
+
+}  // namespace
+
+display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
+                                     const gfx::Point& origin) {
   // A connector with no native mode is connected but unreadable, and a display
   // with empty bounds is one no window can be placed on -- so it gets the same
   // bounds a machine with nothing plugged in gets, rather than nothing.
@@ -26,8 +53,7 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot) {
   // Not named `display`: that is the namespace half of this function's own
   // names are in, and a local by that name makes `display::kInchInMm` below
   // fail to compile.
-  display::Display screen(snapshot.display_id(),
-                          gfx::Rect(snapshot.origin(), size));
+  display::Display screen(snapshot.display_id(), gfx::Rect(origin, size));
 
   // THE PANEL LEAVES HERE OR IT DOES NOT LEAVE AT ALL. This display::Display is
   // everything the browser process ever learns about a snapshot: the display
@@ -115,7 +141,8 @@ gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot) {
 
 std::vector<display::Display> DisplaysFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
-        snapshots) {
+        snapshots,
+    const std::vector<DomicileDisplayLayout>& layout) {
   if (snapshots.empty()) {
     return {display::Display(display::kDefaultDisplayId,
                              gfx::Rect(kDisplaylessBounds))};
@@ -124,9 +151,36 @@ std::vector<display::Display> DisplaysFromSnapshots(
   std::vector<display::Display> displays;
   displays.reserve(snapshots.size());
   for (const display::DisplaySnapshot* snapshot : snapshots) {
-    displays.push_back(DisplayFromSnapshot(*snapshot));
+    const DomicileDisplayLayout* wanted =
+        WantedFor(layout, snapshot->display_id());
+    displays.push_back(DisplayFromSnapshot(
+        *snapshot, wanted ? wanted->origin : snapshot->origin()));
   }
   return displays;
+}
+
+size_t PrimaryIndexForLayout(
+    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+        snapshots,
+    const std::vector<DomicileDisplayLayout>& layout) {
+  if (layout.empty()) {
+    return 0u;
+  }
+  size_t index = 0;
+  for (const display::DisplaySnapshot* snapshot : snapshots) {
+    const DomicileDisplayLayout* wanted =
+        WantedFor(layout, snapshot->display_id());
+    if (wanted && wanted->enabled) {
+      return index;
+    }
+    ++index;
+  }
+  // A layout that lights nothing, which the compositor refuses to write: a
+  // profile disabling every display it names leaves no desktop to put a window
+  // on and is rejected where the config is parsed. Answered with the first
+  // display rather than with nothing, because a list has to have a primary and
+  // `GetPrimaryDisplay` CHECKs that it does.
+  return 0u;
 }
 
 DrmScreen::DrmScreen(DrmWindowHostManager* window_manager)
@@ -136,20 +190,42 @@ DrmScreen::~DrmScreen() = default;
 
 void DrmScreen::OnDisplaysChanged(
     const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
-        snapshots) {
+        snapshots,
+    const std::vector<DomicileDisplayLayout>& layout) {
   // A hotplug arrives as the whole list rather than as a delta, so what is
   // absent from it has been unplugged. DisplayList notifies its observers from
   // AddOrUpdateDisplay and RemoveDisplay, which is the whole of the hotplug
   // path -- there is no observer code of its own here.
   const std::vector<display::Display> displays =
-      DisplaysFromSnapshots(snapshots);
+      DisplaysFromSnapshots(snapshots, layout);
 
+  // Not always the first snapshot: a profile that turns the laptop panel off
+  // is the ordinary case on a full desk, and a primary that is dark is a
+  // browser drawing onto a screen nobody can see. See `PrimaryIndexForLayout`.
+  const size_t primary = PrimaryIndexForLayout(snapshots, layout);
+
+  // THE PRIMARY GOES IN FIRST, and it is `DisplayList` that says so:
+  // `AddDisplay` reads "the first display must be primary" and DCHECKs it,
+  // and this build is `dcheck_always_on`. Filling the list in snapshot order
+  // with the primary somewhere in the middle crashed the browser on the first
+  // reading -- not on a hotplug, where the list is no longer empty, which is
+  // exactly the kind of difference a test catches and a desk does not.
+  //
+  // It is also the order this list is documented to arrive in: the display
+  // event's mojom says "the whole list, primary first", which before now was
+  // true by accident because the primary was always snapshot zero.
   base::flat_set<int64_t> still_here;
-  display::DisplayList::Type type = display::DisplayList::Type::PRIMARY;
+  display_list_.AddOrUpdateDisplay(displays[primary],
+                                   display::DisplayList::Type::PRIMARY);
+  still_here.insert(displays[primary].id());
+  size_t index = 0;
   for (const display::Display& display : displays) {
-    display_list_.AddOrUpdateDisplay(display, type);
-    still_here.insert(display.id());
-    type = display::DisplayList::Type::NOT_PRIMARY;
+    if (index != primary) {
+      display_list_.AddOrUpdateDisplay(
+          display, display::DisplayList::Type::NOT_PRIMARY);
+      still_here.insert(display.id());
+    }
+    ++index;
   }
 
   // Collected before removing rather than removed while iterating: RemoveDisplay

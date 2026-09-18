@@ -176,6 +176,28 @@ pub struct Display {
     pub refresh_mhz: i32,
 }
 
+/// One display, as the compositor wants the connector behind it driven.
+///
+/// The other direction to [`Display`], and the other kind of fact. That one
+/// is the engine's reading of what is plugged in; this is the config's answer
+/// about what to do with it -- which connectors to light, and where each
+/// one's mode goes on the engine's own desktop.
+///
+/// By the engine's own id, which is the only name both sides have. The
+/// `wl_output` this compositor advertises is called `drm-<id>`, and that is a
+/// name it invented out of this number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Connector {
+    /// Which display, as [`Display::id`] named it.
+    pub id: i64,
+    /// Whether to light it at all.
+    pub enabled: bool,
+    /// Where this connector's mode goes on the engine's desktop, in physical
+    /// pixels -- stated for a dark connector too, because the engine's own
+    /// display list carries one whether or not it is lit.
+    pub origin: (i32, i32),
+}
+
 /// What the browser has to tell the compositor, and what each already is in
 /// Wayland terms.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -260,6 +282,24 @@ struct RawDisplay {
     physical_width_mm: i32,
     physical_height_mm: i32,
     refresh_mhz: i32,
+}
+
+/// `DomicileDisplayLayout`, exactly as the C header lays it out.
+///
+/// Flat scalars and an `int32_t` for what is an `Option` on the safe side,
+/// because C has neither tuples nor sum types. One `int64_t` and three
+/// `int32_t`, which is 20 bytes in a struct that is 24 -- see the size test
+/// below, and the C header this mirrors. Not public: [`Connector`] is what a
+/// caller wants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
+struct RawLayout {
+    id: i64,
+    /// Nonzero to light this connector. Zero leaves it dark, and then the
+    /// corner below says nothing.
+    enabled: i32,
+    x: i32,
+    y: i32,
 }
 
 /// `DomicileSpikeCapture`, exactly as the C header lays it out.
@@ -414,6 +454,33 @@ impl Engine {
         let (x, y, width, height) = damage;
         // SAFETY: as above.
         unsafe { f(self.handle, surface, buffer, x, y, width, height) };
+    }
+
+    /// Tells the browser which connectors to light and where.
+    ///
+    /// An empty list is not "light nothing": it is the compositor having no
+    /// opinion, which is what every desktop but a profile's has, and the
+    /// engine answers it by going back to lighting what the hardware reports.
+    /// That is the case that UNDOES a profile -- one that turned a panel off
+    /// stops matching the moment a monitor is unplugged.
+    ///
+    /// Nothing comes back. A modeset is committed on the browser's own DRM
+    /// thread and answered on a later task, so there is nothing to wait for
+    /// here that would not be a lie; what the compositor learns instead is
+    /// the display list the engine sends once the hardware has answered.
+    pub fn configure_displays(&self, connectors: &[Connector]) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, *const RawLayout, u32)> = match self.symbol(
+            b"domicile_displays_configure\0",
+            "domicile_displays_configure",
+        ) {
+            Ok(symbol) => symbol,
+            Err(_) => return,
+        };
+        let raw = layouts_from(connectors);
+        // SAFETY: as above, and `raw` outlives the call -- the engine copies
+        // what it is given, which is the same contract the display list
+        // crossing the other way states.
+        unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
     }
 
     /// Drops an imported buffer, when the client destroys the `wl_buffer`
@@ -624,6 +691,22 @@ fn displays_from(records: &[RawDisplay]) -> Vec<Display> {
         .collect()
 }
 
+/// The connectors as the flat records that cross the ABI.
+///
+/// The mirror of [`displays_from`], which does this for the list coming the
+/// other way.
+fn layouts_from(connectors: &[Connector]) -> Vec<RawLayout> {
+    connectors
+        .iter()
+        .map(|connector| RawLayout {
+            id: connector.id,
+            enabled: i32::from(connector.enabled),
+            x: connector.origin.0,
+            y: connector.origin.1,
+        })
+        .collect()
+}
+
 /// The panel's own name, copied out of the record's borrowed characters.
 ///
 /// Null is refused rather than read. The C header states the pointer is never
@@ -709,6 +792,57 @@ mod tests {
         // the padding is as much part of the ABI as the fields, and a sum
         // would assert 44 and fail on a struct that is correct.
         assert_eq!(std::mem::size_of::<RawDisplay>(), 48);
+    }
+
+    #[test]
+    fn a_connector_is_the_one_int64_and_three_int32_the_c_header_declares() {
+        // 8 for the id, 12 for the three `int32_t`, and four bytes of tail
+        // padding to the struct's own alignment: 24. Asserted rather than
+        // summed, for the reason the display's 48 is: the padding is as much
+        // part of the ABI as the fields are.
+        assert_eq!(std::mem::size_of::<RawLayout>(), 24);
+    }
+
+    #[test]
+    fn a_lit_connector_crosses_as_its_corner_and_a_yes() {
+        let raw = layouts_from(&[Connector {
+            id: 7,
+            enabled: true,
+            origin: (3840, 0),
+        }]);
+
+        assert_eq!(
+            raw,
+            vec![RawLayout {
+                id: 7,
+                enabled: 1,
+                x: 3840,
+                y: 0,
+            }]
+        );
+    }
+
+    #[test]
+    fn a_dark_connector_crosses_as_a_no_and_a_corner_that_still_matters() {
+        // The corner is not a leftover. A dark connector is still one the
+        // engine's display list has to place, and one left where the card
+        // stacked it lands on top of a monitor that is on -- so the compositor
+        // gives it a corner of its own, out of the way.
+        let raw = layouts_from(&[Connector {
+            id: 3,
+            enabled: false,
+            origin: (11520, 0),
+        }]);
+
+        assert_eq!(
+            raw,
+            vec![RawLayout {
+                id: 3,
+                enabled: 0,
+                x: 11520,
+                y: 0,
+            }]
+        );
     }
 
     /// A `RawDisplay` naming `name`, which the returned `CString` owns.

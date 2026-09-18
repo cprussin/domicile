@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/at_exit.h"
+#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
@@ -506,7 +507,44 @@ struct DomicileEngine {
                        base::Unretained(this), surface, buffer));
   }
 
+  // The records are COPIED OUT BEFORE THE HOP, because the ABI borrows them
+  // for the duration of the call and the call returns before the mojo thread
+  // has run anything. The same rule the display list crossing the other way
+  // states, applied in the other direction.
+  void ConfigureDisplays(const DomicileDisplayLayout* layout, uint32_t count) {
+    // Fully qualified, like every other mojom type here: `DomicileEngine` is
+    // outside `namespace domicile`, because it is the opaque handle the C ABI
+    // hands out and the ABI has no namespaces.
+    std::vector<domicile::mojom::DisplayLayoutPtr> wanted;
+    wanted.reserve(count);
+    // SAFETY: the ABI says `layout` points at `count` records, valid for the
+    // duration of this call, and `domicile_displays_configure` has already
+    // refused a null one carrying a count. A span rather than a subscript for
+    // the reason `edid_name.cc` gives -- Chromium compiles with
+    // `-Wunsafe-buffer-usage` -- and `UNSAFE_BUFFERS` because building one
+    // from a pointer and a length is itself what that warning is about. There
+    // is no safer way to read an array that arrived over a C ABI.
+    const auto records =
+        UNSAFE_BUFFERS(base::span(layout, static_cast<size_t>(count)));
+    for (const DomicileDisplayLayout& display : records) {
+      wanted.push_back(domicile::mojom::DisplayLayout::New(
+          display.id, display.enabled != 0,
+          gfx::Point(display.x, display.y)));
+    }
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::ConfigureDisplaysOnThread,
+                       base::Unretained(this), std::move(wanted)));
+  }
+
  private:
+  void ConfigureDisplaysOnThread(
+      std::vector<domicile::mojom::DisplayLayoutPtr> wanted) {
+    if (broker_) {
+      broker_->ConfigureDisplays(std::move(wanted));
+    }
+  }
+
   void ConnectOnThread(const std::string& socket_path, bool* connected) {
     mojo::PlatformChannelEndpoint endpoint =
         mojo::NamedPlatformChannel::ConnectToServer(
@@ -836,6 +874,17 @@ void domicile_surface_submit(DomicileEngine* engine,
     engine->SubmitBuffer(
         surface, buffer,
         gfx::Rect(damage_x, damage_y, damage_width, damage_height));
+  }
+}
+
+void domicile_displays_configure(DomicileEngine* engine,
+                                 const DomicileDisplayLayout* layout,
+                                 uint32_t count) {
+  // A null array with a count is a caller bug and a read through nothing; a
+  // null array with no count is the ordinary way to say "no opinion", which
+  // `base::span` is happy to build empty.
+  if (engine && (layout || count == 0)) {
+    engine->ConfigureDisplays(layout, count);
   }
 }
 

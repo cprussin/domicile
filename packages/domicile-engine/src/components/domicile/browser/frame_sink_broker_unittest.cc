@@ -23,6 +23,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -180,7 +181,16 @@ class FrameSinkBrokerTest : public testing::Test {
             [](viz::FrameSinkIdAllocator* allocator) {
               return allocator->NextFrameSinkId();
             },
-            &allocator_));
+            &allocator_),
+        FrameSinkBroker::SharedImageInterfaceGetter(),
+        base::BindRepeating(&FrameSinkBrokerTest::RecordLayout,
+                            base::Unretained(this)));
+  }
+
+  // Stands in for the ozone platform that owns the CRTCs, which is what a real
+  // embedder injects and which this target deliberately cannot reach.
+  void RecordLayout(std::vector<mojom::DisplayLayoutPtr> layout) {
+    layouts_.push_back(std::move(layout));
   }
 
   void TearDown() override {
@@ -192,6 +202,11 @@ class FrameSinkBrokerTest : public testing::Test {
     host_frame_sink_manager_.reset();
     frame_sink_manager_.reset();
   }
+
+  // Every layout the producer stated, in order. A list rather than a count
+  // because "stated once" and "stated twice the same way" are different facts
+  // about a desktop whose config can be reloaded.
+  std::vector<std::vector<mojom::DisplayLayoutPtr>> layouts_;
 
   // Stands in for the browser's own allocator, which is what a real embedder
   // injects.
@@ -512,6 +527,67 @@ TEST_F(FrameSinkBrokerTest, AnObserverIsToldTheDisplaysAlreadyRead) {
   EXPECT_EQ(observer.lists_[0][0]->physical_size_mm, gfx::Size(597, 336));
   EXPECT_EQ(observer.lists_[0][0]->name, "DEL DELL U3219Q 2ZLS413");
   EXPECT_EQ(observer.lists_[0][0]->refresh_mhz, 59997);
+}
+
+TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
+  // The answer to OnDisplaysChanged, and the reason this interface carries
+  // both directions: what the browser reads off DRM is a fact, and what to do
+  // with it is a config only the producer holds.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  std::vector<mojom::DisplayLayoutPtr> layout;
+  layout.push_back(mojom::DisplayLayout::New(7, true, gfx::Point(1920, 0)));
+  layout.push_back(mojom::DisplayLayout::New(9, false, gfx::Point()));
+  remote->ConfigureDisplays(std::move(layout));
+  RunUntilIdle();
+
+  ASSERT_EQ(layouts_.size(), 1u);
+  ASSERT_EQ(layouts_[0].size(), 2u);
+  EXPECT_EQ(layouts_[0][0]->id, 7);
+  EXPECT_TRUE(layouts_[0][0]->enabled);
+  EXPECT_EQ(layouts_[0][0]->origin, gfx::Point(1920, 0));
+  EXPECT_EQ(layouts_[0][1]->id, 9);
+  EXPECT_FALSE(layouts_[0][1]->enabled);
+}
+
+TEST_F(FrameSinkBrokerTest, AProducerWithNoOpinionSaysSoRatherThanNothing) {
+  // An empty layout is not "light nothing" and is not a message to swallow: it
+  // is the producer having no opinion, which is what every desktop but a
+  // matched profile's has. It has to get through because it is what UNDOES a
+  // profile -- one that turned a panel off stops matching the moment a monitor
+  // is unplugged, and something has to say the panel comes back on.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  remote->ConfigureDisplays({});
+  RunUntilIdle();
+
+  ASSERT_EQ(layouts_.size(), 1u);
+  EXPECT_TRUE(layouts_[0].empty());
+}
+
+TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoCrtcDropsTheLayout) {
+  // Every embedder but a tty: a browser window inside somebody else's session
+  // has no connector to lay out, and a producer states its layout whatever it
+  // is running on, because whether there is one is not a fact it has.
+  // Named for what it is rather than `broker`, which is the fixture's own
+  // accessor: the point of this one is that nothing was wired to it.
+  FrameSinkBroker unwired(host_frame_sink_manager_.get(),
+                          base::BindRepeating(
+                              [](viz::FrameSinkIdAllocator* allocator) {
+                                return allocator->NextFrameSinkId();
+                              },
+                              &allocator_));
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  unwired.Bind(remote.BindNewPipeAndPassReceiver());
+
+  std::vector<mojom::DisplayLayoutPtr> layout;
+  layout.push_back(mojom::DisplayLayout::New(7, true, gfx::Point()));
+  remote->ConfigureDisplays(std::move(layout));
+  RunUntilIdle();
+
+  EXPECT_TRUE(layouts_.empty()) << "the fixture's own broker heard nothing";
 }
 
 TEST_F(FrameSinkBrokerTest, AnObserverHearsNothingUntilTheDisplaysAreRead) {

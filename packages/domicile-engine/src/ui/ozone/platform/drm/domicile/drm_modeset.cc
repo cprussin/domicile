@@ -4,6 +4,8 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
 
+#include <stdint.h>
+
 #include <string>
 #include <utility>
 #include <vector>
@@ -19,23 +21,53 @@
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
 
 namespace ui {
+namespace {
+
+// What `layout` says about the connector `id`, or nothing where it is silent.
+//
+// A pointer into the caller's vector rather than a copy, and `nullptr` for the
+// two cases the caller tells apart itself: a layout that says nothing about
+// anything, and one that says nothing about this connector.
+const DomicileDisplayLayout* WantedFor(
+    const std::vector<DomicileDisplayLayout>& layout,
+    int64_t id) {
+  for (const DomicileDisplayLayout& wanted : layout) {
+    if (wanted.id == id) {
+      return &wanted;
+    }
+  }
+  return nullptr;
+}
+
+}  // namespace
 
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& snapshots) {
+                              VectorExperimental>>& snapshots,
+    const std::vector<DomicileDisplayLayout>& layout) {
   std::vector<display::DisplayConfigurationParams> params;
   params.reserve(snapshots.size());
   for (const auto& snapshot : snapshots) {
     const display::DisplayMode* native_mode = snapshot->native_mode();
     if (!native_mode) {
       // Connected and unreadable. See the header: a connector that advertised
-      // no mode gets none invented for it.
+      // no mode gets none invented for it, whatever a layout says about where
+      // it goes.
+      continue;
+    }
+    const DomicileDisplayLayout* wanted =
+        layout.empty() ? nullptr : WantedFor(layout, snapshot->display_id());
+    if (!layout.empty() && (!wanted || !wanted->enabled)) {
+      // Dark: either the compositor turned this connector off, or it has not
+      // heard of it yet. The header argues why the second is not lit where the
+      // card put it.
       continue;
     }
     // The mode is passed as a borrowed pointer: DisplayConfigurationParams'
     // constructor clones it into its own `mode`, so cloning here as well would
     // leak one DisplayMode per display on every hotplug.
-    params.emplace_back(snapshot->display_id(), snapshot->origin(),
+    params.emplace_back(snapshot->display_id(),
+                        wanted ? wanted->origin : snapshot->origin(),
                         native_mode);
   }
   return params;
@@ -82,6 +114,17 @@ void DrmModeset::Start() {
       base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
 }
 
+void DrmModeset::SetLayout(std::vector<DomicileDisplayLayout> layout) {
+  VLOG(1) << "domicile: the compositor wants " << layout.size()
+          << " connector(s) laid out its way";
+  layout_ = std::move(layout);
+  // The displays again, rather than the last reading: this holds no snapshots
+  // between callbacks, and the header says why the two halves of an answer
+  // come from one reading.
+  delegate_->GetDisplays(
+      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+}
+
 void DrmModeset::OnConfigurationChanged() {
   // A hotplug. Read the list again and light whatever is there now; the two
   // must come from one reading, which is why this does not reuse the last one.
@@ -116,13 +159,16 @@ void DrmModeset::OnDisplaysReceived(
 
   // The screen first: a window needs somewhere to land whether or not the
   // modeset succeeds, and `DrmScreen` answers for an empty list by design.
-  screen_->OnDisplaysChanged(snapshots);
+  screen_->OnDisplaysChanged(snapshots, layout_);
 
   std::vector<display::DisplayConfigurationParams> params =
-      ModesetParamsFromSnapshots(snapshots);
+      ModesetParamsFromSnapshots(snapshots, layout_);
   if (params.empty()) {
-    // Nothing readable is plugged in. Not an error: it is what every connector
-    // on a machine with no panel reports, and `DrmScreen` has already been told.
+    // Nothing to light. Not an error: it is what every connector on a machine
+    // with no panel reports, and `DrmScreen` has already been told. A layout
+    // that turns every connector off cannot get here -- the compositor refuses
+    // a profile that leaves no desktop to put a window on -- so this stays the
+    // reading it always was.
     VLOG(1) << "domicile: nothing readable is plugged in; not modesetting";
     return;
   }

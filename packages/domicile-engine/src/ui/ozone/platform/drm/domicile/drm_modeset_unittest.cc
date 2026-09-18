@@ -12,6 +12,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
+#include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
@@ -121,7 +122,7 @@ TEST(DrmModesetTest, AModesetAsksForTheSnapshotsNativeMode) {
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
   owned.push_back(std::move(snapshot));
 
-  const auto params = ModesetParamsFromSnapshots(Pointers(owned));
+  const auto params = ModesetParamsFromSnapshots(Pointers(owned), {});
 
   ASSERT_EQ(params.size(), 1u);
   EXPECT_EQ(params[0].id, 7);
@@ -134,7 +135,7 @@ TEST(DrmModesetTest, AModesetPlacesADisplayAtItsSnapshotsOrigin) {
   owned.push_back(
       SnapshotBuilder().Id(3).Origin(gfx::Point(1920, 0)).Build());
 
-  const auto params = ModesetParamsFromSnapshots(Pointers(owned));
+  const auto params = ModesetParamsFromSnapshots(Pointers(owned), {});
 
   ASSERT_EQ(params.size(), 1u);
   EXPECT_EQ(params[0].origin, gfx::Point(1920, 0));
@@ -148,7 +149,7 @@ TEST(DrmModesetTest, AConnectorWithNoModeIsNotGivenOne) {
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
   owned.push_back(SnapshotBuilder().Id(4).NoNativeMode().Build());
 
-  EXPECT_TRUE(ModesetParamsFromSnapshots(Pointers(owned)).empty());
+  EXPECT_TRUE(ModesetParamsFromSnapshots(Pointers(owned), {}).empty());
 }
 
 TEST(DrmModesetTest, AReadableConnectorSurvivesAnUnreadableOneBesideIt) {
@@ -159,14 +160,81 @@ TEST(DrmModesetTest, AReadableConnectorSurvivesAnUnreadableOneBesideIt) {
                       .NativeMode(gfx::Size(1280, 1024), 60.f)
                       .Build());
 
-  const auto params = ModesetParamsFromSnapshots(Pointers(owned));
+  const auto params = ModesetParamsFromSnapshots(Pointers(owned), {});
 
   ASSERT_EQ(params.size(), 1u);
   EXPECT_EQ(params[0].id, 5);
 }
 
+// A LAYOUT IS THE COMPOSITOR'S ANSWER ABOUT WHAT THE GLASS DOES, and it
+// arrives over the engine's C ABI because the compositor is the process
+// holding the config and this one is the process holding DRM master. Without
+// it a profile reaches the desktop the compositor advertises and nothing
+// else: the connector a profile turned off goes on being lit, and the
+// monitors are laid out in the order the card enumerated them.
+TEST(DrmModesetTest, ALayoutSaysWhereAConnectorGoes) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(
+      SnapshotBuilder().Id(3).Origin(gfx::Point(1920, 0)).Build());
+
+  const auto params = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 3, .enabled = true, .origin = gfx::Point(0, 0)}});
+
+  ASSERT_EQ(params.size(), 1u);
+  EXPECT_EQ(params[0].origin, gfx::Point(0, 0))
+      << "the layout's corner, not the one the card happened to stack it at";
+}
+
+TEST(DrmModesetTest, ALayoutCanLeaveAConnectorDark) {
+  // `enabled: false` in a profile, which is how a laptop panel is named so
+  // that closing the lid on a full desk still matches the desk's profile and
+  // is turned off so that nothing is drawn on a panel behind a shut lid.
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(SnapshotBuilder().Id(1).Build());
+  owned.push_back(SnapshotBuilder().Id(2).Build());
+
+  const auto params = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 1, .enabled = false, .origin = gfx::Point()},
+                        {.id = 2, .enabled = true, .origin = gfx::Point()}});
+
+  ASSERT_EQ(params.size(), 1u);
+  EXPECT_EQ(params[0].id, 2);
+}
+
+TEST(DrmModesetTest, AConnectorNoLayoutNamesIsLeftDark) {
+  // A monitor plugged in between the reading the compositor answered and this
+  // one. It lights on the next round trip -- the modeset makes the kernel
+  // emit a CHANGE, the display list goes over the ABI again, and the answer
+  // that comes back names it -- and a connector lit at an origin nothing
+  // chose could land on top of one that was chosen, which is the exact-rect
+  // mismatch that scans out nothing at all.
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(SnapshotBuilder().Id(1).Build());
+  owned.push_back(SnapshotBuilder().Id(8).Build());
+
+  const auto params = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 1, .enabled = true, .origin = gfx::Point()}});
+
+  ASSERT_EQ(params.size(), 1u);
+  EXPECT_EQ(params[0].id, 1);
+}
+
+TEST(DrmModesetTest, ALayoutStillDoesNotInventAModeForAConnectorWithNone) {
+  // The layout says where a connector goes, not what it can do. A profile
+  // naming a monitor that reports no mode is a profile the compositor matched
+  // against a display list that named it, and asking a CRTC for a mode the
+  // hardware never advertised is how a screen goes black rather than wrong.
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(SnapshotBuilder().Id(4).NoNativeMode().Build());
+
+  EXPECT_TRUE(ModesetParamsFromSnapshots(
+                  Pointers(owned),
+                  {{.id = 4, .enabled = true, .origin = gfx::Point(0, 0)}})
+                  .empty());
+}
+
 TEST(DrmModesetTest, NothingPluggedInAsksForNoModeset) {
-  EXPECT_TRUE(ModesetParamsFromSnapshots({}).empty());
+  EXPECT_TRUE(ModesetParamsFromSnapshots({}, {}).empty());
 }
 
 TEST(DrmModesetTest, EveryReadableConnectorIsAskedFor) {
@@ -174,7 +242,7 @@ TEST(DrmModesetTest, EveryReadableConnectorIsAskedFor) {
   owned.push_back(SnapshotBuilder().Id(1).Build());
   owned.push_back(SnapshotBuilder().Id(2).Origin(gfx::Point(1920, 0)).Build());
 
-  const auto params = ModesetParamsFromSnapshots(Pointers(owned));
+  const auto params = ModesetParamsFromSnapshots(Pointers(owned), {});
 
   ASSERT_EQ(params.size(), 2u);
   EXPECT_EQ(params[0].id, 1);
@@ -193,9 +261,9 @@ TEST(DrmModesetTest, TheSameReadingTwiceIsNotWorthAModeset) {
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
   const std::vector<display::DisplayConfigurationParams> once =
-      ModesetParamsFromSnapshots(Pointers(snapshots));
+      ModesetParamsFromSnapshots(Pointers(snapshots), {});
   const std::vector<display::DisplayConfigurationParams> again =
-      ModesetParamsFromSnapshots(Pointers(snapshots));
+      ModesetParamsFromSnapshots(Pointers(snapshots), {});
 
   EXPECT_FALSE(ModesetWouldChangeAnything(once, again))
       << "asking the hardware for the mode it just reported is the loop";
@@ -207,7 +275,7 @@ TEST(DrmModesetTest, TheFirstReadingIsAlwaysWorthAModeset) {
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
 
   EXPECT_TRUE(ModesetWouldChangeAnything(
-      {}, ModesetParamsFromSnapshots(Pointers(snapshots))))
+      {}, ModesetParamsFromSnapshots(Pointers(snapshots), {})))
       << "nothing has been asked for yet, so everything is a change";
 }
 
@@ -229,8 +297,8 @@ TEST(DrmModesetTest, ADisplayArrivingIsWorthAModeset) {
                     .Build());
 
   EXPECT_TRUE(
-      ModesetWouldChangeAnything(ModesetParamsFromSnapshots(Pointers(one)),
-                                 ModesetParamsFromSnapshots(Pointers(two))));
+      ModesetWouldChangeAnything(ModesetParamsFromSnapshots(Pointers(one), {}),
+                                 ModesetParamsFromSnapshots(Pointers(two), {})));
 }
 
 TEST(DrmModesetTest, AModeChangingOnOneDisplayIsWorthAModeset) {
@@ -242,8 +310,8 @@ TEST(DrmModesetTest, AModeChangingOnOneDisplayIsWorthAModeset) {
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(1920, 1080), 60.f).Build());
 
   EXPECT_TRUE(
-      ModesetWouldChangeAnything(ModesetParamsFromSnapshots(Pointers(before)),
-                                 ModesetParamsFromSnapshots(Pointers(after))))
+      ModesetWouldChangeAnything(ModesetParamsFromSnapshots(Pointers(before), {}),
+                                 ModesetParamsFromSnapshots(Pointers(after), {})))
       << "the same connector at a different mode is a different request";
 }
 

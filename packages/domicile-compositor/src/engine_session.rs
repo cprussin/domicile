@@ -12,7 +12,9 @@ use smithay::reexports::wayland_server::backend::ObjectId;
 use smithay::reexports::wayland_server::protocol::wl_buffer;
 use smithay::reexports::wayland_server::Resource as _;
 
-use crate::engine::{BufferId, Capture, Dmabuf, Engine, EngineError, Event, SurfaceId, LIBRARY};
+use crate::engine::{
+    BufferId, Capture, Connector, Dmabuf, Engine, EngineError, Event, SurfaceId, LIBRARY,
+};
 use crate::engine_buffers::{HeldBuffers, Returned};
 
 /// A buffer going back to the client, and why. Every one of these is a
@@ -58,6 +60,14 @@ impl EngineSession {
     /// The fd to add to the compositor's loop.
     pub fn fd(&self) -> std::os::fd::RawFd {
         self.engine.fd()
+    }
+
+    /// Tells the engine which connectors to light and where.
+    ///
+    /// See [`crate::engine::Engine::configure_displays`], including what an
+    /// empty list means.
+    pub fn configure_displays(&self, connectors: &[Connector]) {
+        self.engine.configure_displays(connectors);
     }
 
     /// Submits a client's buffer as `app_id`'s window.

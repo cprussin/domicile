@@ -39,10 +39,12 @@ FrameSinkBroker::PendingEmbed::~PendingEmbed() = default;
 FrameSinkBroker::FrameSinkBroker(
     viz::HostFrameSinkManager* host_frame_sink_manager,
     FrameSinkIdAllocator allocate_frame_sink_id,
-    SharedImageInterfaceGetter get_shared_image_interface)
+    SharedImageInterfaceGetter get_shared_image_interface,
+    DisplayLayoutSetter set_display_layout)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
-      get_shared_image_interface_(std::move(get_shared_image_interface)) {
+      get_shared_image_interface_(std::move(get_shared_image_interface)),
+      set_display_layout_(std::move(set_display_layout)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -176,6 +178,18 @@ void FrameSinkBroker::DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
   if (frame_sink) {
     frame_sink->DestroyBuffer(buffer_id);
   }
+}
+
+void FrameSinkBroker::ConfigureDisplays(
+    std::vector<mojom::DisplayLayoutPtr> layout) {
+  if (!set_display_layout_) {
+    // An embedder with no CRTC to lay out, which is every one but a tty. Not
+    // an error and not worth a line: a producer states its layout whatever it
+    // is running on, because whether there is a connector behind a display is
+    // not a fact it has.
+    return;
+  }
+  set_display_layout_.Run(std::move(layout));
 }
 
 void FrameSinkBroker::ObserveDisplays(
