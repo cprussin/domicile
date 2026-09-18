@@ -208,6 +208,20 @@ before it moves it, and either half counts — a `<webview>` whose guest has the
 focus is this document's `activeElement`, which is the other thing patch 0011
 is for.
 
+**And it gives the keyboard back when the user moves on, which is the half
+that is not symmetry.** Every key the compositor delivers arrives in this
+document and is forwarded from here to whichever client the shell named — so a
+key pressed while a guest holds the page's focus never arrives at all: it is
+delivered inside a browsing context of its own, and the document around it
+hears nothing. Moving the seat does not touch that. `focusApp` says where the
+keys this page forwards should go, and a page that is hearing none forwards
+none, so a browser window left holding the focus makes every *other* window
+deaf: terminals that worked before a browser window was opened stop taking
+keystrokes, and the desktop looks locked to the page. The window being left is
+the only thing that can undo it, so it blurs what it holds — Blink hands the
+embedder's own frame the focus on the way out, which is what moves the browser
+process's focused frame tree back off the guest's.
+
 **A browser window comes to the front from a click anywhere in it**, its
 address bar and its page alike, and the two halves say so differently. The
 chrome sends the shell a pointer event like any other page furniture. The page
