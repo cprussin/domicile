@@ -226,6 +226,7 @@ pub fn compositor(
     compositor: &Path,
     engine: &Path,
     runtime: &Runtime,
+    config: Option<&Path>,
     inherited: &dyn Fn(&str) -> Option<String>,
 ) -> Spawn {
     let mut libraries = OsString::from(engine);
@@ -233,15 +234,24 @@ pub fn compositor(
         libraries.push(":");
         libraries.push(theirs);
     }
+    let mut args: Vec<OsString> = vec![
+        "--chrome-socket".into(),
+        runtime.chrome_socket.clone().into(),
+        "--session".into(),
+        runtime.session.clone().into(),
+        "--engine-socket".into(),
+        runtime.broker.clone().into(),
+    ];
+    // ABSENT RATHER THAN EMPTY WHERE THERE IS NO CONFIG. The compositor reads
+    // a missing `--config` as its defaults and refuses a path it cannot load,
+    // so passing the flag with nothing behind it would turn "this desktop
+    // writes no monitors down" into a startup failure.
+    if let Some(path) = config {
+        args.push("--config".into());
+        args.push(path.into());
+    }
     Spawn {
-        args: vec![
-            "--chrome-socket".into(),
-            runtime.chrome_socket.clone().into(),
-            "--session".into(),
-            runtime.session.clone().into(),
-            "--engine-socket".into(),
-            runtime.broker.clone().into(),
-        ],
+        args,
         env: vec![
             (VARIABLE.to_string(), runtime.control.clone().into()),
             ("LD_LIBRARY_PATH".to_string(), libraries),

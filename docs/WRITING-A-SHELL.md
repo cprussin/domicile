@@ -155,11 +155,19 @@ names.
 
 The compositor takes a `--config` naming a JSON file that describes the
 desktop — the displays, their layout, the keyboard — and watches it for
-changes while it runs. **Nothing passes one under the engine.**
-`domicile` starts the compositor without a config, so it runs a single output
-that follows its own window, and a shell has no way to describe a two-screen
-desktop. The compositor's side is built and the shell's side is not
-wired; that is a gap rather than a decision.
+changes while it runs. **`domicile` passes one on:**
+
+```
+domicile --config ./desk.json ./my-desktop/dist/shell.js
+```
+
+The flag may come on either side of the shell, and leaving it off is a real
+answer rather than a missing one — a desktop with no monitors written down
+runs a single output that follows the engine's own window, which is what a
+nested developer run wants. What is refused is the half-stated form: a
+`--config` with nothing behind it, or two of them, because the compositor
+runs its defaults on a missing file and refuses a path it cannot load, and
+guessing between those picks one for somebody who meant the other.
 
 Two of the things it can say about a desktop are different in kind, and which
 one a shell generates depends on whether there is hardware under it:
