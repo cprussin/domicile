@@ -89,13 +89,25 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     let components =
         components(&binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
 
+    // WHERE THIS WAS TYPED AND WHOSE HOME `~` IS, because `shell_path` decides
+    // what a relative path and a tilde mean and neither is a question about
+    // the filesystem. Read here for the same reason the config's default is:
+    // this is the part of the program that reads the world.
+    let here = std::env::current_dir()
+        .map_err(|why| format!("cannot tell where this was started from: {why}"))?;
+    let home = env("HOME").map(PathBuf::from);
+
     // `DOMICILE_PAGE` names the module, exactly as the argument does — a
     // packaged desktop is a wrapper that types the command line so its user
     // does not have to, and a second spelling of "which shell" would only be
     // a second thing to get wrong.
-    let page = shell_module(shell, env("DOMICILE_PAGE").as_deref(), &|path| {
-        path.metadata().ok().map(|found| found.is_dir())
-    })
+    let page = shell_module(
+        shell,
+        env("DOMICILE_PAGE").as_deref(),
+        &here,
+        home.as_deref(),
+        &|path| path.metadata().ok().map(|found| found.is_dir()),
+    )
     .map_err(|why| why.to_string())?;
 
     // One directory per run, thrown away with it. The sockets and the engine's
@@ -115,6 +127,10 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     // module rather than its directory, because the directory is what this
     // used to print and it agreed with the wrong file as readily as the right
     // one — the whole of the bug `shell_path` describes was invisible in it.
+    // Absolute, because `shell_path` resolved it: the answer below goes to
+    // processes that were started somewhere else, with working directories of
+    // their own, and a relative path read from one of those is a different
+    // file.
     let module = page.root.join(&page.module);
     println!("shell: {}", module.display());
     // Said for the same reason the shell is: a desk that comes up in the wrong
@@ -134,7 +150,7 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     // display the compositor will bind does not exist yet, and a desktop
     // cannot be named after something that has not happened.
     let control = take(&places.control).map_err(|why| why.to_string())?;
-    answering(&control, module_of(&module)?)?;
+    answering(&control, module)?;
     println!("{VARIABLE}={}", places.control.display());
 
     let platform = platform(
@@ -302,20 +318,6 @@ fn wait_or_notice_a_stop(wait: Duration) {
 /// carries: the status is kept the way a shell would say it so that a desktop
 /// killed by a signal and one that returned 11 do not read the same.
 const CLEANLY: &str = "exit status: 0";
-
-/// The module this desktop is running, as a path that means the same thing
-/// wherever it is read.
-///
-/// The command line's is relative to wherever the desktop was started from,
-/// and the answer goes to a process that was started somewhere else — a
-/// watcher with a working directory of its own, most of the time. `join`
-/// rather than a concatenation because an argument that was already absolute
-/// replaces the working directory rather than being appended to it.
-fn module_of(module: &Path) -> Result<PathBuf, String> {
-    let here = std::env::current_dir()
-        .map_err(|why| format!("cannot tell where this was started from: {why}"))?;
-    Ok(here.join(module))
-}
 
 /// Answer the control socket for as long as the desktop is up.
 ///
