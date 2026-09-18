@@ -3304,7 +3304,23 @@ fn advertise_output(dh: &DisplayHandle, advertised: &Advertised) -> LiveOutput {
             size: advertised.physical_mm.into(),
             subpixel: Subpixel::Unknown,
             make: "Domicile".into(),
-            model: "Virtual".into(),
+            // THE PANEL'S OWN NAME, where there is one. `wl_output.geometry`
+            // carries a make and a model as strings for exactly this, and it
+            // is what a client showing "which monitor is this" reads.
+            //
+            // It reaches `xdg_output.description` too, and only this way:
+            // Smithay builds that once, as "{make} - {model} - {name}", and
+            // offers no setter for it (`output.rs:264`). So the model is where
+            // a description goes on this version.
+            //
+            // "Virtual" for the desktops that are not panels -- a config's
+            // arithmetic, a host's window -- which is what every output here
+            // used to say.
+            model: if advertised.description.is_empty() {
+                "Virtual".into()
+            } else {
+                advertised.description.clone()
+            },
         },
     );
     let global = output.create_global::<DomicileCompositor>(dh);

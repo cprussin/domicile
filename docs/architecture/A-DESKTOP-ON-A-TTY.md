@@ -804,15 +804,34 @@ things: the profile's mode and origin reaching `DisplayConfigurationParams`, and
 a rotation reaching the DRM plane — which on ChromeOS is `DisplayConfigurator`,
 `//ui/display/manager`, the 478 lines this fork deliberately does not port.
 
-**A profile can only name a monitor by `drm-<id>`**, which is the opaque i64
-ozone derives from the EDID rather than the make, model and serial kanshi
-matches on. Two identical panels are distinguishable — the id carries the
-serial — but not *nameable*: which of the two is on the left is something the
-user has to discover from a log line. `DisplaySnapshot::display_name()` has the
-string and `display::Display` has a `label` to carry it in, so the route is the
-one the millimetres already take (*[The physical size is in the
-snapshot](#the-physical-size-is-in-the-snapshot-and-it-leaves-as-a-dpi)*); it is
-not wired.
+**A profile names a monitor the way it is labelled.** The `wl_output` is still
+`drm-<id>` — short, always there, and what clients are already on — but every
+display now carries a *description* beside it: `"<MAKE> <MODEL> <SERIAL>"`, the
+string kanshi and sway match on, and an entry's `display` matches either. So a
+desk can be written down without first reading an int64 off a log, and it can
+be written down a monitor at a time.
+
+It travels the route the millimetres already take (*[The physical size is in
+the snapshot](#the-physical-size-is-in-the-snapshot-and-it-leaves-as-a-dpi)*):
+`display::Display::label` is the field that exists for it and that nothing on
+this platform was setting, then the mojom `Display`, then a borrowed
+`const char*` on `DomicileDisplay`.
+
+The serial is the part that had to be written. `display::EdidParser` reads the
+same descriptor and keeps only `descriptor_block_serial_number_hash()` — a
+hash, deliberately, because a browser should not carry an identifier around.
+That is the right default there and the wrong one here: the serial is the only
+thing telling three identical U3219Qs apart, it is read off the user's own
+hardware, shown to the user, and goes nowhere else.
+`ui/ozone/platform/drm/domicile/edid_name.cc` is the descriptor walk, and it is
+deliberately free of Chromium types so that the one piece of this with an
+off-by-one in it compiles and runs outside a Chromium tree.
+
+Two things it is not. The make is the three-letter PNP id — `DEL`, not
+`Dell Inc.` — because that is what an EDID holds; the full vendor name is
+hwdata's `pnp.ids`, which libdisplay-info carries and Chromium does not, so a
+name here is one word off what sway prints. And a monitor that states none of
+the three has an empty description and can still only be named `drm-<id>`.
 
 The event carries the panel too: `physical_width_mm`, `physical_height_mm` and
 `refresh_mhz` on `DomicileDisplay`, off the same snapshot, by the route

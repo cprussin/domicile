@@ -21,11 +21,18 @@ fn layout(text: &str, connected: &[Connected]) -> Layout {
         .expect("a profile should match")
 }
 
-/// One monitor as the compositor found it: what it is called and the mode it
-/// is running.
+/// One monitor as the compositor found it, named only by its output name --
+/// the case where the engine had no EDID to build a description out of.
 fn connected(name: &str, mode: (u32, u32)) -> Connected {
+    described(name, "", mode)
+}
+
+/// One monitor with both the names it answers to: the output's, and the
+/// panel's own off its EDID.
+fn described(name: &str, description: &str, mode: (u32, u32)) -> Connected {
     Connected {
         name: name.to_owned(),
+        description: description.to_owned(),
         mode,
     }
 }
@@ -92,6 +99,133 @@ fn a_profile_applies_only_to_the_exact_set_of_displays_it_names() {
             connected(RIGHT, DESK_MODE),
         ]),
         "a display is connected that the profile does not name"
+    );
+}
+
+#[test]
+fn a_profile_can_name_a_monitor_by_its_panel_rather_than_its_output() {
+    // The point of carrying a description at all. `drm-3` is an int64 off an
+    // EDID: stable, unique, and impossible to predict from looking at a desk.
+    // The panel's own name is what a person can write down, and it is the
+    // string kanshi and sway already match on.
+    let layout = layout(
+        r#"{
+  "output": {
+    "profiles": [
+      {
+        "name": "desk",
+        "displays": [
+          {
+            "display": "DEL DELL U3219Q G3MS413",
+            "scale": 1.2,
+            "transform": "rotate-270"
+          }
+        ]
+      }
+    ]
+  }
+}"#,
+        &[described(CENTER, "DEL DELL U3219Q G3MS413", DESK_MODE)],
+    );
+    let placed = layout
+        .placed()
+        .next()
+        .expect("the monitor should be placed");
+    assert_eq!(
+        placed.name, CENTER,
+        "the output keeps the name its clients are on; the panel's name is how it was found"
+    );
+    assert_eq!(placed.logical, (1800, 3200));
+}
+
+#[test]
+fn a_profile_may_name_some_monitors_by_panel_and_others_by_output() {
+    // A desk part-way through being written down: the monitor whose name has
+    // been read off a running desktop, and the laptop panel that reports no
+    // EDID name at all and can only be named by its output.
+    let layout = layout(
+        r#"{
+  "output": {
+    "profiles": [
+      {
+        "name": "half-named",
+        "displays": [
+          {
+            "display": "DEL DELL U3219Q G3MS413",
+            "position": [
+              0,
+              0
+            ],
+            "scale": 1.2
+          },
+          {
+            "display": "drm-1",
+            "position": [
+              640,
+              1800
+            ],
+            "scale": 1.5
+          }
+        ]
+      }
+    ]
+  }
+}"#,
+        &[
+            described(CENTER, "DEL DELL U3219Q G3MS413", DESK_MODE),
+            connected(LAPTOP, PANEL_MODE),
+        ],
+    );
+    assert_eq!(
+        layout.placed().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+        vec![CENTER, LAPTOP]
+    );
+    assert_eq!(layout.size(), (3200, 3080));
+}
+
+#[test]
+fn two_entries_naming_one_monitor_two_ways_is_not_a_match() {
+    // The hole that opens as soon as a display answers to two names: a profile
+    // naming the same monitor by its output AND by its panel has as many
+    // entries as there are monitors, and every entry finds one -- so counting
+    // says the set matches when a whole monitor is unaccounted for. It would
+    // apply the two-monitor layout with one screen left dark.
+    let config = Config::parse(
+        r#"{ "output": { "profiles": [{ "name": "twice-over", "displays": [
+             { "display": "drm-3" },
+             { "display": "DEL DELL U3219Q G3MS413" }] }] } }"#,
+    )
+    .expect("the config should parse");
+    assert!(
+        config
+            .output
+            .layout(&[
+                described(CENTER, "DEL DELL U3219Q G3MS413", DESK_MODE),
+                connected(LAPTOP, PANEL_MODE),
+            ])
+            .expect("a profile that does not match cannot fail to apply")
+            .is_none(),
+        "two entries resolving to one monitor leaves the other unnamed"
+    );
+}
+
+#[test]
+fn a_monitor_that_reports_no_panel_name_is_not_matched_by_an_empty_one() {
+    // Every display with no EDID name shares the same empty description, so a
+    // description is only an identity when there is one. `display` cannot be
+    // empty -- the config refuses that -- and this is the other half of it.
+    let config = Config::parse(
+        r#"{ "output": { "profiles": [{ "name": "anon", "displays": [
+             { "display": "drm-1" }] }] } }"#,
+    )
+    .expect("the config should parse");
+    assert!(
+        config
+            .output
+            .layout(&[connected(LAPTOP, PANEL_MODE)])
+            .expect("applicable")
+            .is_some(),
+        "a monitor with no panel name is still matched by its output name"
     );
 }
 

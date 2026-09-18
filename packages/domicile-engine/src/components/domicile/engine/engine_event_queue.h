@@ -6,6 +6,7 @@
 #define COMPONENTS_DOMICILE_ENGINE_ENGINE_EVENT_QUEUE_H_
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "base/synchronization/lock.h"
@@ -17,9 +18,15 @@ namespace domicile {
 //
 // Flat scalars because an array of these crosses to a caller that has no
 // tuples, and `int32_t` throughout because a mode is measured the way a
-// position is. Mirrors DomicileDisplay in domicile_engine.h.
+// position is. Mirrors DomicileDisplay in domicile_engine.h -- except for
+// `name`, which is a std::string here and a borrowed `const char*` there: the
+// queue owns the characters, and what crosses the ABI points at them.
 struct EngineDisplay {
   int64_t id = 0;
+  // "<MAKE> <MODEL> <SERIAL>" off the panel's EDID, or empty for a monitor
+  // that states none of the three. The id is identity; this is what a person
+  // can write down. See the mojom this is filled in from.
+  std::string name;
   int32_t x = 0;
   int32_t y = 0;
   int32_t width = 0;

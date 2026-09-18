@@ -98,17 +98,18 @@ class FakeDisplayListObserver : public mojom::DisplayListObserver {
   mojo::Receiver<mojom::DisplayListObserver> receiver_{this};
 };
 
-// A display list of one, at the origin, on a 597x336mm panel at a hair under
-// 60Hz.
+// A display list of one: a named 597x336mm panel at the origin, at a hair
+// under 60Hz.
 //
-// The panel is here rather than left at zero because the broker is a pipe and
-// what a pipe drops it drops silently: these two fields were added to the
-// mojom after `id` and `bounds`, and a fixture that never sets them would pass
-// whether or not they cross.
+// Every field after `bounds` is filled in rather than left at its zero,
+// because the broker is a pipe and what a pipe drops it drops silently. Each
+// of them was added to the mojom after `id` and `bounds`, and a fixture that
+// never sets one would pass whether or not it crosses.
 std::vector<mojom::DisplayPtr> OneDisplay(int64_t id, const gfx::Size& size) {
   std::vector<mojom::DisplayPtr> displays;
   displays.push_back(mojom::Display::New(id, gfx::Rect(size),
-                                         gfx::Size(597, 336), 59997));
+                                         gfx::Size(597, 336),
+                                         "DEL DELL U3219Q 2ZLS413", 59997));
   return displays;
 }
 
@@ -509,6 +510,7 @@ TEST_F(FrameSinkBrokerTest, AnObserverIsToldTheDisplaysAlreadyRead) {
   EXPECT_EQ(observer.lists_[0][0]->id, 7);
   EXPECT_EQ(observer.lists_[0][0]->bounds, gfx::Rect(2880, 1920));
   EXPECT_EQ(observer.lists_[0][0]->physical_size_mm, gfx::Size(597, 336));
+  EXPECT_EQ(observer.lists_[0][0]->name, "DEL DELL U3219Q 2ZLS413");
   EXPECT_EQ(observer.lists_[0][0]->refresh_mhz, 59997);
 }
 

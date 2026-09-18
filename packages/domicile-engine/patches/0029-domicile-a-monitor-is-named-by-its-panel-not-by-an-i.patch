@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 18 Sep 2026 00:39:32 +0000
+Subject: [PATCH] domicile: a monitor is named by its panel, not by an id
+
+`display_id()` is already identity: EDID-derived, stable across a hotplug,
+and different for two of the same monitor. What it cannot be is a NAME. It is
+an int64 nobody can predict from looking at a desk, so writing "put the
+left-hand monitor here" means first reading one off a log and then typing a
+number that means nothing -- which is what a Domicile output profile had to
+match on.
+
+edid_name.{h,cc} builds the string kanshi and sway match on instead:
+"<MAKE> <MODEL> <SERIAL>". Its one real piece of work is the serial, which is
+the one part display::EdidParser does not keep -- it hashes it, deliberately,
+because a browser should not carry an identifier around. That is the right
+default there and the wrong one here: the serial is what tells three identical
+U3219Qs apart, it is read off the user's own hardware, shown to the user, and
+goes nowhere else.
+
+Deliberately free of Chromium types, so the descriptor walk and the four ways
+a name can be partly missing compile and run outside a Chromium tree.
+drm_screen.cc puts what it builds on display::Display::label, which is the
+field that exists for exactly this and which nothing on this platform was
+setting.
+---
+ ui/ozone/platform/drm/BUILD.gn | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 07f08aa..bc0be3c 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -136,6 +136,8 @@ source_set("gbm") {
+     "domicile/drm_screen.h",
+     "domicile/drm_vt_switcher.cc",
+     "domicile/drm_vt_switcher.h",
++    "domicile/edid_name.cc",
++    "domicile/edid_name.h",
+     "host/drm_window_host_manager.h",
+     "host/gpu_thread_adapter.h",
+     "host/gpu_thread_observer.h",
+@@ -259,6 +261,7 @@ source_set("gbm_unittests") {
+     "domicile/drm_modeset_unittest.cc",
+     "domicile/drm_screen_unittest.cc",
+     "domicile/drm_vt_switcher_unittest.cc",
++    "domicile/edid_name_unittest.cc",
+   ]
+ 
+   # `ui/display/manager/test/fake_display_snapshot.h` is the one thing this

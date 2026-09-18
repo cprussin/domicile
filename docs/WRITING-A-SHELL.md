@@ -171,9 +171,12 @@ one a shell generates depends on whether there is hardware under it:
   profile names exactly the displays it is for and says what to do with each
   one (`enabled`, `position`, a fractional `scale`, a `transform`); the first
   profile whose set is connected wins, and the match is made again on every
-  hotplug and every reload. A display is named by the `wl_output` name, which
-  on a tty is `drm-<id>` — the id ozone derives from the panel's EDID, so it
-  survives being unplugged.
+  hotplug and every reload. A display may be named either way round: by its
+  `wl_output` name, which on a tty is `drm-<id>`, or by its *description* —
+  `"<MAKE> <MODEL> <SERIAL>"` off the panel's EDID, which is the string kanshi
+  and sway match on and the one a person can write down. Both survive being
+  unplugged; the description is empty for a monitor that states none of the
+  three.
 
 ```jsonc
 {
@@ -183,8 +186,8 @@ one a shell generates depends on whether there is hardware under it:
         "name": "desk",
         "displays": [
           { "display": "drm-1", "enabled": false },
-          { "display": "drm-2", "position": [0, 0], "scale": 1.2,
-            "transform": "rotate-270" }
+          { "display": "DEL DELL U3219Q 2ZLS413", "position": [0, 0],
+            "scale": 1.2, "transform": "rotate-270" }
         ]
       },
       { "name": "laptop-only",

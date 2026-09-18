@@ -141,13 +141,29 @@ impl Dmabuf {
 /// No scale yet: nothing on the DRM path sets a scale factor at all
 /// (`drm_screen.cc` says so where it declines to), and a field that is always
 /// 1 is not a reading. That is its own item on that document's checklist.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Not `Copy` any more: a display carries the panel's own name, which is a
+// `String`. Cloned where it used to be copied, on a list as long as the
+// machine has monitors and only on a hotplug.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Display {
     /// What the engine calls this display, and what the `wl_output` is named
     /// after. Derived from the EDID, so it survives a hotplug: an output whose
     /// name is in both desktops keeps its global rather than being unplugged
     /// and replaced (`Screens::rearranged_into`).
     pub id: i64,
+    /// The panel's own name -- `"<MAKE> <MODEL> <SERIAL>"` off its EDID -- or
+    /// empty for a monitor that states none of the three.
+    ///
+    /// The id above is identity and this is a NAME, and the difference is the
+    /// point: an int64 ozone derived from an EDID cannot be guessed from
+    /// looking at a desk, so it is no use to somebody writing down which
+    /// monitor a layout means. This is what an `output.profiles` entry matches
+    /// on, and it is the same string kanshi and sway match.
+    ///
+    /// Called a description rather than a name because that is what it becomes
+    /// one layer up: the `wl_output` keeps `drm-<id>` as its name, which is
+    /// short, always present, and what clients are already on.
+    pub description: String,
     /// Its top-left corner, in the desktop the engine laid out.
     pub position: (i32, i32),
     /// Its native mode, in physical pixels.
@@ -225,12 +241,18 @@ pub struct Engine {
 /// tuples and an array of these is what crosses the ABI. Not public:
 /// [`Display`] is what a caller wants.
 ///
-/// One `int64_t` and seven `int32_t`, which is 36 bytes in a struct that is
-/// 40 -- see the size test below, and the C header this mirrors.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// One `int64_t`, one pointer and seven `int32_t`, which is 44 bytes in a
+/// struct that is 48 -- see the size test below, and the C header this
+/// mirrors.
+// `Default` for the tests' sake, and it is the right zero: a null name, which
+// is what `displays_from` refuses, and zeros everywhere else.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(C)]
 struct RawDisplay {
     id: i64,
+    /// The panel's own name, borrowed for the duration of the callback. Never
+    /// null, which [`displays_from`] checks rather than trusts.
+    name: *const std::ffi::c_char,
     x: i32,
     y: i32,
     width: i32,
@@ -593,12 +615,38 @@ fn displays_from(records: &[RawDisplay]) -> Vec<Display> {
         .iter()
         .map(|record| Display {
             id: record.id,
+            description: description_of(record),
             position: (record.x, record.y),
             size: (as_extent(record.width), as_extent(record.height)),
             physical_mm: (record.physical_width_mm, record.physical_height_mm),
             refresh_mhz: record.refresh_mhz,
         })
         .collect()
+}
+
+/// The panel's own name, copied out of the record's borrowed characters.
+///
+/// Null is refused rather than read. The C header states the pointer is never
+/// null, so one that is means the engine broke its own contract -- and the
+/// cost of trusting it is not a wrong answer but undefined behaviour, because
+/// `CStr::from_ptr` reads through whatever it is given.
+///
+/// Lossy, on the other side, and deliberately: the characters are an EDID's,
+/// which the engine restricts to printable ASCII before sending, so invalid
+/// UTF-8 is a panel doing something no panel does. Replacing it is a name
+/// nobody will match and everybody can see, which beats taking the desktop
+/// down over a monitor's firmware.
+fn description_of(record: &RawDisplay) -> String {
+    assert!(
+        !record.name.is_null(),
+        "the engine names every display, even if it names it nothing"
+    );
+    // SAFETY: non-null by the assertion above, nul-terminated and valid for
+    // the duration of this call by the ABI -- the engine owns the characters
+    // and frees them when the callback returns, and this copies before then.
+    unsafe { std::ffi::CStr::from_ptr(record.name) }
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// A display's extent as the `u32` a size is here.
@@ -654,8 +702,70 @@ mod tests {
     /// sum would have quietly asserted 36 and failed on a struct that is
     /// correct.
     #[test]
-    fn a_display_is_the_one_int64_and_seven_int32_the_c_header_declares() {
-        assert_eq!(std::mem::size_of::<RawDisplay>(), 40);
+    fn a_display_is_the_one_int64_the_pointer_and_seven_int32_the_c_header_declares() {
+        // 8 for the id, 8 for the name's pointer, 28 for the seven `int32_t`,
+        // and four bytes of tail padding to the struct's own alignment: 48.
+        // Asserted rather than summed for the reason the 40 before it was --
+        // the padding is as much part of the ABI as the fields, and a sum
+        // would assert 44 and fail on a struct that is correct.
+        assert_eq!(std::mem::size_of::<RawDisplay>(), 48);
+    }
+
+    /// A `RawDisplay` naming `name`, which the returned `CString` owns.
+    ///
+    /// Paired so the storage outlives the record: a bare `CString::new(..)
+    /// .as_ptr()` in an argument position is freed at the end of the
+    /// statement, and the pointer left behind is exactly the dangling read
+    /// this type exists to be careful about.
+    fn named(record: RawDisplay, name: &str) -> (RawDisplay, std::ffi::CString) {
+        let owned = std::ffi::CString::new(name).expect("a test name has no nul in it");
+        (
+            RawDisplay {
+                name: owned.as_ptr(),
+                ..record
+            },
+            owned,
+        )
+    }
+
+    #[test]
+    fn a_displays_name_crosses_as_the_panel_spelled_it() {
+        // What the whole EDID path is for: an int64 nobody can predict beside
+        // a string somebody can write down.
+        let (record, _owned) = named(
+            RawDisplay {
+                id: 7,
+                width: 2880,
+                height: 1920,
+                ..RawDisplay::default()
+            },
+            "DEL DELL U3219Q 2ZLS413",
+        );
+
+        assert_eq!(
+            displays_from(&[record])[0].description,
+            "DEL DELL U3219Q 2ZLS413"
+        );
+    }
+
+    #[test]
+    fn a_display_that_names_itself_nothing_crosses_as_nothing() {
+        // A projector, a virtual output, a panel whose maker left the
+        // descriptors out. Empty is the reading, and the id still identifies
+        // it.
+        let (record, _owned) = named(RawDisplay::default(), "");
+
+        assert_eq!(displays_from(&[record])[0].description, "");
+    }
+
+    #[test]
+    #[should_panic(expected = "the engine names every display")]
+    fn a_null_name_is_refused_rather_than_read() {
+        // The header says the pointer is never null, and a null one is the
+        // engine breaking its own contract. Checked rather than trusted
+        // because the alternative is not a wrong answer but undefined
+        // behaviour: `CStr::from_ptr` on null reads through it.
+        let _ = displays_from(&[RawDisplay::default()]);
     }
 
     #[test]
@@ -669,32 +779,40 @@ mod tests {
         // millimetres is ordinary -- a projector, a virtual output -- and zero
         // is what `wl_output` states for one. A conversion that invented a
         // size for it would be the fiction this whole path exists to remove.
+        let (panel, _panel_name) = named(
+            RawDisplay {
+                id: 7,
+                x: 0,
+                y: 0,
+                width: 2880,
+                height: 1920,
+                physical_width_mm: 597,
+                physical_height_mm: 336,
+                refresh_mhz: 59_997,
+                ..RawDisplay::default()
+            },
+            "BOE NE135A1M-NY1",
+        );
+        let (projector, _projector_name) = named(
+            RawDisplay {
+                id: 9,
+                x: 2880,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                physical_width_mm: 0,
+                physical_height_mm: 0,
+                refresh_mhz: 0,
+                ..RawDisplay::default()
+            },
+            "",
+        );
         assert_eq!(
-            displays_from(&[
-                RawDisplay {
-                    id: 7,
-                    x: 0,
-                    y: 0,
-                    width: 2880,
-                    height: 1920,
-                    physical_width_mm: 597,
-                    physical_height_mm: 336,
-                    refresh_mhz: 59_997,
-                },
-                RawDisplay {
-                    id: 9,
-                    x: 2880,
-                    y: 0,
-                    width: 1920,
-                    height: 1080,
-                    physical_width_mm: 0,
-                    physical_height_mm: 0,
-                    refresh_mhz: 0,
-                },
-            ]),
+            displays_from(&[panel, projector]),
             vec![
                 Display {
                     id: 7,
+                    description: "BOE NE135A1M-NY1".into(),
                     position: (0, 0),
                     size: (2880, 1920),
                     physical_mm: (597, 336),
@@ -702,6 +820,7 @@ mod tests {
                 },
                 Display {
                     id: 9,
+                    description: String::new(),
                     position: (2880, 0),
                     size: (1920, 1080),
                     physical_mm: (0, 0),

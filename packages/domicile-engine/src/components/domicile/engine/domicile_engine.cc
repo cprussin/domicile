@@ -300,6 +300,7 @@ class Displays : public mojom::DisplayListObserver {
     for (const mojom::DisplayPtr& one : displays) {
       event.displays.push_back(
           EngineDisplay{.id = one->id,
+                        .name = one->name,
                         .x = one->bounds.x(),
                         .y = one->bounds.y(),
                         .width = one->bounds.width(),
@@ -406,15 +407,22 @@ struct DomicileEngine {
         case domicile::EngineEvent::Type::kDisplays:
           if (callbacks_.displays) {
             // Copied into the ABI's own record rather than handing over the
-            // queue's storage. The two structs are the same eight fields in
-            // the same order today, and a reinterpret_cast across the seam
-            // would make that a silent requirement of both -- for a list with
-            // as many entries as the machine has monitors.
+            // queue's storage. The two structs no longer even have the same
+            // shape -- `name` is a std::string in one and a `const char*` in
+            // the other -- and a reinterpret_cast across the seam was never
+            // going to survive that.
+            //
+            // THE CHARACTERS BEHIND `name` BELONG TO THE EVENT, not to the
+            // record. `event` is a reference into the vector `Drain()`
+            // returned, which lives until this loop ends, so every pointer
+            // below outlives the callback it is handed to -- which is the
+            // whole contract the header states for this array.
             std::vector<DomicileDisplay> records;
             records.reserve(event.displays.size());
             for (const domicile::EngineDisplay& display : event.displays) {
               records.push_back(DomicileDisplay{
                   .id = display.id,
+                  .name = display.name.c_str(),
                   .x = display.x,
                   .y = display.y,
                   .width = display.width,

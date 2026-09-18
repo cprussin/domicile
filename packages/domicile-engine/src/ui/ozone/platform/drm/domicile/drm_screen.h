@@ -5,6 +5,7 @@
 #ifndef UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_SCREEN_H_
 #define UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_SCREEN_H_
 
+#include <string>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -36,6 +37,30 @@ inline constexpr gfx::Size kDisplaylessBounds{1024, 768};
 // bounds come from the snapshot's native mode, which is the mode the modeset
 // driver will configure the CRTC at, so the two cannot disagree.
 display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot);
+
+// What to call this monitor: "<MAKE> <MODEL> <SERIAL>", the identity kanshi
+// and sway match an output profile on.
+//
+// THE WHOLE REASON THIS EXISTS IS THAT AN ID IS NOT A NAME.
+// `display_id()` is derived from the EDID and is perfectly good identity -- it
+// is stable across a hotplug and it does tell three identical monitors apart.
+// What it cannot do is say WHICH ONE: it is an int64 nobody can look at a desk
+// and predict, so a person writing "put the left-hand monitor here" has to
+// read one off a log first and write down a number that means nothing. This is
+// the same identity, spelled the way the panel is labelled.
+//
+// Each of the three parts can be missing and the name is what is left --
+// `ManufacturerIdToString` gives "" for a product code nobody set, a panel
+// need not carry a product-name descriptor, and a serial is often absent. A
+// monitor that reports none of the three gets an empty string, and
+// `DisplayFromSnapshot` leaves the label unset rather than naming everything
+// on the desk the same nothing.
+//
+// The make is the three-letter PNP id -- "DEL", not "Dell Inc." -- because
+// that is what the EDID holds. The full vendor name is a lookup table
+// (hwdata's pnp.ids) that libdisplay-info carries and Chromium does not, so a
+// name from here is one word off what sway prints for the same monitor.
+std::string DisplayNameFromSnapshot(const display::DisplaySnapshot& snapshot);
 
 // The snapshot's physical size, in millimeters.
 //

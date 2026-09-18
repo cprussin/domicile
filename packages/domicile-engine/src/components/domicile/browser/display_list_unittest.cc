@@ -29,6 +29,7 @@ display::Display Panel() {
   screen.set_pixels_per_inch(display::kInchInMm * 1920 / 597,
                              display::kInchInMm * 1080 / 336);
   screen.set_display_frequency(59.997f);
+  screen.set_label("DEL DELL U3219Q 2ZLS413");
   return screen;
 }
 
@@ -59,6 +60,30 @@ TEST(DomicileDisplayListTest, ARefreshRateCrossesInMillihertz) {
 
   ASSERT_EQ(list.size(), 1u);
   EXPECT_EQ(list[0]->refresh_mhz, 59997);
+}
+
+// The name is the producer's only way to let a person say which monitor a
+// layout means: the id beside it is EDID-derived and stable, and it is also an
+// int64 nobody can predict from looking at a desk. Carried through untouched
+// -- `drm_screen.cc` built it out of the panel's EDID and nothing here is in a
+// position to improve on it.
+TEST(DomicileDisplayListTest, APanelsNameCrossesAsItWasBuilt) {
+  const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()});
+
+  ASSERT_EQ(list.size(), 1u);
+  EXPECT_EQ(list[0]->name, "DEL DELL U3219Q 2ZLS413");
+}
+
+// A monitor that states no make, no model and no serial. Empty rather than
+// invented: the id still identifies it, and a list where every entry is named
+// the same nothing looks like an answer.
+TEST(DomicileDisplayListTest, ADisplayWithNoNameCrossesAsEmpty) {
+  const display::Display unnamed(9, gfx::Rect(0, 0, 1280, 800));
+
+  const std::vector<mojom::DisplayPtr> list = DisplayListFor({unnamed});
+
+  ASSERT_EQ(list.size(), 1u);
+  EXPECT_EQ(list[0]->name, "");
 }
 
 // A display with no density and no rate is a projector, a virtual output, or a
