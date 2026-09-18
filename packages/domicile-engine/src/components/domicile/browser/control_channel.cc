@@ -30,9 +30,11 @@ constexpr int kReadBufferSize = 16 * 1024;
 ControlChannel::ControlChannel(
     const std::string& socket_path,
     mojo::PendingReceiver<mojom::ControlChannel> receiver,
-    KeymapSink keymap_sink)
+    KeymapSink keymap_sink,
+    const std::string& screen)
     : socket_path_(socket_path),
       keymap_sink_(std::move(keymap_sink)),
+      screen_(screen),
       receiver_(this, std::move(receiver)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
           kReadBufferSize)) {
@@ -84,6 +86,31 @@ void ControlChannel::OnConnect(int result) {
   std::string line;
   if (base::JSONWriter::Write(hello, &line)) {
     pending_.insert(pending_.begin(), line);
+  }
+
+  // WHICH WINDOW THIS IS, and the browser owns it for the same reason it owns
+  // the handshake: the page does not know which monitor it was put on, and
+  // asking it to find out would be asking it to guess. A desk of several
+  // monitors is several windows -- one cannot span two CRTCs -- each loading
+  // the same shell, and this is the only thing that differs between them.
+  //
+  // AFTER THE HANDSHAKE AND NOT BEFORE. The compositor puts a connection on
+  // its list when it agrees the protocol, and a `set_screen` arriving before
+  // that names a window it has no record of. One socket is read in order, so
+  // inserting it second is enough to be sure.
+  //
+  // Empty for a nested run, where the window is the whole desktop and there is
+  // no display to name.
+  if (!screen_.empty()) {
+    // Built here rather than through `Typed`, which is declared further down
+    // this file than the handshake that needs it.
+    base::DictValue screen;
+    screen.Set("type", "set_screen");
+    screen.Set("name", screen_);
+    std::string named;
+    if (base::JSONWriter::Write(screen, &named)) {
+      pending_.insert(pending_.begin() + 1, named);
+    }
   }
 
   ReadLoop();
@@ -630,7 +657,8 @@ void ControlChannel::DispatchLine(const std::string& line,
 }
 
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
-                        KeymapSink keymap_sink) {
+                        KeymapSink keymap_sink,
+                        const std::string& screen) {
   const std::string socket_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           kDomicileControlSocketSwitch);
@@ -645,7 +673,8 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
   }
   // Owns itself: it lives until the page drops the pipe or the compositor is
   // declared unreachable.
-  new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink));
+  new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink),
+                     screen);
 }
 
 }  // namespace domicile

@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 18 Sep 2026 06:33:06 +0000
+Subject: [PATCH] domicile: a window tells the compositor which display it
+ covers
+
+#421 gave every display a window and every one of them draws the same
+thing: they all load the same shell and lay their `<Screen>` regions out
+in the desktop's coordinates, so the second monitor shows the desktop's
+top-left corner rather than the region belonging to it.
+
+A window has to say which display it is, and the BROWSER is what knows.
+It put that window on that display -- `domicile_shell_windows.cc`
+created it at that display's bounds -- so the answer is a lookup here,
+on the UI thread, where the frame's view and the screen both are. Asking
+the page instead would be asking it to work out which monitor it is from
+its own geometry, and a guess is exactly how this area produces a
+monitor showing another monitor's desktop.
+
+So the binder reads it and hands it to the control channel, which states
+it on the socket right after the handshake. The page never learns it and
+no shell has to do anything: the compositor answers with the desktop
+narrowed to that one display, moved to the origin, and a page goes on
+laying out in the coordinates it always did.
+
+`ScreenOf` is empty where there is nothing to name -- no display::Screen
+at all, which is a unit test, and a frame with no view, which never made
+it to a window. Then nothing is sent and the compositor describes the
+whole desktop, which is what a nested run is.
+---
+ chrome/browser/chrome_browser_interface_binders.cc | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index 460adce..f597145 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/chrome_browser_interface_binders.h"
+ 
+ #include "base/task/bind_post_task.h"
++#include "chrome/browser/domicile/domicile_shell_windows.h"
+ #include "components/domicile/browser/control_channel.h"
+ #include "components/domicile/browser/keyboard_layout.h"
+ #include "components/domicile/browser/web_view_guest.h"
+@@ -521,7 +522,15 @@ void PopulateChromeFrameBinders(
+                 &domicile::BindControlChannel, std::move(receiver),
+                 base::BindPostTask(
+                     content::GetUIThreadTaskRunner({}),
+-                    base::BindRepeating(&domicile::SetProcessKeymap))));
++                    base::BindRepeating(&domicile::SetProcessKeymap)),
++                // AND WHICH WINDOW THIS PAGE IS. A desk of several monitors is
++                // several windows, each loading the same shell, and the only
++                // thing that differs between them is the display they cover.
++                // Read here, on the UI thread, where the frame's view and the
++                // screen both are -- and read from the browser rather than
++                // asked of the page, which does not know which monitor it was
++                // put on and could only guess from its own geometry.
++                domicile::ScreenOf(frame)));
+       }));
+ 
+   // Domicile's engine fork: a <webview> asking for a guest to put behind it.

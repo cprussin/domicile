@@ -35,5 +35,10 @@ source_set("domicile") {
     "//net",
     "//ui/base",
     "//ui/display",
+    # `gfx::NativeView`, which is the handle a frame's view is and the one
+    # `display::Screen::GetDisplayNearestView` takes. `//ui/gfx` is the wrong
+    # label for it and `ui/gfx/native_widget_types.h` is the wrong header --
+    # both were true of a Chromium older than this pin, and the build said so.
+    "//ui/gfx:native_ui_types",
   ]
 }

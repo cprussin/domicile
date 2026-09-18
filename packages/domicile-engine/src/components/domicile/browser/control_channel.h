@@ -51,9 +51,13 @@ class ControlChannel : public mojom::ControlChannel {
   // way a shell can tell: resetting just the client remote silences the inbound
   // direction and leaves the page holding a channel that looks alive and
   // swallows everything written to it.
+  // `screen` is the display this page's window covers, by the name the
+  // compositor describes it under -- `drm-<id>` for the engine's own displays.
+  // Empty where the window is the whole desktop, which is a nested run.
   ControlChannel(const std::string& socket_path,
                  mojo::PendingReceiver<mojom::ControlChannel> receiver,
-                 KeymapSink keymap_sink);
+                 KeymapSink keymap_sink,
+                 const std::string& screen);
 
   ControlChannel(const ControlChannel&) = delete;
   ControlChannel& operator=(const ControlChannel&) = delete;
@@ -145,6 +149,11 @@ class ControlChannel : public mojom::ControlChannel {
 
   const std::string socket_path_;
   const KeymapSink keymap_sink_;
+  // The display this page's window covers, or empty for a window that is the
+  // whole desktop. Stated to the compositor on connecting and never again: a
+  // window does not move between monitors here, because it is created at one
+  // display's bounds and closed when that display goes.
+  const std::string screen_;
   mojo::Receiver<mojom::ControlChannel> receiver_;
   mojo::Remote<mojom::ControlChannelClient> client_;
 
@@ -182,7 +191,8 @@ class ControlChannel : public mojom::ControlChannel {
 // is domicile:// -- is the whole of the security property. See
 // PopulateChromeFrameBinders.
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
-                        KeymapSink keymap_sink);
+                        KeymapSink keymap_sink,
+                        const std::string& screen);
 
 }  // namespace domicile
 

@@ -276,6 +276,23 @@ enum ClientRequest {
     ChromeHello,
 }
 
+/// One connected chrome: where to write to it, and which display its window
+/// covers.
+///
+/// **THE SCREEN IS PER CONNECTION AND THE BRAIN IS NOT.** A desk of several
+/// monitors is several windows -- one browser window cannot span two CRTCs --
+/// each loading the same shell on a socket of its own. What differs between
+/// them is which display they are, so it is held here, beside the writer it
+/// belongs to, rather than on the one [`Host`] all of them drive.
+///
+/// `None` is a chrome that never said, which is a nested run and every chrome
+/// there was before a window could be one display. It is told the whole
+/// desktop, which is what it draws.
+struct Chrome {
+    writer: Arc<Mutex<UnixStream>>,
+    screen: Option<String>,
+}
+
 /// Shared between the Wayland thread (calloop) and the chrome-connection threads.
 ///
 /// Holds the single [`Host`] brain both sides drive, the write-halves of
@@ -283,7 +300,7 @@ enum ClientRequest {
 /// forwarded input onto the Wayland thread and pixels onto the writer thread.
 struct ChromeHub {
     host: Mutex<Host>,
-    chromes: Mutex<Vec<Arc<Mutex<UnixStream>>>>,
+    chromes: Mutex<Vec<Chrome>>,
     request_tx: Mutex<Sender<ClientRequest>>,
     outbound: OutboundSender,
     timings: Mutex<FrameTimings>,
@@ -531,12 +548,23 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
         // as raw bytes; a client's buffer goes to the display compositor
         // instead and nothing on this socket is larger than its JSON.
         let Outbound::Message(message) = item;
+        // Encoded once for everyone who gets the same thing, which is every
+        // message but one and every chrome that has not said which window it
+        // is.
         let line = to_line(&message);
         let mut chromes = hub.chromes.lock().unwrap();
-        chromes.retain(|writer| {
-            let mut stream = writer.lock().unwrap();
+        chromes.retain(|chrome| {
+            // THE ONE MESSAGE THAT DIFFERS PER CONNECTION. A desk of several
+            // monitors is several windows, and each is told the display it
+            // covers rather than the desktop -- see `as_one_screen`. Encoded
+            // inside the loop only for those, because re-encoding the desktop
+            // per chrome is the cost of the feature and re-encoding a pointer
+            // motion per chrome would be the cost of nothing.
+            let own = narrowed_desktop(&message, chrome.screen.as_deref());
+            let bytes = own.as_ref().map_or(line.as_str(), String::as_str);
+            let mut stream = chrome.writer.lock().unwrap();
             stream
-                .write_all(line.as_bytes())
+                .write_all(bytes.as_bytes())
                 .and_then(|_| stream.flush())
                 .is_ok()
         });
@@ -544,6 +572,23 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
 
         report(&mut window, &hub);
     }
+}
+
+/// This chrome's own copy of a desktop description, or `None` where there is
+/// nothing to narrow.
+///
+/// `None` for every message that is not a desktop, and for a chrome that never
+/// said which window it is -- both of which get the line encoded once for
+/// everyone. A window that DID say is told its own display at the origin,
+/// because a window is its display and a page lays out in the coordinates it
+/// is given.
+fn narrowed_desktop(message: &HostMessage, screen: Option<&str>) -> Option<String> {
+    let (HostMessage::Displays { displays }, Some(name)) = (message, screen) else {
+        return None;
+    };
+    Some(to_line(&HostMessage::Displays {
+        displays: domicile_host::as_one_screen(displays, name),
+    }))
 }
 
 /// Print one line, if the window that just closed saw anything.
@@ -748,7 +793,7 @@ fn chrome_connection(
     hub.chromes
         .lock()
         .unwrap()
-        .retain(|held| !Arc::ptr_eq(held, &writer));
+        .retain(|held| !Arc::ptr_eq(&held.writer, &writer));
     info!("chrome client disconnected");
 }
 
@@ -819,7 +864,10 @@ fn read_chrome_messages(
                     // naming the disagreement, on its own socket, and nothing
                     // else.
                     if !joined {
-                        hub.chromes.lock().unwrap().push(writer.clone());
+                        hub.chromes.lock().unwrap().push(Chrome {
+                            screen: None,
+                            writer: writer.clone(),
+                        });
                         joined = true;
                         info!("chrome agreed the protocol; it now gets the desktop");
                     }
@@ -850,7 +898,7 @@ fn read_chrome_messages(
                     hub.chromes
                         .lock()
                         .unwrap()
-                        .retain(|held| !Arc::ptr_eq(held, writer));
+                        .retain(|held| !Arc::ptr_eq(&held.writer, writer));
                     joined = false;
                     info!("chrome took its protocol agreement back; it no longer gets the desktop");
                 }
@@ -915,6 +963,56 @@ fn read_chrome_messages(
             // for the case where the window was the compositor's own and the
             // chrome would only be reporting back what it had been given.
             // There is no such window any more.
+            // WHICH WINDOW THIS IS. A desk of several monitors is several
+            // windows, each loading the same shell on a socket of its own, and
+            // this is the one thing that differs between them. Recorded beside
+            // this connection's writer -- not on the brain, which they share --
+            // and answered straight back with the desktop narrowed to it, so
+            // the page is laying out on its own display from its first paint
+            // rather than from the next time the desktop changes.
+            //
+            // The handshake that came before this one carried the WHOLE
+            // desktop, because a chrome says which window it is after agreeing
+            // the protocol rather than before. That is one description the
+            // page may lay out against and then replace, which the protocol
+            // already allows for -- latest wins -- and which costs a frame on
+            // a desk that is about to be told something better.
+            Ok(ChromeMessage::SetScreen { name }) => {
+                let recorded = {
+                    let mut chromes = hub.chromes.lock().unwrap();
+                    match chromes
+                        .iter_mut()
+                        .find(|held| Arc::ptr_eq(&held.writer, writer))
+                    {
+                        Some(held) => {
+                            held.screen = Some(name.clone());
+                            true
+                        }
+                        None => false,
+                    }
+                };
+                if recorded {
+                    info!(screen = %name, "a chrome says which display its window covers");
+                    let HostMessage::Displays { displays } =
+                        hub.host.lock().unwrap().describe_desktop()
+                    else {
+                        unreachable!("describe_desktop returns Displays and nothing else");
+                    };
+                    vec![HostMessage::Displays {
+                        displays: domicile_host::as_one_screen(&displays, &name),
+                    }]
+                } else {
+                    // Said rather than dropped: a chrome that names its window
+                    // before agreeing the protocol is not in the list yet, and
+                    // the symptom -- a monitor showing the whole desktop --
+                    // looks exactly like a shell that never named one.
+                    warn!(
+                        screen = %name,
+                        "a chrome named its window before it agreed the protocol"
+                    );
+                    Vec::new()
+                }
+            }
             Ok(ChromeMessage::SetDesktopSize { size }) => {
                 hub.send_request(ClientRequest::SetOutputSize {
                     logical: (size[0].round() as i32, size[1].round() as i32),
@@ -4544,8 +4642,8 @@ mod tests {
     use super::{
         announce_open_apps, answers_keystroke, broadcast_closed, broadcast_focus_decision,
         broadcast_focus_request, channel, chrome_connection, client_command, cursor_shape,
-        freshened, parse_find_colors, to_line, write_responses, ChromeHub, ClientRequest,
-        Committer, Handshake, Outbound,
+        freshened, narrowed_desktop, parse_find_colors, to_line, write_responses, Chrome,
+        ChromeHub, ClientRequest, Committer, Handshake, Outbound,
     };
 
     use std::sync::Arc;
@@ -4568,7 +4666,10 @@ mod tests {
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
         ));
-        hub.chromes.lock().unwrap().push(writer.clone());
+        hub.chromes.lock().unwrap().push(Chrome {
+            screen: None,
+            writer: writer.clone(),
+        });
 
         let serving = {
             let hub = hub.clone();
@@ -4787,6 +4888,60 @@ mod tests {
         );
     }
 
+    /// Two monitors side by side, as the desktop describes them to a chrome
+    /// that has not said which window it is.
+    fn two_screens() -> HostMessage {
+        HostMessage::Displays {
+            displays: vec![
+                domicile_protocol::DisplayInfo {
+                    name: "drm-1".to_string(),
+                    position: [0, 0],
+                    scale: 1,
+                    size: [1920, 1080],
+                },
+                domicile_protocol::DisplayInfo {
+                    name: "drm-2".to_string(),
+                    position: [1920, 0],
+                    scale: 1,
+                    size: [1920, 1080],
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn a_chrome_that_named_its_window_gets_that_display_at_the_origin() {
+        // The window on the right monitor is told one display, and told it
+        // starts at zero -- because within that window it does. Told the desk
+        // instead it would put the LEFT monitor's region on the right monitor,
+        // which is what every window did before this existed.
+        let own = narrowed_desktop(&two_screens(), Some("drm-2")).expect("it is narrowed");
+
+        assert!(own.contains("drm-2"), "{own}");
+        assert!(!own.contains("drm-1"), "{own}");
+        assert!(own.contains("[0,0]"), "{own}");
+    }
+
+    #[test]
+    fn a_chrome_that_named_no_window_is_told_the_whole_desktop() {
+        // A nested run, and every chrome there was before a window could be
+        // one display. `None` is what has the caller send the line it encoded
+        // once for everybody.
+        assert!(narrowed_desktop(&two_screens(), None).is_none());
+    }
+
+    #[test]
+    fn nothing_but_the_desktop_is_narrowed() {
+        // A pointer motion is the same event on every screen, and re-encoding
+        // one per chrome would be the cost of the feature paid on the traffic
+        // that has none of its benefit.
+        let welcome = HostMessage::Welcome {
+            protocol_version: domicile_protocol::PROTOCOL_VERSION,
+        };
+
+        assert!(narrowed_desktop(&welcome, Some("drm-2")).is_none());
+    }
+
     #[test]
     fn a_page_that_says_hello_is_told_what_is_already_running() {
         // Nothing else ever re-sends `app_appeared`. Without this the desktop
@@ -4884,7 +5039,10 @@ mod tests {
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
         ));
-        hub.chromes.lock().unwrap().push(writer.clone());
+        hub.chromes.lock().unwrap().push(Chrome {
+            screen: None,
+            writer: writer.clone(),
+        });
         let serving = {
             let hub = hub.clone();
             thread::spawn(move || {

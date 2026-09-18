@@ -6,13 +6,17 @@
 
 #include <stdint.h>
 
+#include <string>
 #include <utility>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
@@ -22,6 +26,7 @@
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/base_window.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
@@ -30,10 +35,31 @@
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/gfx/native_ui_types.h"
 #include "url/gurl.h"
 
 namespace domicile {
 namespace {
+
+// Must match ui/ozone/public/ozone_switches.cc, and spelled out for the reason
+// content/browser/domicile/domicile_frame_sink_broker.cc spells them out: a
+// string is not worth a dependency on //ui/ozone.
+constexpr char kScanoutPlatform[] = "drm";
+constexpr char kOzonePlatformSwitch[] = "ozone-platform";
+
+// Whether this engine is the one that scans out.
+//
+// ON THE PLATFORM THAT SCANS OUT AND NOWHERE ELSE, which is the same gate
+// `DomicileDisplayWatcher` is behind and for the same reason, stated there: a
+// nested run's screen is the HOST's monitors. Windowing those would open a
+// browser window per monitor of the desk this developer run is sitting on, and
+// naming one would tell the compositor its desktop is a display it has never
+// heard of -- which it answers by narrowing to nothing, so the shell is told
+// no screens at all and draws nothing.
+bool ScansOut() {
+  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+             kOzonePlatformSwitch) == kScanoutPlatform;
+}
 
 // A window showing a shell, and the display it is on.
 struct ShellWindow {
@@ -251,8 +277,28 @@ class ShellWindows : public display::DisplayObserver {
 
 }  // namespace
 
+std::string ScreenOf(content::RenderFrameHost* frame) {
+  if (!ScansOut() || frame == nullptr || !display::Screen::HasScreen()) {
+    return std::string();
+  }
+  gfx::NativeView view = frame->GetNativeView();
+  if (view == gfx::NativeView()) {
+    return std::string();
+  }
+  const display::Display on = display::Screen::Get()->GetDisplayNearestView(view);
+  if (on.id() == display::kInvalidDisplayId) {
+    return std::string();
+  }
+  return base::StrCat({"drm-", base::NumberToString(on.id())});
+}
+
 void StartShellWindows() {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!ScansOut()) {
+    // A nested run is one window inside somebody else's session, and the
+    // displays here are that session's. See `ScansOut`.
+    return;
+  }
   // Never torn down, like the command socket beside it: it observes the screen
   // for the life of the browser, and the browser outliving its own teardown
   // order is what a NoDestructor is for.
