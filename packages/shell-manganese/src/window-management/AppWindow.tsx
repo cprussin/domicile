@@ -16,8 +16,10 @@ import {
   draggingStyles,
   edgeStyles,
   focusedEdgeStyles,
+  openingStyles,
   placedAt,
   restingEdgeStyles,
+  settlingStyles,
   windowStyles,
 } from "./window-styles";
 
@@ -207,11 +209,14 @@ export const AppWindow = ({
         windowStyles,
         appStyles,
         edgeStyles,
+        openingStyles,
         // The frame says what the bar above it says: this is the window the
         // keyboard is in.
         focused ? focusedEdgeStyles : restingEdgeStyles,
         clickThrough && clickThroughStyles,
-        dragging && draggingStyles,
+        // A dragged window is written at a new box on every pointer move, so
+        // it takes the box it is given rather than easing towards it.
+        dragging ? draggingStyles : settlingStyles,
       )}
       hidden={rect === undefined}
       // React's own event rather than a listener on the ref: `pointerover` is

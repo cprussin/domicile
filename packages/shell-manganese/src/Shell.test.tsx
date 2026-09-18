@@ -250,6 +250,11 @@ const barFor = (container: HTMLElement, id: string): HTMLElement => {
   }
 };
 
+/** What is left of a window that has closed, while it plays its way out. */
+const leavingParts = (container: HTMLElement, id: string): HTMLElement[] => [
+  ...container.querySelectorAll<HTMLElement>(`[data-closing="${id}"]`),
+];
+
 /** The sheet a drag is caught on, over one floating window. */
 const grabSheets = (container: HTMLElement): HTMLElement[] => [
   ...container.querySelectorAll<HTMLElement>("[data-window][aria-hidden]"),
@@ -541,6 +546,36 @@ describe("Shell", () => {
       domicile.emit("app_closed", { app_id: "term" });
 
       expect(windowsOnScreen(container)).toEqual([]);
+    });
+
+    // A CLOSE IS THE ONE CHANGE THE DESKTOP CANNOT DRAW. Every other one ends
+    // with the desktop as it now is; this one ends with the window gone from
+    // the list, its workspace and the layout at once, so what shrinks away is
+    // a record of the frame it had — see `closing.ts`.
+    it("plays a closed window out at the box it had", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      const was = boxOf(appElement(container, "term"));
+
+      domicile.emit("app_closed", { app_id: "term" });
+
+      expect(leavingParts(container, "app:term").map(boxOf)).toContainEqual(
+        was,
+      );
+    });
+
+    it("takes it off the page once it has finished leaving", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      domicile.emit("app_closed", { app_id: "term" });
+      const [bar] = leavingParts(container, "app:term");
+      if (bar === undefined) {
+        throw new Error("test: the closed window left nothing behind");
+      } else {
+        fireEvent.animationEnd(bar);
+      }
+
+      expect(leavingParts(container, "app:term")).toEqual([]);
     });
 
     it("keeps a window that is on another workspace mounted and hidden", () => {

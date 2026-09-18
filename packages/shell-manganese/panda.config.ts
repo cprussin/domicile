@@ -40,4 +40,36 @@ export default defineConfig({
   outdir: "styled-system",
   preflight: true,
   presets: [domicilePreset],
+  theme: {
+    extend: {
+      keyframes: {
+        // A window leaving: the reverse of the arrival above, and the same
+        // length, so closing one reads as the undoing of opening it.
+        //
+        // It ends at the size it started arriving from rather than at nothing.
+        // A window that shrank to a point would spend most of the animation as
+        // a speck nobody is looking at; what says "gone" is the fade, and the
+        // scale is what makes the fade a movement rather than a dissolve.
+        windowClosing: {
+          "0%": { opacity: "1", transform: "scale(1)" },
+          "100%": { opacity: "0", transform: "scale(0.94)" },
+        },
+        // A window arriving: up from nothing, and out to the box the layout
+        // has already given it.
+        //
+        // A transform rather than the box itself, and that is the whole reason
+        // a window can be animated at all. The size of an `<app>` is the
+        // resolution its client is configured at — the SDK reports the box and
+        // the compositor sends the client a `configure` — so a window that
+        // grew by *laying out* smaller would make the client redraw on every
+        // frame of it. A transform leaves the box alone: the page's own
+        // compositor scales the layer the client's buffer is already in, which
+        // is what the engine fork bought.
+        windowOpening: {
+          "0%": { opacity: "0", transform: "scale(0.94)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+      },
+    },
+  },
 });

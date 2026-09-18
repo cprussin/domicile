@@ -22,8 +22,10 @@ import {
   draggingStyles,
   edgeStyles,
   focusedEdgeStyles,
+  openingStyles,
   placedAt,
   restingEdgeStyles,
+  settlingStyles,
   windowStyles,
 } from "./window-styles";
 import { withScheme } from "./with-scheme";
@@ -271,8 +273,11 @@ export const BrowserWindow = ({
         // And the same colour the bar is drawn in, for the same reason.
         focused ? focusedEdgeStyles : restingEdgeStyles,
         noTopEdgeStyles,
+        openingStyles,
         clickThrough && clickThroughStyles,
-        dragging && draggingStyles,
+        // A dragged window is written at a new box on every pointer move, so
+        // it takes the box it is given rather than easing towards it.
+        dragging ? draggingStyles : settlingStyles,
       )}
       hidden={rect === undefined}
       // Focus as well as the press, for the chrome's own controls: pressing

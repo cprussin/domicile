@@ -103,3 +103,65 @@ export const restingEdgeStyles = css({ borderColor: "borderStrong" });
  * for a menu drawn over it.
  */
 export const clickThroughStyles = css({ pointerEvents: "none" });
+
+/**
+ * A window arriving: it fades up and grows into the box the layout has
+ * already given it.
+ *
+ * On the window and on its bar alike, because the two are separate elements
+ * and a frame whose halves scale differently comes apart at the seam. Both
+ * scale from `top left` for the same reason: their own centres are different
+ * points, so centre-scaled halves would pull away from each other by a
+ * fraction of the window's whole height, while one shared corner holds them
+ * together. The corner is not quite the same point either — the window's is a
+ * bar's height below the bar's — so what is left is a slit of
+ * `(1 - scale) × TITLE_BAR`, under two pixels, closing over the length of the
+ * animation.
+ *
+ * **It runs whenever the window arrives on screen, which is not only when it
+ * opens.** A window the desktop is not showing is hidden rather than
+ * unmounted — that is what keeps its client's surface and its page alive — and
+ * an element that is `display: none` runs no animation, so the one here starts
+ * again when the window is revealed: a workspace switched to, a tab picked, a
+ * fullscreen let go of. Everything the user sees appear, appears the same way.
+ */
+export const openingStyles = css({
+  animation: "windowOpening {durations.fast} {easings.out}",
+  transformOrigin: "top left",
+});
+
+/**
+ * A window leaving: it fades down and shrinks away from the box it had.
+ *
+ * `forwards`, so the last frame is what it is left at. Without it the window
+ * would snap back to full size for however long it takes the desktop to hear
+ * that the animation has ended and take the element off the page.
+ */
+export const closingStyles = css({
+  animation: "windowClosing {durations.fast} {easings.in} forwards",
+  transformOrigin: "top left",
+});
+
+/**
+ * A window moving to a new box rather than appearing at one.
+ *
+ * Every rectangle on this desktop is arithmetic — see `tree/frames.ts` — so a
+ * window whose neighbour opened, closed, split or grew is simply written at a
+ * different `inset` and size on the next render, and lands there between two
+ * frames. This is what gives it the frames in between.
+ *
+ * The box rather than a transform, unlike the arrival above: the window really
+ * is a different size afterwards, and the client has to be configured at it.
+ * The SDK measures every window once an animation frame, so what it reports
+ * during a transition is each intermediate box — the same stream of sizes a
+ * drag on a floating window's corner already produces, over a sixth of a
+ * second rather than as long as the user holds it.
+ *
+ * **Not while the window is being dragged.** A drag writes a new box on every
+ * pointer move, and a window easing towards each of them is one that trails
+ * the pointer instead of following it.
+ */
+export const settlingStyles = css({
+  transition:
+    "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}",
+});

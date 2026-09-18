@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Measure } from "@domicile/chrome-sdk/measure";
@@ -56,6 +57,23 @@ const windowProps = {
 const noReach = () => {
   // Nothing in the case reaches for the window.
 };
+
+// The real stylesheet, because what a window's arrival and its settling
+// resolve to is decided by the emitted CSS rather than by any one `css(...)`
+// call: a className on its own says nothing about the rule behind it.
+//
+// The layers come off first: happy-dom drops `@layer` blocks whole, and Panda
+// emits everything inside them. `@media all` keeps the braces balanced and
+// matches unconditionally, and the layers are emitted weakest-first, so plain
+// source order lands on the same winner the cascade would.
+const stylesheet = document.createElement("style");
+stylesheet.textContent = readFileSync(
+  new URL("../../styled-system/styles.css", import.meta.url),
+  "utf8",
+)
+  .replaceAll(/@layer [^;{]+;/g, "")
+  .replaceAll(/@layer [^{]+\{/g, "@media all{");
+document.head.append(stylesheet);
 
 const portal = (container: HTMLElement): Element => {
   const element = container.querySelector(APP_TAG_NAME);
@@ -237,5 +255,46 @@ describe("AppWindow", () => {
       />,
     );
     expect(portal(container)).toHaveStyle({ cursor: "text" });
+  });
+
+  describe("the way it arrives and settles", () => {
+    it("grows into its box as it arrives", () => {
+      // A transform rather than the box, so the client is not reconfigured on
+      // every frame of it — see the keyframes in `panda.config.ts`.
+      const { container } = render(
+        <AppWindow {...windowProps} focused={false} onReach={noReach} />,
+      );
+
+      expect(
+        globalThis.getComputedStyle(portal(container)).animation,
+      ).toContain("windowOpening");
+    });
+
+    it("eases to a new box rather than jumping to it", () => {
+      const { container } = render(
+        <AppWindow {...windowProps} focused={false} onReach={noReach} />,
+      );
+
+      expect(
+        globalThis.getComputedStyle(portal(container)).transition,
+      ).toContain("inline-size");
+    });
+
+    it("follows the pointer exactly while it is being dragged", () => {
+      // A drag writes a new box on every pointer move, and a window easing
+      // towards each of them trails the pointer instead of following it.
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          dragging
+          focused={false}
+          onReach={noReach}
+        />,
+      );
+
+      expect(
+        globalThis.getComputedStyle(portal(container)).transition,
+      ).not.toContain("inline-size");
+    });
   });
 });
