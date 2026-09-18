@@ -18,16 +18,22 @@ source_set("domicile") {
   sources = [
     "domicile_command_socket.cc",
     "domicile_command_socket.h",
+    "domicile_shell_windows.cc",
+    "domicile_shell_windows.h",
   ]
 
   deps = [
     "//base",
     "//chrome/browser/ui/browser_window",
+    "//chrome/browser/web_applications",
     "//components/domicile:command_protocol",
     "//components/domicile:common",
     "//components/domicile:shell_source",
+    "//components/domicile:shell_windows",
     "//components/tabs:public",
     "//content/public/browser",
     "//net",
+    "//ui/base",
+    "//ui/display",
   ]
 }

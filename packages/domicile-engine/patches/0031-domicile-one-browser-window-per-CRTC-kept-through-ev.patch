@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 18 Sep 2026 05:48:12 +0000
+Subject: [PATCH] domicile: one browser window per CRTC, kept through every
+ hotplug
+
+A desk of three monitors showed the chrome on one of them. `--app=` opens a
+single window; `ScreenManager::FindWindowAt` binds a window to a display
+controller only on an EXACT rectangle match against
+`gfx::Rect(controller->origin(), controller->GetModeSize())`; and one window
+cannot be two rectangles. So the other two CRTCs had no window, a modeset lit
+them, and nothing was ever scanned out to them.
+
+The answer is one browser window per CRTC, and this is the call that starts
+keeping it that way. `StartShellWindows` sits beside `StartCommandSocket` in
+PostBrowserStart for the same two reasons: the shell's own window exists by
+that point -- `browser_creator_->Start` has run -- and the windows this opens
+are copies of it, its profile on its URL, so there is nothing to copy before
+it is there.
+
+A RECONCILIATION RATHER THAN A SETUP STEP, because monitors come and go. The
+decision is `ShellWindowsFor` in //components/domicile:shell_windows, which
+is where its tests are: what displays have no window, and what windows have no
+display. It is run at startup and again from a display::DisplayObserver on
+every add, every removal and every bounds change.
+
+Two rules in it are the difference between a desktop and a dead session, and
+both are tested there rather than argued here. THE LAST WINDOW IS NEVER
+CLOSED: closing it is the browser exiting, and the browser exiting is the
+session ending, so a lid shut on a laptop with nothing plugged in would log
+the user out rather than blank a screen. AND WINDOWS OPEN BEFORE THEY CLOSE:
+a dock swapped under a running desktop closes as many windows as it opens, and
+closing first would pass through zero.
+
+A display that merely MOVED or changed mode is neither an open nor a close --
+the window is the right window with the wrong rectangle, which the exact-rect
+rule above makes a black screen with a clean log. That one is a SetBounds onto
+the display's own bounds.
+
+`display_id` on BrowserWindowCreateParams is `#if BUILDFLAG(IS_CHROMEOS)`, so
+there is no asking for a window on a named display on this build. A window
+lands on the display its rectangle is on, which is what creating it at the
+display's own bounds arranges, and `kFullscreen` from the start rather than a
+toggle afterwards keeps it from drawing a frame on the wrong monitor first.
+---
+ chrome/browser/chrome_browser_main.cc | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index f520f2a..29aa3b8 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/chrome_browser_main.h"
+ 
+ #include "chrome/browser/domicile/domicile_command_socket.h"
++#include "chrome/browser/domicile/domicile_shell_windows.h"
+ 
+ #include <memory>
+ #include <string>
+@@ -1718,6 +1719,13 @@ void ChromeBrowserMainParts::PostBrowserStart() {
+   // would be missing in the one case it exists for.
+   domicile::StartCommandSocket();
+ 
++  // Domicile's engine fork: one shell window per display, kept that way as
++  // monitors come and go. Here for the same two reasons as the socket above --
++  // the shell's own window exists by now, and these are copies of it -- and
++  // after it rather than before because a desk that comes up wrong is a desk
++  // somebody will want to point `load_shell` at.
++  domicile::StartShellWindows();
++
+   for (auto& chrome_extra_part : chrome_extra_parts_) {
+     chrome_extra_part->PostBrowserStart();
+   }
