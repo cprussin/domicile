@@ -191,6 +191,22 @@ export const BrowserWindow = ({
     }
   }, [domicile, focused, focusPage, view]);
 
+  // AND GIVES IT BACK WHEN THE USER MOVES ON, which nothing else in the
+  // desktop can do for this window. Every key the compositor delivers arrives
+  // in this document first and is forwarded from here to whichever client the
+  // shell named — and a key pressed while a guest holds the page's focus never
+  // arrives at all, because it is delivered inside a browsing context of its
+  // own and the document around it hears nothing. Moving the seat does not
+  // touch that: `focusApp` tells the compositor where to send what this page
+  // forwards, and this page is forwarding nothing. So a browser window left
+  // holding the focus is a desktop where no other window can be typed into —
+  // open a browser window and every terminal after it goes deaf.
+  useEffect(() => {
+    if (!focused) {
+      releaseFocus(frame.current);
+    }
+  }, [focused]);
+
   // And keeps it, which is a separate job: the effect above runs when this
   // window becomes the one being worked in, and the chrome can take the focus
   // off the page long after that without this window hearing anything. Closing
@@ -351,6 +367,24 @@ export const BrowserWindow = ({
  */
 const holdsFocus = (frame: HTMLElement | null): boolean =>
   frame?.contains(document.activeElement) === true;
+
+/**
+ * Take this document's focus off the window, if the window is holding it.
+ *
+ * A blur rather than a focus of something else, because the document is where
+ * the keyboard belongs when no window holds it: the SDK listens for keys on
+ * `document` and sends them to whichever client the shell named, and the page
+ * a guest was typing into cannot hear them. Blink hands the embedder's own
+ * frame the focus on the way out — `Element::blur` focuses the document's
+ * frame as it clears the element — which is what moves the browser process's
+ * focused frame tree back off the guest's.
+ */
+const releaseFocus = (frame: HTMLElement | null): void => {
+  const held = document.activeElement;
+  if (holdsFocus(frame) && held instanceof HTMLElement) {
+    held.blur();
+  }
+};
 
 const browserStyles = flex({
   // Its own, because `windowStyles` paints none: this window draws a page

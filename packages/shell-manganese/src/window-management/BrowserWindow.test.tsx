@@ -286,6 +286,62 @@ describe("BrowserWindow", () => {
 
       expect(address()).toHaveFocus();
     });
+
+    // AND IT GIVES THE KEYBOARD BACK, WHICH NOTHING ELSE CAN DO FOR IT. Every
+    // key the desktop delivers arrives in this document first — the SDK
+    // forwards it to whichever client the shell named — and a key pressed
+    // while a guest holds the page's focus never arrives at all: it is
+    // delivered inside a browsing context of its own and the document around
+    // it hears nothing. The compositor moving the seat to a client does not
+    // touch that. So a browser window that kept the focus after the user moved
+    // on is a desktop where no window can be typed into, which is what
+    // `focusChrome` cannot fix on its own.
+    it("gives the keyboard back when the user moves to another window", () => {
+      const windowProps = {
+        clickThrough: false,
+        depth: 0,
+        domicile: silentDomicile,
+        dragging: false,
+        onHover: noHover,
+        onNavigate: () => undefined,
+        onReach: () => undefined,
+        rect: ON_SCREEN,
+        src: "https://example.com",
+      } as const;
+      const { container, rerender } = render(
+        <BrowserWindow {...windowProps} focused />,
+      );
+      expect(view(container)).toHaveFocus();
+
+      rerender(<BrowserWindow {...windowProps} focused={false} />);
+
+      expect(view(container)).not.toHaveFocus();
+    });
+
+    // The same rule, and the other half of the window: what the user left is
+    // not where the caret stays. The desktop still types — a press in the
+    // chrome does reach this document, and the SDK sends it on to whichever
+    // client holds the keyboard — so what a window that kept the caret shows
+    // is a bar that looks ready and swallows nothing.
+    it("gives it back from its address bar too", async () => {
+      const windowProps = {
+        clickThrough: false,
+        depth: 0,
+        domicile: silentDomicile,
+        dragging: false,
+        onHover: noHover,
+        onNavigate: () => undefined,
+        onReach: () => undefined,
+        rect: ON_SCREEN,
+        src: "https://example.com",
+      } as const;
+      const { rerender } = render(<BrowserWindow {...windowProps} focused />);
+      await userEvent.click(address());
+
+      rerender(<BrowserWindow {...windowProps} focused={false} />);
+
+      expect(address()).not.toHaveFocus();
+    });
   });
 
   // A CLICK ANYWHERE IN THE WINDOW IS THE USER STARTING TO WORK IN IT, and the
