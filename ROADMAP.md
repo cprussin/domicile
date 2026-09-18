@@ -648,8 +648,23 @@ costs nothing.
   The transform reaches `wl_output`, `xdg_output` and the `DisplayInfo` the
   chrome lays its `<Screen>` regions out from, and stops there:
   `DisplayConfigurationParams` is `{id, origin, mode, enable_vrr}` and has no
-  field for a rotation. On ChromeOS that is `DisplayConfigurator` and
-  `//ui/display/manager`, the 478 lines this fork deliberately does not port.
+  field for a rotation.
+
+  **A ROTATION IS PAINTED, NOT MODESET, AND THAT IS WHY THIS IS ORDERED
+  BEHIND THE NEXT ITEM.** This said the answer was `DisplayConfigurator` and
+  the 478 lines of `//ui/display/manager` this fork does not port. It is not:
+  `display_configurator.h` at the pin does not contain the string `rotat` at
+  all. ChromeOS turns a screen in the **render tree** — `RootWindowTransformer`
+  in `//ash/host`, whose `GetTransform` is documented as converting root
+  window DIP to host window coordinates and "normally includes rotation and
+  scaling". The scanout is never turned; what is drawn into it is.
+
+  So the shape of the fix is a transform on the window, not a field on the
+  modeset — and a transform belongs to one window, while one window today
+  covers a desk of several monitors that a profile may turn differently.
+  Doing this before the next item means rotating per-display inside a single
+  page, in coordinates that stop being the desktop's, and deleting it when
+  each display gets a window of its own. Hence the order.
 - **The chrome is on one display of a desk with several.**
   `DrmWindowHost::SetFullscreen` puts one window on one display, and
   `ScreenManager::FindWindowAt` binds a controller to a window only on an
