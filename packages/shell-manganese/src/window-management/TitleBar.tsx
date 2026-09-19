@@ -164,7 +164,7 @@ export const TitleBar = ({
         label={fullscreen ? "Restore" : "Maximize"}
         onClick={onFullscreen}
         size="sm"
-        variant={controlVariant(focus)}
+        variant="ghost"
       >
         {fullscreen ? (
           <CornersInIcon size={14} />
@@ -172,12 +172,7 @@ export const TitleBar = ({
           <CornersOutIcon size={14} />
         )}
       </Button>
-      <Button
-        label="Close"
-        onClick={onClose}
-        size="sm"
-        variant={controlVariant(focus)}
-      >
+      <Button label="Close" onClick={onClose} size="sm" variant="ghost">
         <XIcon size={14} />
       </Button>
     </span>
@@ -185,30 +180,16 @@ export const TitleBar = ({
 );
 
 /**
- * Which of the library's buttons the controls on a bar in this state want.
- *
- * The focused bar is *filled* with the accent, and `ghost` — the quiet
- * control every other bar wants — draws its icon in `muted`, which is a gray
- * nobody can find on it. `accent` is the filled control of the same color:
- * its box disappears into the bar it is on and its icon is the page's own
- * `background`, which is exactly what the title beside it is drawn in. What
- * is left is the hover, which is the only thing a window control has to say
- * before it is pressed.
- */
-const controlVariant = (focus: TitleFocus) =>
-  focus === "focused" ? "accent" : "ghost";
-
-/**
  * sway's three client colors, in the one place a window says which it is.
  *
- * **The focused window's bar is filled**, not merely tinted: it is the one
- * thing on a desktop of identical frames that says where the keystrokes are
- * going, and a border a pixel wide is not enough to find at a glance. The fill
- * is the accent and the text on it is the page's own `background`, which is
- * what the component library's own filled controls do — so the pairing is
- * already known to work in both themes.
+ * **What says where the keystrokes are going is the top of the frame**: a rule
+ * of accent three pixels deep, across a bar washed with enough of the same
+ * accent to find in the corner of your eye. A border a pixel wide is not
+ * enough to find at a glance, and a bar *filled* with the accent is a desktop
+ * of windows shouting one color — the wash carries the window without taking
+ * the screen over.
  *
- * Every state names every one of the four rather than overriding one of them.
+ * Every state names every one of the five rather than overriding one of them.
  * Two rules setting `border-color` on one element are decided by the order
  * Panda happens to emit them in, which is not a thing to make a desktop's
  * focus indicator depend on.
@@ -227,23 +208,37 @@ const barStyles = cva({
     borderStartStartRadius: "lg",
     borderStyle: "solid",
     borderWidth: "1px",
-    gap: 2,
+    gap: 1.5,
     justify: "space-between",
     overflow: "hidden",
-    // The controls come off the rounded corner rather than sitting in it.
-    paddingInlineEnd: 1,
-    paddingInlineStart: 3,
+    // A bar thirty pixels tall with an eleven pixel name on it: what the text
+    // needs to clear the rounded corner, and no more.
+    paddingInlineEnd: 0.5,
+    paddingInlineStart: 2,
     position: "absolute",
   }),
   variants: {
     focus: {
       focused: {
-        backgroundColor: "accent",
+        // A wash of the accent through the card rather than a fill of it.
+        backgroundColor:
+          "color-mix(in oklab, {colors.accent} 16%, {colors.card})",
         borderColor: "accent",
-        color: "background",
-        // And its name is set in a heavier face than the rest of the desktop's,
-        // which is the half of standing out that survives a user who cannot
-        // tell the accent from the card.
+        // And the rule across the top, which is what carries across a room.
+        //
+        // Drawn inside the bar rather than as a deeper border, because the box
+        // is a fixed thirty pixels: a top border that grew would take those
+        // pixels off the content and nudge the name down by one. Focus follows
+        // the cursor here, so that is a jiggle on every window the pointer
+        // crosses. An inset shadow moves nothing, and eases — see
+        // `settlingStyles`.
+        //
+        // Three pixels off the spacing scale rather than written as `3px`: a
+        // shadow is not a border width, so it has no literal to claim.
+        boxShadow: "inset 0 {spacing.0.75} 0 {colors.accent}",
+        color: "foreground",
+        // Set in a heavier face as well, which is the half of standing out
+        // that survives a user who cannot tell the accent from the card.
         fontWeight: "medium",
       },
       // And every other bar recedes rather than competing: the window under it
@@ -251,14 +246,16 @@ const barStyles = cva({
       resting: {
         backgroundColor: "card",
         borderColor: "borderStrong",
+        boxShadow: "none",
         color: "muted",
         fontWeight: "normal",
       },
       // A container's open tab, with the keyboard somewhere else: marked as
-      // open by its edge and its text, and not mistakable for the fill above.
+      // open by its edge and its text, and not mistakable for the rule above.
       selected: {
         backgroundColor: "card",
         borderColor: "accent",
+        boxShadow: "none",
         color: "foreground",
         fontWeight: "medium",
       },
@@ -266,9 +263,9 @@ const barStyles = cva({
   },
 });
 
-// The two of them side by side, close enough to read as one group at the end
-// of a bar 30 pixels tall.
-const controlStyles = hstack({ gap: 0.5 });
+// The two of them touching, which is what reads as one group at the end of a
+// bar thirty pixels tall: each is already an icon in its own padded box.
+const controlStyles = hstack({ gap: 0 });
 
 const titleStyles = css({
   // The config's `fonts.size = 11.0`, which is between two tokens on the

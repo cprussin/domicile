@@ -211,12 +211,13 @@ export const movingStyles = cva({
  * pointer move, and a window easing towards each of them is one that trails
  * the pointer instead of following it.
  *
- * **The colors**, which are what a window says about the keyboard — the fill
- * of its bar, the line around its frame, the text on it. Those ease whichever
- * of the two states the window is in, dragged or not: focus follows the cursor
- * in this shell, so they change every time the pointer crosses a window, and a
- * desktop that snapped between them flickered on the way to anywhere. A drag
- * is when the pointer crosses the most windows of all.
+ * **The colors**, which are what a window says about the keyboard — the wash
+ * over its bar, the rule across the top of it, the line around its frame, the
+ * text on it. Those ease whichever of the two states the window is in, dragged
+ * or not: focus follows the cursor in this shell, so they change every time the
+ * pointer crosses a window, and a desktop that snapped between them flickered
+ * on the way to anywhere. A drag is when the pointer crosses the most windows
+ * of all.
  *
  * **One declaration for both**, which is why the box and the colors are one
  * recipe rather than a class each: two rules setting `transition` on one
@@ -228,11 +229,11 @@ export const settlingStyles = cva({
     dragging: {
       false: {
         transition:
-          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, box-shadow {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
       },
       true: {
         transition:
-          "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+          "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, box-shadow {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
       },
     },
   },

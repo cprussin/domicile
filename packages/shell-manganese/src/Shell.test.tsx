@@ -801,13 +801,15 @@ describe("Shell", () => {
 
       expect(barFor(container, "app:two").dataset.focus).toBe("focused");
       expect(barFor(container, "app:one").dataset.focus).toBe("resting");
-      // And the mark is a filled bar rather than a hairline: the one thing on
-      // a desktop of identical frames that says where the keystrokes go.
+      // And the mark is a rule of accent across the top of the frame, not a
+      // hairline: a border a pixel wide is not enough to find at a glance on a
+      // desktop of identical frames. Declarations rather than class names,
+      // because Panda hashes them.
       expect(barFor(container, "app:two").className).toContain(
-        css({ backgroundColor: "accent" }),
+        css({ boxShadow: "inset 0 {spacing.0.75} 0 {colors.accent}" }),
       );
       expect(barFor(container, "app:one").className).not.toContain(
-        css({ backgroundColor: "accent" }),
+        css({ boxShadow: "inset 0 {spacing.0.75} 0 {colors.accent}" }),
       );
     });
 

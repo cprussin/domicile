@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { fireEvent, render, within } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { TitleBar } from "./TitleBar";
@@ -48,10 +48,6 @@ const barProps = {
   title: "kitty",
   window: "app:term",
 } as const;
-
-/** The Close on one of these bars, which every case here renders two of. */
-const closeOn = (container: HTMLElement): HTMLElement =>
-  within(container).getByRole("button", { name: "Close" });
 
 const bar = (container: HTMLElement): HTMLElement => {
   const element = container.querySelector<HTMLElement>("[data-window]");
@@ -137,26 +133,6 @@ describe("TitleBar", () => {
     expect(transition).toContain("background-color");
     expect(transition).toContain("border-color");
     expect(transition).toContain("color");
-  });
-
-  it("draws the buttons on a filled bar in the color that fill is for", () => {
-    // The focused bar is filled with the accent, and the library's quiet
-    // control draws its icon in `muted` — a gray nobody can find on it. The
-    // color the accent is designed against is the page's `background`, which
-    // is what the title beside the buttons is already drawn in.
-    //
-    // Declarations rather than class names, because Panda hashes them.
-    const filled = render(<TitleBar {...barProps} focus="focused" />);
-    expect(closeOn(filled.container).className).toContain(
-      css({ color: "background" }),
-    );
-
-    // And every other bar keeps the quiet one, which is what a control on a
-    // card-colored bar should be.
-    const resting = render(<TitleBar {...barProps} />);
-    expect(closeOn(resting.container).className).not.toContain(
-      css({ color: "background" }),
-    );
   });
 
   it("sets the name of the window being worked in in a heavier face", () => {
