@@ -307,8 +307,34 @@ const boxOf = (element: HTMLElement) => ({
   y: element.style.insetBlockStart,
 });
 
+/**
+ * The machine's battery, which happy-dom has none of and the shell asks the
+ * platform for. Held open rather than answered on its own: the bar draws no
+ * meter until the platform has, so a case that wants one settles this itself,
+ * and every other case here stays synchronous.
+ */
+const platform: { answers?: (battery: BatteryManager) => void } = {};
+
+/** The platform answering with a battery in the state the case is about. */
+const machineAnswers = (reading: {
+  charging: boolean;
+  level: number;
+}): void => {
+  if (platform.answers === undefined) {
+    throw new Error("test: nothing has asked the platform for a battery");
+  } else {
+    platform.answers(Object.assign(new EventTarget(), reading));
+  }
+};
+
 beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
+  // happy-dom implements no Battery Status API, and the shell throws rather
+  // than draw a desktop it cannot read the charge of.
+  navigator.getBattery = () =>
+    new Promise((resolve) => {
+      platform.answers = resolve;
+    });
 });
 
 describe("Shell", () => {
@@ -476,27 +502,28 @@ describe("Shell", () => {
       expect(screen.getByText("resize")).toBeInTheDocument();
     });
 
-    it("launches a terminal", async () => {
-      const user = userEvent.setup();
+    it("shows the charge, and the plug when AC is in", async () => {
       renderShell();
 
-      await user.click(screen.getByRole("button", { name: "Terminal" }));
+      machineAnswers({ charging: true, level: 0.42 });
 
-      expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
+      expect(await screen.findByText("42%")).toBeVisible();
+      expect(screen.getByRole("meter", { name: "Battery" })).toHaveAttribute(
+        "aria-valuenow",
+        "42",
+      );
+      expect(screen.getByRole("img", { name: "Charging" })).toBeVisible();
     });
 
-    it("opens a browser window", async () => {
-      const user = userEvent.setup();
-      const { container } = renderShell();
-
-      await user.click(screen.getByRole("button", { name: "New window" }));
-
-      expect(windowsOnScreen(container)).toEqual(["Browser"]);
-    });
-
-    it("offers no theme toggle: the bar launches things, it does not set the page", () => {
+    it("launches nothing: the keys are what does things to the desktop", () => {
+      // The two launchers were here and are not. `mod+Return` is still the
+      // terminal and `mod+Space` is the launcher, which is what opens a window
+      // on a URL or a search — and a bar with a button for two of the
+      // desktop's keys was a ranking of them that nobody made.
       renderShell();
 
+      expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "New window" })).toBeNull();
       expect(screen.queryByLabelText(/theme/i)).not.toBeInTheDocument();
     });
   });

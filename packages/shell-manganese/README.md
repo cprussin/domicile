@@ -1,15 +1,15 @@
 # @domicile/shell-manganese
 
 The bundled reference chrome: a tiling desktop keyed like [sway](https://swaywm.org),
-under a transparent bar carrying the workspaces, a clock and the two things it
-can launch. It is the app Domicile ships to prove the model end to end — every
+under a transparent bar carrying the workspaces, a clock and the charge. It is
+the app Domicile ships to prove the model end to end — every
 pixel of it is ordinary web content, and each Wayland client on it is a real
 `<app>` element that takes ordinary CSS.
 
 The chrome is a React tree built entirely from
 [`@domicile/component-library`](../component-library/README.md): the bar's
-launchers and a browser window's controls are its `Button`, the address bar its
-`Input`, the empty-desktop card its `Card`.
+workspaces and a browser window's controls are its `Button`, the address bar
+its `Input`, the empty-desktop card its `Card`.
 Styling is Panda CSS from the library's preset — the shell defines no
 stylesheet of its own.
 
@@ -47,7 +47,7 @@ windows over the tiling, and one window at a time filling the screen.
 | Keys | What |
 |---|---|
 | **Mod+Return** | Launch a terminal (`kitty`), which the compositor spawns. |
-| **Mod+Space**, **Mod+D** | Open a browser window. The config's launcher keys — this shell has no launcher to run, and a window of its own is the nearest thing it has. |
+| **Mod+Space**, **Mod+D** | Open the launcher, or put it away. The config's launcher keys, in both the places it binds one. |
 | **Mod+Shift+Q** | Close the window being worked in. |
 | **Mod+H / J / K / L**, **Mod+←↓↑→** | Move the focus. Wrapping at the ends of a container, which is what `focus.wrapping = "yes"` asks for. |
 | **Mod+Shift+** the same | Move the window. Past its neighbour, out of the container it is in, or — pushed across the grain — into a new split of the workspace. |
@@ -343,8 +343,16 @@ the keyboard happens to be; exactly one path acts for any press.
 ## The top bar
 
 Transparent, across the top of the screen the chrome is on: the workspaces at
-one end, the clock in the middle, and at the other end the two launchers and
-the name of the binding mode whenever it is not the usual one.
+one end, the clock in the middle, and at the other end the charge, behind the
+name of the binding mode whenever it is not the usual one.
+
+**It launches nothing.** Everything this desktop does is on a key, and the two
+buttons that were here — a terminal and a window of the shell's own — were a
+ranking of two of them that nobody made. `mod+Return` is still the terminal and
+`mod+Space` is the launcher, which is what opens a window on a URL or a search;
+both are where sway's config puts them and so where a user of this desktop
+already looks. What the bar carries is what no key can be pressed to ask: which
+workspace this is, what time it is, and how much charge is left.
 
 It paints no background, so what is behind it is the wallpaper — and the
 windows are laid out in what is *left* of the screen under it, so nothing is
@@ -365,11 +373,43 @@ workspace nobody is looking at is not on the bar either.
 
 The clock reads `Wednesday 2026-09-16 20:53:40` and ticks every second, in the
 middle of the *bar* rather than in the middle of what the workspaces and the
-buttons leave — so the reading does not shift along as windows open. The day is
+charge leave — so the reading does not shift along as windows open. The day is
 named in English beside an ISO date because the format is a decision rather
 than a locale's default: a locale's own is a different width every hour and a
 different order in every language, which is not something to put in the middle
 of a bar and expect to stay put.
+
+**The charge is at the far end, and is three readings of one number.** A bolt
+when AC is in, a meter whose fill *is* the level, and the percentage in
+figures. None of the three is the other two: the meter is what is read at a
+glance and is the only one exact to better than a percent, the figures are what
+a decision about a lead is made on, and the bolt is the plug — a full battery
+and a machine on AC look identical on a meter and are not the same thing. The
+meter is drawn in `currentcolor`, so the one decision about what colour survives
+a photograph is the bar's own; a meter is boxes rather than type, and `color`
+would reach the figures beside it and nothing else.
+
+**At a tenth left the whole readout goes to `danger`, and at a twentieth it
+flashes.** Both thresholds are read off the *percentage* rather than the level
+behind it, so the colour and the figures cannot disagree — a tenth and a bit
+reads as `10%`, and a readout saying ten while looking comfortable would be two
+answers to one question. The lead being in does not clear either: the bolt is
+what says the lead is in, and what the colour is about is the cell. The flash is
+`chargeFlashing`, the shell's own keyframe, rather than the preset's `pulse`:
+`pulse` sits between a third and two thirds throughout and says a control is
+busy, where this is at full strength twice a turn — a battery with minutes left
+has to be more legible than the rest of the bar at the moment it is least
+ignorable, not less. It is an opacity rather than a second colour, so the one
+decision about what red is stays the `danger` token's and one animation covers
+the case, the fill, the bolt and the figures at once.
+
+It comes off `navigator.getBattery`, the Battery Status API, which the engine
+answers out of UPower — and which `domicile://` can ask at all because the fork
+registers the scheme as secure, the thing that API is gated on. So there is no
+protocol frame for it and nothing for the compositor to forward: the charge is
+one of the few facts about the machine the page can read for itself. Nothing is
+drawn until the platform has answered, because the API hands back a promise and
+a bar that flashed an empty meter for that tick would be saying something false.
 
 ## The wallpaper
 
@@ -414,7 +454,8 @@ shell that wants its own pictures owns its own list.
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | What is on the desktop: the window state, the keys, the bar over the windows, and the rectangles each screen offers them. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar, and alone on every display the bar is not on. |
-| `src/top-bar/` | The bar: the workspaces, the clock and the launchers. |
+| `src/top-bar/` | The bar: the workspaces, the clock and the charge. |
+| `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/placement-line.ts` | What the chrome has to say about its own timings, which is what measuring every window on every frame costs. |
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
@@ -481,7 +522,7 @@ The parts of the config this shell cannot answer, and why:
   lock screen, the volume and brightness keys are all paths into the user's own
   nix store, and a shell has nowhere to read them from — the compositor spawns
   what it is told to spawn, and nothing tells it. `mod+Return` and the
-  launcher keys are what is left: a terminal, and a window of the shell's own.
+  launcher keys are what is left: a terminal, and the shell's own launcher.
 - **Per-window rules.** `for_window [app_id="launcher"] floating enable` and
   the rest of the config's `window.commands` have no equivalent here: every
   window opens tiled, and floating one is a key away.

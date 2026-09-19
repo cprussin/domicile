@@ -19,7 +19,7 @@ import { placementsOf } from "./window-management/placement";
 import type { Rect } from "./window-management/rect";
 import { Stage } from "./window-management/Stage";
 import { useWindows } from "./window-management/useWindows";
-import { HOME_PAGE, siteOf } from "./window-management/window";
+import { siteOf } from "./window-management/window";
 import { WindowAction, workspaceOn } from "./window-management/window-state";
 
 type Props = {
@@ -96,12 +96,6 @@ export const Desktop = ({ domicile }: Props) => {
           current={windows.current}
           mode={windows.mode}
           occupied={windows.occupied}
-          onNew={() => {
-            act(WindowAction.BrowserOpened(HOME_PAGE));
-          }}
-          onOpenTerminal={() => {
-            act(WindowAction.TerminalLaunched());
-          }}
           onSelectWorkspace={(name) => {
             act(WindowAction.WorkspaceSelected(name));
           }}
