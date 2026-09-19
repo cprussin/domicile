@@ -222,7 +222,37 @@ jobs:
       # the order of their steps; a third copy is what the script prevents. It
       # also carries the diagnostic for a tree that is still dirty afterward,
       # which is long because the cause is not visible from the symptom.
+      # IS ANY OF THE NEXT THREE STEPS WORTH DOING?
+      #
+      # The reset puts every patched file back to upstream and `git am` patches
+      # it again, so a series that has not moved still comes out of those two
+      # steps with every file rewritten — same bytes, new mtimes — and the
+      # build behind them is the most expensive thing in this repository.
+      #
+      # This asks whether the checkout is already carrying exactly this pin,
+      # these patches and these laid-down files, and whether it is still in the
+      # state a finished apply leaves. When it is, the reset, the apply and the
+      # compile have nothing to do and are skipped; the guards below still run,
+      # against the build that is already there.
+      #
+      # WHEN IT SAYS YES. A pull request that touches this package without
+      # touching the series — a script, a BUILD arg, this workflow — and the
+      # `push: main` run right after such a pull request merges, which is a
+      # full build of a tree `crux` may have compiled twenty minutes earlier.
+      # When two branches with different series interleave on the one tree, it
+      # says no, and no is what every run costs today.
+      #
+      # THE RISK IS ENTIRELY ON THE `true` SIDE, which is why the script checks
+      # the tree rather than believing the file: a wrong `true` builds
+      # something other than this pull request and reports it as this pull
+      # request. See .github/scripts/engine-series-stamp.sh and its test, which
+      # spends eleven of thirteen cases on exactly that.
+      - name: Is the checkout already carrying this series?
+        id: series
+        run: .github/scripts/engine-series-stamp.sh carries "$CHROMIUM"
+
       - name: Reset the checkout to the pin
+        if: ${{ steps.series.outputs.carries != 'true' }}
         run: .github/scripts/engine-reset.sh "$CHROMIUM"
 
       # A REPIN NEEDS NOBODY ON `crux`, and this step is the half of that which
@@ -257,6 +287,7 @@ jobs:
       # HEAD still at the pin means the series did not go on, and that is worth
       # asserting rather than inferring from an exit code.
       - name: Apply the series
+        if: ${{ steps.series.outputs.carries != 'true' }}
         run: |
           set -euo pipefail
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
@@ -266,6 +297,20 @@ jobs:
             exit 1
           }
           echo "series applied: $(git -C "$CHROMIUM" log --oneline "$pin..HEAD" | wc -l) patches"
+
+      # AFTER THE APPLY AND BEFORE THE BUILD, so that a run which dies in the
+      # build leaves a stamp describing a tree that is genuinely carrying the
+      # series — which it is, whatever the compiler then said about it. The
+      # next run skips the reset and compiles what is left, which is what an
+      # incremental build is for.
+      #
+      # It refuses rather than writes when the tree is not what the apply
+      # should have left. A stamp is only worth what the run that wrote it
+      # checked, and the place to find out is here rather than in the next
+      # run's skip.
+      - name: Write down what the checkout is carrying
+        if: ${{ steps.series.outputs.carries != 'true' }}
+        run: .github/scripts/engine-series-stamp.sh record "$CHROMIUM"
 
       # `build.sh` builds `chrome` and the spike's submitter. The guard also
       # needs `libdomicile_engine.so` — the compositor dlopens it by name — and
