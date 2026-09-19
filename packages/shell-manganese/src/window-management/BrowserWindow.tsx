@@ -17,14 +17,17 @@ import type { Rect } from "./rect";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
 import { useReclaimFocus } from "./useReclaimFocus";
+import type { WindowMotion } from "./window-motion";
+import { isLeaving } from "./window-motion";
 import {
   clickThroughStyles,
   draggingStyles,
   edgeStyles,
   focusedEdgeStyles,
-  openingStyles,
+  movingStyles,
   placedAt,
   restingEdgeStyles,
+  scaledAbout,
   settlingStyles,
   windowStyles,
 } from "./window-styles";
@@ -54,6 +57,22 @@ type Props = {
   /** Whether the user is working in this window, so it takes the keyboard. */
   focused: boolean;
   /**
+   * The whole box this window's bar and contents span, which both of them turn
+   * about — see {@link scaledAbout}. `undefined` for a window that is not on
+   * screen, exactly as {@link Props.rect} is.
+   */
+  frame: Rect | undefined;
+  /**
+   * What this window is doing that the page has to draw over time: arriving,
+   * leaving, or nothing at all.
+   *
+   * A window that is leaving is drawn and nothing else. Its page goes on being
+   * shown — that is the point of drawing the window rather than something
+   * standing in for it — while the window itself asks for no keyboard, takes
+   * no pointer and is nothing a keyboard can reach.
+   */
+  motion: WindowMotion;
+  /**
    * Called when the pointer moves into this window.
    *
    * Focus follows the cursor in this shell, so arriving over a window is the
@@ -72,6 +91,15 @@ type Props = {
    * nothing that names an address. So a tab named from this says where the
    * user asked to go rather than where they ended up.
    */
+  /**
+   * Called when it has played that motion all the way out.
+   *
+   * Which is how the desktop knows a window it has closed can be taken off the
+   * page. Rather than a timer: how long the motion takes is the stylesheet's,
+   * and a duration written in the shell as well is a second copy of it to keep
+   * in step.
+   */
+  onMotionEnded: () => void;
   onNavigate: (url: string) => void;
   /**
    * Called when the user clicks into this window — the page, the address bar,
@@ -114,12 +142,22 @@ export const BrowserWindow = ({
   domicile,
   dragging,
   focused,
+  frame,
+  motion,
   onHover,
+  onMotionEnded,
   onNavigate,
   onReach,
   rect,
   src,
 }: Props) => {
+  // A window the desktop no longer has is being drawn and nothing else. What
+  // it says about the keyboard and what it does about it part company here:
+  // its bar goes on saying the keyboard was in it, which is what keeps the
+  // window from changing while the user watches it go, and it stops reaching
+  // for the keyboard itself — which has moved on to whatever is left.
+  const leaving = isLeaving(motion);
+  const holdsKeyboard = focused && !leaving;
   // `null` rather than `undefined` because that is what React's ref API hands
   // a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
@@ -128,7 +166,7 @@ export const BrowserWindow = ({
   // other. A ref rather than state like the view above, because nothing reads
   // it as it arrives — it is read inside the effects, where the render that
   // set it has already been committed.
-  const frame = useRef<HTMLElement>(null);
+  const element = useRef<HTMLElement>(null);
   const [address, setAddress] = useState(src);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
@@ -188,13 +226,13 @@ export const BrowserWindow = ({
   // is an address bar that cannot be typed into at all. What the user reached
   // for is already in this window, so there is nothing for this to move.
   useEffect(() => {
-    if (focused && view !== null) {
+    if (holdsKeyboard && view !== null) {
       domicile.focusChrome();
-      if (!holdsFocus(frame.current)) {
+      if (!holdsFocus(element.current)) {
         focusPage(view);
       }
     }
-  }, [domicile, focused, focusPage, view]);
+  }, [domicile, focusPage, holdsKeyboard, view]);
 
   // AND GIVES IT BACK WHEN THE USER MOVES ON, which nothing else in the
   // desktop can do for this window. Every key the compositor delivers arrives
@@ -207,17 +245,17 @@ export const BrowserWindow = ({
   // holding the focus is a desktop where no other window can be typed into —
   // open a browser window and every terminal after it goes deaf.
   useEffect(() => {
-    if (!focused) {
-      releaseFocus(frame.current);
+    if (!holdsKeyboard) {
+      releaseFocus(element.current);
     }
-  }, [focused]);
+  }, [holdsKeyboard]);
 
   // And keeps it, which is a separate job: the effect above runs when this
   // window becomes the one being worked in, and the chrome can take the focus
   // off the page long after that without this window hearing anything. Closing
   // another window is the case that costs the user their keyboard — see
   // `useReclaimFocus`.
-  useReclaimFocus(view, focused, focusPage);
+  useReclaimFocus(view, holdsKeyboard, focusPage);
 
   // Every control here drives the view element, which is rendered by this
   // component and so is attached by the time anyone can press one. A press
@@ -273,13 +311,26 @@ export const BrowserWindow = ({
         // And the same colour the bar is drawn in, for the same reason.
         focused ? focusedEdgeStyles : restingEdgeStyles,
         noTopEdgeStyles,
-        openingStyles,
-        clickThrough && clickThroughStyles,
+        movingStyles({ motion }),
+        (clickThrough || leaving) && clickThroughStyles,
         // A dragged window is written at a new box on every pointer move, so
         // it takes the box it is given rather than easing towards it.
         dragging ? draggingStyles : settlingStyles,
       )}
+      // What it is doing, as an attribute as well as an animation: the
+      // desktop's own state is worth being able to read off the element.
+      data-motion={motion}
       hidden={rect === undefined}
+      // Nothing a keyboard can reach, for as long as it is only being drawn.
+      inert={leaving}
+      // Its own rather than one of the chrome's on its way up the document —
+      // the spinner in the address bar turns for as long as a page is
+      // arriving, and each turn of it ends.
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget) {
+          onMotionEnded();
+        }
+      }}
       // Focus as well as the press, for the chrome's own controls: pressing
       // the address bar is a pointer event, and reaching it with the keyboard
       // is not. What happens in the page arrives on the element instead — see
@@ -290,11 +341,15 @@ export const BrowserWindow = ({
       // starting to work in it — the page excepted, because a pointer in there
       // is the guest's, the same way a click in it is.
       onPointerOver={onHover}
-      ref={frame}
+      ref={element}
       // Inline because the box is a runtime number and Panda reads literals;
       // `window-styles` owns everything static. `undefined` is a window with no
       // rectangle, which is a window that is not on screen.
-      style={rect === undefined ? undefined : placedAt(rect, depth)}
+      style={
+        rect === undefined || frame === undefined
+          ? undefined
+          : { ...placedAt(rect, depth), ...scaledAbout(frame, rect) }
+      }
     >
       <form className={addressBarStyles} onSubmit={handleSubmit}>
         <Button

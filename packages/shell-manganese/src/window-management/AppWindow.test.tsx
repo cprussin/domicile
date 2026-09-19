@@ -4,7 +4,7 @@ import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Measure } from "@domicile/chrome-sdk/measure";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 
 import { AppWindow } from "./AppWindow";
 
@@ -41,6 +41,13 @@ const noHover = () => {
 /** Where a window on screen is, which no case here is about. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
 
+/** The whole box its bar and its contents span, which it turns about. */
+const FRAME = { height: 830, width: 1200, x: 0, y: 2 };
+
+const nothingEnded = () => {
+  // Nothing in the case plays an animation to its end.
+};
+
 /** The props every case here shares; each overrides the one it is about. */
 const windowProps = {
   appId: "term",
@@ -49,8 +56,11 @@ const windowProps = {
   depth: 0,
   domicile: recordingDomicile,
   dragging: false,
+  frame: FRAME,
   hasKeyboard: false,
+  motion: "resting",
   onHover: noHover,
+  onMotionEnded: nothingEnded,
   rect: ON_SCREEN,
 } as const;
 
@@ -257,17 +267,42 @@ describe("AppWindow", () => {
     expect(portal(container)).toHaveStyle({ cursor: "text" });
   });
 
-  describe("the way it arrives and settles", () => {
-    it("grows into its box as it arrives", () => {
+  describe("the way it moves", () => {
+    it("plays the motion it is given", () => {
       // A transform rather than the box, so the client is not reconfigured on
       // every frame of it — see the keyframes in `panda.config.ts`.
       const { container } = render(
-        <AppWindow {...windowProps} focused={false} onReach={noReach} />,
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          motion="opening"
+          onReach={noReach}
+        />,
       );
 
       expect(
         globalThis.getComputedStyle(portal(container)).animation,
       ).toContain("windowOpening");
+    });
+
+    // A WINDOW TURNS ABOUT ONE POINT, NOT TWO. Its contents and the bar above
+    // them are separate elements, and each scaled about its own centre would
+    // pull away from the other by a fraction of the window's height.
+    it("turns about the middle of its whole frame rather than its own", () => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          motion="opening"
+          onReach={noReach}
+        />,
+      );
+
+      // The frame's middle is (600, 417), which is 385 above the top of the
+      // contents at y = 32.
+      expect(portal(container)).toHaveStyle({
+        transformOrigin: "600px 385px",
+      });
     });
 
     it("eases to a new box rather than jumping to it", () => {
@@ -295,6 +330,57 @@ describe("AppWindow", () => {
       expect(
         globalThis.getComputedStyle(portal(container)).transition,
       ).not.toContain("inline-size");
+    });
+
+    it("says when it has played its motion out", async () => {
+      await new Promise<void>((resolve) => {
+        const { container } = render(
+          <AppWindow
+            {...windowProps}
+            focused={false}
+            motion="closing"
+            onMotionEnded={() => {
+              resolve();
+            }}
+            onReach={noReach}
+          />,
+        );
+        fireEvent.animationEnd(portal(container));
+      });
+    });
+  });
+
+  // A WINDOW ON ITS WAY OUT ASKS FOR NOTHING AND ANSWERS NOTHING. The keyboard
+  // has moved on to whatever is left, and a window still asking for it would
+  // take it back from the window the user is now working in.
+  describe("while it is leaving", () => {
+    it("does not ask for the keyboard it had", () => {
+      render(
+        <AppWindow
+          {...windowProps}
+          focused
+          motion="closing"
+          onReach={noReach}
+        />,
+      );
+
+      expect(focused).toStrictEqual([]);
+    });
+
+    it("takes no pointer, and is nothing a keyboard can reach", () => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          motion="leaving-to-start"
+          onReach={noReach}
+        />,
+      );
+
+      expect(globalThis.getComputedStyle(portal(container)).pointerEvents).toBe(
+        "none",
+      );
+      expect(portal(container)).toHaveAttribute("inert");
     });
   });
 });

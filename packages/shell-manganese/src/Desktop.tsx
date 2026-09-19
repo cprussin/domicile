@@ -101,6 +101,7 @@ export const Desktop = ({ domicile }: Props) => {
         />
         <Stage
           activeId={windows.activeId}
+          current={windows.current}
           domicile={domicile}
           draggingId={windows.draggingId}
           floats={workspaceOn(windows).floats}

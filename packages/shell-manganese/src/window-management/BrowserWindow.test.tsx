@@ -104,6 +104,13 @@ document.head.append(stylesheet);
 /** Where a window on screen is, which no case here is about. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
 
+/** The whole box its bar and its contents span, which it turns about. */
+const FRAME = { height: 830, width: 1200, x: 0, y: 2 };
+
+const nothingEnded = () => {
+  // Nothing in the case plays an animation to its end.
+};
+
 describe("BrowserWindow", () => {
   it("points its view at the address it opened with", () => {
     const { container } = render(
@@ -113,7 +120,10 @@ describe("BrowserWindow", () => {
         domicile={silentDomicile}
         dragging={false}
         focused
+        frame={FRAME}
+        motion="resting"
         onHover={noHover}
+        onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
         onReach={() => undefined}
         rect={ON_SCREEN}
@@ -133,7 +143,10 @@ describe("BrowserWindow", () => {
           domicile={silentDomicile}
           dragging={false}
           focused
+          frame={FRAME}
+          motion="resting"
           onHover={noHover}
+          onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -160,7 +173,10 @@ describe("BrowserWindow", () => {
           domicile={silentDomicile}
           dragging={false}
           focused
+          frame={FRAME}
+          motion="resting"
           onHover={noHover}
+          onMotionEnded={nothingEnded}
           onNavigate={(url) => {
             seen.push(url);
           }}
@@ -184,7 +200,10 @@ describe("BrowserWindow", () => {
           domicile={silentDomicile}
           dragging={false}
           focused
+          frame={FRAME}
+          motion="resting"
           onHover={noHover}
+          onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -218,7 +237,10 @@ describe("BrowserWindow", () => {
           domicile={recordingDomicile(calls)}
           dragging={false}
           focused
+          frame={FRAME}
+          motion="resting"
           onHover={noHover}
+          onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -237,7 +259,10 @@ describe("BrowserWindow", () => {
           domicile={recordingDomicile(calls)}
           dragging={false}
           focused={false}
+          frame={FRAME}
+          motion="resting"
           onHover={noHover}
+          onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -256,7 +281,10 @@ describe("BrowserWindow", () => {
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
+        frame: FRAME,
+        motion: "resting",
         onHover: noHover,
+        onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -284,7 +312,10 @@ describe("BrowserWindow", () => {
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
+        frame: FRAME,
+        motion: "resting",
         onHover: noHover,
+        onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -316,7 +347,10 @@ describe("BrowserWindow", () => {
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
+        frame: FRAME,
+        motion: "resting",
         onHover: noHover,
+        onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -343,7 +377,10 @@ describe("BrowserWindow", () => {
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
+        frame: FRAME,
+        motion: "resting",
         onHover: noHover,
+        onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -379,7 +416,10 @@ describe("BrowserWindow", () => {
             domicile={silentDomicile}
             dragging={false}
             focused={false}
+            frame={FRAME}
+            motion="resting"
             onHover={noHover}
+            onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
@@ -401,7 +441,10 @@ describe("BrowserWindow", () => {
             domicile={silentDomicile}
             dragging={false}
             focused={false}
+            frame={FRAME}
+            motion="resting"
             onHover={noHover}
+            onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
@@ -426,7 +469,10 @@ describe("BrowserWindow", () => {
             domicile={silentDomicile}
             dragging={false}
             focused={false}
+            frame={FRAME}
+            motion="resting"
             onHover={noHover}
+            onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
@@ -453,7 +499,10 @@ describe("BrowserWindow", () => {
             domicile={silentDomicile}
             dragging={false}
             focused
+            frame={FRAME}
+            motion="resting"
             onHover={noHover}
+            onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
@@ -476,7 +525,10 @@ describe("BrowserWindow", () => {
             domicile={silentDomicile}
             dragging={false}
             focused
+            frame={FRAME}
+            motion="resting"
             onHover={noHover}
+            onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onReach={() => {
               resolve();
@@ -501,7 +553,10 @@ describe("BrowserWindow", () => {
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
+        frame: FRAME,
+        motion: "resting",
         onHover: noHover,
+        onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onReach: () => {
           reaches.push("reach");
@@ -539,7 +594,10 @@ describe("BrowserWindow", () => {
           domicile={silentDomicile}
           dragging={false}
           focused
+          frame={FRAME}
+          motion="resting"
           onHover={noHover}
+          onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onReach={() => {
             reaches.push("reach");
@@ -578,9 +636,12 @@ describe("BrowserWindow", () => {
             domicile={silentDomicile}
             dragging={false}
             focused={false}
+            frame={FRAME}
+            motion="resting"
             onHover={() => {
               resolve();
             }}
+            onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onReach={() => undefined}
             rect={ON_SCREEN}
@@ -605,7 +666,10 @@ describe("BrowserWindow", () => {
           domicile={silentDomicile}
           dragging={false}
           focused
+          frame={FRAME}
+          motion="resting"
           onHover={noHover}
+          onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -628,7 +692,10 @@ describe("BrowserWindow", () => {
           domicile={silentDomicile}
           dragging={false}
           focused
+          frame={FRAME}
+          motion="resting"
           onHover={noHover}
+          onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -651,7 +718,10 @@ describe("BrowserWindow", () => {
           domicile={silentDomicile}
           dragging={false}
           focused
+          frame={FRAME}
+          motion="resting"
           onHover={noHover}
+          onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -676,7 +746,10 @@ describe("BrowserWindow", () => {
         domicile={silentDomicile}
         dragging={false}
         focused={false}
+        frame={FRAME}
+        motion="resting"
         onHover={noHover}
+        onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
         onReach={() => undefined}
         rect={undefined}
@@ -688,7 +761,7 @@ describe("BrowserWindow", () => {
     expect(screen.getByRole("region", { hidden: true })).not.toBeVisible();
   });
 
-  describe("the way it arrives and settles", () => {
+  describe("the way it moves", () => {
     /** The props every case here shares; each overrides the one it is about. */
     const windowProps = {
       clickThrough: false,
@@ -696,19 +769,31 @@ describe("BrowserWindow", () => {
       domicile: silentDomicile,
       dragging: false,
       focused: false,
+      frame: FRAME,
+      motion: "resting",
       onHover: noHover,
+      onMotionEnded: nothingEnded,
       onNavigate: () => undefined,
       onReach: () => undefined,
       rect: ON_SCREEN,
       src: "https://example.com",
     } as const;
 
-    it("grows into its box as it arrives", () => {
-      render(<BrowserWindow {...windowProps} />);
+    it("plays the motion it is given", () => {
+      render(<BrowserWindow {...windowProps} motion="opening" />);
 
       expect(globalThis.getComputedStyle(browser()).animation).toContain(
         "windowOpening",
       );
+    });
+
+    // A WINDOW TURNS ABOUT ONE POINT, NOT TWO. Its contents and the bar above
+    // them are separate elements, and each scaled about its own centre would
+    // pull away from the other by a fraction of the window's height.
+    it("turns about the middle of its whole frame rather than its own", () => {
+      render(<BrowserWindow {...windowProps} motion="opening" />);
+
+      expect(browser()).toHaveStyle({ transformOrigin: "600px 385px" });
     });
 
     it("eases to a new box rather than jumping to it", () => {
@@ -727,6 +812,48 @@ describe("BrowserWindow", () => {
       expect(globalThis.getComputedStyle(browser()).transition).not.toContain(
         "inline-size",
       );
+    });
+
+    // A WINDOW ON ITS WAY OUT ASKS FOR NOTHING AND ANSWERS NOTHING. Its page
+    // goes on being drawn — that is the whole point of drawing it rather than
+    // something standing in for it — but the keyboard has moved on to whatever
+    // is left, and a window still pulling the focus back into its own guest is
+    // one the user cannot type past.
+    it("leaves the keyboard alone while it is leaving", () => {
+      const calls: string[] = [];
+
+      render(
+        <BrowserWindow
+          {...windowProps}
+          domicile={recordingDomicile(calls)}
+          focused
+          motion="closing"
+        />,
+      );
+
+      expect(calls).toStrictEqual([]);
+    });
+
+    it("takes no pointer while it is leaving, and no keyboard can reach it", () => {
+      render(<BrowserWindow {...windowProps} motion="leaving-to-start" />);
+
+      expect(globalThis.getComputedStyle(browser()).pointerEvents).toBe("none");
+      expect(browser()).toHaveAttribute("inert");
+    });
+
+    it("says when it has played its motion out", async () => {
+      await new Promise<void>((resolve) => {
+        render(
+          <BrowserWindow
+            {...windowProps}
+            motion="closing"
+            onMotionEnded={() => {
+              resolve();
+            }}
+          />,
+        );
+        fireEvent.animationEnd(browser());
+      });
     });
   });
 });

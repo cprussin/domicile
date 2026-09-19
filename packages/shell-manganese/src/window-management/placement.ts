@@ -9,7 +9,7 @@
 import { rectOf } from "./floating/float";
 import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
-import type { Tab } from "./tree/frames";
+import type { Frame, Tab } from "./tree/frames";
 import { framesOf } from "./tree/frames";
 import { windowsOf } from "./tree/tiling";
 import type { WindowState } from "./window-state";
@@ -25,6 +25,16 @@ export type Placement = {
    * the compositor hit-tests and stacks the client's surface by.
    */
   depth: number;
+  /**
+   * The whole of what the window occupies: its bar and its contents together.
+   *
+   * What both of those elements turn about when the window arrives or leaves.
+   * They are separate elements, so halves that scaled about their own centres
+   * would pull apart by a fraction of the window's height — one shared point
+   * is what keeps a frame a frame. It is the box of the bar alone for a window
+   * a tab is hiding, which is all such a window has on screen.
+   */
+  frame: Rect;
   id: string;
   /**
    * Where its contents go, or `undefined` for a window a tabbed container is
@@ -85,14 +95,18 @@ export const placementsOf = (
     );
     return {
       placements: [
-        ...frames.map((frame) => ({ ...frame, depth: TILED })),
+        ...frames.map((frame) => placed(frame, TILED)),
         // Over them, in the order the workspace stacks them.
-        ...workspace.floats.map((float, at) => ({
-          bar: barOf(rectOf(float)),
-          depth: FLOATING + at,
-          id: float.id,
-          surface: surfaceOf(rectOf(float)),
-        })),
+        ...workspace.floats.map((float, at) =>
+          placed(
+            {
+              bar: barOf(rectOf(float)),
+              id: float.id,
+              surface: surfaceOf(rectOf(float)),
+            },
+            FLOATING + at,
+          ),
+        ),
       ],
       tabs,
     };
@@ -114,11 +128,36 @@ const fullscreen = (
     return undefined;
   } else {
     const area = full.global ? geometry.desktop : geometry.screen;
-    return {
-      bar: barOf(area),
-      depth: FULLSCREEN,
-      id: full.id,
-      surface: surfaceOf(area),
-    };
+    return placed(
+      { bar: barOf(area), id: full.id, surface: surfaceOf(area) },
+      FULLSCREEN,
+    );
   }
+};
+
+/**
+ * One window's frame, stacked at `depth`.
+ *
+ * The one place a {@link Placement} is made, so that the box the two halves
+ * turn about is worked out once rather than at each of the three ways a
+ * window reaches the screen.
+ */
+const placed = ({ bar, id, surface }: Frame, depth: number): Placement => ({
+  bar,
+  depth,
+  frame: surface === undefined ? bar : spanning(bar, surface),
+  id,
+  surface,
+});
+
+/** The smallest box holding both of them. */
+const spanning = (bar: Rect, surface: Rect): Rect => {
+  const x = Math.min(bar.x, surface.x);
+  const y = Math.min(bar.y, surface.y);
+  return {
+    height: Math.max(bar.y + bar.height, surface.y + surface.height) - y,
+    width: Math.max(bar.x + bar.width, surface.x + surface.width) - x,
+    x,
+    y,
+  };
 };

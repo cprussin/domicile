@@ -4,20 +4,21 @@ import { Fragment } from "react";
 import type { Modifiers } from "../keyboard/useModifiers";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
-import { ClosingWindow } from "./ClosingWindow";
 import { FloatGrab } from "./floating/FloatGrab";
 import { FloatTitleBar } from "./floating/FloatTitleBar";
 import type { Float } from "./floating/float";
-import type { Placement, Screenful } from "./placement";
+import type { Screenful } from "./placement";
 import { TitleBar } from "./TitleBar";
 import { titleFocus } from "./title-focus";
-import { useClosing } from "./useClosing";
+import { useWindowMotion } from "./useWindowMotion";
 import type { ShellWindow } from "./window";
 import { WindowKind } from "./window";
 
 type Props = {
   /** The window the user is working in, which every bar is drawn against. */
   activeId: string | undefined;
+  /** The workspace on screen, which is what a switch is noticed against. */
+  current: string;
   domicile: DomicileClient;
   /** The floating window the user has hold of, or `undefined` when none is. */
   draggingId: string | undefined;
@@ -58,12 +59,15 @@ type Props = {
  * is, is a rectangle; a window with no rectangle is hidden rather than
  * unmounted, for the same reason.
  *
- * And the windows that have closed, which are on the screen without being in
- * the list at all: a close takes a window out of the state everywhere at once,
- * so what is left to draw is a record of the frame it had. See `closing.ts`.
+ * **And the windows the desktop no longer has are in that same list**, at the
+ * places they had, for as long as they are still leaving: one that has closed,
+ * and every one of a workspace that has just been switched away from. Which
+ * windows those are, and what each of them is doing, is `useWindowMotion`'s to
+ * say — this draws the answer.
  */
 export const Stage = ({
   activeId,
+  current,
   domicile,
   draggingId,
   floats,
@@ -80,11 +84,16 @@ export const Stage = ({
   screenful: { placements, tabs },
   windows,
 }: Props) => {
-  const { closing, onGone } = useClosing(windows, placements);
+  const motions = useWindowMotion({
+    activeId,
+    current,
+    placements,
+    tabs,
+    windows,
+  });
   return (
     <main>
-      {windows.map((window) => {
-        const placement = placementOf(placements, window.id);
+      {motions.drawn.map(({ focused, motion, placement, window }) => {
         const floating = floats.find((float) => float.id === window.id);
         // While the desktop's modifier is held the pointer belongs to the shell
         // rather than to the client, so a drag can be caught in the page. Only
@@ -103,6 +112,9 @@ export const Stage = ({
         // against is not a question: it is rendered hidden, which is what keeps
         // its portal and its page alive across a workspace switch.
         const depth = placement?.depth ?? 0;
+        const onMotionEnded = () => {
+          motions.onPlayedOut(window.id, motion);
+        };
         switch (window.kind) {
           case WindowKind.App: {
             return (
@@ -113,12 +125,15 @@ export const Stage = ({
                 depth={depth}
                 domicile={domicile}
                 dragging={window.id === draggingId}
-                focused={window.id === activeId}
+                focused={focused}
+                frame={placement?.frame}
                 hasKeyboard={window.id === focusedId}
                 key={window.id}
+                motion={motion}
                 onHover={() => {
                   onHover(window.id);
                 }}
+                onMotionEnded={onMotionEnded}
                 onReach={() => {
                   onSelect(window.id);
                 }}
@@ -133,11 +148,14 @@ export const Stage = ({
                 depth={depth}
                 domicile={domicile}
                 dragging={window.id === draggingId}
-                focused={window.id === activeId}
+                focused={focused}
+                frame={placement?.frame}
                 key={window.id}
+                motion={motion}
                 onHover={() => {
                   onHover(window.id);
                 }}
+                onMotionEnded={onMotionEnded}
                 onNavigate={(url) => {
                   onRename(window.id, url);
                 }}
@@ -163,8 +181,7 @@ export const Stage = ({
         capture when the capturing element is moved in the document, and taking
         hold of a window raises it.
       */}
-      {windows.map((window) => {
-        const placement = placementOf(placements, window.id);
+      {motions.drawn.map(({ focused, motion, placement, window }) => {
         const floating = floats.find((float) => float.id === window.id);
         const onCloseThis = () => {
           onClose(window.id);
@@ -178,6 +195,16 @@ export const Stage = ({
         const onGrabThis = () => {
           onGrab(window.id);
         };
+        const onMotionEnded = () => {
+          motions.onPlayedOut(window.id, motion);
+        };
+        // A window's own bar has two states rather than three: the keyboard is
+        // in the window or it is not. The third belongs to a container's tab,
+        // below.
+        const focus = titleFocus({
+          hasKeyboard: focused,
+          shownByContainer: false,
+        });
         if (placement === undefined) {
           return undefined;
         } else if (floating === undefined) {
@@ -187,15 +214,12 @@ export const Stage = ({
               // Nothing drags a tiled window: the bar a window is dragged by
               // is the floating one below.
               dragging={false}
-              // A window's own bar has two states rather than three: the
-              // keyboard is in the window or it is not. The third belongs to a
-              // container's tab, below.
-              focus={titleFocus({
-                hasKeyboard: window.id === activeId,
-                shownByContainer: false,
-              })}
+              focus={focus}
+              frame={placement.frame}
               key={window.id}
+              motion={motion}
               onClose={onCloseThis}
+              onMotionEnded={onMotionEnded}
               onReach={onReachThis}
               rect={placement.bar}
               title={window.title}
@@ -209,13 +233,13 @@ export const Stage = ({
                 depth={placement.depth}
                 dragging={window.id === draggingId}
                 float={floating}
-                focus={titleFocus({
-                  hasKeyboard: window.id === activeId,
-                  shownByContainer: false,
-                })}
+                focus={focus}
+                frame={placement.frame}
+                motion={motion}
                 onClose={onCloseThis}
                 onDrop={onDrop}
                 onGrab={onGrabThis}
+                onMotionEnded={onMotionEnded}
                 onMove={onMoveThis}
                 onReach={onReachThis}
                 title={window.title}
@@ -243,21 +267,29 @@ export const Stage = ({
         one that container last had the focus in, and picking one is reaching
         for that window.
       */}
-      {tabs.map((tab) => (
+      {motions.tabs.map(({ focused, motion, tab }) => (
         <TitleBar
           depth={0}
-          // Nothing drags a tab: it is a container's, and a container is tiled.
+          // Nothing drags a tab: it belongs to a container, and a container is
+          // tiled.
           dragging={false}
           // The tab of a container the keyboard is not in is still the open
           // one, and saying so with the fill would be a second window claiming
           // the keystrokes.
           focus={titleFocus({
-            hasKeyboard: tab.id === activeId,
+            hasKeyboard: focused,
             shownByContainer: tab.active,
           })}
+          // A tab is the whole of what the window behind it has on screen, so
+          // it turns about its own middle.
+          frame={tab.rect}
           key={tab.id}
+          motion={motion}
           onClose={() => {
             onClose(tab.id);
+          }}
+          onMotionEnded={() => {
+            motions.onPlayedOut(tab.id, motion);
           }}
           onReach={() => {
             onSelect(tab.id);
@@ -267,30 +299,9 @@ export const Stage = ({
           window={tab.id}
         />
       ))}
-      {/*
-        And last, the windows that have closed. Over whatever has moved into
-        the place each of them had — the neighbour that grew to fill it is
-        already easing across, and a frame fading out from underneath it reads
-        as a flicker rather than as a window leaving.
-      */}
-      {closing.map(({ placement, title }) => (
-        <ClosingWindow
-          key={placement.id}
-          onGone={() => {
-            onGone(placement.id);
-          }}
-          placement={placement}
-          title={title}
-        />
-      ))}
     </main>
   );
 };
-
-const placementOf = (
-  placements: readonly Placement[],
-  id: string,
-): Placement | undefined => placements.find((found) => found.id === id);
 
 /**
  * What a window is called.

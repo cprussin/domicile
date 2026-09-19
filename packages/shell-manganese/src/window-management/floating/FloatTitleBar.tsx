@@ -1,6 +1,8 @@
+import type { Rect } from "../rect";
 import { barOf } from "../rect";
 import { TitleBar } from "../TitleBar";
 import type { TitleFocus } from "../title-focus";
+import type { WindowMotion } from "../window-motion";
 import type { Float } from "./float";
 import { rectOf } from "./float";
 import { useFloatDrag } from "./useFloatDrag";
@@ -13,8 +15,13 @@ type Props = {
   float: Float;
   /** What its bar says about the keyboard — see `title-focus.ts`. */
   focus: TitleFocus;
+  /** The whole box of the window it names — see {@link TitleBar}. */
+  frame: Rect;
+  /** What that window is doing, which its bar does with it. */
+  motion: WindowMotion;
   onClose: () => void;
   onDrop: () => void;
+  onMotionEnded: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
   onReach: () => void;
@@ -40,9 +47,12 @@ export const FloatTitleBar = ({
   dragging,
   float,
   focus,
+  frame,
+  motion,
   onClose,
   onDrop,
   onGrab,
+  onMotionEnded,
   onMove,
   onReach,
   title,
@@ -60,7 +70,10 @@ export const FloatTitleBar = ({
       depth={depth}
       dragging={dragging}
       focus={focus}
+      frame={frame}
+      motion={motion}
       onClose={onClose}
+      onMotionEnded={onMotionEnded}
       onReach={onReach}
       rect={barOf(rectOf(float))}
       title={title}
