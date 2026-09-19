@@ -60,6 +60,7 @@ class MODULES_EXPORT DomicileHost final
   void listFiles(ScriptState*, ExceptionState&);
   void focusApp(ScriptState*, const String& app_id, ExceptionState&);
   void focusChrome(ScriptState*, ExceptionState&);
+  void warpPointer(ScriptState*, double x, double y, ExceptionState&);
   void closeApp(ScriptState*, const String& app_id, ExceptionState&);
   void resizeApp(ScriptState*,
                  const String& app_id,

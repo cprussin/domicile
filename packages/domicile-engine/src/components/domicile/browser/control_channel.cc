@@ -32,9 +32,11 @@ ControlChannel::ControlChannel(
     const std::string& socket_path,
     mojo::PendingReceiver<mojom::ControlChannel> receiver,
     KeymapSink keymap_sink,
+    PointerWarpSink warp_sink,
     const std::string& screen)
     : socket_path_(socket_path),
       keymap_sink_(std::move(keymap_sink)),
+      warp_sink_(std::move(warp_sink)),
       screen_(screen),
       receiver_(this, std::move(receiver)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
@@ -243,6 +245,15 @@ void ControlChannel::ListFiles() {
 
 void ControlChannel::FocusChrome() {
   SendMessage(Typed("focus_chrome"));
+}
+
+// NOTHING IS SENT, AND THAT IS THE MEMBER RATHER THAN AN OMISSION. The pointer
+// a shell is asking about is the one this process draws -- on the platform
+// that scans out it is a cursor plane, and the compositor has never heard of
+// it. So this goes up to the UI thread and no further, which is the same shape
+// `GrabShortcut` has for the same kind of reason.
+void ControlChannel::WarpPointer(double x, double y) {
+  warp_sink_.Run(x, y);
 }
 
 void ControlChannel::CloseApp(const std::string& app_id) {
@@ -734,6 +745,7 @@ void ControlChannel::DispatchLine(const std::string& line,
 
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         KeymapSink keymap_sink,
+                        PointerWarpSink warp_sink,
                         const std::string& screen) {
   const std::string socket_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -750,7 +762,7 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
   // Owns itself: it lives until the page drops the pipe or the compositor is
   // declared unreachable.
   new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink),
-                     screen);
+                     std::move(warp_sink), screen);
 }
 
 }  // namespace domicile

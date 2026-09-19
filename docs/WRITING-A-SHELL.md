@@ -515,6 +515,20 @@ stopped listening. That is a fallback and not a decision — the `app_closed` fo
 that window reaches you first, so a shell that would rather move to the next
 window says so and has the last word.
 
+**If your focus follows the cursor, take the cursor with it.** A desktop where
+crossing a window focuses it is a desktop where a keyed focus change is handed
+straight back: the window the focus came from is still under the pointer, and
+the next pointer event over it — a window sliding into the space the layout
+just changed, without the user moving anything — focuses it again. sway answers
+this with `mouse_warping` and so does every other compositor, from the outside;
+here the shell is a page, and a page can read where the pointer is and cannot
+put it anywhere. So ask: `domicile.warpPointer([x, y])`, in your own page
+coordinates — the ones a `PointerEvent` reports as `clientX`/`clientY`, which
+are the ones you laid the window out in. A point outside your page is clamped
+into it, and where something else owns the pointer — a nested run inside
+another compositor — nothing moves. `shell-manganese` does this on every keyed
+focus change, and only when the pointer is not over the window already.
+
 ## A browser window
 
 `<webview src="…">` is the fork's other tag: a page in a browsing context of

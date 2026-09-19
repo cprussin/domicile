@@ -461,6 +461,23 @@ export type DomicileHost = {
   focusChrome(): void;
 
   /**
+   * Where the pointer is, in this page's own coordinates — the ones a
+   * `PointerEvent` reports as `clientX`/`clientY`.
+   *
+   * **The one message about input that goes the other way**, and the one the
+   * page cannot do for itself: a document can read where the pointer is and
+   * cannot put it anywhere. The engine draws the cursor, so the engine is what
+   * moves it; on the platform that scans out it is a cursor plane, and where
+   * something else owns the pointer — a nested run inside another
+   * compositor — nothing moves, because a client cannot warp somebody else's
+   * pointer.
+   *
+   * Goes no further than the browser process, like `grabShortcut`: the
+   * compositor neither draws this pointer nor hears about it.
+   */
+  warpPointer(x: number, y: number): void;
+
+  /**
    * Ask a client to close. Not a kill — the client decides, which is why a
    * window can refuse and show a save dialog instead.
    */

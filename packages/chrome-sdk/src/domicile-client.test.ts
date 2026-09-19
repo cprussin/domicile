@@ -112,6 +112,9 @@ class FakeHost implements DomicileHost {
   pointerMotion(appId: string, x: number, y: number): void {
     this.calls.push(["pointerMotion", appId, x, y]);
   }
+  warpPointer(x: number, y: number): void {
+    this.calls.push(["warpPointer", x, y]);
+  }
   pointerLeave(appId: string): void {
     this.calls.push(["pointerLeave", appId]);
   }
@@ -434,6 +437,14 @@ describe("DomicileClient", () => {
 
       domicile.key("term", 30, true);
       expect(host.lastCall()).toStrictEqual(["key", "term", 30, true]);
+    });
+
+    it("spreads a pointer's destination into the two doubles the host takes", () => {
+      // The same unpacking `resizeApp` does below, for the same reason: a
+      // place on the desktop is one value to a shell and two arguments to
+      // WebIDL, and a CSS pixel is fractional the whole way across.
+      domicile.warpPointer([960.5, 540.25]);
+      expect(host.lastCall()).toStrictEqual(["warpPointer", 960.5, 540.25]);
     });
 
     it("claims a grabbed chord for the page as well as the browser process", () => {

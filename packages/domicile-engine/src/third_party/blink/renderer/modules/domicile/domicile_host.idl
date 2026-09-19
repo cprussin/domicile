@@ -43,6 +43,21 @@
   [CallWith=ScriptState, RaisesException] undefined focusApp(DOMString appId);
   [CallWith=ScriptState, RaisesException] undefined focusChrome();
 
+  // Put the pointer at a place in this page, in the page's own coordinates --
+  // the ones a PointerEvent reports as clientX/clientY.
+  //
+  // THE COMPANION TO MOVING THE KEYBOARD. A desktop whose focus follows the
+  // cursor has to take the cursor with it when a key moves the focus, or the
+  // next pointer event hands the focus back to whatever the pointer is still
+  // over. Every other compositor does this itself; here the shell is a page,
+  // and a page can read where the pointer is and cannot put it anywhere.
+  //
+  // Doubles for resizeApp's reason: a place in a page is a CSS pixel and a CSS
+  // pixel is fractional. A coordinate outside this page is clamped to its own
+  // box -- what a page may move is the pointer over itself -- and NaN throws.
+  [CallWith=ScriptState, RaisesException] undefined warpPointer(
+      double x, double y);
+
   // Ask a client to close. Not a kill -- the client decides, which is why a
   // window can refuse and show a save dialog instead.
   [CallWith=ScriptState, RaisesException] undefined closeApp(DOMString appId);

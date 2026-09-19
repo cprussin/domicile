@@ -35,6 +35,19 @@ namespace domicile {
 // have to come from. See components/domicile/browser/keyboard_layout.h.
 using KeymapSink = base::RepeatingCallback<void(const std::string&)>;
 
+// How a `warp_pointer` off this channel reaches the cursor it is about.
+//
+// A callback for KeymapSink's reason and one more. The reason: this channel is
+// read on the IO thread and a cursor belongs to the UI thread, along with the
+// window it is moved within -- so the binder, which runs on the UI thread,
+// binds this to it. The one more: THE CURSOR IS NOT THE COMPOSITOR'S HERE.
+// This message reaches no socket at all; the browser process draws the pointer
+// and the browser process moves it, which is why what the page asked for stops
+// in a callback rather than in a line of JSON. A page's own coordinates, in
+// CSS pixels, so this target stays free of //ui and of the window the point is
+// clamped into. See components/domicile/browser/pointer_warp.h.
+using PointerWarpSink = base::RepeatingCallback<void(double x, double y)>;
+
 // The shell's control channel, in the browser process.
 //
 // Speaks newline-delimited JSON over the compositor's unix control socket --
@@ -57,6 +70,7 @@ class ControlChannel : public mojom::ControlChannel {
   ControlChannel(const std::string& socket_path,
                  mojo::PendingReceiver<mojom::ControlChannel> receiver,
                  KeymapSink keymap_sink,
+                 PointerWarpSink warp_sink,
                  const std::string& screen);
 
   ControlChannel(const ControlChannel&) = delete;
@@ -71,6 +85,7 @@ class ControlChannel : public mojom::ControlChannel {
   void ListFiles() override;
   void FocusApp(const std::string& app_id) override;
   void FocusChrome() override;
+  void WarpPointer(double x, double y) override;
   void CloseApp(const std::string& app_id) override;
   void ResizeApp(const std::string& app_id,
                  double width,
@@ -150,6 +165,7 @@ class ControlChannel : public mojom::ControlChannel {
 
   const std::string socket_path_;
   const KeymapSink keymap_sink_;
+  const PointerWarpSink warp_sink_;
   // The display this page's window covers, or empty for a window that is the
   // whole desktop. Stated to the compositor on connecting and never again: a
   // window does not move between monitors here, because it is created at one
@@ -193,6 +209,7 @@ class ControlChannel : public mojom::ControlChannel {
 // PopulateChromeFrameBinders.
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         KeymapSink keymap_sink,
+                        PointerWarpSink warp_sink,
                         const std::string& screen);
 
 }  // namespace domicile

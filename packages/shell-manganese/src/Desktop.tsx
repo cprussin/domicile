@@ -14,10 +14,12 @@ import { NoScreens } from "./screens/NoScreens";
 import { OtherScreens } from "./screens/OtherScreens";
 import { TOP_BAR, TopBar } from "./top-bar/TopBar";
 import { Wallpaper } from "./wallpaper/Wallpaper";
-import type { Geometry } from "./window-management/placement";
+import type { Geometry, Screenful } from "./window-management/placement";
 import { placementsOf } from "./window-management/placement";
+import type { Focus } from "./window-management/pointer-warp";
 import type { Rect } from "./window-management/rect";
 import { Stage } from "./window-management/Stage";
+import { usePointerWarp } from "./window-management/usePointerWarp";
 import { useWindows } from "./window-management/useWindows";
 import { siteOf } from "./window-management/window";
 import { WindowAction, workspaceOn } from "./window-management/window-state";
@@ -47,22 +49,6 @@ export const Desktop = ({ domicile }: Props) => {
   // the compositor's own answer is these keystrokes handed back short.
   const { modifiers, spendShift } = useModifiers();
 
-  // The Shift of the chord that floats a window is spent whether or not there
-  // was a window to float, because what it says is about the press rather than
-  // the outcome: the user pressed it to reach the chord, and a Shift the
-  // desktop has already answered is not one held over the window that lands.
-  // Both paths into here — the page's own keydown and the chord the compositor
-  // hands back — go through it.
-  const onAction = useCallback(
-    (action: WindowAction) => {
-      spendShift();
-      act(action);
-    },
-    [act, spendShift],
-  );
-
-  useShortcuts({ domicile, mode: windows.mode, onAction: onAction });
-
   // Asked for each time the panel goes up — nothing watches a home directory,
   // so a list fetched once would be yesterday's by the afternoon.
   const files = useFiles(domicile, windows.launcherOpen);
@@ -80,6 +66,36 @@ export const Desktop = ({ domicile }: Props) => {
         : placementsOf(windows, geometry),
     [geometry, windows],
   );
+
+  // And the pointer goes where the keyboard goes, because the pointer is what
+  // moves the keyboard here: focus follows the cursor, so a keyed focus change
+  // that left the pointer over the window it came from would be undone by the
+  // next pointer event. `pointer-warp.ts` has the whole of it.
+  const focus = useMemo(
+    () => focusOn(screenful, windows.activeId),
+    [screenful, windows.activeId],
+  );
+  const keyed = usePointerWarp({ domicile, focus });
+
+  // The Shift of the chord that floats a window is spent whether or not there
+  // was a window to float, because what it says is about the press rather than
+  // the outcome: the user pressed it to reach the chord, and a Shift the
+  // desktop has already answered is not one held over the window that lands.
+  // Both paths into here — the page's own keydown and the chord the compositor
+  // hands back — go through it.
+  const onAction = useCallback(
+    (action: WindowAction) => {
+      // Before the action, though either would do: what the press is
+      // remembered for is the render that follows it, and no render happens
+      // in the middle of an event handler.
+      keyed();
+      spendShift();
+      act(action);
+    },
+    [act, keyed, spendShift],
+  );
+
+  useShortcuts({ domicile, mode: windows.mode, onAction: onAction });
 
   return (
     <>
@@ -174,6 +190,26 @@ export const Desktop = ({ domicile }: Props) => {
       <NoScreens />
     </>
   );
+};
+
+/**
+ * The window the keyboard is in and the box a pointer over it would be in, or
+ * `undefined` for a workspace with nothing on it.
+ *
+ * Its contents rather than its whole frame, and that is the box the question
+ * is about: what a `pointerover` moves the focus to is the `<app>` element —
+ * see `Stage` — so the region the pointer has to be in to hold the focus is
+ * the one the window draws in, not the bar above it. A window a tab is hiding
+ * has only that bar, which is where the window is.
+ */
+const focusOn = (
+  screenful: Screenful,
+  activeId: string | undefined,
+): Focus | undefined => {
+  const placement = screenful.placements.find(({ id }) => id === activeId);
+  return placement === undefined
+    ? undefined
+    : { box: placement.surface ?? placement.bar, id: placement.id };
 };
 
 /**
