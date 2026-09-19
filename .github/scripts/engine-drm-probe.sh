@@ -43,31 +43,16 @@ PREFIX="${2:?usage: engine-drm-probe.sh <chromium/src> <sentinel prefix>}"
 
 touch "$PREFIX-ran"
 
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
 # `gn` and `autoninja` are depot_tools', not the nix shell's, and a systemd
-# service has no shell config to put them on PATH. Which depot_tools is not a
-# matter of taste: a checkout's vendored `third_party/depot_tools` is a plain
-# git clone whose bootstrap has never run, and its `autoninja` exits with
-# "python3_bin_reldir.txt not found".
+# service has no shell config to put them on PATH.
 #
-# COPIED FROM engine-build.sh RATHER THAN SHARED WITH IT, deliberately and for
-# one run's worth of reasons: engine-build.sh is what produces the artifact
-# every guard and every release loads, this is a workflow_dispatch-only probe,
-# and refactoring the first to serve the second would put a change to the
-# shipped build in a change that is meant to compile nothing that ships. If a
-# third caller ever wants this, that is when it becomes a file. The precedent
-# is engine-release-build.sh, which copies build.sh's ozone arguments and says
-# so.
-TOOLS=""
-for candidate in /build/depot_tools "$CHROMIUM/third_party/depot_tools"; do
-  if [ -x "$candidate/autoninja" ] && [ -f "$candidate/python3_bin_reldir.txt" ]; then
-    TOOLS="$candidate"
-    break
-  fi
-done
-[ -n "$TOOLS" ] || {
-  echo "drm probe: no bootstrapped depot_tools in /build/depot_tools or $CHROMIUM/third_party/depot_tools"
-  exit 127
-}
+# THIS WAS A COPY OF engine-build.sh's LOOKUP, and its own comment said what
+# would end that: "if a third caller ever wants this, that is when it becomes
+# a file". engine-sync.sh is the fourth, so it is a file —
+# engine-depot-tools.sh, which carries the reasoning all four shared.
+TOOLS="$("$HERE/engine-depot-tools.sh" "$CHROMIUM")" || exit 127
 echo "depot_tools: $TOOLS"
 export PATH="$TOOLS:$PATH"
 

@@ -214,6 +214,66 @@ expect "an edit to an upstream file is reset, not refused" ok \
 expect "and the upstream file is back to the pin's version" "upstream" \
   "$(cat "$TREE/upstream.cc")"
 
+# ---- a pin the checkout has never heard of -------------------------------
+
+# WHAT A REPIN LOOKS LIKE FROM HERE, and the reason this section exists: the
+# revision in `CHROMIUM_PIN` is newer than anything in the shared checkout, so
+# `reset --hard` has nothing to reset to. Every engine workflow used to stop
+# at that point with an instruction to go and run `git fetch origin` on the
+# build host by hand, which made moving the pin a two-machine operation. The
+# fetch is this script's now. `engine-sync.sh` is the other half — the DEPS —
+# and `test-engine-sync.sh` asserts that one.
+
+# An upstream with a commit this checkout does not have.
+UPSTREAM="$WORK/upstream"
+git clone -q "$TREE" "$UPSTREAM"
+git -C "$UPSTREAM" config user.email upstream@example.invalid
+git -C "$UPSTREAM" config user.name upstream
+echo "a later revision" >>"$UPSTREAM/upstream.cc"
+git -C "$UPSTREAM" add -A
+git -C "$UPSTREAM" -c commit.gpgsign=false commit -qm "what the pin moves to"
+NEW_PIN="$(git -C "$UPSTREAM" rev-parse HEAD)"
+git -C "$TREE" remote add origin "$UPSTREAM"
+repin() {
+  echo "# what the series is against" >"$FAKE/packages/domicile-engine/CHROMIUM_PIN"
+  echo "$1" >>"$FAKE/packages/domicile-engine/CHROMIUM_PIN"
+}
+
+# Fetching by revision is what a server with `uploadpack.allowReachableSHA1InWant`
+# allows — Chromium's does — and it costs the commits between here and there
+# rather than every ref there is.
+git -C "$UPSTREAM" config uploadpack.allowReachableSHA1InWant true
+repin "$NEW_PIN"
+expect "a pin the checkout does not have is fetched rather than refused" ok \
+  "$(status "$(run_reset)")"
+expect "and the tree is at it" "$NEW_PIN" "$(git -C "$TREE" rev-parse HEAD)"
+
+# And where the server does not allow that, which most do not: it refuses the
+# request rather than 404ing, so the ordinary fetch is the fallback and the
+# pin has to arrive by it.
+git -C "$UPSTREAM" config uploadpack.allowReachableSHA1InWant false
+git -C "$TREE" -c advice.detachedHead=false checkout -q "$PIN"
+git -C "$TREE" fetch -q origin "+refs/heads/*:refs/hidden/*" 2>/dev/null || true
+rm -rf "$TREE/.git/refs/remotes/origin" "$TREE/.git/refs/hidden"
+echo "another later revision" >>"$UPSTREAM/upstream.cc"
+git -C "$UPSTREAM" add -A
+git -C "$UPSTREAM" -c commit.gpgsign=false commit -qm "and another"
+NEWER_PIN="$(git -C "$UPSTREAM" rev-parse HEAD)"
+repin "$NEWER_PIN"
+expect "a server that will not serve one revision is fetched from wholesale" ok \
+  "$(status "$(run_reset)")"
+expect "and the tree is at that pin too" "$NEWER_PIN" "$(git -C "$TREE" rev-parse HEAD)"
+
+# A pin nobody has is a typo or an unpushed revision, and it is the one case
+# left that a person has to answer. It must say so rather than fail inside a
+# `git reset` whose message names neither the file nor the fix.
+repin "0000000000000000000000000000000000000000"
+missing="$(run_reset)"
+expect "a pin upstream does not have is refused" refused "$(status "$missing")"
+contains "and the revision is named" "0000000000000000000000000000000000000000" "$missing"
+contains "with the file to look at" "CHROMIUM_PIN" "$missing"
+repin "$NEWER_PIN"
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# Put the shared Chromium checkout back to the pin, so `apply.sh` will take it.
+# Put the shared Chromium checkout at the pin, so `apply.sh` will take it —
+# fetching the revision first when the pin has moved past what the tree has.
 #
-# Both engine workflows do this and they must do it identically: `engine.yml`
-# before every proof build, `engine-release.yml` before every published one.
-# It was written twice, the two copies drifted in the order of their steps, and
-# a third copy is what this file exists to prevent.
+# All three engine workflows do this and they must do it identically:
+# `engine.yml` before every proof build, `engine-release.yml` before every
+# published one, `engine-drm-probe.yml` before every probe. It was written
+# twice, the two copies drifted in the order of their steps, and a third copy
+# is what this file exists to prevent.
 #
 #   .github/scripts/engine-reset.sh /build/chromium/src
+#
+# `engine-sync.sh` is the half that comes after it: this puts the checkout on
+# the pin, that puts everything `DEPS` names at the pin. Between them a repin
+# is a commit to this repository and nothing on the build host.
 #
 # `apply.sh` is idempotent for `src/` (a copy) and not for `patches/` — `git am`
 # refuses to apply a patch twice — so the tree has to go back to the pin before
@@ -39,6 +45,43 @@ pin="$(grep -v '^#' "$ROOT/packages/domicile-engine/CHROMIUM_PIN" | tr -d '[:spa
 # In case a previous run died mid-series and left the rebase-apply state
 # behind. It fails when there is nothing to abort, which is the ordinary case.
 git -C "$CHROMIUM" am --abort 2>/dev/null || true
+
+# THE PIN MAY BE NEWER THAN THIS CHECKOUT, which is exactly what a repin is,
+# and getting it is this script's job rather than a person's. All three engine
+# workflows used to stop here with "roll the checkout forward by hand" — so
+# moving one line in `CHROMIUM_PIN` meant an ssh session on the build host
+# before CI could say anything about the change, and an agent that can only
+# reach this repository could not move the pin at all.
+#
+# The DEPS are the other half and are `engine-sync.sh`'s, which runs after this
+# and is where the minutes go. This part is a fetch.
+git -C "$CHROMIUM" cat-file -e "$pin^{commit}" 2>/dev/null || {
+  echo "the checkout does not have $pin; fetching it"
+  # By revision first, which costs the commits between here and there rather
+  # than every ref in a repository with a great many of them. It needs
+  # `uploadpack.allowReachableSHA1InWant` on the server — Chromium's Gitiles
+  # has it — and a server without it refuses the request rather than answering
+  # it empty. So the wholesale fetch is the fallback and not the first try,
+  # and which one this run took is said out loud: the refusal reads like a
+  # missing revision, and the next person here should not have to tell them
+  # apart from an empty log.
+  if ! git -C "$CHROMIUM" fetch --quiet origin "$pin" 2>/dev/null; then
+    echo "origin would not serve that one revision; fetching everything"
+    git -C "$CHROMIUM" fetch origin
+  fi
+}
+
+# Still not there, so it is not a revision upstream has: a typo in the pin
+# file, or a revision that only ever existed in somebody's local tree. That is
+# the one case here a person still has to answer, so it says which file to look
+# at rather than failing inside a `git reset` that names neither.
+git -C "$CHROMIUM" cat-file -e "$pin^{commit}" 2>/dev/null || {
+  echo "::error::$pin is not a revision $CHROMIUM's origin has" >&2
+  echo "It came from packages/domicile-engine/CHROMIUM_PIN, and a fetch did not find it." >&2
+  echo "Either it is mistyped, or it is a commit that was never pushed upstream." >&2
+  exit 1
+}
+
 git -C "$CHROMIUM" reset --hard "$pin"
 
 # THE SERIES THAT RAN LAST, NOT ONLY THE ONE ABOUT TO. Removing what *this*

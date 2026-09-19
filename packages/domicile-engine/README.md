@@ -16,7 +16,8 @@ ozone platform is edits to `ui/ozone/platform/drm` and `ui/events/ozone/evdev`,
 and those are Chromium's. Carrying either as a 40 GB fork of `chromium/src`
 would hide the only number that matters, which is how much of it *does*
 conflict when Chromium moves. Here that number is countable: bump
-`CHROMIUM_PIN`, run `apply.sh`, count what rejects.
+`CHROMIUM_PIN`, run `apply.sh`, count what rejects — and *Moving the pin* below
+is why that is a pull request rather than a session on the build host.
 
 Electron and ungoogled-chromium carry their downstreams the same way, for the
 same reason.
@@ -252,6 +253,39 @@ at their mirrored path in the same change that creates them; edits to files
 Chromium owns become patches via `extract.sh`. Then a reset costs you a re-run
 of `apply.sh` and nothing else, which is the whole reason the series exists.
 
+### Moving the pin
+
+**A repin is a commit to this repository and nothing else.** It used to be a
+commit *and* a person on `crux`: all three engine workflows checked that the
+pin was already in the shared checkout and stopped with "roll the checkout
+forward by hand" when it was not, so the one-line change that starts a rebase
+could not be made by anyone — or anything — that could only reach this repo.
+
+Two scripts carry it now, both under the tree lock, in every engine workflow:
+
+| | |
+|---|---|
+| `.github/scripts/engine-reset.sh` | fetches the revision when the checkout does not have it, by revision where the server allows it and wholesale where it does not, then resets onto it |
+| `.github/scripts/engine-sync.sh` | `gclient sync` to that revision, which is the *other* half of a pin: everything `DEPS` names is still at the previous one until it runs, and a half-rolled tree does not build |
+
+So: change the line, open a pull request, and the engine job tells you what
+rejects. What is still yours is what was always yours — a patch that rejects is
+resolved in the checkout and written back with `extract.sh`, and a new upstream
+file has no counterpart in `src/` until you put one there.
+
+**What the sync costs, and why it is not in front of every run.** The pin the
+DEPS were last synced to is written beside the checkout, in
+`/build/chromium/.domicile-synced-pin`; a run whose pin matches it does not
+start `gclient` at all, which is one `cat` against an incremental build of
+~1m on a machine with one job slot. The run that does pay for it is the repin —
+and that run is rebuilding most of Chromium anyway, so the minutes of
+`gclient` are not the number in it that matters.
+
+**The first run after this shipped syncs once for nothing.** There is no stamp
+on `crux` until a run writes one, and a sync at the pin the tree is already at
+is a few minutes of `gclient` finding nothing to do. Seeding the file by hand
+would be the manual step this exists to remove.
+
 `build.sh`, `spike.sh` and `guard-css-and-resize.sh` all have to run inside
 Chromium's own toolchain shell — a component build links against that shell's glibc and
 will not start without it:
@@ -309,8 +343,9 @@ Incremental, against a tree already built at the pin:
 Net of the floor that is ~1m to lay the series down — `gn` regen, the mojom
 generation, three objects, and relinking `libcontent.so` and `chrome` — and ~6s
 per subsequent edit. The rebase number is still missing: it needs
-`CHROMIUM_PIN` rolled onto a later revision, and that has not happened. See
-`ENGINE-FORK.md`'s *Build and CI cost*.
+`CHROMIUM_PIN` rolled onto a later revision, and that has not happened — the
+roll itself is now a pull request rather than an afternoon on the build host,
+so the number is one repin away. See `ENGINE-FORK.md`'s *Build and CI cost*.
 
 ## State
 
