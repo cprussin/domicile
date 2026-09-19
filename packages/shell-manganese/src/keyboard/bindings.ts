@@ -8,11 +8,10 @@
 // every binding carries both spellings of its key: the `code` a key event
 // names, and the evdev keycode the control channel speaks.
 //
-// **The modifier is Alt**, and it is the one thing here the config does not
-// decide — it sets Mod4, and this desktop answers Mod1. What makes the whole
-// table possible either way is the claim: a chord the compositor has claimed
-// is not delivered to any client, so `mod+h` can be the desktop's while `h`
-// stays the window's.
+// **The modifier is Meta**, which is Mod4 — the key the config sets. What
+// makes the whole table possible is the claim: a chord the compositor has
+// claimed is not delivered to any client, so `mod+h` can be the desktop's
+// while `h` stays the window's.
 //
 // The keysyms are the config's own — `h`, `parenleft`, `Return` — and
 // `programmers-dvorak.ts` is what turns each into the key it is on. Read that
@@ -90,12 +89,12 @@ const bound = (
       action,
       // Every modifier is named rather than left to the dictionary's default:
       // the compositor matches the set it was given and nothing else, so the
-      // ones that must *not* be held are as much of the chord as Alt is.
+      // ones that must *not* be held are as much of the chord as Meta is.
       chord: {
-        altKey: true,
+        altKey: false,
         ctrlKey: false,
         keycode,
-        metaKey: false,
+        metaKey: true,
         shiftKey: shift,
       },
       code,

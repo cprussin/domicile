@@ -468,7 +468,7 @@ leaves a window when another takes it or when a click lands on the chrome.
 round, and it is the one a shell with window furniture has to answer. The SDK
 reads a press that lands off every `<app>` as the page asking for the keyboard
 back, which is right for a press on the desktop and wrong for a press on a
-window's own title bar — or on the sheet an alt-drag is caught on. Those land
+window's own title bar — or on the sheet a meta-drag is caught on. Those land
 off every `<app>` too, and nothing in a press says which window a `<div>`
 belongs to. So it asks, with a cancelable `domicile-focus-release-requested` on
 the `<app>` that holds the keyboard:

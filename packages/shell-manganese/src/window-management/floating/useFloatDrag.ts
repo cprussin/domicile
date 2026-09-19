@@ -64,7 +64,7 @@ type Options = {
  * Turning pointer events into where a floating window ends up.
  *
  * Shared because a window has two things to drag it by and they are the same
- * drag: the sheet that catches an Alt+drag anywhere over it, and the title bar
+ * drag: the sheet that catches a Meta+drag anywhere over it, and the title bar
  * that catches an ordinary one. What differs is where the pointer is allowed
  * to land, which is a matter of which element carries the press.
  *

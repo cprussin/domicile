@@ -3,18 +3,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 /**
  * The modifiers the shell reacts to.
  *
- * Alt is the desktop's modifier — sway's `floating_modifier $mod` is the same
+ * Meta is the desktop's modifier — sway's `floating_modifier $mod` is the same
  * key as its bindings — and holding it hands the pointer to the shell, which
  * is what makes a drag catchable in the page at all; Shift makes that drag a
  * resize, as does taking hold with the secondary button.
  */
 export type Modifiers = {
-  alt: boolean;
+  meta: boolean;
   shift: boolean;
 };
 
 /** Nothing held, which is what the shell assumes until it is told otherwise. */
-const NONE: Modifiers = { alt: false, shift: false };
+const NONE: Modifiers = { meta: false, shift: false };
 
 /**
  * What the keyboard has down, and whether the desktop has already spent it.
@@ -55,13 +55,13 @@ type HeldModifiers = {
  * chrome's window: every key the compositor's seat has ever seen arrived as a
  * `key` the SDK forwarded from this document, and the SDK forwards only while
  * a client holds the keyboard. So a modifier pressed while the chrome holds it
- * — the Alt of the Alt+Return that spawned the terminal, before there was a
+ * — the Meta of the Meta+Return that spawned the terminal, before there was a
  * window to hold anything — never reaches the seat, and the next forwarded key
  * makes the compositor broadcast a set that denies it.
  *
  * This listened to that broadcast and took it over its own keystrokes, which
- * is a held Alt read as let go of: the grab sheet came down and the window the
- * user had just floated would not drag until they released Alt and pressed it
+ * is a held Meta read as let go of: the grab sheet came down and the window the
+ * user had just floated would not drag until they released Meta and pressed it
  * again, which is what put it into the seat. The host cannot know a key this
  * page did not tell it about, so there is nothing to ask it for. When input
  * comes off DRM rather than out of the browser — see
@@ -69,17 +69,17 @@ type HeldModifiers = {
  * knows and the `modifiers` message is how it will say so; it does not know
  * today.
  *
- * **Held is not the same question as meant, and only for Shift.** Alt+Shift+Tab
- * floats a window and Shift over a floating one resizes it, so the half-second
- * after the chord — Alt still down because the shell needs it to have the
- * pointer, Shift not let go of yet — is a user reaching to move a window with
- * the keys for resizing it already held. {@link HeldModifiers.spendShift} is
- * what the chord says so with.
+ * **Held is not the same question as meant, and only for Shift.**
+ * Meta+Shift+Tab floats a window and Shift over a floating one resizes it, so
+ * the half-second after the chord — Meta still down because the shell needs it
+ * to have the pointer, Shift not let go of yet — is a user reaching to move a
+ * window with the keys for resizing it already held.
+ * {@link HeldModifiers.spendShift} is what the chord says so with.
  */
 export const useModifiers = (): HeldModifiers => {
   const [held, setHeld] = useState(NOTHING_HELD);
 
-  // The same object when nothing moved, so a page that holds Alt through a
+  // The same object when nothing moved, so a page that holds Meta through a
   // sentence of typing re-renders once rather than per keystroke.
   const settle = useCallback((next: Modifiers) => {
     setHeld((last) =>
@@ -99,7 +99,7 @@ export const useModifiers = (): HeldModifiers => {
 
   useEffect(() => {
     const follow = (event: KeyboardEvent) => {
-      settle({ alt: event.altKey, shift: event.shiftKey });
+      settle({ meta: event.metaKey, shift: event.shiftKey });
     };
     document.addEventListener("keydown", follow);
     document.addEventListener("keyup", follow);
@@ -120,4 +120,4 @@ export const useModifiers = (): HeldModifiers => {
 
 /** Whether these are the same keys down, which is all a re-render turns on. */
 const same = (held: Modifiers, next: Modifiers): boolean =>
-  held.alt === next.alt && held.shift === next.shift;
+  held.meta === next.meta && held.shift === next.shift;

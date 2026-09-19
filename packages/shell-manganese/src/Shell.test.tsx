@@ -177,8 +177,8 @@ const clientAppears = (appId: string, title = appId): void => {
  */
 const press = (keysym: string, shift = false): void => {
   fireEvent.keyDown(document, {
-    altKey: true,
     code: codeFor(keysym),
+    metaKey: true,
     shiftKey: shift,
   });
 };
@@ -190,10 +190,10 @@ const hostPress = (keysym: string, shift = false): void => {
     throw new Error(`test: no evdev code written down for ${keysym}`);
   } else {
     domicile.emit("shortcut", {
-      altKey: true,
+      altKey: false,
       ctrlKey: false,
       keycode,
-      metaKey: false,
+      metaKey: true,
       shiftKey: shift,
     });
   }
@@ -212,11 +212,11 @@ const KEYCODES: Readonly<Record<string, number>> = {
 };
 
 /** What the page holds down, which is what hands the shell the pointer. */
-const pageHolds = (held: { alt?: boolean; shift?: boolean }): void => {
+const pageHolds = (held: { meta?: boolean; shift?: boolean }): void => {
   fireEvent.keyDown(document, {
-    altKey: held.alt ?? false,
-    code: "AltLeft",
-    key: "Alt",
+    code: "MetaLeft",
+    key: "Meta",
+    metaKey: held.meta ?? false,
     shiftKey: held.shift ?? false,
   });
 };
@@ -646,10 +646,10 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual([
         "grabShortcut",
         {
-          altKey: true,
+          altKey: false,
           ctrlKey: false,
           keycode: KEYCODES.Return,
-          metaKey: false,
+          metaKey: true,
           shiftKey: false,
         },
       ]);
@@ -833,7 +833,7 @@ describe("Shell", () => {
       pageHolds({});
       expect(grabSheets(container)).toHaveLength(0);
 
-      pageHolds({ alt: true });
+      pageHolds({ meta: true });
       expect(grabSheets(container)).toHaveLength(1);
     });
 
