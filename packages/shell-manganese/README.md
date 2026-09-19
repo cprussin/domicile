@@ -380,6 +380,16 @@ still ends in the wallpaper rather than against a line. The shadow draws each
 letter off the picture and the scrim darkens the ground the whole row sits on;
 a wallpaper that is white across the top of the screen needs both.
 
+**It hangs half the bar's height below the bar**, which is what keeps it
+strong where the text is. A gradient given only the bar's own 32px has to
+reach nothing by the bar's lower edge, so it is already thinning out a few
+pixels under the letters — the weakest part of the ramp arrives exactly where
+a bright photograph does its worst. With the extra room the letters sit in the
+dark part and the fade happens under them. The overhang takes no pointer, so
+the top of the stage is still the stage, and it ends where a window's top edge
+is: what you see is a band that stops at the window rather than a line drawn
+across open wallpaper.
+
 The workspaces on it are the ones with windows on them, plus the one being
 looked at — sway's own rule. The desktop keeps all ten all the time, which is
 the one place that difference from sway could show, and it does not: an empty
