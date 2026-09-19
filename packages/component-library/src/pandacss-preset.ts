@@ -410,15 +410,21 @@ export const domicilePreset = definePreset({
           // under each letter and not enough on its own when the picture is
           // bright across the whole band. It ends fully transparent so the
           // band finishes in the wallpaper rather than against a line, and
-          // the middle stop keeps the text's own row dark instead of letting
-          // a straight ramp wash it out. Black rather than a theme color,
-          // and the same in both themes, because a photograph is not a
-          // theme. `to bottom` is physical because `linear-gradient` has no
-          // logical direction keyword; a scrim under a bar hung from the top
-          // of the screen is physical anyway.
+          // the stop two thirds of the way down is what keeps the text's own
+          // row dark: a straight ramp is already half gone by the middle,
+          // which is exactly where the letters are. Black rather than a
+          // theme color, and the same in both themes, because a photograph
+          // is not a theme. `to bottom` is physical because
+          // `linear-gradient` has no logical direction keyword; a scrim
+          // under a bar hung from the top of the screen is physical anyway.
+          //
+          // IT IS SIZED FOR A BAND DEEPER THAN THE TEXT IT CARRIES. Drawn at
+          // exactly the height of the text's own row it reads as a smear,
+          // because the fade has nowhere to happen; the consumer gives it
+          // room below the text and the ramp lands in that room.
           scrimOverPhoto: {
             value:
-              "linear-gradient(to bottom, rgb(from black r g b / 55%), rgb(from black r g b / 30%) 65%, transparent)",
+              "linear-gradient(to bottom, rgb(from black r g b / 85%), rgb(from black r g b / 55%) 65%, transparent)",
           },
         },
         opacity: {
