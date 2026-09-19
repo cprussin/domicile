@@ -168,6 +168,14 @@ class DrmTakenDevices {
 
   // Follows a `PauseDevice`, and answers what logind is owed for it. `type` is
   // logind's own: "pause", "force" or "gone".
+  //
+  // A "gone" IS NOT ALWAYS THE NODE GOING AWAY. logind answers a
+  // `ReleaseDevice` by reporting the device it freed as "gone", so every
+  // `GiveBack` buys one -- and since `GiveBack` is on the way into every
+  // re-take, that echo lands after the `TakeDevice` that replaced the device
+  // it names. Treated as an unplug it forgets a device logind is holding and
+  // about to resume, which on a console switch is every input device in the
+  // desktop at once.
   PauseAnswer Pause(DeviceNumber number, std::string_view type);
 
   // Follows a `ResumeDevice`: parks `descriptor` for the device's path and
@@ -250,6 +258,16 @@ class DrmTakenDevices {
   // Descriptors a `ResumeDevice` left, waiting for the reopen it asked for.
   // Keyed by path because that is what `OpenInputDevice` comes back with.
   std::map<base::FilePath, base::ScopedFD> resumed_;
+
+  // How many `ReleaseDevice` calls this session has made for a device whose
+  // "gone" has not arrived yet.
+  //
+  // A COUNT RATHER THAN A FLAG, because a device can go round the
+  // give-back-and-take-again loop more than once before the first echo is
+  // read -- the evdev thread blocks through each call, so the signals queue
+  // and arrive in a burst afterwards. One release buys exactly one "gone";
+  // the next is the node really going away. See `Pause`.
+  std::map<DeviceNumber, int> released_;
 };
 
 }  // namespace ui

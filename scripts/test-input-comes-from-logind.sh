@@ -255,10 +255,36 @@ else
   fail "a resume is answered from the names rather than from the held table"     "Resume consults devices_, so a resume arriving between a GiveBack and its TakeDevice throws a live descriptor away"
 fi
 
-if grep -q 'names_.erase(number)'   <(sed -n '/kPauseTypeGone/,/kNothingToSay;/p' "$DOMICILE/drm_input_devices.cc"); then
+# THE UNPLUG ARM, not the whole "gone" branch: a release this session asked
+# for is answered with a "gone" as well, and that one must NOT forget
+# anything. The range starts at the comment that names the real case so the
+# two arms cannot be confused for one another.
+if grep -q 'names_.erase(number)'   <(sed -n '/The node is unplugged/,/kNothingToSay;/p' "$DOMICILE/drm_input_devices.cc"); then
   ok "a device whose node is gone is forgotten by name too"
 else
   fail "a device whose node is gone is forgotten by name too"     "a resume for an unplugged device would be answered with a path that is not there any more"
+fi
+
+# AND THE OTHER ARM, WHICH COST A DESKTOP EVERY INPUT DEVICE IT HAD.
+# `ReleaseDevice` frees the `SessionDevice` logind was holding, and logind
+# reports that the way it reports any other: `PauseDevice(..., "gone")`. So
+# every `GiveBack` buys one -- and `GiveBack` is on the way into every
+# re-take, so the echo lands AFTER the `TakeDevice` it made room for and
+# names a device this session is holding on a newer take. Read as an unplug
+# it forgets the name, `Reclaim` then finds nothing, and every `ResumeDevice`
+# logind sends on the way back is refused: no keyboard, no pointer, and no
+# chord left to leave the console with.
+#
+# Measured on a real switch: thirteen force pauses, thirteen "gone" in the
+# 141 microseconds after them, `reclaimed 0 of 0`, thirteen `logind resumed
+# device N, which this session never took`.
+if grep -q 'released_' "$DOMICILE/drm_input_devices.cc" &&
+  grep -q 'released_\[number\] += 1' "$DOMICILE/drm_input_devices.cc"; then
+  ok "a release this session asked for expects the gone it will be answered with"
+else
+  fail "a release this session asked for expects the gone it will be answered with" \
+    "GiveBack does not record the gone logind owes it, so the echo is read as \
+the node going away and the device is forgotten while logind still holds it"
 fi
 
 # EVERY BUS GETS ITS OWN THREAD, AND THAT IS NOT A TUNING CHOICE. The three

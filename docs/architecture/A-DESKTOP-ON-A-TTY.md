@@ -39,13 +39,14 @@ covered a keyboard, and the first run on hardware said otherwise.
 | A click reaches the page under the pointer | **Hardware**, on `engine-f38ef3f`, with a mouse and with the pad |
 | `Ctrl+Alt+F<n>` reaches `Seat.SwitchTo` | **Reasoned from source since the fix.** The chord decoded on hardware and the call died on `/org/freedesktop/login1/seat/self`; reading the session's own `Seat` instead has not been run |
 | The display is dropped on the way out of the console and retaken on the way back | **Reasoned from source.** `DrmVtSwitcherTest` holds the ordering |
-| The desktop is usable again after a console round trip | **Hardware for the failure, twice, and the second reading changed the diagnosis.** The first said the take put master back and nothing put the mode back, which the relight answers. The second said the wedge is *inconsistent* and lands on the way out as often as on the way back — which a missing modeset cannot do, and which points instead at `DrmLogindInput`'s blocking calls starving `DrmVtSwitcher`'s bus off a shared D-Bus thread. Both fixes are reasoned from source; neither has been through a run |
+| The screens come back after a console round trip | **Hardware.** A log from a real switch shows the CHANGE event suppressed by the hotplug guard (`the displays read the same as last time`) and then, on the session going Active, `configuring 1 display(s)` → `Modeset succeeded` → `the DRM thread confirmed the modeset`. The relight is what gets past the guard, and it works |
+| The desktop is usable again after a console round trip | **No.** The same log says why, and it is input rather than display. `ReleaseDevice` makes logind report the device it freed as `PauseDevice(..., "gone")`; every `GiveBack` buys one, the echo lands after the `TakeDevice` it made room for, and treating it as an unplug forgot the name. Measured: thirteen force pauses, thirteen "gone" in the 141 µs after them, `reclaimed 0 of 0` on the way back, thirteen `logind resumed device N, which this session never took`. No keyboard, no pointer, no chord to leave with. `released_` is the fix and has not been through a run |
 | The screens light again when the machine wakes up | **Reasoned from logind's sources.** No runner suspends, so nothing in CI sleeps; `DrmSleepTest` holds the reading of `PrepareForSleep` and `DrmModesetTest` the relight it drives past the hotplug guard |
 | A stop asked for during startup is a stop | **Unit tests.** `domicile-launch`'s milestone tests. It matters here and nowhere else — see [What a tty costs on the way out](#what-a-tty-costs-on-the-way-out) |
 
 Still open: [taking the card node from
 logind](#the-card-should-come-from-logind-too), and a console switch away and
-back on an engine carrying the relight.
+back on an engine carrying the "gone" echo fix.
 
 ## What the assert guards
 
@@ -566,9 +567,10 @@ platform and no evdev at all, so the DRM platform is the only caller.
 | logind revokes the lot | `PauseDevice(major, minor, "force")` arrives, per device, after the revoke; the device is marked revoked and nothing is answered | `DrmTakenDevices::Pause` |
 | the console comes back | the session's `Active` goes true; every revoked device is `ReleaseDevice`d and taken again | `DrmLogindInput::OnPropertiesChanged` → `DrmTakenDevices::Reclaim` |
 | a seat with no VTs pauses | `PauseDevice(..., "pause")`; answered with `PauseDeviceComplete` | `DrmTakenDevices::Pause` |
+| this session releases a device | `PauseDevice(..., "gone")` for it, because logind reports the `SessionDevice` it freed the way it reports any other. Swallowed as the echo it is | `DrmTakenDevices::Pause`, against `released_` |
 | `ResumeDevice(major, minor, fd)` arrives | the descriptor is parked and the device is closed and opened again | `DrmTakenDevices::Resume` |
 | either way back | `RemoveInputDevice(path)` then `AddInputDevice(id, path)`; the reopened device consumes the parked descriptor or takes a fresh one | `InputDeviceFactoryEvdev`, through the callback it handed the opener |
-| device unplugged | `PauseDevice(..., "gone")`; the device is forgotten | `DrmTakenDevices::Pause` |
+| device unplugged | `PauseDevice(..., "gone")` with no release outstanding; the device is forgotten | `DrmTakenDevices::Pause` |
 | shutdown | `Session.ReleaseDevice` per device, then `Session.ReleaseControl` | `~DrmLogindInput` |
 
 Domicile's own compositor is not a second copy of this to borrow from: it opens

@@ -611,5 +611,86 @@ TEST(DrmInputDevicesTest, AResumeForAGoneDeviceIsStillRefused) {
   EXPECT_TRUE(reopen.calls().empty());
 }
 
+// THE ONE THAT COST A DESKTOP ITS KEYBOARD, READ OFF A REAL CONSOLE SWITCH.
+// A force pause reopens the device, the reopen gives it back and takes it
+// again, and logind answers the `ReleaseDevice` half by telling this session
+// the device is "gone" -- because from logind's side it is: the
+// `SessionDevice` this session asked it to free really has been freed. That
+// signal arrives AFTER the `TakeDevice` that replaced it, so it names a
+// device this session is holding on a newer take, and forgetting the name
+// there is the desktop losing every input device for the rest of the run.
+//
+// Measured: thirteen devices force-paused at 21:31:25.68, thirteen "gone"
+// pauses in the 141 microseconds after it, `reclaimed 0 of 0` on the way
+// back, and thirteen `logind resumed device N, which this session never
+// took` -- keyboard and trackpad among them, with no way left to leave the
+// console.
+TEST(DrmInputDevicesTest, AGoneThatEchoesOurOwnReleaseIsNotTheNodeGoingAway) {
+  RecordedRelease release;
+  RecordedReopen reopen;
+  DrmTakenDevices devices(release.Bind(), reopen.Bind());
+  reopen.Watch(&devices);
+  reopen.Knows(kKeyboardPath, kKeyboard);
+  reopen.SessionIsActive(false);
+
+  devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
+               DeviceLiveness::kLive);
+  EXPECT_EQ(devices.Pause(kKeyboard, "force"),
+            PauseAnswer::kDeviceIsRevoked);
+  ASSERT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
+
+  // logind's answer to that release, arriving after the take that replaced
+  // the device it names.
+  EXPECT_EQ(devices.Pause(kKeyboard, "gone"), PauseAnswer::kNothingToSay);
+
+  // The device is still this session's, so the activation's resume lands.
+  EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
+  EXPECT_EQ(reopen.calls().back(), (Reopened{kKeyboardId, kKeyboardPath}));
+}
+
+// AND THE SESSION STILL OWES IT BACK. A "gone" that was only the echo of a
+// release changes nothing about the hold, so the device is one `Reclaim` can
+// find and one the shutdown has to give back -- which is what tells this
+// apart from a node that really went away.
+TEST(DrmInputDevicesTest, ADeviceWhoseGoneWasAnEchoIsStillHeld) {
+  RecordedRelease release;
+  RecordedReopen reopen;
+  DrmTakenDevices devices(release.Bind(), reopen.Bind());
+  reopen.Watch(&devices);
+  reopen.Knows(kKeyboardPath, kKeyboard);
+  reopen.SessionIsActive(false);
+
+  devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
+               DeviceLiveness::kLive);
+  devices.Pause(kKeyboard, "force");
+  devices.Pause(kKeyboard, "gone");
+
+  EXPECT_EQ(devices.Reclaim(), 1u)
+      << "the force pause left it revoked, so the activation must ask again";
+}
+
+// ONE ECHO PER RELEASE AND NOT ONE FOREVER, which is the half that would put
+// the original bug back the moment a node really was unplugged. The second
+// "gone" is nobody's echo: there was one release and it has been accounted
+// for, so this one is the node going away and the name goes with it.
+TEST(DrmInputDevicesTest, OnlyOneGoneIsAnsweredForEachReleaseAsked) {
+  RecordedRelease release;
+  RecordedReopen reopen;
+  DrmTakenDevices devices(release.Bind(), reopen.Bind());
+  reopen.Watch(&devices);
+  reopen.Knows(kKeyboardPath, kKeyboard);
+  reopen.SessionIsActive(false);
+
+  devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
+               DeviceLiveness::kLive);
+  devices.Pause(kKeyboard, "force");
+
+  EXPECT_EQ(devices.Pause(kKeyboard, "gone"), PauseAnswer::kNothingToSay);
+  EXPECT_EQ(devices.Pause(kKeyboard, "gone"), PauseAnswer::kNothingToSay);
+
+  EXPECT_FALSE(devices.Resume(kKeyboard, OpenZero()))
+      << "the second gone is the node unplugged, so the name is forgotten";
+}
+
 }  // namespace
 }  // namespace ui
