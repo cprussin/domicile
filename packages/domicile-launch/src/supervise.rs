@@ -16,11 +16,15 @@
 //! What is left here is starting them, watching them, and making sure nothing
 //! outlives the run.
 
+use std::io::{BufRead, BufReader};
 use std::os::unix::process::CommandExt;
-use std::process::{Child, Command, ExitStatus};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use std::time::Duration;
 
+use crate::heard::Heard;
 use crate::spawn::Spawn;
 
 /// How often the components are asked whether they are still components.
@@ -79,12 +83,29 @@ const LAST_WORDS: Duration = Duration::from_secs(3);
 /// A desktop that exits leaving an engine behind holds the Wayland display its
 /// replacement wants, and the second one fails about a socket rather than
 /// about the first still running.
-pub struct Running(Vec<(&'static str, Child)>);
+pub struct Running {
+    components: Vec<(&'static str, Child)>,
+    listeners: Vec<JoinHandle<()>>,
+}
 
 impl Drop for Running {
     fn drop(&mut self) {
-        for (_, child) in &mut self.0 {
+        for (_, child) in &mut self.components {
             end_the_group(child);
+        }
+        // AFTER the groups are gone, and that order is the whole of why this
+        // terminates: a listener sits in a read on a component's stderr, and
+        // what ends that read is the last process holding the write end going
+        // away. Joined rather than detached because the run repeats what it
+        // heard the moment this returns -- a listener still draining would be
+        // a repeat missing its last lines, and the last lines are the reason.
+        //
+        // A panicked listener is the only `Err` a join has, and there is
+        // nothing to do with one here: unwrapping it would panic inside a
+        // `Drop` that is itself most often running during an unwind, which
+        // aborts the process and takes the sentence with it.
+        for listener in self.listeners.drain(..) {
+            let _ = listener.join();
         }
     }
 }
@@ -122,6 +143,56 @@ fn end_the_group(child: &mut Child) {
     let _ = child.wait();
 }
 
+/// One component, started, with its stderr wherever the caller wants it.
+fn started(what: &'static str, spawn: &Spawn, stderr: fn() -> Stdio) -> Result<Child, RunError> {
+    command(spawn)
+        .stderr(stderr())
+        .spawn()
+        .map_err(|source| RunError::Start {
+            program: spawn.program.clone(),
+            source,
+            what,
+        })
+}
+
+/// Read one component's stderr: past, so a run watching a tty sees it as it
+/// happens, and into `heard`, so a run that gives up can say it again.
+///
+/// Bytes rather than `lines()`, which yields a `Result` per line and fails the
+/// whole iterator on the first byte that is not UTF-8. What arrives here is
+/// whatever a component chose to write, and a stray one would otherwise take
+/// the rest of the complaint with it -- including, on a compositor that died
+/// mid-sentence, the half that says why.
+fn overhear(what: &'static str, stderr: std::process::ChildStderr, heard: &Mutex<Heard>) {
+    let mut reader = BufReader::new(stderr);
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        match reader.read_until(b'\n', &mut line) {
+            // The component closed its stderr, which is the ordinary end of
+            // this: it exited, and `Running` is joining this thread.
+            Ok(0) => return,
+            Ok(_) => {
+                let said = String::from_utf8_lossy(&line);
+                let said = said.trim_end_matches(['\n', '\r']);
+                eprintln!("{said}");
+                heard
+                    .lock()
+                    .expect("nothing panics holding what a component said")
+                    .line(said);
+            }
+            // Not the end of the stream and not something to recover from:
+            // whatever the component says after this is gone either way. Said
+            // out loud rather than returned, because there is nobody to return
+            // it to -- this is a thread whose whole job is the terminal.
+            Err(why) => {
+                eprintln!("domicile: lost the rest of what the {what} said: {why}");
+                return;
+            }
+        }
+    }
+}
+
 /// `killpg`, with the failure ignored on purpose: the only one reachable here
 /// is `ESRCH`, which means the group is already gone, which is the outcome
 /// being asked for.
@@ -133,17 +204,38 @@ fn signal_group(group: libc::pid_t, signal: libc::c_int) {
 
 impl Running {
     pub fn new() -> Self {
-        Running(Vec::new())
+        Running {
+            components: Vec::new(),
+            listeners: Vec::new(),
+        }
     }
 
     /// Start one, with its stdout going wherever the caller's does.
     pub fn start(&mut self, what: &'static str, spawn: &Spawn) -> Result<(), RunError> {
-        let child = command(spawn).spawn().map_err(|source| RunError::Start {
-            program: spawn.program.clone(),
-            source,
-            what,
-        })?;
-        self.0.push((what, child));
+        let child = started(what, spawn, Stdio::inherit)?;
+        self.components.push((what, child));
+        Ok(())
+    }
+
+    /// Start one, and keep what it writes on stderr as well as letting it past.
+    ///
+    /// Both halves matter and they are for different runs. The live output is
+    /// what a desk that comes up on the fifth try is reading; what is kept is
+    /// for the one that never comes up, where the run repeats it at the bottom
+    /// rather than pointing at it. [`crate::heard`] holds why.
+    pub fn start_overheard(
+        &mut self,
+        what: &'static str,
+        spawn: &Spawn,
+        heard: &Arc<Mutex<Heard>>,
+    ) -> Result<(), RunError> {
+        let mut child = started(what, spawn, Stdio::piped)?;
+        let listening = child.stderr.take().expect("stderr was asked for a pipe");
+        let heard = Arc::clone(heard);
+        self.listeners.push(std::thread::spawn(move || {
+            overhear(what, listening, &heard)
+        }));
+        self.components.push((what, child));
         Ok(())
     }
 
@@ -157,7 +249,7 @@ impl Running {
     /// report from — so it takes the run down here rather than being folded
     /// into an error nobody could act on.
     pub fn exited(&mut self) -> Option<Exit> {
-        self.0.iter_mut().find_map(|(what, child)| {
+        self.components.iter_mut().find_map(|(what, child)| {
             child
                 .try_wait()
                 .expect("a child this process started can be waited on")

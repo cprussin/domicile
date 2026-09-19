@@ -14,6 +14,10 @@
 //! what a desktop can be asked and what it answers ([`control`]), and where it
 //! answers ([`control_socket`]).
 //!
+//! What a run that gave up says at the end is [`heard`]: the compositor's own
+//! words, kept as they go past so that the last line of a failed run is the
+//! reason rather than a pointer to it.
+//!
 //! The other boundary is the compositor's own: the command line it is started
 //! with ([`arguments`]), the session document it
 //! publishes once it is up ([`session`]), and whether a page ever reached it
@@ -33,6 +37,7 @@ pub mod config_path;
 pub mod control;
 pub mod control_socket;
 pub mod handshake;
+pub mod heard;
 pub mod milestones;
 pub mod platform;
 pub mod restart;
