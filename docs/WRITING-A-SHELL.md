@@ -700,6 +700,8 @@ opener relationship and the target's name are not carried, and a form POSTed at
 a new target arrives as a GET of its action. A link is the case that survives
 whole, and a link is what this is for.
 
+**A middle click needs nothing from you beyond what you already wrote.** Middle-clicking a link asks for it in a second window, and a page cannot open one — the browser has to. Your `<webview>` announces it with the same `domicile-new-window` event a `target="_blank"` link fires, carrying the same `url`, so the handler you already have covers it. The guest does not navigate itself; opening the window is yours, exactly as it is for `_blank`.
+
 ### What a guest still refuses
 
 Permissions and dialogs are answered by the default, which is no. Each is a

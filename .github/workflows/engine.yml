@@ -813,6 +813,31 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/guard-webview-new-window.sh "$CHROMIUM"
 
+      # And the other half of what a link can ask for: a MIDDLE CLICK, which
+      # asks for the link in a second window and which a page cannot perform
+      # itself. It reaches the guest's OpenURLFromTab, where content's default
+      # delegate answers by doing nothing at all -- a click with no effect and
+      # no error. The guard reads the engine's own line as well as the element's
+      # event, because ReportNewWindow is shared with the target=_blank path
+      # above and a run reading only the event would pass without this override.
+      - name: A middle click in a browser window, and the window it asks for
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-routed-link.sh "$CHROMIUM"
+
+      # Its control: the SAME POINT ON THE SAME LINK, pressed with the left
+      # button. It must follow the link in the guest and ask the browser for
+      # nothing -- a run where it asks says the claim's run was measuring this
+      # guest sending every press to its delegate rather than the button.
+      - name: The routed-link guard is looking at the button
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-routed-link.sh "$CHROMIUM"
+
       # REQUIREMENT 2, WHICH NOTHING HAS RUN SINCE IT WAS WRITTEN. An <app> has
       # to behave like any other replaced element, and `guard-css-and-resize.sh` is what
       # measures that: six CSS properties applied to an <app> and to an
