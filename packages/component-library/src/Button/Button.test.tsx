@@ -11,6 +11,43 @@ describe(Button, () => {
       expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
     });
 
+    // A BUTTON HANDS BACK THE ELEMENT IT DREW. It keeps a ref of its own —
+    // for the loading handoff — and a ref of its own that replaced the
+    // caller's is a button that cannot be an anchor: base-ui positions a
+    // popover against the element its trigger handed back, and a trigger that
+    // hands back nothing leaves the panel unpositioned at the top corner of
+    // the screen with nothing drawn.
+    it("gives the element it drew to a ref it is passed", () => {
+      const seen: (HTMLElement | null)[] = [];
+      render(
+        <Button
+          ref={(element) => {
+            seen.push(element);
+          }}
+        >
+          Save
+        </Button>,
+      );
+
+      expect(seen[0]).toBe(screen.getByRole("button", { name: "Save" }));
+    });
+
+    it("gives an anchor back the same way", () => {
+      const seen: (HTMLElement | null)[] = [];
+      render(
+        <Button
+          href="https://example.com"
+          ref={(element) => {
+            seen.push(element);
+          }}
+        >
+          Visit
+        </Button>,
+      );
+
+      expect(seen[0]).toBe(screen.getByRole("link", { name: "Visit" }));
+    });
+
     it("renders beforeIcon and afterIcon around the label", () => {
       render(
         <Button

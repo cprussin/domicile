@@ -20,11 +20,13 @@ consume it — don't fork. See [/docs/guidelines/STYLING.md](../../docs/guidelin
 | `@domicile/component-library/Textarea` | Auto-sizing textarea with a resize handle. |
 | `@domicile/component-library/Field` | Label + control + validation-message wrapper (base-ui Field). |
 | `@domicile/component-library/Select` | Select / listbox (base-ui Select). |
+| `@domicile/component-library/Autocomplete` | Text field with a caller-supplied list of suggestions under it (base-ui Autocomplete). The caller does the matching, so the list can rank and can offer a line that matches nothing typed. |
 | `@domicile/component-library/Tabs` | Tabbed container (base-ui Tabs): config-driven `tabs` array, a sliding active underline, `size` variants, inset focus ring. |
 | `@domicile/component-library/TabRail` | Vertical rail of tabs with a brand slot, footer, and collapse. |
 | `@domicile/component-library/Card` | Elevated surface with optional title / footer. |
 | `@domicile/component-library/ModalDialog` | Modal dialog with flattened `title` / `footer` / `trigger` API. |
 | `@domicile/component-library/SlideOver` | Edge-anchored drawer (base-ui Dialog). |
+| `@domicile/component-library/Popover` | Non-modal panel anchored to the control that opened it (base-ui Popover), for detail a control has no room for. |
 | `@domicile/component-library/Avatar` | Avatar with initials / gradient fallback. |
 | `@domicile/component-library/Kbd` | Keyboard-shortcut key cap. |
 | `@domicile/component-library/Screen` | Lays its children over one of the desktop's displays, once per display it selects. |

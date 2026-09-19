@@ -40,7 +40,7 @@ const view = (container: HTMLElement): HTMLWebViewElement => {
 };
 
 const address = (): HTMLInputElement =>
-  screen.getByRole("textbox", { name: "Address" });
+  screen.getByRole("combobox", { name: "Address" });
 
 const browser = (): HTMLElement =>
   screen.getByRole("region", { name: "Browser" });
@@ -135,7 +135,7 @@ describe("BrowserWindow", () => {
   });
 
   describe("the address bar", () => {
-    it("loads what was typed, filling in a missing scheme", async () => {
+    it("sends the view to what was typed, filling in a missing scheme", async () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
@@ -709,8 +709,11 @@ describe("BrowserWindow", () => {
     });
   });
 
-  describe("the loading state", () => {
-    it("says the page is arriving until it has arrived", () => {
+  // The bar's own behaviour is `AddressBar`'s to test; what is this window's
+  // is the wiring — the one control reads the view's loading state, and
+  // whichever of the two it is drives the view.
+  describe("the reload button", () => {
+    it("becomes a stop button while the view says a page is arriving", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
@@ -730,11 +733,45 @@ describe("BrowserWindow", () => {
       );
       // A window whose guest has said nothing is a window with nothing on the
       // way: the element answers false until the browser says otherwise.
-      expect(screen.queryByRole("img", { name: "Loading" })).toBeNull();
+      expect(control("Reload")).toBeVisible();
       loads(view(container), true);
-      expect(screen.getByRole("img", { name: "Loading" })).toBeVisible();
+      expect(control("Stop")).toBeVisible();
       loads(view(container), false);
-      expect(screen.queryByRole("img", { name: "Loading" })).toBeNull();
+      expect(control("Reload")).toBeVisible();
+    });
+
+    it("drives the view with whichever of the two it is", async () => {
+      const driven: string[] = [];
+      const { container } = render(
+        <BrowserWindow
+          clickThrough={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          motion="resting"
+          onHover={noHover}
+          onMotionEnded={nothingEnded}
+          onNavigate={() => undefined}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+      const guest = view(container);
+      guest.reload = () => {
+        driven.push("reload");
+      };
+      guest.stop = () => {
+        driven.push("stop");
+      };
+
+      await userEvent.click(control("Reload"));
+      loads(guest, true);
+      await userEvent.click(control("Stop"));
+
+      expect(driven).toStrictEqual(["reload", "stop"]);
     });
   });
 

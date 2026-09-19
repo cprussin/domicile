@@ -23,7 +23,8 @@ const launcher = (files: readonly string[] = FILES) => {
     />,
   );
   return {
-    box: () => screen.getByRole("combobox"),
+    box: () =>
+      screen.getByRole("combobox", { name: "Open a file, a URL, or search" }),
     dismissed,
     launched,
     user: userEvent.setup(),

@@ -1099,6 +1099,24 @@ describe("Shell", () => {
 });
 
 describe("the launcher", () => {
+  /**
+   * The launcher's own box, which is not the only combobox a desktop can have
+   * on screen: a browser window's address bar is one too, so the box is named
+   * and matched by name.
+   */
+  const launcherBox = (): HTMLElement | null =>
+    screen.queryByRole("combobox", { name: "Open a file, a URL, or search" });
+
+  /** The same box where a case needs it to be there. */
+  const typeIntoLauncher = async (typed: string): Promise<void> => {
+    await userEvent
+      .setup()
+      .type(
+        screen.getByRole("combobox", { name: "Open a file, a URL, or search" }),
+        typed,
+      );
+  };
+
   /** Where each browser window on the desktop was pointed. */
   const browsing = (container: HTMLElement): string[] =>
     [...container.querySelectorAll("webview")].map(
@@ -1113,7 +1131,7 @@ describe("the launcher", () => {
   it("is not on screen until the key that opens it", () => {
     renderShell();
 
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(launcherBox()).toBeNull();
   });
 
   it("opens on mod+space and asks the host what there is to open", () => {
@@ -1124,7 +1142,7 @@ describe("the launcher", () => {
 
     press("space");
 
-    expect(screen.getByRole("combobox")).toBeVisible();
+    expect(launcherBox()).toBeVisible();
     expect(domicile.calls).toContainEqual(["listFiles"]);
   });
 
@@ -1158,7 +1176,7 @@ describe("the launcher", () => {
         "Notes/today.org",
       ],
     ]);
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(launcherBox()).toBeNull();
   });
 
   it("opens a typed URL in a browser window on the desktop", async () => {
@@ -1166,21 +1184,17 @@ describe("the launcher", () => {
     press("space");
     homeHolds("todo.txt");
 
-    await userEvent
-      .setup()
-      .type(screen.getByRole("combobox"), "example.com{Enter}");
+    await typeIntoLauncher("example.com{Enter}");
 
     expect(browsing(container)).toStrictEqual(["https://example.com"]);
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(launcherBox()).toBeNull();
   });
 
   it("searches for a query that is neither a file nor a URL", async () => {
     const { container } = renderShell();
     press("space");
 
-    await userEvent
-      .setup()
-      .type(screen.getByRole("combobox"), "!wiki mesa{Enter}");
+    await typeIntoLauncher("!wiki mesa{Enter}");
 
     // The address the window went to is what says where the query was sent,
     // engine and escaping and all.
@@ -1197,6 +1211,6 @@ describe("the launcher", () => {
 
     hostPress("space");
 
-    expect(screen.getByRole("combobox")).toBeVisible();
+    expect(launcherBox()).toBeVisible();
   });
 });

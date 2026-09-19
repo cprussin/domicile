@@ -1,5 +1,5 @@
 import { Button as BaseButton } from "@base-ui/react/button";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ReactNode, Ref } from "react";
 import { useLayoutEffect, useState } from "react";
 import { css, cva, cx } from "../../styled-system/css";
 import type { ControlVariant } from "../../styled-system/recipes";
@@ -67,9 +67,23 @@ export const Button = ({
   label,
   ...passthroughProps
 }: Props) => {
+  // The caller's ref as well as this button's own. `sharedProps` below sets
+  // `ref` after `passthroughProps` is spread, so a button that did not pass it
+  // on here would replace the caller's ref with its own and hand the element
+  // back to nobody — see `useStableRef` for what that breaks.
+  //
+  // THE CAST IS THE POLYMORPHISM. `Props` is a union, so the ref arrives as a
+  // ref for an anchor or a ref for a button, and a ref's element is a
+  // parameter — contravariant — so the two do not unify into a ref for either.
+  // What TypeScript cannot see is that the `href` which picked the member of
+  // the union is the same `href` that picks the element below: this is the
+  // anchor's ref exactly when an anchor is what gets drawn.
+  const forwarded = passthroughProps.ref as
+    | Ref<HTMLAnchorElement | HTMLButtonElement>
+    | undefined;
   const [elementRef, setElementRef] = useStableRef<
     HTMLAnchorElement | HTMLButtonElement
-  >();
+  >(forwarded);
   const [renderedLoading, setRenderedLoading] = useState(loading);
 
   // Smooth handoff from the `_loading` pulse animation back to the resting

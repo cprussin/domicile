@@ -7,11 +7,13 @@
 //
 // The evidence is different in each case, which is why they are ranked rather
 // than pattern-matched independently. A file is either one the host listed —
-// evidence, not a guess — or a path spelled in a way nothing else is. A site
-// is a scheme somebody wrote down, or a host under a TLD that exists. What is
-// left is words, and words are a search.
+// evidence, not a guess — or a path spelled in a way nothing else is. What is
+// left is a web address, and `typedAddress` is the one place that decides
+// whether that is a site or a search: a desktop where this box and a browser
+// window's address bar disagree about `localhost:5173` is one where the user
+// has to remember which box they are in.
 
-import { searchUrl } from "./search";
+import { typedAddress } from "../address/typed-address";
 
 /** Which of the two things the launcher can do with a query. */
 export enum LaunchKind {
@@ -47,18 +49,17 @@ export const launchFor = (
   offered: readonly string[],
 ): Launch | undefined => {
   const typed = query.trim();
-  if (typed === "") {
+  // Asked first, and not because a web address outranks a file — it does not,
+  // and the branches below are still in the order they are decided in. It is
+  // asked first because the one line it answers nothing for is the empty one,
+  // which is the same line this function answers nothing for.
+  const address = typedAddress(typed);
+  if (address === undefined) {
     return undefined;
   } else if (isFile(typed, offered)) {
     return Launch.Edited(underHome(typed));
-  } else if (hasScheme(typed)) {
-    return Launch.Browsed(typed);
-  } else if (isHost(typed)) {
-    // https rather than http: a desktop should not make the insecure guess on
-    // a user's behalf, and a site that only speaks http will say so.
-    return Launch.Browsed(`https://${typed}`);
   } else {
-    return Launch.Browsed(searchUrl(typed));
+    return Launch.Browsed(address.url);
   }
 };
 
@@ -78,48 +79,3 @@ const isFile = (typed: string, offered: readonly string[]): boolean =>
 /** A typed `~/` said in the terms the host answers in: relative to home. */
 const underHome = (typed: string): string =>
   typed.startsWith("~/") ? typed.slice(2) : typed;
-
-/** Whether somebody wrote a scheme down, in which case there is nothing to guess. */
-const hasScheme = (typed: string): boolean =>
-  /^[a-z][a-z\d+.-]*:\/\//i.test(typed);
-
-/**
- * The endings that make a word a hostname rather than the end of a sentence.
- *
- * The launcher's own list rather than the public suffix list. A desktop that
- * recognised every TLD would read "the sentence ends. Then another" as a
- * request for a site in `.then`, and there is no shortage of registries whose
- * TLD is an ordinary English word. These are the ones this desktop's user
- * actually types, which is the same argument the shell script makes by
- * carrying a list of nine.
- */
-const TLDS: readonly string[] = [
-  "co",
-  "com",
-  "dev",
-  "do",
-  "edu",
-  "gov",
-  "io",
-  "me",
-  "net",
-  "org",
-  "sh",
-  "xyz",
-];
-
-/**
- * Whether `typed` is a host, with or without a port and a path after it.
- *
- * `localhost` by name, because it is the one hostname with no dot in it that a
- * person types on purpose — and on a machine that is also a development box,
- * types constantly.
- */
-const isHost = (typed: string): boolean => {
-  const host = typed.split(/[/:?#]/)[0] ?? "";
-  const tld = host.split(".").at(-1) ?? "";
-  return (
-    host === "localhost" ||
-    (host.includes(".") && TLDS.includes(tld.toLowerCase()))
-  );
-};
