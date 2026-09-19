@@ -13,8 +13,11 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "components/domicile/browser/shortcut_registry.h"
+#include "components/security_state/content/content_utils.h"
+#include "components/security_state/core/security_state.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -79,6 +82,33 @@ class WebViewGuestHost final
                                   std::move(guest), std::move(client));
   }
 };
+
+// Chromium's answer for a page, as the one this fork puts on the wire.
+//
+// AN EXPLICIT SWITCH WITH NO DEFAULT ARM, which is the whole reason this is a
+// function rather than a cast. `security_state::SecurityLevel` is Chromium's
+// and its numbering has already changed once -- three members are commented
+// out at our pin -- so a `static_cast` would turn a renumbering upstream into a
+// browser window drawing the wrong lock, silently. Without a default, a level
+// Chromium adds stops the fork's build instead.
+//
+// SECURITY_LEVEL_COUNT is not a level. It is the enum's bound, it is never
+// returned by GetSecurityLevel, and it is here because leaving it out is what
+// would reintroduce the default arm.
+mojom::WebViewSecurity AsWebViewSecurity(security_state::SecurityLevel level) {
+  switch (level) {
+    case security_state::NONE:
+      return mojom::WebViewSecurity::kNeutral;
+    case security_state::SECURE:
+      return mojom::WebViewSecurity::kSecure;
+    case security_state::WARNING:
+      return mojom::WebViewSecurity::kWarning;
+    case security_state::DANGEROUS:
+      return mojom::WebViewSecurity::kDangerous;
+    case security_state::SECURITY_LEVEL_COUNT:
+      NOTREACHED();
+  }
+}
 
 }  // namespace
 
@@ -298,6 +328,15 @@ void WebViewGuest::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
   ReportHistory();
+  // The address as well as the history, from the same call: content reports
+  // INVALIDATE_TYPE_URL through here, and the flags are not read for the
+  // reason the header gives -- what decides whether anything moved is the
+  // comparison inside, not a flag meaning "some browser UI is stale".
+  ReportPage();
+}
+
+void WebViewGuest::DidChangeVisibleSecurityState() {
+  ReportPage();
 }
 
 void WebViewGuest::LoadingStateChanged(content::WebContents* source,
@@ -323,6 +362,43 @@ void WebViewGuest::ReportHistory() {
     reported_can_go_back_ = can_go_back;
     reported_can_go_forward_ = can_go_forward;
     client_->HistoryChanged(can_go_back, can_go_forward);
+  }
+}
+
+void WebViewGuest::ReportPage() {
+  // The same CHECK ReportHistory makes, and for the same reason: content does
+  // not call a delegate of a WebContents it has already destroyed.
+  CHECK(guest_contents_);
+
+  // ONE ENTRY, READ ONCE, FOR BOTH HALVES. `GetVisibleSecurityState` reads
+  // `GetVisibleEntry()` itself, so taking the address from the same call is
+  // what keeps the lock and the address describing one page -- see the header.
+  // It is never null for a live WebContents at this pin: content always has an
+  // entry, and content_utils.cc dereferences it without a check for that
+  // reason.
+  content::NavigationEntry* entry =
+      guest_contents_->GetController().GetVisibleEntry();
+
+  // THE VIRTUAL URL, WHICH IS WHAT A BROWSER SHOWS. `view-source:` and the
+  // other rewrites live in the virtual URL; the real one is what was fetched.
+  // A chrome shown the real one would disagree with every other browser about
+  // what page the user is looking at.
+  const GURL url = entry->GetVirtualURL();
+
+  const std::unique_ptr<security_state::VisibleSecurityState> state =
+      security_state::GetVisibleSecurityState(guest_contents_);
+  const mojom::WebViewSecurity security =
+      AsWebViewSecurity(security_state::GetSecurityLevel(*state));
+
+  // A CHANGE, not a notification, exactly as the two reports above are. Both
+  // hooks that reach here fire for things the other one is about -- a cert
+  // arriving is not a navigation and a navigation is not a cert -- so without
+  // this the element would get a message and the shell's page a DOM event for
+  // every commit, every title and every favicon.
+  if (url != reported_url_ || security != reported_security_) {
+    reported_url_ = url;
+    reported_security_ = security;
+    client_->PageChanged(url, security);
   }
 }
 

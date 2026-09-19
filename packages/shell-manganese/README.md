@@ -522,7 +522,7 @@ shell that wants its own pictures owns its own list.
 | `src/address/typed-address.ts` | Which of the two a typed line is: a site, or words to search for. |
 | `src/address/search.ts` | Where words go: the bang tags, and Google for a query that carries none. |
 | `src/address/address-suggestions.ts` | What an address bar offers under itself — what Enter would do, then where the window has been. |
-| `src/address/connection-safety.ts` | What the scheme of an address says about the connection under it, which is all a shell can honestly say. |
+| `src/address/connection-safety.ts` | The browser's own verdict on a connection, parsed at the boundary — and the one state that must never look like the others, which is the browser not having said. |
 | `src/window-management/` | The windows: what one is, everything that changes them, and where they are drawn. |
 | `src/window-management/window.ts` | The window model: a client's portal or a browser window. |
 | `src/window-management/window-state.ts` | Every change the desktop can undergo, as one pure reduction — and sway's commands as the actions it takes. |
@@ -544,7 +544,8 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar over a `<webview>`, and everywhere the shell has sent it. |
 | `src/window-management/browser/AddressBar.tsx` | That bar: the history controls, the one button that is Reload or Stop, and the address as a pill with its connection indicator inside it. |
-| `src/window-management/browser/ConnectionIndicator.tsx` | The lock at the inline start of the bar, and the panel behind it — what the scheme says, and the sentence about where the page may have gone since. |
+| `src/window-management/browser/ConnectionIndicator.tsx` | The lock at the inline start of the bar, and the panel behind it: the browser's verdict on the connection, drawn from `security_state` rather than guessed from a URL scheme. |
+| `src/window-management/useShownPage.ts` | Where the page in a window actually is, what the browser says about the connection behind it, and everywhere it has been — read off the view's own properties, because a chrome that learned the security level from an event alone would have none for the page already showing when it mounted. |
 | `src/window-management/useHistoryAvailability.ts` | Where that window's page can be sent, read off the view's own properties rather than learned from the event that says to read them. |
 | `src/window-management/useReclaimFocus.ts` | Keeping the document's focus on the window being worked in, but only when it landed on nothing at all — the address bar and the bar's own controls are the user reaching for focus, and a closing window's own control leaves it on the body. Which of the two a `focusout` is comes off the event's `relatedTarget`, because the document is mid-change while it is dispatched. |
 | `src/window-management/window-styles.ts` | What every window shares, how one is placed at a rectangle, and how one arrives, settles and leaves. |

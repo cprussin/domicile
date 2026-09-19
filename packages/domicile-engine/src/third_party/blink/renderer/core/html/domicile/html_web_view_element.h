@@ -129,6 +129,28 @@ class CORE_EXPORT HTMLWebViewElement final
   // a spinner". See WebViewGuest::ReportLoading.
   bool loading() const { return loading_; }
 
+  // WHERE THE PAGE IS, AND WHAT THE BROWSER SAYS ABOUT REACHING IT.
+  //
+  // THE PAIR THAT MAKES THIS A BROWSER. Until they existed a shell could show
+  // only `src` -- where it had *sent* the element -- so a link followed inside
+  // the page left the chrome displaying an address the user had left, and any
+  // lock drawn beside it described a page that was no longer there. Both are
+  // the browser's answer about the guest's visible entry, and they arrive in
+  // one message from one read of one entry so that they cannot come apart.
+  //
+  // PROPERTIES FOR THE REASON `canGoBack` IS ONE, and with more riding on it: a
+  // chrome renders from state, and a security level that existed only in an
+  // event would be missing for exactly the chrome that mounted mid-load -- which
+  // would leave it drawing nothing, or worse, drawing the last page's lock.
+  //
+  // EMPTY MEANS THE BROWSER HAS NOT SAID, and a chrome must not read it as
+  // anything else. It is what a guest showing its initial entry reports, and
+  // what an engine older than this contract reports by having no property here
+  // at all. `security` is never "insecure by default": nothing is claimed until
+  // the browser claims it.
+  const String& url() const { return url_; }
+  const String& security() const { return security_; }
+
   void Trace(Visitor*) const override;
 
  private:
@@ -236,6 +258,12 @@ class CORE_EXPORT HTMLWebViewElement final
   // domicile_new_window_event.h.
   void NewWindowRequested(const KURL& target_url) override;
 
+  // And the browser saying where the page now is and what it says about the
+  // connection behind it. It arrives when either CHANGES, so the event below is
+  // never dispatched for a change that is not one.
+  void PageChanged(const KURL& url,
+                   domicile::mojom::blink::WebViewSecurity security) override;
+
   // The guest, for as long as this element lives. Bound once, and not
   // rebuilt on a later `src`: the placeholder frame is destroyed by the
   // attach, so there would be nothing left to name in a second request.
@@ -259,6 +287,14 @@ class CORE_EXPORT HTMLWebViewElement final
   // which is not a guess either: a guest that has not been sent anywhere is
   // fetching nothing, so the browser does not spend a message saying so.
   bool loading_ = false;
+
+  // And where the page is, with what the browser says about reaching it. Both
+  // empty until the browser says otherwise, and empty is a statement: it is a
+  // guest still showing the initial entry, which is not an address and not a
+  // connection anybody has judged. A default of "neutral" here would be this
+  // element answering a question the browser has not been asked yet.
+  String url_;
+  String security_;
 };
 
 }  // namespace blink

@@ -94,5 +94,18 @@ export const appWindowId = (appId: string): string => `${APP_PREFIX}${appId}`;
 export const appIdOf = (id: string): string | undefined =>
   id.startsWith(APP_PREFIX) ? id.slice(APP_PREFIX.length) : undefined;
 
-/** A window is named after the site it is showing, the way a browser tab is. */
-export const siteOf = (url: string): string => new URL(url).hostname;
+/**
+ * A window is named after the site it is showing, the way a browser tab is —
+ * or after the whole address, when there is no site in it to use.
+ *
+ * THE FALLBACK IS FOR THE PAGE'S OWN NAVIGATIONS. Every address this saw used
+ * to be one the shell built: `HOME_PAGE`, or something `typedAddress` made,
+ * and both have a host. It now gets whatever the browser reports the guest is
+ * showing, and `about:blank` and a `data:` URL have no host at all — so a
+ * window named from the hostname alone would quietly lose its name and leave
+ * the user an unlabelled tab.
+ */
+export const siteOf = (url: string): string => {
+  const { hostname } = new URL(url);
+  return hostname === "" ? url : hostname;
+};

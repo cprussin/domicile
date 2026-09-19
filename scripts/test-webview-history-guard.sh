@@ -90,6 +90,11 @@ baseline() { # $1 NEGATIVE
   START_CAN="false/false"
   TWO_CAN="true/false"
   TWO_EVENTS=0
+  # Where the element said it was and what the browser said about getting
+  # there. Shared, because `two-pages` is read before either run drives
+  # anything — the guest is on its second page in both.
+  TWO_PATH="/two"
+  TWO_SECURITY="neutral"
   # Shared too, and for the same reason: the guest is on a page that arrived a
   # whole step ago, and then on a navigation the fixture is still holding open.
   # Neither run has driven anything by either point.
@@ -111,6 +116,11 @@ baseline() { # $1 NEGATIVE
     BACK_CAN="true/false"
     FORWARD_CAN="true/false"
     FORWARD_EVENTS=0
+    # And it never left /two, so that is where the element still says it is.
+    # Not read in the control's verdict; set because the block is one chain and
+    # `set -u` does not care which arm would have used it.
+    BACK_PATH="/two"
+    FORWARD_PATH="/two"
     # Not read in the control's verdict — nothing stopped the load, so the
     # slow page lands on its own and this says only that it did.
     STOPPED_LOADING="false"
@@ -127,6 +137,10 @@ baseline() { # $1 NEGATIVE
     BACK_CAN="false/true"
     FORWARD_CAN="true/false"
     FORWARD_EVENTS=2
+    # And the element followed the guest both ways, which is the reading the
+    # whole page report exists for: nothing in the shell navigated to either.
+    BACK_PATH="/one"
+    FORWARD_PATH="/two"
     # stop() canceled the load, which the browser reports like any other one
     # finishing.
     STOPPED_LOADING="false"
@@ -216,6 +230,47 @@ expect "no fifth page names reload" "yes" \
 # extra navigation anywhere in the middle would shift them and be read as one
 # of the calls working.
 expect "more pages than were driven is a failure" "fail" "$(verdict 0 COUNT=6)"
+
+echo
+echo "where the element says the page is, which is what a padlock sits beside"
+# THE CLAIM THE PAGE REPORT EXISTS FOR. The guest went back because goBack()
+# moved its own controller in the browser process; nothing in the shell
+# navigated anywhere. An element that still names the page the user left is a
+# chrome that cannot follow its own window — and a lock drawn next to that
+# address describes a page nobody is on.
+expect "an element that did not follow the guest back is a failure" "fail" \
+  "$(verdict 0 BACK_PATH=/two)"
+expect "not following back names what nothing in the shell navigated" "yes" \
+  "$(blames "nothing in the shell navigated" 0 BACK_PATH=/two)"
+expect "an element that did not follow the guest forward is a failure" "fail" \
+  "$(verdict 0 FORWARD_PATH=/one)"
+# ORDERED UNDER THE SEQUENCE IT DEPENDS ON. A run where goBack() never moved
+# the guest has no page for the element to have failed to follow, so the
+# sequence has to be blamed first or the next person debugs the wrong layer.
+expect "a guest that never went back blames the call, not the report" "yes" \
+  "$(blames "goBack() did not take the guest back" 0 THIRD=/two BACK_PATH=/two)"
+# And the address at a point BOTH runs reach, which is the reading that says
+# the report exists at all rather than that it follows a particular call.
+expect "an element showing the wrong page is a failure in both runs" "fail" \
+  "$(verdict 1 TWO_PATH=/one)"
+expect "an element that reported no page at all is a failure" "fail" \
+  "$(verdict 0 TWO_PATH='""')"
+
+echo
+echo "and what the browser said about the connection, which it must not invent"
+# A PADLOCK IS DRAWN FROM THIS. An engine that reports nothing leaves a chrome
+# with nothing to draw — which is the honest outcome — but it is still a broken
+# engine, and the alternative a chrome reaches for is guessing from the scheme.
+expect "no security for a committed page is a failure" "fail" \
+  "$(verdict 0 TWO_SECURITY='""')"
+expect "no security names the browser call that computes it" "yes" \
+  "$(blames "security_state" 0 TWO_SECURITY='""')"
+# What an engine older than the property looks like from the page: the element
+# has no such attribute, so the module logs the word `undefined`.
+expect "an engine with no such property is a failure" "fail" \
+  "$(verdict 0 TWO_SECURITY=undefined)"
+expect "it is a failure in the control too" "fail" \
+  "$(verdict 1 TWO_SECURITY='""')"
 
 echo
 echo "stop(), which is measured as an absence and so needs both halves"

@@ -60,4 +60,32 @@
   // a same-document navigation does not set it. See
   // components/domicile/browser/web_view_guest.cc.
   readonly attribute boolean loading;
+
+  // WHERE THE PAGE ACTUALLY IS, which `src` is not: `src` is the author's
+  // attribute and says where the element was last *sent*, so a link followed
+  // or a redirect taken leaves the two disagreeing. This one is the browser's,
+  // read off the guest's visible entry -- the same entry a browser's own
+  // address bar shows.
+  //
+  // The empty string until the browser has said otherwise, which is a guest
+  // showing the initial entry and not an address anybody can be sent to.
+  readonly attribute USVString url;
+
+  // And what the browser says about the connection behind it. One of
+  // "neutral", "secure", "warning" or "dangerous" -- `security_state`'s own
+  // answer, the one Chrome draws its omnibox lock from, narrowed to the four a
+  // chrome can draw. The empty string until the browser has said anything at
+  // all, which a chrome must not read as "secure".
+  //
+  // READ IT WITH `url` AND NOT ON ITS OWN. They arrive in one message from one
+  // entry so that they always describe the same page; a chrome pairing this
+  // with an address from anywhere else would be drawing a padlock beside an
+  // address it does not belong to.
+  //
+  // A DOMString rather than an IDL enum, which is the shape this would take in
+  // a standards-track API: an enum return type generates a file per enum into
+  // Blink's bindings, and this element deliberately adds none -- see
+  // `scripts/test-the-blink-module-declares-its-files.sh` for what a generated
+  // file costs to register in the fork.
+  readonly attribute DOMString security;
 };
