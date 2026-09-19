@@ -1,5 +1,5 @@
 import { Input as BaseInput } from "@base-ui/react/input";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ReactNode, Ref } from "react";
 import { css, cva, cx } from "../../styled-system/css";
 import type { ControlVariant } from "../../styled-system/recipes";
 import { control } from "../../styled-system/recipes";
@@ -18,6 +18,10 @@ export { SIZES, type Size } from "../control-sizes";
 type CommonProps = Partial<ControlVariant> & {
   clearable?: boolean | undefined;
   prefixIcon?: ReactNode | undefined;
+  // Narrower than the `Ref<HTMLElement>` base-ui's Input declares: this only
+  // ever draws an `<input>`, and a ref object is invariant in its element, so
+  // the wider type is what would force a cast to hand the element back.
+  ref?: Ref<HTMLInputElement> | undefined;
   rounded?: boolean | undefined;
   width?: number | undefined;
 };
@@ -41,7 +45,11 @@ export const Input = ({
   width,
   ...props
 }: Props) => {
-  const [inputRef, setInputRef] = useStableRef<HTMLInputElement>();
+  // The caller's ref as well as this input's own. The `ref` below is set
+  // after `props` is spread, so an input that did not pass it on here would
+  // replace the caller's ref with its own and hand the element back to
+  // nobody — see `useStableRef` for what that breaks.
+  const [inputRef, setInputRef] = useStableRef<HTMLInputElement>(props.ref);
   const { isEmpty, setValue } = useControlValue({
     defaultValue: props.defaultValue,
     value: props.value,

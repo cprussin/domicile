@@ -32,4 +32,20 @@ describe(Input, () => {
       expect(input).toHaveAttribute("autocomplete", "name");
     });
   });
+
+  describe("ref forwarding", () => {
+    it("gives the element it drew to a ref it is passed", () => {
+      const seen: (HTMLElement | null)[] = [];
+      render(
+        <Input
+          aria-label="Name"
+          ref={(element) => {
+            seen.push(element);
+          }}
+        />,
+      );
+
+      expect(seen[0]).toBe(screen.getByRole("textbox"));
+    });
+  });
 });

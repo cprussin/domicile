@@ -1,6 +1,6 @@
 import { Field as BaseField } from "@base-ui/react/field";
-import type { ComponentProps, ReactNode, Ref, RefCallback } from "react";
-import { useCallback, useLayoutEffect } from "react";
+import type { ComponentProps, ReactNode, Ref } from "react";
+import { useLayoutEffect } from "react";
 import { css, cva, cx } from "../../styled-system/css";
 import type { ControlVariant } from "../../styled-system/recipes";
 import { control } from "../../styled-system/recipes";
@@ -57,27 +57,15 @@ export const Textarea = ({
   width,
   ...props
 }: Props) => {
-  const [textareaRef, setTextareaRef] = useStableRef<HTMLTextAreaElement>();
+  // The caller's ref as well as this textarea's own, so consumers can drive
+  // the textarea imperatively (focus, selection, scroll) without losing the
+  // internal wiring that clear, autoSize and the resize handle read.
+  const [textareaRef, setTextareaRef] =
+    useStableRef<HTMLTextAreaElement>(externalRef);
   const { currentValue, isEmpty, setValue } = useControlValue({
     defaultValue: props.defaultValue,
     value: props.value,
   });
-
-  // Compose the internal ref (used for clear/resize-handle/autoSize) with
-  // a caller-supplied ref so consumers can drive the textarea imperatively
-  // (focus, selection, scroll, etc.) without losing the library's internal
-  // wiring.
-  const setCombinedRef = useCallback<RefCallback<HTMLTextAreaElement>>(
-    (el) => {
-      setTextareaRef(el);
-      if (typeof externalRef === "function") {
-        externalRef(el);
-      } else if (externalRef !== undefined && externalRef !== null) {
-        externalRef.current = el;
-      }
-    },
-    [externalRef, setTextareaRef],
-  );
 
   // Autosize: shrink to 0 to read the natural content height, then set
   // blockSize to that scrollHeight. Layout effect so the user never sees
@@ -142,7 +130,7 @@ export const Textarea = ({
             typeof BaseField.Control
           >["onChange"]
         }
-        ref={setCombinedRef as unknown as Ref<HTMLElement>}
+        ref={setTextareaRef as unknown as Ref<HTMLElement>}
         render={<textarea />}
         style={controlSizingStyle({
           // `autoSize` writes blockSize imperatively in the layout effect;
