@@ -458,13 +458,28 @@ describe("Shell", () => {
       expect(bar?.className).toContain(css({ textShadow: "textOverPhoto" }));
     });
 
-    it("lays a scrim behind itself so the text survives a bright wallpaper", () => {
+    it("hangs a scrim below itself so the text survives a bright wallpaper", () => {
       // The shadow is a hairline under each letter; a wallpaper that is white
-      // across the whole top of the screen needs the ground darkened too.
+      // across the whole top of the screen needs the ground darkened too. The
+      // scrim is deeper than the bar — a gradient that had to reach nothing by
+      // the bar's own edge would be at its weakest exactly where the text is —
+      // so it is a layer of its own that takes no pointer, rather than the
+      // bar's background.
       const { container } = renderShell();
 
       expect(container.querySelector("header")?.className).toContain(
-        css({ backgroundImage: "{gradients.scrimOverPhoto}" }),
+        css({
+          "&::before": {
+            backgroundImage: "{gradients.scrimOverPhoto}",
+            content: '""',
+            insetBlockEnd: -4,
+            insetBlockStart: 0,
+            insetInline: 0,
+            pointerEvents: "none",
+            position: "absolute",
+            zIndex: -1,
+          },
+        }),
       );
     });
 

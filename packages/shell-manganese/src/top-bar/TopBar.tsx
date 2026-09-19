@@ -46,10 +46,12 @@ type Props = {
  * that covers it is one the user put there: a float dragged up, or a window
  * filling the screen.
  *
- * **What it paints is a scrim.** Not a surface: a black gradient that fades
- * to nothing by the bar's own lower edge, so the bar still ends in the
- * wallpaper rather than against a line — and the white text has something
- * dark under it when the picture behind it is bright.
+ * **What it paints is a scrim.** Not a surface: a black gradient behind the
+ * text, hanging half the bar's height below the bar so it has room to fade to
+ * nothing — the bar still ends in the wallpaper rather than against a line,
+ * and the text's own row is in the dark part of the ramp rather than the
+ * thin end of it. It takes no pointer, so the stage under the overhang is
+ * still the stage.
  *
  * The clock is in the middle of the *bar* rather than in the middle of what
  * the workspaces and the charge leave, which is what the three columns are
@@ -86,11 +88,29 @@ const barStyles = grid({
   // their own color; this is what puts the workspace numbers on the same
   // footing as the text beside them.
   "& button": { color: "white" },
+  // THE SCRIM, and it hangs below the bar rather than filling it. A gradient
+  // inside the bar's own 32px has to be at its weakest at the lower edge and
+  // is therefore weakest a few pixels under the text, which is the half of
+  // the letter a bright photograph takes first. Given half the bar again to
+  // fade in, the text's row sits in the dark part and the band still ends in
+  // the wallpaper rather than against a line.
+  //
+  // A layer of its own rather than `backgroundImage` on the bar, because a
+  // background stops at the box. It takes no pointer: it hangs over the top
+  // of the stage, where the windows are, and a click there belongs to the
+  // window. `zIndex: -1` puts it under the bar's own text, which `isolation`
+  // below keeps from meaning "under the wallpaper".
+  "&::before": {
+    backgroundImage: "{gradients.scrimOverPhoto}",
+    content: '""',
+    insetBlockEnd: -4,
+    insetBlockStart: 0,
+    insetInline: 0,
+    pointerEvents: "none",
+    position: "absolute",
+    zIndex: -1,
+  },
   alignItems: "center",
-  // The scrim under the text, which is the bar's whole background: it fades
-  // out within the bar's own height, so there is no edge where it stops and
-  // the wallpaper carries on.
-  backgroundImage: "{gradients.scrimOverPhoto}",
   // White with a shadow under it, in both themes — `foreground` would not
   // do: it flips with the theme, and the wallpaper does not. The scrim
   // darkens the band and the shadow draws each letter off it; a picture
@@ -101,6 +121,11 @@ const barStyles = grid({
   gridTemplateColumns: "1fr auto 1fr",
   insetBlockStart: 0,
   insetInline: 0,
+  // What makes the scrim's `zIndex: -1` mean "behind this bar" rather than
+  // "behind the page": without a stacking context here, a negative index is
+  // resolved against the root, which paints it under the wallpaper — a scrim
+  // nobody can see, on a bar that looks exactly like one that has none.
+  isolation: "isolate",
   paddingInline: 2,
   position: "absolute",
   textShadow: "textOverPhoto",
