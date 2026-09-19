@@ -686,6 +686,14 @@ opener relationship and the target's name are not carried, and a form POSTed at
 a new target arrives as a GET of its action. A link is the case that survives
 whole, and a link is what this is for.
 
+**A link the page cannot follow itself needs nothing from you.** A
+`target="_top"` inside a frame from another site, a middle click, a
+`window.open` naming a context that exists — Blink hands each of those to the
+browser rather than performing it, and the engine now answers them on the
+guest: a navigation of the window it already has happens, and anything wanting
+a second window arrives as the event above. Your shell sees the first kind
+exactly as it sees any other link the page follows, which is to say not at all.
+
 ### What a guest still refuses
 
 Permissions and dialogs are answered by the default, which is no. Each is a

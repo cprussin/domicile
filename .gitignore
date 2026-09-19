@@ -31,3 +31,10 @@ styled-system/
 
 # Local tool state
 .claude/
+
+# Python
+#
+# The guards' fixtures are scripts rather than a package, but importing one to
+# check the pages it serves -- which is the only way to read them without
+# starting a browser -- leaves bytecode beside it.
+__pycache__
