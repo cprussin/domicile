@@ -27,7 +27,7 @@ Co-Authored-By: Connor Prussin <connor@prussin.net>
  2 files changed, 45 insertions(+), 1 deletion(-)
 
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index d4c5eee..3bac6e5 100644
+index d4c5eee5..3bac6e58 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -109,7 +109,7 @@ class OzonePlatformDrm : public OzonePlatform {
@@ -61,7 +61,7 @@ index d4c5eee..3bac6e5 100644
      return drm_device_connector_.get();
    }
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index d1ce2d9..4869265 100644
+index d1ce2d90..4869265c 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -5,6 +5,8 @@

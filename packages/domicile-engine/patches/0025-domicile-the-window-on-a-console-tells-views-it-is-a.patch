@@ -55,10 +55,13 @@ answers nothing either.
 WHAT THIS DOES NOT CLAIM. The gap is verified from the sources at the
 pin; that it is the whole of why this desktop answers no key is not, and
 the two log lines above are there to say so on the next run.
-
 ---
+ ui/ozone/platform/drm/host/drm_window_host.cc | 75 ++++++++++++++++++-
+ ui/ozone/platform/drm/host/drm_window_host.h  | 15 ++++
+ 2 files changed, 88 insertions(+), 2 deletions(-)
+
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index 831fe37..d010fb5 100644
+index 831fe37f..d010fb50 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -4,7 +4,10 @@
@@ -173,7 +176,7 @@ index 831fe37..d010fb5 100644
      // Make the event location relative to this window's origin.
      LocatedEvent* located_event = event->AsLocatedEvent();
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
-index 9163424..a0d9a09 100644
+index 91634249..a0d9a09c 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.h
 +++ b/ui/ozone/platform/drm/host/drm_window_host.h
 @@ -111,6 +111,11 @@ class DrmWindowHost : public PlatformWindow,
