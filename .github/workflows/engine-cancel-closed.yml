@@ -1,0 +1,121 @@
+name: Cancel a closed pull request's queued engine runs
+
+# `crux` has one job slot, and GitHub does not care whether the pull request
+# that queued a run still exists.
+#
+# WHAT THIS IS FOR, measured rather than imagined: on 2026-09-19 the slot spent
+# about an hour building two runs whose pull requests had merged hours earlier
+# -- #460's own pre-merge head and #461's -- while three open pull requests sat
+# behind them in the queue. Neither result could change anything: both branches
+# were already in main, and main's own push runs were queued separately.
+#
+# IT CANCELS ONLY RUNS THAT NEVER STARTED, and that restriction is the whole
+# design rather than a detail. A killed `autoninja` leaves a half-linked
+# out/Domicile that the next run inherits, and the failure reads as a code
+# error rather than an interrupted build -- which is why every crux workflow
+# carries `cancel-in-progress: false` and why scripts/test-engine-concurrency.sh
+# asserts it. This must not put that failure back by another door, so the
+# decision lives in .github/scripts/crux-stale-runs.sh, where
+# scripts/test-crux-stale-runs.sh can feed it a started run and watch it
+# refuse.
+#
+# THE RACE IS REAL AND IT IS NARROW, and it is worth writing down rather than
+# discovering. A run this reads as `queued` can be handed a runner in the
+# moment between the listing and the cancel, and the cancel would then land on
+# a job that has started. Two things bound the damage: the status is read again
+# immediately before each cancel, which narrows the window to about a second,
+# and a job that young has not reached `autoninja` -- it is still in
+# `actions/checkout`, and the tree lock it takes a step later is dropped by an
+# `if: always()` step, which GitHub runs on a canceled job too. What is left is
+# a wasted checkout.
+#
+# On the pull request, not on the merge: `pull_request: closed` fires for a
+# merged pull request and for an abandoned one alike, and both leave the same
+# useless runs behind.
+on:
+  pull_request:
+    types: [closed]
+
+# Per pull request. Two closes of the same one are the same work, and the
+# second has nothing left to find.
+concurrency:
+  group: engine-cancel-closed-${{ github.event.number }}
+  cancel-in-progress: false
+
+permissions:
+  # To list the runs and to cancel them. Nothing else.
+  actions: write
+
+jobs:
+  cancel:
+    # Hosted, deliberately: this must never wait for the machine whose queue it
+    # exists to clear.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cancel what this branch left waiting for crux
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API: https://api.github.com/repos/${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          api() { curl -sS -f -H "Authorization: Bearer $GH_TOKEN" \
+                    -H "Accept: application/vnd.github+json" "$@"; }
+
+          # By branch, so the listing is small and already close to the answer;
+          # the filter decides the rest. 100 is well past the number of runs one
+          # branch accumulates, and a branch with more than that has a problem
+          # this workflow is not going to fix.
+          runs="$(api "$API/actions/runs?branch=$BRANCH&per_page=100")"
+
+          stale="$(printf '%s' "$runs" | .github/scripts/crux-stale-runs.sh "$BRANCH")"
+          # Which is also the whole of what a fork's pull request does here. A
+          # `pull_request` event from a fork carries a read-only token, so the
+          # cancel below would answer 403 -- but a fork never has a crux run to
+          # cancel in the first place, because those need the approval gate
+          # described in engine.yml. So this returns before the token matters.
+          [ -n "$stale" ] || { echo "nothing of $BRANCH's is waiting for crux"; exit 0; }
+
+          echo "$BRANCH is closed; these of its runs never started:"
+          printf '%s\n' "$stale" | sed 's/^/  run /'
+
+          printf '%s\n' "$stale" | while IFS= read -r id; do
+            [ -n "$id" ] || continue
+
+            # READ THE STATUS AGAIN, IMMEDIATELY BEFORE CANCELING. The listing
+            # above is a snapshot, and the one transition that matters --
+            # queued to in_progress -- can happen inside it. This is what keeps
+            # a cancel off a job that has since been handed the machine.
+            now="$(api "$API/actions/runs/$id" | jq -r '.status')"
+            case "$now" in
+              (queued|pending)
+                # BY STATUS CODE, NOT BY SUCCESS OR FAILURE. 409 is the one
+                # refusal that is not a problem -- it means the run resolved
+                # itself while this was deciding, which is the outcome this
+                # wanted anyway. Everything else is: a 403 is a token without
+                # `actions: write`, and a version of this that treated every
+                # refusal as "already ended" would report that as a clean run
+                # forever while canceling nothing.
+                code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+                          -H "Authorization: Bearer $GH_TOKEN" \
+                          -H "Accept: application/vnd.github+json" \
+                          "$API/actions/runs/$id/cancel")"
+                case "$code" in
+                  (202) echo "canceled run $id" ;;
+                  (409) echo "run $id ended on its own while this decided" ;;
+                  (*)
+                    echo "::error::canceling run $id answered HTTP $code" >&2
+                    exit 1
+                    ;;
+                esac
+                ;;
+              (*)
+                echo "run $id is '$now' now, not waiting any more — left alone"
+                ;;
+            esac
+          done
