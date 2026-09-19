@@ -129,6 +129,7 @@ work on it, and carry no authority level.
 
 | Doc | Covers |
 |---|---|
+| [/docs/RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md) | How to run one of the desktops the flake ships: a window inside a Wayland session or the screen on a bare tty, the engine the flake pins, launching a client into the desktop, and the home-manager module that describes a desk on NixOS. |
 | [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | How to write a shell that lives outside this repo: that a shell is one built module `domicile` is pointed at, the document Domicile writes rather than the shell, the config a shell owns, why there is nothing to await, who gets the keyboard, the browser window `<webview>` makes and the keyboard it has to hand back, and the bundling rules that fail quietly. Read it before changing anything a shell can see — the module's name, the document, the SDK's public surface — because it is the contract those changes break. Its worked example is `examples/minimal-shell`. |
 
 ## Checking your work
