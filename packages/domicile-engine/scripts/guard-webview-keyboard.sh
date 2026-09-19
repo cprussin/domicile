@@ -227,8 +227,23 @@ wait_for_line "$TRIES" "GUARD claimed" "$ENGINE_LOG" || {
 echo "the shell claimed Alt+Tab, showing a <$KIND>"
 
 # 4. There has to be a page in the window before any of this means anything.
-wait_for_line "$TRIES" "GUARD guest-loaded" "$ENGINE_LOG" ||
-  echo "nothing ever loaded in the window" >&2
+#
+#    NOT WAITED FOR IN THE CONTROL, and that is not a shortcut. The control
+#    replaces the <webview> with an <iframe>, which has no guest -- and
+#    `GUARD guest-loaded` comes from the guest page's own console. So the
+#    control waits the full `$TRIES` for a line its own setup removed, and
+#    then does not read the result: the verdict below reaches the `NEGATIVE`
+#    branch before it ever consults `SAW_PAGE`. Ninety seconds of a 1m45 step,
+#    measured on engine run 35496858205, spent establishing nothing.
+#
+#    The readings the control DOES rest on are waited for on their own: the
+#    claim at step 3 above and the focus at step 6 below, both of which an
+#    <iframe> reaches exactly as a <webview> does. That is the point of the
+#    control.
+if [ "$NEGATIVE" != "1" ]; then
+  wait_for_line "$TRIES" "GUARD guest-loaded" "$ENGINE_LOG" ||
+    echo "nothing ever loaded in the window" >&2
+fi
 
 # 5. THE BEFORE. A key while the shell still has the keyboard, which the shell's
 #    own document must report — and which is also what hands the window the

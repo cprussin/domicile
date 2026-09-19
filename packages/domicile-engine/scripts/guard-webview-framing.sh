@@ -63,6 +63,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-control-budget.sh
+. "$SCRIPTS/lib-control-budget.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -223,9 +225,30 @@ echo "serving a page that refuses framing at $SITE/refuses"
 #    because that is what can frame an http page, which is the whole of what
 #    the old control got wrong.
 if [ "$NEGATIVE" = "1" ]; then
+  # THE TWO LEGS COST DIFFERENT THINGS, and only one of them is waiting for an
+  # absence. `permitted` is looking for a color that arrives, so the probe
+  # stops when it does. `refused` is looking for one that must not, so the
+  # probe has nothing to stop it and runs out `--for-seconds` in full -- which
+  # is the whole of the 1m05 this control was measured at against the guard's
+  # 3s on engine run 35496858205.
+  #
+  # The first leg is the measurement for the second. Same page server, same
+  # browser, same machine, seconds apart, and it is the same question asked in
+  # the direction that can answer: how long does framing something take to show
+  # up here? A multiple of that is how long the other leg has to watch before
+  # its silence means anything.
+  LEG_STARTED="$(date +%s)"
   measure permitted "$SITE/frames?src=/permits"
   PERMITTED_STATUS=$?
-  measure refused "$SITE/frames?src=/refuses"
+
+  # Only when it worked: a permitted leg that failed did not measure how long
+  # framing takes, it measured how long this script waits.
+  if [ "$PERMITTED_STATUS" -eq 0 ]; then
+    budget_note webview-framing "$(($(date +%s) - LEG_STARTED))"
+  fi
+
+  FOR_SECONDS="$(budget_for webview-framing "$FOR_SECONDS")" \
+    measure refused "$SITE/frames?src=/refuses"
   REFUSED_STATUS=$?
   MEASURED="control $PERMITTED_STATUS $REFUSED_STATUS"
 else
