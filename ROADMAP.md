@@ -64,6 +64,7 @@ The wire protocol is at `PROTOCOL_VERSION = 1`.
 | What the browser-to-renderer hop costs | Every `ControlChannelClient` method carries a `mojo_base.mojom.TimeTicks arrival`, stamped once per socket read rather than per parsed message — a read can carry several, and stamping at parse time would price the JSON parse into the second and later ones, so a batch read would report a hop that grows with position in the batch. Converted through `WindowPerformance`, so `event.timeStamp - event.arrival` is the stage and not arithmetic in the renderer. Measured at 0.300 ms and 0.200 ms. **On the socket path only**: `ShortcutPressed` and `Modifiers` also have a registry path stamped elsewhere that nothing measures, and `Displays` dispatches a bare `Event` and is deliberately unstamped |
 | A client's dmabuf imports on AMD | Patch 0005, confirmed on a Radeon 890M on 2026-09-08: kitty survives being floated and resized, on the DCC modifier that used to be refused, with no `gbm_bo_import` failure in the run |
 | The desktop a user runs contains all of it | `packages/domicile-engine/engine-release.nix` pins the published engine; `nix run github:cprussin/domicile#manganese` runs it |
+| The engine a checkout pins runs the compositor that checkout builds | `.github/workflows/pinned-engine.yml`, on every pull request and every push to main. `nix build .#engine` fetches the pinned tarball at the pinned hash, `cargo build -p domicile-compositor` builds the other half from the checkout, and `guard-client-window.sh` puts a real Wayland client's window on the page through the pair. Green on #439's repin to `engine-af499ce`. It exists because #411 was green on every check while main would not start — see *A desktop on a tty* for the shape of that failure and for the one thing about this guard that is still unproven |
 | A desktop on a bare tty can be used | `engine-f38ef3f`, on real hardware on a laptop panel, with no `OZONE=drm` and no trip to another console. `platform()` chooses `drm` off `XDG_VTNR`, the DRM thread confirms a modeset on the panel's own mode, the desktop draws, keys reach the shell, an arrow is drawn on the cursor plane, the trackpad moves it, and a click lands in the page under it. kitty launches. Six ash-only gaps stood between the lit screen and that — see *A desktop on a tty* below |
 
 ---
@@ -171,18 +172,28 @@ decides whether an item is waiting or workable.
    `packages/domicile-engine/**` plus this workflow and its scripts, less that
    package's markdown and its release pin.
    `packages/chrome-sdk/**` is not in it -- so the deletion, which is entirely
-   inside the SDK, would merge with the unit tests and nothing that puts a
-   window on a screen. That is the same hole the missing `GetElementType`
-   override went through, described three paragraphs up, and it is worth
-   noticing *before* rather than after this time.
+   inside the SDK, would merge on the unit tests and nothing that drives the
+   native tag. That is the same hole the missing `GetElementType` override went
+   through, described three paragraphs up, and it is worth noticing *before*
+   rather than after this time.
 
-   Three ways out, and the choice is a cost decision rather than a technical
-   one. Add `packages/chrome-sdk/**` to the filter and every SDK change queues
-   behind the most expensive job in the repository, which can be hours. Make
-   the shell guard dispatchable on its own, the way `engine-drm-probe.yml`
-   already is for the same reason. Or run it deliberately once, against the
+   **`pinned-engine.yml` narrows this without closing it.** It runs on every
+   pull request with no `paths:` filter at all, so an SDK change does now reach
+   a job that puts a real client's window on a page — but through
+   `spike-page.html`, which embeds with `canvas.embedExternalSurface`. So it
+   would catch the compositor-to-engine half breaking and would *not* have
+   caught the missing override, which is the failure mode this item is about.
+
+   Four ways out, and the choice is a cost decision rather than a technical one.
+   Add `packages/chrome-sdk/**` to `engine.yml`'s filter and every SDK change
+   queues behind the most expensive job in the repository, which can be hours.
+   Make the shell guard dispatchable on its own, the way `engine-drm-probe.yml`
+   already is for the same reason. Give `pinned-engine.yml` a shell-guard step:
+   it already runs unfiltered, already holds `crux` for about two minutes, and
+   already has the pinned engine unpacked — the marginal cost is the guard
+   itself rather than a build. Or run it deliberately once, against the
    deletion, and merge on that. The second is the shape the repository has
-   already chosen once; the first is the only one that keeps working when
+   already chosen once; the first and third are the ones that keep working when
    somebody forgets.
 
    Two things are deliberately still on the canvas path and neither blocks the
@@ -257,7 +268,8 @@ decides whether an item is waiting or workable.
      reported going down, so the relight exists to get past the hotplug guard
      that is right about everything else. **No runner suspends**, so what CI
      covers is the reading of the signal and the relight; the lid itself is
-     still unproven.
+     still unproven. It reaches a machine that can close one as of #439, which
+     pinned `engine-af499ce` — so the next step is a run rather than a change.
    - **A component that dies takes the windows with it, though no longer the
      session.** `domicile-launch`'s `restart` stands a whole new desktop up when
      either component stops — backing off 1s, 2s, 4s, 8s and giving up after
@@ -336,21 +348,46 @@ decides whether an item is waiting or workable.
    help" to, and exactly the wall a wake from suspend hits. Patch `0034`
    answers a take that succeeded with `DrmModeset::Relight`. The rest of the
    round trip still rests on source read at the pin and on unit tests —
-   `DrmInputDevicesTest` 22 cases, `DrmVtSwitcherTest` 18, `DrmMasterTest` 7,
-   `DrmModesetTest` 16, `DrmScreenTest` 18, `DrmFullscreenTest` 4,
-   `DrmCursorFactoryTest` 4 — plus the shell-group guards that read the series
-   where a gtest cannot reach. `drm_logind_input.cc` talks to D-Bus and has no
+   `DrmScreenTest` 26 cases, `DrmModesetTest` 22, `DrmVtSwitcherTest` 18,
+   `DrmEdidSerialTest` 18, `DrmInputDevicesTest` 22, `DrmMasterTest` 7,
+   `DrmFullscreenTest` 4, `DrmCursorFactoryTest` 4, `DrmSleepTest` 2 — plus the
+   shell-group guards that read the series where a gtest cannot reach. Those are
+   the floors both `engine.yml` and `engine-drm-probe.yml` hold each suite to,
+   because a `--gtest_filter` matching nothing exits 0 and a suite that stopped
+   linking is otherwise a silent pass. `drm_logind_input.cc` talks to D-Bus and has no
    in-tree unit test by design; `scripts/test-input-comes-from-logind.sh` is
    what asserts that protocol.
 
-   **Nothing checks that the engine `main` pins satisfies the compositor `main`
-   builds.** #411 landed both halves of a display-protocol change — a `name` on
-   the C ABI record and a compositor that asserts it is non-null — and the pin
-   stayed on an engine that predates it, so the desktop aborted on startup with
-   a core dump and drew nothing. CI was green throughout: `nix-build` builds the
-   flake without running a desktop, and the engine guard runs the *freshly
-   built* engine, never the pinned one. A guard belongs here, and until there is
-   one a C ABI change is two merges, not one.
+   **What the engine `main` pins has to satisfy the compositor `main` builds,
+   and now something checks it.** #411 landed both halves of a display-protocol
+   change — a `name` on the C ABI record and a compositor that asserts it is
+   non-null — and the pin stayed on an engine that predates it, so the desktop
+   aborted on startup with a core dump and drew nothing. CI was green
+   throughout: `nix-build` builds the flake without running a desktop, and the
+   engine guard runs the *freshly built* engine, never the pinned one. Every
+   check looked at one half.
+
+   `.github/workflows/pinned-engine.yml` asks the question nothing was asking.
+   `nix build .#engine` — the `fetchurl` of the url and hash in
+   `engine-release.nix`, which is the binary a user gets rather than one built
+   here — then `cargo build -p domicile-compositor` from the checkout, then
+   `guard-client-window.sh` against that store path. Both halves in one process,
+   which is the only place this failure exists. **~2 minutes on `crux`**: no
+   Chromium tree, no tree lock, no `autoninja`, which is what makes it
+   affordable on a one-slot machine and why it is its own workflow rather than a
+   step behind the 27-minute one. Deliberately **no `paths:` filter** — three
+   separate things break this pair, and #411 moved two of them and left the pin
+   alone, so a filter keyed on `engine-release.nix` would skip exactly the
+   change that broke main. `scripts/test-the-pinned-engine-meets-the-compositor.sh`
+   asserts the job keeps being that job.
+
+   It has run green on a repin (#439, `engine-af499ce`), which is the pairing it
+   exists for. **What is still unproven is the red case**: no tree with #411's
+   ABI change and the pin reverted has been put through it, so the mechanism is
+   established from the struct layout — 40 bytes against 48, `name` at the
+   offset the old record's `x` and `y` occupy, both zero for a display at the
+   origin — rather than from a run that went red. A C ABI change is one merge
+   now; the guard catching it is one observation short of demonstrated.
 
    **The four root causes behind the lit screen are worth keeping**, because
    each was invisible in a log and three were reported as something else
@@ -596,11 +633,32 @@ No agent and no CI runner here can see one; `crux` has a card but no panel it
 can render to. A person with a laptop is the whole of this channel, so say
 which question a run would answer rather than guessing between two.
 
-- **Does a tty desktop take a keystroke?** The first question, because the last
-  hardware run lit the screen and was deaf. `engine-6ac6dbc` or later, on a
-  bare tty: a printable key in the shell, and `Ctrl+Alt+F<n>` away and back
-  with the keyboard still alive afterwards. That one run exercises `0020`,
-  `0022`, `0024` and `0019`'s drop at once.
+**Everything below wants `engine-af499ce` or later**, which is what
+`engine-release.nix` pins as of #439 — the first pin carrying `DrmSleep`. The
+question that used to head this list, *does a tty desktop take a keystroke*, is
+answered: keys reach the shell, an arrow is drawn, the trackpad moves it and a
+click lands in the page under it, all on hardware. See *What is proven* above.
+
+Three things Domicile now does that nobody has watched it do — two in the fork,
+one in the launcher. Each is one run, and each has a line to look for, so a run
+that fails says which half failed rather than "it did not work":
+
+- **Does the screen come back from a suspend?** Close the lid, open it. The two
+  failure shapes are distinguishable in `--vmodule=drm*=1`: no `the machine is
+  awake` line means `PrepareForSleep` never arrived and `DrmSleep` is not
+  subscribed; that line without a `configuring N display(s)` after it means the
+  relight ran and the modeset did not. This is the one that turns
+  `A-DESKTOP-ON-A-TTY.md`'s newest evidence row from *reasoned from logind's
+  sources* into a hardware row.
+- **Does the screen come back from a console switch?** `Ctrl+Alt+F<n>` away and
+  back. Before #435 this froze and then killed the GPU process fifteen seconds
+  later; `Relight` on a take that succeeded is the fix, and the same
+  `configuring N display(s)` line is the evidence. The keyboard surviving the
+  round trip is the older half of the same run.
+- **Does a dead component come back?** `pkill domicile-compositor`. Expect a new
+  desktop within a second or so and `starting the desktop again in 1s — that is
+  failure 1 of 5 in a row`; the windows will not come back, which is recorded
+  above as the part that is still missing rather than a fault in the restart.
 - The first real `./scripts/dev-shell.sh <name>`.
 - Anything about orientation, presentation, or what a display does with a
   buffer.
@@ -670,27 +728,36 @@ costs nothing.
   profile places them rather than the order the card enumerated them. There is
   still no mode field — the mode arrives with the monitor, so a profile's
   positions are sums of sizes it does not control.
-- **A rotated monitor is laid out rotated and still scans out the way it did.**
-  The transform reaches `wl_output`, `xdg_output` and the `DisplayInfo` the
-  chrome lays its `<Screen>` regions out from, and stops there:
-  `DisplayConfigurationParams` is `{id, origin, mode, enable_vrr}` and has no
-  field for a rotation.
+- **A rotated monitor is drawn rotated, and only glass can say which way.**
+  A profile's `transform` is applied, and a rotation is **painted rather than
+  modeset**: `DisplayConfigurationParams` is `{id, origin, mode, enable_vrr}` and
+  has no field for one, and ChromeOS does not use it either — it turns a screen
+  in the render tree, through `ash::RootWindowTransformer`. So the turn is CSS on
+  the window that covers the monitor (`translate(0, 2160px) rotate(-90deg)
+  scale(1.2)`), which is why it had to wait for one window per CRTC rather than
+  sit beside it. The scale in that transform is the same arithmetic — the window
+  is the mode in CSS pixels and the region is the logical box — and was a bug of
+  its own before it was one expression.
 
-  **A ROTATION IS PAINTED, NOT MODESET, AND THAT IS WHY THIS IS ORDERED
-  BEHIND THE NEXT ITEM.** This said the answer was `DisplayConfigurator` and
-  the 478 lines of `//ui/display/manager` this fork does not port. It is not:
-  `display_configurator.h` at the pin does not contain the string `rotat` at
-  all. ChromeOS turns a screen in the **render tree** — `RootWindowTransformer`
-  in `//ash/host`, whose `GetTransform` is documented as converting root
-  window DIP to host window coordinates and "normally includes rotation and
-  scaling". The scanout is never turned; what is drawn into it is.
+  `mode` and `transform` cross the ABI on every display because they are true of
+  the panel; `fills_the_window` is the claim that turns them into an instruction,
+  and `as_one_screen` is the only thing that sets it, so a nested desktop lays
+  out exactly as it did. The turn is a closed set in five places, checked for
+  membership *and order* by `scripts/test-display-transforms-agree.sh` — the
+  mojom enum is numbered by position, so two lists agreeing on membership and
+  disagreeing on order do not fail, they turn a monitor the wrong way.
 
-  So the shape of the fix is a transform on the window, not a field on the
-  modeset — and a transform belongs to one window, while one window today
-  covers a desk of several monitors that a profile may turn differently.
-  Doing this before the next item means rotating per-display inside a single
-  page, in coordinates that stop being the desktop's, and deleting it when
-  each display gets a window of its own. Hence the order.
+  **What is left is which way round the two quarter turns are.** `rotate-90`
+  names the turn the *content* takes, which is `wl_output`'s convention and the
+  config file's, and every list from `domicile-config` to `TURNS` in
+  `cover-the-window.ts` applies it as written — so the reading agrees with itself
+  all the way down and only a desk can say whether the reading was right.
+  Swapping two arms of one `switch` is the whole fix if it is wrong.
+
+  **And a client that pre-rotates its own buffer is still wrong**, which is a gap
+  rotation made reachable rather than one it caused: `wl_output.transform` invites
+  it and nothing reads `wl_surface.set_buffer_transform`. Nothing on this desk
+  does it, and the fix is in the dmabuf submit path rather than here.
 - **Every display has a window, and each one is told the display it covers.**
   `ScreenManager::FindWindowAt` binds a controller to a window only on an
   exact rectangle match, so one window cannot span two CRTCs — the engine
