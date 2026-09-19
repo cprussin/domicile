@@ -26,6 +26,7 @@
     "vite": "catalog:"
   },
   "exports": {
+    "./Autocomplete": "./src/Autocomplete/Autocomplete.tsx",
     "./Avatar": "./src/Avatar/Avatar.tsx",
     "./Button": "./src/Button/Button.tsx",
     "./Card": "./src/Card/Card.tsx",
@@ -36,6 +37,7 @@
     "./Input": "./src/Input/Input.tsx",
     "./Kbd": "./src/Kbd/Kbd.tsx",
     "./ModalDialog": "./src/ModalDialog/ModalDialog.tsx",
+    "./Popover": "./src/Popover/Popover.tsx",
     "./Provider": "./src/Provider/Provider.tsx",
     "./pandacss-preset": "./src/pandacss-preset.ts",
     "./Screen": "./src/Screen/Screen.tsx",

@@ -8,6 +8,9 @@ import type { Launch } from "./launch";
 import { launchFor } from "./launch";
 import { matching } from "./matching";
 
+/** What the box asks for, as its placeholder and as its accessible name. */
+const PROMPT = "Open a file, a URL, or search";
+
 type Props = {
   /** What there is to open, in the order the host answered. */
   files: readonly string[];
@@ -93,6 +96,11 @@ const Query = ({ files, onLaunch }: QueryProps) => {
         }
         aria-controls={listId}
         aria-expanded
+        // Named as well as placeheld, because it is no longer the only
+        // combobox a desktop can have on screen: a browser window's address
+        // bar is one too, and a placeholder is not an accessible name — it is
+        // gone the moment anything is typed.
+        aria-label={PROMPT}
         // The box is why the panel is up, and a launcher you have to click
         // into is a launcher that costs more than the terminal it replaces.
         autoFocus
@@ -125,7 +133,7 @@ const Query = ({ files, onLaunch }: QueryProps) => {
             }
           }
         }}
-        placeholder="Open a file, a URL, or search"
+        placeholder={PROMPT}
         role="combobox"
         value={query}
       />

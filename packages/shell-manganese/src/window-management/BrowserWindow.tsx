@@ -1,18 +1,10 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
-import { Button } from "@domicile/component-library/Button";
-import { Input } from "@domicile/component-library/Input";
-import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
-import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
-import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
-import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
-import { SpinnerGapIcon } from "@phosphor-icons/react/dist/ssr/SpinnerGap";
-import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
-import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
-import { flex, hstack } from "../../styled-system/patterns";
+import { flex } from "../../styled-system/patterns";
+import { AddressBar } from "./browser/AddressBar";
 import type { Rect } from "./rect";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
@@ -31,7 +23,6 @@ import {
   settlingStyles,
   windowStyles,
 } from "./window-styles";
-import { withScheme } from "./with-scheme";
 
 type Props = {
   /**
@@ -167,7 +158,18 @@ export const BrowserWindow = ({
   // it as it arrives — it is read inside the effects, where the render that
   // set it has already been committed.
   const element = useRef<HTMLElement>(null);
-  const [address, setAddress] = useState(src);
+  // Where the window was last sent, and everywhere it has been before that —
+  // the bar shows the one and suggests from the other. One piece of state
+  // rather than two, because there is no window whose address is not the last
+  // place it was sent, and a pair that could disagree is a pair that will.
+  //
+  // EVERYWHERE THE SHELL SENT IT is not everywhere it has been: the engine
+  // reports no address for a guest, so a link or a redirect followed inside
+  // the page is not on this list and cannot be. See ROADMAP.md.
+  const [history, setHistory] = useState<{
+    address: string;
+    visited: readonly string[];
+  }>({ address: src, visited: [src] });
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
   // Whether the focus arriving in the page is the focus this window is putting
@@ -285,16 +287,18 @@ export const BrowserWindow = ({
     }
   };
 
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
+  const navigate = (url: string) => {
     withView((loaded) => {
-      const url = withScheme(address);
       // The attribute rather than the property: `src` is reflected, so on the
       // engine the two are one operation, and the attribute is the half that
       // exists whatever this page is running on. On a browser with no
       // `<webview>` the property would be a value hung off an unknown element
       // and the DOM would go on saying the address the window opened at.
       loaded.setAttribute("src", url);
+      setHistory(({ visited }) => ({
+        address: url,
+        visited: [...visited, url],
+      }));
       onNavigate(url);
     });
   };
@@ -351,79 +355,26 @@ export const BrowserWindow = ({
           : { ...placedAt(rect, depth), ...scaledAbout(frame, rect) }
       }
     >
-      <form className={addressBarStyles} onSubmit={handleSubmit}>
-        <Button
-          // A control that would do nothing says so before it is pressed:
-          // `goBack()` on a history with nothing behind it is a no-op in the
-          // browser process, and a live-looking button is this window offering
-          // the user something it cannot do.
-          disabled={!canGoBack}
-          label="Back"
-          onClick={drive((loaded) => {
-            loaded.goBack();
-          })}
-          size="sm"
-          variant="ghost"
-        >
-          <CaretLeftIcon size={16} />
-        </Button>
-        <Button
-          disabled={!canGoForward}
-          label="Forward"
-          onClick={drive((loaded) => {
-            loaded.goForward();
-          })}
-          size="sm"
-          variant="ghost"
-        >
-          <CaretRightIcon size={16} />
-        </Button>
-        <Button
-          label="Stop"
-          onClick={drive((loaded) => {
-            loaded.stop();
-          })}
-          size="sm"
-          variant="ghost"
-        >
-          <XIcon size={16} />
-        </Button>
-        <Button
-          label="Reload"
-          onClick={drive((loaded) => {
-            loaded.reload();
-          })}
-          size="sm"
-          variant="ghost"
-        >
-          <ArrowClockwiseIcon size={16} />
-        </Button>
-        <div className={addressFieldStyles}>
-          <Input
-            aria-label="Address"
-            onChange={(event) => {
-              setAddress(event.target.value);
-            }}
-            // What the window is doing rather than what it is showing, which
-            // is the one thing an address bar can say about a page that has
-            // not arrived: where the guest actually went is the browser
-            // process's and does not reach this document, so a spinner is the
-            // whole of what there is to report — see ROADMAP.md.
-            prefixIcon={
-              loading ? (
-                <span aria-label="Loading" className={spinnerStyles} role="img">
-                  <SpinnerGapIcon size={14} />
-                </span>
-              ) : (
-                <GlobeSimpleIcon size={14} />
-              )
-            }
-            size="sm"
-            spellCheck={false}
-            value={address}
-          />
-        </div>
-      </form>
+      <AddressBar
+        address={history.address}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        loading={loading}
+        onBack={drive((loaded) => {
+          loaded.goBack();
+        })}
+        onForward={drive((loaded) => {
+          loaded.goForward();
+        })}
+        onNavigate={navigate}
+        onReload={drive((loaded) => {
+          loaded.reload();
+        })}
+        onStop={drive((loaded) => {
+          loaded.stop();
+        })}
+        visited={history.visited}
+      />
       <webview className={viewStyles} ref={setView} src={src} />
     </section>
   );
@@ -467,34 +418,6 @@ const browserStyles = flex({
   // rather than standing in for a client's surface, so it wants a ground.
   backgroundColor: "background",
   direction: "column",
-});
-
-const addressBarStyles = hstack({
-  backgroundColor: "card",
-  borderBlockEnd: "1px solid {colors.border}",
-  flex: "none",
-  gap: 1.5,
-  paddingBlock: 1.5,
-  paddingInline: 2,
-});
-
-// The turn that says a page is on its way, wrapped around the icon rather than
-// put on it: a `transform` does nothing to an inline box, which is what an
-// `<svg>` in a line of text is, and the icon is a third party's element either
-// way. No colour, so the spinner is drawn in whatever the globe it replaces was
-// — the control's own, inherited through the field's prefix stack. `spin` is
-// the preset's keyframe; one declared here would be a keyframe only this
-// shell's bundle had a rule for.
-const spinnerStyles = css({
-  animation: "spin {durations.spin} {easings.linear} infinite",
-  display: "inline-flex",
-});
-
-// The field grows into whatever the controls leave; the Input itself fills
-// whatever box it is given.
-const addressFieldStyles = css({
-  flexGrow: 1,
-  minInlineSize: 0,
 });
 
 // The view takes whatever height the address bar leaves, which it has to be
