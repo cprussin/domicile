@@ -47,7 +47,7 @@ evidence; the hardware check belongs on the reporter's machine.
  1 file changed, 43 insertions(+)
 
 diff --git a/ui/gfx/linux/gbm_wrapper.cc b/ui/gfx/linux/gbm_wrapper.cc
-index 6020a6081e961..2aea5aca7ae22 100644
+index 6020a6081e..2aea5aca7a 100644
 --- a/ui/gfx/linux/gbm_wrapper.cc
 +++ b/ui/gfx/linux/gbm_wrapper.cc
 @@ -461,6 +461,49 @@ class Device final : public ui::GbmDevice {

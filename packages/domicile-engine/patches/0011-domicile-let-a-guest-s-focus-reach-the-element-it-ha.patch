@@ -75,15 +75,15 @@ which is how the shell shipped a handler for an event nothing sent.
 See packages/shell-manganese/src/window-management/BrowserWindow.tsx in the Domicile repository
 for the other end of it.
 ---
- .../core/html/html_frame_element_base.h       |  7 +-
+ .../core/html/html_frame_element_base.h       |  9 ++-
  .../renderer/core/page/focus_controller.cc    | 68 +++++++++++++++++++
- 2 files changed, 74 insertions(+), 1 deletion(-)
+ 2 files changed, 76 insertions(+), 1 deletion(-)
 
 diff --git a/third_party/blink/renderer/core/html/html_frame_element_base.h b/third_party/blink/renderer/core/html/html_frame_element_base.h
-index 8828fbd9d7f84..8f3eeb569ac30 100644
+index e72ada052d..7beffa3ade 100644
 --- a/third_party/blink/renderer/core/html/html_frame_element_base.h
 +++ b/third_party/blink/renderer/core/html/html_frame_element_base.h
-@@ -60,6 +60,12 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {
+@@ -60,6 +60,14 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {
    void DidNotifySubtreeInsertionsToDocument() override;
    void AttachLayoutTree(AttachContext&) override;
  
@@ -91,21 +91,23 @@ index 8828fbd9d7f84..8f3eeb569ac30 100644
 +  // `final`, so that <webview> can hear its own focus and still hand the frame
 +  // the focus this does. A subclass may override a private virtual; it may not
 +  // call one. See core/html/domicile/html_web_view_element.h.
-+  void SetFocused(bool, mojom::blink::FocusType) override;
++  void SetFocused(bool,
++                  mojom::blink::FocusType,
++                  BlurEventBehavior) override;
 +
    void SetScrollbarMode(mojom::blink::ScrollbarMode);
    void SetMarginWidth(int);
    void SetMarginHeight(int);
-@@ -78,7 +84,6 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {
+@@ -78,7 +86,6 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {
      return FocusableState::kFocusable;
    }
    int DefaultTabIndex() const final;
--  void SetFocused(bool, mojom::blink::FocusType) final;
+-  void SetFocused(bool, mojom::blink::FocusType, BlurEventBehavior) final;
  
    bool IsURLAttribute(const Attribute&) const final;
    bool HasLegalLinkAttribute(const QualifiedName&) const final;
 diff --git a/third_party/blink/renderer/core/page/focus_controller.cc b/third_party/blink/renderer/core/page/focus_controller.cc
-index 864c2c8ebc7d4..d0799697a2247 100644
+index 864c2c8ebc..d0799697a2 100644
 --- a/third_party/blink/renderer/core/page/focus_controller.cc
 +++ b/third_party/blink/renderer/core/page/focus_controller.cc
 @@ -31,6 +31,7 @@

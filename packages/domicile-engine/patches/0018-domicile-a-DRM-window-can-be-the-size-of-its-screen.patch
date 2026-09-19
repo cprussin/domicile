@@ -61,7 +61,7 @@ handed rather than owns.
  3 files changed, 83 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 50dc4586f2a70..a16ef6c5e8b8b 100644
+index 50dc4586f2..a16ef6c5e8 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -82,7 +82,7 @@ index 50dc4586f2a70..a16ef6c5e8b8b 100644
      "domicile/drm_screen_unittest.cc",
      "domicile/drm_vt_switcher_unittest.cc",
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index 2585e47781d11..f55dc09465218 100644
+index 5a85c15dd0..9ef47dc514 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -9,12 +9,15 @@
@@ -186,7 +186,7 @@ index 2585e47781d11..f55dc09465218 100644
  
  void DrmWindowHost::Activate() {
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
-index 3250e6b7c9c23..916342495552f 100644
+index 3250e6b7c9..9163424955 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.h
 +++ b/ui/ozone/platform/drm/host/drm_window_host.h
 @@ -107,6 +107,10 @@ class DrmWindowHost : public PlatformWindow,

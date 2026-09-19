@@ -120,8 +120,14 @@ Routing is a runtime flag rather than a patch:
 `--enable-features=LibinputHandleTouchpad`. That keeps the decision
 where a person can see and change it.
 ---
+ tools/nix/make-shell-for-system.nix           |  7 +++
+ .../ozone/evdev/input_device_opener_evdev.cc  |  9 ++-
+ .../ozone/evdev/libinput_event_converter.cc   | 62 +++++++++++++++----
+ .../ozone/evdev/libinput_event_converter.h    | 36 ++++++++---
+ 4 files changed, 92 insertions(+), 22 deletions(-)
+
 diff --git a/tools/nix/make-shell-for-system.nix b/tools/nix/make-shell-for-system.nix
-index c87e1b5..69372e1 100644
+index c87e1b596f..69372e1486 100644
 --- a/tools/nix/make-shell-for-system.nix
 +++ b/tools/nix/make-shell-for-system.nix
 @@ -96,6 +96,13 @@ in
@@ -139,7 +145,7 @@ index c87e1b5..69372e1 100644
        libgbm # libgbm.so.1
        libdrm # libdrm.so.2
 diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.cc b/ui/events/ozone/evdev/input_device_opener_evdev.cc
-index e9b64c7..93c5dd1 100644
+index e9b64c7d7d..93c5dd1f26 100644
 --- a/ui/events/ozone/evdev/input_device_opener_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_opener_evdev.cc
 @@ -48,8 +48,13 @@ std::unique_ptr<EventConverterEvdev> CreateConverter(
@@ -159,7 +165,7 @@ index e9b64c7..93c5dd1 100644
  #endif
  
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index cfe335e..160a98c 100644
+index cfe335e2ae..160a98cc70 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -4,11 +4,15 @@
@@ -293,7 +299,7 @@ index cfe335e..160a98c 100644
      LOG(ERROR) << "LibInputContext::Create failed";
      return nullptr;
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.h b/ui/events/ozone/evdev/libinput_event_converter.h
-index c030a34..9a9c2c0 100644
+index c030a344c4..9a9c2c02e6 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.h
 +++ b/ui/events/ozone/evdev/libinput_event_converter.h
 @@ -7,9 +7,12 @@
@@ -386,6 +392,3 @@ index c030a34..9a9c2c0 100644
  
    const bool has_keyboard_;
    const bool has_mouse_;
--- 
-2.54.0
-

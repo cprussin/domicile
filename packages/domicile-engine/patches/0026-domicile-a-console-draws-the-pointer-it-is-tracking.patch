@@ -79,10 +79,13 @@ project on any machine is `drmModeSetCursor` with a real buffer --
 `crux` has no panel. If a pointer still does not draw after this, the
 cursor plane is the next thing to look at and
 `crtc_controller.cc:86`'s `PLOG` is the line that will say so.
-
 ---
+ ui/ozone/platform/drm/BUILD.gn              |  3 +++
+ ui/ozone/platform/drm/ozone_platform_drm.cc | 15 ++++++++++++++-
+ 2 files changed, 17 insertions(+), 1 deletion(-)
+
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 303195b..07f08aa 100644
+index 303195bef4..07f08aab36 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -103,7 +106,7 @@ index 303195b..07f08aa 100644
      "domicile/drm_input_devices_unittest.cc",
      "domicile/drm_master_unittest.cc",
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index dff327e..d4c5eee 100644
+index dff327ec92..d4c5eee580 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -46,6 +46,7 @@

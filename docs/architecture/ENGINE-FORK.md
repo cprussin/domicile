@@ -1243,15 +1243,28 @@ under `XDG_RUNTIME_DIR`, which is mode 700 and the user's.
   not changed is that it is additive and its deps run one way, from Chromium's
   targets into `//components/domicile:*`.
 
-  **The rebase number is still not measured** — `CHROMIUM_PIN` has not moved
-  since the series was written, so nothing has rebased. Moving it no longer
-  needs anybody on `crux`: the engine workflows fetch the revision and
-  `gclient sync` the checkout onto it themselves, so a repin is a one-line pull
-  request and the rebase cost is whatever its engine job reports. See
-  `packages/domicile-engine/README.md`'s *Moving the pin*. But it is now clear it
-  will be upstream's number rather than the fork's: whatever a six-week
-  upstream diff costs to rebuild, carrying this adds seconds to it. This repo's
-  CI still will not carry either.
+  **The rebase number, measured once.** The first roll was three weeks of
+  upstream — `bbbfd22` (2026-08-29) to `3d77360` — and it cost **three of
+  thirty-five patches**:
+
+  | Patch | What upstream moved | What it took |
+  |---|---|---|
+  | `0001` | renamed `session_storage_namespace_impl` to `..._handle_impl` in `//content/browser`'s source list | keep their spelling, re-sort ours beside it |
+  | `0007` | added `kHTMLPersistentWidgetElement` to the `HTMLFrameOwnerElement` fall-through in `StyleAdjuster` | keep both case labels |
+  | `0011` | gave `Element::SetFocused` a third argument, `BlurEventBehavior` | override the new virtual and forward it — **and in `src/` too**, where `<webview>`'s own override had the old signature |
+
+  The other thirty-two applied with `git am -3` untouched, which is the
+  additive design paying out: the twenty-four DRM patches, the ones that edit
+  most of Chromium's own files, took nothing. **The one to learn from is
+  `0011`**: a signature change reaches `src/` as well as `patches/`, and `src/`
+  is a copy that no `git am` will ever reject. A roll that only counts
+  rejected hunks will miss it and fail at the compiler instead.
+
+  Moving the pin no longer needs anybody on `crux`: the engine workflows fetch
+  the revision and `gclient sync` the checkout onto it themselves, so a repin
+  is a pull request. See `packages/domicile-engine/README.md`'s *Moving the
+  pin*. The rebuild cost is still upstream's rather than the fork's: whatever a
+  three-week upstream diff costs to rebuild, carrying this adds seconds to it.
 - **Nothing invalidates a renderer's token when a producer goes away.** The map
   above is keyed on an app id, and app ids are minted from a counter that
   starts over when the compositor restarts. So a compositor restarting under a

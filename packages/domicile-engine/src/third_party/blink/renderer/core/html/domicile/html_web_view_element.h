@@ -184,7 +184,9 @@ class CORE_EXPORT HTMLWebViewElement final
    * may not call one, and the base's own work -- handing the content frame the
    * focus -- still has to happen.
    */
-  void SetFocused(bool received, mojom::blink::FocusType) override;
+  void SetFocused(bool received,
+                  mojom::blink::FocusType,
+                  BlurEventBehavior) override;
 
   /**
    * The dispatch itself, and it is synchronous. Two earlier shapes deferred it
