@@ -742,6 +742,31 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/guard-webview-new-window.sh "$CHROMIUM"
 
+      # And the other half of what a link can ask for: a navigation the page's
+      # own renderer cannot perform. A link in a frame from another site,
+      # targeting the window around it, is handed to the browser -- and
+      # content's default delegate answers it by doing nothing at all, which is
+      # a click with no effect and no error. The guard clicks one and reads the
+      # engine's own line for the routing as well as the page that arrives, so
+      # a frame that turned out to be same-process fails rather than passes.
+      - name: A link a browser window's page cannot follow by itself
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-routed-link.sh "$CHROMIUM"
+
+      # Its control: the other half of the same framed page, an ordinary link
+      # that navigates the frame it is in. It must leave the window where it was
+      # and ask the browser for nothing -- a run where it moves the window says
+      # the claim's run was measuring this guest sending every link to the top.
+      - name: The routed-link guard is looking at the link's target
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-routed-link.sh "$CHROMIUM"
+
       # REQUIREMENT 2, WHICH NOTHING HAS RUN SINCE IT WAS WRITTEN. An <app> has
       # to behave like any other replaced element, and `guard-css-and-resize.sh` is what
       # measures that: six CSS properties applied to an <app> and to an

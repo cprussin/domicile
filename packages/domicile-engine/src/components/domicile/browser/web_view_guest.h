@@ -203,6 +203,38 @@ class WebViewGuest : public mojom::WebViewGuest,
       const content::StoragePartitionConfig& partition_config,
       content::SessionStorageNamespace* session_storage_namespace) override;
 
+  // A NAVIGATION THE PAGE COULD NOT PERFORM ITSELF, handed to the browser to
+  // do on its behalf.
+  //
+  // Not every navigation a page asks for is its own renderer's to make. A link
+  // inside a frame from another site lives in another process, and
+  // `target="_top"` asks it to navigate the page around it -- which it cannot
+  // touch. Blink hands that to the browser, which arrives here. The same call
+  // carries a middle or Ctrl click, and a `window.open` naming a context that
+  // already exists.
+  //
+  // CONTENT'S DEFAULT IS TO DO NOTHING AND RETURN NULL, which is why this is
+  // here at all: for as long as it was not overridden, every one of those was a
+  // click that did nothing whatsoever -- no window, no error, nothing in any
+  // page to notice. Sign-in flows are full of them, which is how it was found.
+  //
+  // A CURRENT-TAB DISPOSITION IS THIS GUEST'S TO PERFORM, and it performs it:
+  // the address goes to the guest's own NavigationController, which is the
+  // thing the page was asking to move. Everything that asks for a SECOND window
+  // is reported to the shell instead, exactly as CreateCustomWebContents does
+  // -- see ReportNewWindow.
+  //
+  // WHAT THE SHELL IS NOT TOLD is that the window went somewhere: an address
+  // bar still shows where the shell SENT the window rather than where its page
+  // then went, which is ROADMAP.md's standing gap about the address bar and not
+  // this one. Nothing here makes it worse; a routed navigation is exactly as
+  // invisible as a link the page followed by itself.
+  content::WebContents* OpenURLFromTab(
+      content::WebContents* source,
+      const content::OpenURLParams& params,
+      base::OnceCallback<void(content::NavigationHandle&)>
+          navigation_handle_callback) override;
+
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;
 
@@ -210,6 +242,16 @@ class WebViewGuest : public mojom::WebViewGuest,
   WebViewGuest(content::RenderFrameHost& owner,
                mojo::PendingReceiver<mojom::WebViewGuest> receiver,
                mojo::PendingRemote<mojom::WebViewGuestClient> client);
+
+  // Tell the element a page asked for a window of its own, at `target_url`.
+  //
+  // ONE PLACE, because two different questions arrive at the same answer: a
+  // page asking content to CREATE a window (CreateCustomWebContents) and a
+  // navigation routed here with a disposition that wants one (OpenURLFromTab).
+  // Both are refused in this process and both are the shell's to open, so the
+  // rule about what is worth reporting -- an address, and never a window with
+  // none -- is written once.
+  void ReportNewWindow(const GURL& target_url);
 
   // Tell the element what back and forward can do, if it has changed.
   //

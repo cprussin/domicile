@@ -10,15 +10,19 @@
 
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/page_navigator.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/base/window_open_disposition.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
@@ -370,17 +374,6 @@ content::WebContents* WebViewGuest::CreateCustomWebContents(
     const blink::mojom::WindowFeatures& window_features,
     const content::StoragePartitionConfig& partition_config,
     content::SessionStorageNamespace* session_storage_namespace) {
-  // AN ADDRESS OR NOTHING, and the invalid case is the one to say out loud: a
-  // `window.open()` with no url asks for a handle to write a document into,
-  // which is precisely what a window the shell navigates to cannot be. Sending
-  // it anyway would open a browser window at nothing, in answer to a script
-  // that is about to write into a handle it did not get.
-  if (!target_url.is_valid()) {
-    LOG(WARNING) << "domicile: a <webview>'s page asked for a window with no "
-                    "address to open; refused, and the shell is not told.";
-    return nullptr;
-  }
-
   // NOT THE WINDOW, WHICH THIS CANNOT MAKE: a guest with no SiteInstance of its
   // own is what keeps the user logged in -- see the class comment -- and
   // content CHECKs that pair in WebContentsImpl::CreateNewWindow. So the window
@@ -391,17 +384,112 @@ content::WebContents* WebViewGuest::CreateCustomWebContents(
   // decision the class makes about everything else an embedder is asked: a
   // Domicile shell has one shape of browser window and lays it out itself, so a
   // popup's requested size is an answer to a question its desktop does not ask.
+  ReportNewWindow(target_url);
+  return nullptr;
+}
+
+content::WebContents* WebViewGuest::OpenURLFromTab(
+    content::WebContents* source,
+    const content::OpenURLParams& params,
+    base::OnceCallback<void(content::NavigationHandle&)>
+        navigation_handle_callback) {
+  // The same CHECK the four controls make: this object is destroyed with the
+  // guest's WebContents, so there is no moment at which content can call this
+  // delegate and the WebContents be gone.
+  CHECK(guest_contents_);
+
+  // `guest_contents_` RATHER THAN `source`, which is the same object here and
+  // says less: this delegate is set on one WebContents and only that one can
+  // reach it, so naming the guest says which page is being navigated where the
+  // parameter only says "whoever called".
+  switch (params.disposition) {
+    case WindowOpenDisposition::CURRENT_TAB: {
+      // THE PAGE THE FRAME COULD NOT REACH, reached. LoadURLParams carries the
+      // referrer, the transition, the POST body and the initiator origin across
+      // from what the renderer asked for, which is what keeps this a
+      // continuation of the navigation rather than a fresh one at the same
+      // address.
+      //
+      // Said BEFORE the load rather than after, so the line means "the browser
+      // was asked" and nothing more: whether the page then arrives is the other
+      // half of the claim and is read from the page itself.
+      // `guard-webview-routed-link.sh` greps for this, and it is what tells a
+      // navigation this delegate routed from one Blink retargeted inside a
+      // single process -- which moves the window just the same and measures
+      // nothing.
+      LOG(INFO) << "domicile: a <webview> followed a link its page could not "
+                   "follow itself, to "
+                << params.url.possibly_invalid_spec();
+
+      base::WeakPtr<content::NavigationHandle> navigation =
+          guest_contents_->GetController().LoadURLWithParams(
+              content::NavigationController::LoadURLParams(params));
+
+      // The callback is content's way of handing the caller the navigation it
+      // just asked for, and a null handle is an ordinary answer rather than a
+      // failure: a navigation the controller refused -- an unsupported scheme,
+      // a URL a renderer may not ask for -- never starts one.
+      if (navigation_handle_callback && navigation) {
+        std::move(navigation_handle_callback).Run(*navigation);
+      }
+      return guest_contents_;
+    }
+
+    case WindowOpenDisposition::NEW_FOREGROUND_TAB:
+    case WindowOpenDisposition::NEW_BACKGROUND_TAB:
+    case WindowOpenDisposition::NEW_POPUP:
+    case WindowOpenDisposition::NEW_WINDOW: {
+      // A SECOND WINDOW, WHICH IS THE SHELL'S, and the same answer
+      // CreateCustomWebContents gives -- this is the other door into it. A
+      // middle click and a Ctrl click arrive here rather than there, so a
+      // desktop that answered only one of the two would open a window for a
+      // `target="_blank"` and do nothing for the same link middle-clicked.
+      ReportNewWindow(params.url);
+      return nullptr;
+    }
+
+    default: {
+      // EVERYTHING ELSE IS REFUSED AND SAID OUT LOUD. Saving to disk, a
+      // singleton tab, a switch to a tab that exists, an off-the-record window:
+      // each is a piece of browser UI this desktop does not have, and a silent
+      // return here is exactly the failure this whole override exists to undo.
+      //
+      // A `default` rather than an arm each, deliberately: this is a
+      // //ui/base enum shared with all of Chromium, and a value added upstream
+      // would turn an exhaustive switch into a build failure on a rebase for a
+      // case the fork has no opinion about. The ones this desktop answers are
+      // written out above; the rest are one sentence.
+      LOG(WARNING) << "domicile: a <webview> refused a navigation to "
+                   << params.url.possibly_invalid_spec()
+                   << " asked for with a disposition a browser window has no "
+                      "answer for: "
+                   << static_cast<int>(params.disposition);
+      return nullptr;
+    }
+  }
+}
+
+void WebViewGuest::ReportNewWindow(const GURL& target_url) {
+  // AN ADDRESS OR NOTHING, and the invalid case is the one to say out loud: a
+  // `window.open()` with no url asks for a handle to write a document into,
+  // which is precisely what a window the shell navigates to cannot be. Sending
+  // it anyway would open a browser window at nothing, in answer to a script
+  // that is about to write into a handle it did not get.
+  if (!target_url.is_valid()) {
+    LOG(WARNING) << "domicile: a <webview>'s page asked for a window with no "
+                    "address to open; refused, and the shell is not told.";
+    return;
+  }
+
   client_->NewWindowRequested(target_url);
 
-  // The line stays a warning rather than becoming an info, because a refusal is
-  // still what happened here: what the user gets is a window the shell opened
-  // at this address, not the window the page asked for. A run where the two
-  // differ -- an opener that was needed, a POST that became a GET -- starts
-  // here.
+  // A warning rather than an info, because a refusal is still what happened:
+  // what the user gets is a window the shell opened at this address, not the
+  // window the page asked for. A run where the two differ -- an opener that was
+  // needed, a POST that became a GET -- starts here.
   LOG(WARNING) << "domicile: a <webview> refused to open a window for "
                << target_url.possibly_invalid_spec()
                << "; the shell was asked to open one instead.";
-  return nullptr;
 }
 
 void WebViewGuest::WebContentsDestroyed() {
