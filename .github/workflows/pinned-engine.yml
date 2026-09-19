@@ -48,10 +48,10 @@ on:
   push:
     branches: [main]
 
-# Keyed by ref and never cancelling, which is the rule every workflow that
+# Keyed by ref and never canceling, which is the rule every workflow that
 # reaches for `crux` follows; scripts/test-engine-concurrency.sh asserts it and
 # engine.yml explains what a shared group did to runs 176 and 177. Nothing here
-# leaves a half-linked build behind, but a cancelled run still holds the slot
+# leaves a half-linked build behind, but a canceled run still holds the slot
 # while it tears down, and a group of depth one that discards work is worse
 # than a queue that makes it wait.
 concurrency:

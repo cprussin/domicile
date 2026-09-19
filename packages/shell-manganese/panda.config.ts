@@ -50,7 +50,7 @@ export default defineConfig({
         // with minutes left has to be *more* legible than the rest of the bar
         // at the moment it is least ignorable, not less.
         //
-        // Opacity rather than a colour, so the one decision about what red is
+        // Opacity rather than a color, so the one decision about what red is
         // stays the `danger` token's, and so the flash reaches the whole
         // readout — the case, the fill, the bolt and the figures — which is
         // four elements and one animation.
@@ -61,7 +61,7 @@ export default defineConfig({
         },
         // A workspace slides in from the side it was on. The distance is the
         // same for every window on it rather than a share of each one's own
-        // box, because what is moving is the workspace: windows that travelled
+        // box, because what is moving is the workspace: windows that traveled
         // different distances would scatter rather than arrive together.
         //
         // Far enough to read as a direction and no further. The two workspaces

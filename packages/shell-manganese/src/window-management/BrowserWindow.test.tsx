@@ -781,7 +781,7 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // The bar's own behaviour is `AddressBar`'s to test; what is this window's
+  // The bar's own behavior is `AddressBar`'s to test; what is this window's
   // is the wiring — the one control reads the view's loading state, and
   // whichever of the two it is drives the view.
   describe("the reload button", () => {
@@ -901,7 +901,7 @@ describe("BrowserWindow", () => {
     });
 
     // A WINDOW TURNS ABOUT ONE POINT, NOT TWO. Its contents and the bar above
-    // them are separate elements, and each scaled about its own centre would
+    // them are separate elements, and each scaled about its own center would
     // pull away from the other by a fraction of the window's height.
     it("turns about the middle of its whole frame rather than its own", () => {
       render(<BrowserWindow {...windowProps} motion="opening" />);

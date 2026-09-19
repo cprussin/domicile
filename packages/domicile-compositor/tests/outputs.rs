@@ -117,14 +117,14 @@ scale = 2
 ///
 /// `0mHz` and `0x0mm` are the protocol's own word for "this output has no such
 /// number", and both are the truth here: nothing tells this compositor how
-/// many millimetres a configured display is or how fast a panel it never
+/// many millimeters a configured display is or how fast a panel it never
 /// opened refreshes. A screen described as `300x200mm` at `60000mHz` — which
 /// is what was advertised, for every display and whatever the config said — is
 /// a DPI a client can compute and act on, and it is wrong.
 ///
 /// A *described* desktop, which is what this config makes, keeps saying so
 /// even now that the engine's own displays carry a real panel: a config is
-/// arithmetic, not millimetres of glass. The zeros here are the evidence that
+/// arithmetic, not millimeters of glass. The zeros here are the evidence that
 /// the plumbing did not start filling them in for outputs that have nothing to
 /// fill them with.
 const AS_TOLD: [&str; 2] = [

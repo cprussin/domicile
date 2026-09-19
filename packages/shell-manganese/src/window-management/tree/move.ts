@@ -3,7 +3,7 @@
 //
 // The same outward walk `focus-direction.ts` does, with a different thing to
 // do at each stop. Inside the container the window is *in*, moving is
-// reordering it past its neighbour. In a container further out — one that runs
+// reordering it past its neighbor. In a container further out — one that runs
 // the right way where the window's own does not — it is the window leaving the
 // container it was in and landing beside it. And where nothing around it runs
 // that way at all, the workspace itself gains a split of the other
@@ -74,7 +74,7 @@ const relocated = (
 const holds = ({ path }: Ancestor, moving: Path): boolean =>
   path.length === moving.length - 1;
 
-// Past its neighbour, which is a swap: the two boxes keep their sizes and
+// Past its neighbor, which is a swap: the two boxes keep their sizes and
 // trade contents, so a window moved along a row of resized windows does not
 // resize the row.
 const reordered = (

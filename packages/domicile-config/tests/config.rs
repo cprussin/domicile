@@ -148,7 +148,7 @@ fn rejects_invalid_syntax() {
 /// did went with `[shell]`.
 #[test]
 fn rejects_a_key_nothing_reads() {
-    // Misspelt in a section that exists, which is the shape a real one takes.
+    // Misspelled in a section that exists, which is the shape a real one takes.
     let err = Config::parse(
         r#"
 [output]

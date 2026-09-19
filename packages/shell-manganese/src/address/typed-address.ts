@@ -87,7 +87,7 @@ const hasScheme = (typed: string): boolean =>
  * The endings that make a word a hostname rather than the end of a sentence.
  *
  * This desktop's own list rather than the public suffix list. A desktop that
- * recognised every TLD would read "the sentence ends. Then another" as a
+ * recognized every TLD would read "the sentence ends. Then another" as a
  * request for a site in `.then`, and there is no shortage of registries whose
  * TLD is an ordinary English word. These are the ones this desktop's user
  * actually types, which is the same argument the shell script makes by

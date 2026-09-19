@@ -106,7 +106,7 @@ const FILE: &str = "domicile.toml";
 /// `XDG_CONFIG_HOME` when it is set to an absolute path, and `~/.config`
 /// otherwise — which is the spec's own rule rather than a kindness. A relative
 /// value resolves against whatever directory the desktop happened to be
-/// started from, so honouring one would make the config a desk reads depend on
+/// started from, so honoring one would make the config a desk reads depend on
 /// where its launcher was standing.
 fn config_home(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     let absolute = |value: String| {

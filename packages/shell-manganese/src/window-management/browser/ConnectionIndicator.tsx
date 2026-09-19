@@ -68,7 +68,7 @@ export const ConnectionIndicator = ({ url }: Props) => {
 
 // One `css(...)` per mark rather than a `cva` with a `safety` variant. The
 // recipe would work — Panda reads an enum member as a variant key — but the
-// colour is the only thing that varies, and a recipe for one property splits
+// color is the only thing that varies, and a recipe for one property splits
 // what the indicator says across two tables keyed by the same enum. They are
 // one answer, so they are in one place: see `INDICATORS` below.
 const encryptedMarkStyles = css({

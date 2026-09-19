@@ -1,7 +1,7 @@
 // What the launcher does with what was typed into it.
 //
 // Three answers in the order `run` decides them in the launcher this desktop
-// is modelled on: a file, then a site, then a search. The order is the whole
+// is modeled on: a file, then a site, then a search. The order is the whole
 // of the design — every query is a search if nothing better claims it first,
 // so the two claims above it have to be the ones that can be made confidently.
 //

@@ -87,7 +87,7 @@ fn no_file_there_is_the_defaults_and_says_where_it_looked() {
     // NOT AN ERROR, and the path is carried anyway. A desktop with no monitors
     // written down is a desktop -- that is what made the flag optional in the
     // first place -- but "the compositor's defaults" on its own is the same
-    // sentence whether the file is missing, misspelt or in the other config
+    // sentence whether the file is missing, misspelled or in the other config
     // directory, so it names the one place that was looked.
     assert_eq!(
         config_file(None, &env(None, Some("/home/somebody")), &nothing),

@@ -353,7 +353,7 @@ std::unique_ptr<dbus::Response> DrmLogindInput::CallAndBlock(
   base::WaitableEvent answered;
 
   // Unretained on stack storage is what the wait makes safe: nothing here
-  // returns until the task has signalled, so the pointers outlive it.
+  // returns until the task has signaled, so the pointers outlive it.
   bus_->GetDBusTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(

@@ -199,7 +199,7 @@ TEST(DrmInputDevicesTest, APathThatIsNotACharacterDeviceHasNoNumber) {
 TEST(DrmInputDevicesTest, APathThatCannotBeStattedHasNoNumber) {
   // A node udev announced and the kernel removed between the announcement and
   // the open. Ordinary, and the answer is that there is no device here rather
-  // than a number made up from an uninitialised `struct stat`.
+  // than a number made up from an uninitialized `struct stat`.
   EXPECT_FALSE(
       NumberOfDevice(base::FilePath(kKeyboardPath), StatRefusing()).has_value());
 }

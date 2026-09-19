@@ -102,7 +102,7 @@ enum CursorShape {
 //
 // Named for the turn the CONTENT takes rather than the one the panel did,
 // which is the `wl_output` convention and the config file's: an output rotated
-// a quarter turn anticlockwise needs what is drawn on it turned a quarter turn
+// a quarter turn counterclockwise needs what is drawn on it turned a quarter turn
 // clockwise to come out upright, and kRotate90 is that clockwise turn.
 enum DisplayTransform {
   kNormal,

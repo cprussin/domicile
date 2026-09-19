@@ -71,7 +71,7 @@ export const draggingStyles = css({ opacity: 0.6 });
  * is drawn around the hole, which is the one part of a window's frame the
  * compositor does not have to be told about.
  *
- * The colour is not here: it says which window the keyboard is in, so it comes
+ * The color is not here: it says which window the keyboard is in, so it comes
  * from {@link focusedEdgeStyles} or {@link restingEdgeStyles}.
  */
 export const edgeStyles = css({
@@ -80,7 +80,7 @@ export const edgeStyles = css({
 });
 
 /**
- * What colour that line is, which is the window's share of saying where the
+ * What color that line is, which is the window's share of saying where the
  * keyboard is: the accent for the window being worked in, and the resting
  * line for every other one.
  *
@@ -109,7 +109,7 @@ export const clickThroughStyles = css({ pointerEvents: "none" });
  * there: the middle of the whole frame, wherever that falls inside this part.
  *
  * **One window, one point.** A window is two elements — the bar and the
- * contents under it — and each of them scaled about its own centre would pull
+ * contents under it — and each of them scaled about its own center would pull
  * away from the other by a fraction of the window's height, which is a frame
  * coming apart rather than a window arriving. Given the frame they span, both
  * of them name the same point on the desktop and the window grows and shrinks
@@ -196,7 +196,7 @@ export const movingStyles = cva({
  * Two things move, and only one of them is always allowed to ease.
  *
  * **The box.** Every rectangle on this desktop is arithmetic — see
- * `tree/frames.ts` — so a window whose neighbour opened, closed, split or grew
+ * `tree/frames.ts` — so a window whose neighbor opened, closed, split or grew
  * is simply written at a different `inset` and size on the next render, and
  * lands there between two frames. This is what gives it the frames in between.
  *
@@ -211,14 +211,14 @@ export const movingStyles = cva({
  * pointer move, and a window easing towards each of them is one that trails
  * the pointer instead of following it.
  *
- * **The colours**, which are what a window says about the keyboard — the fill
+ * **The colors**, which are what a window says about the keyboard — the fill
  * of its bar, the line around its frame, the text on it. Those ease whichever
  * of the two states the window is in, dragged or not: focus follows the cursor
  * in this shell, so they change every time the pointer crosses a window, and a
  * desktop that snapped between them flickered on the way to anywhere. A drag
  * is when the pointer crosses the most windows of all.
  *
- * **One declaration for both**, which is why the box and the colours are one
+ * **One declaration for both**, which is why the box and the colors are one
  * recipe rather than a class each: two rules setting `transition` on one
  * element are decided by the order Panda happens to emit them in, and the
  * loser is simply not applied.

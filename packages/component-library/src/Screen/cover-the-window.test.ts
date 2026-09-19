@@ -54,12 +54,12 @@ describe("coverTheWindow", () => {
     );
   });
 
-  it("turns a region a quarter anticlockwise and pushes it back into view", () => {
+  it("turns a region a quarter counterclockwise and pushes it back into view", () => {
     // The other quarter turn, and the one this desk actually uses: kanshi
     // says `transform = "270"` for the three monitors on their sides, and the
     // domicile config says `rotate-270` for the same three.
     //
-    // Anticlockwise takes the top-left corner to the window's bottom-left, so
+    // Counterclockwise takes the top-left corner to the window's bottom-left, so
     // the push is down by the window's height rather than right by its width.
     expect(coverTheWindow(BOX, { size: MODE, transform: "rotate-270" })).toBe(
       "translate(0, 2160px) rotate(-90deg) scale(1.2)",

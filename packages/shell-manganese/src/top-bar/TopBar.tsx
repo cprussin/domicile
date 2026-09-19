@@ -83,7 +83,7 @@ export const TopBar = ({
 
 const barStyles = grid({
   // The workspace buttons come from the component library, whose recipes set
-  // their own colour; this is what puts the workspace numbers on the same
+  // their own color; this is what puts the workspace numbers on the same
   // footing as the text beside them.
   "& button": { color: "white" },
   alignItems: "center",
@@ -110,7 +110,7 @@ const middleStyles = css({ justifySelf: "center" });
 
 const endStyles = hstack({ gap: 1, justify: "flex-end" });
 
-// Not a colour of its own: the bar's text is white over a photograph, and
+// Not a color of its own: the bar's text is white over a photograph, and
 // what marks this out is that it is a word in capitals where the rest of the
 // bar is numbers and a clock.
 const modeStyles = css({

@@ -309,7 +309,7 @@ describe("AppWindow", () => {
     });
 
     // A WINDOW TURNS ABOUT ONE POINT, NOT TWO. Its contents and the bar above
-    // them are separate elements, and each scaled about its own centre would
+    // them are separate elements, and each scaled about its own center would
     // pull away from the other by a fraction of the window's height.
     it("turns about the middle of its whole frame rather than its own", () => {
       const { container } = render(
@@ -329,7 +329,7 @@ describe("AppWindow", () => {
     });
 
     // A WINDOW LEAVES IN THE TIME THE LAYOUT TAKES TO CLOSE OVER IT. Its
-    // neighbours ease into the box it had while it shrinks away inside it, so
+    // neighbors ease into the box it had while it shrinks away inside it, so
     // a departure that outlasted the settle would be a window still going over
     // a desktop that had finished rearranging itself around it.
     it("leaves in the time the layout takes to close over it", () => {

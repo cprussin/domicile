@@ -31,13 +31,13 @@ crash at a time.
     the only thing that knows a scale factor.
   * `SetRestoredBoundsInDIP`/`GetRestoredBoundsInDIP` -- store pixels, convert
     on the way in and out, and fall back to the current bounds, which is what a
-    window that has never been maximised should restore to.
+    window that has never been maximized should restore to.
   * `SetWindowIcons` -- nothing draws a titlebar on a CRTC, so there is nowhere
     to put an icon.
   * `SizeConstraintsChanged` -- a window that fills a CRTC has no constraints
     to renegotiate.
 
-The bounds conversions preserve upstream's behaviour wherever the old premise
+The bounds conversions preserve upstream's behavior wherever the old premise
 genuinely held: `PlatformWindowDelegate::ConvertRectToDIP` is the identity, and
 only `DesktopWindowTreeHostPlatform` -- the delegate the views browser supplies
 -- overrides it with a real factor.
@@ -94,7 +94,7 @@ index f31e0aa31a990..2585e47781d11 100644
 +  // The delegate is what knows the scale: PlatformWindowDelegate's own
 +  // implementation is the identity, which is exactly the old premise, and
 +  // DesktopWindowTreeHostPlatform overrides it with the real factor. So this
-+  // preserves upstream behaviour wherever the premise really did hold.
++  // preserves upstream behavior wherever the premise really did hold.
 +  SetBoundsInPixels(delegate_->ConvertRectToPixels(bounds));
  }
  
@@ -116,7 +116,7 @@ index f31e0aa31a990..2585e47781d11 100644
  gfx::Rect DrmWindowHost::GetRestoredBoundsInDIP() const {
 -  NOTREACHED();
 +  // Falls back to the current bounds, which is what a window that has never
-+  // been maximised should restore to.
++  // been maximized should restore to.
 +  return delegate_->ConvertRectToDIP(restored_bounds_.value_or(bounds_));
  }
  

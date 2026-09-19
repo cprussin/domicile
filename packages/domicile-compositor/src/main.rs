@@ -3514,11 +3514,11 @@ fn advertise_output(dh: &DisplayHandle, advertised: &Advertised) -> LiveOutput {
     let output = Output::new(
         advertised.name.clone(),
         PhysicalProperties {
-            // The panel's own millimetres on a tty, and
+            // The panel's own millimeters on a tty, and
             // `screens::UNKNOWN_PHYSICAL_MM` — zero, which is `wl_output`'s
             // word for a screen with no such number — everywhere else. A described desktop is a config's
             // arithmetic and a nested one is a window, and neither is
-            // millimetres of glass; the engine's displays are monitors it read
+            // millimeters of glass; the engine's displays are monitors it read
             // off their EDID while holding DRM master, which this process has
             // no card node to do for itself.
             //
@@ -3565,7 +3565,7 @@ fn advertise_output(dh: &DisplayHandle, advertised: &Advertised) -> LiveOutput {
 ///
 /// Not the physical size, which `Output` fixes at construction and which a
 /// kept output cannot have changed: [`Slot::Kept`] matches on the name, an
-/// engine display's name is its EDID-derived id, and the millimetres are a
+/// engine display's name is its EDID-derived id, and the millimeters are a
 /// property of the panel that id names. An output whose name did not survive
 /// is a new one and goes through [`advertise_output`] instead.
 fn restate_output(output: &Output, advertised: &Advertised) {

@@ -33,7 +33,7 @@ export const Clock = ({ now = wallClock }: Props) => {
   );
 };
 
-// No colour of its own: in the top bar it takes the white the bar draws its
+// No color of its own: in the top bar it takes the white the bar draws its
 // text in, and on a screen with no bar it takes the page's own foreground.
 const clockStyles = css({
   // Ten pixels, which is what the desktop asks for and what no font-size token

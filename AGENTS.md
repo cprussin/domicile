@@ -23,6 +23,20 @@ tagged with an authority level so its weight is unambiguous.
 If a doc's own wording disagrees with these labels, the labels here win —
 update the doc.
 
+## American English (everywhere)
+
+Every word in this repo is spelled the American way, never the British one —
+prose, comments, identifiers, test names, commit messages and filenames alike.
+`color`, `center`, `behavior`, `honored`, `labeled`, `initialized`,
+`organize`, `analyze`, `gray`, `counterclockwise`, `defense`, `meter`. The
+reason is mechanical rather than aesthetic: you read this tree before you write
+in it, so whichever spelling is in it is the spelling that comes back out, and
+a tree holding both teaches both.
+
+`scripts/test-american-english.sh` is what says so, and it runs in the `shell`
+group of `./scripts/check.sh`. The one exemption is a spelling that is somebody
+else's API — `nix-store --realise` is Nix's flag, not a word.
+
 ## Post-edit audit (non-negotiable)
 
 After finishing edits — and before declaring a change done or opening a

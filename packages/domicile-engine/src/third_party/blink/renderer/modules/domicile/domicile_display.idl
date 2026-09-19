@@ -55,7 +55,7 @@
   // the config file writes them.
   //
   // NAMED FOR THE TURN THE CONTENT TAKES, not the one the panel did. That is
-  // the wl_output convention: an output rotated a quarter turn anticlockwise
+  // the wl_output convention: an output rotated a quarter turn counterclockwise
   // needs what is drawn on it turned a quarter turn clockwise to come out
   // upright, and `rotate-90` is that clockwise turn. A shell applies it as
   // written.

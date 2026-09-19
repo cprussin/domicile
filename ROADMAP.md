@@ -434,7 +434,7 @@ decides whether an item is waiting or workable.
      then `TakeDevice`, and re-acquisition hangs off the session's `Active`
      property rather than off a signal that may never arrive.
    - **A device parked revoked waited for an edge that never comes**, which
-     was that fix's own regression. Honouring `TakeDevice`'s second return
+     was that fix's own regression. Honoring `TakeDevice`'s second return
      value is right — logind revokes the descriptor before handing it over for
      a session that is not in front of the user — but the only thing that
      un-parked the device was `PropertiesChanged`, which is emitted on a
@@ -493,7 +493,7 @@ decides whether an item is waiting or workable.
      fullscreen, `enter_fullscreen = !context->IsFullscreen()` read false, and
      `DrmWindowHost` put the window back on its `restored_bounds_`. A patch
      that made a stub work and then undid the only thing calling it.
-     `scripts/test-the-fullscreen-flag-is-honoured-once.sh` reads both halves
+     `scripts/test-the-fullscreen-flag-is-honored-once.sh` reads both halves
      out of the series.
    - `0019` is **the browser dropping DRM master, because the GPU process
      never could.** Not a sandbox and not a permission bit: `drm_set_master`
@@ -694,7 +694,7 @@ taken.
   on an overlay plane is not in the render pass a backdrop filter reads from.
   Promotion checks occlusion and should decline under a filter, so the expected
   result is that it works -- but that check is the mechanism by which this
-  could fail, and it is exactly the optimisation this architecture is proud
+  could fail, and it is exactly the optimization this architecture is proud
   of. `guard-css-and-resize.sh` is where the answer belongs, beside the seven
   properties already bit-exact there.
 
@@ -816,11 +816,11 @@ costs nothing.
 - **A `wl_output` that is not a panel reports no physical size and no
   refresh** -- zero for both, which is what `wl_output` says a screen with no
   such number advertises. That is every described desktop and every nested one:
-  a config's arithmetic and a host's window are not millimetres of glass, and
+  a config's arithmetic and a host's window are not millimeters of glass, and
   neither has a mode. On a tty they are the panel's own, off the same
   `DisplaySnapshot` the CRTCs are configured from, and `DomicileDisplay`
   carries them. The one thing `display::Display` had no field for is the
-  millimetres, so they cross it as the DPI they make with the mode and are
+  millimeters, so they cross it as the DPI they make with the mode and are
   divided back out in `components/domicile/browser/display_list.cc`; a
   connector that reports no size -- a projector, a virtual output -- still
   advertises zero, because zero is the reading.

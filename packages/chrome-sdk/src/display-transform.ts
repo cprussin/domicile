@@ -5,7 +5,7 @@
 //
 // **Named for the turn the content takes, not the one the panel did.** That is
 // the `wl_output` convention and the config's: `transform_90` is an output
-// rotated a quarter turn anticlockwise, so what is drawn on it has to go a
+// rotated a quarter turn counterclockwise, so what is drawn on it has to go a
 // quarter turn *clockwise* to come out upright, and `rotate-90` names that
 // clockwise turn. A shell applies it as written.
 //

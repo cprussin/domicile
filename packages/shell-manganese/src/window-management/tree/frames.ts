@@ -46,7 +46,7 @@ export type Tiled = {
 const NOTHING: Tiled = { frames: [], tabs: [] };
 
 /**
- * The tiling laid out over `area`, with `gap` between neighbours.
+ * The tiling laid out over `area`, with `gap` between neighbors.
  *
  * The gap is the caller's because it is a policy rather than a measurement:
  * the desktop's config asks for twenty pixels between windows and none at all

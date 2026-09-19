@@ -38,7 +38,7 @@ describe("typedAddress", () => {
       );
     });
 
-    it("loads localhost, which has no dot to recognise it by", () => {
+    it("loads localhost, which has no dot to recognize it by", () => {
       expect(typedAddress("localhost:5173")).toStrictEqual(
         TypedAddress.Site("https://localhost:5173"),
       );

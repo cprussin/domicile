@@ -2,7 +2,7 @@
 //
 // sway's own walk. Start at the container the focus is in and work outwards
 // until one of them runs the way the user asked to go, then cross into the
-// neighbour on that side — by *its* own focus, so a container is entered at
+// neighbor on that side — by *its* own focus, so a container is entered at
 // whichever window was last used in it rather than at its first.
 
 import type { Direction } from "../direction";
@@ -39,7 +39,7 @@ export const focusMoved = (tiling: Tiling, direction: Direction): Tiling => {
  *
  * The candidates in the order sway tries them: the innermost container that
  * runs along the direction and has somewhere to go, then the ones outside it,
- * and last the wrap round the innermost one — so a container with a neighbour
+ * and last the wrap round the innermost one — so a container with a neighbor
  * two levels up is reached before the focus comes round on itself.
  */
 const crossing = (
@@ -52,7 +52,7 @@ const crossing = (
       axisOf(ancestor.container.layout) === axisOfDirection(direction),
   );
   const tried = [
-    ...along.map((ancestor) => into(ancestor, neighbour(ancestor, direction))),
+    ...along.map((ancestor) => into(ancestor, neighbor(ancestor, direction))),
     ...along
       .slice(0, 1)
       .map((ancestor) => into(ancestor, wrapped(ancestor, direction))),
@@ -66,7 +66,7 @@ const into = (
 ): Path | undefined => (child === undefined ? undefined : [...path, child]);
 
 /** The child on the `direction` side of the one the focus is in, if any. */
-const neighbour = (
+const neighbor = (
   { container, index }: Ancestor,
   direction: Direction,
 ): number | undefined => {

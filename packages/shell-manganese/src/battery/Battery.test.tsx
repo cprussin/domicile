@@ -170,7 +170,7 @@ describe("Battery", () => {
     });
 
     it("goes on saying so with the lead in", () => {
-      // The bolt says the lead is in. What the colour is about is the cell,
+      // The bolt says the lead is in. What the color is about is the cell,
       // and a machine that cannot be unplugged is not a machine that is fine.
       const battery = heldBattery();
       const { container } = render(

@@ -131,7 +131,7 @@ impl Dmabuf {
 /// It comes off the same `DisplaySnapshot`s the modeset driver configures the
 /// CRTCs from, so the desktop advertised and the modes lit cannot disagree.
 ///
-/// The millimetres and the rate are the panel's own, off the same snapshot,
+/// The millimeters and the rate are the panel's own, off the same snapshot,
 /// and either can be zero -- `wl_output`'s word for a screen with no such
 /// number. A connector reports no physical size (a projector, a virtual
 /// output) or no mode (connected but unreadable) often enough that this is an
@@ -168,7 +168,7 @@ pub struct Display {
     pub position: (i32, i32),
     /// Its native mode, in physical pixels.
     pub size: (u32, u32),
-    /// The panel's own size, in millimetres, or `(0, 0)` for a display that
+    /// The panel's own size, in millimeters, or `(0, 0)` for a display that
     /// reports none.
     pub physical_mm: (i32, i32),
     /// The rate the CRTC took, in mHz, or zero for a display that reports
@@ -711,7 +711,7 @@ fn layouts_from(connectors: &[Connector]) -> Vec<RawLayout> {
 ///
 /// Null is refused rather than read. The C header states the pointer is never
 /// null, so one that is means the engine broke its own contract -- and the
-/// cost of trusting it is not a wrong answer but undefined behaviour, because
+/// cost of trusting it is not a wrong answer but undefined behavior, because
 /// `CStr::from_ptr` reads through whatever it is given.
 ///
 /// Lossy, on the other side, and deliberately: the characters are an EDID's,
@@ -775,7 +775,7 @@ mod tests {
 
     /// The same guard as above, for the struct a display list is an array of.
     /// A field added or dropped on one side of the ABI and not the other reads
-    /// every display after the first out of the middle of its neighbour.
+    /// every display after the first out of the middle of its neighbor.
     ///
     /// Spelled as a number rather than as a sum of its fields, because the
     /// struct is no longer the sum of its fields: one `int64_t` and seven
@@ -898,7 +898,7 @@ mod tests {
         // The header says the pointer is never null, and a null one is the
         // engine breaking its own contract. Checked rather than trusted
         // because the alternative is not a wrong answer but undefined
-        // behaviour: `CStr::from_ptr` on null reads through it.
+        // behavior: `CStr::from_ptr` on null reads through it.
         let _ = displays_from(&[RawDisplay::default()]);
     }
 
@@ -910,7 +910,7 @@ mod tests {
         //
         // The second display carries zeros for the panel, which is not a
         // second display with a bug in it: a connector that reports no
-        // millimetres is ordinary -- a projector, a virtual output -- and zero
+        // millimeters is ordinary -- a projector, a virtual output -- and zero
         // is what `wl_output` states for one. A conversion that invented a
         // size for it would be the fiction this whole path exists to remove.
         let (panel, _panel_name) = named(

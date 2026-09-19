@@ -288,7 +288,7 @@ fn a_quarter_turn_swaps_a_displays_axes() {
     // The mode is what the connector scans out and does not turn with the
     // monitor; the logical size is what the desktop is laid out in and does.
     // Applied before the scale so that a rotated 3840x2160 at 1.2 is 1800x3200
-    // rather than 3200x1800 relabelled — the desk below stands three monitors
+    // rather than 3200x1800 relabeled — the desk below stands three monitors
     // on their sides and steps across them by 1800.
     let layout = layout(
         r#"

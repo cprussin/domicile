@@ -120,7 +120,7 @@ export const TitleBar = ({
       isLeaving(motion) && clickThroughStyles,
       settlingStyles({ dragging }),
     )}
-    // Which of the three this is, as an attribute as well as a colour: the
+    // Which of the three this is, as an attribute as well as a color: the
     // desktop's own state is worth being able to read off the element, in
     // devtools and in a test, rather than only off a hashed class name.
     data-focus={focus}
@@ -188,8 +188,8 @@ export const TitleBar = ({
  * Which of the library's buttons the controls on a bar in this state want.
  *
  * The focused bar is *filled* with the accent, and `ghost` — the quiet
- * control every other bar wants — draws its icon in `muted`, which is a grey
- * nobody can find on it. `accent` is the filled control of the same colour:
+ * control every other bar wants — draws its icon in `muted`, which is a gray
+ * nobody can find on it. `accent` is the filled control of the same color:
  * its box disappears into the bar it is on and its icon is the page's own
  * `background`, which is exactly what the title beside it is drawn in. What
  * is left is the hover, which is the only thing a window control has to say
@@ -199,7 +199,7 @@ const controlVariant = (focus: TitleFocus) =>
   focus === "focused" ? "accent" : "ghost";
 
 /**
- * sway's three client colours, in the one place a window says which it is.
+ * sway's three client colors, in the one place a window says which it is.
  *
  * **The focused window's bar is filled**, not merely tinted: it is the one
  * thing on a desktop of identical frames that says where the keystrokes are

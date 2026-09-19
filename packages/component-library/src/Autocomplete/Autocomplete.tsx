@@ -82,7 +82,7 @@ type Props<V> = ExtendProps<
  * it.
  *
  * Highlighting fills the field rather than only marking a line, which is the
- * behaviour of every address bar: what the user would get by pressing Enter is
+ * behavior of every address bar: what the user would get by pressing Enter is
  * readable without looking away from where they are typing.
  */
 export const Autocomplete = <V,>({

@@ -61,7 +61,7 @@ The existing pointer line keeps its name but not its meaning: it now
 fires for the first located event NOT carrying `EF_IS_SYNTHESIZED`, so
 it answers the question it was always supposed to.
 
-No behaviour changes. Every addition is a VLOG(1) and a bool, and the
+No behavior changes. Every addition is a VLOG(1) and a bool, and the
 one non-logging edit -- reading `DispatchEventFromNativeUiEvent`'s return
 value instead of dropping it -- does not alter what is dispatched or what
 this returns.

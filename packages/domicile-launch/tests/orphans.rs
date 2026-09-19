@@ -7,7 +7,7 @@
 //! the card, which is a console nobody can get back.
 //!
 //! So each component is started in a process group of its own and the group is
-//! what gets signalled. These tests are the only place that is asserted: it
+//! what gets signaled. These tests are the only place that is asserted: it
 //! cannot be read off a `Command`, because std exposes no getter for it, and a
 //! unit test over the decision would be a test that we wrote the line we wrote.
 //! A grandchild that really outlives its parent is the thing being prevented.
@@ -58,7 +58,7 @@ fn sleeper(pidfile: &Path) -> i32 {
     panic!("the test child never reported a grandchild; it did not start");
 }
 
-/// The kernel does not free a pid the instant it is signalled, so a single
+/// The kernel does not free a pid the instant it is signaled, so a single
 /// read after `drop` is a race the test would lose about as often as it won.
 fn gone_within(pid: i32, patience: Duration) -> bool {
     let deadline = Instant::now() + patience;

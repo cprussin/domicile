@@ -1,7 +1,7 @@
 // How a window's title bar is drawn: which of three things it says about the
 // keyboard.
 //
-// sway's three client colours, and for its reason. `focused` is the window the
+// sway's three client colors, and for its reason. `focused` is the window the
 // keyboard is in, and there is exactly one of those on a desktop. `unfocused`
 // is every other window. The one in between is what a tab needs: a tabbed or
 // stacking container shows one of its children whether or not the keyboard is
