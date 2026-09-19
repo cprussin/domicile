@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-import { css } from "../../styled-system/css";
+import { css, cva } from "../../styled-system/css";
 import type { Rect } from "./rect";
 
 /**
@@ -105,41 +105,75 @@ export const restingEdgeStyles = css({ borderColor: "borderStrong" });
 export const clickThroughStyles = css({ pointerEvents: "none" });
 
 /**
- * A window arriving: it fades up and grows into the box the layout has
- * already given it.
+ * The point a part of a window turns about, as the inline style that puts it
+ * there: the middle of the whole frame, wherever that falls inside this part.
  *
- * On the window and on its bar alike, because the two are separate elements
- * and a frame whose halves scale differently comes apart at the seam. Both
- * scale from `top left` for the same reason: their own centres are different
- * points, so centre-scaled halves would pull away from each other by a
- * fraction of the window's whole height, while one shared corner holds them
- * together. The corner is not quite the same point either — the window's is a
- * bar's height below the bar's — so what is left is a slit of
- * `(1 - scale) × TITLE_BAR`, under two pixels, closing over the length of the
- * animation.
+ * **One window, one point.** A window is two elements — the bar and the
+ * contents under it — and each of them scaled about its own centre would pull
+ * away from the other by a fraction of the window's height, which is a frame
+ * coming apart rather than a window arriving. Given the frame they span, both
+ * of them name the same point on the desktop and the window grows and shrinks
+ * in one piece.
  *
- * **It runs whenever the window arrives on screen, which is not only when it
- * opens.** A window the desktop is not showing is hidden rather than
- * unmounted — that is what keeps its client's surface and its page alive — and
- * an element that is `display: none` runs no animation, so the one here starts
- * again when the window is revealed: a workspace switched to, a tab picked, a
- * fullscreen let go of. Everything the user sees appear, appears the same way.
+ * Inline for the reason {@link placedAt} is: these are runtime numbers, and
+ * Panda extracts styles by reading literals at build time.
+ *
+ * It costs the mapping a client's pointer is inverted through nothing at all.
+ * `transform-origin` conjugates a transform by a translation, which leaves its
+ * linear part alone, and the SDK solves for the translation from where the box
+ * actually lands — so every origin gives the same answer. See the chrome SDK's
+ * `element-transform.ts`.
  */
-export const openingStyles = css({
-  animation: "windowOpening {durations.fast} {easings.out}",
-  transformOrigin: "top left",
+export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties => ({
+  transformOrigin: `${(frame.x + frame.width / 2 - rect.x).toString()}px ${(frame.y + frame.height / 2 - rect.y).toString()}px`,
 });
 
 /**
- * A window leaving: it fades down and shrinks away from the box it had.
+ * What a window is doing over time, drawn.
  *
- * `forwards`, so the last frame is what it is left at. Without it the window
- * would snap back to full size for however long it takes the desktop to hear
- * that the animation has ended and take the element off the page.
+ * Every one of these is a transform and an opacity, which is what makes them
+ * free: the compositor is already drawing the client's buffer into a layer of
+ * this page, so scaling or sliding that layer is the page's own compositing
+ * rather than anything the client is asked to redraw. The keyframes are in
+ * `panda.config.ts`, with why each one looks the way it does.
+ *
+ * Its variant is keyed by `WindowMotion`, which is why that is a string union
+ * rather than an enum: a motion the shell can ask for and this does not name
+ * is a call that does not compile.
+ *
+ * The two departures end `forwards`, so the last frame is what the window is
+ * left at. Without it a window would snap back to full size and full opacity
+ * for however long it takes the desktop to hear that the animation has ended
+ * and take the element off the page.
  */
-export const closingStyles = css({
-  animation: "windowClosing {durations.fast} {easings.in} forwards",
-  transformOrigin: "top left",
+export const movingStyles = cva({
+  variants: {
+    motion: {
+      "arriving-from-end": {
+        animation: "windowArrivingFromEnd {durations.slow} {easings.out}",
+      },
+      "arriving-from-start": {
+        animation: "windowArrivingFromStart {durations.slow} {easings.out}",
+      },
+      closing: {
+        animation: "windowClosing {durations.slow} {easings.in} forwards",
+      },
+      "leaving-to-end": {
+        animation: "windowLeavingToEnd {durations.slow} {easings.in} forwards",
+      },
+      "leaving-to-start": {
+        animation:
+          "windowLeavingToStart {durations.slow} {easings.in} forwards",
+      },
+      opening: {
+        animation: "windowOpening {durations.slow} {easings.out}",
+      },
+      // A window that is simply on the desktop, which is most of them most of
+      // the time. Revealed by a workspace switch, a tab, a fullscreen let go
+      // of: it is there, and a window that is there has nothing to play.
+      resting: {},
+    },
+  },
 });
 
 /**
@@ -150,12 +184,12 @@ export const closingStyles = css({
  * different `inset` and size on the next render, and lands there between two
  * frames. This is what gives it the frames in between.
  *
- * The box rather than a transform, unlike the arrival above: the window really
- * is a different size afterwards, and the client has to be configured at it.
- * The SDK measures every window once an animation frame, so what it reports
- * during a transition is each intermediate box — the same stream of sizes a
- * drag on a floating window's corner already produces, over a sixth of a
- * second rather than as long as the user holds it.
+ * The box rather than a transform, unlike everything in {@link movingStyles}:
+ * the window really is a different size afterwards, and the client has to be
+ * configured at it. The SDK measures every window once an animation frame, so
+ * what it reports during a transition is each intermediate box — the same
+ * stream of sizes a drag on a floating window's corner already produces, over
+ * a sixth of a second rather than as long as the user holds it.
  *
  * **Not while the window is being dragged.** A drag writes a new box on every
  * pointer move, and a window easing towards each of them is one that trails

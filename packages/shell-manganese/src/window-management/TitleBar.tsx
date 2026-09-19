@@ -6,7 +6,15 @@ import { css, cva, cx } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import type { Rect } from "./rect";
 import type { TitleFocus } from "./title-focus";
-import { openingStyles, placedAt, settlingStyles } from "./window-styles";
+import type { WindowMotion } from "./window-motion";
+import { isLeaving } from "./window-motion";
+import {
+  clickThroughStyles,
+  movingStyles,
+  placedAt,
+  scaledAbout,
+  settlingStyles,
+} from "./window-styles";
 
 type Props = {
   /** How it stacks: the depth of the window it names. */
@@ -22,8 +30,22 @@ type Props = {
   dragging: boolean;
   /** What this bar says about the keyboard — see `title-focus.ts`. */
   focus: TitleFocus;
+  /**
+   * The whole box of the window this bar names, which both halves of that
+   * window turn about — see {@link scaledAbout}. It is this bar's own box for
+   * a tab, which is the whole of what such a window has on screen.
+   */
+  frame: Rect;
+  /**
+   * What the window this bar names is doing, which the bar does with it: the
+   * two are separate elements, and a frame whose halves moved differently
+   * would come apart while the user watched.
+   */
+  motion: WindowMotion;
   /** Close the window this bar belongs to — what the X does. */
   onClose: () => void;
+  /** Called when it has played that motion all the way out. */
+  onMotionEnded: () => void;
   onContextMenu?: ((event: { preventDefault: () => void }) => void) | undefined;
   /** How a drag of the bar starts, for a window that can be dragged by it. */
   onPointerDown?: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;
@@ -58,8 +80,11 @@ export const TitleBar = ({
   depth,
   dragging,
   focus,
+  frame,
+  motion,
   onClose,
   onContextMenu,
+  onMotionEnded,
   onPointerDown,
   onReach,
   rect,
@@ -71,23 +96,37 @@ export const TitleBar = ({
   <div
     className={cx(
       barStyles({ focus }),
-      openingStyles,
+      movingStyles({ motion }),
+      // The window this names has gone, and what is drawn is where it was.
+      isLeaving(motion) && clickThroughStyles,
       !dragging && settlingStyles,
     )}
     // Which of the three this is, as an attribute as well as a colour: the
     // desktop's own state is worth being able to read off the element, in
     // devtools and in a test, rather than only off a hashed class name.
     data-focus={focus}
+    // What it is doing, as an attribute as well as an animation: the desktop's
+    // own state is worth being able to read off the element.
+    data-motion={motion}
     // The window this bar belongs to: a press on it lands off every `<app>`,
     // and left unanswered that is the chrome taking the keyboard off the
     // window the user has just taken hold of. See `AppWindow`.
     data-window={window}
+    // Nothing a keyboard can reach, for as long as it is only being drawn: the
+    // X on a window that has closed is a control that does nothing.
+    inert={isLeaving(motion)}
+    // Its own rather than the Close button's on its way up the document.
+    onAnimationEnd={(event) => {
+      if (event.target === event.currentTarget) {
+        onMotionEnded();
+      }
+    }}
     onContextMenu={onContextMenu}
     onPointerDown={(event) => {
       onReach();
       onPointerDown?.(event);
     }}
-    style={placedAt(rect, depth)}
+    style={{ ...placedAt(rect, depth), ...scaledAbout(frame, rect) }}
   >
     <span className={titleStyles}>{title}</span>
     {/*

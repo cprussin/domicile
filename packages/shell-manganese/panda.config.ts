@@ -43,7 +43,28 @@ export default defineConfig({
   theme: {
     extend: {
       keyframes: {
-        // A window leaving: the reverse of the arrival above, and the same
+        // A workspace slides in from the side it was on. The distance is the
+        // same for every window on it rather than a share of each one's own
+        // box, because what is moving is the workspace: windows that travelled
+        // different distances would scatter rather than arrive together.
+        //
+        // Far enough to read as a direction and no further. The two workspaces
+        // are on the screen together while this runs, so a slide the width of
+        // a screen would need the screen's width — a runtime number no
+        // stylesheet has — and one that crossed the whole desktop would spend
+        // most of its time off the edge of it.
+        windowArrivingFromEnd: {
+          "0%": { opacity: "0", transform: "translateX({spacing.24})" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
+        windowArrivingFromStart: {
+          "0%": {
+            opacity: "0",
+            transform: "translateX(calc(-1 * {spacing.24}))",
+          },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
+        // A window leaving: the reverse of the arrival below, and the same
         // length, so closing one reads as the undoing of opening it.
         //
         // It ends at the size it started arriving from rather than at nothing.
@@ -52,7 +73,20 @@ export default defineConfig({
         // scale is what makes the fade a movement rather than a dissolve.
         windowClosing: {
           "0%": { opacity: "1", transform: "scale(1)" },
-          "100%": { opacity: "0", transform: "scale(0.94)" },
+          "100%": { opacity: "0", transform: "scale(0.85)" },
+        },
+        // And the workspace being left goes the other way, so the two pass
+        // each other.
+        windowLeavingToEnd: {
+          "0%": { opacity: "1", transform: "translateX(0)" },
+          "100%": { opacity: "0", transform: "translateX({spacing.24})" },
+        },
+        windowLeavingToStart: {
+          "0%": { opacity: "1", transform: "translateX(0)" },
+          "100%": {
+            opacity: "0",
+            transform: "translateX(calc(-1 * {spacing.24}))",
+          },
         },
         // A window arriving: up from nothing, and out to the box the layout
         // has already given it.
@@ -65,8 +99,13 @@ export default defineConfig({
         // frame of it. A transform leaves the box alone: the page's own
         // compositor scales the layer the client's buffer is already in, which
         // is what the engine fork bought.
+        //
+        // About the middle of the window's whole frame, which is not a thing a
+        // keyframe can say: the bar and the contents are separate elements at
+        // different boxes, so the point they share is written on each of them
+        // as an inline `transform-origin`. See `scaledAbout`.
         windowOpening: {
-          "0%": { opacity: "0", transform: "scale(0.94)" },
+          "0%": { opacity: "0", transform: "scale(0.85)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
       },

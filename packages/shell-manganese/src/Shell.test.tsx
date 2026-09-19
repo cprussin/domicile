@@ -250,10 +250,34 @@ const barFor = (container: HTMLElement, id: string): HTMLElement => {
   }
 };
 
-/** What is left of a window that has closed, while it plays its way out. */
-const leavingParts = (container: HTMLElement, id: string): HTMLElement[] => [
-  ...container.querySelectorAll<HTMLElement>(`[data-closing="${id}"]`),
+/** Everything on screen that is arriving or leaving, and what each is doing. */
+const moving = (container: HTMLElement): string[] =>
+  [
+    ...container.querySelectorAll<HTMLElement>(
+      '[data-motion]:not([data-motion="resting"])',
+    ),
+  ].map((element) => element.dataset.motion ?? "");
+
+/** The parts of one window that are arriving or leaving. */
+const movingParts = (container: HTMLElement, motion: string): HTMLElement[] => [
+  ...container.querySelectorAll<HTMLElement>(`[data-motion="${motion}"]`),
 ];
+
+/**
+ * Everything that is arriving or leaving says it has finished.
+ *
+ * What a browser does by itself, and what nothing in a test DOM does: the
+ * shell goes on drawing a window it has closed, and the workspace it has just
+ * left, until the elements say their animations have ended. A case about what
+ * the desktop shows *afterwards* has to play them out first.
+ */
+const motionsPlayOut = (container: HTMLElement): void => {
+  for (const element of container.querySelectorAll(
+    '[data-motion]:not([data-motion="resting"])',
+  )) {
+    fireEvent.animationEnd(element);
+  }
+};
 
 /** The sheet a drag is caught on, over one floating window. */
 const grabSheets = (container: HTMLElement): HTMLElement[] => [
@@ -544,23 +568,44 @@ describe("Shell", () => {
       clientAppears("term");
 
       domicile.emit("app_closed", { app_id: "term" });
+      motionsPlayOut(container);
 
       expect(windowsOnScreen(container)).toEqual([]);
     });
 
     // A CLOSE IS THE ONE CHANGE THE DESKTOP CANNOT DRAW. Every other one ends
     // with the desktop as it now is; this one ends with the window gone from
-    // the list, its workspace and the layout at once, so what shrinks away is
-    // a record of the frame it had — see `closing.ts`.
-    it("plays a closed window out at the box it had", () => {
+    // the list, its workspace and the layout at once, so the page goes on
+    // drawing it from a record of what it was — see `closing.ts`.
+    it("plays a closed window out at the box it had, showing the window itself", () => {
       const { container } = renderShell();
       clientAppears("term");
       const was = boxOf(appElement(container, "term"));
 
       domicile.emit("app_closed", { app_id: "term" });
 
-      expect(leavingParts(container, "app:term").map(boxOf)).toContainEqual(
-        was,
+      // The window's own element, not something standing in for it: what a
+      // window shows must not change while the user watches it go.
+      expect(appElement(container, "term")).toHaveAttribute(
+        "data-motion",
+        "closing",
+      );
+      expect(boxOf(appElement(container, "term"))).toEqual(was);
+    });
+
+    // AND GOES ON SAYING WHAT IT SAID. Closing a window moves the keyboard to
+    // whatever is left, so a bar drawn from the desktop as it now is would
+    // lose its fill half way through the window's own departure.
+    it("keeps its bar saying the keyboard was in it while it goes", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      clientAppears("editor");
+
+      domicile.emit("app_closed", { app_id: "editor" });
+
+      expect(barFor(container, "app:editor")).toHaveAttribute(
+        "data-focus",
+        "focused",
       );
     });
 
@@ -568,14 +613,11 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("term");
       domicile.emit("app_closed", { app_id: "term" });
-      const [bar] = leavingParts(container, "app:term");
-      if (bar === undefined) {
-        throw new Error("test: the closed window left nothing behind");
-      } else {
-        fireEvent.animationEnd(bar);
-      }
 
-      expect(leavingParts(container, "app:term")).toEqual([]);
+      motionsPlayOut(container);
+
+      expect(movingParts(container, "closing")).toEqual([]);
+      expect(windowsOnScreen(container)).toEqual([]);
     });
 
     it("keeps a window that is on another workspace mounted and hidden", () => {
@@ -585,9 +627,51 @@ describe("Shell", () => {
       clientAppears("term");
 
       press("parenright");
+      motionsPlayOut(container);
 
       expect(windowsOnScreen(container)).toEqual([]);
       expect(appElement(container, "term")).toBeInTheDocument();
+    });
+
+    // A WORKSPACE SWITCH IS THE ONE CHANGE ON THIS DESKTOP WITH A DIRECTION.
+    // The workspaces are a row: the one arriving comes in from the side it was
+    // on and the one being left goes the other way, so the two pass each
+    // other rather than one blinking out and the other blinking in.
+    it("slides one workspace off as the next one slides in", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      press("braceright");
+      clientAppears("editor");
+
+      press("parenleft");
+
+      expect(moving(container)).toContain("leaving-to-end");
+      expect(moving(container)).toContain("arriving-from-start");
+    });
+
+    it("and the other way when the switch goes the other way", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+
+      press("braceright");
+
+      expect(moving(container)).toContain("leaving-to-start");
+    });
+
+    // A WINDOW SIMPLY COMING BACK INTO VIEW IS NOT A WINDOW OPENING. It has
+    // been on the desktop the whole time, and a desktop that played an
+    // arrival for it would announce every window on a workspace as new every
+    // time the workspace was reached.
+    it("does not play a window in when a workspace switch reveals it", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      press("braceright");
+      motionsPlayOut(container);
+
+      press("parenleft");
+      motionsPlayOut(container);
+
+      expect(moving(container)).toEqual([]);
     });
   });
 
@@ -748,6 +832,9 @@ describe("Shell", () => {
 
       expect(windowsOnScreen(container)).toEqual(["one"]);
       press("parenright");
+      // Once the workspace it was on has finished sliding off: `one` is drawn
+      // for as long as that takes.
+      motionsPlayOut(container);
       expect(windowsOnScreen(container)).toEqual(["two"]);
     });
 

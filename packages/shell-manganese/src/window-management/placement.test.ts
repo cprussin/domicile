@@ -44,6 +44,7 @@ describe("placementsOf", () => {
     expect(placementFor(desktop("kitty"), "kitty")).toEqual({
       bar: { height: TITLE_BAR, width: 1920, x: 0, y: 32 },
       depth: 0,
+      frame: { height: 1048, width: 1920, x: 0, y: 32 },
       id: appWindowId("kitty"),
       surface: {
         height: 1048 - TITLE_BAR,
@@ -136,5 +137,30 @@ describe("placementsOf", () => {
     // title bar, so there is nothing extra to draw.
     expect(placementsOf(state, GEOMETRY).tabs).toEqual([]);
     expect(placementFor(state, "kitty")?.bar).toMatchObject({ y: 32 });
+  });
+  // WHAT BOTH HALVES OF A WINDOW TURN ABOUT. A window is two elements — the
+  // bar and the contents under it — and a frame whose halves scaled about
+  // their own centres would come apart at the seam, so each of them is given
+  // the whole box to turn about instead.
+  it("gives every window the box its bar and its contents span together", () => {
+    expect(placementFor(desktop("kitty"), "kitty")?.frame).toEqual({
+      height: 1048,
+      width: 1920,
+      x: 0,
+      y: 32,
+    });
+  });
+
+  it("gives a window a tab is hiding the box of the tab alone", () => {
+    // There are no contents on screen to span: the tab is the whole of what
+    // the window has.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+    );
+    const hidden = placementFor(state, "kitty");
+
+    expect(hidden?.surface).toBeUndefined();
+    expect(hidden?.frame).toEqual(hidden?.bar ?? GEOMETRY.screen);
   });
 });

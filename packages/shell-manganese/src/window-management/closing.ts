@@ -5,8 +5,8 @@
 // resizes, and there it is at the new rectangle — while a window that closes
 // is gone from the list, from its workspace and from the layout in the same
 // reduction, so there is nothing left for a stylesheet to animate. What plays
-// out instead is a record of what the window was: its last box and its name,
-// held here until it has finished leaving.
+// out instead is a record of what the window was, held here until it has
+// finished leaving.
 //
 // Not in `window-state.ts` for exactly that reason. The state is what the
 // desktop *is*, and a window in the middle of closing is not one of the
@@ -14,14 +14,33 @@
 // nothing the user does reaches it.
 
 import type { Placement } from "./placement";
+import type { Shown } from "./shown";
 import type { ShellWindow } from "./window";
 
-/** A window that has closed, with what it takes to draw it one last time. */
+/** A window that has closed, with everything it takes to go on drawing it. */
 export type Closing = {
-  /** The box it last had, which is where it plays out. */
+  /**
+   * Where it was in the list of windows.
+   *
+   * So that it goes on being drawn there rather than moved to the end while it
+   * leaves: React keeps an element across a re-order by moving it in the
+   * document, and a `<webview>` moved in the document reloads the page inside
+   * it — which is a browser window going blank for the whole of its own
+   * closing animation.
+   */
+  at: number;
+  /**
+   * Whether the keyboard was in it.
+   *
+   * Frozen, because closing a window moves the keyboard to whatever is left:
+   * a bar drawn from the desktop as it now is would lose its fill half way
+   * through the window's own departure, which is the window changing while the
+   * user watches it go.
+   */
+  focused: boolean;
+  /** The box it had, which is where it plays out. */
   placement: Placement;
-  /** What it was called, which its bar goes on saying while it goes. */
-  title: string;
+  window: ShellWindow;
 };
 
 /**
@@ -34,15 +53,35 @@ export type Closing = {
  * using now.
  */
 export const departed = (
-  before: readonly ShellWindow[],
-  after: readonly ShellWindow[],
-  placements: readonly Placement[],
+  before: Shown,
+  windows: readonly ShellWindow[],
 ): readonly Closing[] =>
-  before
-    .filter((window) => !after.some((open) => open.id === window.id))
-    .flatMap((window) => {
-      const placement = placements.find((found) => found.id === window.id);
-      return placement === undefined
-        ? []
-        : [{ placement, title: window.title }];
-    });
+  before.windows.flatMap((window, at) => {
+    const placement = before.placements.find(({ id }) => id === window.id);
+    return windows.some((open) => open.id === window.id) ||
+      placement === undefined
+      ? []
+      : [{ at, focused: before.activeId === window.id, placement, window }];
+  });
+
+/**
+ * The windows to draw: the open ones, with the closing ones back in the places
+ * they had.
+ *
+ * In ascending order of where they belong, so that two windows closing at once
+ * land either side of each other rather than both at the earlier index.
+ */
+export const withClosing = (
+  windows: readonly ShellWindow[],
+  closing: readonly Closing[],
+): readonly ShellWindow[] =>
+  [...closing]
+    .sort((one, other) => one.at - other.at)
+    .reduce<readonly ShellWindow[]>(
+      (drawn, { at, window }) => [
+        ...drawn.slice(0, at),
+        window,
+        ...drawn.slice(at),
+      ],
+      windows,
+    );

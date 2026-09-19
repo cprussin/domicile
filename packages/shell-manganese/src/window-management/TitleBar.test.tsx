@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 
 import { TitleBar } from "./TitleBar";
 
@@ -24,12 +24,22 @@ document.head.append(stylesheet);
 /** Where a window's bar on screen is, which no case here is about. */
 const ON_SCREEN = { height: 30, width: 1200, x: 0, y: 32 };
 
+/** The whole box the window it names spans, which it turns about. */
+const FRAME = { height: 830, width: 1200, x: 0, y: 32 };
+
+const nothingEnded = () => {
+  // Nothing in the case plays an animation to its end.
+};
+
 /** The props every case here shares; each overrides the one it is about. */
 const barProps = {
   depth: 0,
   dragging: false,
   focus: "resting",
+  frame: FRAME,
+  motion: "resting",
   onClose: () => undefined,
+  onMotionEnded: nothingEnded,
   onReach: () => undefined,
   rect: ON_SCREEN,
   title: "kitty",
@@ -49,12 +59,45 @@ const bar = (container: HTMLElement): HTMLElement => {
 // arrived or settled differently from the window it names would be a frame
 // coming apart at the seam.
 describe("TitleBar", () => {
-  it("grows in with the window it names", () => {
-    const { container } = render(<TitleBar {...barProps} />);
+  it("plays the motion the window it names is playing", () => {
+    const { container } = render(<TitleBar {...barProps} motion="opening" />);
 
     expect(globalThis.getComputedStyle(bar(container)).animation).toContain(
       "windowOpening",
     );
+  });
+
+  it("turns about the middle of that window rather than its own", () => {
+    const { container } = render(<TitleBar {...barProps} motion="opening" />);
+
+    // The frame's middle is (600, 447), which is 415 below the top of the bar.
+    expect(bar(container)).toHaveStyle({ transformOrigin: "600px 415px" });
+  });
+
+  // The window it names is going, and its Close does nothing now: a control
+  // the keyboard can still reach for a fifth of a second is not one.
+  it("is nothing a pointer or a keyboard can reach while it leaves", () => {
+    const { container } = render(<TitleBar {...barProps} motion="closing" />);
+
+    expect(globalThis.getComputedStyle(bar(container)).pointerEvents).toBe(
+      "none",
+    );
+    expect(bar(container)).toHaveAttribute("inert");
+  });
+
+  it("says when it has played that motion out", async () => {
+    await new Promise<void>((resolve) => {
+      const { container } = render(
+        <TitleBar
+          {...barProps}
+          motion="closing"
+          onMotionEnded={() => {
+            resolve();
+          }}
+        />,
+      );
+      fireEvent.animationEnd(bar(container));
+    });
   });
 
   it("eases to a new box rather than jumping to it", () => {

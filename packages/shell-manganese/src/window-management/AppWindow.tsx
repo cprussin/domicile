@@ -11,14 +11,17 @@ import { useEffect, useState } from "react";
 import { css, cx } from "../../styled-system/css";
 import type { Rect } from "./rect";
 import { appWindowId } from "./window";
+import type { WindowMotion } from "./window-motion";
+import { isLeaving } from "./window-motion";
 import {
   clickThroughStyles,
   draggingStyles,
   edgeStyles,
   focusedEdgeStyles,
-  openingStyles,
+  movingStyles,
   placedAt,
   restingEdgeStyles,
+  scaledAbout,
   settlingStyles,
   windowStyles,
 } from "./window-styles";
@@ -45,6 +48,12 @@ type Props = {
   depth: number;
   /** The channel the keyboard is asked for over. */
   domicile: DomicileClient;
+  /**
+   * The whole box this window's bar and contents span, which both of them turn
+   * about — see {@link scaledAbout}. `undefined` for a window that is not on
+   * screen, exactly as {@link Props.rect} is.
+   */
+  frame: Rect | undefined;
   /** Whether the user is working in this window, so it takes the keyboard. */
   focused: boolean;
   /**
@@ -55,6 +64,24 @@ type Props = {
    * whenever something takes the keyboard without the shell saying so.
    */
   hasKeyboard: boolean;
+  /**
+   * What this window is doing that the page has to draw over time: arriving,
+   * leaving, or nothing at all.
+   *
+   * A window that is leaving is drawn and nothing else. It asks for no
+   * keyboard, takes no pointer and is nothing a keyboard can reach, because
+   * what it is showing is where the window was rather than a window.
+   */
+  motion: WindowMotion;
+  /**
+   * Called when it has played that motion all the way out.
+   *
+   * Which is how the desktop knows a window it has closed can be taken off the
+   * page. Rather than a timer: how long the motion takes is the stylesheet's,
+   * and a duration written in the shell as well is a second copy of it to keep
+   * in step.
+   */
+  onMotionEnded: () => void;
   /**
    * Called when the pointer moves into this window.
    *
@@ -110,11 +137,16 @@ export const AppWindow = ({
   domicile,
   dragging,
   focused,
+  frame,
   hasKeyboard,
+  motion,
   onHover,
+  onMotionEnded,
   onReach,
   rect,
 }: Props) => {
+  // A window the desktop no longer has is being drawn and nothing else.
+  const leaving = isLeaving(motion);
   // `null` rather than `undefined` because that is what React's ref API hands a
   // callback ref on unmount.
   const [element, setElement] = useState<HTMLAppElement | null>(null);
@@ -135,11 +167,16 @@ export const AppWindow = ({
   // It cannot loop. A `focusApp` the compositor carries out comes back as the
   // `focus_changed` that makes this false, and one it refuses moves neither
   // this nor `focused`, so the effect is not run again either way.
+  //
+  // And not for a window that is leaving. Its bar goes on saying the keyboard
+  // was in it — that is what stops a window changing while the user watches it
+  // go — but the keyboard itself has moved on to whatever is left, and asking
+  // again would take it back off the window the user is now working in.
   useEffect(() => {
-    if (focused && !hasKeyboard) {
+    if (focused && !hasKeyboard && !leaving) {
       focusApp(domicile, appId);
     }
-  }, [appId, domicile, focused, hasKeyboard]);
+  }, [appId, domicile, focused, hasKeyboard, leaving]);
 
   // A click on a client's window asks for the keyboard, and the SDK grants it
   // unless something answers first. This answers first: the request becomes the
@@ -209,21 +246,33 @@ export const AppWindow = ({
         windowStyles,
         appStyles,
         edgeStyles,
-        openingStyles,
+        movingStyles({ motion }),
         // The frame says what the bar above it says: this is the window the
         // keyboard is in.
         focused ? focusedEdgeStyles : restingEdgeStyles,
-        clickThrough && clickThroughStyles,
+        (clickThrough || leaving) && clickThroughStyles,
         // A dragged window is written at a new box on every pointer move, so
         // it takes the box it is given rather than easing towards it.
         dragging ? draggingStyles : settlingStyles,
       )}
+      // What it is doing, as an attribute as well as an animation: the
+      // desktop's own state is worth being able to read off the element.
+      data-motion={motion}
       hidden={rect === undefined}
+      // Nothing a keyboard can reach, for as long as it is only being drawn.
+      inert={leaving}
       // React's own event rather than a listener on the ref: `pointerover` is
       // one it has heard of, unlike the two the SDK invented above. It rather
       // than `pointerenter` because it is the one the page is actually given —
       // an `<app>` is a replaced element with no rendered children, so nothing
       // distinguishes the two here anyway.
+      // Its own rather than one of the chrome's on its way up the document:
+      // a window is told it has finished when *it* has.
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget) {
+          onMotionEnded();
+        }
+      }}
       onPointerOver={onHover}
       ref={setElement}
       // Inline because the box is a runtime number and Panda reads literals;
@@ -233,7 +282,9 @@ export const AppWindow = ({
       // hidden, with the page's own cursor over it.
       style={{
         cursor,
-        ...(rect === undefined ? undefined : placedAt(rect, depth)),
+        ...(rect === undefined || frame === undefined
+          ? undefined
+          : { ...placedAt(rect, depth), ...scaledAbout(frame, rect) }),
       }}
     />
   );

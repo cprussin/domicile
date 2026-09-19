@@ -168,37 +168,64 @@ a bar is, is on the element as `data-focus` as well as in its colours.
 
 ### Windows arrive, settle and leave
 
-A window is not simply *there* and then gone. One that appears fades up and
-grows into its box; one whose neighbours rearrange eases across to the new box
-rather than jumping to it; one that closes shrinks and fades away from where it
-was.
+A window is not simply *there* and then gone.
 
-**The arrival and the departure are a transform, and the settling is the box
+- **One that opens** fades up and grows out of the middle of its own frame.
+- **One whose neighbours rearrange** eases across to the new box rather than
+  jumping to it.
+- **One that closes** shrinks and fades away from where it was.
+- **A workspace being switched to** slides its windows in from the side it was
+  on, while the one being left slides off the other way.
+
+**The arrivals and the departures are a transform, and the settling is the box
 itself**, which is not a stylistic difference. The size of an `<app>` is the
 resolution its client is configured at — the SDK measures the element every
 animation frame and the host sends the client a `configure` — so a window that
 *grew* by laying out smaller would make its client redraw on every frame of the
 animation. A transform leaves the box alone: the page's own compositor scales
-the layer the client's buffer is already in. A settling window really is a
-different size afterwards and its client really does have to be told, which is
-the same stream of sizes dragging a floating window's corner already produces,
-over a sixth of a second instead of as long as the user holds it. **A window
-being dragged settles at nothing**: it takes the box each pointer move writes,
-because one easing towards each of them trails the pointer instead of
-following it.
+or slides the layer the client's buffer is already in. A settling window really
+is a different size afterwards and its client really does have to be told,
+which is the same stream of sizes dragging a floating window's corner already
+produces, over a sixth of a second instead of as long as the user holds it.
+**A window being dragged settles at nothing**: it takes the box each pointer
+move writes, because one easing towards each of them trails the pointer instead
+of following it.
 
-An arrival is played whenever a window appears on screen, not only when it
-opens: a window the desktop is not showing is hidden rather than unmounted —
-that is what keeps its client's surface and its page alive — and a hidden
-element runs no animation, so the one on it starts again when a workspace is
-switched to, a tab is picked, or a fullscreen is let go of.
+**A window turns about one point, not two.** Its bar and its contents are
+separate elements; each scaled about its own centre would pull away from the
+other by a fraction of the window's height, which is a frame coming apart
+rather than a window arriving. So the layout hands both of them the box they
+span together and they turn about the middle of that — see `scaledAbout`.
 
-**What leaves is not the window.** A close ends the window everywhere at once
-— the list, its workspace, the layout — and for a client's window the pixels
-have gone with it, because `app_closed` is the host saying the client has
-exited. So what shrinks away is a record of the frame the window had, with its
-name still on it, held by `closing.ts` until it says it has finished; it takes
-no pointer while it goes.
+**Opening and being revealed are different things.** A window behind a tab,
+under a fullscreen one, or on a workspace nobody is looking at has been on the
+desktop the whole time: it is hidden rather than unmounted, which is what keeps
+its client's surface and its page alive. Only a window the desktop did not have
+a render ago is opening. A workspace switch is the one reveal with an animation
+of its own, and it is a slide rather than ten windows growing in at once —
+because the windows were already there, and somewhere else is what they were.
+
+**What leaves is the window itself, unchanged.** A close ends the window
+everywhere at once — the list, its workspace, the layout — so the page goes on
+drawing it from a record of what it was: the box it had, where it was in the
+list, and whether the keyboard was in it. It is the same element at the same
+place in the document, because React takes an element out of the document the
+moment it stops being rendered and a `<webview>` put back a frame later is a
+page reloaded from scratch. Its bar goes on saying the keyboard was in it,
+because closing a window moves the keyboard and a bar that lost its fill half
+way through its own departure is a window changing while the user watches it
+go. What it stops doing is asking: no keyboard, no pointer, and nothing a
+keyboard can reach. The workspace being switched away from is held the same
+way, screenful and all.
+
+One thing a closed **client's** window cannot keep is its pixels. `app_closed`
+is the host saying the client has exited, so the surface has gone with it and
+what shrinks away is the frame. A browser window, whose page is part of this
+one, keeps showing its page the whole way out.
+
+Each of them is let go when it says it has finished, not when a timer says so:
+how long any of it takes is the stylesheet's, and a duration written in the
+shell as well would be a second copy of it to keep in step.
 
 ### Focus follows the cursor
 
@@ -413,9 +440,11 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/useReclaimFocus.ts` | Keeping the document's focus on the window being worked in, but only when it landed on nothing at all — the address bar and the bar's own controls are the user reaching for focus, and a closing window's own control leaves it on the body. Which of the two a `focusout` is comes off the event's `relatedTarget`, because the document is mid-change while it is dispatched. |
 | `src/window-management/with-scheme.ts` | What an address typed without one gets: `example.com` is an address, not a relative path. |
 | `src/window-management/window-styles.ts` | What every window shares, how one is placed at a rectangle, and how one arrives, settles and leaves. |
-| `src/window-management/closing.ts` | A window that has closed: the box and the name it had, which is the one change the state cannot draw. |
-| `src/window-management/useClosing.ts` | Which windows those are, from the difference between two renders, held until each says it has finished leaving. |
-| `src/window-management/ClosingWindow.tsx` | The frame of a closed window, shrinking away from where it was. |
+| `src/window-management/window-motion.ts` | What a window is doing that the page has to draw over time, and which way a workspace switch went. |
+| `src/window-management/shown.ts` | The desktop as the page last drew it, which is the only place a close or a switch survives. |
+| `src/window-management/closing.ts` | A window that has closed: the box, the name and the keyboard it had, and where in the list it goes on being drawn. |
+| `src/window-management/workspace-switch.ts` | The workspace that has just left the screen, with the screenful it had and the way it went. |
+| `src/window-management/useWindowMotion.ts` | Which windows are drawn and what each of them is doing, worked out from the difference between two renders. |
 | `src/window-management/floating/float.ts` | A window that has left the tiling: where it sits and how big. Its own module because floating is not a kind of window. |
 | `src/window-management/floating/useFloatDrag.ts`, `FloatGrab.tsx`, `FloatTitleBar.tsx` | Dragging and resizing a floating window, and the furniture that offers it. |
 | `src/wallpaper/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
