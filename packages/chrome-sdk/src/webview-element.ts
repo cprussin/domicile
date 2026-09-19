@@ -76,6 +76,60 @@ export const WEBVIEW_HISTORY_CHANGE_EVENT = "domicile-history-change";
 export const WEBVIEW_LOADING_CHANGE_EVENT = "domicile-loading-change";
 
 /**
+ * Fired when the page inside the view changes: a new address, a new verdict on
+ * the connection behind it, or both.
+ *
+ * THE EVENT THAT MAKES A `<webview>` A BROWSER. Before it, a chrome knew only
+ * where it had *sent* a window — `src` is the author's attribute — so a link
+ * followed, a redirect taken or a form posted left the address bar showing a
+ * page the user had left. What the engine now reports is the guest's *visible
+ * entry*: the one a browser's own address bar shows.
+ *
+ * THE ENGINE DISPATCHES THIS, and like the history and loading events it
+ * carries nothing: what changed is readable on the element as
+ * {@link HTMLWebViewElement.url} and {@link HTMLWebViewElement.security}. The
+ * reason is the same one — a payload is a copy of the state correct only at
+ * the instant it was made — and so is the reason the state is a property: a
+ * chrome that mounts mid-load is the ordinary case, and one that learned the
+ * security level only from an event would have none to draw.
+ *
+ * READ THE TWO TOGETHER. They arrive in one message, from one read of one
+ * entry, so that the address and the lock always describe the same page — see
+ * `components/domicile/mojom/web_view_guest.mojom`. A chrome that paired this
+ * security with an address from anywhere else (from `src`, say) would draw a
+ * padlock beside an address it does not belong to, which is the shape of every
+ * address-bar spoof.
+ *
+ * It bubbles, so a chrome can listen on the window it drew rather than on the
+ * view.
+ */
+export const WEBVIEW_PAGE_CHANGE_EVENT = "domicile-page-change";
+
+/**
+ * What the browser says about the connection behind the page in a `<webview>`.
+ *
+ * `security_state::GetSecurityLevel` narrowed to the four a chrome can draw —
+ * the same function, over the same entry, that Chrome's own omnibox lock comes
+ * from. Not a scheme: a `https://` that failed to validate is `dangerous`, and
+ * a `https://` running active mixed content is too.
+ *
+ * `""` IS NOT A LEVEL AND MUST NOT BE READ AS ONE. It is what the element
+ * reports before the browser has said anything — a guest still on its initial
+ * entry — and what an engine older than this contract reports by having no
+ * such property at all. A chrome that treated it as "neutral" would be making
+ * a claim nobody checked; see `connection-safety.ts` in shell-manganese for
+ * what to do with it instead.
+ */
+export const WEBVIEW_SECURITY_LEVELS = [
+  "neutral",
+  "secure",
+  "warning",
+  "dangerous",
+] as const;
+
+export type WebViewSecurity = (typeof WEBVIEW_SECURITY_LEVELS)[number];
+
+/**
  * Fired when the page inside the view asks for a window of its own — a link
  * with `target="_blank"`, a `window.open`, a form submitted at a named target
  * that does not exist.
@@ -141,6 +195,25 @@ declare global {
      * {@link WEBVIEW_LOADING_CHANGE_EVENT}.
      */
     readonly loading: boolean;
+    /**
+     * Where the page actually is — the guest's visible entry, which is the
+     * address a browser's own bar shows. NOT {@link HTMLWebViewElement.src},
+     * which is where the element was last *sent*.
+     *
+     * `""` until the browser has said otherwise. Changes are announced in
+     * {@link WEBVIEW_PAGE_CHANGE_EVENT}.
+     */
+    readonly url: string;
+    /**
+     * What the browser says about the connection behind that page: one of
+     * {@link WEBVIEW_SECURITY_LEVELS}, or `""` before the browser has said
+     * anything — which is not a level. See {@link WebViewSecurity}.
+     *
+     * Typed as `string` rather than as the union on purpose: this is the value
+     * an engine hands the page, so it is external data, and the union is what
+     * a chrome gets after parsing it at that boundary.
+     */
+    readonly security: string;
     goBack(): void;
     goForward(): void;
     stop(): void;

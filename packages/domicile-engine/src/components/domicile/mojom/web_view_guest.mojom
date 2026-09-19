@@ -30,6 +30,37 @@ import "url/mojom/url.mojom";
 // asks for a guest can already ask for `Spawn`, so there is nothing here to
 // protect it from itself.
 
+// What the browser is prepared to say about the connection behind the page a
+// <webview> is showing.
+//
+// THE BROWSER'S OWN ANSWER, NARROWED -- not a scheme, and not a second opinion.
+// This is `security_state::GetSecurityLevel` over the guest's visible entry,
+// which is the same function and the same entry Chrome's own omnibox draws its
+// lock from: the certificate the network stack validated, the mixed content
+// the page ran, the cert errors it displayed. A chrome that derived a lock
+// from `https://` instead would be claiming, on every page, a thing nobody
+// checked.
+//
+// AN ENUM OF OUR OWN RATHER THAN security_state::SecurityLevel ON THE WIRE.
+// That enum carries deprecated members and numbering nobody here should depend
+// on, and the mapping between it and this is one explicit switch in
+// web_view_guest.cc with no default arm -- so a level Chromium adds is a
+// compile error in the fork rather than a page that silently reads as neutral.
+enum WebViewSecurity {
+  // Neither secure nor insecure, and the browser is not making a claim:
+  // about:blank, a file, an error page, a scheme that is not a connection.
+  kNeutral,
+  // HTTPS with a certificate that validated, and nothing on the page that
+  // undoes it.
+  kSecure,
+  // The browser would show a "Not secure" warning: plain HTTP, or an HTTPS
+  // page it considers insecure.
+  kWarning,
+  // A serious problem: a certificate that failed to validate, active mixed
+  // content, an HTTPS connection that failed.
+  kDangerous,
+};
+
 // Renderer -> browser, bound per document.
 interface WebViewGuestHost {
   // Give `placeholder_frame` a guest page.
@@ -140,6 +171,42 @@ interface WebViewGuestClient {
   // into, which is exactly the part refusing does not carry, so it is refused
   // and not reported. See WebViewGuest::CreateCustomWebContents.
   NewWindowRequested(url.mojom.Url target_url);
+
+  // WHERE THE PAGE ACTUALLY IS, AND WHAT THE BROWSER SAYS ABOUT GETTING THERE.
+  //
+  // THIS IS THE MESSAGE THAT MAKES A BROWSER WINDOW A BROWSER. Before it, a
+  // shell knew only where it had *sent* a window: `src` is the author's
+  // attribute, so a link followed, a redirect taken or a form posted left the
+  // chrome showing an address the page had left, and any lock drawn beside it
+  // was a claim about a different page. An address bar that cannot follow its
+  // own page cannot be trusted with a padlock, which is why the address and
+  // the security travel together in one message rather than in two.
+  //
+  // BOTH HALVES COME FROM THE ONE ENTRY -- `GetVisibleEntry()` on the guest's
+  // own NavigationController. That is not a convenience, it is the property
+  // that makes the pair meaningful: a URL taken from one entry beside a level
+  // computed from another is a lock drawn next to an address it does not
+  // describe, which is the shape of every address-bar spoof. `GetVisibleEntry`
+  // is also what decides when a pending navigation may be shown at all --
+  // content only lets a browser-initiated one be visible before it commits,
+  // which is the rule that keeps a page from writing another site's address
+  // into the bar.
+  //
+  // THE VIRTUAL URL, which is the one a browser shows: `view-source:` and the
+  // other rewrites are the entry's virtual URL and not its real one, and a
+  // chrome showing the real one would disagree with every other browser.
+  //
+  // SENT ONLY WHEN THE PAIR CHANGES, like HistoryChanged and LoadingChanged
+  // above. It is driven from two hooks -- NavigationStateChanged for the
+  // address and DidChangeVisibleSecurityState for the level -- and either can
+  // fire for something the other reported, so both go through one comparison
+  // against the last pair sent.
+  //
+  // A FRESH GUEST SENDS NOTHING. It is showing the initial entry, which
+  // GetVisibleSecurityState declines to describe, and an element that has
+  // heard nothing holds exactly that: no address, and a security nobody has
+  // stated.
+  PageChanged(url.mojom.Url url, WebViewSecurity security);
 };
 
 // One guest, for as long as the element that asked for it lives.

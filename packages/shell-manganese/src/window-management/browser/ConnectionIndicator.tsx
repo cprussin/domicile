@@ -2,22 +2,24 @@ import { Button } from "@domicile/component-library/Button";
 import { Popover } from "@domicile/component-library/Popover";
 import { InfoIcon } from "@phosphor-icons/react/dist/ssr/Info";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
+import { QuestionIcon } from "@phosphor-icons/react/dist/ssr/Question";
 import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
+import { WarningOctagonIcon } from "@phosphor-icons/react/dist/ssr/WarningOctagon";
 import type { ReactNode } from "react";
 
 import { css } from "../../../styled-system/css";
-import {
-  ConnectionSafety,
-  connectionSafety,
-} from "../../address/connection-safety";
+import { ConnectionSafety } from "../../address/connection-safety";
 
 type Props = {
+  /** The browser's verdict on the connection behind the page being shown. */
+  security: ConnectionSafety;
   /**
-   * The address the window was sent to.
+   * The address that verdict is about.
    *
-   * Which is not where the page is — see {@link ConnectionSafety} — and the
-   * details below say so, because an indicator that let the user believe
-   * otherwise would be worse than no indicator at all.
+   * THE ONE THE VERDICT CAME WITH. Both reach the chrome in one message about
+   * one entry — see `useShownPage` — and handing this component an address
+   * from anywhere else would make it name a host the lock beside it was never
+   * about.
    */
   url: string;
 };
@@ -25,14 +27,21 @@ type Props = {
 /**
  * The lock at the inline start of the address bar, and what it opens.
  *
- * It says less than a browser's lock and says it in the same place, so what it
- * says has to be exact: the scheme of the address this window was *sent* to.
- * The panel behind it is where that fits — a line about the connection, the
- * host, and the sentence about where the page may have gone since.
+ * WHAT IT DRAWS IS THE BROWSER'S ANSWER. The engine computes it with
+ * `security_state::GetSecurityLevel` over the guest's visible entry, which is
+ * the same function over the same entry Chrome's own omnibox lock comes from —
+ * so an expired certificate, a name mismatch, a page running active mixed
+ * content and a connection that failed all read here exactly as they read
+ * there. This component chooses an icon and a sentence; it does not judge a
+ * connection, and it has no way to.
+ *
+ * It used to derive a lock from the URL scheme, which is a claim that a
+ * certificate validated made without anyone having looked. That is the bug
+ * this replaced.
  */
-export const ConnectionIndicator = ({ url }: Props) => {
-  const { body, mark, title } = INDICATORS[connectionSafety(url)];
-  const { host } = new URL(url);
+export const ConnectionIndicator = ({ security, url }: Props) => {
+  const { body, mark, title } = INDICATORS[security];
+  const host = hostOf(url);
   return (
     <Popover
       align="start"
@@ -50,47 +59,42 @@ export const ConnectionIndicator = ({ url }: Props) => {
         </Button>
       }
     >
-      {host === "" ? undefined : <span className={hostStyles}>{host}</span>}
+      {host === undefined ? undefined : (
+        <span className={hostStyles}>{host}</span>
+      )}
       <span>{body}</span>
-      {/* THE CAVEAT IS PART OF THE ANSWER. A browser draws its lock from a
-          certificate the network stack validated; this one is drawn from a
-          scheme, and the engine reports no address for the page inside a
-          window — so a link or a redirect has taken it somewhere this panel
-          was never told about. */}
-      <span>
-        This describes where this window was sent, not where the page has gone
-        since: a link or a redirect inside the page is not reported back to the
-        desktop.
-      </span>
     </Popover>
   );
 };
 
-// One `css(...)` per mark rather than a `cva` with a `safety` variant. The
-// recipe would work — Panda reads an enum member as a variant key — but the
-// color is the only thing that varies, and a recipe for one property splits
-// what the indicator says across two tables keyed by the same enum. They are
-// one answer, so they are in one place: see `INDICATORS` below.
-const encryptedMarkStyles = css({
+// The four colors a mark is drawn in, one `css(...)` call at a time. See
+// `INDICATORS` below for why they are not a `cva` keyed by the verdict.
+const secureMarkStyles = css({
   alignItems: "center",
   color: "success",
   display: "inline-flex",
 });
 
-const localMarkStyles = css({
+const neutralMarkStyles = css({
   alignItems: "center",
   color: "muted",
   display: "inline-flex",
 });
 
-const plainMarkStyles = css({
+const warningMarkStyles = css({
   alignItems: "center",
   color: "warning",
   display: "inline-flex",
 });
 
+const dangerousMarkStyles = css({
+  alignItems: "center",
+  color: "danger",
+  display: "inline-flex",
+});
+
 /**
- * Everything the indicator draws and says, per connection.
+ * Everything the indicator draws and says, per verdict.
  *
  * A record rather than a `switch` in three places: the mark, the name and the
  * sentence are one answer, and a variant added to {@link ConnectionSafety} is a
@@ -103,32 +107,55 @@ const plainMarkStyles = css({
 const INDICATORS: Readonly<
   Record<ConnectionSafety, { body: string; mark: ReactNode; title: string }>
 > = {
-  [ConnectionSafety.Encrypted]: {
-    body: "This window asked for the page over HTTPS, so what passes between here and the site cannot be read on the way.",
+  [ConnectionSafety.Dangerous]: {
+    body: "The browser could not establish a private connection to this site. Its certificate did not validate, or the page is running content that undoes the encryption. You should not enter anything sensitive here.",
     mark: (
-      <span className={encryptedMarkStyles}>
-        <LockIcon size={14} />
+      <span className={dangerousMarkStyles}>
+        <WarningOctagonIcon size={14} />
       </span>
     ),
-    title: "Connection is encrypted",
+    title: "Connection is not private",
   },
-  [ConnectionSafety.Local]: {
-    body: "This address is not a connection. The page comes from this machine rather than over the network.",
+  [ConnectionSafety.Neutral]: {
+    body: "This address is not a network connection, so there is nothing to encrypt. The page comes from this machine or from the browser itself.",
     mark: (
-      <span className={localMarkStyles}>
+      <span className={neutralMarkStyles}>
         <InfoIcon size={14} />
       </span>
     ),
     title: "Connection is local",
   },
-  [ConnectionSafety.Plain]: {
-    body: "This window asked for the page over plain HTTP. Anything sent to or from the site can be read and changed by anything on the path.",
+  [ConnectionSafety.Secure]: {
+    body: "The browser validated this site's certificate, and what passes between here and it is encrypted. That is a statement about the connection and not about the site: a page can be reached securely and still not be worth trusting.",
     mark: (
-      <span className={plainMarkStyles}>
+      <span className={secureMarkStyles}>
+        <LockIcon size={14} />
+      </span>
+    ),
+    title: "Connection is secure",
+  },
+  // THE ONE THAT MUST NEVER LOOK LIKE ANY OF THE OTHERS. It is the browser
+  // having said nothing — a guest that has committed no page, or an engine
+  // older than the report — and the tempting thing to do with it is fall back
+  // to reading the scheme, which is the padlock-without-a-certificate this
+  // whole change removed. So it says what it does not know instead.
+  [ConnectionSafety.Unstated]: {
+    body: "The browser has not reported on this page's connection. Until it does, nothing here is a statement about whether the page is encrypted or whether its certificate is valid.",
+    mark: (
+      <span className={neutralMarkStyles}>
+        <QuestionIcon size={14} />
+      </span>
+    ),
+    title: "Connection is not known",
+  },
+  [ConnectionSafety.Warning]: {
+    body: "This page was not reached over an encrypted connection, so anything sent to or from it can be read and changed by anything on the path between here and the site.",
+    mark: (
+      <span className={warningMarkStyles}>
         <WarningIcon size={14} />
       </span>
     ),
-    title: "Connection is not encrypted",
+    title: "Connection is not secure",
   },
 };
 
@@ -138,3 +165,19 @@ const hostStyles = css({
   fontSize: "xs",
   overflowWrap: "anywhere",
 });
+
+/**
+ * The host of `url`, or `undefined` when there is not one to show.
+ *
+ * `URL.parse` rather than the constructor, and that is what sets this apart
+ * from every other address in this shell: the rest were built by
+ * `typedAddress` or opened by the desktop, so one that will not parse is a bug
+ * to fail loudly on. THIS one is whatever the browser is showing — an engine
+ * newer than this page could report a form of address it cannot read — and a
+ * browser window that threw out of its own render over an unfamiliar address
+ * would take the desktop's chrome down with it.
+ */
+const hostOf = (url: string): string | undefined => {
+  const parsed = URL.parse(url);
+  return parsed === null || parsed.host === "" ? undefined : parsed.host;
+};
