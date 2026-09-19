@@ -106,6 +106,40 @@ interface WebViewGuestClient {
   // that has not heard from it -- so a guest's first message is its first
   // load beginning.
   LoadingChanged(bool is_loading);
+
+  // The page in the guest asked for a window of its own: a link with
+  // target="_blank" followed, a window.open, a form submitted at a target name
+  // that names no existing context.
+  //
+  // THE WINDOW IS NOT MADE, AND CANNOT BE HERE. A guest has no SiteInstance of
+  // its own -- see components/domicile/browser/web_view_guest.h for why that is
+  // a decision and not an omission -- and content CHECKs a guest's SiteInstance
+  // against its WebContents in WebContentsImpl::CreateNewWindow. So the browser
+  // refuses the window content would have made and sends this instead, and what
+  // opens a window is the shell: a second <webview>, in a second browser window
+  // it drew, pointed at this address. That is also the layering the rest of
+  // this desktop has -- where a window goes is the shell's answer, and a
+  // browser process that placed one would be placing it on a desktop it cannot
+  // see.
+  //
+  // WHAT IS LOST BY REFUSING AND REPORTING, which is worth stating where the
+  // decision is: the shell's window is a NAVIGATION to this address rather than
+  // the window the page asked for, so the opener relationship, the handle
+  // window.open returns, the target's name and a POST body do not survive. A
+  // link is the case that survives whole, and a link is what this was written
+  // for. Carrying the rest means handing the shell a window the browser made,
+  // which is the CHECK above and a guest SiteInstance in a StoragePartition of
+  // its own -- a browser window where the user is logged out of everything.
+  //
+  // ONE MESSAGE PER ASK, unlike the two above: this is an event rather than a
+  // state, so there is nothing to compare against what was last sent. Two
+  // links opened in a row are two windows.
+  //
+  // THE ADDRESS IS ALWAYS ONE, and that is what the browser side filters: a
+  // window.open() with no address at all asks for a handle to write a document
+  // into, which is exactly the part refusing does not carry, so it is refused
+  // and not reported. See WebViewGuest::CreateCustomWebContents.
+  NewWindowRequested(url.mojom.Url target_url);
 };
 
 // One guest, for as long as the element that asked for it lives.

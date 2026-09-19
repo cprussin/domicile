@@ -370,9 +370,37 @@ content::WebContents* WebViewGuest::CreateCustomWebContents(
     const blink::mojom::WindowFeatures& window_features,
     const content::StoragePartitionConfig& partition_config,
     content::SessionStorageNamespace* session_storage_namespace) {
+  // AN ADDRESS OR NOTHING, and the invalid case is the one to say out loud: a
+  // `window.open()` with no url asks for a handle to write a document into,
+  // which is precisely what a window the shell navigates to cannot be. Sending
+  // it anyway would open a browser window at nothing, in answer to a script
+  // that is about to write into a handle it did not get.
+  if (!target_url.is_valid()) {
+    LOG(WARNING) << "domicile: a <webview>'s page asked for a window with no "
+                    "address to open; refused, and the shell is not told.";
+    return nullptr;
+  }
+
+  // NOT THE WINDOW, WHICH THIS CANNOT MAKE: a guest with no SiteInstance of its
+  // own is what keeps the user logged in -- see the class comment -- and
+  // content CHECKs that pair in WebContentsImpl::CreateNewWindow. So the window
+  // is refused, exactly as it was before this message existed, and the address
+  // goes to the element. What opens a window is the shell.
+  //
+  // `disposition` and `window_features` are not carried, and that is the same
+  // decision the class makes about everything else an embedder is asked: a
+  // Domicile shell has one shape of browser window and lays it out itself, so a
+  // popup's requested size is an answer to a question its desktop does not ask.
+  client_->NewWindowRequested(target_url);
+
+  // The line stays a warning rather than becoming an info, because a refusal is
+  // still what happened here: what the user gets is a window the shell opened
+  // at this address, not the window the page asked for. A run where the two
+  // differ -- an opener that was needed, a POST that became a GET -- starts
+  // here.
   LOG(WARNING) << "domicile: a <webview> refused to open a window for "
                << target_url.possibly_invalid_spec()
-               << "; new windows from a guest are not wired up yet.";
+               << "; the shell was asked to open one instead.";
   return nullptr;
 }
 

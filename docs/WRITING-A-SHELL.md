@@ -494,7 +494,7 @@ back here, which is how dragging a window no longer takes the keyboard off it.
 **If you write JSX**, note that `<app>` has no hyphen in its name, so React
 treats the tag as an ordinary HTML element: it writes neither a property it does
 not recognize nor an `on…` prop for an event it has never heard of. Bind this
-event with `addEventListener` on a ref. `<webview>`'s two events are the same.
+event with `addEventListener` on a ref. `<webview>`'s four events are the same.
 
 **A client asking for focus** is the second, and it arrives as a message rather
 than an event: `domicile.on("focus_requested", ({ app_id }) => …)`. This is
@@ -656,11 +656,41 @@ shell that focuses the page on becoming focused spends the user's own press:
 the caret lands in the bar and is pulled into the page a moment later, which is
 an address bar that cannot be typed into at all.
 
-### What a guest refuses
+### A window the page asks for
 
-A page in one cannot open a second window, and permissions and dialogs are
-answered by the default, which is no. Each is a piece of work rather than a
-limit of the design; [ROADMAP.md](/ROADMAP.md) keeps the list.
+A link with `target="_blank"`, a `window.open` — the one thing a page asks for
+that is a *window* rather than an answer, and the one your shell has to supply.
+The browser process opens none: a guest has no `SiteInstance` of its own, which
+is what keeps the user logged in, and content refuses to hand such a guest a
+window it made. So the address comes to you instead, and the window is yours to
+open — which is the same rule as everywhere else here, since where a window goes
+is a thing only your layout knows.
+
+```ts
+import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile/chrome-sdk/webview-element";
+
+// Bubbles, like the three above, so one listener on the window covers it.
+frame.addEventListener(WEBVIEW_NEW_WINDOW_EVENT, (event) => {
+  openBrowserWindow(event.url);
+});
+```
+
+The only one of the four events that carries anything, and it has to: there is
+no element showing that address yet, which is the whole of what is being asked
+for. **A shell that ignores it is a desktop where such a link does nothing at
+all** — no window, no error, nothing in the page to notice.
+
+**What the window you open is not** is the window the page asked for. It is a
+navigation to that address, so `window.open` hands the opener `null`, the
+opener relationship and the target's name are not carried, and a form POSTed at
+a new target arrives as a GET of its action. A link is the case that survives
+whole, and a link is what this is for.
+
+### What a guest still refuses
+
+Permissions and dialogs are answered by the default, which is no. Each is a
+piece of work rather than a limit of the design; [ROADMAP.md](/ROADMAP.md)
+keeps the list.
 
 ## Bundling
 

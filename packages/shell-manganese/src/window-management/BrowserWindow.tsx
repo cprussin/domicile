@@ -1,5 +1,8 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  WEBVIEW_GUEST_FOCUS_EVENT,
+  WEBVIEW_NEW_WINDOW_EVENT,
+} from "@domicile/chrome-sdk/webview-element";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
@@ -93,6 +96,17 @@ type Props = {
   onMotionEnded: () => void;
   onNavigate: (url: string) => void;
   /**
+   * Called with the address the page inside this window asked to open in a
+   * window of its own — a link with `target="_blank"`, a `window.open`.
+   *
+   * A second window, which is the desktop's to open and not this one's: this
+   * component draws one window, and where another goes is the layout's
+   * question. The browser process opens none either — a guest cannot be handed
+   * a window content made — so an address that arrives here and is dropped is
+   * a `target="_blank"` that does nothing at all.
+   */
+  onOpenWindow: (url: string) => void;
+  /**
    * Called when the user clicks into this window — the page, the address bar,
    * anywhere in it.
    *
@@ -138,6 +152,7 @@ export const BrowserWindow = ({
   onHover,
   onMotionEnded,
   onNavigate,
+  onOpenWindow,
   onReach,
   rect,
   src,
@@ -208,6 +223,26 @@ export const BrowserWindow = ({
       };
     }
   }, [onReach, view]);
+
+  // A window the page asked for, which is the one thing this window hears from
+  // its page that is not about this window: a link with `target="_blank"` opens
+  // a second browser window, and where that goes is the desktop's to decide.
+  // The engine reports the address rather than opening anything — see
+  // `WEBVIEW_NEW_WINDOW_EVENT` — so a shell that ignores this is a desktop
+  // where such a link does nothing.
+  useEffect(() => {
+    if (view === null) {
+      return undefined;
+    } else {
+      const asked = (event: DomicileNewWindowEvent) => {
+        onOpenWindow(event.url);
+      };
+      view.addEventListener(WEBVIEW_NEW_WINDOW_EVENT, asked);
+      return () => {
+        view.removeEventListener(WEBVIEW_NEW_WINDOW_EVENT, asked);
+      };
+    }
+  }, [onOpenWindow, view]);
 
   // The window the user is working in takes the keyboard, and a browser
   // window's belongs to its page rather than to the chrome around it.

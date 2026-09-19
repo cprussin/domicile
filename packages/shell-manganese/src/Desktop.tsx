@@ -128,6 +128,9 @@ export const Desktop = ({ domicile }: Props) => {
           onMove={(id, x, y) => {
             act(WindowAction.WindowMoved(id, x, y));
           }}
+          onOpenWindow={(url) => {
+            act(WindowAction.BrowserOpened(url));
+          }}
           onRename={(id, url) => {
             act(WindowAction.WindowRenamed(id, siteOf(url)));
           }}

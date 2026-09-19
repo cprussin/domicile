@@ -316,6 +316,18 @@ for that as well as for its own chrome's pointer events. `guard-webview-click.sh
 is what says a real click in a real guest arrives here — it is also what found
 that the focus alone did not.
 
+**And a link with `target="_blank"` opens a second browser window**, which is
+the same boundary answered the other way round. The browser process opens no
+window for a guest — it has no `SiteInstance` of its own, which is what keeps
+the user logged in — so the element reports the address in
+`domicile-new-window` and the window is the shell's to open: `BrowserWindow`
+passes it up, `Desktop` opens a `BrowserOpened` at it, and it lands on the
+workspace being looked at like any other window the user opens. What the user
+gets is a window at that address rather than the window the page asked for —
+`window.open` is handed `null`, and the opener relationship is not carried.
+`guard-webview-new-window.sh` clicks such a link in a real engine and reads the
+page that then loads in the second `<webview>`.
+
 A client's window arrives at the same place by a different road. The SDK would
 focus a clicked client by itself, and the shell stops it: the SDK asks first,
 with a cancelable `domicile-focus-requested`, and this shell answers every one

@@ -50,9 +50,14 @@ It provides these:
   with, `canGoBack` / `canGoForward` say whether the first two would do
   anything, `loading` says whether a page is still arriving, and `focus` puts
   the keyboard on the embedded page. What this module adds is the TypeScript
-  for all of that plus the names of the three events the browser process
-  dispatches on it, `domicile-guest-focus`, `domicile-history-change` and
-  `domicile-loading-change`.
+  for all of that plus the names of the four events the browser process
+  dispatches on it, `domicile-guest-focus`, `domicile-history-change`,
+  `domicile-loading-change` and `domicile-new-window`. The last is the only one
+  that carries anything — `event.url`, the address a link with
+  `target="_blank"` asked to open — because it is the only one that is not about
+  state the element already holds: the browser process opens no window for a
+  guest, so a shell that ignores it is a desktop where such a link does
+  nothing.
 - **`connectToHost`** (`./connect-to-host`) — the `DomicileHost` off the
   document, or a stand-in that does nothing when there is none. `hasHost` is
   beside it for code that needs the answer rather than the object.
