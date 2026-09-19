@@ -107,12 +107,16 @@ export const Desktop = ({ domicile }: Props) => {
           draggingId={windows.draggingId}
           floats={workspaceOn(windows).floats}
           focusedId={windows.focusedId}
+          fullscreenId={workspaceOn(windows).fullscreen?.id}
           modifiers={modifiers}
           onClose={(id) => {
             act(WindowAction.WindowClosed(id));
           }}
           onDrop={() => {
             act(WindowAction.WindowDropped());
+          }}
+          onFullscreen={(id) => {
+            act(WindowAction.WindowFullscreened(id));
           }}
           onGrab={(id) => {
             act(WindowAction.WindowGrabbed(id));

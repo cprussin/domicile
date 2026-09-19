@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, within } from "@testing-library/react";
 
+import { css } from "../../styled-system/css";
 import { TitleBar } from "./TitleBar";
 
 // The real stylesheet, because what a bar's arrival and its settling resolve
@@ -37,14 +38,20 @@ const barProps = {
   dragging: false,
   focus: "resting",
   frame: FRAME,
+  fullscreen: false,
   motion: "resting",
   onClose: () => undefined,
+  onFullscreen: () => undefined,
   onMotionEnded: nothingEnded,
   onReach: () => undefined,
   rect: ON_SCREEN,
   title: "kitty",
   window: "app:term",
 } as const;
+
+/** The Close on one of these bars, which every case here renders two of. */
+const closeOn = (container: HTMLElement): HTMLElement =>
+  within(container).getByRole("button", { name: "Close" });
 
 const bar = (container: HTMLElement): HTMLElement => {
   const element = container.querySelector<HTMLElement>("[data-window]");
@@ -110,11 +117,84 @@ describe("TitleBar", () => {
 
   it("follows the pointer exactly while its window is being dragged", () => {
     // A floating window is dragged by this bar, and a bar easing towards each
-    // box the drag writes is one that trails the pointer holding it.
+    // box the drag writes is one that trails the pointer holding it. Only the
+    // box: the colours below still ease, because a drag is when the pointer
+    // crosses the most windows.
     const { container } = render(<TitleBar {...barProps} dragging />);
 
-    expect(
-      globalThis.getComputedStyle(bar(container)).transition,
-    ).not.toContain("inline-size");
+    const { transition } = globalThis.getComputedStyle(bar(container));
+    expect(transition).not.toContain("inline-size");
+    expect(transition).toContain("background-color");
+  });
+
+  // Focus follows the cursor here, so these colours change as often as the
+  // pointer crosses a window: bars that snapped between them would flicker
+  // across the desktop on the way to anywhere.
+  it("eases between the colours that say where the keyboard is", () => {
+    const { container } = render(<TitleBar {...barProps} />);
+
+    const { transition } = globalThis.getComputedStyle(bar(container));
+    expect(transition).toContain("background-color");
+    expect(transition).toContain("border-color");
+    expect(transition).toContain("color");
+  });
+
+  it("draws the buttons on a filled bar in the colour that fill is for", () => {
+    // The focused bar is filled with the accent, and the library's quiet
+    // control draws its icon in `muted` — a grey nobody can find on it. The
+    // colour the accent is designed against is the page's `background`, which
+    // is what the title beside the buttons is already drawn in.
+    //
+    // Declarations rather than class names, because Panda hashes them.
+    const filled = render(<TitleBar {...barProps} focus="focused" />);
+    expect(closeOn(filled.container).className).toContain(
+      css({ color: "background" }),
+    );
+
+    // And every other bar keeps the quiet one, which is what a control on a
+    // card-coloured bar should be.
+    const resting = render(<TitleBar {...barProps} />);
+    expect(closeOn(resting.container).className).not.toContain(
+      css({ color: "background" }),
+    );
+  });
+
+  it("sets the name of the window being worked in in a heavier face", () => {
+    // The other half of standing out, and the half that survives a user who
+    // cannot tell the accent from the card.
+    const focused = render(<TitleBar {...barProps} focus="focused" />);
+    expect(bar(focused.container).className).toContain(
+      css({ fontWeight: "medium" }),
+    );
+
+    const resting = render(<TitleBar {...barProps} />);
+    expect(bar(resting.container).className).not.toContain(
+      css({ fontWeight: "medium" }),
+    );
+  });
+
+  describe("the button that fills the screen", () => {
+    it("asks for the window it names to fill the screen", async () => {
+      await new Promise<void>((resolve) => {
+        const { getByRole } = render(
+          <TitleBar
+            {...barProps}
+            onFullscreen={() => {
+              resolve();
+            }}
+          />,
+        );
+        fireEvent.click(getByRole("button", { name: "Maximize" }));
+      });
+    });
+
+    it("offers the screen back once its window has it", () => {
+      // The bar is still drawn over a fullscreen window, so the same button
+      // is what gives the desktop back — and it has to say so.
+      const { queryByRole } = render(<TitleBar {...barProps} fullscreen />);
+
+      expect(queryByRole("button", { name: "Maximize" })).toBeNull();
+      expect(queryByRole("button", { name: "Restore" })).not.toBeNull();
+    });
   });
 });

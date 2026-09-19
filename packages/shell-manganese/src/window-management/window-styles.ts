@@ -191,12 +191,14 @@ export const movingStyles = cva({
 });
 
 /**
- * A window moving to a new box rather than appearing at one.
+ * How a window gets from one look to the next rather than snapping to it.
  *
- * Every rectangle on this desktop is arithmetic — see `tree/frames.ts` — so a
- * window whose neighbour opened, closed, split or grew is simply written at a
- * different `inset` and size on the next render, and lands there between two
- * frames. This is what gives it the frames in between.
+ * Two things move, and only one of them is always allowed to ease.
+ *
+ * **The box.** Every rectangle on this desktop is arithmetic — see
+ * `tree/frames.ts` — so a window whose neighbour opened, closed, split or grew
+ * is simply written at a different `inset` and size on the next render, and
+ * lands there between two frames. This is what gives it the frames in between.
  *
  * The box rather than a transform, unlike everything in {@link movingStyles}:
  * the window really is a different size afterwards, and the client has to be
@@ -208,8 +210,30 @@ export const movingStyles = cva({
  * **Not while the window is being dragged.** A drag writes a new box on every
  * pointer move, and a window easing towards each of them is one that trails
  * the pointer instead of following it.
+ *
+ * **The colours**, which are what a window says about the keyboard — the fill
+ * of its bar, the line around its frame, the text on it. Those ease whichever
+ * of the two states the window is in, dragged or not: focus follows the cursor
+ * in this shell, so they change every time the pointer crosses a window, and a
+ * desktop that snapped between them flickered on the way to anywhere. A drag
+ * is when the pointer crosses the most windows of all.
+ *
+ * **One declaration for both**, which is why the box and the colours are one
+ * recipe rather than a class each: two rules setting `transition` on one
+ * element are decided by the order Panda happens to emit them in, and the
+ * loser is simply not applied.
  */
-export const settlingStyles = css({
-  transition:
-    "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}",
+export const settlingStyles = cva({
+  variants: {
+    dragging: {
+      false: {
+        transition:
+          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+      },
+      true: {
+        transition:
+          "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+      },
+    },
+  },
 });

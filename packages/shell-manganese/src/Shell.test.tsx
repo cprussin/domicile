@@ -594,6 +594,29 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual(["term"]);
     });
 
+    it("fills the screen from the button on the window's own bar", async () => {
+      // `mod+f`, reached with the pointer instead: the same toggle, on the
+      // window whose bar was pressed.
+      const user = userEvent.setup();
+      const { container } = renderShell();
+      clientAppears("term");
+
+      await user.click(screen.getByRole("button", { name: "Maximize" }));
+
+      // Over the top bar as well, which is what a fullscreen window covers.
+      expect(boxOf(appElement(container, "term"))).toMatchObject({
+        height: `${(1080 - TITLE_BAR).toString()}px`,
+        y: `${TITLE_BAR.toString()}px`,
+      });
+
+      // And the same button is what gives the desktop back.
+      await user.click(screen.getByRole("button", { name: "Restore" }));
+
+      expect(boxOf(appElement(container, "term"))).toMatchObject({
+        y: `${(TOP_BAR + TITLE_BAR).toString()}px`,
+      });
+    });
+
     it("takes the window away when the client goes", () => {
       const { container } = renderShell();
       clientAppears("term");

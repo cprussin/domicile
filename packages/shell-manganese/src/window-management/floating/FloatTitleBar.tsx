@@ -17,10 +17,13 @@ type Props = {
   focus: TitleFocus;
   /** The whole box of the window it names — see {@link TitleBar}. */
   frame: Rect;
+  /** Whether that window already has the screen — see {@link TitleBar}. */
+  fullscreen: boolean;
   /** What that window is doing, which its bar does with it. */
   motion: WindowMotion;
   onClose: () => void;
   onDrop: () => void;
+  onFullscreen: () => void;
   onMotionEnded: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
@@ -48,9 +51,11 @@ export const FloatTitleBar = ({
   float,
   focus,
   frame,
+  fullscreen,
   motion,
   onClose,
   onDrop,
+  onFullscreen,
   onGrab,
   onMotionEnded,
   onMove,
@@ -71,8 +76,10 @@ export const FloatTitleBar = ({
       dragging={dragging}
       focus={focus}
       frame={frame}
+      fullscreen={fullscreen}
       motion={motion}
       onClose={onClose}
+      onFullscreen={onFullscreen}
       onMotionEnded={onMotionEnded}
       onReach={onReach}
       rect={barOf(rectOf(float))}

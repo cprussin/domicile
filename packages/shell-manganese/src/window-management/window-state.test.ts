@@ -382,6 +382,35 @@ describe("the pointer", () => {
   });
 });
 
+describe("the buttons on a window's own title bar", () => {
+  it("fills the screen with the window whose bar it is, not the one being worked in", () => {
+    // The bar is the window's, so pressing anything on it is reaching for that
+    // window: the button fullscreens what it is drawn on rather than whatever
+    // the keyboard happened to be in.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowFullscreened(APP("kitty")),
+    );
+
+    expect(workspaceOn(state).fullscreen).toEqual({
+      global: false,
+      id: APP("kitty"),
+    });
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("gives the screen back when the same button is pressed again", () => {
+    // The same toggle `mod+f` is, because it is the same command.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.WindowFullscreened(APP("kitty")),
+      WindowAction.WindowFullscreened(APP("kitty")),
+    );
+
+    expect(workspaceOn(state).fullscreen).toBeUndefined();
+  });
+});
+
 describe("the launcher", () => {
   it("is shut on a desktop nobody has opened it on", () => {
     expect(NO_WINDOWS.launcherOpen).toBe(false);
