@@ -609,6 +609,23 @@ describe("Shell", () => {
       );
     });
 
+    // AND IS DRAWN OVER THE WINDOW MOVING INTO ITS PLACE. The neighbour eases
+    // into the box it had while it shrinks away inside it, and at the depth it
+    // used to have the neighbour would cover it before it had gone — two
+    // elements at one `z-index` are decided by the order they come in the
+    // document, and a closing window goes on being drawn where it always was.
+    it("draws a closing window over the one taking its space", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      domicile.emit("app_closed", { app_id: "one" });
+
+      expect(Number(appElement(container, "one").style.zIndex)).toBeGreaterThan(
+        Number(appElement(container, "two").style.zIndex),
+      );
+    });
+
     it("takes it off the page once it has finished leaving", () => {
       const { container } = renderShell();
       clientAppears("term");

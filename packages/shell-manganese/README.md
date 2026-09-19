@@ -222,6 +222,15 @@ is the host saying the client has exited, so the surface has gone with it and
 what shrinks away is the frame. A browser window, whose page is part of this
 one, keeps showing its page the whole way out.
 
+**A window and the space around it are one movement.** Opening and closing run
+for exactly as long as the layout takes to ease into its new boxes, and both
+lead with the motion — most of the scale and most of the fade in the first few
+frames, the rest settling — rather than the usual accelerate-away curve for
+something leaving, which at this length reads as a window sitting still and
+then being snatched. A closing window is drawn *over* the windows moving into
+its place, too: they are easing into the box it is still shrinking away inside,
+and at the depth it used to have they would cover it before it had gone.
+
 Each of them is let go when it says it has finished, not when a timer says so:
 how long any of it takes is the stylesheet's, and a duration written in the
 shell as well would be a second copy of it to keep in step.

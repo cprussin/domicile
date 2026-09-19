@@ -14,6 +14,7 @@
 // nothing the user does reaches it.
 
 import type { Placement } from "./placement";
+import { LEAVING } from "./placement";
 import type { Shown } from "./shown";
 import type { ShellWindow } from "./window";
 
@@ -38,7 +39,14 @@ export type Closing = {
    * user watches it go.
    */
   focused: boolean;
-  /** The box it had, which is where it plays out. */
+  /**
+   * The box it had, which is where it plays out — raised to {@link LEAVING}.
+   *
+   * Raised because its neighbours are easing into that box while it shrinks
+   * away inside it: left at the depth it had they would cover it before it had
+   * gone, two elements at one `z-index` being decided by the order they come
+   * in the document.
+   */
   placement: Placement;
   window: ShellWindow;
 };
@@ -61,7 +69,14 @@ export const departed = (
     return windows.some((open) => open.id === window.id) ||
       placement === undefined
       ? []
-      : [{ at, focused: before.activeId === window.id, placement, window }];
+      : [
+          {
+            at,
+            focused: before.activeId === window.id,
+            placement: { ...placement, depth: LEAVING },
+            window,
+          },
+        ];
   });
 
 /**

@@ -48,6 +48,22 @@ const nothingEnded = () => {
   // Nothing in the case plays an animation to its end.
 };
 
+/**
+ * The first length written into a `transition` or `animation` shorthand.
+ *
+ * Both start with theirs, and reading them back is how two of them are held
+ * against each other without either being written down here: what matters is
+ * that they are the same, not what they are.
+ */
+const lengthOf = (shorthand: string): string => {
+  const found = /\d+m?s/.exec(shorthand);
+  if (found === null) {
+    throw new Error(`test: no length in ${shorthand}`);
+  } else {
+    return found[0];
+  }
+};
+
 /** The props every case here shares; each overrides the one it is about. */
 const windowProps = {
   appId: "term",
@@ -303,6 +319,24 @@ describe("AppWindow", () => {
       expect(portal(container)).toHaveStyle({
         transformOrigin: "600px 385px",
       });
+    });
+
+    // A WINDOW LEAVES IN THE TIME THE LAYOUT TAKES TO CLOSE OVER IT. Its
+    // neighbours ease into the box it had while it shrinks away inside it, so
+    // a departure that outlasted the settle would be a window still going over
+    // a desktop that had finished rearranging itself around it.
+    it("leaves in the time the layout takes to close over it", () => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          motion="closing"
+          onReach={noReach}
+        />,
+      );
+      const style = globalThis.getComputedStyle(portal(container));
+
+      expect(lengthOf(style.animation)).toBe(lengthOf(style.transition));
     });
 
     it("eases to a new box rather than jumping to it", () => {
