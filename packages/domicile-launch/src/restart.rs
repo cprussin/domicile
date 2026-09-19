@@ -100,9 +100,15 @@ pub enum Next {
         failures: u32,
         of: u32,
     },
+    // WHERE THE REASON IS IS NOT SAID HERE ANY MORE. It used to end "Every one
+    // of them said why above", which was true and was a pointer into two
+    // hundred lines of Chromium's startup log -- from the last line of the
+    // run, which is the one line anyone reads. `bin/domicile.rs` puts the
+    // compositor's own words under this instead, because it is the half that
+    // has them; see `crate::heard`.
     #[error(
         "{failures} desktops in a row have failed, so this one is not being \
-         started again. Every one of them said why above."
+         started again."
     )]
     GiveUp { failures: u32 },
 }
