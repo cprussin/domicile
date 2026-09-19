@@ -61,12 +61,13 @@ windows over the tiling, and one window at a time filling the screen.
 | **Mod+R** | Resize mode — see below. |
 | **Mod+( ) } + { ] [ ! = \*** | Go to a workspace. **With Shift**, send the window being worked in there and stay. |
 
-The window being worked in is the one whose title bar is **filled with the
-accent**, and it is the one everything keyed acts on. Its frame is drawn in
-the same color and its name is set in a heavier face, so the bar and the
-three edges below it say one thing. Every window eases between those colors
-rather than snapping between them: focus follows the cursor here, so they
-change every time the pointer crosses a window.
+The window being worked in is the one with a **rule of accent across the top
+of its frame**, over a title bar washed with enough of the same accent to find
+in the corner of your eye, and it is the one everything keyed acts on. Its
+frame is drawn in that color and its name is set in a heavier face, so the bar
+and the three edges below it say one thing. Every window eases between those
+colors rather than snapping between them: focus follows the cursor here, so
+they change every time the pointer crosses a window.
 
 ### The keys are physical, and the layout is written down
 
@@ -166,8 +167,8 @@ for a whole container is named after the window that container last had the
 focus in.
 
 **Three states, which are sway's three client colors.** The window the
-keyboard is in has the filled bar; a container's open tab with the keyboard
-somewhere else is marked by its edge and its text rather than a fill
+keyboard is in has the accent rule and the wash under it; a container's open
+tab with the keyboard somewhere else is marked by its edge and its text alone
 (`focused_inactive`, and without it two bars on one screen would look like the
 focused window); every other bar recedes to a card fill and muted text,
 because the window under it is what the user is looking at. Which of the three
@@ -315,18 +316,6 @@ says so itself**, in an event that is not a focus event, and the window listens
 for that as well as for its own chrome's pointer events. `guard-webview-click.sh`
 is what says a real click in a real guest arrives here — it is also what found
 that the focus alone did not.
-
-**And a link with `target="_blank"` opens a second browser window**, which is
-the same boundary answered the other way round. The browser process opens no
-window for a guest — it has no `SiteInstance` of its own, which is what keeps
-the user logged in — so the element reports the address in
-`domicile-new-window` and the window is the shell's to open: `BrowserWindow`
-passes it up, `Desktop` opens a `BrowserOpened` at it, and it lands on the
-workspace being looked at like any other window the user opens. What the user
-gets is a window at that address rather than the window the page asked for —
-`window.open` is handed `null`, and the opener relationship is not carried.
-`guard-webview-new-window.sh` clicks such a link in a real engine and reads the
-page that then loads in the second `<webview>`.
 
 A client's window arrives at the same place by a different road. The SDK would
 focus a clicked client by itself, and the shell stops it: the SDK asks first,
