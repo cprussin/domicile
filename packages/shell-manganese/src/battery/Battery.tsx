@@ -1,9 +1,10 @@
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { BatteryMessage } from "@domicile/chrome-sdk/host-message";
 import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { useEffect, useState } from "react";
 
 import { css, cva } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
-import type { BatteryReading } from "./watch-battery";
 import { watchBattery } from "./watch-battery";
 
 /** A tenth left is a warning rather than a reading. */
@@ -13,7 +14,9 @@ const DANGEROUS_PERCENT = 10;
 const FLASHING_PERCENT = 5;
 
 type Props = {
-  /** The machine's battery; injected so tests can drive one. */
+  /** Where the charge comes from: the host, over the control channel. */
+  domicile: DomicileClient;
+  /** How it is watched; injected so tests can drive a battery of their own. */
   watch?: typeof watchBattery | undefined;
 };
 
@@ -27,21 +30,23 @@ type Props = {
  * decision about a lead is made on. The bolt is the plug: a full battery and a
  * machine on AC look the same on a meter, and they are not the same thing.
  *
- * Nothing is drawn until the platform has answered, which is a moment rather
- * than a state worth marking: the API hands back a promise, and a bar that
- * flashed an empty meter for that tick would be saying something false.
+ * Nothing is drawn until the host has said a charge, which is a moment rather
+ * than a state worth marking — and is also how a machine with no battery
+ * looks, because the compositor sends nothing for one. A bar that flashed an
+ * empty meter in either case would be saying something false, which is the
+ * whole failure this readout was rebuilt to stop making.
  */
-export const Battery = ({ watch = watchBattery }: Props) => {
-  const [reading, setReading] = useState<BatteryReading | undefined>(undefined);
+export const Battery = ({ domicile, watch = watchBattery }: Props) => {
+  const [reading, setReading] = useState<BatteryMessage | undefined>(undefined);
 
-  useEffect(() => watch(setReading), [watch]);
+  useEffect(() => watch(domicile, setReading), [domicile, watch]);
 
   return reading === undefined ? undefined : <Meter reading={reading} />;
 };
 
 /** The reading itself, once there is one. */
-const Meter = ({ reading }: { reading: BatteryReading }) => {
-  const percent = Math.round(reading.level * 100);
+const Meter = ({ reading }: { reading: BatteryMessage }) => {
+  const percent = Math.round(reading.charge * 100);
   return (
     <div className={rootStyles({ charge: chargeOf(percent) })}>
       {reading.charging && (

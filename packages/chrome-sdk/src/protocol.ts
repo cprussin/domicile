@@ -260,6 +260,28 @@ const filesSchema = z.looseObject({
   type: z.literal("files"),
 });
 
+// The machine's battery: how full, and whether a lead is in.
+//
+// Pushed rather than answered — a charge changes on its own, so there is no
+// `list_battery` beside `list_files`. The compositor reads
+// `/sys/class/power_supply` and sends this when the reading moves far enough
+// to draw, plus once to a chrome that has just connected.
+//
+// **Not `navigator.getBattery`**, which is where a shell would otherwise read
+// this and is a trap: that API answers through UPower over D-Bus, a desktop on
+// a bare tty has neither, and Chromium resolves with its default
+// `BatteryStatus` — charging, and full — which is indistinguishable from a
+// real laptop on a full battery.
+//
+// `charge` is a fraction rather than a percentage, and is not clamped here: a
+// number outside 0..1 would be a compositor bug, and rejecting the message
+// would hide it behind a bar with no meter on it.
+const batterySchema = z.looseObject({
+  charge: z.number(),
+  charging: z.boolean(),
+  type: z.literal("battery"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -279,6 +301,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   shortcutMessageSchema,
   modifiersSchema,
   filesSchema,
+  batterySchema,
 ]);
 
 /** A decoded host message. */
@@ -305,6 +328,7 @@ export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 export type FilesMessage = z.infer<typeof filesSchema>;
+export type BatteryMessage = z.infer<typeof batterySchema>;
 
 /** One display of the desktop, in the coordinates the shell lays out in. */
 export type DisplayInfo = z.infer<typeof displayInfoSchema>;

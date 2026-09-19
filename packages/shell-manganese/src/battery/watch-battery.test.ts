@@ -1,77 +1,61 @@
 import { describe, expect, it } from "bun:test";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { BatteryMessage } from "@domicile/chrome-sdk/host-message";
 
-import type { BatteryReading } from "./watch-battery";
 import { watchBattery } from "./watch-battery";
 
 /**
- * The battery the platform would answer with, which the test drives: the two
- * events the API emits are the two this watcher is listening for.
+ * The client, as much of it as this touches: one slot per message type, and an
+ * `off` that removes a handler only if it is still the registered one — which
+ * is `DomicileClient`'s own contract and the thing a teardown has to honour.
  */
-class FakeBattery extends EventTarget {
-  charging = false;
-  level = 0.5;
-
-  drainTo(level: number) {
-    this.level = level;
-    this.dispatchEvent(new Event("levelchange"));
-  }
-
-  plugIn() {
-    this.charging = true;
-    this.dispatchEvent(new Event("chargingchange"));
-  }
-}
-
-/**
- * The platform answering. A tick of the microtask queue is what the watcher
- * needs to have subscribed, because the API hands back a promise.
- */
-const answers = (battery: FakeBattery) => () => Promise.resolve(battery);
+const heldClient = () => {
+  const handlers = new Map<string, (message: BatteryMessage) => void>();
+  return {
+    client: {
+      off: (type: string, handler: (message: BatteryMessage) => void) => {
+        if (handlers.get(type) === handler) {
+          handlers.delete(type);
+        }
+      },
+      on: (type: string, handler: (message: BatteryMessage) => void) => {
+        handlers.set(type, handler);
+      },
+    } as unknown as DomicileClient,
+    says: (reading: BatteryMessage) => {
+      handlers.get("battery")?.(reading);
+    },
+    get watching() {
+      return handlers.has("battery");
+    },
+  };
+};
 
 describe("watchBattery", () => {
-  it("reports the battery it finds, and again whenever it changes", async () => {
-    const battery = new FakeBattery();
-    const readings: BatteryReading[] = [];
+  it("reports every charge the host says", () => {
+    const host = heldClient();
+    const readings: BatteryMessage[] = [];
 
-    const stop = watchBattery((reading) => {
+    watchBattery(host.client, (reading) => {
       readings.push(reading);
-    }, answers(battery));
-    await Promise.resolve();
-    battery.drainTo(0.25);
-    battery.plugIn();
-    stop();
+    });
+    host.says({ charge: 0.5, charging: false });
+    host.says({ charge: 0.49, charging: true });
 
     expect(readings).toEqual([
-      { charging: false, level: 0.5 },
-      { charging: false, level: 0.25 },
-      { charging: true, level: 0.25 },
+      { charge: 0.5, charging: false },
+      { charge: 0.49, charging: true },
     ]);
   });
 
-  it("takes its listeners off when it is stopped", async () => {
-    const battery = new FakeBattery();
-    const readings: BatteryReading[] = [];
-    const stop = watchBattery((reading) => {
-      readings.push(reading);
-    }, answers(battery));
-    await Promise.resolve();
+  it("stops listening when it is stopped", () => {
+    const host = heldClient();
+    const stop = watchBattery(host.client, () => {
+      /* nothing to record */
+    });
 
     stop();
-    battery.drainTo(0.25);
 
-    expect(readings).toHaveLength(1);
-  });
-
-  it("reports nothing when it is stopped before the platform answers", async () => {
-    const battery = new FakeBattery();
-    const readings: BatteryReading[] = [];
-
-    const stop = watchBattery((reading) => {
-      readings.push(reading);
-    }, answers(battery));
-    stop();
-    await Promise.resolve();
-
-    expect(readings).toEqual([]);
+    expect(host.watching).toBe(false);
   });
 });

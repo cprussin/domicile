@@ -1,0 +1,33 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+    RuntimeEnabled=DomicileControlChannel,
+    Exposed=Window
+] interface DomicileBatteryEvent : Event {
+  constructor(DOMString type,
+              optional DomicileBatteryEventInit eventInitDict = {});
+
+  // How full the machine's battery is, 0.0 through 1.0.
+  //
+  // A fraction rather than a percentage because a bar does two things with it
+  // -- rounds it to figures and fills a meter with it -- and rounding once,
+  // where it is drawn, is what keeps those two from disagreeing.
+  //
+  // THIS IS NOT navigator.getBattery, AND THAT IS THE POINT. The Battery
+  // Status API answers through UPower over D-Bus; a desktop on a bare tty has
+  // neither, and Chromium then resolves with its default BatteryStatus --
+  // charging, and full -- which is indistinguishable from a real laptop on a
+  // full battery. The compositor reads /sys/class/power_supply, which is in
+  // every kernel and needs no daemon, and sends it here.
+  readonly attribute double charge;
+
+  // Whether a lead is in: a full battery on AC is true, because what a shell
+  // draws from this is a plug rather than a rate.
+  readonly attribute boolean charging;
+
+  // When the browser process had this message, on `performance.now()`'s clock.
+  // See DomicileModifiersEvent.arrival for what this is and what it is not.
+  readonly attribute DOMHighResTimeStamp arrival;
+};

@@ -689,6 +689,23 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
+  if (*type == "battery") {
+    // DROPPED RATHER THAN DEFAULTED, which is the opposite of what `displays`
+    // does two blocks up and is deliberate. A monitor the wrong way up is
+    // still a desktop; a charge that defaulted to zero is a reading, and one
+    // the bar would draw in red and flash. The whole reason this message
+    // exists is that a plausible-looking default is indistinguishable from
+    // the truth -- see the note on ControlChannelClient::Battery -- so a
+    // message this cannot read is one to say nothing about.
+    std::optional<double> charge = message.FindDouble("charge");
+    std::optional<bool> charging = message.FindBool("charging");
+    if (!charge || !charging) {
+      return;
+    }
+    client_->Battery(*charge, *charging, arrival);
+    return;
+  }
+
   if (*type == "focus_changed") {
     // Empty app_id means the chrome itself has focus, which is a state rather
     // than a missing field.

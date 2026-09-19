@@ -118,6 +118,7 @@ use crate::screens::{Advertised, Screens, Slot};
 use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
 use domicile_config::{Config, ConfigError, ConfigStore};
+use domicile_host::battery::{reading, Charge, RealPowerSupplies};
 use domicile_host::files::{listing, RealDirectory, DEEP_ROOTS};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
@@ -716,6 +717,9 @@ struct FrameReport {
     submit_ms: u32,
     submit_worst_ms: u32,
 }
+
+/// How often the battery is read. See the timer that uses it for the number.
+const BATTERY_POLL: Duration = Duration::from_secs(10);
 
 /// How often the writer thread reports. Long enough that the line is not noise,
 /// short enough to watch while typing.
@@ -1398,6 +1402,13 @@ struct DomicileCompositor {
     chrome_frame_shape: Option<((f64, f64), bool, bool)>,
     /// Which modifiers the chrome was last told are held.
     modifiers: Held,
+    /// What the chromes were last told about the battery.
+    ///
+    /// Polled rather than delivered: nothing signals a percent, so the timer
+    /// below reads `/sys/class/power_supply` and this is what decides which of
+    /// those readings is news. See `domicile_host::battery`, and the message's
+    /// own docs in `domicile_protocol` for why the page cannot read it itself.
+    charge: Charge,
     /// Whether anything has changed since the last frame was drawn.
     ///
     /// Compositing does not happen where the change is noticed. Submitting a
@@ -2655,6 +2666,37 @@ impl DomicileCompositor {
         }
     }
 
+    /// Tell every chrome the charge, when it has moved far enough to draw.
+    ///
+    /// The one broadcast on a clock rather than on an event, because a battery
+    /// has no event: the kernel publishes files and nothing knocks. Read here
+    /// and not in the page — `navigator.getBattery` answers through UPower
+    /// over D-Bus, which a desktop on a bare tty has not got, and Chromium
+    /// then resolves with a default of *charging, and full* that no page can
+    /// tell from the truth. `domicile_host::battery` says the rest.
+    fn tell_the_chromes_the_charge(&mut self) {
+        if let Some(read) = self.charge.moved_to(reading(&RealPowerSupplies)) {
+            self.hub.broadcast(HostMessage::Battery {
+                charge: read.charge,
+                charging: read.charging,
+            });
+        }
+    }
+
+    /// The charge again, for a chrome that has only just connected.
+    ///
+    /// Not a change, so it cannot go through the teller above: on a settled
+    /// machine the next change is minutes away, and a page that has just
+    /// reloaded would carry a gap where the meter goes for all of it.
+    fn tell_a_new_chrome_the_charge(&self) {
+        if let Some(read) = self.charge.again() {
+            self.hub.broadcast(HostMessage::Battery {
+                charge: read.charge,
+                charging: read.charging,
+            });
+        }
+    }
+
     /// Inject a forwarded input event into the appropriate client via the seat.
     fn handle_client_request(&mut self, event: ClientRequest) {
         match event {
@@ -2793,6 +2835,10 @@ impl DomicileCompositor {
                 // Nothing is held and nothing is owed. The windows a chrome
                 // needs are re-supplied by the hand-over pass in `present`,
                 announce_open_apps(&self.hub);
+                // And the charge, which no pass re-supplies: it is broadcast
+                // when it moves, and a page that connected between two moves
+                // has never been told one.
+                self.tell_a_new_chrome_the_charge();
             }
             ClientRequest::SetOutputScale { ratio, scale } => {
                 // Kept whether or not the scale below is taken up. A described
@@ -4279,6 +4325,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         screens,
         device_pixel_ratio: 1.0,
         modifiers: Held::default(),
+        charge: Charge::default(),
         stop: Arc::new(AtomicBool::new(false)),
         engine,
     };
@@ -4355,6 +4402,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         })?;
     }
+
+    // The battery, on a clock, because a battery has no event.
+    //
+    // Everything else a chrome is told arrives from somewhere: a client maps,
+    // a key goes down, a monitor is plugged in. The kernel publishes the
+    // charge as files and knocks on nothing, so this is the one thing the
+    // compositor has to go and look at.
+    //
+    // TEN SECONDS, and the number is a compromise between two things nobody
+    // notices. A percent takes minutes to move even on a machine running
+    // flat, so nothing on the bar is stale at this rate — but a lead going in
+    // moves the bolt and a user *is* watching for that, which is the half
+    // that wants it short. Reading three small files out of a virtual
+    // filesystem costs nothing measurable; what a shorter interval would cost
+    // is waking a laptop's CPU more often to tell it about its own battery,
+    // which is a funny way to spend a charge.
+    //
+    // Armed on every desktop rather than only on a laptop: a machine with no
+    // battery reads `/sys/class/power_supply`, finds no cell, and says
+    // nothing — see `domicile_host::battery::reading` — and a desktop that
+    // decided at startup would be wrong about a battery plugged in later.
+    handle.insert_source(Timer::immediate(), |_, _, data: &mut CalloopData| {
+        data.state.tell_the_chromes_the_charge();
+        TimeoutAction::ToDuration(BATTERY_POLL)
+    })?;
 
     // Inject forwarded input (from chrome threads) on the Wayland thread.
     handle.insert_source(request_rx, |event, _, data: &mut CalloopData| {

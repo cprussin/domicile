@@ -308,33 +308,19 @@ const boxOf = (element: HTMLElement) => ({
 });
 
 /**
- * The machine's battery, which happy-dom has none of and the shell asks the
- * platform for. Held open rather than answered on its own: the bar draws no
- * meter until the platform has, so a case that wants one settles this itself,
- * and every other case here stays synchronous.
+ * The compositor saying what the battery is doing.
+ *
+ * A message like every other one here, which is the point of the change that
+ * put it on this channel: the charge used to come off `navigator.getBattery`,
+ * and happy-dom has no such thing — so this case needed a platform stubbed in
+ * where every other one needs only the host.
  */
-const platform: { answers?: (battery: BatteryManager) => void } = {};
-
-/** The platform answering with a battery in the state the case is about. */
-const machineAnswers = (reading: {
-  charging: boolean;
-  level: number;
-}): void => {
-  if (platform.answers === undefined) {
-    throw new Error("test: nothing has asked the platform for a battery");
-  } else {
-    platform.answers(Object.assign(new EventTarget(), reading));
-  }
+const machineSays = (reading: { charge: number; charging: boolean }): void => {
+  domicile.emit("battery", reading);
 };
 
 beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
-  // happy-dom implements no Battery Status API, and the shell throws rather
-  // than draw a desktop it cannot read the charge of.
-  navigator.getBattery = () =>
-    new Promise((resolve) => {
-      platform.answers = resolve;
-    });
 });
 
 describe("Shell", () => {
@@ -512,17 +498,26 @@ describe("Shell", () => {
       expect(screen.getByText("resize")).toBeInTheDocument();
     });
 
-    it("shows the charge, and the plug when AC is in", async () => {
+    it("shows the charge, and the plug when AC is in", () => {
       renderShell();
 
-      machineAnswers({ charging: true, level: 0.42 });
+      machineSays({ charge: 0.42, charging: true });
 
-      expect(await screen.findByText("42%")).toBeVisible();
+      expect(screen.getByText("42%")).toBeVisible();
       expect(screen.getByRole("meter", { name: "Battery" })).toHaveAttribute(
         "aria-valuenow",
         "42",
       );
       expect(screen.getByRole("img", { name: "Charging" })).toBeVisible();
+    });
+
+    it("draws no meter for a machine the host says nothing about", () => {
+      // A desktop PC, which the compositor sends no reading for at all. The
+      // bar showing `100%` on one would be the bug this readout was rebuilt
+      // to stop making, wearing a different hat.
+      renderShell();
+
+      expect(screen.queryByRole("meter")).toBeNull();
     });
 
     it("launches nothing: the keys are what does things to the desktop", () => {

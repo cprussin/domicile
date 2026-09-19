@@ -284,6 +284,21 @@ interface ControlChannelClient {
   // drawing an empty list is how that failure would otherwise look.
   Files(array<string> files, mojo_base.mojom.TimeTicks arrival);
 
+  // The machine's battery: `charge` is a fraction 0.0 through 1.0, `charging`
+  // is whether a lead is in.
+  //
+  // Pushed, unlike Files, and with no member on ControlChannel to ask for it:
+  // a charge changes on its own. The compositor polls
+  // /sys/class/power_supply and sends this when the reading moves far enough
+  // to draw, and once more to a chrome that has just connected.
+  //
+  // It exists because navigator.getBattery() does not work here. That API
+  // reads UPower over D-Bus and a desktop on a bare tty has neither, so it
+  // resolves with the default BatteryStatus -- charging, and full -- which no
+  // page can distinguish from a real full battery. A machine with no battery
+  // sends nothing rather than a zero, for the same reason.
+  Battery(double charge, bool charging, mojo_base.mojom.TimeTicks arrival);
+
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);
 

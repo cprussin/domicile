@@ -365,6 +365,38 @@ pub enum HostMessage {
     /// rather than a failure — the same distinction [`HostMessage::Displays`]
     /// draws.
     Files { files: Vec<String> },
+
+    /// The machine's battery: how full, and whether a lead is in.
+    ///
+    /// **Pushed, not answered.** There is no `ListBattery` beside
+    /// [`ChromeMessage::ListFiles`], because a charge changes on its own while
+    /// a home directory changes for reasons nothing is watching. The
+    /// compositor polls `/sys/class/power_supply` and sends this when the
+    /// reading moves, and once more to a chrome that has just connected — so a
+    /// page that reloaded is not left blank until the next percent.
+    ///
+    /// **Not `navigator.getBattery`, which is where a shell would otherwise
+    /// read this.** That API answers through UPower over D-Bus, and a desktop
+    /// on a bare tty has neither: the engine resolves with Chromium's default
+    /// `BatteryStatus` instead — charging, and full — which no page can tell
+    /// from a real laptop on a full battery. The kernel's own files need no
+    /// daemon and no bus, and the compositor is already the process that owns
+    /// the machine. `domicile_host::battery` is the reading.
+    ///
+    /// `charge` is a fraction, 0.0 through 1.0, rather than a percentage: the
+    /// bar rounds it to figures *and* fills a meter with it, and rounding once
+    /// where it is drawn is what keeps those two from disagreeing.
+    ///
+    /// `charging` is whether a lead is in, not whether the cell is gaining. A
+    /// full battery on AC is `true` here, because what a shell draws from it
+    /// is a plug rather than a rate — see `domicile_host::battery::charging`
+    /// for which files answer it.
+    ///
+    /// A machine with no battery is no message rather than a zero: there is
+    /// nothing to draw, and a desktop PC reporting an empty cell would be this
+    /// protocol inventing a reading, which is the failure the whole message
+    /// exists to undo.
+    Battery { charge: f64, charging: bool },
 }
 
 /// One display of the desktop, as the chrome is told about it.

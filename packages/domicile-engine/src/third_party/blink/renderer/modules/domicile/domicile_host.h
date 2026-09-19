@@ -103,6 +103,7 @@ class MODULES_EXPORT DomicileHost final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(shortcut, kShortcut)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(modifiers, kModifiers)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(files, kFiles)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(battery, kBattery)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focusrequested, kFocusrequested)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(displayschanged, kDisplayschanged)
@@ -148,6 +149,9 @@ class MODULES_EXPORT DomicileHost final
                  bool meta,
                  base::TimeTicks arrival) override;
   void Files(const Vector<String>& files, base::TimeTicks arrival) override;
+  void Battery(double charge,
+               bool charging,
+               base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
   void Displays(
