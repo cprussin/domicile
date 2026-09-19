@@ -29,10 +29,9 @@ const reportsFrom = (view: ReturnType<typeof aWindow>) => {
 };
 
 describe("reportDesktopSize", () => {
-  // THE ONE THING THE COMPOSITOR CANNOT SEE FOR ITSELF. Where it presents it
-  // owns the window and reads the size off it; under the engine the window is
-  // the browser's. Without this first report the desktop stays at
-  // `compositor.nested_size` for the whole run.
+  // THE ONE THING THE COMPOSITOR CANNOT SEE FOR ITSELF: under the engine the
+  // window is the browser's. Without this first report the desktop stays at
+  // the compositor's startup placeholder for the whole run.
   it("reports the viewport it was given", () => {
     expect(reportsFrom(aWindow(1600, 1200))).toEqual([[1600, 1200]]);
   });

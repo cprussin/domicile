@@ -41,36 +41,6 @@ pub enum ConfigError {
     Validation(String),
 }
 
-/// Host-level compositor settings.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct CompositorConfig {
-    /// The desktop's size when nothing describes one (width, height).
-    ///
-    /// Not the winit window's: `winit::init()` is called with no attributes,
-    /// so nothing sizes that from here. This is the single output's logical
-    /// size, advertised on every run with no displays — headless included.
-    ///
-    /// Two jobs, and the second only looks like the first. While
-    /// [`OutputConfig::displays`] is empty this *is* the desktop — the single
-    /// output's logical size. Once the desktop is described it is the largest
-    /// window Domicile will ask a host for: the desktop is shown at its own
-    /// size where it fits inside this and scaled to fit where it does not, so
-    /// a wall of 4K displays does not ask for a window no screen can hold.
-    ///
-    /// The desktop itself is what the outputs make up either way. This never
-    /// changes what a client is told.
-    pub nested_size: (u32, u32),
-}
-
-impl Default for CompositorConfig {
-    fn default() -> Self {
-        CompositorConfig {
-            nested_size: (1280, 800),
-        }
-    }
-}
-
 /// Keyboard settings, named after the `xkb_*` options SwayWM accepts.
 ///
 /// `xkb_rules`, `xkb_model`, `xkb_layout` and `xkb_variant` are handed to xkb
@@ -352,10 +322,10 @@ impl OutputConfig {
     /// absence of a described one — the case where the single output follows
     /// whatever window Domicile itself was given.
     ///
-    /// That `None` becomes `compositor.nested_size` and, on the wire, a
-    /// display named `domicile-0` — the one output that follows the window.
-    /// Not an empty `displays` list: an empty list is a desktop of *no*
-    /// screens, and a chrome told one would lay out against nothing.
+    /// That `None` becomes the compositor's own startup placeholder and, on
+    /// the wire, a display named `domicile-0` — the one output that follows
+    /// the window. Not an empty `displays` list: an empty list is a desktop of
+    /// *no* screens, and a chrome told one would lay out against nothing.
     ///
     /// Rebuilt on each call, names and all. Fine for a list the config states
     /// once; not something to put on a frame path.
@@ -489,7 +459,6 @@ impl std::fmt::Display for Axis {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    pub compositor: CompositorConfig,
     pub input: InputConfig,
     pub output: OutputConfig,
 }
@@ -532,40 +501,6 @@ impl Config {
 
     /// Semantic validation beyond what the type system / deserializer enforce.
     fn validate(&self) -> Result<(), ConfigError> {
-        let (w, h) = self.compositor.nested_size;
-        if w == 0 || h == 0 {
-            return Err(ConfigError::Validation(format!(
-                "compositor.nested_size must be non-zero, got {w}x{h}"
-            )));
-        }
-        // The nested desktop's mode, for the same reason a described display's
-        // is checked: with no displays configured the desktop is
-        // `nested_size` and its scale climbs to `max_scale`, so those two
-        // multiply into physical pixels that have to be a coordinate. Neither
-        // is wrong alone, which is why the check is on the product and the
-        // message names both.
-        //
-        // Unconditional, though a config that describes displays never reaches
-        // either setting: a config is checked for what it says, not for which
-        // of it this run happens to use, so adding a display does not quietly
-        // legalize a nested size that was rejected a moment ago.
-        // `u64` for the same reason as a display's: two `u32`s multiply past
-        // `i64::MAX`, so an `i64` product panics in debug and wraps in
-        // release — and a wrapped one lands back under the bound, which turns
-        // this check into the thing that admits what it exists to reject. A
-        // panic here would also break `ConfigStore`'s guarantee that a bad
-        // config can never take the compositor down.
-        let widest = u64::from(w) * u64::from(self.output.max_scale);
-        let tallest = u64::from(h) * u64::from(self.output.max_scale);
-        let reach = u64::try_from(i32::MAX).expect("`i32::MAX` is positive");
-        if widest > reach || tallest > reach {
-            return Err(ConfigError::Validation(format!(
-                "compositor.nested_size {w}x{h} at output.max_scale {} is a \
-                 mode of {widest}x{tallest} — more pixels across or down than \
-                 a coordinate can describe",
-                self.output.max_scale
-            )));
-        }
         self.input.keyboard.validate()?;
         self.output.validate()
     }

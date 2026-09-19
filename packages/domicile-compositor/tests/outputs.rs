@@ -70,7 +70,7 @@
 //! killed it killed `desktop.rs`'s own version, including deleting the guard);
 //! the chrome and the client agreeing on how many screens there are (killed
 //! only by a mutation that kills four other checks at once); and the
-//! undescribed desktop being `compositor.nested_size` — its size half is
+//! undescribed desktop being the startup placeholder — its size half is
 //! caught by two checks in `desktop.rs`, its name half by a unit test in
 //! `screens.rs`, and even advertising *no* output on that path is caught by
 //! `desktop.rs`. The chrome's view and the client's are coupled closely enough

@@ -697,14 +697,13 @@
           };
           # A desk with one of everything the schema has, so the check covers
           # the shapes rather than the happy path: a turned monitor at a
-          # fractional scale, one turned off, a described display, a keyboard
-          # and a nested size.
+          # fractional scale, one turned off, a described display and a
+          # keyboard.
           desk = { ... }: {
             programs.domicile = {
               enable = true;
               shell = "${desktops.simple}/shell.js";
               settings = {
-                compositor.nested_size = [ 1600 900 ];
                 input.keyboard = {
                   xkb_layout = "us";
                   xkb_variant = "dvp";

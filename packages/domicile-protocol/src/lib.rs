@@ -89,12 +89,10 @@ pub enum ChromeMessage {
     ///
     /// **The desktop is the chrome's window, and this is the only way the
     /// compositor can learn its size when it is not drawing that window
-    /// itself.** Where the compositor presents, it owns a winit window and
-    /// reads the size off it (`adopt_window_scale`); under the forked engine
-    /// the window is the browser's, the compositor never sees it, and without
-    /// this the desktop stays at `compositor.nested_size` however big the
-    /// window is — a chrome laid out for 1280x800 in the corner of whatever
-    /// the user actually opened.
+    /// itself.** The window is the browser's, the compositor never sees it,
+    /// and without this the desktop stays at the compositor's startup
+    /// placeholder however big the window is — a chrome laid out for 1280x800
+    /// in the corner of whatever the user actually opened.
     ///
     /// Its own message rather than a field on the density above, so each
     /// carries one fact: they change independently (a resize is not a

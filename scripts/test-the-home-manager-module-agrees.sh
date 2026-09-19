@@ -126,13 +126,15 @@ compare "output.displays[]" "$LIB" DisplayConfig '^  display = lib\.types\.submo
 compare "output.profiles[]" "$PROFILE" Profile '^  profile = lib\.types\.submodule \{$' '      '
 compare "output.profiles[].displays[]" "$PROFILE" DisplayPlacement '^  placement = lib\.types\.submodule \{$' '      '
 
-# `compositor` has one field and is written as a path, so it is checked by
-# name rather than by block.
-if grep -q '^          compositor\.nested_size =$' "$MODULE"; then
-  printf '  ok    compositor (1 field)\n'
-else
-  printf '  FAIL  compositor: the module no longer declares compositor.nested_size\n'
+# `compositor` is gone from the schema -- its one field was a startup
+# placeholder rather than a setting -- so the agreement to check is the
+# absence. A module that declares one again writes a section `Config` denies,
+# and every desk built from it would fail to parse at startup rather than here.
+if grep -q '^          compositor\.' "$MODULE"; then
+  printf '  FAIL  compositor: the module declares a section the schema dropped\n'
   FAILED=$((FAILED + 1))
+else
+  printf '  ok    compositor (dropped from both)\n'
 fi
 
 if [ "$FAILED" -gt 0 ]; then
