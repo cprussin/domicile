@@ -1,6 +1,7 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 
+import { editorCommand } from "../launcher/editor-command";
 import { appIdOf } from "./window";
 import type { WindowAction, WindowState } from "./window-state";
 import {
@@ -87,6 +88,13 @@ export const useWindows = (domicile: DomicileClient): Windows => {
       // one table and the reduction stays pure.
       if (action.kind === WindowActionKind.TerminalLaunched) {
         domicile.spawn(TERMINAL_COMMAND);
+      }
+      // The launcher's other half. `editorCommand` is where the argv is built
+      // and why it has a shell in it: `$EDITOR` and `$HOME` live in the
+      // process the compositor starts, not in a page served over
+      // `domicile://`.
+      if (action.kind === WindowActionKind.EditorLaunched) {
+        domicile.spawn(editorCommand(action.path));
       }
       if (
         action.kind === WindowActionKind.WindowKilled ||

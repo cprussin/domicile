@@ -381,3 +381,64 @@ describe("the pointer", () => {
     });
   });
 });
+
+describe("the launcher", () => {
+  it("is shut on a desktop nobody has opened it on", () => {
+    expect(NO_WINDOWS.launcherOpen).toBe(false);
+  });
+
+  it("opens and shuts on the same key", () => {
+    // One binding, because `mod+space` is what a person presses to *reach*
+    // the launcher and pressing it again is the same reflex as Escape. Two
+    // actions would be a key that only works one way round.
+    const opened = reduce(NO_WINDOWS, WindowAction.LauncherToggled());
+    expect(opened.launcherOpen).toBe(true);
+
+    expect(reduce(opened, WindowAction.LauncherToggled()).launcherOpen).toBe(
+      false,
+    );
+  });
+
+  it("shuts when it is dismissed, however many times", () => {
+    // Escape, and a click on the backdrop, both of which the dialog reports as
+    // one thing. Idempotent because the dialog reports its own closing too:
+    // dismissing a shut launcher is a state nobody should have to think about.
+    const dismissed = reduce(
+      NO_WINDOWS,
+      WindowAction.LauncherToggled(),
+      WindowAction.LauncherDismissed(),
+      WindowAction.LauncherDismissed(),
+    );
+
+    expect(dismissed.launcherOpen).toBe(false);
+  });
+
+  it("shuts behind the browser window it opened", () => {
+    // The panel is how the window was asked for; leaving it up over the answer
+    // would mean typing a URL and then having to dismiss the thing you typed
+    // it into. Nothing else has to remember to close it — the launch closes
+    // it, on whichever of the two paths the query took.
+    const launched = reduce(
+      NO_WINDOWS,
+      WindowAction.LauncherToggled(),
+      WindowAction.BrowserOpened("https://example.com"),
+    );
+
+    expect(launched.launcherOpen).toBe(false);
+    expect(launched.windows).toHaveLength(1);
+  });
+
+  it("shuts behind the editor it launched, and opens no window itself", () => {
+    // The editor is a Wayland client the compositor spawns, so its window
+    // arrives as an `app_appeared` like any other client's. Nothing here has a
+    // window to add, which is the same shape `TerminalLaunched` has.
+    const launched = reduce(
+      NO_WINDOWS,
+      WindowAction.LauncherToggled(),
+      WindowAction.EditorLaunched("Notes/today.org"),
+    );
+
+    expect(launched.launcherOpen).toBe(false);
+    expect(launched.windows).toStrictEqual([]);
+  });
+});

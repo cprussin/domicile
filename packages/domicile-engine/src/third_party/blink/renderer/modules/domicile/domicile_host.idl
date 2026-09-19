@@ -25,6 +25,20 @@
   // is a shell's job and there is no shell in this path.
   [CallWith=ScriptState, RaisesException] undefined spawn(sequence<DOMString> command);
 
+  // Ask what there is to open. Answered with a `files` event.
+  //
+  // IT TAKES NO PATH, AND THAT IS THE POINT RATHER THAN AN OVERSIGHT. A shell
+  // is served over domicile:// so that it has an origin without a TCP port,
+  // not so that it gets a filesystem. A call that named a directory would be
+  // one, and every document this engine serves would have it. What gets read
+  // is the compositor's decision -- see `domicile_host::files` -- and this
+  // asks only that it decide.
+  //
+  // A question rather than a subscription: nothing pushes a `files` event on
+  // its own, because a home directory changes for reasons no desktop is
+  // watching. A launcher asks each time it opens.
+  [CallWith=ScriptState, RaisesException] undefined listFiles();
+
   // Which window has the keyboard. focusChrome() takes it back to the page.
   [CallWith=ScriptState, RaisesException] undefined focusApp(DOMString appId);
   [CallWith=ScriptState, RaisesException] undefined focusChrome();
@@ -82,6 +96,9 @@
   // Which modifiers the seat holds, as a DomicileModifiersEvent. One seat,
   // outliving every window.
   attribute EventHandler onmodifiers;
+
+  // What there is to open, as a DomicileFilesEvent, answering listFiles().
+  attribute EventHandler onfiles;
 
   // Focus moved. `appId` is empty when the chrome itself has it.
   attribute EventHandler onfocuschanged;

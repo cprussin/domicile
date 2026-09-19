@@ -235,6 +235,12 @@ void ControlChannel::FocusApp(const std::string& app_id) {
   SendMessage(ForApp("focus_app", app_id));
 }
 
+// No arguments to carry, and that is the whole shape of it: the message asks
+// the compositor what there is to open and says nothing about where to look.
+void ControlChannel::ListFiles() {
+  SendMessage(Typed("list_files"));
+}
+
 void ControlChannel::FocusChrome() {
   SendMessage(Typed("focus_chrome"));
 }
@@ -660,6 +666,26 @@ void ControlChannel::DispatchLine(const std::string& line,
     // answer: a page told nothing and a page told there are no screens are
     // different states, and only the second can be rendered.
     client_->Displays(std::move(displays));
+    return;
+  }
+
+  if (*type == "files") {
+    const base::ListValue* offered = message.FindList("files");
+    if (!offered) {
+      return;
+    }
+    std::vector<std::string> files;
+    files.reserve(offered->size());
+    for (const base::Value& entry : *offered) {
+      const std::string* path = entry.GetIfString();
+      if (path) {
+        files.push_back(*path);
+      }
+    }
+    // Sent even when it is empty, for the reason `displays` above is: a home
+    // with nothing to offer is an answer, and a launcher that never heard one
+    // would wait for a message the compositor has already sent.
+    client_->Files(std::move(files), arrival);
     return;
   }
 

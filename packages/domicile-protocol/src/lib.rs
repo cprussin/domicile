@@ -153,6 +153,20 @@ pub enum ChromeMessage {
         keycode: u32,
         pressed: bool,
     },
+
+    /// What is there to open? Answered with [`HostMessage::Files`].
+    ///
+    /// A shell's launcher is a page, and a page has no filesystem: there is no
+    /// `readdir` on `window.domicile` and this is deliberately not one. **It
+    /// carries no path**, so nothing a page can say decides which directory is
+    /// read — the compositor holds that policy, and the document served over
+    /// `domicile://` gains no reach into the filesystem by asking. A launcher
+    /// wants one list of what a user might open, not a directory browser, and
+    /// this is that list.
+    ///
+    /// Asked again whenever the shell wants a fresh answer; nothing is pushed,
+    /// because a home directory changes for reasons no desktop is watching.
+    ListFiles,
 }
 
 /// Messages sent from the host to the chrome (in-page client).
@@ -337,6 +351,22 @@ pub enum HostMessage {
     /// See `APP_FOCUS_REQUESTED_EVENT` in `@domicile/chrome-sdk`, which is the
     /// same question asked where the answer is known.
     FocusRequested { app_id: String },
+
+    /// What there is to open, answering [`ChromeMessage::ListFiles`].
+    ///
+    /// Paths relative to the home directory — `Notes/today.org` rather than
+    /// `/home/you/Notes/today.org` — because that is what a launcher draws and
+    /// because the part every row would share is the part no row needs. A
+    /// shell that opens one hands it straight back to `spawn`, and the
+    /// compositor's child inherits the home directory it was named from.
+    ///
+    /// Sorted, and the order is the answer: see `domicile_host::files`, which
+    /// is where the walk and the sort live.
+    ///
+    /// An empty list is a home with nothing to offer, which is a real answer
+    /// rather than a failure — the same distinction [`HostMessage::Displays`]
+    /// draws.
+    Files { files: Vec<String> },
 }
 
 /// One display of the desktop, as the chrome is told about it.

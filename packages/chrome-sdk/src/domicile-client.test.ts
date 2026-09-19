@@ -82,6 +82,9 @@ class FakeHost implements DomicileHost {
   spawn(command: readonly string[]): void {
     this.calls.push(["spawn", command]);
   }
+  listFiles(): void {
+    this.calls.push(["listFiles"]);
+  }
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
   }
@@ -248,6 +251,27 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual(["appeared:term", "closed:term"]);
     });
 
+    it("delivers what there is to open to a launcher that asked", () => {
+      // The one event that answers a question rather than announcing
+      // something. It goes through the same hold as every other, which is what
+      // a launcher needs: `listFiles` is called from an effect and the answer
+      // can be back before the handler for it is.
+      const seen: unknown[] = [];
+      domicile.on("files", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "files",
+        Object.assign(new Event("files"), {
+          arrival: 0,
+          files: ["Notes/today.org", "src"],
+        }),
+      );
+
+      expect(seen).toStrictEqual([{ files: ["Notes/today.org", "src"] }]);
+    });
+
     it("delivers a client's request for the keyboard without moving it", () => {
       const asked: unknown[] = [];
       domicile.on("focus_requested", (message) => {
@@ -349,6 +373,9 @@ describe("DomicileClient", () => {
 
       domicile.spawn(["kitty"]);
       expect(host.lastCall()).toStrictEqual(["spawn", ["kitty"]]);
+
+      domicile.listFiles();
+      expect(host.lastCall()).toStrictEqual(["listFiles"]);
 
       domicile.setDevicePixelRatio(2);
       expect(host.lastCall()).toStrictEqual(["setDevicePixelRatio", 2]);

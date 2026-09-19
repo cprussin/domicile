@@ -68,6 +68,7 @@ class ControlChannel : public mojom::ControlChannel {
   void SetClient(
       mojo::PendingRemote<mojom::ControlChannelClient> client) override;
   void Spawn(const std::vector<std::string>& command) override;
+  void ListFiles() override;
   void FocusApp(const std::string& app_id) override;
   void FocusChrome() override;
   void CloseApp(const std::string& app_id) override;

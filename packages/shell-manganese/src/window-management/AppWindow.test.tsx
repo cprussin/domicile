@@ -21,6 +21,13 @@ const recordingDomicile = {
   focusChrome: () => undefined,
   // Recorded only so a click does not throw out of the SDK's own handler: the
   // button belongs to the client, and nothing here asserts on it.
+  //
+  // `key` is here for the same reason and one more: `registerElements` puts a
+  // listener on the *document*, and the focus it forwards from is module
+  // state, so a window left focused here is one a later test file's keystroke
+  // is forwarded to. Without this that keystroke throws out of a handler in
+  // another suite entirely.
+  key: () => undefined,
   pointerButton: () => undefined,
   pointerMotion: () => undefined,
   resizeApp: () => undefined,

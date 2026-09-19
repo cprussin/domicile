@@ -68,6 +68,19 @@ fn chrome_messages_round_trip() {
         keycode: 30,
         pressed: true,
     });
+    chrome_round_trip(&ChromeMessage::ListFiles);
+}
+
+/// The launcher's ask carries nothing, and that is the security property.
+///
+/// A page cannot name a directory to enumerate, so this message is no route
+/// out of the sandbox the shell is served in: it asks "what can I open", and
+/// where the compositor looks for the answer is the compositor's.
+#[test]
+fn asking_what_there_is_to_open_names_nothing() {
+    let v = serde_json::to_value(ChromeMessage::ListFiles).unwrap();
+    assert_eq!(v["type"], "list_files");
+    assert_eq!(v.as_object().expect("an object").len(), 1);
 }
 
 #[test]
@@ -118,6 +131,34 @@ fn host_messages_round_trip() {
         app_id: "term".into(),
         cursor: CursorShape::Text,
     });
+    host_round_trip(&HostMessage::Files {
+        files: vec!["Notes/today.org".into(), "src".into()],
+    });
+}
+
+/// The answer is paths relative to the home directory, in the order they go
+/// on screen.
+///
+/// Relative because that is what a launcher shows — `Notes/today.org`, not
+/// `/home/you/Notes/today.org` — and because the home directory is the one
+/// piece of the path the list has no use for repeating on every row.
+#[test]
+fn the_files_a_launcher_can_offer_are_named_from_home() {
+    let v = serde_json::to_value(HostMessage::Files {
+        files: vec!["Notes/today.org".into(), "src".into()],
+    })
+    .unwrap();
+    assert_eq!(v["type"], "files");
+    assert_eq!(v["files"], serde_json::json!(["Notes/today.org", "src"]));
+}
+
+/// A home with nothing in it is an answer, and the empty list has to survive
+/// the wire to be one — the same reason a desktop of no displays does.
+#[test]
+fn a_home_with_nothing_to_open_is_an_answer() {
+    let v = serde_json::to_value(HostMessage::Files { files: vec![] }).unwrap();
+    assert_eq!(v["type"], "files");
+    assert_eq!(v["files"], serde_json::json!([]));
 }
 
 /// The chrome assigns the cursor straight to CSS `cursor`, so every shape must

@@ -4,6 +4,7 @@ import type {
   DomicileAppCursorEvent,
   DomicileAppEvent,
   DomicileAppTitledEvent,
+  DomicileFilesEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
 } from "./domicile-host";
@@ -12,6 +13,7 @@ import {
   appCursor,
   appResized,
   appTitled,
+  files,
   focusChanged,
   modifiers,
   shortcut,
@@ -200,6 +202,36 @@ describe("the modifiers the seat holds", () => {
         Object.assign(new Event("modifiers"), fields) as DomicileModifiersEvent,
       ),
     ).toStrictEqual(fields);
+  });
+});
+
+describe("what there is to open", () => {
+  it("arrives as a plain array of paths", () => {
+    // A `FrozenArray<DOMString>` on the IDL side, which is an ordinary array
+    // to a page — and the order is the answer rather than incidental, so
+    // nothing here sorts it a second time.
+    const offered = files(
+      Object.assign(new Event("files"), {
+        arrival: 0,
+        files: ["Notes/today.org", "src"],
+      }) as DomicileFilesEvent,
+    );
+
+    expect(offered).toStrictEqual({ files: ["Notes/today.org", "src"] });
+  });
+
+  it("carries an empty list as an empty list", () => {
+    // A home with nothing to offer is an answer. It has to survive as one:
+    // a launcher that read it as "not told yet" would sit waiting for a
+    // second message that is never coming.
+    expect(
+      files(
+        Object.assign(new Event("files"), {
+          arrival: 0,
+          files: [],
+        }) as DomicileFilesEvent,
+      ),
+    ).toStrictEqual({ files: [] });
   });
 });
 

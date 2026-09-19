@@ -248,6 +248,18 @@ const keymapSchema = z.looseObject({
   type: z.literal("keymap"),
 });
 
+// What there is to open, answering `list_files`. Paths relative to the home
+// directory, sorted — the order is the answer, worked out by
+// `domicile_host::files` rather than by whatever a `read_dir` handed back.
+//
+// An empty list is a home with nothing to offer. A home that could not be read
+// is not this message at all: the compositor logs that and says nothing, so a
+// launcher shows no list rather than an empty one it would have to explain.
+const filesSchema = z.looseObject({
+  files: z.array(z.string()),
+  type: z.literal("files"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -266,6 +278,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   focusRequestedSchema,
   shortcutMessageSchema,
   modifiersSchema,
+  filesSchema,
 ]);
 
 /** A decoded host message. */
@@ -291,6 +304,7 @@ export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 export type ModifiersMessage = z.infer<typeof modifiersSchema>;
+export type FilesMessage = z.infer<typeof filesSchema>;
 
 /** One display of the desktop, in the coordinates the shell lays out in. */
 export type DisplayInfo = z.infer<typeof displayInfoSchema>;

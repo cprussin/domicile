@@ -118,6 +118,7 @@ use crate::screens::{Advertised, Screens, Slot};
 use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
 use domicile_config::{Config, ConfigError, ConfigStore};
+use domicile_host::files::{listing, RealDirectory, DEEP_ROOTS};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
@@ -948,6 +949,32 @@ fn read_chrome_messages(
                 spawn_client(&command, &hub.wayland_display);
                 Vec::new()
             }
+            // The one message here the compositor answers rather than acts on.
+            // A shell's launcher is a page and a page has no filesystem, so the
+            // walk is the compositor's -- and it can be, safely, because
+            // `list_files` names no path: what is read is decided here and
+            // nowhere a document can reach. `domicile_host::files` is the walk
+            // itself, which is why there is almost nothing of it in this arm.
+            Ok(ChromeMessage::ListFiles) => match home_directory() {
+                Some(home) => match listing(&home, DEEP_ROOTS, &RealDirectory) {
+                    Ok(files) => vec![HostMessage::Files { files }],
+                    // Answered with nothing rather than with an empty list. A
+                    // home directory that will not open is a broken desktop,
+                    // and "you have no files" is that breakage wearing the face
+                    // of an ordinary answer -- a shell told it would draw an
+                    // empty launcher and nobody would ever find this line. Left
+                    // unanswered, the launcher still opens and still takes a
+                    // path, a URL or a query; what it has not got is a list.
+                    Err(err) => {
+                        tracing::error!(%err, home = %home.display(), "the home directory could not be read");
+                        Vec::new()
+                    }
+                },
+                None => {
+                    tracing::error!("no HOME in the environment, so there is no home to list");
+                    Vec::new()
+                }
+            },
             Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
                 hub.send_request(ClientRequest::PointerMotion { app_id, x, y });
                 Vec::new()
@@ -3843,6 +3870,18 @@ fn spawn_client(command: &[String], wayland_display: &OsStr) {
         }
         Err(err) => tracing::error!(%err, ?command, "failed to spawn client"),
     }
+}
+
+/// The home directory whose files a launcher is offered.
+///
+/// **The one thing this compositor reads from its environment that is not
+/// instrumentation.** Everything a desktop is *configured* with arrives on the
+/// command line, because a program writes it; a home directory is not a
+/// setting but a fact about the user this process is running as, and it is the
+/// same one [`spawn_client`] hands every client it starts. Taking it on a flag
+/// would be asking the supervisor to tell us which user we are.
+fn home_directory() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
 }
 
 /// The command a spawned client runs under.

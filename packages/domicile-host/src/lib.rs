@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage};
 
+pub mod files;
 pub mod ipc;
 use domicile_scene::{KeyboardTarget, Scene};
 
@@ -330,6 +331,7 @@ impl Host {
             // — the window leaves the scene when it actually goes away.
             ChromeMessage::CloseApp { .. }
             | ChromeMessage::Spawn { .. }
+            | ChromeMessage::ListFiles
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }
             | ChromeMessage::PointerButton { .. }

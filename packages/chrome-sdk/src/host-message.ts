@@ -33,6 +33,7 @@ import type {
   DomicileAppEvent,
   DomicileAppTitledEvent,
   DomicileDisplay,
+  DomicileFilesEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
 } from "./domicile-host";
@@ -168,6 +169,22 @@ export type DisplaysMessage = {
   displays: readonly DomicileDisplay[];
 };
 
+/**
+ * What there is to open.
+ *
+ * Paths relative to the home directory — `Notes/today.org`, not
+ * `/home/you/Notes/today.org` — and already in the order they go on screen, so
+ * a launcher draws the list rather than sorting it a second time under a rule
+ * of its own.
+ *
+ * An empty list is a home with nothing to offer, and is an answer: a shell
+ * that read it as "not told yet" would wait for a message that is not coming.
+ * A home that could not be read produces no message at all.
+ */
+export type FilesMessage = {
+  files: readonly string[];
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -180,6 +197,7 @@ export type HostMessageMap = {
   shortcut: ShortcutMessage;
   modifiers: ModifiersMessage;
   displays: DisplaysMessage;
+  files: FilesMessage;
 };
 
 /** The name of every message this build knows how to deliver. */
@@ -259,6 +277,18 @@ export const shortcut = (event: DomicileShortcutEvent): ShortcutMessage => ({
   keycode: event.keycode,
   metaKey: event.metaKey,
   shiftKey: event.shiftKey,
+});
+
+/**
+ * What there is to open, passed through rather than translated.
+ *
+ * A `FrozenArray<DOMString>` is already an array of strings to a page, and the
+ * order it arrives in is the answer — so this is the one translator with no
+ * decision in it, and it exists so that `domicile-client.ts` has the same one
+ * call per listener that every other event gets.
+ */
+export const files = (event: DomicileFilesEvent): FilesMessage => ({
+  files: event.files,
 });
 
 export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({
