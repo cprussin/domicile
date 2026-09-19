@@ -27,7 +27,7 @@ const NESTED = {
 };
 
 describe("movedBy", () => {
-  it("moves a window past its neighbour", () => {
+  it("moves a window past its neighbor", () => {
     const moved = movedBy(withFocusOn(ROW, "b"), Direction.Right);
 
     expect(windowsOf(moved)).toEqual(["a", "c", "b"]);
@@ -62,7 +62,7 @@ describe("movedBy", () => {
     expect(moved.root).toMatchObject({ children: [{}, {}, {}] });
   });
 
-  it("moves a whole container past its neighbour", () => {
+  it("moves a whole container past its neighbor", () => {
     const moved = movedBy(withFocusOn(NESTED, "a"), Direction.Right);
 
     expect(windowsOf(moved)).toEqual(["b", "c", "a"]);

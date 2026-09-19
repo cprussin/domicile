@@ -27,7 +27,7 @@ describe("matching", () => {
 
   it("requires every word, in any order and anywhere in the path", () => {
     // fzf's `--exact` with several terms, which is what the launcher this one
-    // is modelled on runs: each word narrows, and none of them has to be next
+    // is modeled on runs: each word narrows, and none of them has to be next
     // to the last. It is what makes `notes april` reach a file whose path says
     // them in that order with a year in between.
     expect(matching(OFFERED, "april notes")).toStrictEqual([

@@ -32,7 +32,7 @@ export const useStableRef = <E>(
       const release = attach(forwarded, element);
       // A cleanup rather than waiting for React to call this again with
       // `null`: React 19 does one or the other, and returning a cleanup is
-      // what lets a forwarded callback ref's own cleanup be honoured.
+      // what lets a forwarded callback ref's own cleanup be honored.
       return () => {
         ref.current = null;
         release();

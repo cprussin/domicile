@@ -63,9 +63,9 @@ export const resized = (tiling: Tiling, direction: Direction): Tiling => {
 
 /**
  * The container's shares with one step moved between the focused child and its
- * neighbour, or `undefined` when that would squeeze one of them out.
+ * neighbor, or `undefined` when that would squeeze one of them out.
  *
- * The neighbour is the one on the side being resized towards, and the one
+ * The neighbor is the one on the side being resized towards, and the one
  * *behind* where there is nothing ahead: a window at the end of a row still
  * grows when it is asked to, by taking from what is before it.
  */
@@ -80,7 +80,7 @@ const shared = (
   const shrinks = isForward(direction) ? from : index;
   const grown = container.fractions[grows];
   const shrunk = container.fractions[shrinks];
-  // Nothing to move where there is no neighbour to move it with, and nothing
+  // Nothing to move where there is no neighbor to move it with, and nothing
   // to take from a window that has the least a window can have.
   if (
     grown === undefined ||

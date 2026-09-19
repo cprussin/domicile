@@ -819,7 +819,7 @@ impl Client {
     /// separate promises — `current` and `preferred` — each of which a
     /// one-line mutation can drop on its own.
     ///
-    /// The millimetres and the refresh rate are read for the same reason and
+    /// The millimeters and the refresh rate are read for the same reason and
     /// one more: they are the two fields the compositor cannot know, and a
     /// reading blind to them cannot tell a compositor that says so from one
     /// that invents a panel — which is what this one did, for every screen and

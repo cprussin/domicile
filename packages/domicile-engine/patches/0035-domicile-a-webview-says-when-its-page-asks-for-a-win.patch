@@ -42,7 +42,7 @@ either. The first `extract.sh` after this lands on a real tree replaces both
 with what the tree says.
 
 Verified: not built. This repository cannot build Chromium, and the guard that
-measures the behaviour end to end --
+measures the behavior end to end --
 `packages/domicile-engine/scripts/guard-webview-new-window.sh`, a
 `target="_blank"` link clicked in a browser window and the second `<webview>`
 the shell opens for it -- runs on `crux` with the rest of the engine job.

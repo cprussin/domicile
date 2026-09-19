@@ -90,7 +90,7 @@ const densityOf = (
  *
  * **Applied as written, because the name is already the content's turn.**
  * `wl_output`'s `transform_90` is an output rotated a quarter turn
- * anticlockwise, so what is drawn on it goes a quarter turn *clockwise* to
+ * counterclockwise, so what is drawn on it goes a quarter turn *clockwise* to
  * come out upright — and `rotate-90` names that clockwise turn, all the way
  * from the config file the user wrote. CSS measures positive angles clockwise,
  * so the two agree and the degrees below are the names in other units.
@@ -118,7 +118,7 @@ const turn = ({
     case "rotate-180": {
       return `translate(${String(modeWidth)}px, ${String(modeHeight)}px) rotate(180deg) `;
     }
-    // Anticlockwise: the box's top edge swings above the origin's y instead.
+    // Counterclockwise: the box's top edge swings above the origin's y instead.
     case "rotate-270": {
       return `translate(0, ${String(modeHeight)}px) rotate(-90deg) `;
     }

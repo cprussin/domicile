@@ -34,7 +34,7 @@ never asks the platform window. A views browser is not ash.
 and every key event dispatched into the tree is dropped -- a desktop
 that draws, follows the pointer, and cannot be typed into.
 
-`Show(inactive)` now says so, honouring `inactive` because that is
+`Show(inactive)` now says so, honoring `inactive` because that is
 `Widget`'s own word for "show this without giving it focus"; `Activate`
 and `Deactivate` say so on demand; `Hide` withdraws it. `SetActive`
 guards on the change rather than the call, because the delegate acts on
@@ -94,7 +94,7 @@ index 831fe37..d010fb5 100644
 +  // that draws, tracks the pointer, and answers no key at all.
 +  //
 +  // `inactive` is `Widget`'s own word for "show this without giving it
-+  // focus", and it is honoured for the same reason the rest of this class
++  // focus", and it is honored for the same reason the rest of this class
 +  // answers rather than asserts: it is what the caller asked for.
 +  SetActive(!inactive);
  }

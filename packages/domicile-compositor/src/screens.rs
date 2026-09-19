@@ -103,12 +103,12 @@ pub struct Advertised {
     /// empty. Only the engine's displays have one — a config's arithmetic and
     /// a host's window are not panels.
     pub description: String,
-    /// The panel's own size in millimetres, or [`UNKNOWN_PHYSICAL_MM`] where
+    /// The panel's own size in millimeters, or [`UNKNOWN_PHYSICAL_MM`] where
     /// this output is not a panel at all.
     ///
     /// Only one of the three desktops has one. A described desktop is a
     /// config's arithmetic and a window-following one is a window, and neither
-    /// is millimetres of glass; the engine's displays are monitors, and the
+    /// is millimeters of glass; the engine's displays are monitors, and the
     /// engine is the process that read them.
     pub physical_mm: (i32, i32),
     /// The rate the panel is running at in mHz, or [`UNKNOWN_REFRESH_MHZ`]
@@ -314,7 +314,7 @@ impl Screens {
     /// is no Domicile window on a tty to resize them with.
     ///
     /// Scale 1 because the engine reports none: see [`Display`]. The
-    /// millimetres and the rate it *does* report are carried straight through,
+    /// millimeters and the rate it *does* report are carried straight through,
     /// zeros included -- a connector with no physical size or no mode is an
     /// ordinary reading, and [`UNKNOWN_PHYSICAL_MM`] is what the engine sends
     /// for one.
@@ -784,7 +784,7 @@ scale = 2
                     transform: Transform::Normal,
                     description: String::new(),
                     // A described display is a config's arithmetic rather
-                    // than millimetres of glass, and no config states a rate.
+                    // than millimeters of glass, and no config states a rate.
                     // Both stay the protocol's own word for "no such number",
                     // however much the engine has to say about a real panel.
                     physical_mm: UNKNOWN_PHYSICAL_MM,
@@ -1163,7 +1163,7 @@ size = [800, 600]
                     description: "BOE NE135A1M-NY1".into(),
                     // The panel's own, carried rather than invented -- and the
                     // second display's zeros carried just as faithfully,
-                    // because a connector that reports no millimetres and no
+                    // because a connector that reports no millimeters and no
                     // mode is ordinary and `wl_output` has a word for it.
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
@@ -1265,7 +1265,7 @@ size = [800, 600]
         // The panel at 1.5 and the monitor at 1.2, the monitor stood on its
         // side, and the panel centered underneath it — the arrangement this
         // exists for. Everything the engine read that the config says nothing
-        // about is carried through: the mode, the millimetres and the rate are
+        // about is carried through: the mode, the millimeters and the rate are
         // the panel's own and no profile invents them.
         let placed = Screens::nested()
             .replugged_into(&two_plugged_in(), &output(HOME_OFFICE))
@@ -1512,7 +1512,7 @@ scale = 1.5
                 transform: Transform::Normal,
                 description: String::new(),
                 // A window is not a panel: the desktop this output describes is
-                // whatever box the host gave Domicile, which has no millimetres
+                // whatever box the host gave Domicile, which has no millimeters
                 // and no mode of its own to report.
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,

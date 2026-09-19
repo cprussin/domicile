@@ -295,7 +295,7 @@ desktop in the corner of a black screen.
 
 **`transform` names the turn the *content* takes**, which is the `wl_output`
 convention and the config file's: `rotate-90` is a quarter turn clockwise, for
-an output bolted a quarter turn anticlockwise. A shell reading it applies it as
+an output bolted a quarter turn counterclockwise. A shell reading it applies it as
 written.
 
 `@domicile/chrome-sdk` does not parse that file. Its schema is the

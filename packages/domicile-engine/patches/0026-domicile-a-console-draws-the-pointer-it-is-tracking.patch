@@ -11,7 +11,7 @@ and drew no pointer at all.
 THE ARROW IS IN THE BINARY. `ui_lottie_resources.grd:10` gates the
 cursor block on `use_aura`, not on ChromeOS; `chrome/chrome_paks.gni:152`
 puts that pak in `chrome_extra_paks` unconditionally; and
-`skia_support_skottie` is `!is_android`, so the rasteriser is here too.
+`skia_support_skottie` is `!is_android`, so the rasterizer is here too.
 Nothing asks for it.
 
 `wm::CursorLoader::CursorFromType` asks the platform's factory first and

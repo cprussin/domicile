@@ -13,7 +13,7 @@
 //! desk is a different profile applying, with nothing reloaded and nothing
 //! restarted.
 //!
-//! Modelled on kanshi, which is what a sway desktop uses for this, without
+//! Modeled on kanshi, which is what a sway desktop uses for this, without
 //! borrowing its file format: a list of profiles, each naming exactly the
 //! displays it is for, and the first one whose set is plugged in wins.
 
@@ -243,7 +243,7 @@ pub enum Transform {
     Rotate90,
     #[serde(rename = "rotate-180")]
     Rotate180,
-    /// A quarter turn anticlockwise, which is how a monitor on a desk usually
+    /// A quarter turn counterclockwise, which is how a monitor on a desk usually
     /// ends up standing on its side.
     #[serde(rename = "rotate-270")]
     Rotate270,
@@ -569,7 +569,7 @@ fn found<'a>(placement: &DisplayPlacement, connected: &'a [Connected]) -> &'a Co
 /// not a display, and a zero-sized one is a screen every window misses.
 ///
 /// Turned first, so a 3840x2160 monitor on its side at 1.2 is 1800x3200 rather
-/// than 3200x1800 relabelled.
+/// than 3200x1800 relabeled.
 fn logical(mode: (u32, u32), transform: Transform, scale: f64) -> Option<(u32, u32)> {
     let turned = if transform.swaps_axes() {
         (mode.1, mode.0)

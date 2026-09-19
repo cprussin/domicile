@@ -9,7 +9,7 @@
 //!
 //! # The rule
 //!
-//! Two passes, taken from the launcher this desktop is modelled on
+//! Two passes, taken from the launcher this desktop is modeled on
 //! (`pkgs/launcher/scripts/launch.nix` in `cprussin/dotfiles`):
 //!
 //! ```sh

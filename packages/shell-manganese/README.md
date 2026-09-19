@@ -50,7 +50,7 @@ windows over the tiling, and one window at a time filling the screen.
 | **Mod+Space**, **Mod+D** | Open the launcher, or put it away. The config's launcher keys, in both the places it binds one. |
 | **Mod+Shift+Q** | Close the window being worked in. |
 | **Mod+H / J / K / L**, **Mod+←↓↑→** | Move the focus. Wrapping at the ends of a container, which is what `focus.wrapping = "yes"` asks for. |
-| **Mod+Shift+** the same | Move the window. Past its neighbour, out of the container it is in, or — pushed across the grain — into a new split of the workspace. |
+| **Mod+Shift+** the same | Move the window. Past its neighbor, out of the container it is in, or — pushed across the grain — into a new split of the workspace. |
 | **Mod+B / Mod+V** | `splith` / `splitv`: wrap the focus in a container of one, so the next window opens beside or below it. |
 | **Mod+W / Mod+S / Mod+E** | `layout tabbed` / `layout stacking` / `layout toggle split` on the container the focus is in. |
 | **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. |
@@ -63,8 +63,8 @@ windows over the tiling, and one window at a time filling the screen.
 
 The window being worked in is the one whose title bar is **filled with the
 accent**, and it is the one everything keyed acts on. Its frame is drawn in
-the same colour and its name is set in a heavier face, so the bar and the
-three edges below it say one thing. Every window eases between those colours
+the same color and its name is set in a heavier face, so the bar and the
+three edges below it say one thing. Every window eases between those colors
 rather than snapping between them: focus follows the cursor here, so they
 change every time the pointer crosses a window.
 
@@ -165,20 +165,20 @@ container is the same component at a different rectangle. A tab that stands
 for a whole container is named after the window that container last had the
 focus in.
 
-**Three states, which are sway's three client colours.** The window the
+**Three states, which are sway's three client colors.** The window the
 keyboard is in has the filled bar; a container's open tab with the keyboard
 somewhere else is marked by its edge and its text rather than a fill
 (`focused_inactive`, and without it two bars on one screen would look like the
 focused window); every other bar recedes to a card fill and muted text,
 because the window under it is what the user is looking at. Which of the three
-a bar is, is on the element as `data-focus` as well as in its colours.
+a bar is, is on the element as `data-focus` as well as in its colors.
 
 ### Windows arrive, settle and leave
 
 A window is not simply *there* and then gone.
 
 - **One that opens** fades up and grows out of the middle of its own frame.
-- **One whose neighbours rearrange** eases across to the new box rather than
+- **One whose neighbors rearrange** eases across to the new box rather than
   jumping to it.
 - **One that closes** shrinks and fades away from where it was.
 - **A workspace being switched to** slides its windows in from the side it was
@@ -199,7 +199,7 @@ move writes, because one easing towards each of them trails the pointer instead
 of following it.
 
 **A window turns about one point, not two.** Its bar and its contents are
-separate elements; each scaled about its own centre would pull away from the
+separate elements; each scaled about its own center would pull away from the
 other by a fraction of the window's height, which is a frame coming apart
 rather than a window arriving. So the layout hands both of them the box they
 span together and they turn about the middle of that — see `scaledAbout`.
@@ -410,21 +410,21 @@ figures. None of the three is the other two: the meter is what is read at a
 glance and is the only one exact to better than a percent, the figures are what
 a decision about a lead is made on, and the bolt is the plug — a full battery
 and a machine on AC look identical on a meter and are not the same thing. The
-meter is drawn in `currentcolor`, so the one decision about what colour survives
+meter is drawn in `currentcolor`, so the one decision about what color survives
 a photograph is the bar's own; a meter is boxes rather than type, and `color`
 would reach the figures beside it and nothing else.
 
 **At a tenth left the whole readout goes to `danger`, and at a twentieth it
 flashes.** Both thresholds are read off the *percentage* rather than the level
-behind it, so the colour and the figures cannot disagree — a tenth and a bit
+behind it, so the color and the figures cannot disagree — a tenth and a bit
 reads as `10%`, and a readout saying ten while looking comfortable would be two
 answers to one question. The lead being in does not clear either: the bolt is
-what says the lead is in, and what the colour is about is the cell. The flash is
+what says the lead is in, and what the color is about is the cell. The flash is
 `chargeFlashing`, the shell's own keyframe, rather than the preset's `pulse`:
 `pulse` sits between a third and two thirds throughout and says a control is
 busy, where this is at full strength twice a turn — a battery with minutes left
 has to be more legible than the rest of the bar at the moment it is least
-ignorable, not less. It is an opacity rather than a second colour, so the one
+ignorable, not less. It is an opacity rather than a second color, so the one
 decision about what red is stays the `danger` token's and one animation covers
 the case, the fill, the bolt and the figures at once.
 
@@ -529,7 +529,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/rect.ts` | A rectangle of the desktop, and the bar the top of one carries. |
 | `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it, and the ones still leaving. |
 | `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
-| `src/window-management/title-focus.ts` | Which of sway's three client colours a bar is drawn in, and why a tab needs the third. |
+| `src/window-management/title-focus.ts` | Which of sway's three client colors a bar is drawn in, and why a tab needs the third. |
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar over a `<webview>`, and everywhere the shell has sent it. |
 | `src/window-management/browser/AddressBar.tsx` | That bar: the history controls, the one button that is Reload or Stop, and the address as a pill with its connection indicator inside it. |

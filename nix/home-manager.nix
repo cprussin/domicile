@@ -44,7 +44,7 @@
 
   # The four `wl_output` rotations, named for the turn the CONTENT takes to
   # come out upright -- `rotate-90` is a quarter turn clockwise, for a panel
-  # bolted a quarter turn anticlockwise. Spelled the way the file spells them,
+  # bolted a quarter turn counterclockwise. Spelled the way the file spells them,
   # which is not serde's kebab-case of the Rust variant.
   transform = lib.types.enum ["normal" "rotate-90" "rotate-180" "rotate-270"];
 

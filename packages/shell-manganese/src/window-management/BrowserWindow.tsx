@@ -347,14 +347,14 @@ export const BrowserWindow = ({
         browserStyles,
         // The bar above carries the top edge; this picks up the other three.
         edgeStyles,
-        // And the same colour the bar is drawn in, for the same reason.
+        // And the same color the bar is drawn in, for the same reason.
         focused ? focusedEdgeStyles : restingEdgeStyles,
         noTopEdgeStyles,
         movingStyles({ motion }),
         (clickThrough || leaving) && clickThroughStyles,
         // A dragged window is written at a new box on every pointer move, so
         // it takes the box it is given rather than easing towards it. Its
-        // colours go on easing either way — see `settlingStyles`.
+        // colors go on easing either way — see `settlingStyles`.
         dragging && draggingStyles,
         settlingStyles({ dragging }),
       )}

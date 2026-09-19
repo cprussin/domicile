@@ -114,7 +114,7 @@ So libinput joins the list it was always going to belong to, one line
 and a reason.
 
 Routing is a runtime flag rather than a patch:
-`EventDeviceInfo::UseLibinput` honours an overridden
+`EventDeviceInfo::UseLibinput` honors an overridden
 `kLibinputHandleTouchpad` above its own heuristics
 (`event_device_info.cc:792-806`), and `domicile-launch` passes
 `--enable-features=LibinputHandleTouchpad`. That keeps the decision

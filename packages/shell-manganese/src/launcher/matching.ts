@@ -1,6 +1,6 @@
 // Which of the offered files a query is still asking about.
 //
-// `fzf --exact` is what the launcher this one is modelled on filters with, and
+// `fzf --exact` is what the launcher this one is modeled on filters with, and
 // this is what that means: every word has to appear somewhere in the path, in
 // any order, ignoring case. No ranking and no reordering — the host already
 // sorted, and a second rule about order would be a second chance for the list

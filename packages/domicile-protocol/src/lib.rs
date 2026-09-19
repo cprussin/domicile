@@ -460,7 +460,7 @@ pub struct DisplayInfo {
 ///
 /// **NAMED FOR THE TURN THE CONTENT TAKES, NOT THE ONE THE PANEL DID.** That
 /// is the `wl_output` convention and `domicile-config`'s: `transform_90` is an
-/// output rotated a quarter turn anticlockwise, so what is drawn on it has to
+/// output rotated a quarter turn counterclockwise, so what is drawn on it has to
 /// go a quarter turn *clockwise* to come out upright, and that clockwise turn
 /// is what this names. A page applies it as written.
 ///
@@ -478,7 +478,7 @@ pub enum DisplayTransform {
     Rotate90,
     #[serde(rename = "rotate-180")]
     Rotate180,
-    /// A quarter turn anticlockwise, which is how a monitor on a desk usually
+    /// A quarter turn counterclockwise, which is how a monitor on a desk usually
     /// ends up standing on its side.
     #[serde(rename = "rotate-270")]
     Rotate270,

@@ -693,9 +693,9 @@ describe("Shell", () => {
       );
     });
 
-    // AND IS DRAWN OVER THE WINDOW MOVING INTO ITS PLACE. The neighbour eases
+    // AND IS DRAWN OVER THE WINDOW MOVING INTO ITS PLACE. The neighbor eases
     // into the box it had while it shrinks away inside it, and at the depth it
-    // used to have the neighbour would cover it before it had gone — two
+    // used to have the neighbor would cover it before it had gone — two
     // elements at one `z-index` are decided by the order they come in the
     // document, and a closing window goes on being drawn where it always was.
     it("draws a closing window over the one taking its space", () => {
@@ -824,7 +824,7 @@ describe("Shell", () => {
 
     it("draws the focused window's own frame in the accent as well", () => {
       // The bar is one edge of the window; a frame that stayed the resting
-      // colour would say something different from the bar above it.
+      // color would say something different from the bar above it.
       // Declarations rather than class names, because Panda hashes them.
       const { container } = renderShell();
       clientAppears("one");

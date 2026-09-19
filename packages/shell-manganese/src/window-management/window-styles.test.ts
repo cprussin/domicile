@@ -36,7 +36,7 @@ const SURFACE = { height: 1018, width: 1920, x: 0, y: 62 };
 
 describe("scaledAbout", () => {
   // A WINDOW TURNS ABOUT ONE POINT, NOT TWO. Its bar and its contents are
-  // separate elements: scaled about their own centres they would pull apart
+  // separate elements: scaled about their own centers they would pull apart
   // by a fraction of the window's height, and a frame in two pieces is not a
   // window arriving.
   it("turns the contents about the middle of the whole frame", () => {

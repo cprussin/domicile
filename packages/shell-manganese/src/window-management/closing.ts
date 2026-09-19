@@ -42,7 +42,7 @@ export type Closing = {
   /**
    * The box it had, which is where it plays out — raised to {@link LEAVING}.
    *
-   * Raised because its neighbours are easing into that box while it shrinks
+   * Raised because its neighbors are easing into that box while it shrinks
    * away inside it: left at the depth it had they would cover it before it had
    * gone, two elements at one `z-index` being decided by the order they come
    * in the document.

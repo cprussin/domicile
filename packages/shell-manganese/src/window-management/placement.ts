@@ -29,7 +29,7 @@ export type Placement = {
    * The whole of what the window occupies: its bar and its contents together.
    *
    * What both of those elements turn about when the window arrives or leaves.
-   * They are separate elements, so halves that scaled about their own centres
+   * They are separate elements, so halves that scaled about their own centers
    * would pull apart by a fraction of the window's height — one shared point
    * is what keeps a frame a frame. It is the box of the bar alone for a window
    * a tab is hiding, which is all such a window has on screen.
@@ -60,7 +60,7 @@ export type Screenful = {
 };
 
 /**
- * How far apart neighbouring windows are — `gaps.inner` from the config.
+ * How far apart neighboring windows are — `gaps.inner` from the config.
  *
  * With `gaps.smartGaps`, which is what the caller below applies: a workspace
  * showing one window has nothing to space it away from, so it gets the screen.
@@ -82,7 +82,7 @@ const FULLSCREEN = 1000;
 /**
  * And over everything, a window that has closed and is still shrinking away.
  *
- * Because its neighbours are easing into the space it had while it does. At
+ * Because its neighbors are easing into the space it had while it does. At
  * the depth it used to have they would cover it before it had finished going:
  * two elements at one `z-index` are decided by the order they come in the
  * document, and a closing window goes on being drawn where it always was —

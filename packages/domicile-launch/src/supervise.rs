@@ -98,12 +98,12 @@ impl Drop for Running {
 /// later, holding DRM master on the card. The console was not recoverable and
 /// nothing said why, because from here the component had exited.
 ///
-/// So each one leads a process group and the group is what is signalled.
+/// So each one leads a process group and the group is what is signaled.
 /// `SIGTERM` first, because the engine has a console to hand back; `SIGKILL`
 /// after `LAST_WORDS`, because a component that will not go is worse than one
 /// that did not get to say goodbye.
 ///
-/// Signalling the group by the leader's pid stays right after the leader has
+/// Signaling the group by the leader's pid stays right after the leader has
 /// been reaped: a process group outlives its leader as long as it has members,
 /// and the members are exactly what this is for.
 fn end_the_group(child: &mut Child) {

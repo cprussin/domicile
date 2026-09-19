@@ -57,7 +57,7 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
 // What it cannot do is say WHICH ONE: it is an int64 nobody can look at a desk
 // and predict, so a person writing "put the left-hand monitor here" has to
 // read one off a log first and write down a number that means nothing. This is
-// the same identity, spelled the way the panel is labelled.
+// the same identity, spelled the way the panel is labeled.
 //
 // Each of the three parts can be missing and the name is what is left --
 // `ManufacturerIdToString` gives "" for a product code nobody set, a panel

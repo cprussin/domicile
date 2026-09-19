@@ -118,7 +118,7 @@ describe("TitleBar", () => {
   it("follows the pointer exactly while its window is being dragged", () => {
     // A floating window is dragged by this bar, and a bar easing towards each
     // box the drag writes is one that trails the pointer holding it. Only the
-    // box: the colours below still ease, because a drag is when the pointer
+    // box: the colors below still ease, because a drag is when the pointer
     // crosses the most windows.
     const { container } = render(<TitleBar {...barProps} dragging />);
 
@@ -127,10 +127,10 @@ describe("TitleBar", () => {
     expect(transition).toContain("background-color");
   });
 
-  // Focus follows the cursor here, so these colours change as often as the
+  // Focus follows the cursor here, so these colors change as often as the
   // pointer crosses a window: bars that snapped between them would flicker
   // across the desktop on the way to anywhere.
-  it("eases between the colours that say where the keyboard is", () => {
+  it("eases between the colors that say where the keyboard is", () => {
     const { container } = render(<TitleBar {...barProps} />);
 
     const { transition } = globalThis.getComputedStyle(bar(container));
@@ -139,10 +139,10 @@ describe("TitleBar", () => {
     expect(transition).toContain("color");
   });
 
-  it("draws the buttons on a filled bar in the colour that fill is for", () => {
+  it("draws the buttons on a filled bar in the color that fill is for", () => {
     // The focused bar is filled with the accent, and the library's quiet
-    // control draws its icon in `muted` — a grey nobody can find on it. The
-    // colour the accent is designed against is the page's `background`, which
+    // control draws its icon in `muted` — a gray nobody can find on it. The
+    // color the accent is designed against is the page's `background`, which
     // is what the title beside the buttons is already drawn in.
     //
     // Declarations rather than class names, because Panda hashes them.
@@ -152,7 +152,7 @@ describe("TitleBar", () => {
     );
 
     // And every other bar keeps the quiet one, which is what a control on a
-    // card-coloured bar should be.
+    // card-colored bar should be.
     const resting = render(<TitleBar {...barProps} />);
     expect(closeOn(resting.container).className).not.toContain(
       css({ color: "background" }),

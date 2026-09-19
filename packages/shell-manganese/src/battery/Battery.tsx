@@ -107,7 +107,7 @@ const rootStyles = cva({
 
 // Drawn in `currentcolor` throughout, which is whatever the readout above has
 // set `color` to — the bar's white, or `danger`. A meter is boxes rather than
-// type, so naming a colour here would leave it behind when the figures beside
+// type, so naming a color here would leave it behind when the figures beside
 // it went red.
 const caseStyles = css({
   // The terminal nub, which is what makes a rounded box a battery.
@@ -151,7 +151,7 @@ const percentStyles = css({
 /**
  * Which of the three the readout is in.
  *
- * Off the *percentage* rather than off the level behind it, so the colour and
+ * Off the *percentage* rather than off the level behind it, so the color and
  * the figures cannot disagree: a tenth and a bit reads as `10%`, and a readout
  * saying ten while looking comfortable would be two answers to one question.
  */

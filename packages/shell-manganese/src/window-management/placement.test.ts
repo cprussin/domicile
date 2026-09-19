@@ -140,7 +140,7 @@ describe("placementsOf", () => {
   });
   // WHAT BOTH HALVES OF A WINDOW TURN ABOUT. A window is two elements — the
   // bar and the contents under it — and a frame whose halves scaled about
-  // their own centres would come apart at the seam, so each of them is given
+  // their own centers would come apart at the seam, so each of them is given
   // the whole box to turn about instead.
   it("gives every window the box its bar and its contents span together", () => {
     expect(placementFor(desktop("kitty"), "kitty")?.frame).toEqual({

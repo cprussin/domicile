@@ -85,7 +85,7 @@ pub struct Runtime {
 /// the command every machine runs.
 /// The ozone platform that drives a CRTC rather than living in somebody else's
 /// session. `domicile-launch` is where the name is decided, so it is where the
-/// one behaviour that depends on it belongs.
+/// one behavior that depends on it belongs.
 const SCANOUT_PLATFORM: &str = "drm";
 
 pub fn engine(

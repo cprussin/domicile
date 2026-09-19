@@ -355,7 +355,7 @@ another console and back asked for.
 the card to the GPU process: after the `open` and before anything can commit on
 it. `DrmModeset::Start` is earlier and holds no card to ask about. The ask is
 idempotent — the kernel answers 0 for a file that is already the current master
-— so a machine whose `open` did take master pays one ioctl and no behaviour.
+— so a machine whose `open` did take master pays one ioctl and no behavior.
 
 **A card that arrives on somebody else's console is recorded and not taken**, or
 a display plugged in during a VT switch would be mastered by a desktop nobody
@@ -476,7 +476,7 @@ this session is actually on. One `Get` on an object logind gave us, no
 credentials resolved, and correct on the second seat of a machine that has two —
 which `seat0` written out here would not be. A session on no seat is `("", "/")`,
 and `/` is a well-formed object path, so it is refused where it is read rather
-than travelling to a `SwitchTo` to fail as cryptically as the alias did.
+than traveling to a `SwitchTo` to fail as cryptically as the alias did.
 
 **The drop is one D-Bus round trip late, and that is the remaining gap.** The
 card is not one of logind's devices — the browser `open`s it, through the ACL
@@ -616,7 +616,7 @@ says the caller must read the boolean rather than trust the fd. Popping only the
 descriptor is how a startup scan that lands during an inactive moment ends up
 with a desktop full of dead devices and no complaint anywhere.
 
-**An inactive answer is asked about, not waited on.** Honouring the boolean by
+**An inactive answer is asked about, not waited on.** Honoring the boolean by
 parking the device and waiting for `Reclaim` is a regression on its own, because
 `OnPropertiesChanged` is `Reclaim`'s only caller and logind emits
 `PropertiesChanged` on a *change*. A session that was already in front of the
@@ -927,7 +927,7 @@ the turn, is both.
 **What a desk still has to settle is which way round the two quarter turns
 are.** `rotate-90` is the turn the *content* takes, which is the `wl_output`
 convention and the config file's — an output bolted a quarter turn
-anticlockwise needs what is drawn on it turned clockwise — and every list from
+counterclockwise needs what is drawn on it turned clockwise — and every list from
 `domicile-config` to `TURNS` in `cover-the-window.ts` applies it as written.
 Reading agrees with itself all the way down; only glass can say whether the
 reading was right. Swapping two arms of one `switch` is the whole fix.
@@ -987,14 +987,14 @@ window on the left monitor and nowhere else, which is what it always meant,
 and `position` is still where the region goes on the page — it is just that
 the page is one screen now.
 
-**A profile names a monitor the way it is labelled.** The `wl_output` is still
+**A profile names a monitor the way it is labeled.** The `wl_output` is still
 `drm-<id>` — short, always there, and what clients are already on — but every
 display now carries a *description* beside it: `"<MAKE> <MODEL> <SERIAL>"`, the
 string kanshi and sway match on, and an entry's `display` matches either. So a
 desk can be written down without first reading an int64 off a log, and it can
 be written down a monitor at a time.
 
-It travels the route the millimetres already take (*[The physical size is in
+It travels the route the millimeters already take (*[The physical size is in
 the snapshot](#the-physical-size-is-in-the-snapshot-and-it-leaves-as-a-dpi)*):
 `display::Display::label` is the field that exists for it and that nothing on
 this platform was setting, then the mojom `Display`, then a borrowed
@@ -1051,7 +1051,7 @@ reproduces it exactly on a 2880x1920 work area:
 That arithmetic is also the strongest evidence `DrmScreen` works: 1050 and 1900
 are derivable only from a 2880x1920 work area.
 
-Nothing on a tty maximises a window: there is no window manager and no session to
+Nothing on a tty maximizes a window: there is no window manager and no session to
 restore bounds from. **Fullscreen rather than a size on the command line**, and
 the difference is not style. `--window-size=WxH --window-position=0,0` does work
 — `browser_window_state.cc:180` applies both after `WindowSizer` and forces

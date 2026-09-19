@@ -119,7 +119,7 @@ export type DomicileDisplay = {
    *
    * **Named for the turn the content takes, not the one the panel did** — the
    * `wl_output` convention, which the config file and the host both follow. An
-   * output rotated a quarter turn anticlockwise needs what is drawn on it
+   * output rotated a quarter turn counterclockwise needs what is drawn on it
    * turned a quarter turn *clockwise* to come out upright, and `rotate-90` is
    * that clockwise turn. A shell applies it as written.
    */

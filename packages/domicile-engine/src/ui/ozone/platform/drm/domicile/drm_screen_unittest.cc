@@ -129,7 +129,7 @@ constexpr int64_t kDellProductCode = (int64_t{0x10AC} << 16) | 0x41A0;
 // monitors. What it is not is something a person can predict: it is an int64,
 // so writing "put the left-hand monitor here" means reading one off a log and
 // typing a number that means nothing. The label is the same panel spelled the
-// way it is labelled, and it is the string kanshi and sway match a profile on.
+// way it is labeled, and it is the string kanshi and sway match a profile on.
 TEST(DrmScreenTest, ADisplayIsNamedByItsPanel) {
   auto snapshot = SnapshotBuilder()
                       .ProductCode(kDellProductCode)

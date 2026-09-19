@@ -1,6 +1,6 @@
 // Where a query that is not a file and not a URL goes.
 //
-// The bang tags of the launcher this desktop is modelled on: a query carries
+// The bang tags of the launcher this desktop is modeled on: a query carries
 // `!yt` or `!wiki` somewhere in it and that word picks the engine, and a query
 // that carries none goes to Google. Anywhere in the query rather than at the
 // front, because that is how a tag actually gets typed — the words go in, the

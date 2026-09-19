@@ -64,7 +64,7 @@ describe("launchFor", () => {
       );
     });
 
-    it("browses localhost, which has no dot to recognise it by", () => {
+    it("browses localhost, which has no dot to recognize it by", () => {
       // The one hostname with no TLD that a person types on purpose, and the
       // one this desktop's user types most.
       expect(launchFor("localhost:5173", OFFERED)).toStrictEqual(

@@ -47,7 +47,7 @@ cat > "$BIN/curl" <<'FAKE'
 #!/usr/bin/env bash
 # GitHub, as far as the publisher can tell. Every call is appended to
 # `$STATE/calls` as `<METHOD> <url>`; a release exists iff `$STATE/rel-<tag>`
-# does, and `-f` is honoured by exiting 22 when it does not.
+# does, and `-f` is honored by exiting 22 when it does not.
 set -u
 state="$FAKE_STATE"
 method=GET; url=""; stdin_body=0; upload=""

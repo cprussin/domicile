@@ -14,7 +14,7 @@ and every frame it submits is dropped before it reaches the kernel.
 
 Chromium's default window is `kWindowMaxDefaultWidth` wide and the work area
 inset by `kWindowTilePixels` -- 1050x1900 on a 2880x1920 panel -- so out of the
-box nothing is ever scanned out. Nothing on a tty maximises a window either:
+box nothing is ever scanned out. Nothing on a tty maximizes a window either:
 there is no window manager and no session to restore bounds from.
 
 `DrmWindowHost::SetFullscreen` is an empty body upstream, on the premise behind
@@ -26,7 +26,7 @@ permanently false, so views re-enters fullscreen on every request and the
 `DCHECK_EQ` in its own `SetFullscreen` fails in a DCHECK build.
 
 NOTHING IN `chrome/` NEEDS TOUCHING, and an earlier revision of this patch
-touched it anyway. `--start-fullscreen` is honoured in
+touched it anyway. `--start-fullscreen` is honored in
 `StartupBrowserCreatorImpl::MaybeToggleFullscreen`, and the `--app=` path does
 reach it: `MaybeLaunchAppShortcutWindow` calls
 `web_app::startup::FinalizeWebAppLaunch`, whose last statement is that call
@@ -35,7 +35,7 @@ reach it: `MaybeLaunchAppShortcutWindow` calls
 entry -- `FullscreenController::ToggleFullscreenModeInternal` reads
 `enter_fullscreen = !context->IsFullscreen()` -- which put the window straight
 back on `restored_bounds_` and is the black screen this patch was written to
-end. `scripts/test-the-fullscreen-flag-is-honoured-once.sh` is what says so
+end. `scripts/test-the-fullscreen-flag-is-honored-once.sh` is what says so
 without a Chromium tree.
 
 Kiosk is deliberately not mirrored: it carries a policy surface -- accelerator

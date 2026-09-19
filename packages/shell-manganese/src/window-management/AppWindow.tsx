@@ -253,7 +253,7 @@ export const AppWindow = ({
         (clickThrough || leaving) && clickThroughStyles,
         // A dragged window is written at a new box on every pointer move, so
         // it takes the box it is given rather than easing towards it. Its
-        // colours go on easing either way — see `settlingStyles`.
+        // colors go on easing either way — see `settlingStyles`.
         dragging && draggingStyles,
         settlingStyles({ dragging }),
       )}

@@ -101,7 +101,7 @@ export const Screen = ({
           // `top left` for the same reason the four above are physical, and
           // it is load-bearing rather than a preference: every push in that
           // file is measured from the region's own top-left corner, and the
-          // default origin is the centre.
+          // default origin is the center.
           style={{
             height: `${String(display.size[1])}px`,
             left: `${String(display.position[0])}px`,
