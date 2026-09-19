@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
 
 import type { Placement } from "./placement";
+import { LEAVING } from "./placement";
 import type { Shown } from "./shown";
 import { useWindowMotion } from "./useWindowMotion";
 import { ShellWindow } from "./window";
@@ -100,7 +101,8 @@ describe("useWindowMotion", () => {
         result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id),
       ).toMatchObject({
         motion: "closing",
-        placement: placementOf(EDITOR.id),
+        // At the box it had, raised over the windows moving into it.
+        placement: { ...placementOf(EDITOR.id), depth: LEAVING },
       });
     });
 

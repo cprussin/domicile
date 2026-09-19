@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { departed, withClosing } from "./closing";
 import type { Placement } from "./placement";
+import { LEAVING } from "./placement";
 import type { Shown } from "./shown";
 import { ShellWindow } from "./window";
 
@@ -31,7 +32,9 @@ describe("departed", () => {
       departed(shown([TERMINAL, EDITOR]), [EDITOR]).map(
         ({ placement, window }) => [window.title, placement],
       ),
-    ).toStrictEqual([["kitty", placementOf(TERMINAL.id)]]);
+    ).toStrictEqual([
+      ["kitty", { ...placementOf(TERMINAL.id), depth: LEAVING }],
+    ]);
   });
 
   // WHAT IT SAID, IT GOES ON SAYING. Closing a window moves the keyboard to
@@ -43,6 +46,19 @@ describe("departed", () => {
         ({ focused }) => focused,
       ),
     ).toStrictEqual([true]);
+  });
+
+  // AND IS DRAWN OVER THE WINDOWS CLOSING OVER ITS SPACE. They ease into the
+  // box it had while it shrinks away inside it, and at the depth it used to
+  // have they would cover it before it had gone — two elements at one
+  // `z-index` are decided by the order they come in the document, and this one
+  // goes on being drawn where it always was.
+  it("is raised above the windows moving into its place", () => {
+    expect(
+      departed(shown([TERMINAL, EDITOR]), [EDITOR]).map(
+        ({ placement }) => placement.depth,
+      ),
+    ).toStrictEqual([LEAVING]);
   });
 
   it("remembers where it was in the list", () => {

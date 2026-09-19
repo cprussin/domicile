@@ -79,6 +79,21 @@ const FLOATING = 1;
  */
 const FULLSCREEN = 1000;
 
+/**
+ * And over everything, a window that has closed and is still shrinking away.
+ *
+ * Because its neighbours are easing into the space it had while it does. At
+ * the depth it used to have they would cover it before it had finished going:
+ * two elements at one `z-index` are decided by the order they come in the
+ * document, and a closing window goes on being drawn where it always was —
+ * see `closing.ts` for why it cannot simply be moved to the end.
+ *
+ * Above `FULLSCREEN` as well, which costs nothing: a workspace showing a
+ * fullscreen window places no other window at all, so the only window that can
+ * be closing over one is the fullscreen window itself.
+ */
+export const LEAVING = 2000;
+
 export const placementsOf = (
   state: WindowState,
   geometry: Geometry,

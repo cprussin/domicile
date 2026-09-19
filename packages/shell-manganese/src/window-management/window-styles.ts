@@ -141,6 +141,20 @@ export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties => ({
  * rather than an enum: a motion the shell can ask for and this does not name
  * is a call that does not compile.
  *
+ * **Opening and closing run for as long as the layout does**, which is what
+ * makes a window and the space around it one movement rather than two. The
+ * windows either side of one that opens or closes are easing into their new
+ * boxes over `durations.fast` — see {@link settlingStyles} — so a window that
+ * took twice as long to go was still shrinking over a desktop that had
+ * finished rearranging itself around it.
+ *
+ * **And both of them lead with the movement.** `easings.outQuart` puts most of
+ * the scale and most of the fade in the first few frames and lets the rest
+ * settle, which is what a window appearing or going away should feel like. The
+ * usual curve for something leaving is the other way round — accelerate out —
+ * and at this length it reads as a window sitting still and then being
+ * snatched.
+ *
  * The two departures end `forwards`, so the last frame is what the window is
  * left at. Without it a window would snap back to full size and full opacity
  * for however long it takes the desktop to hear that the animation has ended
@@ -156,7 +170,7 @@ export const movingStyles = cva({
         animation: "windowArrivingFromStart {durations.slow} {easings.out}",
       },
       closing: {
-        animation: "windowClosing {durations.slow} {easings.in} forwards",
+        animation: "windowClosing {durations.fast} {easings.outQuart} forwards",
       },
       "leaving-to-end": {
         animation: "windowLeavingToEnd {durations.slow} {easings.in} forwards",
@@ -166,7 +180,7 @@ export const movingStyles = cva({
           "windowLeavingToStart {durations.slow} {easings.in} forwards",
       },
       opening: {
-        animation: "windowOpening {durations.slow} {easings.out}",
+        animation: "windowOpening {durations.fast} {easings.outQuart}",
       },
       // A window that is simply on the desktop, which is most of them most of
       // the time. Revealed by a workspace switch, a tab, a fullscreen let go
