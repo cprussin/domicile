@@ -63,13 +63,12 @@ describe("the default bindings", () => {
     expect(pressing("q", true)).toEqual(WindowAction.WindowKilled());
   });
 
-  it("opens a browser window where the config puts its launcher", () => {
-    expect(pressing("space")).toEqual(
-      WindowAction.BrowserOpened("https://www.google.com"),
-    );
-    expect(pressing("d")).toEqual(
-      WindowAction.BrowserOpened("https://www.google.com"),
-    );
+  it("opens the launcher on both keys the config puts one on", () => {
+    // `mod+space` is the user's own binding and `mod+d` is what sway's
+    // defaults leave under it. Both reach the same panel, so a person who
+    // learned either key has the launcher.
+    expect(pressing("space")).toEqual(WindowAction.LauncherToggled());
+    expect(pressing("d")).toEqual(WindowAction.LauncherToggled());
   });
 
   it("works the scratchpad", () => {

@@ -326,6 +326,26 @@ export type DomicileModifiersEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/**
+ * What there is to open, answering {@link DomicileHost.listFiles}.
+ *
+ * Paths relative to the home directory the desktop is running as — sorted,
+ * and the order is the answer rather than whatever a `read_dir` handed back.
+ * An empty list is a home with nothing to offer; a home that could not be read
+ * is no event at all, because "you have no files" is not something a broken
+ * desktop should be able to say.
+ */
+export type DomicileFilesEvent = Event & {
+  readonly files: readonly string[];
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
+   * what this is and what it is not.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
 /** Every event `window.domicile` fires, and what each one carries. */
 export type DomicileHostEventMap = {
   appappeared: DomicileAppEvent;
@@ -342,6 +362,8 @@ export type DomicileHostEventMap = {
   apptitled: DomicileAppTitledEvent;
   shortcut: DomicileShortcutEvent;
   modifiers: DomicileModifiersEvent;
+  /** The answer to a {@link DomicileHost.listFiles}, and only ever to one. */
+  files: DomicileFilesEvent;
   /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it
@@ -385,6 +407,22 @@ export type DomicileHost = {
    * shell's job and there is no shell in this path. An empty one throws.
    */
   spawn(command: readonly string[]): void;
+
+  /**
+   * Ask what there is to open. Answered with a `files` event.
+   *
+   * **It takes no path, and that is the security property rather than an
+   * oversight.** A shell is served over `domicile://` precisely so that it has
+   * an origin without a port, not so that it gets a filesystem; a call that
+   * named a directory would be one, and every document the engine serves would
+   * have it. What is read is the compositor's to decide — see
+   * `domicile_host::files` — and this asks only that it decide.
+   *
+   * A question rather than a subscription: nothing pushes a `files` event on
+   * its own, because a home directory changes for reasons no desktop is
+   * watching. A launcher asks each time it opens.
+   */
+  listFiles(): void;
 
   /** Which window has the keyboard. `focusChrome()` takes it back to the page. */
   focusApp(appId: string): void;

@@ -139,6 +139,7 @@ const absentHost = (): DomicileHost => ({
   focusChrome: () => undefined,
   grabShortcut: () => undefined,
   key: () => undefined,
+  listFiles: () => undefined,
   pointerAxis: () => undefined,
   pointerButton: () => undefined,
   pointerLeave: () => undefined,

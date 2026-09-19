@@ -79,6 +79,7 @@ import {
   appCursor,
   appResized,
   appTitled,
+  files,
   focusChanged,
   focusRequested,
   modifiers,
@@ -202,6 +203,9 @@ export class DomicileClient {
     });
     host.addEventListener("modifiers", (event) => {
       this.#deliver("modifiers", modifiers(event));
+    });
+    host.addEventListener("files", (event) => {
+      this.#deliver("files", files(event));
     });
     host.addEventListener("displayschanged", () => {
       // The event is bare and the desktop is on the attribute, which the
@@ -379,6 +383,21 @@ export class DomicileClient {
   /** Ask the compositor to spawn a client process (argv array). */
   spawn(command: readonly string[]): void {
     this.#host.spawn(command);
+  }
+
+  /**
+   * Ask what there is to open. The answer arrives as a `files` message.
+   *
+   * A page has no filesystem and this is deliberately not one: it names no
+   * path, so what gets read is the compositor's decision and not something a
+   * document served over `domicile://` can steer. See `DomicileHost.listFiles`.
+   *
+   * Asked rather than subscribed to, so a launcher asks each time it opens —
+   * and the hold in {@link #held} is what makes that safe from an effect,
+   * where the answer can be back before the handler for it is registered.
+   */
+  listFiles(): void {
+    this.#host.listFiles();
   }
 
   /**

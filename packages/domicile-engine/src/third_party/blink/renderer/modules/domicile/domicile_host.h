@@ -54,6 +54,10 @@ class MODULES_EXPORT DomicileHost final
   // Throws on an empty argv. The browser refuses it too -- this check is a
   // better error message, not the enforcement.
   void spawn(ScriptState*, const Vector<String>& command, ExceptionState&);
+  // Ask what there is to open; the answer arrives as a `files` event. Names
+  // no path -- see the IDL, where that is written down as a property rather
+  // than a convenience.
+  void listFiles(ScriptState*, ExceptionState&);
   void focusApp(ScriptState*, const String& app_id, ExceptionState&);
   void focusChrome(ScriptState*, ExceptionState&);
   void closeApp(ScriptState*, const String& app_id, ExceptionState&);
@@ -98,6 +102,7 @@ class MODULES_EXPORT DomicileHost final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(appcursor, kAppcursor)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(shortcut, kShortcut)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(modifiers, kModifiers)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(files, kFiles)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focusrequested, kFocusrequested)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(displayschanged, kDisplayschanged)
@@ -142,6 +147,7 @@ class MODULES_EXPORT DomicileHost final
                  bool shift,
                  bool meta,
                  base::TimeTicks arrival) override;
+  void Files(const Vector<String>& files, base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
   void Displays(

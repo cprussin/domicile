@@ -23,6 +23,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_modifiers_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -119,6 +120,12 @@ void DomicileHost::focusApp(ScriptState*, const String& app_id,
                             ExceptionState& exception_state) {
   if (ReadyForApp(app_id, exception_state)) {
     channel_->FocusApp(app_id);
+  }
+}
+
+void DomicileHost::listFiles(ScriptState*, ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->ListFiles();
   }
 }
 
@@ -310,6 +317,16 @@ void DomicileHost::Displays(
   // them is what lets a component that mounted after the description read the
   // desktop at all -- an event carrying the only copy is gone once dispatched.
   DispatchEvent(*Event::Create(event_type_names::kDisplayschanged));
+}
+
+// The one message on this channel that answers a question. It is still an
+// event, because the page reads every other one as an event and a promise here
+// would be a second delivery mechanism for a single message -- with its own
+// answer to what happens when the reply beats the listener, which
+// `DomicileClient`'s hold already answers once for all ten.
+void DomicileHost::Files(const Vector<String>& files, base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileFilesEvent>(
+      event_type_names::kFiles, files, Arrival(arrival)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id,

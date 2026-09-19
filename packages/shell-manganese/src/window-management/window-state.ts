@@ -101,6 +101,17 @@ export type WindowState = {
    * what this exists to follow.
    */
   focusedId: string | undefined;
+  /**
+   * Whether the launcher's panel is up.
+   *
+   * Here rather than in the component that draws it because it is a desktop
+   * state and not a widget's: the key that opens it is a line in the same
+   * bindings table as every other key, and what closes it is usually
+   * something else being launched. A panel that owned its own `useState`
+   * would need the bindings to reach into it and every launch to remember to
+   * close it.
+   */
+  launcherOpen: boolean;
   mode: BindingMode;
   /**
    * The workspace the current one was reached from, which the same key goes
@@ -119,6 +130,7 @@ export const NO_WINDOWS: WindowState = {
   current: "1",
   draggingId: undefined,
   focusedId: undefined,
+  launcherOpen: false,
   mode: BindingMode.Default,
   previous: undefined,
   scratchpad: [],
@@ -165,11 +177,14 @@ export enum WindowActionKind {
   BrowserOpened,
   ChildFocused,
   ContainerSplit,
+  EditorLaunched,
   FloatToggled,
   FocusChanged,
   FocusRequested,
   FocusStepped,
   FullscreenToggled,
+  LauncherDismissed,
+  LauncherToggled,
   LayoutSet,
   ModeSet,
   ModeSwapped,
@@ -243,6 +258,22 @@ export const WindowAction = {
     kind: WindowActionKind.ContainerSplit as const,
   }),
 
+  /**
+   * The user picked a file in the launcher, which the compositor opens in
+   * their editor.
+   *
+   * Nothing in the state moves but the panel: the editor is a Wayland client
+   * and its window arrives as an announcement from the host, exactly as
+   * {@link WindowAction.TerminalLaunched}'s does. `path` is relative to the
+   * home directory, or absolute for a file outside it — see
+   * `launcher/editor-command.ts`, which resolves the difference in the one
+   * process that can.
+   */
+  EditorLaunched: (path: string) => ({
+    kind: WindowActionKind.EditorLaunched as const,
+    path,
+  }),
+
   /** `floating toggle`. */
   FloatToggled: () => ({ kind: WindowActionKind.FloatToggled as const }),
 
@@ -282,6 +313,26 @@ export const WindowAction = {
     global,
     kind: WindowActionKind.FullscreenToggled as const,
   }),
+
+  /**
+   * The launcher was closed without launching anything — Escape, or a click
+   * on the backdrop.
+   *
+   * Separate from {@link WindowAction.LauncherToggled} because it comes from
+   * the dialog rather than from a key, and the dialog reports its own
+   * closing: a toggle here would re-open the panel on the way out of it.
+   */
+  LauncherDismissed: () => ({
+    kind: WindowActionKind.LauncherDismissed as const,
+  }),
+
+  /**
+   * `mod+space`, which is the launcher's key in both directions.
+   *
+   * One binding rather than two, because the same press is what a person
+   * reaches for to open the panel and to give up on it.
+   */
+  LauncherToggled: () => ({ kind: WindowActionKind.LauncherToggled as const }),
 
   /** `layout tabbed` / `layout stacking`. */
   LayoutSet: (layout: Layout) => ({
@@ -455,6 +506,12 @@ export const reduceWindows = (
         containerSplit(workspace, action.axis),
       );
     }
+    case WindowActionKind.EditorLaunched: {
+      // The compositor spawns it and the host announces the window it opens,
+      // the same way a terminal's arrives. The panel goes, because the panel
+      // is how the file was asked for.
+      return { ...state, launcherOpen: false };
+    }
     case WindowActionKind.FloatToggled: {
       return onCurrent(state, floatToggled);
     }
@@ -481,6 +538,12 @@ export const reduceWindows = (
       return onCurrent(state, (workspace) =>
         fullscreenToggled(workspace, action.global),
       );
+    }
+    case WindowActionKind.LauncherDismissed: {
+      return { ...state, launcherOpen: false };
+    }
+    case WindowActionKind.LauncherToggled: {
+      return { ...state, launcherOpen: !state.launcherOpen };
     }
     case WindowActionKind.LayoutSet: {
       return onCurrent(state, (workspace) =>
@@ -607,10 +670,14 @@ const openApp = (
     : state;
 };
 
+// The launcher shuts here as well as on `EditorLaunched`, because those are
+// the two answers it has and a panel left up over its own answer is one the
+// user has to dismiss after every URL they type. Harmless on the bar's `+`,
+// where it is already shut.
 const openBrowser = (state: WindowState, src: string): WindowState => {
   const browsersOpened = state.browsersOpened + 1;
   return openWindow(
-    { ...state, browsersOpened },
+    { ...state, browsersOpened, launcherOpen: false },
     Window.Browser(browsersOpened, src),
   );
 };

@@ -102,6 +102,9 @@ class FakeDomicile {
   spawn(command: readonly string[]): void {
     this.calls.push(["spawn", command]);
   }
+  listFiles(): void {
+    this.calls.push(["listFiles"]);
+  }
   grabShortcut(shortcut: unknown): void {
     this.calls.push(["grabShortcut", shortcut]);
   }
@@ -208,6 +211,7 @@ const hostPress = (keysym: string, shift = false): void => {
  */
 const KEYCODES: Readonly<Record<string, number>> = {
   Return: 28,
+  space: 57,
   Tab: 15,
 };
 
@@ -1047,5 +1051,108 @@ describe("Shell", () => {
         barFor(container, "app:two").className,
       );
     });
+  });
+});
+
+describe("the launcher", () => {
+  /** Where each browser window on the desktop was pointed. */
+  const browsing = (container: HTMLElement): string[] =>
+    [...container.querySelectorAll("webview")].map(
+      (view) => view.getAttribute("src") ?? "",
+    );
+
+  /** The host answering a `list_files`, which is what fills the panel. */
+  const homeHolds = (...files: readonly string[]): void => {
+    domicile.emit("files", { files });
+  };
+
+  it("is not on screen until the key that opens it", () => {
+    renderShell();
+
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("opens on mod+space and asks the host what there is to open", () => {
+    // The ask rides with the opening rather than with the shell starting: a
+    // home directory changes for reasons nothing here is watching, so the list
+    // has to be current at the moment the panel is.
+    renderShell();
+
+    press("space");
+
+    expect(screen.getByRole("combobox")).toBeVisible();
+    expect(domicile.calls).toContainEqual(["listFiles"]);
+  });
+
+  it("shows the files the host answered with", () => {
+    renderShell();
+    press("space");
+
+    homeHolds("Notes/today.org", "todo.txt");
+
+    expect(
+      screen.getAllByRole("option").map((row) => row.textContent),
+    ).toStrictEqual(["Notes/today.org", "todo.txt"]);
+  });
+
+  it("opens a file in the user's editor and puts the panel away", async () => {
+    // `$EDITOR` and `$HOME` are read by the spawned shell, because they exist
+    // there and nowhere this page can see. See `launcher/editor-command.ts`.
+    renderShell();
+    press("space");
+    homeHolds("Notes/today.org");
+
+    await userEvent.setup().click(screen.getByRole("option"));
+
+    expect(domicile.calls).toContainEqual([
+      "spawn",
+      [
+        "sh",
+        "-c",
+        'case $1 in /*) exec "$EDITOR" "$1" ;; *) exec "$EDITOR" "$HOME/$1" ;; esac',
+        "domicile-launcher",
+        "Notes/today.org",
+      ],
+    ]);
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("opens a typed URL in a browser window on the desktop", async () => {
+    const { container } = renderShell();
+    press("space");
+    homeHolds("todo.txt");
+
+    await userEvent
+      .setup()
+      .type(screen.getByRole("combobox"), "example.com{Enter}");
+
+    expect(browsing(container)).toStrictEqual(["https://example.com"]);
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("searches for a query that is neither a file nor a URL", async () => {
+    const { container } = renderShell();
+    press("space");
+
+    await userEvent
+      .setup()
+      .type(screen.getByRole("combobox"), "!wiki mesa{Enter}");
+
+    // The address the window went to is what says where the query was sent,
+    // engine and escaping and all.
+    expect(browsing(container)).toStrictEqual([
+      "https://en.wikipedia.org/wiki/Special:Search?search=mesa",
+    ]);
+  });
+
+  it("answers the same key handed back by the host", () => {
+    // A browser window has the keyboard, so `mod+space` never reaches this
+    // document. The launcher is the one thing on the desktop you most want to
+    // reach from inside a window, so this is the path that matters for it.
+    renderShell();
+
+    hostPress("space");
+
+    expect(screen.getByRole("combobox")).toBeVisible();
   });
 });

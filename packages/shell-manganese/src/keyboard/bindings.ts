@@ -22,7 +22,6 @@ import { evdevFromCode } from "@domicile/chrome-sdk/input";
 
 import { Axis, Direction } from "../window-management/direction";
 import { Layout } from "../window-management/tree/node";
-import { HOME_PAGE } from "../window-management/window";
 import type { WindowAction } from "../window-management/window-state";
 import {
   WindowAction as Action,
@@ -110,10 +109,15 @@ export const BINDINGS: readonly Binding[] = [
   bound("Return", false, Action.TerminalLaunched()),
   bound("q", true, Action.WindowKilled()),
   // The launcher's key in both places the config puts one — `mod+space` in
-  // the user's own bindings and `mod+d` in sway's defaults. This shell has no
-  // launcher to run, and the nearest thing it has is a window of its own.
-  bound("space", false, Action.BrowserOpened(HOME_PAGE)),
-  bound("d", false, Action.BrowserOpened(HOME_PAGE)),
+  // the user's own bindings and `mod+d` in sway's defaults. Both are the same
+  // panel rather than one of them being a lesser version: a person who learned
+  // either key has the launcher.
+  //
+  // A toggle, because the same press is what you reach for to open it and to
+  // give up on it. Escape and the backdrop close it too, and those arrive from
+  // the dialog rather than from here — see `launcher/Launcher.tsx`.
+  bound("space", false, Action.LauncherToggled()),
+  bound("d", false, Action.LauncherToggled()),
 
   ...DIRECTIONS.map(([keysym, way]) =>
     bound(keysym, false, Action.FocusStepped(way)),

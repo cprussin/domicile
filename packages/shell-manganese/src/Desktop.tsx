@@ -5,6 +5,9 @@ import { useCallback, useMemo } from "react";
 
 import { useModifiers } from "./keyboard/useModifiers";
 import { useShortcuts } from "./keyboard/useShortcuts";
+import { Launcher } from "./launcher/Launcher";
+import { LaunchKind } from "./launcher/launch";
+import { useFiles } from "./launcher/useFiles";
 import { FirstScreen } from "./screens/FirstScreen";
 import { IdleScreen } from "./screens/IdleScreen";
 import { NoScreens } from "./screens/NoScreens";
@@ -59,6 +62,10 @@ export const Desktop = ({ domicile }: Props) => {
   );
 
   useShortcuts({ domicile, mode: windows.mode, onAction: onAction });
+
+  // Asked for each time the panel goes up — nothing watches a home directory,
+  // so a list fetched once would be yesterday's by the afternoon.
+  const files = useFiles(domicile, windows.launcherOpen);
 
   // The screen the chrome is on, which is what the windows are laid out in.
   // Nothing is placed until the host has described a desktop — `FirstScreen`
@@ -135,6 +142,30 @@ export const Desktop = ({ domicile }: Props) => {
           windows={windows.windows}
         />
       </FirstScreen>
+      {/*
+        Outside every screen, like the wallpaper and for the same reason: the
+        viewport is the desktop, and the panel is over the whole of it rather
+        than over one monitor of it.
+      */}
+      <Launcher
+        files={files}
+        onDismiss={() => {
+          act(WindowAction.LauncherDismissed());
+        }}
+        onLaunch={(launch) => {
+          switch (launch.kind) {
+            case LaunchKind.Edited: {
+              act(WindowAction.EditorLaunched(launch.path));
+              break;
+            }
+            case LaunchKind.Browsed: {
+              act(WindowAction.BrowserOpened(launch.url));
+              break;
+            }
+          }
+        }}
+        open={windows.launcherOpen}
+      />
       <OtherScreens>
         <IdleScreen />
       </OtherScreens>
