@@ -95,16 +95,42 @@ DrmLogindInput::DrmLogindInput()
   dbus::Bus::Options options;
   options.bus_type = dbus::Bus::SYSTEM;
   options.connection_type = dbus::Bus::PRIVATE;
-  // The same recipe `dbus_thread_linux::CreateSharedBus` uses, and for the
-  // same reason: a thread-pool worker installs a `FileDescriptorWatcher` for
-  // the scope tasks run in (`base/task/thread_pool/worker_thread.cc`), which
-  // is what the bus needs to watch its socket and what the evdev thread does
-  // not have. The shared bus itself is not reused: its origin is the browser's
-  // UI thread, and taking it over from here would move the thread every other
-  // caller's signals are delivered on.
+  // A thread-pool worker installs a `FileDescriptorWatcher` for the scope
+  // tasks run in (`base/task/thread_pool/worker_thread.cc`), which is what the
+  // bus needs to watch its socket and what the evdev thread does not have. The
+  // browser's shared bus is not reused either: its origin is the UI thread,
+  // and taking it over from here would move the thread every other caller's
+  // signals are delivered on.
+  //
+  // DEDICATED, AND THIS IS THE ONE BUS THAT MAKES IT NON-NEGOTIABLE. The calls
+  // below are synchronous because `OpenInputDevice` has to answer with a
+  // descriptor, so `CallAndBlock` posts `CallMethodAndBlock` to this thread
+  // and waits -- and libdbus does not return to the message loop until logind
+  // answers. A `SHARED` runner puts every bus with these traits on that one
+  // thread, so for the length of every round trip made here NO OTHER BUS CAN
+  // READ ITS SOCKET.
+  //
+  // What that starves is a console switch. logind force-pauses every device at
+  // once, and each one costs three blocking round trips from the evdev thread
+  // -- `ReleaseDevice`, `TakeDevice`, `Active` -- which on a laptop with
+  // fifteen input devices is some forty-five, back to back. `DrmVtSwitcher`
+  // hears that the session went inactive only through `PropertiesChanged` on
+  // ITS bus, and shared, that signal queues behind the whole storm. A
+  // relinquish that lands late is a GPU process still committing flips into a
+  // card whose console is somebody else's: the commit fails, `PageFlipWatchdog`
+  // arms, and fifteen seconds later it is `LOG(FATAL) ... Crashing GPU
+  // process.` Losing that race depends on how fast logind services forty-five
+  // calls, which is why a desktop wedged sometimes on the way out and
+  // sometimes on the way back rather than every time.
+  //
+  // A thread is the cheap half of the answer and not the whole of it: the
+  // evdev thread still stops for the length of the storm, so input is frozen
+  // across a switch either way. Unblocking THAT means making
+  // `InputDeviceOpener::OpenInputDevice` asynchronous, which is a change to a
+  // contract Chromium owns -- see the header.
   options.dbus_task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-      base::SingleThreadTaskRunnerThreadMode::SHARED);
+      base::SingleThreadTaskRunnerThreadMode::DEDICATED);
   bus_ = base::MakeRefCounted<dbus::Bus>(std::move(options));
 
   dbus::ObjectProxy* manager =

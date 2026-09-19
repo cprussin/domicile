@@ -193,15 +193,23 @@ DrmVtSwitcher::DrmVtSwitcher(
   dbus::Bus::Options options;
   options.bus_type = dbus::Bus::SYSTEM;
   options.connection_type = dbus::Bus::PRIVATE;
-  // The recipe `DrmLogindInput` uses, for the same reason: a thread-pool
-  // worker installs a `FileDescriptorWatcher` for the scope tasks run in,
-  // which is what the bus needs to watch its socket. The ORIGIN thread is this
-  // one -- the browser's UI thread -- so every signal and every answer below
-  // is delivered here, which is where a `NativeDisplayDelegate` may be called
-  // and where a key is dispatched. Nothing on this class blocks.
+  // A thread-pool worker installs a `FileDescriptorWatcher` for the scope
+  // tasks run in, which is what the bus needs to watch its socket. The ORIGIN
+  // thread is this one -- the browser's UI thread -- so every signal and every
+  // answer below is delivered here, which is where a `NativeDisplayDelegate`
+  // may be called and where a key is dispatched. Nothing on this class blocks.
+  //
+  // DEDICATED, BECAUSE THIS IS THE BUS THAT WAS BEING STARVED. Nothing here
+  // blocking is not enough when something else on the same thread does:
+  // `DrmLogindInput`'s calls are synchronous by necessity, and a shared runner
+  // put its `CallMethodAndBlock` on the thread that pumps this socket. The
+  // signal it delayed is the one that says the session went inactive -- which
+  // is the only thing that starts the relinquish, and the thing standing
+  // between a console switch and `PageFlipWatchdog` killing the GPU process
+  // fifteen seconds later. See `domicile/drm_logind_input.cc`.
   options.dbus_task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-      base::SingleThreadTaskRunnerThreadMode::SHARED);
+      base::SingleThreadTaskRunnerThreadMode::DEDICATED);
   bus_ = base::MakeRefCounted<dbus::Bus>(std::move(options));
 
   dbus::ObjectProxy* manager =

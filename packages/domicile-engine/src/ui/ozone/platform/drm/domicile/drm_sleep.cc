@@ -42,14 +42,17 @@ DrmSleep::DrmSleep(DrmModeset* modeset) : modeset_(modeset) {
   dbus::Bus::Options options;
   options.bus_type = dbus::Bus::SYSTEM;
   options.connection_type = dbus::Bus::PRIVATE;
-  // The recipe `DrmVtSwitcher` uses, for the same reason: a thread-pool worker
+  // The recipe `DrmVtSwitcher` uses, for the same reasons: a thread-pool worker
   // installs the `FileDescriptorWatcher` the bus needs to watch its socket,
   // while the ORIGIN thread stays this one -- the browser's UI thread, which
   // is where `DrmModeset` lives and where a modeset may be asked for. Nothing
-  // on this class blocks.
+  // on this class blocks, and DEDICATED because a bus that shares a thread
+  // with `DrmLogindInput`'s cannot read its socket while that one is waiting
+  // on logind. A wake is not as tight a deadline as a console switch, but the
+  // shape is the same and there is no reason to be the exception.
   options.dbus_task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-      base::SingleThreadTaskRunnerThreadMode::SHARED);
+      base::SingleThreadTaskRunnerThreadMode::DEDICATED);
   bus_ = base::MakeRefCounted<dbus::Bus>(std::move(options));
 
   bus_->GetObjectProxy(kLogind, dbus::ObjectPath(kManagerPath))

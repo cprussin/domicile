@@ -261,6 +261,48 @@ else
   fail "a device whose node is gone is forgotten by name too"     "a resume for an unplugged device would be answered with a path that is not there any more"
 fi
 
+# EVERY BUS GETS ITS OWN THREAD, AND THAT IS NOT A TUNING CHOICE. The three
+# D-Bus connections this platform opens -- `DrmLogindInput`'s on the evdev
+# thread, `DrmVtSwitcher`'s and `DrmSleep`'s on the browser's UI thread -- were
+# all built with `SingleThreadTaskRunnerThreadMode::SHARED` and identical
+# traits, which is Chromium's way of saying "put these on the same thread".
+#
+# `DrmLogindInput` is the one that cannot share. Its calls are SYNCHRONOUS by
+# design -- `OpenInputDevice` has to answer with a descriptor -- so
+# `CallAndBlock` posts `CallMethodAndBlock` to that thread and waits, and
+# libdbus does not return to the message loop until logind answers. While it
+# is in there, NO OTHER BUS ON THAT THREAD CAN READ ITS SOCKET.
+#
+# What is on the other end of that is a console switch. logind force-pauses
+# every device at once, so the evdev thread makes three blocking round trips
+# per device -- `ReleaseDevice`, `TakeDevice`, `Active` -- which on a laptop
+# with fifteen input devices is some forty-five, back to back. `DrmVtSwitcher`
+# learns the session went inactive from `PropertiesChanged` on ITS bus, and
+# that signal waits behind the whole storm. A relinquish that arrives late is
+# a GPU process still committing flips into a card whose console belongs to
+# somebody else: the atomic commit fails, `PageFlipWatchdog` arms, and fifteen
+# seconds later it is `LOG(FATAL) ... Crashing GPU process.`
+#
+# Whether that race is lost depends on how fast logind services forty-five
+# calls, which is why the desktop locked up sometimes on the way out and
+# sometimes on the way back rather than every time.
+for bus in drm_logind_input drm_vt_switcher drm_sleep; do
+  if grep -q 'SingleThreadTaskRunnerThreadMode::DEDICATED' "$DOMICILE/$bus.cc"; then
+    ok "$bus's bus has a thread of its own"
+  else
+    fail "$bus's bus has a thread of its own" \
+      "$bus.cc does not ask for DEDICATED, so its socket is pumped on a thread \
+another bus can block for the length of a logind round trip"
+  fi
+done
+
+if grep -l 'SingleThreadTaskRunnerThreadMode::SHARED' "$DOMICILE"/*.cc >/dev/null 2>&1; then
+  fail "no bus in this platform shares a thread" \
+    "$(grep -l 'ThreadMode::SHARED' "$DOMICILE"/*.cc | tr '\n' ' ')asks for SHARED"
+else
+  ok "no bus in this platform shares a thread"
+fi
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

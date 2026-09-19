@@ -39,7 +39,7 @@ covered a keyboard, and the first run on hardware said otherwise.
 | A click reaches the page under the pointer | **Hardware**, on `engine-f38ef3f`, with a mouse and with the pad |
 | `Ctrl+Alt+F<n>` reaches `Seat.SwitchTo` | **Reasoned from source since the fix.** The chord decoded on hardware and the call died on `/org/freedesktop/login1/seat/self`; reading the session's own `Seat` instead has not been run |
 | The display is dropped on the way out of the console and retaken on the way back | **Reasoned from source.** `DrmVtSwitcherTest` holds the ordering |
-| The desktop is usable again after a console round trip | **Hardware for the failure.** A run switched away and back and the desktop locked up: the take put master back and nothing put the mode back, so every flip went into a card the console's last owner had modeset. The relight that answers it is reasoned from source — `DrmVtSwitcherTest` holds the cell, and no run has been through the fix |
+| The desktop is usable again after a console round trip | **Hardware for the failure, twice, and the second reading changed the diagnosis.** The first said the take put master back and nothing put the mode back, which the relight answers. The second said the wedge is *inconsistent* and lands on the way out as often as on the way back — which a missing modeset cannot do, and which points instead at `DrmLogindInput`'s blocking calls starving `DrmVtSwitcher`'s bus off a shared D-Bus thread. Both fixes are reasoned from source; neither has been through a run |
 | The screens light again when the machine wakes up | **Reasoned from logind's sources.** No runner suspends, so nothing in CI sleeps; `DrmSleepTest` holds the reading of `PrepareForSleep` and `DrmModesetTest` the relight it drives past the hotplug guard |
 | A stop asked for during startup is a stop | **Unit tests.** `domicile-launch`'s milestone tests. It matters here and nowhere else — see [What a tty costs on the way out](#what-a-tty-costs-on-the-way-out) |
 
@@ -642,12 +642,34 @@ has no in-tree unit test by design.
 `OpenInputDevice` is **synchronous** and runs on the **evdev thread**;
 `dbus::ObjectProxy::CallMethodAndBlock` is only legal on the thread that owns the
 bus. The bus is therefore created **on the evdev thread**, with a thread-pool
-single-thread runner of its own — the same shape `dbus_thread_linux::CreateSharedBus`
-uses. That makes the evdev thread the bus's *origin* thread, so `ConnectToSignal`
-and every `PauseDevice` / `ResumeDevice` / `PropertiesChanged` callback lands
-there with no hop and no lock and the state machine is single-threaded, and it
-leaves exactly one crossing: `CallMethodAndBlock` posted to the D-Bus thread with
-the evdev thread waiting on a `base::WaitableEvent`.
+single-thread runner of its own. That makes the evdev thread the bus's *origin*
+thread, so `ConnectToSignal` and every `PauseDevice` / `ResumeDevice` /
+`PropertiesChanged` callback lands there with no hop and no lock and the state
+machine is single-threaded, and it leaves exactly one crossing:
+`CallMethodAndBlock` posted to the D-Bus thread with the evdev thread waiting on
+a `base::WaitableEvent`.
+
+**That runner is `DEDICATED`, and `SHARED` is what wedged a desktop.** All three
+of this platform's buses — this one, `DrmVtSwitcher`'s and `DrmSleep`'s — were
+built with `SingleThreadTaskRunnerThreadMode::SHARED` and identical traits,
+copied from `dbus_thread_linux::CreateSharedBus`. The buses *it* builds do not
+block; this one does, and a blocking call holds libdbus inside the socket read
+until logind answers, so every other bus on that thread goes unread for the
+duration. A console switch force-pauses every device at once and costs three
+blocking round trips here per device — `ReleaseDevice`, `TakeDevice`, `Active` —
+so on a fifteen-device laptop `DrmVtSwitcher`'s `PropertiesChanged` queues behind
+about forty-five of them. That signal is the only thing that starts the
+relinquish, and a relinquish that lands late is a GPU process still committing
+flips into a card whose console is somebody else's: the commit fails,
+`PageFlipWatchdog` arms, and fifteen seconds later it is `LOG(FATAL) ... Crashing
+GPU process.` Whether the race is lost depends on how fast logind services
+forty-five calls, which is why the desktop wedged **sometimes on the way out and
+sometimes on the way back** rather than every time.
+
+**A thread of its own is the cheap half.** The evdev thread still stops for the
+length of the storm, so a console switch costs the desktop its input either way.
+Ending that means `OpenInputDevice` answering later than it is asked — Chromium's
+contract, not this fork's — which is the open item below.
 
 Two alternatives, and why neither:
 
@@ -1192,6 +1214,7 @@ Step 2 — the embedder.
 - [x] the touchpad goes to libinput — patch `0027` and `use_libinput = true` in both `gn gen` blocks, with libinput in `tools/nix/make-shell-for-system.nix` because the build runs host binaries that link it
 - [x] the window says what it did with a click — patch `0028`. A one-shot gated only on `IsLocatedEvent()` is spent by the startup's own synthesized move, so it answered nothing; it now excludes `EF_IS_SYNTHESIZED`, reports a press apart from a move, and reads the `EventResult` the dispatch used to discard
 - [ ] take the card node from logind too — `TakeDevice` on `/dev/dri/card0` plus `PauseDevice` / `ResumeDevice`. See [The card should come from logind too](#the-card-should-come-from-logind-too)
+- [ ] stop the evdev thread blocking through a console switch — `InputDeviceOpener::OpenInputDevice` answering later than it is asked, which patch `0020` priced as re-plumbing `OpenInputDeviceParams`, `EventFactoryEvdev` and the factory proxy. A thread of its own per bus stops the starvation that killed the GPU process; it does not stop the desktop losing input for the length of the switch
 
 ## Open questions
 
