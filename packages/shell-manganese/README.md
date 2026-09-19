@@ -403,13 +403,30 @@ ignorable, not less. It is an opacity rather than a second colour, so the one
 decision about what red is stays the `danger` token's and one animation covers
 the case, the fill, the bolt and the figures at once.
 
-It comes off `navigator.getBattery`, the Battery Status API, which the engine
-answers out of UPower — and which `domicile://` can ask at all because the fork
-registers the scheme as secure, the thing that API is gated on. So there is no
-protocol frame for it and nothing for the compositor to forward: the charge is
-one of the few facts about the machine the page can read for itself. Nothing is
-drawn until the platform has answered, because the API hands back a promise and
-a bar that flashed an empty meter for that tick would be saying something false.
+**It comes off the host, and the first version of it did not.** The obvious
+route for a page is `navigator.getBattery`, the Battery Status API, and it is a
+trap: that API answers through UPower over D-Bus, a desktop on a bare tty has
+neither — see the `ERROR:dbus/bus.cc` line `scripts/test-shell-guard.sh` has
+long treated as ordinary engine noise — and Chromium then resolves with its
+*default* `BatteryStatus`, which is *charging, and full*. A default that looks
+like a real reading is the worst kind: no page can tell it from a laptop
+genuinely on AC at 100%, so nothing in here could have caught it, and the bar
+said `100%` on a machine running flat.
+
+So the charge crosses the control channel like everything else the desktop
+knows about the machine. The compositor reads `/sys/class/power_supply`, which
+is in every kernel and wants no daemon and no bus, sums the batteries rather
+than averaging their percentages, and counts a USB-C charger as a lead the same
+as `AC` — `domicile_host::battery` is the reading and `packages/domicile-host/
+tests/battery.rs` is the rule. It is **pushed**, not asked for, which is the
+one place this differs from `list_files`: a charge changes on its own, so there
+is nothing for a shell to ask. It arrives when the reading moves far enough to
+draw — a whole percent, or the lead — and once more to a page that has just
+connected, so a reload does not wait for the next percent.
+
+Nothing is drawn until the host has said a charge, and a machine with no
+battery looks exactly the same: the compositor sends nothing for a desktop PC,
+and a bar that drew `100%` for one would be the same lie in a different hat.
 
 ## The wallpaper
 

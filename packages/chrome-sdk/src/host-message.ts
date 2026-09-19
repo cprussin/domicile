@@ -32,6 +32,7 @@ import type {
   DomicileAppCursorEvent,
   DomicileAppEvent,
   DomicileAppTitledEvent,
+  DomicileBatteryEvent,
   DomicileDisplay,
   DomicileFilesEvent,
   DomicileModifiersEvent,
@@ -185,6 +186,23 @@ export type FilesMessage = {
   files: readonly string[];
 };
 
+/**
+ * The machine's battery, as a shell reads it.
+ *
+ * Pushed rather than asked for: it arrives when the charge moves far enough to
+ * draw, and once more when a page connects. A machine with no battery sends
+ * nothing at all, so a shell that has had no message has no meter to draw
+ * rather than a battery at zero.
+ *
+ * `charge` is a fraction, 0 through 1, and `charging` is whether a lead is in
+ * — a full battery on AC is `true`, because what a bar draws from it is a plug
+ * rather than a rate.
+ */
+export type BatteryMessage = {
+  charge: number;
+  charging: boolean;
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -198,6 +216,7 @@ export type HostMessageMap = {
   modifiers: ModifiersMessage;
   displays: DisplaysMessage;
   files: FilesMessage;
+  battery: BatteryMessage;
 };
 
 /** The name of every message this build knows how to deliver. */
@@ -289,6 +308,12 @@ export const shortcut = (event: DomicileShortcutEvent): ShortcutMessage => ({
  */
 export const files = (event: DomicileFilesEvent): FilesMessage => ({
   files: event.files,
+});
+
+/** The charge, with the SDK's own `arrival` left behind: no shell draws it. */
+export const battery = (event: DomicileBatteryEvent): BatteryMessage => ({
+  charge: event.charge,
+  charging: event.charging,
 });
 
 export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({

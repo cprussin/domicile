@@ -100,6 +100,15 @@
   // What there is to open, as a DomicileFilesEvent, answering listFiles().
   attribute EventHandler onfiles;
 
+  // The machine's battery, as a DomicileBatteryEvent.
+  //
+  // NO listBattery() TO GO WITH IT, and the asymmetry with onfiles is the
+  // point: a charge changes on its own, where a home directory changes for
+  // reasons nothing is watching. The compositor polls and pushes, so there is
+  // nothing for a page to ask. It arrives when the reading moves far enough to
+  // draw, and once more to a page that has only just connected.
+  attribute EventHandler onbattery;
+
   // Focus moved. `appId` is empty when the chrome itself has it.
   attribute EventHandler onfocuschanged;
 

@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_modifiers_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_battery_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
@@ -327,6 +328,17 @@ void DomicileHost::Displays(
 void DomicileHost::Files(const Vector<String>& files, base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileFilesEvent>(
       event_type_names::kFiles, files, Arrival(arrival)));
+}
+
+// Pushed, so there is no ask for this to be the answer to. The compositor
+// polls the kernel's files and sends one of these when the reading moves far
+// enough to draw -- see `domicile_host::battery`, which is also where the
+// reason a page cannot read this for itself is written down.
+void DomicileHost::Battery(double charge,
+                           bool charging,
+                           base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileBatteryEvent>(
+      event_type_names::kBattery, charge, charging, Arrival(arrival)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id,

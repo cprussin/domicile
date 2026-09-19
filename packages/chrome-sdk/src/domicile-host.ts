@@ -346,6 +346,36 @@ export type DomicileFilesEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/**
+ * The machine's battery, pushed whenever the reading moves far enough to draw.
+ *
+ * **Not what `navigator.getBattery` would tell you**, and that is why this
+ * exists. The Battery Status API reads UPower over D-Bus; a desktop on a bare
+ * tty has neither, so the engine resolves with Chromium's default
+ * `BatteryStatus` — charging, and full — which is a plausible reading and so
+ * indistinguishable from the truth from inside a page. The compositor reads
+ * `/sys/class/power_supply` instead, which is in every kernel and wants no
+ * daemon.
+ *
+ * There is no `listBattery()` to go with it. A charge changes on its own,
+ * where a home directory changes for reasons nothing is watching, so this is
+ * pushed and `files` is answered. A machine with no battery sends nothing.
+ */
+export type DomicileBatteryEvent = Event & {
+  /** How full, 0 through 1. */
+  readonly charge: number;
+
+  /** Whether a lead is in. A full battery on AC is `true`. */
+  readonly charging: boolean;
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
+   * what this is and what it is not.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
 /** Every event `window.domicile` fires, and what each one carries. */
 export type DomicileHostEventMap = {
   appappeared: DomicileAppEvent;
@@ -364,6 +394,8 @@ export type DomicileHostEventMap = {
   modifiers: DomicileModifiersEvent;
   /** The answer to a {@link DomicileHost.listFiles}, and only ever to one. */
   files: DomicileFilesEvent;
+  /** The charge, whenever it moves far enough to draw. Nobody asked for it. */
+  battery: DomicileBatteryEvent;
   /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it

@@ -79,6 +79,7 @@ import {
   appCursor,
   appResized,
   appTitled,
+  battery,
   files,
   focusChanged,
   focusRequested,
@@ -206,6 +207,9 @@ export class DomicileClient {
     });
     host.addEventListener("files", (event) => {
       this.#deliver("files", files(event));
+    });
+    host.addEventListener("battery", (event) => {
+      this.#deliver("battery", battery(event));
     });
     host.addEventListener("displayschanged", () => {
       // The event is bare and the desktop is on the attribute, which the

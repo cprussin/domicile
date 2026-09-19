@@ -272,6 +272,28 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual([{ files: ["Notes/today.org", "src"] }]);
     });
 
+    it("delivers the charge nobody asked for", () => {
+      // The other shape of message on this channel: pushed rather than
+      // answered, because a battery changes on its own. It goes through the
+      // same hold as the rest, which is what a bar that mounted a moment after
+      // the page connected needs.
+      const seen: unknown[] = [];
+      domicile.on("battery", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "battery",
+        Object.assign(new Event("battery"), {
+          arrival: 0,
+          charge: 0.42,
+          charging: true,
+        }),
+      );
+
+      expect(seen).toStrictEqual([{ charge: 0.42, charging: true }]);
+    });
+
     it("delivers a client's request for the keyboard without moving it", () => {
       const asked: unknown[] = [];
       domicile.on("focus_requested", (message) => {

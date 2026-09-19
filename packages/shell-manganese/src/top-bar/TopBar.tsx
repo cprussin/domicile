@@ -1,3 +1,5 @@
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+
 import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
 import { Battery } from "../battery/Battery";
@@ -18,6 +20,8 @@ export const TOP_BAR = 32;
 type Props = {
   /** The workspace on screen, which the bar marks. */
   current: string;
+  /** Where the charge comes from — the bar reads nothing off the machine. */
+  domicile: DomicileClient;
   /** Which bindings are live, which the bar says when it is not the usual set. */
   mode: BindingMode;
   /** The workspaces with something on them, which are the ones shown. */
@@ -50,6 +54,7 @@ type Props = {
  */
 export const TopBar = ({
   current,
+  domicile,
   mode,
   occupied,
   onSelectWorkspace,
@@ -67,7 +72,7 @@ export const TopBar = ({
       {mode === BindingMode.Resize && (
         <span className={modeStyles}>resize</span>
       )}
-      <Battery />
+      <Battery domicile={domicile} />
     </div>
   </header>
 );

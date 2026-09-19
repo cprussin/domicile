@@ -1,63 +1,32 @@
-/** The battery as the page can read it: whether AC is in, and how full. */
-export type BatteryReading = {
-  charging: boolean;
-  /** 0 through 1, which is the scale the API reports on. */
-  level: number;
-};
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { BatteryMessage } from "@domicile/chrome-sdk/host-message";
 
 /**
  * Watch the machine's battery: `onReading` is called with the charge as soon
- * as the platform has answered and again on every change, and what comes back
+ * as the host has said one and again whenever it moves, and what comes back
  * stops it.
  *
- * @param battery - The platform's own battery. Injected so a test can hand
- *   over one it drives.
+ * **The host, not `navigator.getBattery`.** The Battery Status API is the
+ * obvious way for a page to read this and is the reason the bar shipped
+ * saying `100%` on a machine running flat: it answers through UPower over
+ * D-Bus, a desktop on a bare tty has neither, and Chromium resolves with its
+ * default `BatteryStatus` — charging, and full. That default is a
+ * plausible-looking reading, indistinguishable from a real laptop on a full
+ * battery, so no page can tell it from the truth. The compositor reads
+ * `/sys/class/power_supply`, which is in every kernel and wants no daemon —
+ * see `domicile_host::battery`.
+ *
+ * Nothing is asked for. The charge is pushed when it moves far enough to draw
+ * and once more to a page that has just connected, and the client holds a
+ * message that arrived before this registered — so a bar mounted a beat after
+ * the handshake still gets the reading that crossed in between.
  */
 export const watchBattery = (
-  onReading: (reading: BatteryReading) => void,
-  battery: typeof platformBattery = platformBattery,
+  domicile: DomicileClient,
+  onReading: (reading: BatteryMessage) => void,
 ): (() => void) => {
-  const watching = new AbortController();
-  battery()
-    .then((manager) => {
-      const report = () => {
-        onReading({ charging: manager.charging, level: manager.level });
-      };
-      // The signal is the whole teardown: the listeners come off with it, and
-      // an abort that landed while the platform was still answering is what
-      // keeps the first reading from arriving after the watcher was stopped.
-      manager.addEventListener("chargingchange", report, {
-        signal: watching.signal,
-      });
-      manager.addEventListener("levelchange", report, {
-        signal: watching.signal,
-      });
-      if (!watching.signal.aborted) {
-        report();
-      }
-    })
-    .catch((error: unknown) => {
-      // biome-ignore lint/suspicious/noConsole: surfacing a background failure
-      console.error("Failed to read the battery", error);
-    });
+  domicile.on("battery", onReading);
   return () => {
-    watching.abort();
+    domicile.off("battery", onReading);
   };
-};
-
-/**
- * The battery the page is running on.
- *
- * A browser without the API is a failure rather than a machine without a
- * battery: a laptop with the lead out and a desktop with no cell both answer,
- * the second of them as full and on AC forever.
- */
-const platformBattery = (): Promise<BatteryManager> => {
-  if (navigator.getBattery === undefined) {
-    throw new Error(
-      "This browser has no Battery Status API, so the desktop cannot read the charge",
-    );
-  } else {
-    return navigator.getBattery();
-  }
 };

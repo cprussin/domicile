@@ -4,6 +4,7 @@ import type {
   DomicileAppCursorEvent,
   DomicileAppEvent,
   DomicileAppTitledEvent,
+  DomicileBatteryEvent,
   DomicileFilesEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
@@ -13,6 +14,7 @@ import {
   appCursor,
   appResized,
   appTitled,
+  battery,
   files,
   focusChanged,
   modifiers,
@@ -232,6 +234,36 @@ describe("what there is to open", () => {
         }) as DomicileFilesEvent,
       ),
     ).toStrictEqual({ files: [] });
+  });
+});
+
+describe("the charge", () => {
+  it("arrives as the fraction and the lead, without the hop", () => {
+    // The two fields a bar draws and nothing else: `arrival` is the SDK's
+    // own bookkeeping and no shell has a use for it.
+    const charge = battery(
+      Object.assign(new Event("battery"), {
+        arrival: 0,
+        charge: 0.42,
+        charging: true,
+      }) as DomicileBatteryEvent,
+    );
+
+    expect(charge).toStrictEqual({ charge: 0.42, charging: true });
+  });
+
+  it("carries an empty battery as an empty battery", () => {
+    // Zero is a reading. A machine with no battery sends no message at all,
+    // so there is nothing here for `0` to be mistaken for.
+    expect(
+      battery(
+        Object.assign(new Event("battery"), {
+          arrival: 0,
+          charge: 0,
+          charging: false,
+        }) as DomicileBatteryEvent,
+      ),
+    ).toStrictEqual({ charge: 0, charging: false });
   });
 });
 

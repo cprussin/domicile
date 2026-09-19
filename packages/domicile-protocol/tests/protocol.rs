@@ -124,6 +124,10 @@ fn host_messages_round_trip() {
         app_id: "term".into(),
         size: [800.0, 600.0],
     });
+    host_round_trip(&HostMessage::Battery {
+        charge: 0.42,
+        charging: true,
+    });
     host_round_trip(&HostMessage::AppClosed {
         app_id: "term".into(),
     });
@@ -159,6 +163,41 @@ fn a_home_with_nothing_to_open_is_an_answer() {
     let v = serde_json::to_value(HostMessage::Files { files: vec![] }).unwrap();
     assert_eq!(v["type"], "files");
     assert_eq!(v["files"], serde_json::json!([]));
+}
+
+/// The charge, in the shape the bar draws it.
+///
+/// A fraction rather than a percentage, and that is not a style choice: the
+/// bar rounds it to figures and fills a meter with it, and rounding once at
+/// the end is what keeps the two from disagreeing. `charging` is whether a
+/// lead is in rather than whether the cell is gaining — a full battery on AC
+/// is charging by this message's reckoning, because what the bolt on the bar
+/// says is that the machine is plugged in.
+#[test]
+fn the_charge_is_a_fraction_and_the_lead_is_a_flag() {
+    let v = serde_json::to_value(HostMessage::Battery {
+        charge: 0.42,
+        charging: true,
+    })
+    .unwrap();
+    assert_eq!(v["type"], "battery");
+    assert_eq!(v["charge"], 0.42);
+    assert_eq!(v["charging"], true);
+}
+
+/// A machine with no battery sends no message at all, so there is no "absent"
+/// to serialize — which is why both fields are plain and neither is an
+/// `Option`. An empty battery is a real reading and has to survive the wire
+/// as one, the same way a home with no files does.
+#[test]
+fn an_empty_battery_is_a_reading_rather_than_a_silence() {
+    let v = serde_json::to_value(HostMessage::Battery {
+        charge: 0.0,
+        charging: false,
+    })
+    .unwrap();
+    assert_eq!(v["charge"], 0.0);
+    assert_eq!(v["charging"], false);
 }
 
 /// The chrome assigns the cursor straight to CSS `cursor`, so every shape must

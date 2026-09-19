@@ -94,6 +94,7 @@ export const Desktop = ({ domicile }: Props) => {
       <FirstScreen>
         <TopBar
           current={windows.current}
+          domicile={domicile}
           mode={windows.mode}
           occupied={windows.occupied}
           onSelectWorkspace={(name) => {

@@ -15,3 +15,4 @@
 {"type":"focus_changed","app_id":null}
 {"type":"focus_requested","app_id":"app-2"}
 {"type":"files","files":["Notes/2026/plan.org","src","src/domicile"]}
+{"type":"battery","charge":0.42,"charging":true}

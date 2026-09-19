@@ -100,6 +100,7 @@ compare DomicileAppCursorEvent domicile_app_cursor_event.idl
 compare DomicileAppTitledEvent domicile_app_titled_event.idl
 compare DomicileShortcutEvent domicile_shortcut_event.idl
 compare DomicileModifiersEvent domicile_modifiers_event.idl
+compare DomicileBatteryEvent domicile_battery_event.idl
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
