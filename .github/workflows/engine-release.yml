@@ -90,24 +90,17 @@ jobs:
       - name: Take the tree
         run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
 
-      - name: Check the tree is at the pin this series expects
-        run: |
-          set -euo pipefail
-          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-          echo "series expects $pin"
-          git -C "$CHROMIUM" cat-file -e "$pin^{commit}" 2>/dev/null || {
-            echo "::error::$CHROMIUM has no commit $pin. Roll the checkout forward by hand." >&2
-            exit 1
-          }
-
-      # The same script engine.yml resets with, because it is the same tree
-      # and the same reset. This one used to be a second copy of it, already
-      # drifted in the order of its steps.
-      - name: Reset the checkout to the pin and apply the series
+      # The same scripts engine.yml resets and syncs with, because it is the
+      # same tree, the same reset and the same pin. The reset used to be a
+      # second copy of it here, already drifted in the order of its steps.
+      - name: Reset the checkout to the pin, sync its DEPS and apply the series
         run: |
           set -euo pipefail
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
           .github/scripts/engine-reset.sh "$CHROMIUM"
+          # The DEPS, which the reset does not move. A no-op unless the pin
+          # changed; see engine.yml, where the cost of it is written down.
+          .github/scripts/engine-sync.sh "$CHROMIUM"
           # Directly, not through Chromium's shell: apply.sh needs no host
           # tool, and the sandbox swallowed both its exit status and its
           # output. See engine.yml.

@@ -217,17 +217,6 @@ jobs:
       - name: Take the tree
         run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
 
-      - name: Check the tree is at the pin this series expects
-        run: |
-          set -euo pipefail
-          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-          echo "series expects $pin"
-          git -C "$CHROMIUM" cat-file -e "$pin^{commit}" 2>/dev/null || {
-            echo "::error::$CHROMIUM has no commit $pin. Roll the checkout forward by hand:" >&2
-            echo "  git -C $CHROMIUM fetch origin && gclient sync" >&2
-            exit 1
-          }
-
       # In a script, and shared with engine-release.yml, which resets the same
       # tree for the same reason. The two copies of this had already drifted in
       # the order of their steps; a third copy is what the script prevents. It
@@ -235,6 +224,23 @@ jobs:
       # which is long because the cause is not visible from the symptom.
       - name: Reset the checkout to the pin
         run: .github/scripts/engine-reset.sh "$CHROMIUM"
+
+      # A REPIN NEEDS NOBODY ON `crux`, and this step is the half of that which
+      # costs anything. The reset above fetches the revision and puts the tree
+      # on it; every third-party checkout under it is still at the previous
+      # pin's revisions until `gclient sync` moves them, and a tree half-rolled
+      # like that does not build. Both used to be a person's job: this step and
+      # the one above it were a check that stopped with "roll the checkout
+      # forward by hand".
+      #
+      # ON AN ORDINARY RUN IT IS ONE `cat`. The pin the DEPS were last synced
+      # to is written down beside the checkout, and a run whose pin matches it
+      # does not start `gclient` at all — which matters because this machine
+      # has one job slot and an incremental build in it is ~1m. The run that
+      # does pay is the repin, which is rebuilding most of Chromium anyway.
+      # See .github/scripts/engine-sync.sh and scripts/test-engine-sync.sh.
+      - name: Sync the checkout's DEPS to the pin
+        run: .github/scripts/engine-sync.sh "$CHROMIUM"
 
       # NOT through Chromium's shell, and that was a mistake worth naming.
       #
