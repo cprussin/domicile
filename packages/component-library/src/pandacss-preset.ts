@@ -404,6 +404,23 @@ export const domicilePreset = definePreset({
               "ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Monaco, Consolas, monospace",
           },
         },
+        gradients: {
+          // The ground under light text drawn straight onto a photograph —
+          // the other half of `shadows.textOverPhoto`, which is a hairline
+          // under each letter and not enough on its own when the picture is
+          // bright across the whole band. It ends fully transparent so the
+          // band finishes in the wallpaper rather than against a line, and
+          // the middle stop keeps the text's own row dark instead of letting
+          // a straight ramp wash it out. Black rather than a theme colour,
+          // and the same in both themes, because a photograph is not a
+          // theme. `to bottom` is physical because `linear-gradient` has no
+          // logical direction keyword; a scrim under a bar hung from the top
+          // of the screen is physical anyway.
+          scrimOverPhoto: {
+            value:
+              "linear-gradient(to bottom, rgb(from black r g b / 55%), rgb(from black r g b / 30%) 65%, transparent)",
+          },
+        },
         opacity: {
           disabled: { value: "0.6" },
           // A dragged element fades to signal it's the one in flight, so the

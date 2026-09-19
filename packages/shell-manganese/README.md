@@ -342,9 +342,9 @@ the keyboard happens to be; exactly one path acts for any press.
 
 ## The top bar
 
-Transparent, across the top of the screen the chrome is on: the workspaces at
-one end, the clock in the middle, and at the other end the charge, behind the
-name of the binding mode whenever it is not the usual one.
+Across the top of the screen the chrome is on: the workspaces at one end, the
+clock in the middle, and at the other end the charge, behind the name of the
+binding mode whenever it is not the usual one.
 
 **It launches nothing.** Everything this desktop does is on a key, and the two
 buttons that were here — a terminal and a window of the shell's own — were a
@@ -354,17 +354,22 @@ both are where sway's config puts them and so where a user of this desktop
 already looks. What the bar carries is what no key can be pressed to ask: which
 workspace this is, what time it is, and how much charge is left.
 
-It paints no background, so what is behind it is the wallpaper — and the
-windows are laid out in what is *left* of the screen under it, so nothing is
-behind it but the wallpaper. A window that covers it is one the user put there:
-a float dragged up, or a window filling the screen.
+What is behind it is the wallpaper: the windows are laid out in what is *left*
+of the screen under it, so nothing else is. A window that covers it is one the
+user put there: a float dragged up, or a window filling the screen.
 
 **Its text is white with a black shadow under it, in both themes.** There is no
-background to read against, so the theme's `foreground` would not do: it flips
+surface to read against, so the theme's `foreground` would not do: it flips
 with the theme and the photograph does not, and half of any photograph is
 lighter than light text. The shadow is `shadows.textOverPhoto` from the
 component library's preset — tight and nearly opaque rather than soft, because
 a blurred shadow under ten-pixel type reads as a smudge.
+
+**Under the text is a scrim, not a surface.** `gradients.scrimOverPhoto`, also
+from the preset: black at the top edge and gone by the bottom one, so the bar
+still ends in the wallpaper rather than against a line. The shadow draws each
+letter off the picture and the scrim darkens the ground the whole row sits on;
+a wallpaper that is white across the top of the screen needs both.
 
 The workspaces on it are the ones with windows on them, plus the one being
 looked at — sway's own rule. The desktop keeps all ten all the time, which is
