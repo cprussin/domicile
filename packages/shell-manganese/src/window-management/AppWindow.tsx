@@ -252,8 +252,10 @@ export const AppWindow = ({
         focused ? focusedEdgeStyles : restingEdgeStyles,
         (clickThrough || leaving) && clickThroughStyles,
         // A dragged window is written at a new box on every pointer move, so
-        // it takes the box it is given rather than easing towards it.
-        dragging ? draggingStyles : settlingStyles,
+        // it takes the box it is given rather than easing towards it. Its
+        // colours go on easing either way — see `settlingStyles`.
+        dragging && draggingStyles,
+        settlingStyles({ dragging }),
       )}
       // What it is doing, as an attribute as well as an animation: the
       // desktop's own state is worth being able to read off the element.

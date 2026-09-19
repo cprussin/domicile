@@ -29,10 +29,20 @@ type Props = {
    * is. Not the same as `activeId`: see `AppWindow`.
    */
   focusedId: string | undefined;
+  /**
+   * The window filling the screen, or `undefined` while none is.
+   *
+   * Which its own bar has to know, because the bar of a fullscreen window is
+   * drawn over it: the button that took the screen is the one that gives it
+   * back, and it says so.
+   */
+  fullscreenId: string | undefined;
   /** What the user is holding down, which decides who gets the pointer. */
   modifiers: Modifiers;
   onClose: (id: string) => void;
   onDrop: () => void;
+  /** The screen, asked for from a window's own bar — `fullscreen`. */
+  onFullscreen: (id: string) => void;
   onGrab: (id: string) => void;
   /** The pointer moved into a window, which is the user working in it. */
   onHover: (id: string) => void;
@@ -72,9 +82,11 @@ export const Stage = ({
   draggingId,
   floats,
   focusedId,
+  fullscreenId,
   modifiers: { meta, shift },
   onClose,
   onDrop,
+  onFullscreen,
   onGrab,
   onHover,
   onMove,
@@ -189,6 +201,9 @@ export const Stage = ({
         const onReachThis = () => {
           onSelect(window.id);
         };
+        const onFullscreenThis = () => {
+          onFullscreen(window.id);
+        };
         const onMoveThis = (x: number, y: number) => {
           onMove(window.id, x, y);
         };
@@ -216,9 +231,11 @@ export const Stage = ({
               dragging={false}
               focus={focus}
               frame={placement.frame}
+              fullscreen={window.id === fullscreenId}
               key={window.id}
               motion={motion}
               onClose={onCloseThis}
+              onFullscreen={onFullscreenThis}
               onMotionEnded={onMotionEnded}
               onReach={onReachThis}
               rect={placement.bar}
@@ -235,9 +252,11 @@ export const Stage = ({
                 float={floating}
                 focus={focus}
                 frame={placement.frame}
+                fullscreen={window.id === fullscreenId}
                 motion={motion}
                 onClose={onCloseThis}
                 onDrop={onDrop}
+                onFullscreen={onFullscreenThis}
                 onGrab={onGrabThis}
                 onMotionEnded={onMotionEnded}
                 onMove={onMoveThis}
@@ -283,10 +302,16 @@ export const Stage = ({
           // A tab is the whole of what the window behind it has on screen, so
           // it turns about its own middle.
           frame={tab.rect}
+          // A workspace showing a fullscreen window draws no tabs at all — see
+          // `placement.ts` — so this one never names it.
+          fullscreen={tab.id === fullscreenId}
           key={tab.id}
           motion={motion}
           onClose={() => {
             onClose(tab.id);
+          }}
+          onFullscreen={() => {
+            onFullscreen(tab.id);
           }}
           onMotionEnded={() => {
             motions.onPlayedOut(tab.id, motion);

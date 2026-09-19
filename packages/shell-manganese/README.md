@@ -54,7 +54,7 @@ windows over the tiling, and one window at a time filling the screen.
 | **Mod+B / Mod+V** | `splith` / `splitv`: wrap the focus in a container of one, so the next window opens beside or below it. |
 | **Mod+W / Mod+S / Mod+E** | `layout tabbed` / `layout stacking` / `layout toggle split` on the container the focus is in. |
 | **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. |
-| **Mod+F / Mod+Shift+F** | Fill the screen with the window being worked in, or every screen there is. |
+| **Mod+F / Mod+Shift+F** | Fill the screen with the window being worked in, or every screen there is. The button on a window's own title bar is the first of the two, on the window whose bar it is. |
 | **Mod+Tab** | `focus mode_toggle`: swap the keyboard between the floating windows and the tiled ones. |
 | **Mod+Shift+Tab** | `floating toggle`: take the window out of the tiling, or put it back. |
 | **Mod+Minus / Mod+Shift+Minus** | `scratchpad show` / `move scratchpad`. |
@@ -63,7 +63,10 @@ windows over the tiling, and one window at a time filling the screen.
 
 The window being worked in is the one whose title bar is **filled with the
 accent**, and it is the one everything keyed acts on. Its frame is drawn in
-the same colour, so the bar and the three edges below it say one thing.
+the same colour and its name is set in a heavier face, so the bar and the
+three edges below it say one thing. Every window eases between those colours
+rather than snapping between them: focus follows the cursor here, so they
+change every time the pointer crosses a window.
 
 ### The keys are physical, and the layout is written down
 
@@ -139,10 +142,15 @@ reports with the placement so the compositor hit-tests in the same order.
 ### Every window has a title bar
 
 Floating or tiled, a window is a title bar over its contents: what it is
-called, and an X that closes it. The bar comes *out* of the window's box
-rather than being added to it, so a window dragged or tiled to a size is that
-size, bar included, and a resize does not have to reason about a frame that
-grows with it.
+called, a button that fills the screen with it — `fullscreen`, which is what
+**Mod+F** does — and an X that closes it. The bar comes *out* of the window's
+box rather than being added to it, so a window dragged or tiled to a size is
+that size, bar included, and a resize does not have to reason about a frame
+that grows with it.
+
+Its top two corners are rounded and its bottom two are not, because those are
+the only corners the page draws: the bottom of a frame is the window's
+contents, and those are a client's own pixels laid into the page.
 
 **And the press on the bar is the bar's**, because the page is what hit-tests
 it: the DOM gives the press to the bar and the `<app>` under it never hears

@@ -194,6 +194,7 @@ export enum WindowActionKind {
   TerminalLaunched,
   WindowClosed,
   WindowDropped,
+  WindowFullscreened,
   WindowGrabbed,
   WindowGrown,
   WindowHovered,
@@ -377,6 +378,26 @@ export const WindowAction = {
 
   /** The user let go of the window they had hold of. */
   WindowDropped: () => ({ kind: WindowActionKind.WindowDropped as const }),
+
+  /**
+   * The user asked for a window to fill the screen, from the button on its
+   * own title bar.
+   *
+   * `fullscreen` on a named window rather than on the one being worked in,
+   * which is the difference between this and
+   * {@link WindowAction.FullscreenToggled} — the same difference
+   * {@link WindowAction.WindowClosed} has from `kill`. A bar belongs to one
+   * window, so a button on it says which.
+   *
+   * Never global: `fullscreen toggle global` spreads a window across every
+   * screen, and a button that did that on the press a user expected to
+   * maximize would move the window to a monitor they were not looking at.
+   * The chord is still there for it.
+   */
+  WindowFullscreened: (id: string) => ({
+    id,
+    kind: WindowActionKind.WindowFullscreened as const,
+  }),
 
   /**
    * The user took hold of a floating window to move or resize it.
@@ -574,6 +595,17 @@ export const reduceWindows = (
     }
     case WindowActionKind.WindowDropped: {
       return { ...state, draggingId: undefined };
+    }
+    case WindowActionKind.WindowFullscreened: {
+      // Reached first, because `fullscreenToggled` is `mod+f` — it acts on the
+      // window the workspace has the focus in, and the window this names is
+      // the one whose bar was pressed. Pressing a bar is reaching for its
+      // window anyway, so the two are one press.
+      return onWorkspaceWith(
+        reachWindow(state, action.id),
+        action.id,
+        (workspace) => fullscreenToggled(workspace, false),
+      );
     }
     case WindowActionKind.WindowGrabbed: {
       // Taking hold of a window brings it to the front, the same way clicking
