@@ -43,6 +43,22 @@ export default defineConfig({
   theme: {
     extend: {
       keyframes: {
+        // The charge, once there is almost none: the readout is drawn at full
+        // strength twice a turn rather than dimmed throughout, which is the
+        // difference between this and the preset's `pulse`. `pulse` sits
+        // between a third and two thirds and says a control is busy; a battery
+        // with minutes left has to be *more* legible than the rest of the bar
+        // at the moment it is least ignorable, not less.
+        //
+        // Opacity rather than a colour, so the one decision about what red is
+        // stays the `danger` token's, and so the flash reaches the whole
+        // readout — the case, the fill, the bolt and the figures — which is
+        // four elements and one animation.
+        chargeFlashing: {
+          "0%": { opacity: "1" },
+          "50%": { opacity: "{opacity.pulseMin}" },
+          "100%": { opacity: "1" },
+        },
         // A workspace slides in from the side it was on. The distance is the
         // same for every window on it rather than a share of each one's own
         // box, because what is moving is the workspace: windows that travelled

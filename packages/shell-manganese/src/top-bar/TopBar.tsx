@@ -1,9 +1,6 @@
-import { Button } from "@domicile/component-library/Button";
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
-import { TerminalWindowIcon } from "@phosphor-icons/react/dist/ssr/TerminalWindow";
-
 import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
+import { Battery } from "../battery/Battery";
 import { Clock } from "../clock/Clock";
 import { BindingMode } from "../window-management/window-state";
 import { Workspaces } from "./Workspaces";
@@ -25,16 +22,20 @@ type Props = {
   mode: BindingMode;
   /** The workspaces with something on them, which are the ones shown. */
   occupied: readonly string[];
-  /** Open a browser window — what the bar's + does. */
-  onNew: () => void;
-  /** Launch a terminal onto the desktop. */
-  onOpenTerminal: () => void;
   onSelectWorkspace: (name: string) => void;
 };
 
 /**
  * The bar across the top of the screen the chrome is on: the workspaces, the
- * clock, and the two things this desktop can launch.
+ * clock, and the charge.
+ *
+ * **It launches nothing.** Everything this desktop does is on a key, and two
+ * buttons for two of those keys were a ranking nobody made — the terminal is
+ * `mod+Return` and the launcher, which is what opens a window on a URL or a
+ * search, is `mod+Space`. Both are where sway's config puts them and so where
+ * a user of this desktop already looks. What is on the bar is what no key can
+ * be pressed to ask: which workspace this is, what time it is, and how much
+ * charge is left.
  *
  * **Transparent, and over nothing.** It paints no background, so what is
  * behind it is the wallpaper — and the windows are laid out in what is left of
@@ -43,7 +44,7 @@ type Props = {
  * filling the screen.
  *
  * The clock is in the middle of the *bar* rather than in the middle of what
- * the workspaces and the buttons leave, which is what the three columns are
+ * the workspaces and the charge leave, which is what the three columns are
  * for: the one in the middle is centered in the screen whatever is in the
  * other two, so the reading does not shift along as windows open.
  */
@@ -51,8 +52,6 @@ export const TopBar = ({
   current,
   mode,
   occupied,
-  onNew,
-  onOpenTerminal,
   onSelectWorkspace,
 }: Props) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
@@ -68,25 +67,15 @@ export const TopBar = ({
       {mode === BindingMode.Resize && (
         <span className={modeStyles}>resize</span>
       )}
-      <Button
-        label="Terminal"
-        onClick={onOpenTerminal}
-        size="sm"
-        variant="ghost"
-      >
-        <TerminalWindowIcon size={14} />
-      </Button>
-      <Button label="New window" onClick={onNew} size="sm" variant="ghost">
-        <PlusIcon size={14} />
-      </Button>
+      <Battery />
     </div>
   </header>
 );
 
 const barStyles = grid({
-  // The bar's own controls come from the component library, whose recipes
-  // set their own colour; this is what puts the workspace numbers and the
-  // launchers' icons on the same footing as the text beside them.
+  // The workspace buttons come from the component library, whose recipes set
+  // their own colour; this is what puts the workspace numbers on the same
+  // footing as the text beside them.
   "& button": { color: "white" },
   alignItems: "center",
   // White with a shadow under it, in both themes. The bar paints no
