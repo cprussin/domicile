@@ -447,6 +447,16 @@ describe("Shell", () => {
       expect(bar?.className).toContain(css({ textShadow: "textOverPhoto" }));
     });
 
+    it("lays a scrim behind itself so the text survives a bright wallpaper", () => {
+      // The shadow is a hairline under each letter; a wallpaper that is white
+      // across the whole top of the screen needs the ground darkened too.
+      const { container } = renderShell();
+
+      expect(container.querySelector("header")?.className).toContain(
+        css({ backgroundImage: "{gradients.scrimOverPhoto}" }),
+      );
+    });
+
     it("reads the date and the time down to the second", () => {
       renderShell();
 

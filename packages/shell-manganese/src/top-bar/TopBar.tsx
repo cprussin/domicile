@@ -37,11 +37,15 @@ type Props = {
  * be pressed to ask: which workspace this is, what time it is, and how much
  * charge is left.
  *
- * **Transparent, and over nothing.** It paints no background, so what is
- * behind it is the wallpaper — and the windows are laid out in what is left of
- * the screen under it, so nothing is behind it but the wallpaper. A window
+ * **Over nothing but the wallpaper.** The windows are laid out in what is left
+ * of the screen under it, so nothing is behind it but the picture. A window
  * that covers it is one the user put there: a float dragged up, or a window
  * filling the screen.
+ *
+ * **What it paints is a scrim.** Not a surface: a black gradient that fades
+ * to nothing by the bar's own lower edge, so the bar still ends in the
+ * wallpaper rather than against a line — and the white text has something
+ * dark under it when the picture behind it is bright.
  *
  * The clock is in the middle of the *bar* rather than in the middle of what
  * the workspaces and the charge leave, which is what the three columns are
@@ -78,11 +82,14 @@ const barStyles = grid({
   // footing as the text beside them.
   "& button": { color: "white" },
   alignItems: "center",
-  // White with a shadow under it, in both themes. The bar paints no
-  // background, so nothing separates its text from the photograph behind it
-  // — and `foreground` would not do: it flips with the theme, and the
-  // wallpaper does not. The shadow is what survives a picture that happens
-  // to be white behind any given letter.
+  // The scrim under the text, which is the bar's whole background: it fades
+  // out within the bar's own height, so there is no edge where it stops and
+  // the wallpaper carries on.
+  backgroundImage: "{gradients.scrimOverPhoto}",
+  // White with a shadow under it, in both themes — `foreground` would not
+  // do: it flips with the theme, and the wallpaper does not. The scrim
+  // darkens the band and the shadow draws each letter off it; a picture
+  // bright behind one word and dark behind the next needs both.
   color: "white",
   // Three columns, the outer two equal: what is in them can be any width and
   // the middle one stays in the middle of the screen.
