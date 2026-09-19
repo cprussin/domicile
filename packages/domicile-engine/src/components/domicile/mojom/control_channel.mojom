@@ -193,6 +193,17 @@ interface ControlChannel {
   // whichever client has focus.
   GrabShortcut(Shortcut shortcut);
 
+  // Put the cursor where the page says, in the page's own coordinates.
+  //
+  // THE ONE MESSAGE ABOUT INPUT THAT GOES THE OTHER WAY, and it stops in the
+  // browser process -- the compositor neither draws this pointer nor hears
+  // about it. A shell whose focus follows the cursor has to take the cursor
+  // with the keyboard or have the focus handed back by the next pointer event;
+  // a page can read where the pointer is and cannot put it anywhere, so it
+  // asks. What a page may move is the pointer over itself, which is
+  // `PointerWarpTarget`'s to enforce and not this channel's to promise.
+  WarpPointer(double x, double y);
+
   // Input forwarding. Coordinates are surface-local and keycodes are evdev,
   // because that is what a Wayland client expects to be handed.
   Key(string app_id, uint32 keycode, bool pressed);

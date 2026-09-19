@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/modules/domicile/domicile_host.h"
 
+#include <cmath>
 #include <optional>
 #include <string_view>
 
@@ -133,6 +134,25 @@ void DomicileHost::listFiles(ScriptState*, ExceptionState& exception_state) {
 void DomicileHost::focusChrome(ScriptState*, ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     channel_->FocusChrome();
+  }
+}
+
+void DomicileHost::warpPointer(ScriptState*, double x, double y,
+                               ExceptionState& exception_state) {
+  // A coordinate that is not a number is not a place, and every arithmetic
+  // that follows it -- the browser's clamp into this page's box, the round to
+  // a pixel -- would carry it. Refused here because the page is where the
+  // mistake is, the way a device pixel ratio of zero is.
+  //
+  // A coordinate OUTSIDE this page is not refused: it is clamped to the page's
+  // own box in the browser process, which is where the box is known. See
+  // `PointerWarpTarget`.
+  if (!std::isfinite(x) || !std::isfinite(y)) {
+    exception_state.ThrowTypeError("warpPointer: x and y must be finite");
+    return;
+  }
+  if (Ready(exception_state)) {
+    channel_->WarpPointer(x, y);
   }
 }
 

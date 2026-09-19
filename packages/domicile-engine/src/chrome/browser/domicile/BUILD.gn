@@ -18,6 +18,8 @@ source_set("domicile") {
   sources = [
     "domicile_command_socket.cc",
     "domicile_command_socket.h",
+    "domicile_pointer_warp.cc",
+    "domicile_pointer_warp.h",
     "domicile_shell_windows.cc",
     "domicile_shell_windows.h",
   ]
@@ -28,11 +30,17 @@ source_set("domicile") {
     "//chrome/browser/web_applications",
     "//components/domicile:command_protocol",
     "//components/domicile:common",
+    "//components/domicile:pointer_warp",
     "//components/domicile:shell_source",
     "//components/domicile:shell_windows",
     "//components/tabs:public",
     "//content/public/browser",
     "//net",
+    # The window a page's view is in, and the host that owns its cursor. Here
+    # and not in //components/domicile for the reason the whole of this
+    # directory is here: a cursor is moved through an aura WindowTreeHost, and
+    # nothing below //chrome/browser has one.
+    "//ui/aura",
     "//ui/base",
     "//ui/display",
     # `gfx::NativeView`, which is the handle a frame's view is and the one

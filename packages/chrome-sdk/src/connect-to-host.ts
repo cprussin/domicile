@@ -148,4 +148,5 @@ const absentHost = (): DomicileHost => ({
   setDesktopSize: () => undefined,
   setDevicePixelRatio: () => undefined,
   spawn: () => undefined,
+  warpPointer: () => undefined,
 });

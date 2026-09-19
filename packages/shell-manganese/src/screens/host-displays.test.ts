@@ -58,6 +58,7 @@ class Host implements DomicileHost {
   readonly setDesktopSize = ignored;
   readonly setDevicePixelRatio = ignored;
   readonly spawn = ignored;
+  readonly warpPointer = ignored;
 }
 
 /**

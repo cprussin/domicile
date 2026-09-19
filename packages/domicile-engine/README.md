@@ -89,8 +89,9 @@ a new message.
 
 **Implemented — every member the fork keeps.** Outbound: `spawn`, `focus_app`,
 `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
-`set_device_pixel_ratio`, `grab_shortcut`, `key`, `pointer_motion`,
-`pointer_leave`, `pointer_button`, `pointer_axis`. Inbound: `welcome`,
+`set_device_pixel_ratio`, `grab_shortcut`, `warp_pointer`, `key`,
+`pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
+Inbound: `welcome`,
 `app_appeared`, `app_titled`, `app_resized`, `app_closed`, `app_cursor`,
 `shortcut`, `modifiers`, `focus_changed`, `focus_requested`, `displays`,
 `keymap`.
@@ -106,14 +107,29 @@ already resolved the modifiers against this keymap, so a document holding 40
 kilobytes of xkb has nothing to do with it. Adding a message therefore costs
 four places *or one*, depending on which side of the browser it stops on.
 
-`grab_shortcut` is the one member that goes no further than the browser
-process. It used to be relayed to the compositor, which held the claims and
+`grab_shortcut` and `warp_pointer` are the two members that go no further than
+the browser process.
+
+`grab_shortcut` used to be relayed to the compositor, which held the claims and
 took a matching press out of the stream before the focused client saw it. It
 cannot: a browser window is a `<webview>` whose page is a guest, and the
 compositor never sees one of its keys — the shell is what forwards keys, and a
 guest's never reach the shell. So the browser holds the set and matches it in
 `WebViewGuest::PreHandleKeyboardEvent`, and the press comes back up `shortcut`
 from there. See `src/components/domicile/browser/shortcut_registry.h`.
+
+`warp_pointer` stops here for a different reason: THE COMPOSITOR DOES NOT DRAW
+THIS POINTER. On the console it is a DRM cursor plane this process owns, and in
+a nested run it is the host session's — so a shell asking for the pointer to be
+moved is asking the browser, and the message reaches no socket. What it is for
+is a desktop whose focus follows the cursor: a keyed focus change leaves the
+pointer over the window it came from, and the next pointer event hands the
+focus back. sway's `mouse_warping`, from the one side of the window that can
+still do it. The arithmetic and the one rule that is not arithmetic — a page
+may move the pointer over ITSELF, and a coordinate outside its own box is
+clamped into it — are in `src/components/domicile/browser/pointer_warp.h`,
+which is where the tests are; the window it is carried out in is
+`src/chrome/browser/domicile/domicile_pointer_warp.cc`.
 
 `displays` reaches the page as an attribute — `window.domicile.displays` —
 with a bare `displayschanged` event beside it, rather than as an event carrying
