@@ -116,6 +116,7 @@ every TS file you write or modify.
 | Doc | Covers |
 |---|---|
 | [/docs/guidelines/WORKSPACE.md](/docs/guidelines/WORKSPACE.md) | Tools (bun, turbo, biome), workspace layout across both languages, package READMEs, dependency policy, and the required-checks workflow you run before a PR. |
+| [/docs/DEVELOPING.md](/docs/DEVELOPING.md) | Running, testing and debugging out of a checkout: the commands, the compositor's frame report, and the gotchas — Nix, Smithay and the test clients — that have each cost a session. |
 
 ## Architecture & design docs
 
@@ -133,8 +134,9 @@ working in its area; it is context, not compliance.
 | [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The fork itself: the design, the C ABI between the compositor and the engine, the measurements, and the plan — phase 1 shipped, phases 2 and 3 have items left. |
 | [/docs/architecture/A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md) | A desktop draws on a bare tty, and this is how: the Ozone DRM embedder that had to be written, who opens the card and holds DRM master, where input comes from, and what a console switch does. Read it before touching the DRM platform, `platform.rs`, or anything that assumes a display server. |
 
-[`/ROADMAP.md`](/ROADMAP.md) carries the current state and the ordered plan;
-read it before starting anything substantial.
+[`/ROADMAP.md`](/ROADMAP.md) is the open work and the known gaps, with each
+item pointing at the doc above that carries its detail. Read it before starting
+anything substantial, and keep it honest: an item that shipped comes out.
 
 ## Guides
 
