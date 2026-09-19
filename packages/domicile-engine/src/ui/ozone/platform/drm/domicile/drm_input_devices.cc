@@ -89,6 +89,36 @@ base::ScopedFD DrmTakenDevices::Resumed(const base::FilePath& path) {
 PauseAnswer DrmTakenDevices::Pause(DeviceNumber number,
                                    std::string_view type) {
   if (type == kPauseTypeGone) {
+    // A "gone" THIS SESSION ASKED FOR IS NOT THE NODE GOING AWAY, and telling
+    // those two apart is the difference between a console switch and a
+    // desktop with no keyboard. `ReleaseDevice` frees the `SessionDevice`
+    // logind was holding, and logind reports that freeing the way it reports
+    // any other: a `PauseDevice` of type "gone" for the number. Every
+    // `GiveBack` therefore buys one, and `GiveBack` is on the way into every
+    // re-take -- so the echo lands AFTER the `TakeDevice` that replaced the
+    // device it names, and forgetting the name there strands a device logind
+    // is about to resume.
+    //
+    // MEASURED ON A CONSOLE SWITCH: thirteen devices force-paused, thirteen
+    // "gone" pauses in the 141 microseconds after them, `reclaimed 0 of 0` on
+    // the way back, and thirteen `logind resumed device N, which this session
+    // never took`. Keyboard and trackpad among them, and no chord left to
+    // leave the console with.
+    const auto echo = released_.find(number);
+    if (echo != released_.end()) {
+      // ONE PER RELEASE. A second "gone" with nothing outstanding is the node
+      // really going away, and it is answered below.
+      echo->second -= 1;
+      if (echo->second == 0) {
+        released_.erase(echo);
+      }
+      VLOG(1) << "domicile: input device " << number.major << ":"
+              << number.minor
+              << " reports gone, which is logind answering the release this "
+                 "session asked for; still holding " << devices_.size();
+      return PauseAnswer::kNothingToSay;
+    }
+
     // The node is unplugged. There is nothing left to give back, and udev's
     // own removal is what takes the converter down -- so forgetting it is the
     // whole of the handling. The name goes with it: this is the one pause
@@ -219,7 +249,13 @@ bool DrmTakenDevices::GiveBack(DeviceNumber number) {
     return false;
   }
 
-  if (!release_.Run(number)) {
+  if (release_.Run(number)) {
+    // WHAT logind IS ABOUT TO SAY ABOUT IT, recorded before it says it. A
+    // release it agreed to frees the device on its side, and it reports that
+    // with a `PauseDevice` of type "gone" -- which arrives after the
+    // `TakeDevice` this release is making room for. See `Pause`.
+    released_[number] += 1;
+  } else {
     LOG(ERROR) << "logind refused to take back " << taken->second.path.value()
                << " (" << number.major << ":" << number.minor
                << "), so it cannot be taken again and this device stays dead";
@@ -257,6 +293,10 @@ bool DrmTakenDevices::Release() {
   devices_.clear();
   names_.clear();
   resumed_.clear();
+  // Nothing is owed an answer any more: the tables a stale "gone" could have
+  // damaged are empty, and holding the expectation past them would make the
+  // first real unplug after a shutdown that did not finish look like an echo.
+  released_.clear();
   return every_device_agreed;
 }
 

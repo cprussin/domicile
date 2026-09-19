@@ -69,12 +69,29 @@ namespace ui {
 // runs on the evdev thread; `TakeDevice` is a D-Bus call, which Chromium's
 // `dbus::Bus` will only issue from the thread that owns the connection. The
 // bus is therefore created HERE, on the evdev thread, with a thread-pool
-// single-thread runner for its own -- the same shape `dbus_thread_linux`
-// builds its shared buses with. That makes the evdev thread the bus's ORIGIN
-// thread, so `ConnectToSignal` and every signal callback land on it with no
-// hop and no lock, and leaves exactly one crossing: `CallMethodAndBlock` must
-// run on the D-Bus thread, so it is posted there and this thread waits on a
-// `base::WaitableEvent` for the answer.
+// single-thread runner of its own. That makes the evdev thread the bus's
+// ORIGIN thread, so `ConnectToSignal` and every signal callback land on it
+// with no hop and no lock, and leaves exactly one crossing:
+// `CallMethodAndBlock` must run on the D-Bus thread, so it is posted there and
+// this thread waits on a `base::WaitableEvent` for the answer.
+//
+// THAT RUNNER IS `DEDICATED` AND NOT `SHARED`, WHICH COST A DESKTOP. Shared is
+// what `dbus_thread_linux` builds the browser's own buses with, and it was
+// copied from there -- but the buses it builds do not block. This one does,
+// and a blocking call holds libdbus inside the socket read until logind
+// answers, so every other bus on that thread goes unread for the duration.
+// `DrmVtSwitcher`'s is the one that mattered: its `PropertiesChanged` is what
+// says the session went inactive, a console switch costs three blocking round
+// trips here per input device, and a relinquish delayed behind forty-five of
+// them is a GPU process that keeps flipping into somebody else's console until
+// `PageFlipWatchdog` kills it. See `drm_logind_input.cc`.
+//
+// WHAT A THREAD OF ITS OWN DOES NOT FIX is this one: the evdev thread is still
+// stopped for the length of the storm, so a console switch costs the desktop
+// its input either way. Ending that means `OpenInputDevice` answering later
+// than it is asked, which is Chromium's contract rather than this fork's --
+// patch `0020` priced it as re-plumbing `OpenInputDeviceParams`,
+// `EventFactoryEvdev` and the factory proxy, and it is still the open item.
 //
 // The evdev thread is where a `base::Thread` runs a `MessagePumpType::UI`
 // pump, so `CurrentIOThread::IsSet()` is false there and `base::Thread` gives
