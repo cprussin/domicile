@@ -682,7 +682,8 @@ struct FrameTimings {
     /// path — the only import inside this is the hand-over's.
     composite: TimingWindow,
     /// The submit alone. What the two mean and how to read them together is
-    /// the legend in ROADMAP.md; `record_present` is what keeps them apart.
+    /// the legend in `docs/DEVELOPING.md`; `record_present` is what keeps them
+    /// apart.
     submit: TimingWindow,
     /// How many of them there were.
     composited: usize,
@@ -709,8 +710,8 @@ struct FrameReport {
     response_ms: u32,
     response_worst_ms: u32,
     /// Importing a client's buffer and drawing every layer, up to but not
-    /// including the submit — see `submit_ms`, and the legend in ROADMAP.md
-    /// for how to read the two together.
+    /// including the submit — see `submit_ms`, and the legend in
+    /// `docs/DEVELOPING.md` for how to read the two together.
     composite_ms: u32,
     composite_worst_ms: u32,
     /// The submit, which on a nested window blocks for a frame callback.

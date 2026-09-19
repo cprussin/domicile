@@ -133,6 +133,22 @@ Outside the default set, because it pulls Smithay and the native Wayland
 libraries — build it in `nix develop .#full`:
 
 - `domicile-compositor` — the Wayland server itself, and the seam to the engine.
+  Inside it: `screens.rs` is what the desktop is made of; `dmabuf_import.rs` the
+  import; `engine.rs`, `engine_session.rs` and `engine_buffers.rs` the seam to
+  the fork and what it holds; `outbound.rs` the queue to the chrome; `scale.rs`,
+  `viewport.rs`, `coalesce.rs`, `timing_window.rs`, `modifiers.rs` and
+  `latency.rs` are each one small thing named after itself.
+
+  **Two rules the chrome queue is built around, both from freezes.** Never write
+  to a chrome from the Wayland loop — a chrome that reads slowly fills the socket
+  buffer and a blocking write stops frame callbacks for *every* client. Never
+  *wait* on one either: that stalls the thread that injects input, past the 200ms
+  repeat delay, so a key the user tapped starts repeating. `outbound.rs` is the
+  queue that keeps both, and `message()` never waits and never drops. It gives
+  frames no policy of their own, because no frame comes down it: a client's
+  buffer goes to the display compositor, so what is left is messages. The freeze
+  itself is written down in `tests/input.rs`, where a chrome that stopped
+  draining once cost the compositor twenty seconds.
 
 Web side:
 

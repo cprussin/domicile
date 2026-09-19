@@ -69,3 +69,8 @@ the doc and remove its row from AGENTS.md's "Architecture & design docs" index.
 Durable documentation
 lives in the code and package READMEs, not a stale `/docs/architecture/` doc
 that drifts from reality.
+
+**A document that describes a deleted mechanism is worse than no document.**
+`ROADMAP.md` said "there are two paths, and both work" for as long as there was
+one. When a change removes a mechanism, the doc that describes it is part of
+the change.
