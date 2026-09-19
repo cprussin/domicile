@@ -464,9 +464,29 @@ fn write_responses(
     if responses.is_empty() {
         return true;
     }
+    // WHICH DISPLAY THIS CHROME'S WINDOW COVERS, read here and handed down,
+    // because `freshened` re-reads the desktop and would otherwise hand back
+    // the whole of it -- see there.
+    //
+    // Before the writer lock and not inside it. The broadcast path takes
+    // `chromes` and then `writer`; taking the two in the other order here is
+    // the inversion that deadlocks them against each other.
+    //
+    // `None` is an answer rather than a miss, twice over: a chrome that has
+    // not agreed the protocol is not on that list at all -- and the response
+    // being written to it is its `welcome` -- and one that has agreed may not
+    // have said which window it is yet. Neither has a display to be narrowed
+    // to, and the whole desktop is what both should get.
+    let screen = hub
+        .chromes
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|held| Arc::ptr_eq(&held.writer, writer))
+        .and_then(|held| held.screen.clone());
     let mut writer = writer.lock().unwrap();
     for message in responses {
-        let message = freshened(hub, message);
+        let message = freshened(hub, message, screen.as_deref());
         if writer.write_all(to_line(&message).as_bytes()).is_err() {
             return false;
         }
@@ -501,7 +521,20 @@ fn write_responses(
 ///
 /// Any other message passes through: this is the only one whose content is a
 /// fact about the world rather than an answer to what was asked.
-fn freshened(hub: &ChromeHub, message: HostMessage) -> HostMessage {
+///
+/// **AND IT IS NARROWED AGAIN, WHICH IS NOT OPTIONAL.** Re-reading the desktop
+/// throws away whatever the caller had already made of it, and one caller had
+/// made something: the answer to `set_screen` is the desktop narrowed to the
+/// one display that window covers, with `fills_the_window` set. This used to
+/// take the fresh desktop and return it, so that answer went out as the whole
+/// desk with the flag false -- every window laying its regions out in the
+/// desktop's coordinates, and a page drawing its logical box at logical size
+/// in the corner of a monitor rather than scaled over the whole of it.
+///
+/// So the narrowing is applied here rather than only at the call site, which
+/// is also what makes this agree with [`narrowed_desktop`] on the broadcast
+/// path: both go through `as_one_screen`, keyed on the same `Chrome::screen`.
+fn freshened(hub: &ChromeHub, message: HostMessage, screen: Option<&str>) -> HostMessage {
     if !matches!(message, HostMessage::Displays { .. }) {
         return message;
     }
@@ -513,20 +546,27 @@ fn freshened(hub: &ChromeHub, message: HostMessage) -> HostMessage {
     // only one that can tell those apart, and a guard that cannot blames the
     // wrong end. The count is in the text so a reader — and `guard-shell.sh` —
     // can tell an empty desktop from a described one.
-    //
-    // THE HANDSHAKE, AND IT SAYS SO. `freshened` is on the response path, and
-    // the only response carrying a desktop is the answer to a chrome's Hello;
-    // the two runtime re-describes reach a chrome through `hub.broadcast`,
-    // which does not come through here. A line claiming to cover those would
-    // be wrong about a chrome that got its first display from one of them.
-    let HostMessage::Displays { displays } = &fresh else {
+    let HostMessage::Displays { displays } = fresh else {
         unreachable!("describe_desktop returns Displays and nothing else");
     };
-    info!(
-        "told the chrome about {} display(s) in its handshake",
-        displays.len()
-    );
-    fresh
+    // TWO RESPONSES CARRY A DESKTOP, not one: a chrome's Hello, and its
+    // `set_screen`. The runtime re-describes reach a chrome through
+    // `hub.broadcast` instead, which does not come through here -- so a line
+    // naming the handshake alone would be wrong about the second of these, and
+    // it used to be.
+    let displays = match screen {
+        None => displays,
+        Some(name) => domicile_host::as_one_screen(&displays, name),
+    };
+    match screen {
+        None => info!("told the chrome about {} display(s)", displays.len()),
+        Some(name) => info!(
+            screen = %name,
+            "told the chrome about {} display(s): the window it named",
+            displays.len()
+        ),
+    }
+    HostMessage::Displays { displays }
 }
 
 /// Encode and write everything bound for the chrome, off the Wayland thread.
@@ -993,14 +1033,17 @@ fn read_chrome_messages(
                 };
                 if recorded {
                     info!(screen = %name, "a chrome says which display its window covers");
-                    let HostMessage::Displays { displays } =
-                        hub.host.lock().unwrap().describe_desktop()
-                    else {
-                        unreachable!("describe_desktop returns Displays and nothing else");
-                    };
-                    vec![HostMessage::Displays {
-                        displays: domicile_host::as_one_screen(&displays, &name),
-                    }]
+                    // NOT NARROWED HERE, and the desktop in it is not the one
+                    // that goes out: `freshened` re-reads the desktop under
+                    // the writer lock and narrows it to the screen just
+                    // recorded, so anything built here is overwritten.
+                    //
+                    // A `Displays` all the same, because that is what makes
+                    // `freshened` act at all -- every other message passes
+                    // through it untouched. Narrowing it twice would be two
+                    // sources of one truth, and the one here is the one that
+                    // is discarded.
+                    vec![hub.host.lock().unwrap().describe_desktop()]
                 } else {
                     // Said rather than dropped: a chrome that names its window
                     // before agreeing the protocol is not in the list yet, and
@@ -4842,7 +4885,7 @@ mod tests {
         };
 
         assert_eq!(
-            freshened(&hub, built_earlier),
+            freshened(&hub, built_earlier, None),
             HostMessage::Displays {
                 displays: described
             },
@@ -4862,7 +4905,7 @@ mod tests {
         };
 
         assert_eq!(
-            freshened(&hub, welcome.clone()),
+            freshened(&hub, welcome.clone(), None),
             welcome,
             "a message that is not the desktop passes through untouched"
         );
@@ -4915,6 +4958,60 @@ mod tests {
         assert!(own.contains("drm-2"), "{own}");
         assert!(!own.contains("drm-1"), "{own}");
         assert!(own.contains("[0,0]"), "{own}");
+    }
+
+    #[test]
+    fn each_chrome_is_answered_with_the_window_it_named_and_not_another_one() {
+        // A DESK OF TWO MONITORS IS TWO CONNECTIONS, and the answer is written
+        // to one of them -- so what picks the screen has to be *this*
+        // connection's entry rather than whichever is first or was recorded
+        // last. Both of those pass every other check here, because every other
+        // check connects one chrome; what they cost is the left monitor's
+        // desktop drawn on the right monitor, which is the whole thing the
+        // narrowing exists to prevent.
+        //
+        // `narrowed_desktop` next door is the same claim on the broadcast
+        // path. This is the response path, where the lookup lives.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let HostMessage::Displays { displays } = two_screens() else {
+            unreachable!("two_screens is a desktop");
+        };
+        hub.host.lock().unwrap().describe_displays(displays);
+
+        let connected = |screen: &str| {
+            let (page, compositor) = UnixStream::pair().expect("a socket pair");
+            let writer = Arc::new(Mutex::new(
+                compositor.try_clone().expect("the stream clones"),
+            ));
+            hub.chromes.lock().unwrap().push(Chrome {
+                screen: Some(screen.to_string()),
+                writer: writer.clone(),
+            });
+            (page, writer)
+        };
+        // The left one first, so an answer that takes the head of the list
+        // reaches for `drm-1` while the right one is being written to.
+        let (_left_page, _left) = connected("drm-1");
+        let (right_page, right) = connected("drm-2");
+
+        assert!(
+            write_responses(&hub, &right, vec![two_screens()]),
+            "the peer is reading, so the write lands"
+        );
+
+        let mut answer = String::new();
+        BufReader::new(right_page)
+            .read_line(&mut answer)
+            .expect("the answer is one line");
+        assert!(
+            answer.contains("drm-2"),
+            "the window on the right monitor is told the right monitor: {answer}"
+        );
+        assert!(
+            !answer.contains("drm-1"),
+            "and is told nothing else, or it lays the desk out on one screen: {answer}"
+        );
     }
 
     #[test]

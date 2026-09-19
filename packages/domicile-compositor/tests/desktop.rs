@@ -420,3 +420,71 @@ nested_size = [900, 600]
         "the reported size, at the density reported before it"
     );
 }
+
+/// A window that says which display it covers is answered with that display,
+/// at the origin, told that it fills the window.
+///
+/// **THE ANSWER IS THE WHOLE FEATURE.** A desk of several monitors is several
+/// windows, each loading the same shell, and `set_screen` is the only thing
+/// that differs between them: without the narrowing every window lays its
+/// regions out in the whole desktop's coordinates and draws the desktop's
+/// top-left corner. `fills_the_window` is the other half — it is what tells a
+/// page its logical box has to be turned and scaled over the window, and a
+/// page told `false` draws its desktop at logical size in the corner of the
+/// monitor with the wallpaper filling the rest.
+///
+/// It went out `false` for a whole release. `as_one_screen` was right and
+/// unit-tested, and `freshened` — on the write path, and written when the
+/// handshake was the only response carrying a desktop — replaced the answer
+/// with `describe_desktop()` on its way to the socket. Nothing compared what
+/// was built with what was sent, which is what this does.
+#[test]
+fn a_window_that_says_which_display_it_covers_is_answered_with_that_display() {
+    let compositor = Compositor::started_with(SIDE_BY_SIDE);
+    let mut chrome = compositor.chrome();
+
+    // The handshake first, which is the whole desktop and fills nobody's
+    // window — waited on so the answer below is the *next* description rather
+    // than this one.
+    let handshake = chrome
+        .wait_for(|message| matches!(message, HostMessage::Displays { .. }))
+        .expect("the desktop rides with the handshake");
+    let HostMessage::Displays { displays } = handshake else {
+        unreachable!("the wait matched on this");
+    };
+    assert_eq!(displays.len(), 2, "the handshake is the whole desktop");
+    assert!(
+        displays.iter().all(|display| !display.fills_the_window),
+        "a desktop is not anybody's viewport: {displays:?}"
+    );
+
+    chrome
+        .say(&ChromeMessage::SetScreen {
+            name: "right".to_string(),
+        })
+        .expect("a chrome can say which window it is");
+
+    let answer = chrome
+        .wait_for(|message| matches!(message, HostMessage::Displays { .. }))
+        .expect("naming a window is answered with that window's display");
+    let HostMessage::Displays { displays } = answer else {
+        unreachable!("the wait matched on this");
+    };
+    assert_eq!(
+        displays.len(),
+        1,
+        "a window is one display, not the desk it is on: {displays:?}"
+    );
+    assert_eq!(displays[0].name, "right");
+    assert_eq!(
+        displays[0].position,
+        [0, 0],
+        "a window IS its display, so within it that display starts at zero"
+    );
+    assert!(
+        displays[0].fills_the_window,
+        "the page has to draw its logical box over the whole window, and this \
+         is what tells it so: {:?}",
+        displays[0]
+    );
+}
