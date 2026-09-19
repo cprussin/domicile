@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::process::Command;
+use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -4062,7 +4062,31 @@ fn cursor_shape(icon: CursorIcon) -> CursorShape {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// Run one compositor, and say in a sentence why if it will not start.
+///
+/// NOT `main() -> Result<_, _>`, WHICH IS WHAT THIS WAS. Rust's own
+/// `Termination` prints that error with `Debug`, and a startup failure here is
+/// the only thing a desk that will not come up has to go on: `domicile` starts
+/// a desktop five times and says each time that the compositor "said why
+/// above". What was above, for a config with a section one release too old,
+/// was `Error: Parse("TOML parse error at line 1, column 2\n  |\n1 | ...")` —
+/// the variant name wrapped around it and the span toml had underlined escaped
+/// into one unreadable line, in the middle of Chromium's startup log.
+///
+/// `Display` is what every error this can return is written for, so printing
+/// it is the whole of the fix. `bin/domicile.rs` has done it this way all
+/// along; this is the other half of the same terminal.
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(why) => {
+            eprintln!("domicile-compositor: {why}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
         tracing_subscriber::fmt().with_env_filter(filter).init();
     } else {

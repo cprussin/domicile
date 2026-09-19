@@ -34,6 +34,17 @@ pub enum ConfigError {
     #[error("could not read config file {path}: {message}")]
     Io { path: String, message: String },
 
+    /// A config that was read from a file, and the file it came from.
+    ///
+    /// [`Config::parse`] is given text and has no file to name; [`Config::load`]
+    /// has one, so the path goes on here rather than into every message
+    /// underneath. Without it only [`ConfigError::Io`] said which config it was
+    /// about, and a machine has more than one: the shell's generated file, the
+    /// one a `--config` flag names, whatever is under `$XDG_CONFIG_HOME`. A
+    /// complaint about a key that names none of them is a hunt.
+    #[error("the config at {path} could not be loaded:\n{why}")]
+    At { path: String, why: Box<ConfigError> },
+
     #[error("invalid config syntax: {0}")]
     Parse(String),
 
@@ -496,7 +507,11 @@ impl Config {
             path: path.display().to_string(),
             message: e.to_string(),
         })?;
-        Config::parse(&text)
+        // Not the read failure above, which names the path already.
+        Config::parse(&text).map_err(|why| ConfigError::At {
+            path: path.display().to_string(),
+            why: Box::new(why),
+        })
     }
 
     /// Semantic validation beyond what the type system / deserializer enforce.

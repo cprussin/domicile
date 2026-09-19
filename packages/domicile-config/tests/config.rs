@@ -310,6 +310,47 @@ fn missing_file_is_an_io_error() {
     assert!(matches!(err, ConfigError::Io { .. }), "got {err:?}");
 }
 
+/// A file that will not load says which file it was.
+///
+/// `Io` named the path and the other two did not, which is the asymmetry a
+/// desk that would not come up ran into: the compositor's complaint was about
+/// a key, and a machine has a config under `$XDG_CONFIG_HOME`, one a
+/// `--config` flag may name, and whatever the shell generated -- with nothing
+/// in the sentence to say which of them was being read. `Config::parse` works
+/// on text and has no file to name; `load` does, so the path goes on here.
+#[test]
+fn a_file_that_will_not_load_says_which_file() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let unparseable = dir.path().join("syntax.toml");
+    std::fs::write(&unparseable, "[compositor]\n").unwrap();
+    let err = Config::load(&unparseable).unwrap_err();
+    let said = format!("{err}");
+    assert!(
+        said.contains(&unparseable.display().to_string()),
+        "the complaint should name the file: {said}"
+    );
+    assert!(
+        said.contains("`compositor`"),
+        "and keep what toml said about it: {said}"
+    );
+
+    // The other half of the asymmetry: a config that parses and then does not
+    // hold up is about the same file and used to name it just as little.
+    let invalid = dir.path().join("validation.toml");
+    std::fs::write(&invalid, "[output]\nmax_scale = 0\n").unwrap();
+    let err = Config::load(&invalid).unwrap_err();
+    let said = format!("{err}");
+    assert!(
+        said.contains(&invalid.display().to_string()),
+        "a config that will not validate names it too: {said}"
+    );
+    assert!(
+        said.contains("max_scale"),
+        "and keeps what was wrong with it: {said}"
+    );
+}
+
 #[test]
 fn store_reload_from_path_keeps_last_good_on_bad_file() {
     let dir = tempfile::tempdir().unwrap();
