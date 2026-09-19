@@ -17,18 +17,19 @@ import {
   AddressSuggestionKind,
   addressSuggestions,
 } from "../../address/address-suggestions";
+import type { ConnectionSafety } from "../../address/connection-safety";
 import { typedAddress } from "../../address/typed-address";
 import { ConnectionIndicator } from "./ConnectionIndicator";
 
 type Props = {
   /**
-   * Where the window was sent, which is what the bar shows when nobody is
-   * typing into it.
+   * The address to show when nobody is typing into the bar: where the page is,
+   * or where it was sent while nothing has arrived there yet.
    *
-   * Not where the page *is*: the engine reports no address for a guest, so a
-   * link or a redirect the page followed has taken it somewhere the shell was
-   * never told about. See ROADMAP.md, and the indicator's own panel, which
-   * says so to the user.
+   * IT IS THE ONE `security` DESCRIBES. The two come off one report about one
+   * entry — see `useShownPage` — and a bar that showed an address from one
+   * place beside a lock from another would be drawing a padlock for a page it
+   * is not displaying, which is the shape of every address-bar spoof.
    */
   address: string;
   canGoBack: boolean;
@@ -41,6 +42,8 @@ type Props = {
   onNavigate: (url: string) => void;
   onReload: () => void;
   onStop: () => void;
+  /** The browser's verdict on the connection behind {@link Props.address}. */
+  security: ConnectionSafety;
   /** Everywhere the window has been sent, oldest first. */
   visited: readonly string[];
 };
@@ -63,6 +66,7 @@ export const AddressBar = ({
   onNavigate,
   onReload,
   onStop,
+  security,
   visited,
 }: Props) => {
   // The bar shows the address until the user starts typing, and goes back to
@@ -150,7 +154,9 @@ export const AddressBar = ({
         autoHighlight={typed.trim() !== ""}
         onSuggestionTaken={onNavigate}
         onValueChange={type}
-        prefixButtons={<ConnectionIndicator url={address} />}
+        prefixButtons={
+          <ConnectionIndicator security={security} url={address} />
+        }
         rounded
         size="sm"
         spellCheck={false}

@@ -3,29 +3,32 @@ import { describe, expect, it } from "bun:test";
 import { ConnectionSafety, connectionSafety } from "./connection-safety";
 
 describe("connectionSafety", () => {
-  it("reads https as a page that was asked for over TLS", () => {
-    expect(connectionSafety("https://example.com/one")).toBe(
-      ConnectionSafety.Encrypted,
-    );
+  it("reads the four verdicts the browser reports", () => {
+    expect(connectionSafety("secure")).toBe(ConnectionSafety.Secure);
+    expect(connectionSafety("warning")).toBe(ConnectionSafety.Warning);
+    expect(connectionSafety("dangerous")).toBe(ConnectionSafety.Dangerous);
+    expect(connectionSafety("neutral")).toBe(ConnectionSafety.Neutral);
   });
 
-  it("reads http as a page that was asked for in the clear", () => {
-    expect(connectionSafety("http://example.com")).toBe(ConnectionSafety.Plain);
+  // THE EMPTY STRING IS NOT A VERDICT. It is what the element reports before
+  // the browser has said anything — a guest still on its initial entry — and
+  // reading it as "neutral" would be the chrome making a claim nobody checked.
+  it("says nothing has been stated for a page the browser has not judged", () => {
+    expect(connectionSafety("")).toBe(ConnectionSafety.Unstated);
   });
 
-  it("reads a scheme that never goes over a wire as neither", () => {
-    // `about:blank` and this desktop's own `domicile:` are not a connection at
-    // all, so a lock on them would be saying something about nothing and a
-    // warning on them would be a lie.
-    expect(connectionSafety("about:blank")).toBe(ConnectionSafety.Local);
-    expect(connectionSafety("domicile://shell/")).toBe(ConnectionSafety.Local);
-    expect(connectionSafety("file:///etc/hosts")).toBe(ConnectionSafety.Local);
+  // AND NEITHER IS A MISSING PROPERTY. An engine older than this contract has
+  // no `security` on the element at all, so what a chrome reads is
+  // `undefined` — and a lock drawn from that would be a lock drawn from
+  // nothing at all.
+  it("says nothing has been stated on an engine that cannot say", () => {
+    expect(connectionSafety(undefined)).toBe(ConnectionSafety.Unstated);
   });
 
-  it("refuses an address that is not one", () => {
-    // Every address that reaches here was made by `typedAddress` or opened by
-    // the shell, so one that will not parse is a bug upstream rather than a
-    // case to draw an icon for.
-    expect(() => connectionSafety("not an address")).toThrow();
+  // The same rule for a level this shell has never heard of, which is what a
+  // NEWER engine reporting a fifth verdict looks like from here. Guessing
+  // which of the four it resembles is how a `dangerous` becomes a padlock.
+  it("says nothing has been stated for a verdict it does not know", () => {
+    expect(connectionSafety("catastrophic")).toBe(ConnectionSafety.Unstated);
   });
 });

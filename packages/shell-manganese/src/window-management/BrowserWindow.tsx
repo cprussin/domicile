@@ -12,6 +12,7 @@ import type { Rect } from "./rect";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
 import { useReclaimFocus } from "./useReclaimFocus";
+import { useShownPage } from "./useShownPage";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
 import {
@@ -173,18 +174,15 @@ export const BrowserWindow = ({
   // it as it arrives — it is read inside the effects, where the render that
   // set it has already been committed.
   const element = useRef<HTMLElement>(null);
-  // Where the window was last sent, and everywhere it has been before that —
-  // the bar shows the one and suggests from the other. One piece of state
-  // rather than two, because there is no window whose address is not the last
-  // place it was sent, and a pair that could disagree is a pair that will.
-  //
-  // EVERYWHERE THE SHELL SENT IT is not everywhere it has been: the engine
-  // reports no address for a guest, so a link or a redirect followed inside
-  // the page is not on this list and cannot be. See ROADMAP.md.
-  const [history, setHistory] = useState<{
-    address: string;
-    visited: readonly string[];
-  }>({ address: src, visited: [src] });
+  // Where the shell last SENT the window, which is not where the page is —
+  // it is what the bar shows for the moment between asking for a page and the
+  // browser reporting one, the way any browser shows a pending address. The
+  // page itself comes from `useShownPage` below.
+  const [sent, setSent] = useState(src);
+  // AND WHERE THE PAGE ACTUALLY IS, with the browser's verdict on the
+  // connection behind it. A link followed, a redirect taken, a form posted:
+  // none of them is a navigation the shell made, and all of them move this.
+  const shown = useShownPage(view);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
   // Whether the focus arriving in the page is the focus this window is putting
@@ -330,13 +328,33 @@ export const BrowserWindow = ({
       // `<webview>` the property would be a value hung off an unknown element
       // and the DOM would go on saying the address the window opened at.
       loaded.setAttribute("src", url);
-      setHistory(({ visited }) => ({
-        address: url,
-        visited: [...visited, url],
-      }));
-      onNavigate(url);
+      setSent(url);
     });
   };
+
+  // WHAT THE WINDOW IS CALLED FOLLOWS THE PAGE, not the ask. The desktop names
+  // a browser window after the site in it, and before the browser reported its
+  // own address the only thing there was to name it after was wherever the
+  // shell had last sent it — so a window whose page had followed a link went on
+  // wearing the name of the page the user left.
+  //
+  // An effect rather than a call inside `navigate`, because most of what moves
+  // a page is not `navigate`: the shell hears about a link the same way it
+  // hears about a redirect, which is the element reporting a new page.
+  //
+  // AND A PAGE IS REPORTED ONCE, WHICH THE DEPENDENCIES ALONE WILL NOT DO. The
+  // desktop builds `onNavigate` inline, so it is a new function on every
+  // render and this effect runs on every render — and a second report of the
+  // same page renames the window, which renders it again, which reports again.
+  // The ref is what makes the page rather than the callback the thing that
+  // decides, so the dependency array can go on telling the truth.
+  const reported = useRef("");
+  useEffect(() => {
+    if (shown.url !== "" && shown.url !== reported.current) {
+      reported.current = shown.url;
+      onNavigate(shown.url);
+    }
+  }, [onNavigate, shown.url]);
 
   return (
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a window is not a control and is not being made into one — these say the user clicked into it, which is what raises a window in any desktop, and there is no interactive element that could carry them: the page half of this window sends no pointer events at all
@@ -393,7 +411,7 @@ export const BrowserWindow = ({
       }
     >
       <AddressBar
-        address={history.address}
+        address={addressOf(shown.url, sent)}
         canGoBack={canGoBack}
         canGoForward={canGoForward}
         loading={loading}
@@ -410,7 +428,8 @@ export const BrowserWindow = ({
         onStop={drive((loaded) => {
           loaded.stop();
         })}
-        visited={history.visited}
+        security={shown.security}
+        visited={shown.visited}
       />
       <webview className={viewStyles} ref={setView} src={src} />
     </section>
@@ -477,3 +496,18 @@ const viewStyles = css({
 // A browser window meets its title bar at the top, and the seam between the
 // two is not a line to draw twice.
 const noTopEdgeStyles = css({ borderBlockStartWidth: 0 });
+
+/**
+ * The address the bar shows: where the page is, or where it was sent while
+ * nothing has arrived there yet.
+ *
+ * A BROWSER SHOWS A PENDING ADDRESS, which is what the fallback is for and not
+ * a gap being papered over. Between Enter and the first commit there is no
+ * page to report, and a bar that blanked for that span would flicker on every
+ * navigation. What keeps the fallback honest is that it moves no lock with it:
+ * the security beside it is the browser's, and the browser says nothing about
+ * a page it has not committed — so a pending address is shown with the
+ * indicator that says exactly that.
+ */
+const addressOf = (shown: string, sent: string): string =>
+  shown === "" ? sent : shown;

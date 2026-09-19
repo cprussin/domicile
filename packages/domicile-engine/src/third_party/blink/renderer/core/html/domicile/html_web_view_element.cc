@@ -48,6 +48,41 @@ constexpr char kLoadingChangeEvent[] = "domicile-loading-change";
 // to read it off. See domicile_new_window_event.h.
 constexpr char kNewWindowEvent[] = "domicile-new-window";
 
+// And what it says when the page it is showing changes -- its address, the
+// browser's verdict on the connection behind it, or both. Carries nothing, for
+// the reason the history and loading events carry nothing: `url` and
+// `security` are readable on the element at any moment, which is what a chrome
+// that mounted mid-load needs, and a detail here would be a second copy right
+// only at the instant it was made.
+constexpr char kPageChangeEvent[] = "domicile-page-change";
+
+// The four values `security` can take, which are the four the browser's own
+// omnibox draws. Strings rather than an IDL enum -- see the .idl for why -- and
+// named here so the element and the SDK have one spelling between them.
+constexpr char kSecurityNeutral[] = "neutral";
+constexpr char kSecureSecurity[] = "secure";
+constexpr char kSecurityWarning[] = "warning";
+constexpr char kSecurityDangerous[] = "dangerous";
+
+// The browser's verdict as the string the element reports.
+//
+// AN EXPLICIT SWITCH WITH NO DEFAULT ARM, which is the same decision
+// AsWebViewSecurity makes on the browser side and for the same reason: a value
+// added to the mojom enum has to stop this build rather than reach a shell as
+// a level it has never heard of.
+const char* SecurityName(domicile::mojom::blink::WebViewSecurity security) {
+  switch (security) {
+    case domicile::mojom::blink::WebViewSecurity::kNeutral:
+      return kSecurityNeutral;
+    case domicile::mojom::blink::WebViewSecurity::kSecure:
+      return kSecureSecurity;
+    case domicile::mojom::blink::WebViewSecurity::kWarning:
+      return kSecurityWarning;
+    case domicile::mojom::blink::WebViewSecurity::kDangerous:
+      return kSecurityDangerous;
+  }
+}
+
 HTMLWebViewElement::HTMLWebViewElement(Document& document)
     : HTMLFrameElementBase(html_names::kWebviewTag, document),
       // Null in a document with no window -- a template's, say -- and that is
@@ -284,6 +319,20 @@ void HTMLWebViewElement::LoadingChanged(bool is_loading) {
 void HTMLWebViewElement::NewWindowRequested(const KURL& target_url) {
   DispatchEvent(*MakeGarbageCollected<DomicileNewWindowEvent>(
       AtomicString(kNewWindowEvent), target_url.GetString()));
+}
+
+void HTMLWebViewElement::PageChanged(
+    const KURL& url,
+    domicile::mojom::blink::WebViewSecurity security) {
+  // BOTH, ALWAYS, AND IN THAT ORDER -- they are written before the event is
+  // dispatched so that a handler reading one reads the other's new value too.
+  // A chrome that saw a new address beside the last page's lock would be shown
+  // a padlock for a page it is no longer on, which is the one failure this
+  // whole message exists to prevent.
+  url_ = url.GetString();
+  security_ = String(SecurityName(security));
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kPageChangeEvent)));
 }
 
 }  // namespace blink

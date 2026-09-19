@@ -308,6 +308,26 @@ PENDING_LOADING="$(loading_at pending)"
 PENDING_LOADING_EVENTS="$(loading_events_at pending)"
 STOPPED_LOADING="$(loading_at after-stop)"
 
+# WHERE THE ELEMENT SAID THE PAGE WAS, and what the browser said about the
+# connection behind it, at the same four points. Parsed apart from the pair
+# above because it answers a different question: back and forward are what the
+# element can DO, and this is what it is SHOWING — and the second is the one a
+# chrome puts in front of a user beside a padlock.
+PAGES="$(grep -o 'GUARD page-state at=[^ ]* path=[^ ]* security=[^ ]*' \
+  "$ENGINE_LOG")"
+path_at() { # $1 point
+  printf '%s\n' "$PAGES" |
+    sed -n "s/^GUARD page-state at=$1 path=\([^ ]*\) .*\$/\1/p" | head -1
+}
+security_at() { # $1 point
+  printf '%s\n' "$PAGES" |
+    sed -n "s/^GUARD page-state at=$1 .* security=\([^ ]*\)\$/\1/p" | head -1
+}
+TWO_PATH="$(path_at two-pages)"
+TWO_SECURITY="$(security_at two-pages)"
+BACK_PATH="$(path_at after-back)"
+FORWARD_PATH="$(path_at after-forward)"
+
 SAW_MODULE=$(grep -qF "GUARD driving" "$ENGINE_LOG" && echo 1 || echo 0)
 SAW_SLOW_SHOWN=$(printf '%s\n' "$SEQUENCE" | grep -qx "/slow" && echo 1 || echo 0)
 # Asked for, which is not the same as answered: the fixture records a request
@@ -321,6 +341,8 @@ echo "the guest showed: $(printf '%s' "$SEQUENCE" | tr '\n' ' ')"
 echo "module=$SAW_MODULE pages=$COUNT slow-asked=$SAW_SLOW_ASKED slow-shown=$SAW_SLOW_SHOWN"
 echo "the element said: start=$START_CAN two-pages=$TWO_CAN after-back=$BACK_CAN after-forward=$FORWARD_CAN"
 echo "history events: at two-pages=$TWO_EVENTS at after-forward=$FORWARD_EVENTS"
+echo "and it was showing: two-pages=$TWO_PATH after-back=$BACK_PATH after-forward=$FORWARD_PATH"
+echo "with security: at two-pages=$TWO_SECURITY"
 echo "and it was loading: settled=$SETTLED_LOADING pending=$PENDING_LOADING after-stop=$STOPPED_LOADING"
 echo "loading events: at pending=$PENDING_LOADING_EVENTS"
 echo
@@ -351,6 +373,19 @@ elif [ "$SECOND" != "/two" ]; then
 history to move in and nothing below is a measurement. The element's own \
 src attribute is what drives that navigation, so this is Navigate rather than \
 any of the four"
+elif [ "$TWO_PATH" != "/two" ]; then
+  FAILURE="the guest was showing /two and the element said it was showing \
+\"$TWO_PATH\". THIS IS THE ADDRESS CLAIM: the element reports the guest's \
+visible entry, pushed from the browser, and a chrome that cannot read it shows \
+the user the page they left. An empty reading is the browser never having sent \
+PageChanged; a stale one is it having sent the wrong entry"
+elif [ "$TWO_SECURITY" = "" ] || [ "$TWO_SECURITY" = "undefined" ]; then
+  FAILURE="the element reported no security for a page that had committed, \
+which is what an engine with no verdict to give looks like from a chrome: \
+\"$TWO_SECURITY\". A browser window draws its padlock from this, and a chrome \
+that reads nothing here can only draw nothing — or, worse, fall back to \
+guessing from the scheme. This is WebViewGuest::ReportPage and the \
+security_state call inside it"
 elif [ "$NEGATIVE" = "1" ]; then
   if [ -n "$THIRD" ] && [ "$THIRD" != "/slow" ]; then
     FAILURE="the guest showed a third page ($THIRD) with nothing driving it. \
@@ -409,11 +444,23 @@ elif [ "$THIRD" != "/one" ]; then
 has a NavigationController of its own in the browser process, and either the \
 call never reached it or it reached the placeholder frame's History as it did \
 before. What the guest showed instead was \"$THIRD\""
+elif [ "$BACK_PATH" != "/one" ]; then
+  FAILURE="the guest went back to /one and the element said it was showing \
+\"$BACK_PATH\". THIS IS THE CLAIM THE WHOLE PAGE REPORT EXISTS FOR: nothing \
+in the shell navigated here — goBack() moved the guest's own controller in the \
+browser process — so an element that still names the old page is a chrome that \
+cannot follow its own window. A padlock drawn beside that address would be \
+describing a page the user is not on"
 elif [ "$FOURTH" != "/two" ]; then
   FAILURE="goForward() did not take the guest forward. goBack() worked, so \
 the pipe is reaching the browser and the guest has the entries — this is \
 GoForward on the controller, or a back that left no forward entry to return \
 to. What the guest showed instead was \"$FOURTH\""
+elif [ "$FORWARD_PATH" != "/two" ]; then
+  FAILURE="the guest went forward to /two and the element said it was showing \
+\"$FORWARD_PATH\". goBack() was followed, so the report is not dead — this is \
+one direction of it, which is a browser sending PageChanged for some entry \
+changes and not others"
 elif [ "$FIFTH" != "/two" ]; then
   FAILURE="reload() showed nothing again. The page was already on screen, so \
 what is missing is the fresh load: nothing arrived and no pageshow fired, \

@@ -795,15 +795,18 @@ costs nothing.
   arrives as a GET of its action. Carrying those means a guest `SiteInstance` in
   a StoragePartition of its own, which is a browser window where the user is
   logged out of everything.
-- **A browser window's address bar cannot follow its page.** Where the guest
-  actually went is the browser process's, `WebViewGuestClient` carries
-  `HistoryChanged(can_go_back, can_go_forward)` and `LoadingChanged(is_loading)`
-  and nothing that names a URL, and `src` is the author's attribute rather than
-  a report — so a chrome can show where it *sent* a window, and that something
-  is arriving, and not where the page then went. There is no `domicile-navigate`
-  event to reach for: the SDK once synthesized one, it had fired for nothing
-  since the fork landed, and it was deleted rather than left looking
-  available.
+- **A browser window's padlock rests on a guard that cannot fail it.**
+  `WebViewGuestClient::PageChanged` carries the guest's visible entry — the
+  address and `security_state::GetSecurityLevel` over the same entry, which is
+  where Chrome's own omnibox lock comes from — so the chrome follows its page
+  and the lock is the browser's answer rather than a reading of the URL scheme.
+  What is not yet measured is the half that matters most: the fixture serves
+  plain http from localhost, so `guard-webview-history.sh` asserts that a
+  verdict arrives and that the address follows a `goBack()` the shell never
+  made, and asserts nothing about **which** verdict. The cases a scheme test
+  gets wrong — an expired certificate, a name that does not match, a page
+  running active mixed content — need an https fixture with a cert the browser
+  distrusts, and until one exists `dangerous` is a path no run has taken.
 - **Two things configure a client, and they disagree by a border.** The
   engine states an `<app>`'s box from `ReplacedContentRect` — the *content*
   box — and the chrome's `resize_app` reports `offsetWidth`/`offsetHeight`,

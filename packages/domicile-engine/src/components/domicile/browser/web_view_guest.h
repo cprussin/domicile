@@ -206,6 +206,19 @@ class WebViewGuest : public mojom::WebViewGuest,
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;
 
+  // WHERE A LOCK STOPS BEING A GUESS. This is the call Chrome's own
+  // SecurityStateTabHelper is driven by: content fires it when the certificate,
+  // the mixed-content status or anything else the omnibox draws from changes,
+  // including on a page that never navigated -- a subresource with a cert error
+  // arriving after the commit is exactly that, and it is the case a chrome
+  // reading only navigations would show a clean lock over.
+  //
+  // PAIRED WITH NavigationStateChanged ABOVE RATHER THAN REPLACING IT. The
+  // address moves on a navigation and the level moves on either, so both hooks
+  // funnel into ReportPage and the comparison there is what keeps one message
+  // per real change.
+  void DidChangeVisibleSecurityState() override;
+
  private:
   WebViewGuest(content::RenderFrameHost& owner,
                mojo::PendingReceiver<mojom::WebViewGuest> receiver,
@@ -223,6 +236,18 @@ class WebViewGuest : public mojom::WebViewGuest,
   // reporting ShouldEnableBackButton() would light the one button this whole
   // interface exists to gray out.
   void ReportHistory();
+
+  // Tell the element where the page is and what the browser says about the
+  // connection behind it, if either has changed.
+  //
+  // ONE READ OF ONE ENTRY, and that is the correctness property rather than an
+  // efficiency one. `GetVisibleEntry()` is what Chrome's own omnibox shows and
+  // what `GetVisibleSecurityState` computes its level from, so taking both from
+  // it means the address and the lock always describe the same page. Reading
+  // them from different places -- the committed URL beside a visible level, say
+  // -- is how an address bar comes to draw a padlock next to an address it does
+  // not belong to.
+  void ReportPage();
 
   // Tell the element whether a page is on its way, if that has changed.
   //
@@ -272,6 +297,14 @@ class WebViewGuest : public mojom::WebViewGuest,
   // a guest that has not been asked for a page is not fetching one, and
   // neither is the element that has not heard from it.
   bool reported_loading_ = false;
+
+  // And the last address and security sent. Empty and neutral to start, which
+  // is what a guest showing its initial entry is: GetVisibleSecurityState
+  // declines to describe that entry at all, so a fresh guest's first read is
+  // this pair and it does not spend a message saying so.
+  GURL reported_url_;
+  mojom::WebViewSecurity reported_security_ =
+      mojom::WebViewSecurity::kNeutral;
 
   base::WeakPtrFactory<WebViewGuest> weak_factory_{this};
 };
