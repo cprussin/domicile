@@ -51,7 +51,7 @@ none and the screen answers with the displayless display above.
  4 files changed, 30 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index b70f88a48b45b..ffee39089df7d 100644
+index b70f88a..ffee390 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -72,7 +72,7 @@ index b70f88a48b45b..ffee39089df7d 100644
  
    # `ui/display/manager/test/fake_display_snapshot.h` is the one thing this
 diff --git a/ui/ozone/platform/drm/host/drm_window_host_manager.cc b/ui/ozone/platform/drm/host/drm_window_host_manager.cc
-index c2b53e7a5e1b1..24f44e1cdb717 100644
+index c2b53e7..24f44e1 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host_manager.cc
 @@ -51,6 +51,10 @@ DrmWindowHost* DrmWindowHostManager::GetWindow(gfx::AcceleratedWidget widget) {
@@ -87,7 +87,7 @@ index c2b53e7a5e1b1..24f44e1cdb717 100644
    for (auto it = window_map_.begin(); it != window_map_.end(); ++it)
      if (it->second->GetBoundsInPixels().Contains(location))
 diff --git a/ui/ozone/platform/drm/host/drm_window_host_manager.h b/ui/ozone/platform/drm/host/drm_window_host_manager.h
-index ca23c512ee008..32c035ba3e515 100644
+index ca23c51..32c035b 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host_manager.h
 +++ b/ui/ozone/platform/drm/host/drm_window_host_manager.h
 @@ -44,6 +44,14 @@ class DrmWindowHostManager {
@@ -106,7 +106,7 @@ index ca23c512ee008..32c035ba3e515 100644
    DrmWindowHost* GetWindowAt(const gfx::Point& location);
  
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index fb0426dcfa31b..662ee090043a2 100644
+index fb0426d..662ee09 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -46,6 +46,7 @@

@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: domicile <domicile@invalid>
-Date: Thu, 18 Sep 2026 20:10:00 +0000
+Date: Fri, 18 Sep 2026 20:10:00 +0000
 Subject: [PATCH] domicile: the screens come back when the machine does
 
 A suspend takes almost nothing away from this session. logind's
