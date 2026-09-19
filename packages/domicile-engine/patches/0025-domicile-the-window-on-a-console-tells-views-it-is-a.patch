@@ -55,8 +55,11 @@ answers nothing either.
 WHAT THIS DOES NOT CLAIM. The gap is verified from the sources at the
 pin; that it is the whole of why this desktop answers no key is not, and
 the two log lines above are there to say so on the next run.
-
 ---
+ ui/ozone/platform/drm/host/drm_window_host.cc | 75 ++++++++++++++++++-
+ ui/ozone/platform/drm/host/drm_window_host.h  | 15 ++++
+ 2 files changed, 88 insertions(+), 2 deletions(-)
+
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
 index 831fe37..d010fb5 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc

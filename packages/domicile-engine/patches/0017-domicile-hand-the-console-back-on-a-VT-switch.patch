@@ -57,7 +57,7 @@ same two edges, keys typed at another VT still reach this one.
  2 files changed, 34 insertions(+)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 1d789a5ce9f51..50dc4586f2a70 100644
+index 1d789a5..50dc458 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -124,6 +124,8 @@ source_set("gbm") {
@@ -78,7 +78,7 @@ index 1d789a5ce9f51..50dc4586f2a70 100644
  
    # `ui/display/manager/test/fake_display_snapshot.h` is the one thing this
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 3fd2c99b3baef..3c23bee3cf3e7 100644
+index 3fd2c99..3c23bee 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -4,6 +4,7 @@

@@ -103,7 +103,7 @@ Claude-Session: https://claude.ai/code/session_0121wHJhHTqCKfhKTwP4R2t1
  3 files changed, 33 insertions(+), 30 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 98850d6d0aaa6..303195bef42a6 100644
+index 98850d6..303195b 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -288,6 +288,20 @@ source_set("gbm_unittests") {
@@ -128,10 +128,10 @@ index 98850d6d0aaa6..303195bef42a6 100644
      "//ui/gfx/linux:drm",
      "//ui/gfx/linux:gbm",
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index b3f4d821cec9a..4322dd7442994 100644
+index 9aa71a1..2f8462b 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-@@ -695,9 +695,10 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
+@@ -714,9 +714,10 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
    // arriving by the other door.
    //
    // A DROP THAT FAILS MAKES THE WHOLE RELINQUISH FAIL, even though the GPU
@@ -146,7 +146,7 @@ index b3f4d821cec9a..4322dd7442994 100644
  
    if (relinquished) {
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index aabe8e62c1ed0..80b99eff1789d 100644
+index aabe8e6..80b99ef 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -4,7 +4,6 @@
