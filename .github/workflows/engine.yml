@@ -717,6 +717,31 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/guard-webview-click.sh "$CHROMIUM"
 
+      # And what a link with target="_blank" in one of those windows does,
+      # which until now was nothing at all: the browser refuses the window a
+      # guest asks for -- it has no SiteInstance of its own, and content CHECKs
+      # that pair -- so the address is reported instead and the shell opens a
+      # browser window of its own. The guard clicks the link and reads the page
+      # that arrives in the SECOND <webview>, because an event is not a window.
+      - name: A target=_blank link in a browser window, and the window it opens
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-new-window.sh "$CHROMIUM"
+
+      # Its control: the other half of the same page, which is an ordinary link
+      # in the same guest clicked the same way. It must navigate the window it
+      # is in and ask for no second one -- a run where it asks anyway is a run
+      # where the element announces a window for any click or any navigation,
+      # which would pass the claim while measuring nothing about the target.
+      - name: The new-window guard is looking at the link's target
+        env:
+          NEGATIVE: "1"
+        run: |
+          set -euo pipefail
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/guard-webview-new-window.sh "$CHROMIUM"
+
       # REQUIREMENT 2, WHICH NOTHING HAS RUN SINCE IT WAS WRITTEN. An <app> has
       # to behave like any other replaced element, and `guard-css-and-resize.sh` is what
       # measures that: six CSS properties applied to an <app> and to an

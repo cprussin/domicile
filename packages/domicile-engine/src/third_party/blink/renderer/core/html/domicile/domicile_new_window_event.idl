@@ -1,0 +1,32 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// The event a <webview> dispatches when the page inside it asks for a window
+// of its own — a link with target="_blank", a window.open.
+// See docs/architecture/ENGINE-FORK.md in the Domicile repository.
+//
+// Not a web standard and not proposed as one; it exists in Domicile's engine
+// fork only, beside the element that dispatches it.
+//
+// NO CONSTRUCTOR AND NO EVENT-INIT DICTIONARY, unlike the fork's
+// control-channel events. Only the browser process ever asks for one of these,
+// through HTMLWebViewElement, and a dictionary would be two more generated
+// files in three more build lists for a constructor no shell calls. A shell
+// that wants to synthesize one in a test dispatches an Event with a `url` on
+// it, which is what `BrowserWindow.test.tsx` does.
+[
+    RuntimeEnabled=DomicileExternalSurface,
+    Exposed=Window
+] interface DomicileNewWindowEvent : Event {
+  // The address the page asked to open, absolute — resolved in the browser
+  // process against the document that asked, before this event existed.
+  //
+  // A SHELL POINTS A SECOND <webview> AT IT, in a second browser window it
+  // draws. Nothing in either process has opened a window: the browser refuses
+  // the one a guest's page asks for, because a guest has no SiteInstance of its
+  // own and content CHECKs that pair. See
+  // components/domicile/browser/web_view_guest.h, which also says what refusing
+  // costs — the opener, window.open's handle, and a POST body do not survive.
+  readonly attribute USVString url;
+};

@@ -172,11 +172,18 @@ class WebViewGuest : public mojom::WebViewGuest,
   void LoadingStateChanged(content::WebContents* source,
                            bool should_show_loading_ui) override;
 
-  // A page in a browser window cannot open a second one yet. Overridden rather
-  // than left to the default because the default is content creating the
+  // A page in a browser window asking for a second one -- target="_blank", a
+  // window.open, a form at an unopened target name.
+  //
+  // THE WINDOW IS STILL REFUSED HERE, AND THE ELEMENT IS TOLD. Overridden
+  // rather than left to the default because the default is content creating the
   // window itself, and for a guest with no guest SiteInstance that path CHECKs
-  // -- see the class comment. A refusal is the answer that has a guard behind
-  // it; opening one is its own piece of work.
+  // -- see the class comment. So CreateCustomWebContents returns null as it
+  // always did, and sends NewWindowRequested on the way: the shell opens a
+  // browser window of its own at that address, which is the layer that knows
+  // where a window goes. What that costs -- the opener, the handle, a POST body
+  // -- is written down beside the message in
+  // components/domicile/mojom/web_view_guest.mojom.
   bool IsWebContentsCreationOverridden(
       content::RenderFrameHost* opener,
       content::SiteInstance* source_site_instance,

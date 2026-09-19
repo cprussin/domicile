@@ -47,6 +47,16 @@ type Props = {
   /** The pointer moved into a window, which is the user working in it. */
   onHover: (id: string) => void;
   onMove: (id: string, x: number, y: number) => void;
+  /**
+   * A browser window's page asked for a window of its own — a link with
+   * `target="_blank"` followed.
+   *
+   * Not the window's own to open: a second browser window is one more window on
+   * the workspace, which is the desktop's to place. Nothing names the window
+   * that asked, because nothing about where the new one goes depends on it — it
+   * opens where any window the user opens now would.
+   */
+  onOpenWindow: (url: string) => void;
   /** A browser window's page navigated, so its title says somewhere new. */
   onRename: (id: string, url: string) => void;
   onResize: (id: string, width: number, height: number) => void;
@@ -90,6 +100,7 @@ export const Stage = ({
   onGrab,
   onHover,
   onMove,
+  onOpenWindow,
   onRename,
   onResize,
   onSelect,
@@ -171,6 +182,7 @@ export const Stage = ({
                 onNavigate={(url) => {
                   onRename(window.id, url);
                 }}
+                onOpenWindow={onOpenWindow}
                 onReach={() => {
                   onSelect(window.id);
                 }}

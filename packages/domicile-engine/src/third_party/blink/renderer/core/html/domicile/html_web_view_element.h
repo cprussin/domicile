@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
 namespace blink {
 
@@ -218,6 +219,22 @@ class CORE_EXPORT HTMLWebViewElement final
   // CHANGES, so the event below is never dispatched for a change that is not
   // one.
   void LoadingChanged(bool is_loading) override;
+
+  // And the browser saying the page inside asked for a window of its own -- a
+  // link with target="_blank" followed, a window.open.
+  //
+  // ONE MESSAGE PER ASK AND ONE EVENT PER MESSAGE, which is where this parts
+  // company with the two above: they report state, so they are filtered against
+  // what was last sent and this is not filtered at all. Two links opened in a
+  // row are two windows, and a shell that heard one of them would be a desktop
+  // that drops every second window.
+  //
+  // THE ONE EVENT THIS ELEMENT DISPATCHES WITH ANYTHING ON IT. There is no
+  // property behind it for the reason there is one behind `canGoBack`: an
+  // address nobody has opened yet is not state this element holds, and a
+  // property holding the last one asked for would be a lie between asks. See
+  // domicile_new_window_event.h.
+  void NewWindowRequested(const KURL& target_url) override;
 
   // The guest, for as long as this element lives. Bound once, and not
   // rebuilt on a later `src`: the placeholder frame is destroyed by the

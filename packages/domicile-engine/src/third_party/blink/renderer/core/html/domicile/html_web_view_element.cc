@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/domicile/domicile_new_window_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
@@ -40,6 +41,12 @@ constexpr char kHistoryChangeEvent[] = "domicile-history-change";
 // is what a chrome that mounted in the middle of a load needs and what an
 // event's detail cannot be.
 constexpr char kLoadingChangeEvent[] = "domicile-loading-change";
+
+// And what it says when the page inside asks for a window of its own. The one
+// of the four that carries anything: what is being asked for is an address
+// nothing is showing yet, so there is no property on this element for a chrome
+// to read it off. See domicile_new_window_event.h.
+constexpr char kNewWindowEvent[] = "domicile-new-window";
 
 HTMLWebViewElement::HTMLWebViewElement(Document& document)
     : HTMLFrameElementBase(html_names::kWebviewTag, document),
@@ -260,6 +267,23 @@ void HTMLWebViewElement::LoadingChanged(bool is_loading) {
   loading_ = is_loading;
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kLoadingChangeEvent)));
+}
+
+// The page asking for a window, which is the only thing the browser tells this
+// element that is not about the page it already has.
+//
+// NOTHING IS STORED, unlike the two above, and that is the difference between
+// an event and a state: the address is the message. Storing it would mean
+// answering "what window was asked for?" between asks, which has no true
+// answer.
+//
+// AND NOTHING IS OPENED HERE. This element cannot make a second one of itself
+// and must not try: where a window goes is the shell's, and the shell is what
+// hears this. `GetString()` rather than the KURL, because what a chrome does
+// with it is write it into another element's `src`.
+void HTMLWebViewElement::NewWindowRequested(const KURL& target_url) {
+  DispatchEvent(*MakeGarbageCollected<DomicileNewWindowEvent>(
+      AtomicString(kNewWindowEvent), target_url.GetString()));
 }
 
 }  // namespace blink

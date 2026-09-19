@@ -5,6 +5,7 @@ import {
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_HISTORY_CHANGE_EVENT,
   WEBVIEW_LOADING_CHANGE_EVENT,
+  WEBVIEW_NEW_WINDOW_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -28,6 +29,10 @@ const recordingDomicile = (calls: string[]): DomicileClient =>
 
 const noHover = () => {
   // Nothing in the case moves the pointer into the window.
+};
+
+const noWindows = () => {
+  // Nothing in the case asks for a window of its own.
 };
 
 const view = (container: HTMLElement): HTMLWebViewElement => {
@@ -81,6 +86,22 @@ const loads = (element: HTMLWebViewElement, loading: boolean): void => {
   fireEvent(element, new Event(WEBVIEW_LOADING_CHANGE_EVENT));
 };
 
+/**
+ * The engine saying the page inside the view asked for a window of its own —
+ * a `target="_blank"` link followed, a `window.open` called.
+ *
+ * The one `<webview>` event that carries anything, and it has to: there is no
+ * second view to read the address off yet, which is the whole of what the page
+ * is asking for. Built rather than constructed, because the event's own type is
+ * the engine's and no DOM this test runs on has it.
+ */
+const asksForAWindow = (element: HTMLWebViewElement, url: string): void => {
+  fireEvent(
+    element,
+    Object.assign(new Event(WEBVIEW_NEW_WINDOW_EVENT), { url }),
+  );
+};
+
 // What a window's box resolves to is decided by the emitted stylesheet, not by
 // any one `css(...)` call: Panda's atomic classes all carry the same
 // specificity, so a window's own `display` survives only if nothing later in
@@ -125,6 +146,7 @@ describe("BrowserWindow", () => {
         onHover={noHover}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
+        onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={ON_SCREEN}
         src="https://example.com"
@@ -148,6 +170,7 @@ describe("BrowserWindow", () => {
           onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
           src="https://example.com"
@@ -180,6 +203,7 @@ describe("BrowserWindow", () => {
           onNavigate={(url) => {
             seen.push(url);
           }}
+          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
           src="https://example.com"
@@ -188,6 +212,37 @@ describe("BrowserWindow", () => {
       await userEvent.clear(address());
       await userEvent.type(address(), "docs.example.com{Enter}");
       expect(seen).toStrictEqual(["https://docs.example.com"]);
+    });
+  });
+
+  // A LINK WITH `target="_blank"`, which without this does nothing at all. The
+  // page in the window is a guest, so the browser process refuses the window it
+  // asks for and reports the address instead — a window is the desktop's to
+  // open, and this window is not the one to open it.
+  describe("a window its page asks for", () => {
+    it("asks the desktop for the address the page wanted", async () => {
+      const wanted = await new Promise<string>((resolve) => {
+        const { container } = render(
+          <BrowserWindow
+            clickThrough={false}
+            depth={0}
+            domicile={silentDomicile}
+            dragging={false}
+            focused
+            frame={FRAME}
+            motion="resting"
+            onHover={noHover}
+            onMotionEnded={nothingEnded}
+            onNavigate={() => undefined}
+            onOpenWindow={resolve}
+            onReach={() => undefined}
+            rect={ON_SCREEN}
+            src="https://example.com"
+          />,
+        );
+        asksForAWindow(view(container), "https://example.com/opened");
+      });
+      expect(wanted).toBe("https://example.com/opened");
     });
   });
 
@@ -205,6 +260,7 @@ describe("BrowserWindow", () => {
           onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
           src="https://example.com"
@@ -242,6 +298,7 @@ describe("BrowserWindow", () => {
           onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
           src="https://example.com"
@@ -264,6 +321,7 @@ describe("BrowserWindow", () => {
           onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
           src="https://example.com"
@@ -286,6 +344,7 @@ describe("BrowserWindow", () => {
         onHover: noHover,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
+        onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
         src: "https://example.com",
@@ -317,6 +376,7 @@ describe("BrowserWindow", () => {
         onHover: noHover,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
+        onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
         src: "https://example.com",
@@ -352,6 +412,7 @@ describe("BrowserWindow", () => {
         onHover: noHover,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
+        onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
         src: "https://example.com",
@@ -382,6 +443,7 @@ describe("BrowserWindow", () => {
         onHover: noHover,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
+        onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
         src: "https://example.com",
@@ -421,6 +483,7 @@ describe("BrowserWindow", () => {
             onHover={noHover}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenWindow={noWindows}
             onReach={() => {
               resolve();
             }}
@@ -446,6 +509,7 @@ describe("BrowserWindow", () => {
             onHover={noHover}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenWindow={noWindows}
             onReach={() => {
               resolve();
             }}
@@ -474,6 +538,7 @@ describe("BrowserWindow", () => {
             onHover={noHover}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenWindow={noWindows}
             onReach={() => {
               resolve();
             }}
@@ -504,6 +569,7 @@ describe("BrowserWindow", () => {
             onHover={noHover}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenWindow={noWindows}
             onReach={() => {
               resolve();
             }}
@@ -530,6 +596,7 @@ describe("BrowserWindow", () => {
             onHover={noHover}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenWindow={noWindows}
             onReach={() => {
               resolve();
             }}
@@ -558,6 +625,7 @@ describe("BrowserWindow", () => {
         onHover: noHover,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
+        onOpenWindow: noWindows,
         onReach: () => {
           reaches.push("reach");
         },
@@ -599,6 +667,7 @@ describe("BrowserWindow", () => {
           onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenWindow={noWindows}
           onReach={() => {
             reaches.push("reach");
           }}
@@ -643,6 +712,7 @@ describe("BrowserWindow", () => {
             }}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenWindow={noWindows}
             onReach={() => undefined}
             rect={ON_SCREEN}
             src="https://example.com"
@@ -671,6 +741,7 @@ describe("BrowserWindow", () => {
           onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
           src="https://example.com"
@@ -697,6 +768,7 @@ describe("BrowserWindow", () => {
           onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
           src="https://example.com"
@@ -726,6 +798,7 @@ describe("BrowserWindow", () => {
           onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
           src="https://example.com"
@@ -754,6 +827,7 @@ describe("BrowserWindow", () => {
           onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
           src="https://example.com"
@@ -788,6 +862,7 @@ describe("BrowserWindow", () => {
         onHover={noHover}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
+        onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={undefined}
         src="https://example.com"
@@ -811,6 +886,7 @@ describe("BrowserWindow", () => {
       onHover: noHover,
       onMotionEnded: nothingEnded,
       onNavigate: () => undefined,
+      onOpenWindow: noWindows,
       onReach: () => undefined,
       rect: ON_SCREEN,
       src: "https://example.com",

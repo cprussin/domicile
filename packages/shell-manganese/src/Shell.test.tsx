@@ -3,6 +3,7 @@ import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
+import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -298,6 +299,30 @@ const appElement = (container: HTMLElement, appId: string): HTMLElement => {
     return element;
   }
 };
+
+/**
+ * The page in the first browser window on screen asking for a window of its
+ * own, which is what the engine reports when a `target="_blank"` link is
+ * followed: a guest cannot be handed a window the browser process made, so the
+ * address arrives on the element and opening one is the desktop's.
+ */
+const pageAsksForAWindow = (container: HTMLElement, url: string): void => {
+  const view = container.querySelector("webview");
+  if (view === null) {
+    throw new Error("test: no browser window for a page to ask from");
+  } else {
+    fireEvent(
+      view,
+      Object.assign(new Event(WEBVIEW_NEW_WINDOW_EVENT), { url }),
+    );
+  }
+};
+
+/** What every address bar on screen is showing, in the windows' own order. */
+const addressesShowing = (): string[] =>
+  screen
+    .getAllByRole<HTMLInputElement>("combobox", { name: "Address" })
+    .map((field) => field.value);
 
 /** Where an element was placed, as the numbers the layout worked out. */
 const boxOf = (element: HTMLElement) => ({
@@ -748,6 +773,23 @@ describe("Shell", () => {
       motionsPlayOut(container);
 
       expect(moving(container)).toEqual([]);
+    });
+
+    // A LINK WITH `target="_blank"`, end to end. The page in a browser window
+    // is a guest, so the browser process refuses the window it asks for and
+    // reports the address instead — and what the user asked for is a second
+    // browser window, address bar and all, which only the desktop can open.
+    it("opens a second browser window when a page asks for one", async () => {
+      const { container } = renderShell();
+      press("space");
+      await userEvent
+        .setup()
+        .type(screen.getByRole("combobox"), "example.com{Enter}");
+
+      pageAsksForAWindow(container, "https://example.com/opened");
+
+      expect(windowsOnScreen(container)).toEqual(["Browser", "Browser"]);
+      expect(addressesShowing()).toContain("https://example.com/opened");
     });
   });
 
