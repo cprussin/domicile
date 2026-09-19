@@ -37,9 +37,9 @@
 //! the compositor to say `keyboard focus -> client` before any test looks at
 //! anything. It logs a different line for the window with no surface, so the
 //! fixture's own fault and the compositor's are distinguishable rather than
-//! both arriving as "no input was delivered". The ROADMAP records that
-//! `e2e-chrome-layer.sh` got this wrong and passed anyway for as long as it
-//! existed; `tests/layers.rs` took its claims over and places first.
+//! both arriving as "no input was delivered". The deleted `e2e-chrome-layer.sh`
+//! got this wrong and passed anyway for as long as it existed; `tests/layers.rs`
+//! took its claims over and places first.
 
 mod running;
 
