@@ -203,13 +203,6 @@ in {
       type = lib.types.submodule {
         freeformType = toml.type;
         options = {
-          compositor.nested_size =
-            (pair lib.types.ints.positive ''
-              The desktop's size when nothing describes one, and the largest
-              window Domicile will ask a host for once something does.
-            '')
-            // {default = [1280 800];};
-
           input.keyboard = {
             xkb_rules = lib.mkOption {
               description = "Handed to xkb verbatim. Empty means whatever libxkbcommon defaults to.";

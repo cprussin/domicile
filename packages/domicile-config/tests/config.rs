@@ -9,12 +9,6 @@ use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig};
 // ---- parsing & defaults ---------------------------------------------------
 
 #[test]
-fn empty_config_uses_defaults() {
-    let cfg = Config::parse("").expect("an empty file should parse to defaults");
-    assert_eq!(cfg.compositor.nested_size, (1280, 800));
-}
-
-#[test]
 fn a_desk_that_configured_no_keyboard_gets_nobodys_layout() {
     // THIS USED TO BE PROGRAMMER'S DVORAK WITH CAPS LOCK AND ESCAPE SWAPPED,
     // which is one author's desk and a surprise on anybody else's: a user who
@@ -50,16 +44,6 @@ xkb_options = ["caps:escape"]
     assert_eq!(keyboard.xkb_layout, "us");
     assert_eq!(keyboard.xkb_variant, "dvp");
     assert_eq!(keyboard.xkb_options, vec!["caps:escape".to_string()]);
-}
-
-#[test]
-fn parses_a_full_config() {
-    let text = r#"
-[compositor]
-nested_size = [1920, 1080]
-"#;
-    let cfg = Config::parse(text).expect("valid config should parse");
-    assert_eq!(cfg.compositor.nested_size, (1920, 1080));
 }
 
 // ---- keyboard / keymap ------------------------------------------------------
@@ -167,14 +151,14 @@ fn rejects_a_key_nothing_reads() {
     // Misspelt in a section that exists, which is the shape a real one takes.
     let err = Config::parse(
         r#"
-[compositor]
-nested_sixe = [800, 600]
+[output]
+max_scaale = 2
 "#,
     )
     .unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
     assert!(
-        format!("{err}").contains("nested_sixe"),
+        format!("{err}").contains("max_scaale"),
         "the message should name the key: {err}"
     );
 
@@ -189,8 +173,8 @@ nested_sixe = [800, 600]
 
     // Every section that carries the attribute, not only the two above. The
     // ones a shell writes keys into are `output` and `input.keyboard`, and a
-    // guard that covered `Config` and `CompositorConfig` alone would have let
-    // a misspelled `xkb_optoins` through while reading as though it did not.
+    // guard that covered `Config` alone would have let a misspelled
+    // `xkb_optoins` through while reading as though it did not.
     for section in [
         r#"
 [input.keyboard]
@@ -198,10 +182,6 @@ xkb_optoins = []
 "#,
         r#"
 [input.keyboardd]
-"#,
-        r#"
-[output]
-max_scaale = 2
 "#,
         r#"
 [[output.displays]]
@@ -219,15 +199,29 @@ scaale = 2
 }
 
 #[test]
-fn rejects_zero_nested_size() {
-    let err = Config::parse(
+fn the_startup_placeholder_is_not_a_setting() {
+    // It was `compositor.nested_size`, and it never described anyone's desk.
+    // The desktop it names is the one advertised between the compositor coming
+    // up and the first real answer arriving -- DRM on a tty, the chrome's
+    // `SetDesktopSize` when nested -- so it is overwritten within a beat of
+    // every run, and no value a user could write here survives long enough to
+    // be worth writing. It is a constant in the compositor now, and the whole
+    // `[compositor]` section went with it.
+    for stated in [
         r#"
 [compositor]
-nested_size = [0, 600]
+nested_size = [800, 600]
 "#,
-    )
-    .unwrap_err();
-    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+        r#"
+[compositor]
+"#,
+    ] {
+        let err = Config::parse(stated).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Parse(_)),
+            "{stated} should be refused, got {err:?}"
+        );
+    }
 }
 
 // ---- hot-reload semantics (the important part) ----------------------------
@@ -238,12 +232,12 @@ fn store_reload_valid_swaps_current_and_clears_error() {
     store
         .reload_from_str(
             r#"
-[compositor]
-nested_size = [800, 600]
+[output]
+max_scale = 3
 "#,
         )
         .unwrap();
-    assert_eq!(store.current().compositor.nested_size, (800, 600));
+    assert_eq!(store.current().output.max_scale, 3);
     assert!(store.last_error().is_none());
 }
 
@@ -253,18 +247,18 @@ fn store_reload_invalid_keeps_last_good_and_records_error() {
     store
         .reload_from_str(
             r#"
-[compositor]
-nested_size = [800, 600]
+[output]
+max_scale = 3
 "#,
         )
         .unwrap();
 
     // A subsequent bad edit must NOT change the live config.
-    let err = store.reload_from_str("nested_size = = broken").unwrap_err();
+    let err = store.reload_from_str("max_scale = = broken").unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)));
     assert_eq!(
-        store.current().compositor.nested_size,
-        (800, 600),
+        store.current().output.max_scale,
+        3,
         "last-good config must remain active after a bad edit"
     );
     assert!(store.last_error().is_some());
@@ -279,12 +273,12 @@ fn store_recovers_after_fixing_a_bad_edit() {
     store
         .reload_from_str(
             r#"
-[compositor]
-nested_size = [640, 480]
+[output]
+max_scale = 4
 "#,
         )
         .unwrap();
-    assert_eq!(store.current().compositor.nested_size, (640, 480));
+    assert_eq!(store.current().output.max_scale, 4);
     assert!(
         store.last_error().is_none(),
         "error must clear once config is valid again"
@@ -300,14 +294,14 @@ fn loads_from_a_file() {
     std::fs::write(
         &path,
         r#"
-[compositor]
-nested_size = [1024, 768]
+[output]
+max_scale = 3
 "#,
     )
     .unwrap();
 
     let cfg = Config::load(&path).unwrap();
-    assert_eq!(cfg.compositor.nested_size, (1024, 768));
+    assert_eq!(cfg.output.max_scale, 3);
 }
 
 #[test]
@@ -323,19 +317,19 @@ fn store_reload_from_path_keeps_last_good_on_bad_file() {
     std::fs::write(
         &path,
         r#"
-[compositor]
-nested_size = [1024, 768]
+[output]
+max_scale = 3
 "#,
     )
     .unwrap();
 
     let mut store = ConfigStore::new(Config::load(&path).unwrap());
-    assert_eq!(store.current().compositor.nested_size, (1024, 768));
+    assert_eq!(store.current().output.max_scale, 3);
 
     // Simulate a user saving a broken file.
-    std::fs::write(&path, "nested_size = = nope").unwrap();
+    std::fs::write(&path, "max_scale = = nope").unwrap();
     assert!(store.reload_from_path(&path).is_err());
-    assert_eq!(store.current().compositor.nested_size, (1024, 768));
+    assert_eq!(store.current().output.max_scale, 3);
 }
 
 // ---- output ---------------------------------------------------------------
@@ -944,142 +938,5 @@ scale = 4294967295
     assert!(
         message.contains("a mode of"),
         "rejected for its mode rather than for its far corner: {message}"
-    );
-}
-
-#[test]
-fn the_nested_desktops_mode_must_fit_the_coordinate_space() {
-    // The same arithmetic on the other path. With no displays described, the
-    // desktop is `compositor.nested_size` and the scale climbs to
-    // `output.max_scale` — so those two multiply into a mode exactly as the
-    // described ones do, and the product has to be a coordinate.
-    let err = Config::parse(
-        r#"
-[compositor]
-nested_size = [2000000000, 800]
-
-[output]
-max_scale = 10
-"#,
-    )
-    .unwrap_err();
-    assert!(
-        matches!(err, ConfigError::Validation(_)),
-        "an unrepresentable nested mode should fail validation: {err:?}"
-    );
-    let message = format!("{err}");
-    assert!(
-        message.contains("nested_size") && message.contains("max_scale"),
-        "the message should name both settings, since neither is wrong alone: {err}"
-    );
-
-    // Either alone is fine, which is why the check is on the product. The cap
-    // has to be stated: it defaults to 2, and this desktop does not fit twice.
-    Config::parse(
-        r#"
-[compositor]
-nested_size = [2000000000, 800]
-
-[output]
-max_scale = 1
-"#,
-    )
-    .expect("a large desktop at scale 1 is representable");
-    Config::parse(
-        r#"
-[output]
-max_scale = 10
-"#,
-    )
-    .expect("a high cap on a small desktop is fine");
-
-    // The boundary, exactly, and one past it.
-    Config::parse(
-        r#"
-[compositor]
-nested_size = [2147483647, 1]
-
-[output]
-max_scale = 1
-"#,
-    )
-    .expect("a mode exactly as wide as a coordinate should parse");
-    Config::parse(
-        r#"
-[compositor]
-nested_size = [2147483648, 1]
-
-[output]
-max_scale = 1
-"#,
-    )
-    .expect_err("one pixel more than a coordinate should not");
-
-    // Each axis with the other comfortably inside the bound, so neither case
-    // can pass on the strength of the half it is not about.
-    let err = Config::parse(
-        r#"
-[compositor]
-nested_size = [2147483647, 1]
-
-[output]
-max_scale = 2
-"#,
-    )
-    .unwrap_err();
-    assert!(
-        format!("{err}").contains("nested_size"),
-        "the width half is checked with a height that fits: {err}"
-    );
-    let err = Config::parse(
-        r#"
-[compositor]
-nested_size = [1, 2147483647]
-
-[output]
-max_scale = 2
-"#,
-    )
-    .unwrap_err();
-    assert!(
-        format!("{err}").contains("nested_size"),
-        "the height half is checked with a width that fits: {err}"
-    );
-
-    // Rejected even when displays are described, where neither setting is
-    // read: a config is checked for what it says, not for which of it this run
-    // happens to use, so adding a display must not quietly legalize a nested
-    // size that was rejected a moment ago. Scoping the check to the
-    // no-displays case passes every other test here.
-    Config::parse(
-        r#"
-[compositor]
-nested_size = [2000000000, 800]
-
-[output]
-max_scale = 10
-[[output.displays]]
-name = "only"
-size = [1920, 1080]
-"#,
-    )
-    .expect_err("an unrepresentable nested mode is rejected whatever else is configured");
-
-    // The largest inputs the types allow, which an `i64` product wrapped or
-    // panicked on. A panic here would also break `ConfigStore`'s guarantee
-    // that a bad config can never take the compositor down.
-    let err = Config::parse(
-        r#"
-[compositor]
-nested_size = [4294967295, 4294967295]
-
-[output]
-max_scale = 4294967295
-"#,
-    )
-    .unwrap_err();
-    assert!(
-        matches!(err, ConfigError::Validation(_)),
-        "the biggest nested mode the types allow is rejected, not a panic or a wrap: {err:?}"
     );
 }

@@ -20,12 +20,11 @@ export type ViewportView = {
  * changes.
  *
  * **The chrome's window is the desktop, and the page is the only part of
- * Domicile that can see it.** Where the compositor draws that window itself it
- * reads the size off it; under the forked engine the window belongs to the
- * browser and the compositor never sees it, so without this the desktop stays
- * at `compositor.nested_size` for the whole run — a chrome laid out for that
- * size in the corner of whatever the user actually opened, and every client
- * told a screen that is not the screen.
+ * Domicile that can see it.** The window belongs to the browser and the
+ * compositor never sees it, so without this the desktop stays at the
+ * compositor's startup placeholder for the whole run — a chrome laid out for
+ * 1280x800 in the corner of whatever the user actually opened, and every
+ * client told a screen that is not the screen.
  *
  * CSS pixels, which is what the compositor's logical units are and what
  * `<Screen>` lays out in. The density goes separately and the compositor

@@ -48,6 +48,21 @@ pub const UNKNOWN_PHYSICAL_MM: (i32, i32) = (0, 0);
 /// paced by `wl_surface.frame`, which comes off a real composite.
 pub const UNKNOWN_REFRESH_MHZ: i32 = 0;
 
+/// The desktop advertised before anything has described one, in logical units.
+///
+/// A placeholder, and deliberately not a setting. `wl_output` has no way to
+/// say "size unknown" and a chrome told an empty display list has nothing to
+/// lay out on, so the compositor owes every run an output from the moment it
+/// comes up -- before DRM has reported a monitor on a tty, and before the
+/// chrome has said how big its window is when nested. Both arrive within a
+/// beat and overwrite this, which is why no value written here would survive
+/// long enough to be worth configuring: it was `compositor.nested_size` in the
+/// config and nobody could have tuned it to mean anything.
+///
+/// Scale 1 goes with it, for the reason the size is fixed: inventing a density
+/// here would make every fresh run sharp or blurry until the real one lands.
+const UNDESCRIBED_DESKTOP: (i32, i32) = (1280, 800);
+
 /// One `wl_output`, in the form the compositor advertises it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Advertised {
@@ -355,24 +370,13 @@ impl Screens {
 
     /// The one output a run with no described desktop starts on.
     ///
-    /// `compositor.nested_size` is in *logical* units: a `wl_output` mode is
+    /// [`UNDESCRIBED_DESKTOP`] is in *logical* units: a `wl_output` mode is
     /// physical, so the mode is this times the scale. Advertising a fixed mode
     /// instead would shrink the desktop every time the density went up, which
     /// a client feels as a smaller screen. The window then redefines it, as it
     /// always has, because nothing described one.
-    ///
-    /// `Config::validate` requires both non-zero and bounds their product
-    /// against `output.max_scale`, so a size past `i32::MAX` is a config
-    /// asking for a desktop no coordinate can describe — asserted rather than
-    /// cast, since a silent wrap is a negative screen.
-    pub fn nested(size: (u32, u32)) -> Screens {
-        Screens::following_the_window(
-            (
-                i32::try_from(size.0).expect("compositor.nested_size fits a coordinate"),
-                i32::try_from(size.1).expect("compositor.nested_size fits a coordinate"),
-            ),
-            1,
-        )
+    pub fn nested() -> Screens {
+        Screens::following_the_window(UNDESCRIBED_DESKTOP, 1)
     }
 
     /// The single output that follows Domicile's own window.
@@ -486,7 +490,7 @@ impl Screens {
     /// a reload is them saying it again. With none described the *window* is —
     /// its size and density come from the host through `adopt_window_scale`,
     /// and the config knows neither. Rebuilding from the config anyway hands
-    /// back `nested_size` at scale 1, so a desktop that had come up to scale 2
+    /// back the placeholder at scale 1, so a desktop that had come up to scale 2
     /// drops to 1 and every client redraws for the wrong screen, with nothing
     /// to say why: the file was read correctly, it just does not describe this.
     ///
@@ -497,7 +501,7 @@ impl Screens {
     ///
     /// A desktop that *stopped* being described is the other direction and does
     /// change: it was the config's, the config no longer claims it, and
-    /// `nested_size` is where the window takes over again.
+    /// [`UNDESCRIBED_DESKTOP`] is where the window takes over again.
     ///
     /// `displays` is the engine's last reading of the monitors, empty on every
     /// nested run and on a tty before the first display event. It is here
@@ -510,7 +514,6 @@ impl Screens {
     pub fn reloaded_into(
         &self,
         output: &OutputConfig,
-        nested: (u32, u32),
         displays: &[Display],
     ) -> Result<Option<Screens>, ConfigError> {
         match output.desktop() {
@@ -521,7 +524,7 @@ impl Screens {
             // this arm cannot come back `None`.
             None if !displays.is_empty() => self.replugged_into(displays, output),
             None if self.follows_the_window() => Ok(None),
-            None => Ok(Some(Screens::nested(nested))),
+            None => Ok(Some(Screens::nested())),
         }
     }
 
@@ -705,7 +708,7 @@ fn id_of(name: &str, displays: &[Display]) -> i64 {
 ///
 /// No production caller can reach the panic. `DisplayConfig::validate` bounds
 /// a described display's size times its own scale; `Screens::nested` uses
-/// scale 1 on a size `Config::validate` bounds; and `adopt_window_scale`
+/// scale 1 on [`UNDESCRIBED_DESKTOP`]; and `adopt_window_scale`
 /// divides the window's physical size by the scale before multiplying it back,
 /// so the product is at most the window's own size.
 fn multiplied(logical: (i32, i32), scale: i32) -> (i32, i32) {
@@ -1094,8 +1097,8 @@ size = [1280, 1024]
     }
 
     #[test]
-    fn the_nested_size_is_the_desktop_when_nothing_described_one() {
-        let screens = Screens::nested((1280, 800));
+    fn the_placeholder_is_the_desktop_when_nothing_described_one() {
+        let screens = Screens::nested();
         assert_eq!(screens.size(), (1280, 800));
         assert!(screens.follows_the_window());
         let only = screens.outputs().next().expect("the one output");
@@ -1230,7 +1233,7 @@ size = [800, 600]
 
     #[test]
     fn a_desktop_nothing_described_is_the_engines_to_define() {
-        let taken = Screens::nested((1280, 800))
+        let taken = Screens::nested()
             .replugged_into(&plugged_in(), &unconfigured())
             .expect("nothing here can fail to be applied")
             .expect("an undescribed desktop takes the engine's displays");
@@ -1246,7 +1249,7 @@ size = [800, 600]
         // — so a monitor unplugged after that was read, matched and thrown
         // away, and the desktop kept describing a screen that was no longer
         // plugged in.
-        let one_monitor = Screens::nested((1280, 800))
+        let one_monitor = Screens::nested()
             .replugged_into(&plugged_in(), &unconfigured())
             .expect("nothing here can fail to be applied")
             .expect("an undescribed desktop takes the engine's displays");
@@ -1264,7 +1267,7 @@ size = [800, 600]
         // exists for. Everything the engine read that the config says nothing
         // about is carried through: the mode, the millimetres and the rate are
         // the panel's own and no profile invents them.
-        let placed = Screens::nested((1280, 800))
+        let placed = Screens::nested()
             .replugged_into(&two_plugged_in(), &output(HOME_OFFICE))
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
@@ -1315,7 +1318,7 @@ size = [800, 600]
         // logical and turned and has the disabled displays already dropped;
         // this is what a CRTC has to be set to for that desktop to exist at
         // all, and it is the engine that owns the CRTCs.
-        let placed = Screens::nested((1280, 800))
+        let placed = Screens::nested()
             .replugged_into(&two_plugged_in(), &output(HOME_OFFICE))
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
@@ -1347,7 +1350,7 @@ size = [800, 600]
         // profile's has. It matters because it has to UNDO one -- a profile
         // that turned a panel off stops matching the moment a monitor is
         // unplugged, and the panel has to come back on.
-        let unplanned = Screens::nested((1280, 800))
+        let unplanned = Screens::nested()
             .replugged_into(&plugged_in(), &output(HOME_OFFICE))
             .expect("a profile that does not match cannot fail to apply")
             .expect("an undescribed desktop is still the engine's to define");
@@ -1359,7 +1362,7 @@ size = [800, 600]
         // The whole point of carrying a description up to here. The profile
         // below names neither monitor `drm-1` or `drm-2` -- it names them the
         // way their EDIDs do, which is the way a person can.
-        let placed = Screens::nested((1280, 800))
+        let placed = Screens::nested()
             .replugged_into(
                 &two_plugged_in(),
                 &output(&format!(
@@ -1403,7 +1406,7 @@ scale = 1.5
         // *this* desk. The answer is the engine's own reading rather than an
         // error or an empty desktop: a monitor plugged into a laptop on a
         // train is a desktop, it is just not one anybody wrote down.
-        let unplanned = Screens::nested((1280, 800))
+        let unplanned = Screens::nested()
             .replugged_into(&plugged_in(), &output(HOME_OFFICE))
             .expect("a profile that does not match cannot fail to apply")
             .expect("an undescribed desktop is still the engine's to define");
@@ -1417,7 +1420,7 @@ scale = 1.5
         // in. The desktop that is up keeps working and the complaint names
         // what is wrong with the config, which is the same bargain
         // `ConfigStore` makes for an edit that does not parse.
-        let err = Screens::nested((1280, 800))
+        let err = Screens::nested()
             .replugged_into(
                 &plugged_in(),
                 &output(
@@ -1652,7 +1655,7 @@ size = [1920, 1080]
         // the absence of a described one, and the single window-following
         // output is a different output with a different name.
         let before = described(&format!("{LEFT}{RIGHT}"));
-        let after = Screens::nested((1280, 800));
+        let after = Screens::nested();
         assert_eq!(
             before.rearranged_into(&after),
             Rearrangement {
@@ -1668,7 +1671,7 @@ size = [1920, 1080]
         let config = output(LEFT);
         let described = desktop(LEFT);
         assert_eq!(
-            now.reloaded_into(&config, (1280, 800), NOTHING_PLUGGED_IN)
+            now.reloaded_into(&config, NOTHING_PLUGGED_IN)
                 .expect("a described desktop cannot fail to be applied"),
             Some(Screens::described(&described))
         );
@@ -1686,7 +1689,7 @@ size = [1920, 1080]
         // none -- a nested run, or a tty before the first display event -- the
         // rules below are the ones that were here before profiles existed.
         let placed = Screens::from_the_engine(&two_plugged_in())
-            .reloaded_into(&output(HOME_OFFICE), (1280, 800), &two_plugged_in())
+            .reloaded_into(&output(HOME_OFFICE), &two_plugged_in())
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         assert_eq!(placed.size(), (1920, 3200));
@@ -1697,7 +1700,7 @@ size = [1920, 1080]
         // The regression. With no `output.displays` the window is the
         // desktop, and its size and density are what `adopt_window_scale`
         // negotiated with the host — facts the config does not know. Rebuilding
-        // from the config anyway hands back `nested_size` at scale 1, so a
+        // from the config anyway hands back the placeholder at scale 1, so a
         // desktop that had come up to scale 2 silently dropped to 1 and every
         // client redrew for the wrong screen. Nothing said so, because the
         // config was read correctly; it simply is not the authority here.
@@ -1707,7 +1710,7 @@ size = [1920, 1080]
         // because that is how an atomic rename is caught.
         let now = Screens::following_the_window((1920, 1200), 2);
         assert_eq!(
-            now.reloaded_into(&unconfigured(), (1280, 800), NOTHING_PLUGGED_IN)
+            now.reloaded_into(&unconfigured(), NOTHING_PLUGGED_IN)
                 .expect("an undescribed config cannot fail to be applied"),
             None
         );
@@ -1717,14 +1720,14 @@ size = [1920, 1080]
     fn a_reload_that_stopped_describing_displays_hands_the_desktop_back() {
         // The other direction, and not the same as the case above: this
         // desktop was the config's, the config has stopped claiming it, and
-        // there is nothing to keep. `nested_size` is where the window takes
+        // there is nothing to keep. The placeholder is where the window takes
         // over — its next resize or density change corrects it, which is
         // exactly what an undescribed desktop is.
         let now = described(&format!("{LEFT}{RIGHT}"));
         assert_eq!(
-            now.reloaded_into(&unconfigured(), (1280, 800), NOTHING_PLUGGED_IN)
+            now.reloaded_into(&unconfigured(), NOTHING_PLUGGED_IN)
                 .expect("an undescribed config cannot fail to be applied"),
-            Some(Screens::nested((1280, 800)))
+            Some(Screens::nested())
         );
     }
 

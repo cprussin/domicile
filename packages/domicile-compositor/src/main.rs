@@ -1022,9 +1022,9 @@ fn read_chrome_messages(
             }
             // THE DESKTOP IS THE CHROME'S WINDOW, and the compositor has no
             // other way to learn its size: the window belongs to the browser
-            // and is never seen from here. Without this the desktop sits at
-            // `compositor.nested_size` — a chrome laid out for 1280x800 in the
-            // corner of whatever the user actually opened.
+            // and is never seen from here. Without this the desktop sits at the
+            // compositor's startup placeholder — a chrome laid out for 1280x800
+            // in the corner of whatever the user actually opened.
             //
             // Both this and the density above were guarded on `presenting`,
             // for the case where the window was the compositor's own and the
@@ -3444,7 +3444,7 @@ delegate_cursor_shape!(DomicileCompositor);
 fn screens_at_startup(config: &Config) -> Screens {
     match config.output.desktop() {
         Some(desktop) => Screens::described(&desktop),
-        None => Screens::nested(config.compositor.nested_size),
+        None => Screens::nested(),
     }
 }
 
@@ -4446,7 +4446,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     let rebuilt = data.state.screens.reloaded_into(
                         &data.state.config.current().output,
-                        data.state.config.current().compositor.nested_size,
                         &data.state.engine_displays,
                     );
                     match rebuilt {

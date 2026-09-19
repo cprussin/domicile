@@ -75,6 +75,6 @@ setInterval(() => {
 // The density is what a client renders at; the size is how big the desktop
 // *is*, and under the forked engine the compositor cannot see the window this
 // page is in — without the second call the desktop stays at the compositor's
-// configured `nested_size` however large the window really is.
+// startup placeholder however large the window really is.
 reportDevicePixelRatio(domicile, window);
 reportDesktopSize(domicile, window);

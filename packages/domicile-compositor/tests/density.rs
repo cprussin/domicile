@@ -70,19 +70,12 @@ use crate::running::Compositor;
 /// A desktop with no configured displays, so the chrome's density is what sets
 /// the scale.
 ///
-/// The size is stated rather than defaulted because the mode assertion below
-/// spells the same numbers doubled — 900x600 at density 2 is a 1800x1200 mode
-/// — and does not read them from here. Two copies of one number that have to
-/// be edited together, which is worth having in one file rather than leaving
-/// the expectation here and the config in `domicile-config`'s default.
-///
-/// Measured, since an earlier version of this sentence claimed the opposite:
-/// defaulted, the check *fails* — 1280x800 gives a 2560x1600 mode against a
-/// hardcoded 1800x1200. It does not go quietly vacuous.
-const FOLLOWING: &str = r#"
-[compositor]
-nested_size = [900, 600]
-"#;
+/// Nothing configured at all, which is what makes the desktop the window's:
+/// the size is the compositor's own `UNDESCRIBED_DESKTOP`, and the mode
+/// assertion below spells those numbers doubled rather than reading them from
+/// here. Two copies of one number that have to be edited together, which is
+/// the cost of the check naming the mode it expects.
+const FOLLOWING: &str = "";
 
 /// The density the chrome reports, and what the client should draw at.
 const DENSITY: f64 = 2.0;
@@ -144,7 +137,7 @@ fn the_mode_carries_the_density() {
     // every client is told the screen is half the size the chrome lays out
     // against.
     assert!(
-        client.wait_for_trace(&format!(".mode(3, {}, {},", 900 * 2, 600 * 2), 1),
+        client.wait_for_trace(&format!(".mode(3, {}, {},", 1280 * 2, 800 * 2), 1),
         "the mode did not grow with the density, so every client computes a \
          desktop half the size the chrome is laid out at; it traced:\n{}",
         client.trace()

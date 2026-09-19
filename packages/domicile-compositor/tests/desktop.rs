@@ -67,18 +67,13 @@ fn a_chrome_is_told_the_whole_desktop_at_the_handshake() {
 /// A compositor told nothing about displays still has a desktop — the single
 /// output that follows its own window — and still says so.
 ///
-/// The size is *stated* rather than defaulted, so what is asserted below is
-/// about the config rather than about a constant: `domicile-config` unit-tests
-/// that `compositor.nested_size` parses, and this is the only thing showing it
-/// survives the trip and comes out as the desktop a page lays out against.
+/// The size is the compositor's own `UNDESCRIBED_DESKTOP`, which is the whole
+/// of what an unconfigured run has to go on: there is no setting to state it
+/// with any more, so what this shows is that a page is handed a desktop to lay
+/// out against before anything has described one.
 #[test]
 fn a_compositor_with_no_configured_displays_still_describes_one() {
-    let compositor = Compositor::started_with(
-        r#"
-[compositor]
-nested_size = [1024, 640]
-"#,
-    );
+    let compositor = Compositor::started_with("");
     let mut chrome = compositor.chrome();
 
     let described = chrome
@@ -102,7 +97,7 @@ nested_size = [1024, 640]
     // The whole tuple, not just the count: what a chrome lays out against is
     // every field of it, and the size is the one this config stated. A length
     // check passes just as well on a desktop of one display 0 pixels wide.
-    assert_eq!(described, vec![("domicile-0", [0, 0], [1024, 640], 1)]);
+    assert_eq!(described, vec![("domicile-0", [0, 0], [1280, 800], 1)]);
 }
 
 /// The other way a desktop changes: a chrome that says how dense it is.
@@ -121,15 +116,7 @@ nested_size = [1024, 640]
 /// desktop once at startup never updates.
 #[test]
 fn a_density_one_chrome_reports_is_described_to_the_others() {
-    // Stated for the same reason as above: the size held across the density
-    // change is the one this config chose, not a default that would look the
-    // same whatever reached the compositor.
-    let compositor = Compositor::started_with(
-        r#"
-[compositor]
-nested_size = [900, 600]
-"#,
-    );
+    let compositor = Compositor::started_with("");
     let mut watching = compositor.chrome();
     let mut reporting = compositor.chrome();
     watching
@@ -157,7 +144,7 @@ nested_size = [900, 600]
     // The size holds while the scale climbs: a denser display is a sharper
     // desktop rather than a smaller one, and a chrome told otherwise would
     // halve its own layout.
-    assert_eq!(described, vec![("domicile-0", [900, 600], 2)]);
+    assert_eq!(described, vec![("domicile-0", [1280, 800], 2)]);
 
     // The second way, and the one the deleted script called its weak arm: the
     // chrome that asked. Told over the same broadcast rather than answered
@@ -172,7 +159,7 @@ nested_size = [900, 600]
     let HostMessage::Displays { displays } = told else {
         unreachable!("the wait matched on this");
     };
-    assert_eq!(displays[0].size, [900, 600]);
+    assert_eq!(displays[0].size, [1280, 800]);
 
     // And the third way: the retained answer, which is a separate write from
     // the broadcast above and has gone stale on its own before.
@@ -360,29 +347,23 @@ fn a_described_desktop_refuses_a_chromes_size() {
 /// the one the run started at, and every chrome is told.
 ///
 /// This is the whole of how a desktop learns how big it is under the forked
-/// engine. Where the compositor presents, it owns a winit window and
-/// `adopt_window_scale` reads the size off it; under the engine that window is
-/// the browser's and the compositor never sees it. Before this message the
-/// desktop stayed at `compositor.nested_size` however big the window was —
-/// observed on a real machine as a chrome laid out for 1280x800 sitting in the
-/// corner of a much larger one, with `advertising output scale width=1280
-/// height=800` in the log next to a chrome reporting `devicePixelRatio` 1.5.
+/// engine: the window is the browser's and the compositor never sees it.
+/// Before this message the desktop stayed at the startup placeholder however
+/// big the window was — observed on a real machine as a chrome laid out for
+/// 1280x800 sitting in the corner of a much larger one, with `advertising
+/// output scale width=1280 height=800` in the log next to a chrome reporting
+/// `devicePixelRatio` 1.5.
 ///
-/// `nested_size` is stated and deliberately not the default, so a compositor
-/// that ignored the message and kept its own would fail here rather than
-/// coincide with it.
+/// The reported size is deliberately neither half of that placeholder, so a
+/// compositor that ignored the message and kept its own would fail here rather
+/// than coincide with it.
 ///
 /// The scale is asserted to hold across the resize for the same reason the
 /// size is asserted to hold across a density change above: a mode is both, and
 /// restating one must not silently reset the other.
 #[test]
 fn a_size_one_chrome_reports_becomes_the_desktop() {
-    let compositor = Compositor::started_with(
-        r#"
-[compositor]
-nested_size = [900, 600]
-"#,
-    );
+    let compositor = Compositor::started_with("");
     let mut watching = compositor.chrome();
     let mut reporting = compositor.chrome();
     watching
