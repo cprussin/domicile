@@ -150,31 +150,25 @@ jobs:
       - name: Take the tree
         run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
 
-      - name: Check the tree is at the pin this series expects
-        run: |
-          set -euo pipefail
-          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-          echo "series expects $pin"
-          git -C "$CHROMIUM" cat-file -e "$pin^{commit}" 2>/dev/null || {
-            echo "::error::$CHROMIUM has no commit $pin. Roll the checkout forward by hand:" >&2
-            echo "  git -C $CHROMIUM fetch origin && gclient sync" >&2
-            exit 1
-          }
-
-      # The same two scripts the other two workflows use, called rather than
-      # copied. The reset is where the series' own untracked files come off the
-      # tree and where the diagnostic for a tree that is still dirty lives;
-      # apply.sh is where the pin is checked a second time and the series goes
-      # on. A third copy of either is what engine-reset.sh exists to prevent.
+      # The same three scripts the other two workflows use, called rather than
+      # copied. The reset is where the pin is fetched when the tree has never
+      # had it, where the series' own untracked files come off the tree, and
+      # where the diagnostic for a tree that is still dirty lives; the sync is
+      # where everything DEPS names is moved onto that pin; apply.sh is where
+      # the pin is checked a second time and the series goes on. A third copy
+      # of any of them is what engine-reset.sh exists to prevent.
       #
       # Not through Chromium's shell: apply.sh is git, grep, cp and find, and
       # the sandbox swallowed both its exit status and its output when
       # engine.yml tried it that way.
-      - name: Reset the checkout to the pin and apply the series
+      - name: Reset the checkout to the pin, sync its DEPS and apply the series
         run: |
           set -euo pipefail
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
           .github/scripts/engine-reset.sh "$CHROMIUM"
+          # The DEPS, which the reset does not move. A no-op unless the pin
+          # changed; see engine.yml, where the cost of it is written down.
+          .github/scripts/engine-sync.sh "$CHROMIUM"
           packages/domicile-engine/scripts/apply.sh "$CHROMIUM"
           [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
             echo "::error::apply.sh succeeded but the checkout is still at the pin, so no patch was applied" >&2

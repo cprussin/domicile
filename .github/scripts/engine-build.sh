@@ -16,37 +16,10 @@ CHROMIUM="${1:?usage: engine-build.sh <chromium/src> <sentinel>}"
 SENTINEL="${2:?usage: engine-build.sh <chromium/src> <sentinel>}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-# `gn` and `autoninja` are depot_tools', not the nix shell's. An interactive
-# user has them from their shell config; a systemd service has no shell config
-# — the same reason this workflow has to supply NIX_PATH and a git identity.
-#
-# WHICH depot_tools is not a matter of taste. A checkout has a vendored copy at
-# third_party/depot_tools, and it is a plain git clone: `autoninja` there exits
-# with "python3_bin_reldir.txt not found. need to initialize depot_tools",
-# because the bootstrap that fetches its own python has never run in it. The
-# standalone one is what a person set this machine up with and what the first
-# four-hour build used.
-#
-# So this picks the one that is bootstrapped rather than the one that sounds
-# right — `python3_bin_reldir.txt` is what the bootstrap leaves behind, so it
-# is the question asked directly.
-TOOLS=""
-for candidate in /build/depot_tools "$CHROMIUM/third_party/depot_tools"; do
-  if [ -x "$candidate/autoninja" ] && [ -f "$candidate/python3_bin_reldir.txt" ]; then
-    TOOLS="$candidate"
-    break
-  fi
-done
-[ -n "$TOOLS" ] || {
-  echo "no bootstrapped depot_tools in /build/depot_tools or $CHROMIUM/third_party/depot_tools." >&2
-  echo "One is there but not initialized: run its ensure_bootstrap, or gclient once." >&2
-  for candidate in /build/depot_tools "$CHROMIUM/third_party/depot_tools"; do
-    printf '  %s: autoninja=%s bootstrapped=%s\n' "$candidate" \
-      "$([ -x "$candidate/autoninja" ] && echo yes || echo no)" \
-      "$([ -f "$candidate/python3_bin_reldir.txt" ] && echo yes || echo no)" >&2
-  done
-  exit 127
-}
+# `gn` and `autoninja` are depot_tools', not the nix shell's, and which
+# depot_tools is not a matter of taste — engine-depot-tools.sh is the answer
+# and the reasons, in the one place the four scripts that need it share.
+TOOLS="$("$HERE/engine-depot-tools.sh" "$CHROMIUM")" || exit 127
 echo "depot_tools: $TOOLS"
 export PATH="$TOOLS:$PATH"
 

@@ -1244,7 +1244,11 @@ under `XDG_RUNTIME_DIR`, which is mode 700 and the user's.
   targets into `//components/domicile:*`.
 
   **The rebase number is still not measured** — `CHROMIUM_PIN` has not moved
-  since the series was written, so nothing has rebased. But it is now clear it
+  since the series was written, so nothing has rebased. Moving it no longer
+  needs anybody on `crux`: the engine workflows fetch the revision and
+  `gclient sync` the checkout onto it themselves, so a repin is a one-line pull
+  request and the rebase cost is whatever its engine job reports. See
+  `packages/domicile-engine/README.md`'s *Moving the pin*. But it is now clear it
   will be upstream's number rather than the fork's: whatever a six-week
   upstream diff costs to rebuild, carrying this adds seconds to it. This repo's
   CI still will not carry either.

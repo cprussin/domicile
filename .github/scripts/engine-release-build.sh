@@ -36,21 +36,13 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
 # `gn` and `autoninja` are depot_tools', not the nix shell's, and a systemd
-# service has no shell config to put them on PATH. The bootstrapped one, not
-# the checkout's vendored clone, which has never run its own bootstrap — see
-# .github/scripts/engine-build.sh, where guessing that cost a round.
-TOOLS=""
-for candidate in /build/depot_tools "$CHROMIUM/third_party/depot_tools"; do
-  if [ -x "$candidate/autoninja" ] && [ -f "$candidate/python3_bin_reldir.txt" ]; then
-    TOOLS="$candidate"
-    break
-  fi
-done
-[ -n "$TOOLS" ] || {
-  echo "no bootstrapped depot_tools found; run its ensure_bootstrap" >&2
-  exit 127
-}
+# service has no shell config to put them on PATH. Which one, and why the
+# checkout's own vendored clone is the wrong answer, is engine-depot-tools.sh.
+TOOLS="$("$HERE/engine-depot-tools.sh" "$CHROMIUM")" || exit 127
+echo "depot_tools: $TOOLS"
 export PATH="$TOOLS:$PATH"
 
 cd "$CHROMIUM" || exit 1
