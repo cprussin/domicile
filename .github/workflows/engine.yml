@@ -160,6 +160,13 @@ jobs:
       # attempt's `drop` and the second's `take` must not be able to agree.
       LOCK_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
 
+      # And who holds the render node, which is a different lock over a
+      # different thing and is why it has a name of its own. The tree lock
+      # keeps two writers out of /build/chromium/src; this one keeps two
+      # clients off the card while something is being timed. They are held over
+      # different spans and released by different steps.
+      CARD_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+
       # `apply.sh` ends in `git am`, which writes commits, and git refuses to
       # write one without an identity. The runner's HOME is the work directory
       # — deleted and recreated on every start — so there is no ~/.gitconfig
@@ -895,6 +902,33 @@ jobs:
       # The one requirement nothing measured until now. Last of the guards
       # because it is the longest: sixty rounds, each a keystroke and a wait
       # for the browser to draw.
+      # THE CARD, TAKEN FOR THE TWO STEPS THAT TIME SOMETHING AND NO OTHERS.
+      #
+      # `crux` runs two jobs at once now (cprussin/dotfiles:
+      # config/machines/crux/domicile-ci.nix). That is what stopped
+      # `pinned-engine.yml` -- 1m51s of work, no Chromium tree, every pull
+      # request -- from queueing three hours behind this build. The machine's
+      # single job slot was what made that queue, and it was also, by accident,
+      # a lock over the render node.
+      #
+      # Every other guard in this job survives losing it: they ask whether a
+      # color landed, and a second client on the card makes that slower rather
+      # than wrong. These two do not. `guard-latency.sh` reports what a
+      # keystroke costs to reach a pixel over sixty rounds, and another job
+      # drawing on the same node during those rounds is indistinguishable from
+      # the regression it exists to catch -- a red check nobody caused, which
+      # is the failure mode that teaches people to re-run until green.
+      #
+      # Held across the control as well as the measurement, because the control
+      # is a second run of the same script and a number taken beside somebody
+      # else's client is not a control for one that was not.
+      #
+      # NOT AROUND THE WHOLE JOB. That would hold the card for ~15 minutes of
+      # guards that do not need it, which is the one-queue arrangement this
+      # change exists to leave.
+      - name: Take the render node
+        run: .github/scripts/engine-render-node-lock.sh take "$CARD_OWNER"
+
       - name: What a keystroke costs to reach a pixel
         run: |
           set -euo pipefail
@@ -914,6 +948,15 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
             packages/domicile-engine/scripts/guard-latency.sh "$CHROMIUM"
+
+      # Before the diagnostics and before the tree, because the card is the
+      # thing another job is waiting on and none of what follows needs it.
+      # `drop` is a no-op unless the lock is still ours, so a run that failed
+      # before taking it reaches here harmlessly -- the tree lock's rule, for
+      # the tree lock's reason.
+      - name: Drop the render node
+        if: ${{ always() }}
+        run: .github/scripts/engine-render-node-lock.sh drop "$CARD_OWNER"
 
       # Everything the guard writes down, because none of it is on stdout.
       #
