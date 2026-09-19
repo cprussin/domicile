@@ -13,6 +13,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use domicile_launch::cli::{invocation, Invocation};
@@ -22,6 +23,7 @@ use domicile_launch::control::{answer, Request, Response};
 use domicile_launch::control_socket::{
     address, advertised, answer_one, ask, take, Control, PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
+use domicile_launch::heard::Heard;
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::platform::platform;
 use domicile_launch::restart::{clear_the_last_one, keep_a_desktop_up, Attempt, Ending, Policy};
@@ -32,6 +34,15 @@ use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVE
 /// How long each component gets to do the one thing the next one waits on. A
 /// debug build on a loaded machine is seconds, not milliseconds.
 const PATIENCE: Duration = Duration::from_secs(30);
+
+/// How many of the compositor's last lines a run that gave up says again.
+///
+/// The complaint about a config it could not read is six lines, so twenty is
+/// room for the shape of one rather than a guess at a size. The cap is for the
+/// other end: a desktop that came up, was used and then panicked leaves a
+/// backtrace on that stream, and repeating all of it would bury the repeat the
+/// way the original was buried.
+const WORTH_REPEATING: usize = 20;
 
 fn main() -> ExitCode {
     match run() {
@@ -184,9 +195,14 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
         places: &places,
         platform: &platform,
     };
+    // What the last desktop's compositor said, kept across the loop so that a
+    // run which gives up ends on the reason rather than on a pointer to it.
+    // The *last* one and not all five: they are the same six lines five times
+    // over, and a repeat of thirty is the wall this exists to cut down.
+    let mut said = None;
     let ending = keep_a_desktop_up(
         &policy,
-        &mut || one_desktop(&desktop),
+        &mut || one_desktop(&desktop, &mut said),
         &interrupted,
         &mut wait_or_notice_a_stop,
         &mut |next| eprintln!("domicile: {next}"),
@@ -196,7 +212,22 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
         // A stop is not a success, which is what this said before there was
         // anything to restart: a run that was interrupted did not do what it
         // was asked to.
-        Ending::Stopped | Ending::GaveUp { .. } => ExitCode::FAILURE,
+        Ending::Stopped => ExitCode::FAILURE,
+        // THE LAST THING ON THE TERMINAL IS THE ONE THING ANYONE READS, and
+        // for a desk that would not come up it used to be "every one of them
+        // said why above" -- true, and a pointer into two hundred lines of
+        // Chromium's startup log. The compositor's own words go here instead.
+        //
+        // Only where there are any: a run whose engine never started has
+        // nothing of the compositor's to repeat, and the pointer is then the
+        // honest answer rather than a heading over an empty quote.
+        Ending::GaveUp { .. } => {
+            match &said {
+                Some(said) => eprintln!("\ndomicile: the last compositor said:\n\n{said}"),
+                None => eprintln!("domicile: every one of them said why above."),
+            }
+            ExitCode::FAILURE
+        }
     })
 }
 
@@ -223,22 +254,34 @@ struct Desktop<'a> {
 /// The failure is said here rather than carried out, because this is where the
 /// sentence is: an exit and a milestone that was never reached each already
 /// know how to say what happened.
-fn one_desktop(desktop: &Desktop) -> Attempt {
+fn one_desktop(desktop: &Desktop, said: &mut Option<String>) -> Attempt {
+    // One per desktop rather than one per run: each attempt's compositor is a
+    // new process with its own reason, and a tail shared across five would be
+    // five reasons deep and the earliest of them cut in half.
+    let heard = Arc::new(Mutex::new(Heard::new(WORTH_REPEATING)));
     let started = Instant::now();
-    match up(desktop) {
+    let attempt = match up(desktop, &heard) {
         Ok(()) => Attempt::Ended,
-        Err(said) => {
-            eprintln!("domicile: {said}");
+        Err(why) => {
+            eprintln!("domicile: {why}");
             Attempt::Failed {
                 lived: started.elapsed(),
             }
         }
-    }
+    };
+    // After `up`, which is after its `Running` was dropped -- and that drop is
+    // what ends the listener and joins it, so everything the compositor said
+    // is in hand by this line. See `supervise::Running::drop`.
+    *said = heard
+        .lock()
+        .expect("nothing panics holding what a component said")
+        .said();
+    attempt
 }
 
 /// Start the two components in the one order they can be started in, and wait
 /// for one of them to stop being one.
-fn up(desktop: &Desktop) -> Result<(), String> {
+fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
     // WHAT THE LAST DESKTOP LEFT WOULD BE READ AS THIS ONE'S. The session
     // document is the one that matters: the wait below is for that file to
     // appear, so one still on disk is a desktop announced up before its
@@ -268,8 +311,12 @@ fn up(desktop: &Desktop) -> Result<(), String> {
         &mut running,
     )?;
 
+    // Overheard, where the engine is not: this one's stderr is its own -- its
+    // tracing goes to stdout -- so what arrives is the fatal complaint and
+    // nothing else, while the engine's is Chromium's and is the volume being
+    // cut through.
     running
-        .start(
+        .start_overheard(
             "compositor",
             &compositor(
                 &desktop.components.compositor,
@@ -278,6 +325,7 @@ fn up(desktop: &Desktop) -> Result<(), String> {
                 desktop.config,
                 desktop.env,
             ),
+            heard,
         )
         .map_err(|why| why.to_string())?;
     wait_for(

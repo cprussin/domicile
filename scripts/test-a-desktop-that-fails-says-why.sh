@@ -82,6 +82,21 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "${DOMICILE_FAKE_COMPOSITOR_DIES:-}" ] && exit 4
+# A compositor that will not start, and says why on stderr -- the shape the
+# real one's config complaint has, underlined span and trailing blank line
+# included, because both are what the repeat has to survive.
+if [ -n "${DOMICILE_FAKE_COMPOSITOR_COMPLAINS:-}" ]; then
+  {
+    echo "fake-compositor: the config at /nowhere/domicile.toml could not be loaded:"
+    echo "invalid config syntax: TOML parse error at line 1, column 2"
+    echo "  |"
+    echo "1 | [compositor]"
+    echo "  |  ^^^^^^^^^^"
+    echo "unknown field \`compositor\`, expected \`input\` or \`output\`"
+    echo
+  } >&2
+  exit 1
+fi
 : >"$session"
 # A desktop that came up and then lost a component, which is the failure the
 # restart is for. The second of grace is what makes it that rather than a race
@@ -183,6 +198,54 @@ else
   echo "FAIL: a compositor that exited 4 was not reported, or the run did not"
   echo "      give up on its own (it exited $STATUS). What it said:"
   sed 's/^/    /' "$DEAD"
+  FAILED=1
+fi
+
+# ---- a compositor that would not start says why at the bottom too ---------
+#
+# THE ONE PLACE A PERSON LOOKS IS THE LAST LINE, and until this existed what
+# was there was "Every one of them said why above" -- a pointer, from the end
+# of the run, to six lines somewhere in two hundred of Chromium's. The live
+# output still goes past as it happens; what is checked here is that the run
+# does not *end* on a pointer.
+
+echo "== a compositor that would not start says why again at the end =="
+SAID="$WORK/complained.log"
+run_domicile 60 "$SAID" DOMICILE_FAKE_COMPOSITOR_COMPLAINS=1
+GAVE_UP_AT="$(grep -n "desktops in a row have failed" "$SAID" | tail -1 | cut -d: -f1)"
+LAST_LINE_AT="$(grep -n "unknown field" "$SAID" | tail -1 | cut -d: -f1)"
+LAST_SPAN_AT="$(grep -n '\^\^\^\^' "$SAID" | tail -1 | cut -d: -f1)"
+TIMES="$(grep -c "unknown field" "$SAID")"
+
+# Said live as well as at the end: five desktops each printing it, and the one
+# repeat. A run that only repeated it would have swallowed the live output,
+# which is what a desk that comes up on the fifth try is reading.
+if [ "$TIMES" = 6 ]; then
+  echo "PASS: what it said went past five times and was said once more at the end"
+else
+  echo "FAIL: the complaint appears $TIMES times, not 6. What it said:"
+  sed 's/^/    /' "$SAID"
+  FAILED=1
+fi
+
+# The ordering is the assertion. A repeat that landed anywhere but after the
+# give-up is the burial this exists to undo.
+if [ -n "$GAVE_UP_AT" ] && [ -n "$LAST_LINE_AT" ] && [ "$LAST_LINE_AT" -gt "$GAVE_UP_AT" ]; then
+  echo "PASS: the reason is below the line that gave up, not above it"
+else
+  echo "FAIL: it gave up at line $GAVE_UP_AT and last said why at line"
+  echo "      $LAST_LINE_AT. What it said:"
+  sed 's/^/    /' "$SAID"
+  FAILED=1
+fi
+
+# All of it, not just the line a grep happened to match: toml draws the key it
+# could not read, and three of the six lines are that drawing.
+if [ -n "$LAST_SPAN_AT" ] && [ "$LAST_SPAN_AT" -gt "$GAVE_UP_AT" ]; then
+  echo "PASS: the underlined span came back with it"
+else
+  echo "FAIL: the repeat did not carry the whole complaint. What it said:"
+  sed 's/^/    /' "$SAID"
   FAILED=1
 fi
 
