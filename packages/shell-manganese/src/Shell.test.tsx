@@ -112,6 +112,9 @@ class FakeDomicile {
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
   }
+  warpPointer(to: readonly number[]): void {
+    this.calls.push(["warpPointer", to]);
+  }
   // The portal forwards the keys a focused window is given, so the shell's own
   // keystrokes reach this once a window has the keyboard.
   key(appId: string, keycode: number, pressed: boolean): void {
@@ -1121,6 +1124,30 @@ describe("Shell", () => {
   });
 
   describe("focus follows the cursor", () => {
+    it("takes the pointer with it when a key moves the focus", () => {
+      // `mouse_warping`, and the reason this desktop needs it: the window the
+      // focus came from is still under the pointer, and the first pointer
+      // event over it would hand the focus straight back. The pointer goes to
+      // the middle of the window's contents — 950 wide from the left edge,
+      // under its own title bar — which is the region a `pointerover` on
+      // focuses.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      domicile.calls.length = 0;
+
+      press("h");
+
+      expect(domicile.calls).toContainEqual(["focusApp", "one"]);
+      expect(domicile.calls).toContainEqual(["warpPointer", [475, 571]]);
+      expect(boxOf(appElement(container, "one"))).toMatchObject({
+        height: "1018px",
+        width: "950px",
+        x: "0px",
+        y: "62px",
+      });
+    });
+
     it("gives the keyboard to the window the pointer moves into", () => {
       const { container } = renderShell();
       clientAppears("one");

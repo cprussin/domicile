@@ -69,6 +69,16 @@ and the three edges below it say one thing. Every window eases between those
 colors rather than snapping between them: focus follows the cursor here, so
 they change every time the pointer crosses a window.
 
+**And the cursor follows the keyboard**, which is `mouse_warping container`
+from the config and is not decoration: a key that moves the focus leaves the
+pointer over the window it came from, the layout slides another window under
+that stationary pointer, and the `pointerover` that fires as it arrives hands
+the focus straight back. So a keyed focus change puts the pointer in the middle
+of the window it moved to — unless the pointer is over that window already,
+which is every press that moved nothing the pointer is near: a split, a layout,
+a tab of the container it is sitting on. The page cannot move a pointer; the
+engine can, and `warpPointer` is what asks it to.
+
 ### The keys are physical, and the layout is written down
 
 sway binds *keysyms* and resolves them through the active keymap. Nothing here
@@ -529,6 +539,8 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it, and the ones still leaving. |
 | `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
 | `src/window-management/title-focus.ts` | Which of sway's three client colors a bar is drawn in, and why a tab needs the third. |
+| `src/window-management/pointer-warp.ts` | Where the pointer goes when a key moves the focus, and the two questions that decide whether it goes anywhere at all. |
+| `src/window-management/usePointerWarp.ts` | The half of that a page has to do: which press was a keyed one, where the pointer is, and the render that is late enough to know the window's new box. |
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar over a `<webview>`, and everywhere the shell has sent it. |
 | `src/window-management/browser/AddressBar.tsx` | That bar: the history controls, the one button that is Reload or Stop, and the address as a pill with its connection indicator inside it. |
@@ -578,8 +590,8 @@ The parts of the config this shell cannot answer, and why:
 - **Outputs, inputs, and the bar's own config.** The compositor owns the
   displays and the keyboard — `manganese.json` is where those are set, below —
   and the bar is this page rather than a swaybar process.
-- **Mouse warping, per-window borders, `hideEdgeBorders`.** A window's frame
-  is CSS here; there is no pointer to warp from a page.
+- **Per-window borders and `hideEdgeBorders`.** A window's frame is CSS here,
+  and every window wears the same one.
 
 ## Configure
 

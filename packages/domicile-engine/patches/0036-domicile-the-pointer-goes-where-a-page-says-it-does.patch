@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 19 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the pointer goes where a page says it does
+
+A desktop whose focus follows the cursor has to take the cursor with it
+when a key moves the focus. sway calls it `mouse_warping` and does it
+itself; here the shell is a page, and a page can read where the pointer
+is and cannot put it anywhere -- so the focus a press moved was handed
+straight back by the first pointer event over the window it came from.
+
+`warpPointer` is the message that answers it, and this is the one place
+it needs a file Chromium owns. The rest is the fork's own: the mojom,
+the Blink method, `ControlChannel::WarpPointer`, and the two halves in
+`//components/domicile:pointer_warp` and
+`//chrome/browser/domicile/domicile_pointer_warp.cc`.
+
+THE SINK IS BOUND HERE FOR THE KEYMAP'S REASON NEXT DOOR. A cursor is
+moved through the aura WindowTreeHost the page's view belongs to, which
+is the UI thread's, and the channel is read on the IO thread. Binding it
+here -- where the UI thread is already the current one, and where the
+frame is -- is what keeps //content and //chrome out of
+//components/domicile:control_channel, which deliberately has neither.
+
+By id rather than by frame, because the callback runs on the other side
+of a thread hop: a RenderFrameHost may not be carried across threads,
+and a page that closed in the meantime is a lookup that answers nothing.
+
+WRITTEN BY HAND, AGAINST THE SERIES RATHER THAN IN A CHECKOUT, so its
+post-image blob is not known and is left zeroed: there was no Chromium
+tree to read it from. Regenerate the series with `scripts/extract.sh`
+once this has been applied on a tree -- `scripts/test-patch-series-chain.sh`
+is what will say so, on the next patch that touches this file.
+---
+ chrome/browser/chrome_browser_interface_binders.cc | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index f597145..0000000 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/chrome_browser_interface_binders.h"
+
+ #include "base/task/bind_post_task.h"
++#include "chrome/browser/domicile/domicile_pointer_warp.h"
+ #include "chrome/browser/domicile/domicile_shell_windows.h"
+ #include "components/domicile/browser/control_channel.h"
+ #include "components/domicile/browser/keyboard_layout.h"
+@@ -523,6 +524,16 @@ void PopulateChromeFrameBinders(
+                 base::BindPostTask(
+                     content::GetUIThreadTaskRunner({}),
+                     base::BindRepeating(&domicile::SetProcessKeymap)),
++                // AND WHERE THIS PAGE'S POINTER GOES WHEN IT ASKS. Bound
++                // here for the keymap's reason above: the cursor belongs to
++                // the UI thread, along with the window it is moved within,
++                // and this is where the UI thread already is. The frame goes
++                // in as its id rather than as itself, because what runs on
++                // the far side of that hop may not hold a RenderFrameHost.
++                base::BindPostTask(
++                    content::GetUIThreadTaskRunner({}),
++                    base::BindRepeating(&domicile::WarpPointerIn,
++                                        frame->GetGlobalId())),
+                 // AND WHICH WINDOW THIS PAGE IS. A desk of several monitors is
+                 // several windows, each loading the same shell, and the only
+                 // thing that differs between them is the display they cover.

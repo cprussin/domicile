@@ -64,6 +64,25 @@ source_set("shell_windows") {
   public_deps = [ "//ui/display" ]
 }
 
+# Where the cursor goes when a page asks for it to be moved.
+#
+# A target of its own beside :shell_windows for the same reason that one is
+# one: the arithmetic and the refusals are here, where a test can reach them
+# with no browser and no window, and carrying it out is in
+# //chrome/browser/domicile, which is the only place a window's root can be
+# found. //ui/gfx/geometry and nothing else -- a rectangle and a point.
+source_set("pointer_warp") {
+  sources = [
+    "browser/pointer_warp.cc",
+    "browser/pointer_warp.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
+}
+
 source_set("common") {
   sources = [ "common/domicile_scheme.h" ]
 }
@@ -250,6 +269,7 @@ source_set("unit_tests") {
     "browser/command_protocol_unittest.cc",
     "browser/display_list_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
+    "browser/pointer_warp_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_windows_unittest.cc",
@@ -277,6 +297,7 @@ source_set("unit_tests") {
     ":cursor_shape",
     ":display_transform",
     ":keyboard_layout",
+    ":pointer_warp",
     ":shell_scheme",
     ":shell_source",
     ":shell_windows",

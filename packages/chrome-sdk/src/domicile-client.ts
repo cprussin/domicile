@@ -375,6 +375,25 @@ export class DomicileClient {
   }
 
   /**
+   * Put the pointer at `to`, in this page's own coordinates.
+   *
+   * **The companion to moving the keyboard, and only a desktop where the two
+   * follow each other needs it.** Focus that follows the cursor hands itself
+   * straight back: a keyed focus change leaves the pointer over the window it
+   * came from, and the next thing to cross that window is what the focus is
+   * on. sway answers it with `mouse_warping` and so does every other
+   * compositor; here there is no pointer in the page to move, so the engine
+   * moves the one it is drawing.
+   *
+   * A pair here and two arguments on the host, for the reason
+   * {@link resizeApp} states: a place is one value to a shell and WebIDL has
+   * no tuple.
+   */
+  warpPointer(to: readonly [x: number, y: number]): void {
+    this.#host.warpPointer(to[0], to[1]);
+  }
+
+  /**
    * Ask the client owning `appId` to close its window.
    *
    * A request, not a kill: a terminal exits, an editor with unsaved work puts
