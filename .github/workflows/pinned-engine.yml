@@ -21,15 +21,21 @@ name: Pinned engine
 # which has the new field — never the tarball a user downloads. Every check
 # looked at one half. #413 records the gap and #415 paid for it with a repin.
 #
-# WHY THIS IS AFFORDABLE ON A ONE-SLOT MACHINE. It runs the same pixel guard
-# engine.yml runs, and the only difference is where the engine comes from:
-# `nix build .#engine` is `fetchurl` of the url and hash in
-# `engine-release.nix` plus `autoPatchelfHook` over what comes out — a ~210MB
-# download, and on a warm store not even that. No Chromium tree is touched, no
-# lock is taken, and `crux`'s slot is held for minutes rather than the 27 an
-# incremental engine build takes. That is the whole reason this is a workflow
-# of its own rather than a step in engine.yml, where it would sit behind both
-# that build and the `paths:` filter in front of it.
+# WHY THIS IS AFFORDABLE. It runs the same pixel guard engine.yml runs, and the
+# only difference is where the engine comes from: `nix build .#engine` is
+# `fetchurl` of the url and hash in `engine-release.nix` plus
+# `autoPatchelfHook` over what comes out — a ~210MB download, and on a warm
+# store not even that. No Chromium tree is touched and the tree lock is never
+# taken, so this is minutes rather than the 27 an incremental engine build
+# takes. That is the whole reason this is a workflow of its own rather than a
+# step in engine.yml, where it would sit behind both that build and the
+# `paths:` filter in front of it.
+#
+# BEING CHEAP WAS NOT ENOUGH WHILE THE MACHINE HAD ONE SLOT, which is what the
+# `runs-on:` below is about: a two-minute job queued behind a twenty-nine
+# minute one is a twenty-nine minute job. It has a slot of its own now, and the
+# one thing it still shares with the engine build is the render node — hence
+# the only lock it takes, around the guard step and nothing else.
 #
 # NO `paths:` FILTER HERE, AND THAT IS THE POINT RATHER THAN AN OVERSIGHT.
 # Three independent things break this pair — the compositor's side of the ABI
@@ -48,15 +54,32 @@ on:
   push:
     branches: [main]
 
-# Keyed by ref and never canceling, which is the rule every workflow that
-# reaches for `crux` follows; scripts/test-engine-concurrency.sh asserts it and
-# engine.yml explains what a shared group did to runs 176 and 177. Nothing here
-# leaves a half-linked build behind, but a canceled run still holds the slot
-# while it tears down, and a group of depth one that discards work is worse
-# than a queue that makes it wait.
+# Keyed by ref, which is the rule every workflow that reaches for this machine
+# follows; scripts/test-engine-concurrency.sh asserts it and engine.yml
+# explains what a shared group did to runs 176 and 177.
+#
+# AND THIS ONE CANCELS, WHICH THE OTHERS MUST NOT. The rule they follow is
+# `cancel-in-progress: false`, and its reason is a killed Chromium link leaving a
+# half-linked out/Domicile that the next run inherits. This job compiles no
+# Chromium at all: it is a `fetchurl` of a published tarball, a cargo build in
+# a work directory of its own, and a guard. There is nothing here for a cancel
+# to leave behind.
+#
+# (Said without naming the build tool, because
+# scripts/test-the-pinned-engine-meets-the-compositor.sh greps this whole file
+# for it — comments included — to prove this job is a download. That is a
+# stricter rule than it needs to be and it is not this change's to relax.)
+#
+# An earlier version of this said so and kept `false` anyway, on the reasoning
+# that a canceled run still holds the slot while it tears down and a queue that
+# makes work wait beats a group that discards it. That was true while this job
+# and the engine build shared one slot. They do not: this runs on `crux-light`
+# now, where the thing behind a superseded run in the queue is another run of
+# this same job. Making it wait for a commit nobody will merge is the discard,
+# just spelled as a delay.
 concurrency:
   group: pinned-engine-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -68,14 +91,41 @@ jobs:
     # reach, `scripts/e2e-dmabuf.sh` is the skip CI explicitly allows for it,
     # and `under-wayland.sh` exists because `--ozone-platform=headless` has no
     # `CreateNativePixmapFromHandle` to import into. `crux` has the card.
-    runs-on: [self-hosted, crux]
+    #
+    # `crux-light`, NOT `crux`, AND THAT IS THE WHOLE POINT OF THIS LINE. Both
+    # labels are the same machine; they are different job slots on it
+    # (cprussin/dotfiles: config/machines/crux/domicile-ci.nix). `crux` is the
+    # slot that holds the 97G Chromium checkout, and a run of `engine.yml` owns
+    # it for ~29 minutes. This job opens no part of that checkout -- the engine
+    # it guards is a tarball out of the nix store -- and it ran on that slot
+    # anyway, because there was only one.
+    #
+    # WHAT THAT COST, measured on 2026-09-19 off the Actions API: run #101 of
+    # this workflow was created at 18:21:01, started at 21:22:45 and finished
+    # at 21:24:36. Three hours and two minutes of queue for one minute and
+    # fifty-one seconds of work, and it was an ordinary day rather than a bad
+    # one. This job carries no `paths:` filter on purpose, so that wait was in
+    # front of every pull request in the repository.
+    runs-on: [self-hosted, crux-light]
 
     # Minutes, not hours, and that is the claim this job is making. Measured on
     # `crux`, first run, warm store: 18s to fetch the engine, 39s to build the
-    # compositor, 64s for the guard — 2m07s end to end. A run that is still
-    # going at half an hour is stuck, and on a single-slot machine a stuck run
-    # is the cost.
+    # compositor, 64s for the guard — 2m07s end to end, and 1m51s on the run
+    # cited above. A run that is still going at half an hour is stuck.
+    #
+    # The half hour now has one thing in it that can legitimately wait: the
+    # render node lock below, which gives up after twenty minutes. That is
+    # deliberately inside this timeout rather than outside it, so a wedged card
+    # fails with the lock's message — which says who holds it and how to clear
+    # it — rather than with GitHub's, which says nothing.
     timeout-minutes: 30
+
+    env:
+      # Who holds the render node, in words a person reading a held-lock
+      # message can act on. The same shape engine.yml uses for the tree lock,
+      # and for the same reason: "held by someone" is not something anybody can
+      # do anything about.
+      CARD_OWNER: pinned-engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
 
     steps:
       - uses: actions/checkout@v7
@@ -130,6 +180,27 @@ jobs:
       # script with `NEGATIVE=1` to show it can fail, and that property belongs
       # to the script rather than to either caller — a second copy here would
       # buy nothing and spend the slot twice.
+      # ONE JOB AT A TIME ON THE CARD, and only around the step that uses it.
+      #
+      # This job and `engine.yml` are now two slots on one machine, which is
+      # what stopped this waiting hours for a tarball fetch. The card did not
+      # get a second one. Most of what either job does is fine beside the other
+      # -- a pixel comparison asks whether a color landed, and a busy machine
+      # makes that slower rather than wrong -- but `engine.yml` ends in
+      # `guard-latency.sh`, which times sixty keystroke-to-pixel rounds, and a
+      # second client on the render node is indistinguishable from the
+      # regression that guard is there to catch.
+      #
+      # Taken here rather than for the whole job, because holding it from
+      # checkout to drop would put these two back into one queue and undo the
+      # change that gave this job its own slot. The fetch and the cargo build
+      # above touch no card.
+      #
+      # It waits where the tree lock refuses; see the script's header for why
+      # the second slot is what makes that safe.
+      - name: Take the render node
+        run: .github/scripts/engine-render-node-lock.sh take "$CARD_OWNER"
+
       - name: The pinned engine draws a client's window on the page
         env:
           OUT: .
@@ -138,6 +209,15 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/under-wayland.sh "$ENGINE" \
             packages/domicile-engine/scripts/guard-client-window.sh "$ENGINE"
+
+      # Even when the guard failed, and even when this run is being canceled --
+      # which this job's concurrency group now does -- because a lock left
+      # behind by a canceled run is the ordinary way this leaks. `drop` is a
+      # no-op unless the lock is still ours, so the run that failed to take it
+      # in the first place reaches here harmlessly.
+      - name: Drop the render node
+        if: ${{ always() }}
+        run: .github/scripts/engine-render-node-lock.sh drop "$CARD_OWNER"
 
       - name: What the guard wrote down
         if: ${{ failure() }}
