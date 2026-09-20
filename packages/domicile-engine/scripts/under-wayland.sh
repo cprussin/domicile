@@ -27,6 +27,10 @@
 # Mesa.
 set -u
 
+SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=packages/domicile-engine/scripts/lib-compositor-cleanup.sh
+. "$SCRIPTS/lib-compositor-cleanup.sh"
+
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
   echo "usage: under-wayland.sh <path to chromium/src> <script> [args...]" >&2
@@ -56,10 +60,20 @@ command -v nix >/dev/null || {
 export XDG_RUNTIME_DIR="${UNDER_WAYLAND_RUNTIME_DIR:-/tmp/domicile-under-wayland-rt}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
+# What everything this run starts carries, the compositor included. It is how a
+# later run tells a compositor whose script is still using it from one whose
+# script is gone; `owner_is_running` in the library is what reads it.
+export DOMICILE_UNDER_WAYLAND="$$"
+# A step that is killed outright — a `timeout-minutes` expiring, a job
+# canceled — never reaches the trap below, so its compositor outlives it and
+# nothing else on the machine is going to collect it. This is where that one
+# goes.
+kill_compositors
 # A compositor that was killed leaves its socket behind, and the wait below
 # takes the first one it finds — which would be the dead one, and every client
 # then fails with "Connection refused" against a compositor that is running
-# perfectly well next to it.
+# perfectly well next to it. The sweep above is what makes that sentence true:
+# before it, the compositor behind a stale socket was usually still running.
 rm -f "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null || true
 # The virtual output has to be bigger than the largest page any check drives,
 # or the compositor clamps the window and the page does not fit. wlroots'
@@ -89,6 +103,7 @@ CONFIG_EOF
 # says `failed to execute message bus daemon`. sway then never starts, and the
 # only symptom out here is "no compositor came up".
 nix shell nixpkgs#sway nixpkgs#dbus --command env \
+  "$(compositor_env)" \
   XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
   WLR_BACKENDS=headless \
   WLR_LIBINPUT_NO_DEVICES=1 \
@@ -96,7 +111,9 @@ nix shell nixpkgs#sway nixpkgs#dbus --command env \
   sway -c "$CONFIG" >/tmp/domicile-under-wayland.log 2>&1 &
 COMPOSITOR=$!
 cleanup() {
-  kill "$COMPOSITOR" 2>/dev/null
+  # Not `kill "$COMPOSITOR"`: that pid is dbus-run-session's, and killing it
+  # leaves the bus, sway and swaybg behind. See lib-compositor-cleanup.sh.
+  kill_compositors "$$"
   wait "$COMPOSITOR" 2>/dev/null
   rm -f "$CONFIG"
 }
