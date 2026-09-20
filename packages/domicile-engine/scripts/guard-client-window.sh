@@ -37,6 +37,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-control-budget.sh
+. "$SCRIPTS/lib-control-budget.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -210,12 +212,36 @@ else
 fi
 
 # The compositor logs what viz drew each time it submits.
+#
+# HOW LONG TO WATCH IS NOT THE SAME QUESTION FOR THE TWO RUNS. The guard stops
+# the moment a color appears; 60 is how patient it is willing to be on a slow
+# machine, and it almost never spends it. The control cannot stop early -- with
+# no client there is nothing to appear -- so it spends all 60 every time, which
+# is why it was measured at 2m04 against the guard's 1m05.
+#
+# So the control waits a multiple of what the guard just measured instead. The
+# two are consecutive steps of one job against one build, so that number is a
+# better statement of "long enough for it to have shown up" than a constant
+# chosen for the worst machine. With no measurement to hand -- a control run on
+# its own -- it is the full 60, exactly as before. See lib-control-budget.sh.
+LOOKS="${LOOKS:-60}"
+[ "$NEGATIVE" = "1" ] && LOOKS="$(budget_for client-window "$LOOKS")"
+
 DRAWN=""
-for _ in $(seq 1 60); do
+WAITED=0
+for _ in $(seq 1 "$LOOKS"); do
   DRAWN=$(grep -oE "engine drew #[0-9A-F]{8}" "$COMP_LOG" | tail -1 | grep -oE "[0-9A-F]{8}$")
   [ -n "$DRAWN" ] && break
   sleep 1
+  WAITED=$((WAITED + 1))
 done
+
+# Only what the GUARD measured, and only when it actually saw something: a run
+# that timed out measured its own patience rather than the system's, and the
+# control must not inherit that as though it were a reading.
+if [ "$NEGATIVE" != "1" ] && [ -n "$DRAWN" ]; then
+  budget_note client-window "$WAITED"
+fi
 
 echo
 if [ -z "$DRAWN" ]; then

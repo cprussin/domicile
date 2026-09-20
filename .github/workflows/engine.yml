@@ -189,8 +189,21 @@ jobs:
       # below will happily print it — which it did, for three reads of a job
       # that had failed before any guard ran. Numbers from a previous run are
       # worse than no numbers.
+      # AND THE CONTROL BUDGETS, which are not logs and are the same hazard.
+      # A guard writes down how long it waited so that its control can watch
+      # for a multiple of that rather than a constant; the runner is not
+      # ephemeral, so a number from the last job is sitting there. The library
+      # ignores a note older than ten minutes for exactly this, and a clock is
+      # a worse guarantee than an empty directory. See lib-control-budget.sh.
+      #
+      # Beside the logs and for the same reason: /tmp is what the steps of one
+      # job share. This used to read `${TMPDIR:-/tmp}` and so emptied a third
+      # directory again — `nix develop` gives every `--command` a $TMPDIR of
+      # its own, so no step of this job has the one this step does.
       - name: Forget the last run's logs
-        run: rm -f /tmp/domicile-*.log
+        run: |
+          rm -f /tmp/domicile-*.log
+          rm -rf /tmp/domicile-control-budgets
 
       # TWO SHELLS, AND WHICH ONE A STEP NEEDS IS NOT A DETAIL.
       #

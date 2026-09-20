@@ -35,6 +35,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-control-budget.sh
+. "$SCRIPTS/lib-control-budget.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -425,14 +427,37 @@ if [ "$EMBEDDED" != "1" ]; then
 fi
 echo "the shell embedded the client it was announced"
 
+# HOW LONG TO WATCH, which is a different question for the two runs. The guard
+# stops when the color turns up and spends 90 only on a machine that is having
+# a bad day. The control is looking for an absence, so it spends all 90 every
+# time -- 1m41 against the guard's 12s, measured on engine run 35496858205, and
+# twice over because manganese runs this again.
+#
+# A multiple of what the guard just measured is the better number: same job,
+# same build, same machine, minutes apart. Per shell, because `simple` and
+# `manganese` are different pages with different amounts of work in front of
+# the first frame, and one's timing is not a statement about the other. No
+# measurement to hand means the full 90, as before. See lib-control-budget.sh.
+LOOKS="${LOOKS:-90}"
+[ "$NEGATIVE" = "1" ] && LOOKS="$(budget_for "shell-$SHELL_NAME" "$LOOKS")"
+
 FOUND=""
-for _ in $(seq 1 90); do
+WAITED=0
+for _ in $(seq 1 "$LOOKS"); do
   FOUND=$(grep -aoE "engine found #[0-9A-F]{8} over .*" "$COMP_LOG" 2>/dev/null |
             tail -1)
   [ -n "$FOUND" ] && break
   kill -0 $COMP 2>/dev/null || break
   sleep 1
+  WAITED=$((WAITED + 1))
 done
+
+# The guard's reading, and only when it read something. A run that gave up
+# measured its own patience, and a control that inherited that would be
+# watching for a multiple of the wrong number.
+if [ "$NEGATIVE" != "1" ] && [ -n "$FOUND" ]; then
+  budget_note "shell-$SHELL_NAME" "$WAITED"
+fi
 
 echo
 if [ "$NEGATIVE" = "1" ]; then
