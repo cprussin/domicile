@@ -274,6 +274,186 @@ contains "and the revision is named" "0000000000000000000000000000000000000000" 
 contains "with the file to look at" "CHROMIUM_PIN" "$missing"
 repin "$NEWER_PIN"
 
+# ---- DEPS that are out of step with the pin ------------------------------
+
+# WHAT BLOCKED EVERY ENGINE BUILD IN THE REPOSITORY ON 2026-09-20, and the one
+# kind of dirty that is nobody's mistake. Chromium's DEPS are git submodules of
+# the superproject, so they are gitlinks rather than files — and `reset --hard`
+# in a superproject does not touch a submodule's working tree. A `gclient sync`
+# at a newer revision moves them; the next run's reset puts the superproject
+# back on the pin and cannot put them back with it; `git status` then reports
+# every one of them as ` M`, and the tree stays that way until a sync at the
+# pin runs.
+#
+# `engine-sync.sh` is that sync and it runs immediately after this script, so
+# the state is the next step's input rather than a reason to stop. What must
+# not happen is this step refusing the job before that step can fix it, which
+# is what failed three pull requests and `main` in one morning.
+#
+# What must ALSO not happen is the deferral becoming a hole: a dep out of step
+# excuses the dep, and nothing else in the tree.
+
+# A dep with two revisions, carried as a real submodule: `.gitmodules` and a
+# gitlink, which is what a Chromium checkout has.
+DEP="$WORK/dep"
+mkdir -p "$DEP"
+git -C "$DEP" init -q
+git -C "$DEP" config user.email dep@example.invalid
+git -C "$DEP" config user.name dep
+echo "at the pin" >"$DEP/dep.cc"
+git -C "$DEP" add -A
+git -C "$DEP" -c commit.gpgsign=false commit -qm "the revision DEPS names at the pin"
+DEP_AT_PIN="$(git -C "$DEP" rev-parse HEAD)"
+echo "a later revision" >>"$DEP/dep.cc"
+git -C "$DEP" -c commit.gpgsign=false commit -qam "the revision a newer DEPS names"
+DEP_AHEAD="$(git -C "$DEP" rev-parse HEAD)"
+
+# `protocol.file.allow`: git refuses a file:// submodule clone by default since
+# CVE-2022-39253, and the fixture has nowhere else to clone one from.
+git -C "$TREE" -c protocol.file.allow=always submodule add -q "$DEP" third_party/dep
+git -C "$TREE/third_party/dep" checkout -q "$DEP_AT_PIN"
+git -C "$TREE" add -A
+git -C "$TREE" -c commit.gpgsign=false commit -qm "a pin whose DEPS are submodules"
+SUB_PIN="$(git -C "$TREE" rev-parse HEAD)"
+repin "$SUB_PIN"
+
+# The stamp `engine-sync.sh` reads to decide whether it may skip the sync, at
+# the path it derives when nothing overrides it.
+STAMP="$WORK/chromium/.domicile-synced-pin"
+stamp_says_the_pin() { printf '%s\n' "$SUB_PIN" >"$STAMP"; }
+
+# What a sync at another pin leaves behind, exactly: the submodule's working
+# tree at the other revision, and the superproject back on the pin.
+diverge_the_deps() { git -C "$TREE/third_party/dep" checkout -q "$DEP_AHEAD"; }
+step_the_deps_back() { git -C "$TREE/third_party/dep" checkout -q "$DEP_AT_PIN"; }
+
+# And what that sync also leaves: a dep a newer DEPS names and this pin does
+# not. It is a gclient clone, so it is a git repository of its own, which is
+# why `git status -uall` prints it as a directory rather than listing the files
+# under it — the real one read `?? third_party/jetstream/v3.0/`.
+a_dep_this_pin_does_not_name() {
+  mkdir -p "$TREE/third_party/jetstream/v3.0"
+  git -C "$TREE/third_party/jetstream/v3.0" init -q
+  echo "fetched by a sync at another pin" >"$TREE/third_party/jetstream/v3.0/JetStream.js"
+}
+
+# ---- neither kind of dirty ----
+
+stamp_says_the_pin
+# Nothing to say, and above all nothing to clear. A reset that dropped the
+# stamp here would put a `gclient sync` in front of every ordinary build, which
+# is minutes on the one machine that has the tree.
+expect "a clean tree is reset without comment" ok "$(status "$(run_reset)")"
+expect "and the sync's fast path is left alone" "$SUB_PIN" "$(cat "$STAMP")"
+
+# ---- DEPS out of step, and nothing else ----
+
+diverge_the_deps
+deps="$(run_reset)"
+expect "DEPS out of step with the pin are not treated as contamination" ok \
+  "$(status "$deps")"
+contains "the dep is named" "third_party/dep" "$deps"
+contains "and it says whose job it is" "engine-sync.sh" "$deps"
+# The advice the old diagnostic gave for this class, which is wrong for it: a
+# gitlink is not a file, and there is no mirrored path it belongs at.
+expect "it does not tell anyone to commit a submodule into the series" "0" \
+  "$(printf '%s\n' "$deps" | grep -c 'packages/domicile-engine/src/third_party/dep' || true)"
+expect "and the sync cannot be skipped after it" "" "$(cat "$STAMP" 2>/dev/null)"
+# This step cannot fix that and does not pretend to. `apply.sh` is the gate
+# that still refuses it, after the sync has had its turn.
+expect "the reset leaves the dep where it found it" "$DEP_AHEAD" \
+  "$(git -C "$TREE/third_party/dep" rev-parse HEAD)"
+
+# ---- a dep this pin does not name, alongside them ----
+
+stamp_says_the_pin
+a_dep_this_pin_does_not_name
+both="$(run_reset)"
+expect "a dep the pin does not name is deferred to the same sync" ok \
+  "$(status "$both")"
+contains "and named" "third_party/jetstream/v3.0/" "$both"
+expect "the sync cannot be skipped after that either" "" "$(cat "$STAMP" 2>/dev/null)"
+expect "and nothing of it is deleted here" "fetched by a sync at another pin" \
+  "$(cat "$TREE/third_party/jetstream/v3.0/JetStream.js")"
+
+# ---- a loose untracked file, alongside them ----
+
+# THE HOLE THE DEFERRAL MUST NOT OPEN. `gclient sync -D` removes a *dep* the
+# current DEPS no longer names — it reads `.gclient_entries`, not the tree — so
+# it does nothing at all about a file somebody wrote. Deferring one would hand
+# the refusal to `apply.sh` minutes later, with none of the advice below it and
+# none of the warning against `git clean -fdx`.
+stamp_says_the_pin
+mkdir -p "$TREE/components/domicile/browser"
+echo "in progress" >"$TREE/components/domicile/browser/shell_url_loader_factory.cc"
+loose="$(run_reset)"
+expect "somebody's work is refused even while the DEPS are out of step" refused \
+  "$(status "$loose")"
+contains "and named" \
+  "components/domicile/browser/shell_url_loader_factory.cc" "$loose"
+contains "with the mirrored path to commit it at" \
+  "packages/domicile-engine/src/components/domicile/browser/shell_url_loader_factory.cc" \
+  "$loose"
+expect "the work is still there afterward" "in progress" \
+  "$(cat "$TREE/components/domicile/browser/shell_url_loader_factory.cc")"
+expect "and a refusal leaves the stamp alone" "$SUB_PIN" "$(cat "$STAMP")"
+rm -rf "$TREE/components/domicile"
+rm -rf "$TREE/third_party/jetstream"
+
+# ---- a tracked file that is not a dep, alongside them ----
+
+# `reset --hard` restores a tracked file, so the only way one is dirty when
+# this check runs is that something wrote it afterward — here, this script's
+# own manifest naming a path it should not. Whatever wrote it, it is not a
+# gitlink and the sync will not put it back.
+stamp_says_the_pin
+printf '%s\n' "upstream.cc" >"$WORK/chromium/.domicile-series-files"
+tracked_too="$(run_reset)"
+expect "a tracked file gone missing is refused even while the DEPS are out of step" \
+  refused "$(status "$tracked_too")"
+contains "and named" "upstream.cc" "$tracked_too"
+expect "and that refusal leaves the stamp alone too" "$SUB_PIN" "$(cat "$STAMP")"
+git -C "$TREE" checkout -q -- upstream.cc
+
+# ---- a dep dirty in its own files, with its revision at the pin ----
+
+# NOT A PIN MISMATCH, so not the sync's and not a reason to clear the stamp.
+# ` M third_party/dep` means either "the recorded revision is not this one" or
+# "there is something in its working tree", and only the first is what
+# `engine-sync.sh` exists to fix — `gclient sync --reset` does not pass
+# `--force`, so a stray file inside a dep survives it. Clearing the stamp for
+# one would put a full `gclient sync` in front of every build from then on, and
+# fix nothing.
+stamp_says_the_pin
+step_the_deps_back
+echo "left by a build" >"$TREE/third_party/dep/scratch.o"
+content="$(run_reset)"
+expect "a dep dirty in its own files is refused, not called a pin mismatch" \
+  refused "$(status "$content")"
+expect "and the fast path is left alone, so ordinary builds stay fast" \
+  "$SUB_PIN" "$(cat "$STAMP")"
+rm -f "$TREE/third_party/dep/scratch.o"
+
+# ---- a stamp that names another pin ----
+
+# The state the repin left the machine in. It must not come out of this
+# claiming anything: the DEPS it describes are at neither pin until a sync
+# says otherwise.
+printf '%s\n' "0000000000000000000000000000000000000000" >"$STAMP"
+diverge_the_deps
+expect "a stamp naming another pin is cleared too, not left standing" ok \
+  "$(status "$(run_reset)")"
+expect "and it claims neither pin afterward" "" "$(cat "$STAMP" 2>/dev/null)"
+step_the_deps_back
+
+# THE TWO SCRIPTS MUST NAME THE SAME FILE. This one clears the stamp and that
+# one reads it; a path spelled two ways is a fast path that skips the sync this
+# step just asked for, and nothing would say so.
+stamp_line() { grep '^STAMP=' "$1"; }
+expect "the stamp path is engine-sync.sh's, character for character" \
+  "$(stamp_line "$ROOT/.github/scripts/engine-sync.sh")" \
+  "$(stamp_line "$RESET_SH")"
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1
