@@ -6,6 +6,7 @@ import {
   WEBVIEW_HISTORY_CHANGE_EVENT,
   WEBVIEW_LOADING_CHANGE_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
+  WEBVIEW_PAGE_CHANGE_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -102,6 +103,27 @@ const asksForAWindow = (element: HTMLWebViewElement, url: string): void => {
   );
 };
 
+/**
+ * The engine reporting where the guest now is and what it says about the
+ * connection behind it — a page committing, a link followed, a certificate
+ * going bad under a page that never moved.
+ *
+ * `defineProperties` rather than assignment because both are readonly on the
+ * real element: where the page is and what the connection is worth are the
+ * browser process's to say.
+ */
+const shows = (
+  element: HTMLWebViewElement,
+  url: string,
+  security: string,
+): void => {
+  Object.defineProperties(element, {
+    security: { configurable: true, value: security },
+    url: { configurable: true, value: url },
+  });
+  fireEvent(element, new Event(WEBVIEW_PAGE_CHANGE_EVENT));
+};
+
 // What a window's box resolves to is decided by the emitted stylesheet, not by
 // any one `css(...)` call: Panda's atomic classes all carry the same
 // specificity, so a window's own `display` survives only if nothing later in
@@ -183,13 +205,13 @@ describe("BrowserWindow", () => {
       );
     });
 
-    // WHERE THE SHELL SENT IT, which is every navigation the shell can see. A
-    // page that follows a link or a redirect goes somewhere this window is
-    // never told about: the guest's page is the browser process's, and the
-    // engine reports its history availability but not its address.
-    it("reports where it sent the page so the window's tab can be retitled", async () => {
+    // WHERE THE PAGE WENT, which is not where it was sent — and the difference
+    // is the whole of what the engine's page report bought. A window named
+    // after the shell's last ask wears the name of the page the user left, the
+    // moment they follow a link.
+    it("reports where the page went, so the window's tab follows it", () => {
       const seen: string[] = [];
-      render(
+      const { container } = render(
         <BrowserWindow
           clickThrough={false}
           depth={0}
@@ -209,9 +231,107 @@ describe("BrowserWindow", () => {
           src="https://example.com"
         />,
       );
-      await userEvent.clear(address());
-      await userEvent.type(address(), "docs.example.com{Enter}");
-      expect(seen).toStrictEqual(["https://docs.example.com"]);
+
+      shows(view(container), "https://elsewhere.example/landing", "secure");
+
+      expect(seen).toStrictEqual(["https://elsewhere.example/landing"]);
+    });
+
+    // ONE REPORT PER PAGE, AND THE CALLBACK'S IDENTITY IS NOT A PAGE. The
+    // desktop hands this window a fresh arrow on every render — `Stage.tsx`
+    // builds one inline — so an effect keyed on the callback alone re-reports
+    // the page it already reported, the desktop renames the window, that
+    // renders the window again, and the loop does not stop.
+    it("reports a page once, however often it is re-rendered", () => {
+      const seen: string[] = [];
+      const windowProps = {
+        clickThrough: false,
+        depth: 0,
+        domicile: silentDomicile,
+        dragging: false,
+        focused: true,
+        frame: FRAME,
+        motion: "resting",
+        onHover: noHover,
+        onMotionEnded: nothingEnded,
+        onOpenWindow: noWindows,
+        onReach: () => undefined,
+        rect: ON_SCREEN,
+        src: "https://example.com",
+      } as const;
+      const report = () => (url: string) => {
+        seen.push(url);
+      };
+      const { container, rerender } = render(
+        <BrowserWindow {...windowProps} onNavigate={report()} />,
+      );
+
+      shows(view(container), "https://elsewhere.example/landing", "secure");
+      // A fresh callback, which is what every render of the desktop hands it.
+      rerender(<BrowserWindow {...windowProps} onNavigate={report()} />);
+      rerender(<BrowserWindow {...windowProps} onNavigate={report()} />);
+
+      expect(seen).toStrictEqual(["https://elsewhere.example/landing"]);
+    });
+
+    // AND THE BAR FOLLOWS IT TOO. The shell sent this window to one place and
+    // the page went to another by itself; what the user reads has to be the
+    // second, or the address bar is describing a page that is not on screen.
+    it("shows where the page went rather than where it was sent", () => {
+      const { container } = render(
+        <BrowserWindow
+          clickThrough={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          motion="resting"
+          onHover={noHover}
+          onMotionEnded={nothingEnded}
+          onNavigate={() => undefined}
+          onOpenWindow={noWindows}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+      expect(address()).toHaveValue("https://example.com");
+
+      shows(view(container), "https://elsewhere.example/landing", "warning");
+
+      expect(address()).toHaveValue("https://elsewhere.example/landing");
+    });
+
+    // AND SO DOES THE LOCK. This is the reading that used to come off the URL
+    // scheme, which answered "secure" for an expired certificate and for a
+    // page running active mixed content alike.
+    it("draws the browser's verdict on the page, not a guess from its scheme", () => {
+      const { container } = render(
+        <BrowserWindow
+          clickThrough={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          motion="resting"
+          onHover={noHover}
+          onMotionEnded={nothingEnded}
+          onNavigate={() => undefined}
+          onOpenWindow={noWindows}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+      // Nothing reported yet: a window whose guest has committed no page has no
+      // verdict to draw, and must not invent one.
+      expect(control("Connection is not known")).toBeVisible();
+
+      shows(view(container), "https://expired.example.com", "dangerous");
+
+      expect(control("Connection is not private")).toBeVisible();
     });
   });
 

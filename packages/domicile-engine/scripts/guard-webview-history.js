@@ -185,6 +185,24 @@ const readState = (at) => {
   );
 };
 
+// WHERE THE ELEMENT SAYS THE PAGE IS, and what the browser says about the
+// connection behind it. A LINE OF ITS OWN rather than two more fields on
+// `history-state`, because the guard parses that line with a sed anchored at
+// both ends — appending to it would break the readings that already work,
+// which is the wrong way to add a measurement.
+//
+// THE PATH AS WELL AS THE ADDRESS. The address is what a person reading the
+// log wants; the path is what the guard compares, for the reason the page
+// sequence is compared by path — the port is the fixture's and changes per run.
+const readPage = (at) => {
+  const url = view.url ?? "";
+  // An element that has reported nothing has no address to take a path out of,
+  // and `new URL("")` throws — which would end the run on a TypeError and turn
+  // "the element said nothing" into "the harness broke".
+  const path = url === "" ? "" : new URL(url).pathname;
+  say(`page-state at=${at} path=${path} security=${view.security} url=${url}`);
+};
+
 // And whether it says a page is on its way, read the same way and at points
 // chosen for what the guest is doing rather than for what was driven at it:
 // one where a page has been sitting there for a whole step, one where a
@@ -210,6 +228,7 @@ const schedule = [
   {
     act: () => {
       readState("start");
+      readPage("start");
       navigate("/two");
     },
     after: settle,
@@ -219,6 +238,7 @@ const schedule = [
       // BEFORE `listen()`, and that order is the measurement: this is the
       // value an element reports having never had a listener on it.
       readState("two-pages");
+      readPage("two-pages");
       listen();
       call("goBack", (v) => v.goBack());
     },
@@ -227,6 +247,7 @@ const schedule = [
   {
     act: () => {
       readState("after-back");
+      readPage("after-back");
       call("goForward", (v) => v.goForward());
     },
     after: step,
@@ -234,6 +255,7 @@ const schedule = [
   {
     act: () => {
       readState("after-forward");
+      readPage("after-forward");
       call("reload", (v) => v.reload());
     },
     after: step,

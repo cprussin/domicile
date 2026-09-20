@@ -158,10 +158,16 @@ costs nothing.
   browser window of its own — but `window.open` gets `null`, the opener and the
   target's name are not carried, and a form POSTed at a new target arrives as a
   GET of its action.
-- **A browser window's address bar cannot follow its page.** The element reports
-  `canGoBack`, `canGoForward` and `loading` and nothing that names a URL, so a
-  chrome can show where it *sent* a window and that something is arriving, and
-  not where the page then went.
+- **A browser window's padlock rests on a guard that cannot fail it.**
+  `PageChanged` carries the guest's visible entry — the address, and
+  `security_state::GetSecurityLevel` over that same entry, which is where
+  Chrome's own omnibox lock comes from. What is not measured is which verdict:
+  the fixture serves plain http from localhost, so the guard asserts that one
+  arrives and that the address follows a `goBack()` the shell never made, and
+  nothing more. The cases a scheme test gets wrong — an expired certificate, a
+  name that does not match, active mixed content — need an https fixture with a
+  cert the browser distrusts, and until one exists `dangerous` is a path no run
+  has taken.
 - **Two things configure a client, and they disagree by a border.** The engine
   states an `<app>`'s box from `ReplacedContentRect` — the content box — and
   `resize_app` reports `offsetWidth`/`offsetHeight`, the border box, so a

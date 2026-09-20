@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { ConnectionSafety } from "../../address/connection-safety";
 import { AddressBar } from "./AddressBar";
 
 /** The props every case here shares; each overrides the one it is about. */
@@ -15,6 +16,7 @@ const BAR = {
   onNavigate: () => undefined,
   onReload: () => undefined,
   onStop: () => undefined,
+  security: ConnectionSafety.Secure,
   visited: ["https://example.com"],
 } as const;
 
@@ -197,9 +199,18 @@ describe("AddressBar", () => {
     expect(address()).toHaveValue("https://docs.example.com");
   });
 
-  it("carries the indicator for the connection it was sent over", () => {
-    render(<AddressBar {...BAR} address="http://example.com" />);
+  // THE INDICATOR IS GIVEN THE VERDICT, NOT THE ADDRESS TO GUESS FROM. An
+  // `https://` whose certificate did not validate is dangerous, and a bar that
+  // read the scheme would put a padlock on it.
+  it("carries the browser's verdict on the page it is showing", () => {
+    render(
+      <AddressBar
+        {...BAR}
+        address="https://expired.example.com"
+        security={ConnectionSafety.Dangerous}
+      />,
+    );
 
-    expect(control("Connection is not encrypted")).toBeVisible();
+    expect(control("Connection is not private")).toBeVisible();
   });
 });

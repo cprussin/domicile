@@ -210,6 +210,14 @@ source_set("web_view_guest") {
     "//base",
     "//components/domicile/mojom",
     "//components/input",
+    # THE LOCK A BROWSER WINDOW DRAWS, and the reason it is Chromium's own
+    # answer rather than the fork's. `security_state` is what Chrome's omnibox
+    # is driven by: `content` builds a VisibleSecurityState out of the visible
+    # entry's SSLStatus and `core` turns it into the level. A fork deriving one
+    # from a URL scheme would be drawing a padlock nobody checked a certificate
+    # for.
+    "//components/security_state/content",
+    "//components/security_state/core",
     "//content/public/browser",
     "//mojo/public/cpp/bindings",
     "//third_party/blink/public/common",
