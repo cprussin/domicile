@@ -70,36 +70,13 @@ jobs:
       # `apt-get` can burn the whole job budget getting nowhere.
       - name: Install the graphics and client stacks
         run: |
-          install() {
-            sudo apt-get update && sudo apt-get install -y \
-              libxkbcommon-dev libwayland-dev \
-              libegl1-mesa-dev libgles2-mesa-dev libgbm-dev mesa-utils \
-              libgl1-mesa-dri \
-              weston wayland-utils \
-              libdrm2 libxkbcommon0
-          }
-          for attempt in 1 2 3; do
-            if timeout --kill-after=10 300 bash -c "$(declare -f install); install"; then
-              exit 0
-            fi
-            echo "::warning::apt attempt $attempt failed or timed out" >&2
-            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 5)); fi
-          done
-          echo "::error::apt did not succeed in three attempts" >&2
-          exit 1
+          .github/scripts/apt-install.sh \
+            libxkbcommon-dev libwayland-dev \
+            libegl1-mesa-dev libgles2-mesa-dev libgbm-dev mesa-utils \
+            libgl1-mesa-dri \
+            weston wayland-utils \
+            libdrm2 libxkbcommon0
 
-      # `wayland-utils` is in that list for a reason worth recording: it
-      # provides `wayland-info`, which `e2e-dmabuf.sh` uses to ask the
-      # compositor what it advertises. Without it the probe cannot run, and the
-      # script reports that as "the compositor is alive but NOT answering: its
-      # event loop is blocked" — a missing tool wearing the signature of a hung
-      # compositor.
-      #
-      # Two of the checks this loop runs used it until `e2e-slow-chrome.sh` was
-      # ported to `tests/backpressure.rs`, which asks the same question of a
-      # client it starts itself and so needs nothing installed.
-      # `smoke-compositor.sh` uses it too and is not in this loop.
-      - run: bun install --frozen-lockfile
 
       # Which tools and libraries actually arrived. When a suite fails on a
       # runner nobody can log into, the first question is always whether it

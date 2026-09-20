@@ -197,8 +197,6 @@ jobs:
       # artifact that cannot show a client's window is not a release, and
       # nothing else here would have noticed a file left out of the manifest.
       - name: The packaged build passes the guard
-        env:
-          OUT: out/Release-staged
         run: |
           set -euo pipefail
           rm -rf "$CHROMIUM/out/Release-staged"
@@ -206,9 +204,13 @@ jobs:
           tar -xf "$STAGE/${{ steps.package.outputs.tarball }}" \
             -C "$CHROMIUM/out/Release-staged" --strip-components=1
           nix develop .#full --command cargo build -p domicile-compositor
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-client-window.sh "$CHROMIUM"
+          # `DOMICILE_GUARD_CONTROL=0` for the reason pinned-engine.yml sets
+          # it: the check runs its control by default and this caller does not
+          # want the second run. engine.yml is where that guard is shown to be
+          # able to fail.
+          DOMICILE_CHROMIUM="$CHROMIUM" DOMICILE_ENGINE_OUT=out/Release-staged \
+            DOMICILE_GUARD_CONTROL=0 \
+            nix develop .#full --command ./scripts/engine-guard-client-window.sh
 
       - name: Publish
         env:

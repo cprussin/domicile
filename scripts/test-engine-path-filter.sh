@@ -262,6 +262,38 @@ else
   fail "a step script builds the engine" "no .github/scripts/engine-*.sh"
 fi
 
+# AND WHAT THE JOB ASSERTS, which is no longer in the workflow at all. The
+# guards, the gtest floors and the artifact check are `scripts/engine-*.sh`,
+# which engine is pointed at and whether each runs its control is
+# `scripts/lib/engine-guard.sh`, and the order they run in and the group that
+# holds them is `scripts/check.sh`. A change to any of those changes what this
+# job proves, so a change to any of those has to be a change it runs on —
+# otherwise the pixel suite can be edited and nothing rebuilds to try it, which
+# is the "too narrow" failure in its most direct form.
+engine_check="$(cd "$ROOT" && ls scripts/engine-*.sh 2>/dev/null | head -1)"
+if [ -n "$engine_check" ]; then
+  triggers "an engine check builds the engine" "$engine_check" "${patterns[@]}"
+else
+  fail "an engine check builds the engine" "no scripts/engine-*.sh"
+fi
+
+real scripts/lib/engine-guard.sh &&
+  triggers "the guard library builds the engine" \
+    scripts/lib/engine-guard.sh "${patterns[@]}"
+
+real scripts/check.sh &&
+  triggers "the runner builds the engine" scripts/check.sh "${patterns[@]}"
+
+# And the other direction for the same directory, because `scripts/` is mostly
+# checks for `ubuntu-latest` and they must never take the `crux` slot. This is
+# what distinguishes the three patterns above from a `scripts/**` somebody
+# widens later.
+does_not_trigger "an unrelated check does not build the engine" \
+  scripts/test-american-english.sh "${patterns[@]}"
+
+does_not_trigger "a nix check does not build the engine" \
+  scripts/nix-the-shells-build.sh "${patterns[@]}"
+
 # --- exactly as narrow as it says -------------------------------------------
 
 # Not a file in the tree, and that is the point: this asserts the SHAPE of the

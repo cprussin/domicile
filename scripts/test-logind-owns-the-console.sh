@@ -196,22 +196,19 @@ else
     "no patch gives DrmVtSwitcher the DrmModeset it relights through"
 fi
 
-for workflow in engine.yml engine-drm-probe.yml; do
-  if grep -q "DrmVtSwitcherTest:" "$ROOT/.github/workflows/$workflow" 2>/dev/null; then
-    ok "$workflow carries a floor for the suite"
-  else
-    fail "$workflow carries a floor for the suite" \
-      "no 'DrmVtSwitcherTest:<n>' in .github/workflows/$workflow"
-  fi
-done
-
-# A floor without a run is a count of tests nobody executed, and this suite was
-# exactly that: counted in both workflows and named in neither filtered run.
-if grep -q 'DrmVtSwitcherTest\.\*' "$ROOT/.github/workflows/engine.yml" 2>/dev/null; then
-  ok "engine.yml's filtered run names the suite"
+# THE FLOOR, WHICH HAS ONE HOME NOW. It used to be written in both
+# engine.yml and engine-drm-probe.yml, and this asserted it was in each —
+# which is the check that noticed nothing when the two copies parted
+# (`DrmScreenTest:26` against `:18`, and this suite missing from one of
+# them altogether). `scripts/engine-drm-unit-tests.sh` is the one list, and
+# both jobs run it, so there is one thing to assert and the filter that
+# runs is derived from the same array rather than written beside it.
+FLOORS="$ROOT/scripts/engine-drm-unit-tests.sh"
+if grep -qE "^ *DrmVtSwitcherTest:[0-9]+$" "$FLOORS" 2>/dev/null; then
+  ok "the DRM suite list carries a floor for the suite"
 else
-  fail "engine.yml's filtered run names the suite" \
-    "DrmVtSwitcherTest.* is not in the --gtest_filter"
+  fail "the DRM suite list carries a floor for the suite" \
+    "no 'DrmVtSwitcherTest:<n>' in scripts/engine-drm-unit-tests.sh, so the suite can stop linking and nothing says so"
 fi
 
 if [ "$FAILED" -gt 0 ]; then

@@ -39,9 +39,11 @@
 #     outlives a job, so a number from an earlier build is not a measurement of
 #     this one and is ignored.
 
-# WHERE THE NOTE GOES, AND WHY IT IS NOT $TMPDIR. A guard and its control are
-# two steps of one job, and on the runner each step is its own
-# `nix develop .#full --command`. The rc script `nix develop` writes ends in
+# WHERE THE NOTE GOES, AND WHY IT IS NOT $TMPDIR. A guard and its control run
+# inside `nix develop .#full --command`, and there are callers where each of
+# them is its OWN invocation of it: `pinned-engine.yml` and
+# `engine-release.yml` each run one guard that way, and so does a person
+# running one by hand. The rc script `nix develop` writes ends in
 #
 #   export NIX_BUILD_TOP="$(mktemp -d -t nix-shell.XXXXXX)"
 #   export TMPDIR="$NIX_BUILD_TOP"      # and TMP, TEMP, TEMPDIR
@@ -61,6 +63,17 @@
 # instead of a log. What being per-unit rather than per-job costs is a note
 # from the last job sitting there, and the staleness check below is what that
 # is for; `engine.yml` empties the directory at the top of a run as well.
+#
+# AND IT STAYS PINNED EVEN THOUGH THE ENGINE GROUP NO LONGER NEEDS IT TO BE.
+# `engine.yml` runs its seventeen checks as one `./scripts/check.sh engine` inside
+# one `nix develop`, and `scripts/lib/engine-guard.sh` runs each guard and its
+# control back to back in that one process tree -- so for that job the two now
+# share a $TMPDIR as well as a /tmp, and either location would carry the note.
+# That is not a reason to move it back. The other callers above are still one
+# invocation per guard, and a note under $TMPDIR would be unreadable for them
+# exactly as it was for every caller before: silently, by spending the full
+# budget, which is the defect two engine runs could not tell from having nothing
+# to read.
 DOMICILE_CONTROL_BUDGET_DIR="${DOMICILE_CONTROL_BUDGET_DIR:-/tmp/domicile-control-budgets}"
 
 # What a control is allowed to infer from the guard's measurement.

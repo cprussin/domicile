@@ -188,22 +188,114 @@ else
     "every crux workflow takes the tree lock, so the split below it is dead code"
 fi
 
+# --- a lock dropped is a lock taken ------------------------------------------
+
+# NOTHING HERE WAS ASKING WHETHER THE TREE LOCK IS EVER TAKEN, and a refactor
+# dropped the `take` step out of `engine.yml` while leaving the `drop` in place.
+# Run 35552949501 said so in one line -- `no lock at
+# /build/chromium/.domicile-tree-lock to drop` -- and every rule in this file
+# still passed, because the rules above find a workflow by its mention of
+# `engine-tree-lock.sh` and the surviving `drop` was mention enough.
+#
+# What that costs is the whole point of the lock: `engine-reset.sh` runs
+# unguarded, and a reset landing inside somebody's build on `crux` is silent --
+# siso carries on and links a binary compiled from two different trees. A loud
+# failure would have been better than a green one.
+#
+# So the pair is asserted as a pair, in both directions. A `take` with no `drop`
+# holds the tree until a person clears it by hand; a `drop` with no `take`
+# protects nothing at all.
+echo "the tree lock is taken and dropped in pairs"
+
+tree_users=0
+for workflow in "$WORKFLOWS"/*.yml; do
+  name="$(basename "$workflow")"
+  commands_of() { grep -v '^[[:space:]]*#' "$1"; }
+  commands_of "$workflow" | grep -q 'engine-tree-lock\.sh' || continue
+  tree_users=$((tree_users + 1))
+
+  takes=0; drops=0
+  commands_of "$workflow" | grep -qE 'engine-tree-lock\.sh take' && takes=1
+  commands_of "$workflow" | grep -qE 'engine-tree-lock\.sh drop' && drops=1
+
+  if [ "$takes" -eq 1 ] && [ "$drops" -eq 1 ]; then
+    ok "$name takes the tree and drops it"
+  elif [ "$drops" -eq 1 ]; then
+    fail "$name takes the tree and drops it" \
+      "it drops the tree lock and never takes it, so the reset runs unguarded and a build in that checkout can be clobbered mid-link"
+  else
+    fail "$name takes the tree and drops it" \
+      "it takes the tree lock and never drops it, so the next run finds the tree held by a job that has ended"
+  fi
+done
+
+if [ "$tree_users" -ge 1 ]; then
+  ok "something takes the tree at all ($tree_users)"
+else
+  fail "something takes the tree at all" \
+    "no workflow names engine-tree-lock.sh, so the rules above asserted nothing"
+fi
+
 # --- the render node --------------------------------------------------------
 
 # WHAT THE SECOND JOB SLOT TOOK AWAY. One slot was one job on the card; two are
-# not, and `guard-latency.sh` is the guard that minds. These two rules are what
-# stop that from being rediscovered as a flaky latency regression six months
-# from now.
+# not, and `guard-latency.sh` is the guard that minds. These rules are what stop
+# that from being rediscovered as a flaky latency regression six months from now.
+#
+# THE SUBJECTS ARE NO LONGER ONLY WORKFLOWS, and that is the one thing to
+# understand here. `engine.yml` used to run the timed guard from a step of its
+# own and take the card around it from two more; it runs `check.sh engine`
+# now, which is a single step, and holding the card for that whole group would
+# be ~15 minutes of guards that do not need it — the one-queue arrangement the
+# second slot exists to leave. So the lock moved into the check that wants it,
+# `scripts/engine-guard-latency.sh`, and the rules follow it there.
+#
+# Both kinds of subject are read, because a rule that only looked at YAML would
+# now assert nothing about the engine side and a rule that only looked at
+# scripts would assert nothing about the light one.
 LOCK_SH=".github/scripts/engine-render-node-lock.sh"
 [ -x "$ROOT/$LOCK_SH" ] || fail "the render node lock exists" "no $ROOT/$LOCK_SH"
 
+# Every file that could run the timed guard or take the card: the workflows, and
+# the engine checks `check.sh` runs. Globbed rather than listed, for the reason
+# the loop above globs the workflows — a sixth check that times something is in
+# scope the moment it exists.
+subjects() {
+  printf '%s\n' "$WORKFLOWS"/*.yml
+  printf '%s\n' "$ROOT"/scripts/engine-*.sh
+}
+
+# A subject's commands, with whole-line comments taken out. Not "everything
+# before a `#`", which is what this used to be: the step that runs the group is
+# `nix develop .#full --command ...`, and a pattern that stopped at the first
+# `#` would cut it in half. These files are the most heavily commented in the
+# repository — `pinned-engine.yml` names `guard-latency.sh` in a comment
+# explaining why it locks the card, and so does the check that takes it — so a
+# grep that could not tell prose from a command would read both as timed guards.
+commands_of() { grep -v '^[[:space:]]*#' "$1"; }
+
+# Whether a subject takes the card, asked in the two spellings there are. A
+# workflow runs the lock script by path; a check keeps the path in a variable
+# and runs `"$CARD" take`, because it also needs it for the drop in its trap.
+#
+# `take` has to follow one or the other on the same line rather than merely
+# appear in the file. Both spellings are required to mention the lock at all
+# first, which is what keeps `engine-tree-lock.sh take` — a different lock over
+# a different thing, in the same workflow — from reading as this one.
+takes_card() {
+  commands_of "$1" | grep -q 'engine-render-node-lock\.sh' || return 1
+  commands_of "$1" |
+    grep -qE '(engine-render-node-lock\.sh|\$\{?CARD\}?)"?[[:space:]]+take'
+}
+
 timed=0
-for workflow in "$WORKFLOWS"/*.yml; do
-  name="$(basename "$workflow")"
-  commands "$workflow" | grep -q 'guard-latency.sh' || continue
+for subject in $(subjects); do
+  [ -e "$subject" ] || continue
+  name="$(basename "$subject")"
+  commands_of "$subject" | grep -q 'guard-latency\.sh' || continue
   timed=$((timed + 1))
 
-  if commands "$workflow" | grep -q "$LOCK_SH take"; then
+  if takes_card "$subject"; then
     ok "$name times something and takes the render node first"
   else
     fail "$name times something and takes the render node first" \
@@ -212,9 +304,9 @@ for workflow in "$WORKFLOWS"/*.yml; do
 done
 
 if [ "$timed" -ge 1 ]; then
-  ok "a workflow that times something was found at all ($timed)"
+  ok "something that times a guard was found at all ($timed)"
 else
-  fail "a workflow that times something was found at all" \
+  fail "something that times a guard was found at all" \
     "nothing runs guard-latency.sh, so the rule above asserted nothing"
 fi
 
@@ -222,32 +314,81 @@ fi
 # the ordinary way this one leaks -- pinned-engine.yml cancels superseded runs
 # now -- and the script does steal a lock that has aged out, but a ten-minute
 # stall on every cancel is not a design, it is a backstop.
+#
+# HOW A SUBJECT SAYS SO DEPENDS ON WHAT IT IS, and both forms mean the same
+# thing. A workflow drops it from a step carrying `if: ${{ always() }}`. A check
+# has no later step to put that in, so it drops it from a `trap ... EXIT`, which
+# is reached however the shell unwinds — including the run that failed to take
+# the lock at all, which `drop` treats as a no-op for the tree lock's reason.
 holders=0
-for workflow in "$WORKFLOWS"/*.yml; do
-  name="$(basename "$workflow")"
-  commands "$workflow" | grep -q "$LOCK_SH take" || continue
+workflow_holders=0
+script_holders=0
+for subject in $(subjects); do
+  [ -e "$subject" ] || continue
+  name="$(basename "$subject")"
+  takes_card "$subject" || continue
   holders=$((holders + 1))
 
-  # The drop, and an `always()` within the few lines above it — which is the
-  # step it belongs to. Read off the file with its comments still in, because
-  # the `if:` and the `run:` are different lines of the same step and the
-  # distance between them is what says they are.
-  if awk -v lock="$LOCK_SH drop" '
-       /always\(\)/ { seen = NR }
-       index($0, lock) && seen && NR - seen <= 4 { found = 1 }
-       END { exit !found }' "$workflow"; then
-    ok "$name drops the render node even when the job did not finish"
-  else
-    fail "$name drops the render node even when the job did not finish" \
-      "its drop step has no \`if: \${{ always() }}\`, so a failed or canceled run leaves the card locked"
-  fi
+  case "$subject" in
+    (*.yml)
+      workflow_holders=$((workflow_holders + 1))
+      # The drop, and an `always()` within the few lines above it — which is the
+      # step it belongs to. Read off the file with its comments still in,
+      # because the `if:` and the `run:` are different lines of the same step
+      # and the distance between them is what says they are.
+      if awk -v lock="engine-render-node-lock.sh drop" '''
+           /always\(\)/ { seen = NR }
+           index($0, lock) && seen && NR - seen <= 4 { found = 1 }
+           END { exit !found }''' "$subject"; then
+        ok "$name drops the render node even when the job did not finish"
+      else
+        fail "$name drops the render node even when the job did not finish" \
+          "its drop step has no \`if: \${{ always() }}\`, so a failed or canceled run leaves the card locked"
+      fi
+      ;;
+    (*)
+      script_holders=$((script_holders + 1))
+      # A trap naming the drop. Asserted as one thing rather than as "there is a
+      # trap somewhere and a drop somewhere": a script with both, unconnected,
+      # is a script that drops the lock only where it happens to reach the line.
+      # Single-quoted, because the pattern has a `$` in it that belongs to grep
+      # rather than to bash: inside double quotes `\$` reaches grep as a bare
+      # `$`, which in an extended regular expression is end-of-line and matches
+      # nothing here. That is a green no-op in the making — the rule reported a
+      # failure it could not have reported a pass for.
+      if grep -qE '^[[:space:]]*trap .*(engine-render-node-lock\.sh|\$\{?CARD\}?)"?[[:space:]]+drop' \
+           "$subject"; then
+        ok "$name drops the render node from a trap, however it unwinds"
+      else
+        fail "$name drops the render node from a trap, however it unwinds" \
+          "it takes the card and never attaches the drop to a trap, so a failure between the two leaves it locked"
+      fi
+      ;;
+  esac
 done
 
 if [ "$holders" -ge 2 ]; then
-  ok "both sides of the machine take the render node ($holders workflows)"
+  ok "the render node is taken by more than one thing ($holders)"
 else
-  fail "both sides of the machine take the render node" \
-    "only $holders workflow(s) take $LOCK_SH; a lock one side does not take is not a lock"
+  fail "the render node is taken by more than one thing" \
+    "only $holders take $LOCK_SH; a lock one side does not take is not a lock"
+fi
+
+# AND ONE OF EACH KIND, because the two rules above are different code and a
+# split that matches nothing on one side asserts nothing on that side. The light
+# job takes it from YAML around its one guard; the engine side takes it from
+# inside the check, because its guards are one step now.
+if [ "$workflow_holders" -ge 1 ]; then
+  ok "a workflow takes the render node ($workflow_holders)"
+else
+  fail "a workflow takes the render node" \
+    "none does, so the always() rule above asserted nothing"
+fi
+if [ "$script_holders" -ge 1 ]; then
+  ok "a check takes the render node ($script_holders)"
+else
+  fail "a check takes the render node" \
+    "none does, so the trap rule above asserted nothing"
 fi
 
 if [ "$FAILED" -gt 0 ]; then
