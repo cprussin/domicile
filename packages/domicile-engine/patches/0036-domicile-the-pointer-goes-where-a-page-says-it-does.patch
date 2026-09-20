@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: domicile CI <ci@domicile.invalid>
-Date: Fri, 19 Sep 2026 00:00:00 +0000
+Date: Sat, 19 Sep 2026 00:00:00 +0000
 Subject: [PATCH] domicile: the pointer goes where a page says it does
 
 A desktop whose focus follows the cursor has to take the cursor with it
@@ -36,18 +36,18 @@ is what will say so, on the next patch that touches this file.
  1 file changed, 11 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index f597145..0000000 100644
+index a3d5250c07..cde1bc0596 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
  #include "chrome/browser/chrome_browser_interface_binders.h"
-
+ 
  #include "base/task/bind_post_task.h"
 +#include "chrome/browser/domicile/domicile_pointer_warp.h"
  #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
-@@ -523,6 +524,16 @@ void PopulateChromeFrameBinders(
+@@ -513,6 +514,16 @@ void PopulateChromeFrameBinders(
                  base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),
                      base::BindRepeating(&domicile::SetProcessKeymap)),
