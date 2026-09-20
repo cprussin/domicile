@@ -201,7 +201,7 @@ class WebViewGuest : public mojom::WebViewGuest,
       WindowOpenDisposition disposition,
       const blink::mojom::WindowFeatures& window_features,
       const content::StoragePartitionConfig& partition_config,
-      content::SessionStorageNamespace* session_storage_namespace) override;
+      content::SessionStorageNamespaceHandle* session_storage_namespace) override;
 
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;

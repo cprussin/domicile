@@ -445,7 +445,7 @@ content::WebContents* WebViewGuest::CreateCustomWebContents(
     WindowOpenDisposition disposition,
     const blink::mojom::WindowFeatures& window_features,
     const content::StoragePartitionConfig& partition_config,
-    content::SessionStorageNamespace* session_storage_namespace) {
+    content::SessionStorageNamespaceHandle* session_storage_namespace) {
   // AN ADDRESS OR NOTHING, and the invalid case is the one to say out loud: a
   // `window.open()` with no url asks for a handle to write a document into,
   // which is precisely what a window the shell navigates to cannot be. Sending
