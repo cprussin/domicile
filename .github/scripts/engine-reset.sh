@@ -27,6 +27,14 @@
 # Every run after the first used the first one's sources and the first one's
 # build.
 #
+# AND THE DEPS ARE NOT THIS SCRIPT'S AT ALL. Chromium's DEPS are submodules of
+# the superproject, `reset --hard` does not touch a submodule's working tree,
+# and a `gclient sync` at another pin therefore leaves this step looking at
+# modified gitlinks it cannot restore and never could. That is
+# `engine-sync.sh`'s to fix and it runs next, so this step says so and defers
+# rather than refusing the job in front of the thing that repairs it. The long
+# version is beside the check itself, at the bottom.
+#
 # Removed file by file rather than with `git clean`, which would be the obvious
 # tool and is the wrong one here: `-fd` would also delete anything else
 # untracked that gclient's hooks put in this tree, and rebuilding it is four
@@ -137,6 +145,130 @@ git -C "$CHROMIUM" config user.email "ci@domicile.invalid"
 dirty="$(git -C "$CHROMIUM" status --porcelain --untracked-files=all)"
 [ -n "$dirty" ] || exit 0
 
+# THE DEPS ARE NOT THIS SCRIPT'S TO RESTORE, SO THEY ARE NOT ITS TO REFUSE.
+#
+# Chromium's DEPS are git submodules of the superproject: `third_party/angle`,
+# `net/third_party/quiche/src` and everything else DEPS names are gitlinks
+# rather than files. `git reset --hard` in a superproject writes the gitlink
+# and leaves the submodule's own working tree exactly where it was — so the
+# reset above cannot put a dep back at the pin's revision, and never could.
+# What `git status` then reports is ` M third_party/angle`, which looks like a
+# tracked file somebody edited and is nothing of the kind.
+#
+# That state is the ordinary consequence of a repin rather than an accident.
+# The run that moves `CHROMIUM_PIN` is the first to sync the DEPS forward; from
+# then until that repin merges, every run still on the old pin resets the
+# superproject back and finds the DEPS ahead of it. On 2026-09-20 that locked
+# out three pull requests and `main` in twelve minutes, each in four seconds,
+# with a diagnostic telling their authors to commit a submodule into
+# `packages/domicile-engine/src/`.
+#
+# `engine-sync.sh` runs immediately after this step and is exactly the thing
+# that fixes it — `gclient sync --revision "$SOLUTION@$PIN" --reset
+# --delete_unversioned_trees` puts every dep back at the pin's revision and
+# removes the deps a newer DEPS named. So this is the next step's input, not a
+# reason to stop.
+#
+# NOTHING IS LOOSENED BY PASSING HERE. `apply.sh` checks `git status
+# --porcelain` itself, with no `--ignore-submodules`, after the sync has had
+# its turn — see packages/domicile-engine/scripts/apply.sh — and refuses the
+# tree if any of this survived. This step defers; it does not forgive.
+#
+# AND THE DEFERRAL IS NOT A HOLE: a dep out of step excuses the dep, and
+# nothing else in the tree. Anything that is not the sync's to fix still stops
+# the job here, where the diagnostic below can say whose it is — not minutes
+# later inside `apply.sh`, which says only "has uncommitted changes".
+#
+# Three views of the same tree, which is how each class is told from the
+# others. `--ignore-submodules` is the one way of the alternatives that needs
+# nothing but git's own opinion of the index: `git submodule status` reads
+# `.gitmodules` and the submodule config, which a gclient-managed tree does not
+# have to have registered, and `git diff --submodule=short` still leaves the
+# labeling to a parser. Each view only ever drops lines the wider one has, so
+# the differences between them ARE the classes, by construction. `grep -Fxv`
+# does the differencing because the runner has grep and no diffutils — no
+# `diff`, no `cmp` — and `comm` would want both sides sorted first for no gain.
+#
+#   dirty  everything
+#   atpin  everything except what is inside a dep: a submodule line survives
+#          here only when the revision the superproject records for it is not
+#          the one checked out, which is what "out of step with the pin" means
+#   files  no submodule lines at all, so: ordinary files, and only those
+atpin="$(git -C "$CHROMIUM" status --porcelain --untracked-files=all \
+  --ignore-submodules=dirty)"
+files="$(git -C "$CHROMIUM" status --porcelain --untracked-files=all \
+  --ignore-submodules=all)"
+deps="$(printf '%s\n' "$atpin" | grep -Fxv -f <(printf '%s\n' "$files") || true)"
+
+# A dep a newer DEPS named and this pin does not, which a sync at that pin
+# cloned and left behind. It is a git repository of its own, and `git status
+# -uall` prints a nested repository as a directory rather than listing the
+# files under it — every other untracked thing is listed file by file. That
+# trailing slash is the whole difference, and it is what tells
+# `?? third_party/jetstream/v3.0/` apart from somebody's work in progress.
+#
+# Only these are the sync's. `--delete_unversioned_trees` removes a dep that
+# `.gclient_entries` records and the current DEPS does not name; it reads that
+# file, not the tree, so it does nothing whatever about a loose file somebody
+# wrote. Deferring one of those would move the refusal to `apply.sh` and drop
+# every word of advice the diagnostic below gives with it.
+clones="$(printf '%s\n' "$files" | grep -E '^\?\? .*/$' || true)"
+contamination="$(printf '%s\n' "$files" | grep -Ev '^\?\? .*/$' || true)"
+
+# The file `engine-sync.sh` reads to decide it may skip the sync entirely. Same
+# expression as that script's, character for character, so the two cannot
+# drift: one clears it and the other reads it, and a path spelled two ways is a
+# fast path that skips the sync this step just asked for, silently.
+STAMP="${DOMICILE_SYNCED_PIN:-$(dirname "$CHROMIUM")/.domicile-synced-pin}"
+
+if [ -n "$deps" ] && [ -z "$contamination" ]; then
+  echo "the DEPS under $CHROMIUM are not at $pin, so engine-sync.sh has work to do:"
+  # `sed -n 1,20p` rather than `head -20` for the reason the diagnostic below
+  # uses it: under `pipefail` a `head` that closes the pipe early makes the
+  # whole block exit 141. With a total on the truncation line, which the
+  # diagnostic below never printed: twenty lines out of an unstated number
+  # told the runs this was written for nothing about how much of their tree
+  # it meant.
+  printf '%s\n' "$deps" | sed -n '1,20p' | sed 's/^/  /'
+  more="$(printf '%s\n' "$deps" | sed -n '21,$p' | wc -l | tr -d ' ')"
+  [ "$more" -eq 0 ] ||
+    echo "  ... and $more more ($(printf '%s\n' "$deps" | wc -l | tr -d ' ') in all)"
+  echo
+  echo "Each is a gitlink — a submodule DEPS names — and not a file anybody"
+  echo "edited. \`git reset --hard\` does not touch a submodule's working tree, so"
+  echo "this step cannot move them and a \`gclient sync\` at the pin is what does."
+  echo "This is what a repin looks like from a branch that has not taken it yet."
+
+  if [ -n "$clones" ]; then
+    echo
+    echo "And deps this pin does not name, which that sync removes with"
+    echo "\`--delete_unversioned_trees\`. Each is a git repository of its own,"
+    echo "which is why it is listed as a directory and not file by file:"
+    printf '%s\n' "$clones" | sed -n '1,20p' | sed 's/^/  /'
+    more="$(printf '%s\n' "$clones" | sed -n '21,$p' | wc -l | tr -d ' ')"
+    [ "$more" -eq 0 ] || echo "  ... and $more more"
+  fi
+
+  # DEPS STATE IS THE STAMP'S BUSINESS, and `git status` was only ever a proxy
+  # for it that happened to correlate until a pin actually moved. The stamp is
+  # cleared before a sync and written only after one that finished with HEAD at
+  # the pin, so it never describes a tree between two pins — which is why
+  # deferring to it is safe. Usually it already names another pin and the fast
+  # path would not have fired anyway; where it names this one and the deps are
+  # still out of step — a dep moved without a repin — the fast path would skip
+  # the one sync this tree needs. Cleared, so it cannot.
+  #
+  # Only on a real pin mismatch, which is why `atpin` ignores what is inside a
+  # dep: a stray object file in one is not a mismatch, `gclient sync --reset`
+  # does not pass `--force` and would not remove it, and clearing the stamp for
+  # it would buy every build from then on a full sync that fixes nothing.
+  rm -f "$STAMP"
+  echo
+  echo "Cleared $STAMP so the sync cannot take its fast path."
+  echo "apply.sh checks this tree again afterward and still refuses a dirty one."
+  exit 0
+fi
+
 # WHAT A READER NEEDS HERE IS THE CAUSE, NOT THE SYMPTOM. This last fired on a
 # pull request that had nothing to do with it, and the reason — `reset --hard`
 # leaves untracked files, so another agent's work in progress in the shared
@@ -190,10 +322,14 @@ tracked="$(printf '%s\n' "$dirty" | sed -n '/^?? /!p')"
   fi
 
   if [ -n "$tracked" ]; then
-    echo "Tracked and modified — edits to upstream files that are not in the"
-    echo "series. \`reset --hard\` should have restored these, so something wrote"
-    echo "them after it ran, which most likely means a build or a \`git am\` is"
-    echo "in this tree right now:"
+    echo "Tracked and modified. A path here is one of two things. If it is a"
+    echo "dep — a submodule DEPS names — it is either out of step with the pin,"
+    echo "which is engine-sync.sh's and would have been deferred to it had the"
+    echo "rest of this tree been clean, or dirty in its own working tree, which"
+    echo "no sync of ours removes. Otherwise it is an ordinary file, and"
+    echo "\`reset --hard\` does restore one of those — so it was written after"
+    echo "the reset ran, which most likely means a build or a \`git am\` is in"
+    echo "this tree right now:"
     printf '%s\n' "$tracked" | sed -n '1,20p' | sed 's/^/  /'
   fi
 

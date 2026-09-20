@@ -293,9 +293,14 @@ file has no counterpart in `src/` until you put one there.
 DEPS were last synced to is written beside the checkout, in
 `/build/chromium/.domicile-synced-pin`; a run whose pin matches it does not
 start `gclient` at all, which is one `cat` against an incremental build of
-~1m on a machine with one job slot. The run that does pay for it is the repin —
-and that run is rebuilding most of Chromium anyway, so the minutes of
-`gclient` are not the number in it that matters.
+~1m on a machine with one job slot. `engine-reset.sh` is the file's other
+writer: where it finds the deps out of step with the pin — which is every run
+on the old pin between a repin and its merge — it deletes the stamp, because
+that is exactly the state the fast path must not skip over.
+
+The run that does pay for the sync is the repin — and that run is rebuilding
+most of Chromium anyway, so the minutes of `gclient` are not the number in it
+that matters.
 
 **The first run after this shipped syncs once for nothing.** There is no stamp
 on `crux` until a run writes one, and a sync at the pin the tree is already at
