@@ -21,6 +21,16 @@ answers kMouseDown -- so the release changes nothing about what the guard
 reads; it is sent so that the window the guard leaves behind is not one with a
 button held down in it, which every later reading of that run would be taken
 under.
+
+WHICH BUTTON IS AN ARGUMENT, AND FOR ONE GUARD IT IS THE EXPERIMENT. A left
+press on a link follows it in place; a MIDDLE press on the same link asks for
+it in a second window, and that difference is decided in the browser process
+rather than in the page. guard-webview-routed-link.sh drives both at one point
+on one link, so the only thing that differs between its run and its control is
+this flag -- which is why the button is named here rather than assumed.
+
+The release carries the same `button` as the press. A middle press answered by
+a left release is not a click anybody makes, and Blink pairs them by button.
 """
 
 import argparse
@@ -28,38 +38,40 @@ import sys
 
 from guard_webview_devtools import command, connect, shell_target
 
-# What a left button looks like in the two ways CDP asks for it: `button` names
-# which one the event is about, and `buttons` is the mask of what is held while
-# it happens. A press with an empty mask is not a press.
-LEFT = "left"
-LEFT_HELD = 1
+# What a button looks like in the two ways CDP asks for it: `button` names which
+# one the event is about, and `buttons` is the mask of what is held while it
+# happens. The two are not the same spelling of one fact -- the mask is a
+# bitfield in the DOM's own order, where 1 is primary and 4 is auxiliary (2 is
+# the secondary button, which nothing here sends) -- and a press with an empty
+# mask is not a press.
+BUTTONS = {"left": 1, "middle": 4}
 NONE_HELD = 0
 
 
-def click(connection, x, y):
-    """Press and release the left button at (x, y), and answer with both."""
+def click(connection, x, y, button="left"):
+    """Press and release `button` at (x, y), and answer with both."""
     return [
-        command(connection, 1, "Input.dispatchMouseEvent", pressing(x, y)),
-        command(connection, 2, "Input.dispatchMouseEvent", releasing(x, y)),
+        command(connection, 1, "Input.dispatchMouseEvent", pressing(x, y, button)),
+        command(connection, 2, "Input.dispatchMouseEvent", releasing(x, y, button)),
     ]
 
 
-def pressing(x, y):
-    """The left button going down at (x, y)."""
-    return mouse_event("mousePressed", x, y, LEFT_HELD)
+def pressing(x, y, button="left"):
+    """The button going down at (x, y), and held while it does."""
+    return mouse_event("mousePressed", x, y, button, BUTTONS[button])
 
 
-def releasing(x, y):
+def releasing(x, y, button="left"):
     """And coming back up, with nothing held once it has."""
-    return mouse_event("mouseReleased", x, y, NONE_HELD)
+    return mouse_event("mouseReleased", x, y, button, NONE_HELD)
 
 
-def mouse_event(kind, x, y, held):
+def mouse_event(kind, x, y, button, held):
     return {
         "type": kind,
         "x": x,
         "y": y,
-        "button": LEFT,
+        "button": button,
         "buttons": held,
         # A press that is not the first of a click is one the page can tell
         # from a click, and `Input.dispatchMouseEvent` defaults this to 0.
@@ -76,16 +88,25 @@ def main():
     parser.add_argument(
         "--y", type=int, required=True, help="CSS pixels from the window's top"
     )
+    parser.add_argument(
+        "--button",
+        choices=sorted(BUTTONS),
+        default="left",
+        help="which button to press; middle is what asks for a second window",
+    )
     arguments = parser.parse_args()
 
     connection = connect(shell_target(arguments.port))
-    answers = click(connection, arguments.x, arguments.y)
+    answers = click(connection, arguments.x, arguments.y, arguments.button)
     connection.close()
 
     for answer in answers:
         if "error" in answer:
             raise SystemExit("the engine refused the click: %s" % answer["error"])
-    print("clicked at %d,%d" % (arguments.x, arguments.y), flush=True)
+    print(
+        "clicked the %s button at %d,%d" % (arguments.button, arguments.x, arguments.y),
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
