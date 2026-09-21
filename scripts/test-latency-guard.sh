@@ -52,7 +52,7 @@ spread() { # $1 label, $2 median
   say "latency $1: min $2, median $2, max $2 ms over 60 (median 1.0 frames)"
 }
 
-run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered, $6 display frame
+run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered, $6 display frame, $7 moved before the answer
   local f; f="$(mktemp "$FIXTURES/XXXXXX")"
   {
     # The compositor says this first, and the guard divides by it. Defaulted to
@@ -69,6 +69,7 @@ run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 endin
       say "latency key to pixel: nothing measured"
     fi
     say "latency: $3 round(s) abandoned by the client"
+    say "latency: ${7:-0} round(s) whose pixel moved before the client answered"
     say "latency: ${5:-0} round(s) whose key was never delivered"
     case "$4" in
       completed) say "latency: the run completed" ;;
@@ -201,6 +202,18 @@ expect "an undelivered key fails, and is not the client's fault" \
   "::error::guard-latency: 2 round(s) never had their key delivered, so the run measured fewer rounds than it set out to and the compositor is what failed, not the client" \
   "$(verdict "$(run_log 16.67 16.68 0 completed 2)" 0)"
 
+# The third thing a round can be. Nothing the client draws in answer can reach
+# the screen before the commit the round waits for, so a probe point that
+# changed color before that commit was changed by a frame from before the key —
+# and the round is given up rather than timed from whichever commit came next.
+# It costs the run a round exactly as the two above do.
+MOVED="$(run_log 16.67 16.68 0 completed 0 16.67 2)"
+expect "a round whose pixel moved before the client answered fails" \
+  "1" "$(verdict_code "$MOVED" 0)"
+expect "and says the keystroke is not what moved it" \
+  "::error::guard-latency: 2 round(s) had the probe point change color before the client answered, so a frame from before the keystroke is what changed it and the run measured fewer rounds than it set out to" \
+  "$(verdict "$MOVED" 0)"
+
 # A run that never reported at all. Distinct from every case above, which all
 # have an ending: a round only advances on a commit, so a client that answers a
 # key with no redraw leaves the run waiting rather than abandoning rounds. A
@@ -247,6 +260,14 @@ expect "a control that never priced the probe fails" \
   "1" "$(verdict_code "$(run_log '' '' 3 completed)" 1)"
 expect "a control where nothing was abandoned fails" \
   "1" "$(verdict_code "$(run_log 16.67 '' 0 completed)" 1)"
+
+# The check above belongs to the measurement and not to the control: what the
+# control proves is that a client answering no keys produces no figure, and a
+# round given up before that client answered is the guard doing its job rather
+# than a reason to fail it. Without this, moving that check above the control's
+# branch would go unnoticed.
+expect "a control whose rounds moved before an answer is still a correct control" \
+  "0" "$(verdict_code "$(run_log 16.67 '' 1 completed 0 16.67 2)" 1)"
 
 # And one is enough. What the control proves is that the guard *notices* a
 # client answering nothing, so the check is "at least one", not "how many" —

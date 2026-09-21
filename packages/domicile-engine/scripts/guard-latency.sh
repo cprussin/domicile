@@ -97,10 +97,18 @@ PROFILE="${PROFILE:-/tmp/domicile-latency-profile}"
 COMPOSITOR="$SCRIPTS/../../../target/debug/domicile-compositor"
 APP_ID="${APP_ID:-app-1}"
 
-# NEGATIVE=1 runs a client that ignores the keyboard. Every round must then be
-# abandoned and the guard must fail. Without this the guard would pass on any
+# NEGATIVE=1 runs a client that ignores the keyboard. No round may then produce
+# a figure, and the guard must fail. Without this the guard would pass on any
 # client that merely draws, which is the failure `guard-two-windows.sh` shipped
 # once already.
+#
+# It has already earned its keep. The control's client answers no keys and
+# still redraws, so a round was started by a commit the key had not caused, and
+# the run was not watching the probe point between the press and that commit —
+# so a color change that arrived during the wait was priced as the keystroke's.
+# One round in three, about half the runs. The control said the guard was
+# measuring something other than its own keystrokes, and it was right: the run
+# watches that wait now, and gives the round up instead. See `latency.rs`.
 NEGATIVE="${NEGATIVE:-0}"
 
 # How many display frames `commit to pixel` may take. One means "no stage of
@@ -292,12 +300,14 @@ OURS="$(latency_median "commit to pixel" "$COMP_LOG")"
 THEIRS="$(latency_median "key to commit" "$COMP_LOG")"
 WHOLE="$(latency_median "key to pixel" "$COMP_LOG")"
 ABANDONED="$(latency_abandoned "$COMP_LOG")"
+MOVED="$(latency_moved "$COMP_LOG")"
 UNDELIVERED="$(latency_undelivered "$COMP_LOG")"
 REDREW="$(latency_redrew "$COMP_LOG")"
 echo "ended: $ENDED; display frame ${FRAME:-none} ms; floor ${FLOOR:-none} ms;"
 echo "commit to pixel ${OURS:-none} ms;"
 echo "key to commit ${THEIRS:-none} ms; key to pixel ${WHOLE:-none} ms;"
-echo "abandoned ${ABANDONED:-none}; undelivered ${UNDELIVERED:-none};"
+echo "abandoned ${ABANDONED:-none}; moved before the answer ${MOVED:-none};"
+echo "undelivered ${UNDELIVERED:-none};"
 echo "drew again while polling ${REDREW:-none}"
 
 if [ "$NEGATIVE" = "1" ]; then
@@ -345,6 +355,21 @@ if [ "${ABANDONED:-0}" -gt 0 ]; then
   annotate "guard-latency: $ABANDONED round(s) went unanswered — the client did" \
        "not change color when a key was pressed, so what was measured is not" \
        "a keystroke reaching a pixel"
+  grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
+  exit 1
+fi
+
+# The third, and the one the negative control caught by failing. Nothing the
+# client draws in answer can reach the screen before the commit the round is
+# waiting for, so a probe point that changed color before that commit was
+# changed by a frame committed before the key. The run gives those rounds up
+# rather than timing them from whichever commit came next — that is what used
+# to produce a commit-to-pixel figure out of a client answering nothing — and
+# each one costs the run a round the median is then not over.
+if [ "${MOVED:-0}" -gt 0 ]; then
+  annotate "guard-latency: $MOVED round(s) had the probe point change color" \
+       "before the client answered, so a frame from before the keystroke is" \
+       "what changed it and the run measured fewer rounds than it set out to"
   grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
   exit 1
 fi

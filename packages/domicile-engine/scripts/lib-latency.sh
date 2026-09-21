@@ -90,6 +90,21 @@ latency_redrew() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
+# How many rounds were given up because the probe point changed color before
+# the client answered. Empty when the run never said.
+#
+# Its own reader, and its own accusation again: the client was asked and the
+# screen moved anyway, which means a frame from before the key reached it. The
+# round is not a measurement and is not counted as one — so a guard that read
+# only `abandoned` would report a run as whole while it measured fewer rounds
+# than it set out to.
+latency_moved() {
+  local log="$1"
+  grep -a "round(s) whose pixel moved before the client answered" "$log" 2>/dev/null |
+    tail -1 |
+    sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
+}
+
 # How many rounds this compositor failed to deliver a key for. Empty when the
 # run never said.
 #

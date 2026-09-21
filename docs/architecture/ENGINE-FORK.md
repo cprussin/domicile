@@ -484,6 +484,16 @@ is the run's own reported frame rather than the sampled floor: a floor of
 quantized to probe round trips and that run's was 29.18. `guard-latency.sh`'s
 header carries the whole argument.
 
+**The wait for the client's frame is watched, or the figure is not a
+keystroke's.** Nothing the client draws in answer reaches the screen before the
+frame it commits, so a color change seen before that commit came from a frame
+committed before the key. The run gives those rounds up and counts them
+(`round(s) whose pixel moved before the client answered`) rather than timing
+them from whichever commit came next. The negative control found this by
+failing: a client that answers no keys still reported 25.93 ms commit to pixel
+over one round. The cost is up to one probe round trip inside `key to commit`,
+which is the bucket already declared impure.
+
 **Two instruments agree on the frame.** In the same CI job as run 4,
 `css_parity.cc` — which runs inside the browser and can ask viz — reported a
 `BeginFrameArgs` interval of 16.67 ms and a probe round trip with a median of

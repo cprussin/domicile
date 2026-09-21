@@ -2036,6 +2036,17 @@ impl DomicileCompositor {
             "latency: {} round(s) abandoned by the client",
             report.abandoned
         );
+        // The third thing a round can be, and the one the client is blameless
+        // for: the probe point changed color while the key was still on its
+        // way to being answered, so a frame from before the press reached the
+        // screen and the round is not a measurement. Said always, because a
+        // run that gave up rounds this way reports a median over the ones it
+        // did not.
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: {} round(s) whose pixel moved before the client answered",
+            report.moved_before_commit
+        );
         // What the client did with the key, as opposed to whether it answered
         // at all. A round counted here answered with more than one frame, and
         // its `commit to pixel` is timed from the first of them — so a run

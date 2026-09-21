@@ -32,6 +32,22 @@
 //! Small, and named rather than hidden. Folding the two together would let a
 //! slow client hide a regression in ours, or report one that is not.
 //!
+//! THE WAIT IS WATCHED, WHICH IS WHAT MAKES THE SECOND NUMBER A KEYSTROKE'S.
+//! The probe is asked through the first bucket as well as the second, because
+//! a color change arriving before the client's commit cannot be that commit's:
+//! nothing the client draws in answer reaches the screen before the frame it
+//! commits, so a change there is a frame from *before* the key, landing late.
+//! A round that sees one is given up — see [`Report::moved_before_commit`].
+//! Left unwatched, the first poll after the commit found a color that had
+//! already changed and priced it as this design's half, which is how a client
+//! answering no keys produced a `commit to pixel` figure at all.
+//!
+//! It is not free: each of those asks is a probe round trip, and the thread is
+//! in one when the client's commit arrives, so `key_to_commit` carries up to
+//! one more display frame than it did. That bucket already says it is not
+//! purely the client's. A number that is a keystroke's and slightly generous
+//! beats one that is neither.
+//!
 //! THE FLOOR IS NOT OPTIONAL. Asking what color a pixel is costs a
 //! `CopyOutputRequest`, which forces the draw it then reads, so a round trip
 //! that changed nothing still takes a display frame. Every number here is at
@@ -142,6 +158,14 @@ pub struct Report {
     /// rather than hidden: the alternative was starting it after delivery,
     /// which drops that work out of every number instead of putting it in a
     /// declared one.
+    ///
+    /// **And the probe is in here too, for up to one round trip.** The wait is
+    /// watched rather than idled through — see the module docs — and the
+    /// thread is inside an ask when the commit arrives, so this reads about a
+    /// display frame higher than it did when nothing watched. That is the
+    /// price of `commit_to_pixel` being a keystroke's, and it is paid by the
+    /// bucket that was already declared impure rather than by the one this
+    /// design answers for.
     pub key_to_commit: Option<Spread>,
     /// That commit to the new color being in the display compositor's
     /// output. **This is the number this design is answerable for.**
@@ -168,6 +192,22 @@ pub struct Report {
     /// client that ignores the keyboard looks like, and is the whole of what a
     /// negative control asserts.
     pub abandoned: usize,
+    /// Rounds given up because the probe point changed color before the
+    /// client answered the key.
+    ///
+    /// **Its own count, and not `abandoned`.** The client was asked, and what
+    /// happened is neither its answer nor its silence: a frame it committed
+    /// before the key went in reached the screen during the wait. Nothing the
+    /// client draws in answer can get there before the commit the round is
+    /// waiting for, so a change here is by construction not the keystroke's.
+    ///
+    /// Counted rather than dropped, because a run that gave up half its
+    /// rounds this way reports a median over the other half, and because it
+    /// is the number that says the probe point is not as still as the floor
+    /// found it. It is what a client answering no keys produces instead of a
+    /// commit-to-pixel figure — see the negative control in
+    /// `guard-latency.sh`, which caught this by failing.
+    pub moved_before_commit: usize,
     /// Rounds whose key was never delivered, because there was no surface to
     /// deliver it to.
     ///
@@ -274,7 +314,10 @@ enum Phase {
     },
     /// Between rounds: the next thing to do is press a key.
     Ready,
-    /// A key has gone in; waiting for the client to commit.
+    /// A key has gone in; waiting for the client to commit, and watching the
+    /// probe point while it does — a change before that commit is a frame from
+    /// before the key, and the round it would otherwise be credited to is
+    /// given up instead.
     Pressed { at: Instant, before: u32 },
     /// The client committed; polling for the color to reach the screen.
     Polling {
@@ -433,6 +476,7 @@ pub struct Latency {
     commit_to_pixel: Vec<Duration>,
     key_to_pixel: Vec<Duration>,
     abandoned: usize,
+    moved_before_commit: usize,
     redrew_while_polling: usize,
     undelivered: usize,
 }
@@ -465,6 +509,7 @@ impl Latency {
             commit_to_pixel: Vec::new(),
             key_to_pixel: Vec::new(),
             abandoned: 0,
+            moved_before_commit: 0,
             redrew_while_polling: 0,
             undelivered: 0,
         }
@@ -508,7 +553,13 @@ impl Latency {
                 };
                 Step::Press
             }
-            Phase::Pressed { .. } | Phase::Done(_) => Step::Wait,
+            // Watched, not waited out. A color change arriving here was
+            // caused by a frame committed before the key — nothing the client
+            // draws in answer can reach the screen before the commit this is
+            // waiting for — so the run has to see it happen, or it will credit
+            // it to whichever commit comes next. See `sampled`.
+            Phase::Pressed { .. } => Step::Sample,
+            Phase::Done(_) => Step::Wait,
         }
     }
 
@@ -576,9 +627,20 @@ impl Latency {
                     }
                 };
             }
-            // A sample answered while we wait for the commit was asked for
-            // before the key went in, so it says nothing about this round.
-            Phase::Ready | Phase::Pressed { .. } | Phase::Done(_) => {}
+            // A sample answered outside a round says nothing about one.
+            Phase::Ready | Phase::Done(_) => {}
+            // The screen moved before the client answered the key, so the key
+            // is not what moved it: the only way a pixel changes here is a
+            // frame committed before the press, arriving now. The round is
+            // given up rather than left to be timed from whichever commit
+            // comes next — which is how a client that answers no keys
+            // produced a commit-to-pixel figure.
+            Phase::Pressed { before, .. } => {
+                if argb != before {
+                    self.moved_before_commit += 1;
+                    self.end_round();
+                }
+            }
             Phase::Polling {
                 keyed,
                 committed,
@@ -724,6 +786,7 @@ impl Latency {
             commit_to_pixel: Spread::of(&self.commit_to_pixel),
             key_to_pixel: Spread::of(&self.key_to_pixel),
             abandoned: self.abandoned,
+            moved_before_commit: self.moved_before_commit,
             redrew_while_polling: self.redrew_while_polling,
             undelivered: self.undelivered,
             ended,
@@ -1051,6 +1114,54 @@ mod tests {
         driver.latency.sampled(driver.now, color);
         let report = driver.latency.report().unwrap();
         assert_eq!(report.commit_to_pixel.unwrap().max, ms(33));
+    }
+
+    /// THE NEGATIVE CONTROL'S FAILURE, and the defect behind it. A round is
+    /// started by the client's next commit, and a client that answers no keys
+    /// still commits — the control's prints a dot every fifth of a second. So
+    /// the wait between the press and that commit can be long, and a color
+    /// change that arrives during it was caused by a frame the key had
+    /// nothing to do with: it was committed before the key went in.
+    ///
+    /// Nothing watched the probe point through that wait, so the first poll
+    /// after the commit found a color that had already changed and credited
+    /// it to the keystroke. That is a commit-to-pixel figure out of a client
+    /// that answered nothing — which is what the control saw, and it was
+    /// right to.
+    #[test]
+    fn a_color_that_changed_before_the_commit_is_not_the_keystrokes_answer() {
+        let mut driver = Driver::new(1, 3, 10);
+        driver.reach_first_press(ms(17));
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+
+        // A frame the key did not cause reaches the screen while the run is
+        // still waiting for the client to answer.
+        assert_eq!(driver.tick(ms(1)), Step::Sample, "the wait is watched");
+        driver.color = 0xFF44_4444;
+        driver.answer(ms(17));
+
+        // The client commits much later, for its own reasons, and the run
+        // keeps being driven: the first poll would find the color it was
+        // already showing, and price the whole of that wait as a keystroke.
+        driver.now += ms(1180);
+        driver.latency.committed(driver.now);
+        driver.tick(ms(0));
+        driver.answer(ms(17));
+
+        let report = driver.latency.report().unwrap();
+        assert_eq!(
+            report.commit_to_pixel, None,
+            "the pixel had changed before the commit, so no commit caused it"
+        );
+        assert_eq!(
+            report.key_to_pixel, None,
+            "and the whole of it is no more a keystroke's than its second half"
+        );
+        assert_eq!(
+            report.moved_before_commit, 1,
+            "a round given up is counted, not quietly missing from the run"
+        );
+        assert_eq!(report.abandoned, 0, "the client was not what failed here");
     }
 
     #[test]
@@ -1386,6 +1497,11 @@ mod tests {
 
     /// Nothing advances without the driver, so a driver that stops answering
     /// stops the run rather than filling it with samples nobody took.
+    ///
+    /// What it asks for while it waits is the probe point — a change there
+    /// before the client's answer is not the client's — and an answer that
+    /// agrees with the color the round is watching for is not a change. It
+    /// must leave the round exactly where it was rather than spend it.
     #[test]
     fn a_press_that_is_never_answered_leaves_the_run_waiting() {
         let mut driver = Driver::new(1, 3, 10);
@@ -1393,7 +1509,8 @@ mod tests {
         assert_eq!(driver.tick(ms(0)), Step::Press);
 
         for _ in 0..5 {
-            assert_eq!(driver.tick(ms(100)), Step::Wait);
+            assert_eq!(driver.tick(ms(100)), Step::Sample);
+            driver.answer(ms(17));
         }
         assert_eq!(driver.latency.report(), None);
     }
