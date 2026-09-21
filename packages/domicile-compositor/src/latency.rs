@@ -177,6 +177,9 @@ pub struct Report {
     /// nothing here is a measurement; it is this compositor failing to do the
     /// one thing a round starts with.
     pub undelivered: usize,
+    /// Rounds the client spent unable to draw, because the engine was holding
+    /// every buffer it had.
+    pub starved: usize,
     /// Rounds where the client committed *again* while we were polling.
     ///
     /// Not a fault, and not counted against anybody. It is the number that
@@ -433,6 +436,10 @@ pub struct Latency {
     commit_to_pixel: Vec<Duration>,
     key_to_pixel: Vec<Duration>,
     abandoned: usize,
+    starved: usize,
+    /// Whether the client owes a frame it was starved out of drawing, so the
+    /// next round's commit is that frame rather than an answer to its key.
+    owes_a_frame: bool,
     redrew_while_polling: usize,
     undelivered: usize,
 }
@@ -465,6 +472,8 @@ impl Latency {
             commit_to_pixel: Vec::new(),
             key_to_pixel: Vec::new(),
             abandoned: 0,
+            starved: 0,
+            owes_a_frame: false,
             redrew_while_polling: 0,
             undelivered: 0,
         }
@@ -615,6 +624,13 @@ impl Latency {
     /// is `Ended::NeverSettled`'s job and not this one's.)
     pub fn committed(&mut self, now: Instant) {
         match self.phase {
+            // The frame a starved client owed, which this round's key did not
+            // ask for. Given up rather than timed: see `client_starved`.
+            Phase::Pressed { .. } if self.owes_a_frame => {
+                self.owes_a_frame = false;
+                self.starved += 1;
+                self.end_round();
+            }
             Phase::Pressed { at, before } => {
                 self.key_to_commit.push(now.saturating_duration_since(at));
                 self.phase = Phase::Polling {
@@ -712,6 +728,44 @@ impl Latency {
         self.end_round();
     }
 
+    /// A buffer was taken back from the engine so the client could draw,
+    /// because viz had sat on it past its deadline.
+    ///
+    /// **Which means the client could not draw until now, and what it draws
+    /// next is the frame it owed rather than an answer to a key.** The engine
+    /// holds a client's dmabufs until viz releases them, so a client with all
+    /// of its buffers outstanding stops drawing entirely; `engine_buffers.rs`
+    /// takes a superseded one back past `HOLD_DEADLINE` precisely so that it
+    /// can carry on. Timed as a round, that recovery reads as a keystroke the
+    /// client took the better part of a second to answer — and as a
+    /// `commit to pixel` figure for a key nothing answered at all, which is
+    /// what engine run 35554054792's negative control reported.
+    ///
+    /// So a round this happens during is not a measurement. It is counted
+    /// under its own name rather than as `abandoned`, for the reason
+    /// `undelivered` is: the client did not fail to answer, it was not in a
+    /// position to.
+    ///
+    /// **The floor needs nothing from this**, which is why there is no arm for
+    /// it. The frame the client owed changes the screen when it arrives, and a
+    /// screen that moves restarts the floor — so a floor that completes after
+    /// one is a run of agreeing answers taken after the client caught up,
+    /// which is exactly what the next round needs.
+    pub fn client_starved(&mut self) {
+        match self.phase {
+            Phase::Pressed { .. } | Phase::Polling { .. } => {
+                self.starved += 1;
+                self.end_round();
+            }
+            // No round to discard, so the debt goes to the round that will
+            // receive the frame: `next` presses out of `Ready` on this same
+            // turn of the loop, long before a client that has just been handed
+            // a buffer back can have drawn into it.
+            Phase::Ready => self.owes_a_frame = true,
+            Phase::Floor { .. } | Phase::Done(_) => {}
+        }
+    }
+
     /// The run's numbers, and how it ended. `None` while it is still running:
     /// a median over a third of a run is a number somebody will quote.
     pub fn report(&self) -> Option<Report> {
@@ -724,6 +778,7 @@ impl Latency {
             commit_to_pixel: Spread::of(&self.commit_to_pixel),
             key_to_pixel: Spread::of(&self.key_to_pixel),
             abandoned: self.abandoned,
+            starved: self.starved,
             redrew_while_polling: self.redrew_while_polling,
             undelivered: self.undelivered,
             ended,
@@ -1337,6 +1392,84 @@ mod tests {
         assert_eq!(report.undelivered, 2, "we never asked the client");
         assert_eq!(report.abandoned, 0, "and must not blame it for that");
         assert_eq!(report.commit_to_pixel, None);
+    }
+
+    /// A round the client spent starved of buffers is not a measurement, and
+    /// the frame it draws when one comes back is not an answer to the key.
+    ///
+    /// The engine holds a client's dmabufs until viz releases them, and a
+    /// client whose buffers are all outstanding cannot draw at all — so
+    /// `engine_buffers.rs` takes back any that viz has sat on past
+    /// `HOLD_DEADLINE`. The frame the client then draws is the one it owed,
+    /// half a second or more after the key that is being timed against it.
+    ///
+    /// Engine run 35554054792's control measured exactly that: four buffers
+    /// taken back mid-run, `key to commit` at 955.23 ms against a client
+    /// committing every 200 ms, and a `commit to pixel` figure out of a client
+    /// that answers no keys at all. The control was right — the run was
+    /// measuring something other than its own keystrokes — and this is that
+    /// something, named rather than timed.
+    #[test]
+    fn a_round_the_client_was_starved_through_is_not_a_measurement() {
+        let mut driver = Driver::new(1, 3, 10);
+        driver.reach_first_press(ms(17));
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+
+        // Past the deadline with every buffer outstanding, so the compositor
+        // takes one back and the client can draw again.
+        driver.now += ms(500);
+        driver.latency.client_starved();
+        // The frame it owed, and the screen changing with it.
+        driver.now += ms(455);
+        driver.latency.committed(driver.now);
+        driver.color = 0xFF00_FF00;
+        driver.answer(ms(26));
+
+        let report = driver.latency.report().unwrap();
+        assert_eq!(report.starved, 1);
+        assert_eq!(report.ended, Ended::Completed);
+        assert_eq!(
+            report.commit_to_pixel, None,
+            "a frame the client owed is not this key's answer reaching a pixel"
+        );
+        assert_eq!(
+            report.key_to_commit, None,
+            "nor is a second of starvation what the client took to think"
+        );
+        assert_eq!(
+            report.abandoned, 0,
+            "the client did not fail to answer; it was not able to draw"
+        );
+    }
+
+    /// The same fact one round later. A buffer taken back between rounds
+    /// leaves the client still owing the frame it could not draw, and the next
+    /// press is what that frame arrives against — so discarding only the round
+    /// a reclaim landed in would credit it to the following key instead.
+    #[test]
+    fn the_frame_a_starved_client_owes_is_not_the_next_rounds_answer() {
+        let mut driver = Driver::new(2, 3, 10);
+        driver.reach_first_press(ms(17));
+        driver.round(ms(5), ms(16));
+        // Between rounds, which is where a timer-driven run mostly is.
+        driver.now += ms(500);
+        driver.latency.client_starved();
+
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+        driver.now += ms(455);
+        driver.latency.committed(driver.now);
+        driver.color = 0xFF00_FF00;
+        driver.answer(ms(26));
+
+        let report = driver.latency.report().unwrap();
+        assert_eq!(report.starved, 1);
+        assert_eq!(report.ended, Ended::Completed);
+        assert_eq!(
+            report.commit_to_pixel.unwrap().count,
+            1,
+            "the clean round is the whole of the measurement"
+        );
+        assert_eq!(report.key_to_commit.unwrap().count, 1);
     }
 
     /// A commit with no key behind it is a blinking cursor, and timing to one

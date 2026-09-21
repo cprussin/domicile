@@ -131,6 +131,31 @@ CONTROL="$(log_of "2026-09-07T14:00:00.6Z  INFO domicile::engine::spike: latency
 expect "a client that answered nothing is counted" \
   "3" "$(latency_abandoned "$CONTROL")"
 
+# A round the client was starved through: the engine held every buffer it had,
+# so the frame it drew when one came back is not an answer to a key. Its own
+# line and its own reader for the reason `undelivered` has one — it is neither
+# the client failing to answer nor a measurement — and anchored on its own
+# wording, because every one of these lines matches `latency: <n> round(s)`.
+STARVED="$(log_of "2026-09-07T14:00:00.6Z  INFO domicile::engine::spike: latency: 2 round(s) abandoned by the client
+2026-09-07T14:00:00.62Z  INFO domicile::engine::spike: latency: 0 round(s) where the client drew again while polling
+2026-09-07T14:00:00.64Z  INFO domicile::engine::spike: latency: 0 round(s) whose key was never delivered
+2026-09-07T14:00:00.66Z  INFO domicile::engine::spike: latency: 1 round(s) whose client was starved of buffers
+2026-09-07T14:00:00.7Z  INFO domicile::engine::spike: latency: the run completed")"
+expect "a round the client was starved through is counted" \
+  "1" "$(latency_starved "$STARVED")"
+expect "and is not read off the abandoned line" \
+  "2" "$(latency_abandoned "$STARVED")"
+expect "nor the undelivered one" \
+  "0" "$(latency_undelivered "$STARVED")"
+
+# A run nothing starved says zero, and a log with no run in it says nothing —
+# the difference between "the engine released every buffer" and "there is no
+# reading", which is the same distinction every other reader here keeps.
+UNSTARVED="$(log_of "2026-09-07T14:00:00.66Z  INFO domicile::engine::spike: latency: 0 round(s) whose client was starved of buffers")"
+expect "a run nothing starved says zero" "0" "$(latency_starved "$UNSTARVED")"
+expect "and a log with no run in it has no count to give" \
+  "" "$(latency_starved "$EMPTY")"
+
 # The compositor's log is colorized: tracing wraps the timestamp, the level
 # and the target in escapes. The message after them is plain, which is what
 # these greps rely on — so one fixture carries the real escapes rather than

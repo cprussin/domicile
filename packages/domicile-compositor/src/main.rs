@@ -1677,6 +1677,11 @@ impl DomicileCompositor {
         // worse than one that tears once and says why.
         let overdue = session.overdue(Instant::now());
 
+        // Whether the window a latency run is measuring is one of them. A
+        // client that could not draw draws the frame it owed the moment one
+        // comes back, and a round timed over that is not a keystroke reaching
+        // a pixel: see `Latency::client_starved`.
+        let mut starved = false;
         for release in releases.into_iter().chain(overdue) {
             match release.why {
                 Returned::Released => {}
@@ -1697,12 +1702,15 @@ impl DomicileCompositor {
                         .as_ref()
                         .and_then(|session| session.app_for(release.surface))
                     {
-                        Some(app_id) => tracing::error!(
-                            app_id,
-                            "the engine never released a client buffer; taking it back so the \
-                             client can draw. Something in viz is holding a dmabuf it has \
-                             finished with"
-                        ),
+                        Some(app_id) => {
+                            starved |= self.latency_app.as_deref() == Some(app_id);
+                            tracing::error!(
+                                app_id,
+                                "the engine never released a client buffer; taking it back so \
+                                 the client can draw. Something in viz is holding a dmabuf it \
+                                 has finished with"
+                            );
+                        }
                         None => tracing::error!(
                             "the engine never released a buffer belonging to a window that has \
                              since gone; taking it back"
@@ -1714,6 +1722,11 @@ impl DomicileCompositor {
                 }
             }
             release.buffer.release();
+        }
+        if starved {
+            if let Some(run) = self.latency.as_mut() {
+                run.client_starved();
+            }
         }
 
         for event in events {
@@ -2044,6 +2057,17 @@ impl DomicileCompositor {
             target: "domicile::engine::spike",
             "latency: {} round(s) whose key was never delivered",
             report.undelivered
+        );
+        // And separately again, because this one points across the seam. A
+        // client with every buffer outstanding cannot draw at all, so the frame
+        // it draws once one is taken back is the frame it owed — and a round
+        // timed over that recovery is a keystroke's cost made out of somebody
+        // else's stall. Said always, for the same reason as the two above:
+        // whoever reads a median here needs to know how many rounds it is over.
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: {} round(s) whose client was starved of buffers",
+            report.starved
         );
         match report.ended {
             latency::Ended::Completed => tracing::info!(

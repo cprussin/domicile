@@ -104,6 +104,23 @@ latency_undelivered() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
+# How many rounds the client spent unable to draw, because the engine was
+# holding every buffer it had. Empty when the run never said.
+#
+# Its own accusation again, and the one that points across the seam: the engine
+# holds a client's dmabufs until viz releases them, so a client with all of its
+# buffers outstanding stops drawing until the compositor takes one back past
+# its deadline. A round that happens over that recovery is timed from a frame
+# the client owed rather than one a key asked for — a `commit to pixel` figure
+# out of a client that answered nothing, which is what the negative control
+# caught on engine run 35554054792. See `Latency::client_starved`.
+latency_starved() {
+  local log="$1"
+  grep -a "round(s) whose client was starved of buffers" "$log" 2>/dev/null |
+    tail -1 |
+    sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
+}
+
 # Whether `$1` is at most `$2` times `$3`, in floating point.
 #
 # `awk` because these are milliseconds with two decimals and `[` compares

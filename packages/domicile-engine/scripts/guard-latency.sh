@@ -101,6 +101,18 @@ APP_ID="${APP_ID:-app-1}"
 # abandoned and the guard must fail. Without this the guard would pass on any
 # client that merely draws, which is the failure `guard-two-windows.sh` shipped
 # once already.
+#
+# IT IS THIS CONTROL THAT FINDS THE STARVED ROUND, and it is not a coincidence:
+# its client is the only one here that draws without being asked. The engine
+# holds a client's dmabufs until viz releases them, so a client committing on
+# its own outruns the releases, ends up with every buffer outstanding and stops
+# drawing — until the compositor takes a superseded one back past its deadline.
+# On engine run 35554054792 that happened four times inside a three-round
+# control, and the frame the client drew after it landed 955 ms after a
+# keystroke, changed the probe point, and was reported as a commit-to-pixel
+# figure for a client that answers nothing. The control was right; the round was
+# not a measurement. `Latency::client_starved` is what gives those rounds up
+# now, and `latency_starved` is what says how many.
 NEGATIVE="${NEGATIVE:-0}"
 
 # How many display frames `commit to pixel` may take. One means "no stage of
@@ -293,11 +305,13 @@ THEIRS="$(latency_median "key to commit" "$COMP_LOG")"
 WHOLE="$(latency_median "key to pixel" "$COMP_LOG")"
 ABANDONED="$(latency_abandoned "$COMP_LOG")"
 UNDELIVERED="$(latency_undelivered "$COMP_LOG")"
+STARVED="$(latency_starved "$COMP_LOG")"
 REDREW="$(latency_redrew "$COMP_LOG")"
 echo "ended: $ENDED; display frame ${FRAME:-none} ms; floor ${FLOOR:-none} ms;"
 echo "commit to pixel ${OURS:-none} ms;"
 echo "key to commit ${THEIRS:-none} ms; key to pixel ${WHOLE:-none} ms;"
 echo "abandoned ${ABANDONED:-none}; undelivered ${UNDELIVERED:-none};"
+echo "starved ${STARVED:-none};"
 echo "drew again while polling ${REDREW:-none}"
 
 if [ "$NEGATIVE" = "1" ]; then
@@ -320,9 +334,21 @@ if [ "$NEGATIVE" = "1" ]; then
          "measuring something other than its own keystrokes"
     exit 1
   fi
+  # AT LEAST ONE CLEAN ROUND, and that is what makes this the control's real
+  # assertion rather than the absence above. A round given up as starved proves
+  # nothing about the client: it was never in a position to answer, so it is not
+  # counted here and the control is not allowed to pass on a run made only of
+  # those. Its own rounds are what a starving client costs this control — a
+  # figure out of a frame it owed is exactly what a control asserting an absence
+  # must never be handed — so the starved count is read but not failed on here.
+  # `Latency::client_starved` is where the round goes, and the guard proper
+  # fails on the same count below, because a median is a number and this one
+  # asserts there is none.
   if [ "${ABANDONED:-0}" -lt 1 ]; then
     annotate "guard-latency negative control: no round was abandoned, so the" \
-         "guard would not have noticed a client that answers nothing"
+         "guard would not have noticed a client that answers nothing." \
+         "${STARVED:-0} round(s) were given up because the engine held every" \
+         "buffer the client had, which is not the client answering nothing"
     exit 1
   fi
   echo "negative control: correct, a client that answers no keys is not a measurement"
@@ -357,6 +383,24 @@ if [ "${UNDELIVERED:-0}" -gt 0 ]; then
        "so the run measured fewer rounds than it set out to and the compositor" \
        "is what failed, not the client"
   grep -aE "latency|no surface" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
+  exit 1
+fi
+
+# The third of these, and the one that points across the seam rather than at
+# either end of the keystroke. The engine holds a client's dmabufs until viz
+# releases them, so a client whose buffers are all outstanding stops drawing
+# until the compositor takes a superseded one back past its deadline — and the
+# frame the client then draws is the one it owed rather than the one a key asked
+# for. `Latency::client_starved` gives that round up instead of timing it, so
+# this is not a median over fewer rounds than it says: it is a run that measured
+# fewer rounds than it set out to, for a reason that is nobody's end of what is
+# being measured. The compositor says which buffer in the log beside it.
+if [ "${STARVED:-0}" -gt 0 ]; then
+  annotate "guard-latency: $STARVED round(s) were given up because the client" \
+       "had no buffer to draw into — the engine held one past its deadline and" \
+       "the compositor took it back, so those rounds priced a frame the client" \
+       "owed rather than a keystroke"
+  grep -aE "latency|never released" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
   exit 1
 fi
 

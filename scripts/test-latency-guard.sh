@@ -52,7 +52,7 @@ spread() { # $1 label, $2 median
   say "latency $1: min $2, median $2, max $2 ms over 60 (median 1.0 frames)"
 }
 
-run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered, $6 display frame
+run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered, $6 display frame, $7 starved
   local f; f="$(mktemp "$FIXTURES/XXXXXX")"
   {
     # The compositor says this first, and the guard divides by it. Defaulted to
@@ -70,6 +70,7 @@ run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 endin
     fi
     say "latency: $3 round(s) abandoned by the client"
     say "latency: ${5:-0} round(s) whose key was never delivered"
+    say "latency: ${7:-0} round(s) whose client was starved of buffers"
     case "$4" in
       completed) say "latency: the run completed" ;;
       unsettled) say "latency: the run gave up — the screen at the probe point never held still, so the probe could not be priced against it" ;;
@@ -201,6 +202,19 @@ expect "an undelivered key fails, and is not the client's fault" \
   "::error::guard-latency: 2 round(s) never had their key delivered, so the run measured fewer rounds than it set out to and the compositor is what failed, not the client" \
   "$(verdict "$(run_log 16.67 16.68 0 completed 2)" 0)"
 
+# A round the client spent with no buffer to draw into is a third accusation
+# again, and the one that points across the seam: the engine held a dmabuf past
+# its deadline, the compositor took it back so the client could carry on, and
+# the frame the client then drew is the one it owed rather than one a key asked
+# for. `Latency::client_starved` gives that round up, so the run measured fewer
+# rounds than it set out to for a reason neither end of the keystroke is.
+STARVED_RUN="$(run_log 16.67 16.68 0 completed 0 16.67 1)"
+expect "a starved round fails even with a good number" \
+  "1" "$(verdict_code "$STARVED_RUN" 0)"
+expect "and blames the buffer the engine held rather than either end" \
+  "::error::guard-latency: 1 round(s) were given up because the client had no buffer to draw into — the engine held one past its deadline and the compositor took it back, so those rounds priced a frame the client owed rather than a keystroke" \
+  "$(verdict "$STARVED_RUN" 0)"
+
 # A run that never reported at all. Distinct from every case above, which all
 # have an ending: a round only advances on a commit, so a client that answers a
 # key with no redraw leaves the run waiting rather than abandoning rounds. A
@@ -254,6 +268,20 @@ expect "a control where nothing was abandoned fails" \
 # control that worked would start failing.
 expect "a control with a single abandoned round is enough" \
   "0" "$(verdict_code "$(run_log 16.67 '' 1 completed)" 1)"
+
+# A CONTROL DOES NOT FAIL ON A STARVED ROUND, and this is the case that says
+# why. What the control asserts is an absence, and a round given up as starved
+# produces no figure — so it cannot manufacture the presence the control is
+# looking for. What it must not do is stand in for the client answering nothing:
+# a control made only of starved rounds proved nothing about the guard, and the
+# abandoned check below is what refuses it.
+expect "a control whose run had a starved round in it is still correct" \
+  "0" "$(verdict_code "$(run_log 16.67 '' 2 completed 0 16.67 1)" 1)"
+expect "but one made only of starved rounds proves nothing" \
+  "1" "$(verdict_code "$(run_log 16.67 '' 0 completed 0 16.67 3)" 1)"
+expect "and says that starvation is not the client answering nothing" \
+  "::error::guard-latency negative control: no round was abandoned, so the guard would not have noticed a client that answers nothing. 3 round(s) were given up because the engine held every buffer the client had, which is not the client answering nothing" \
+  "$(verdict "$(run_log 16.67 '' 0 completed 0 16.67 3)" 1)"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
