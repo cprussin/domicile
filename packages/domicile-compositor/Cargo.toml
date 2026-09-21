@@ -38,6 +38,12 @@ domicile-launch = { path = "../domicile-launch" }
 # `[[bin]]` links against the former. It adds no crate to this tree: Smithay
 # already pulls `wayland-client` and `wayland-protocols` for the server side.
 domicile-test-client = { path = "../domicile-test-client" }
+# The netlink socket the kernel announces device changes on, which is how the
+# battery is read without a timer — see `src/uevents.rs`. Bindings rather than
+# a library: `libc` is already in this tree under Smithay and calloop, and the
+# libc it binds is one every Rust binary links, so this keeps the promise the
+# note above makes about linking nothing but libxkbcommon. libudev would not.
+libc = "0.2"
 # Same dlopen crate Smithay uses for EGL, so libEGL can be probed for before
 # Smithay loads it (it treats a missing library as fatal).
 libloading = "0.9"

@@ -11,7 +11,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use domicile_host::battery::{reading, Charge, PowerSupplies, Reading};
+use domicile_host::battery::{announces_a_power_supply, reading, Charge, PowerSupplies, Reading};
 
 /// The `/sys/class/power_supply` of a machine that is not this one.
 ///
@@ -272,4 +272,59 @@ fn a_chrome_that_has_just_connected_is_told_the_reading_again() {
 #[test]
 fn there_is_nothing_to_tell_a_chrome_before_the_first_reading() {
     assert_eq!(Charge::default().again(), None);
+}
+
+/// One uevent datagram, in the kernel's own format: NUL-separated fields, the
+/// first of them `ACTION@DEVPATH` and the rest `KEY=VALUE`.
+fn datagram(fields: &[&str]) -> Vec<u8> {
+    fields.join("\0").into_bytes()
+}
+
+#[test]
+fn a_power_supply_change_is_worth_reading_the_charge_again() {
+    // What the kernel sends when a lead goes in or out: `power_supply_changed`
+    // in the driver becomes a KOBJ_CHANGE uevent on the supply's device.
+    assert!(announces_a_power_supply(&datagram(&[
+        "change@/devices/LNXSYSTM:00/device:00/ACPI0003:00/power_supply/AC",
+        "ACTION=change",
+        "DEVPATH=/devices/LNXSYSTM:00/device:00/ACPI0003:00/power_supply/AC",
+        "SUBSYSTEM=power_supply",
+        "POWER_SUPPLY_NAME=AC",
+        "SEQNUM=4242",
+    ])));
+}
+
+#[test]
+fn every_other_device_on_the_machine_is_not() {
+    // The filter is the whole reason this is read at all: a desktop sees a
+    // uevent for every device that changes, and re-reading `/sys` for a USB
+    // stick would be the polling this replaced, on somebody else's clock.
+    assert!(!announces_a_power_supply(&datagram(&[
+        "add@/devices/pci0000:00/0000:00:14.0/usb2/2-1",
+        "ACTION=add",
+        "SUBSYSTEM=usb",
+        "SEQNUM=4243",
+    ])));
+}
+
+#[test]
+fn a_subsystem_that_merely_starts_the_same_is_not_one() {
+    // The field is matched whole. Nothing in the kernel is called this today,
+    // and a prefix match is the kind of thing that stays right until it is
+    // not.
+    assert!(!announces_a_power_supply(&datagram(&[
+        "change@/devices/made/up",
+        "SUBSYSTEM=power_supply_wireless",
+    ])));
+}
+
+#[test]
+fn a_datagram_that_is_not_a_uevent_at_all_is_not_one() {
+    // Anything at all may arrive on a netlink socket. None of these is a
+    // power supply, and the worst a datagram that said it was could do is
+    // cost one read of `/sys` — the message is a doorbell and never a
+    // reading.
+    assert!(!announces_a_power_supply(b""));
+    assert!(!announces_a_power_supply(b"\0\0\0"));
+    assert!(!announces_a_power_supply(b"SUBSYSTEM=power_sup"));
 }
