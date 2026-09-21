@@ -12,7 +12,7 @@
 # `engine-nightly`: the nightly is deleted and recreated on every release
 # run, and a pin to it stops resolving as soon as the next build lands.
 {
-  commit = "c2692c14cbcefc1f5e5cb8f990f322bdb42c67d4";
-  url = "https://github.com/cprussin/domicile/releases/download/engine-c2692c1/domicile-engine-c2692c1-linux-x64.tar.zst";
-  hash = "sha256-2bBbi3w09PBzbThqMTs10lNpqt+/eIplGaa0JvCGH6s=";
+  commit = "aa0b9bd91cce230a656bf6d34260408f47862540";
+  url = "https://github.com/cprussin/domicile/releases/download/engine-aa0b9bd/domicile-engine-aa0b9bd-linux-x64.tar.zst";
+  hash = "sha256-aNShRQQL1xe0lEPHYcBGJ184A2RJQ2Qfvhsd12GZZA0=";
 }
