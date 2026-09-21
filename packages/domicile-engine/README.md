@@ -259,7 +259,15 @@ are, and both of these have already happened rather than been imagined:
   the tree, and uncommitted work in the checkout is taken without warning. Take
   the lock around builds:
   `.github/scripts/engine-tree-lock.sh take /build/chromium/src "<who>"`, and
-  drop it with the same owner string when you are done.
+  drop it with the same owner string when you are done. **The lock is at
+  `/build/.domicile-tree-lock`, not inside the tree** — see the pool below for
+  why it had to move out.
+- **`/build/chromium` is a symlink, and CI moves it.** There is more than one
+  tree on that machine now; which one that path names is chosen per run, under
+  the lock, from the pin the run carries. So the lock is not optional even if
+  you never reset anything: a swap under a build you are running compiles half
+  of one tree and half of another, which is the same silent binary as a reset
+  landing mid-build.
 - **A file in the checkout with no counterpart in `src/` wedges the next run.**
   The reset removes the series' own files by walking `src/`, so anything not
   mirrored there survives, and `apply.sh` then refuses the dirty tree. The
@@ -307,6 +315,43 @@ that matters.
 on `crux` until a run writes one, and a sync at the pin the tree is already at
 is a few minutes of `gclient` finding nothing to do. Seeding the file by hand
 would be the manual step this exists to remove.
+
+### More than one tree, so a repin costs one branch rather than all of them
+
+`out/Domicile` is compiled against the pin, so moving it invalidates the whole
+of that directory — and invalidates it *in both directions*, because going back
+to the older pin is as much of a rebuild as going forward was. With one tree on
+the machine, a repin branch and an ordinary engine branch open at the same time
+took turns in it, and every turn was the full build: 4h05m, measured on run
+35576710600. A pull-request run and a merge run each makes that four of them,
+on the one job slot everything else queues behind.
+
+So `/build/chromium` is a symlink into `/build/trees`, and
+`.github/scripts/engine-tree-pool.sh use <pin>` points it at a tree before
+anything reads it:
+
+- a tree already carrying that pin is a **swap**, which makes
+  `engine-series-stamp.sh` answer `carries=true` and skips the reset, the sync,
+  the apply and the compile — the ~1m case, for a pin that used to cost four
+  hours;
+- a pin nothing carries costs what it always cost, in whichever tree no run has
+  asked for in longest. An unused tree goes before a used one, so the first pins
+  fill the pool rather than evicting each other.
+
+It never looks inside a tree: it picks a directory, and whether that directory
+holds this series is still the stamp's question, asked afterward and against
+whatever the path now names. The division is the point — a wrong pick costs one
+run what every run used to cost, and a wrong *claim* about a tree's contents is
+a green check over code nothing compiled.
+
+How many trees there are is the machine's business rather than this
+repository's. `setup-chromium-trees.service` (cprussin/dotfiles:
+`config/machines/crux/chromium-build.nix`) makes the slots, does the one-time
+move of the old checkout into the first of them, and owns the disk arithmetic;
+the pool uses whatever it finds and creates nothing. On a machine where that
+unit has not been deployed there is no pool, and a run builds in the one tree
+exactly as it did before — which is what lets the two repositories land in
+either order.
 
 `build.sh`, `spike.sh` and `guard-css-and-resize.sh` all have to run inside
 Chromium's own toolchain shell — a component build links against that shell's glibc and

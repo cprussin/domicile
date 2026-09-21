@@ -90,6 +90,18 @@ jobs:
       - name: Take the tree
         run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
 
+      # Which tree, for engine.yml's reason and with one of this job's own:
+      # `out/Release` is a second output directory in whichever tree it lands
+      # in, and it is ~40G. Pointing every release at the tree that carries
+      # main's pin keeps it to one of them rather than one per slot, and the
+      # `Room to build in` check above is what says so if that stops being
+      # true. See .github/scripts/engine-tree-pool.sh.
+      - name: Which tree this pin builds in
+        run: |
+          set -euo pipefail
+          .github/scripts/engine-tree-pool.sh use \
+            "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+
       # The same scripts engine.yml resets and syncs with, because it is the
       # same tree, the same reset and the same pin. The reset used to be a
       # second copy of it here, already drifted in the order of its steps.

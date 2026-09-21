@@ -113,6 +113,43 @@ expect "an unnamed lock is not droppable by an empty owner" ok \
   "$(status "$(lock who)")"
 contains "so it is still there to be cleared by hand" "is locked by" "$(lock who)"
 
+# THE LOCK BELONGS TO THE POOL, NOT TO A TREE, AND THAT CHANGED UNDER IT.
+#
+# This used to put the lock beside the checkout — `dirname` of
+# `/build/chromium/src`, so `/build/chromium/.domicile-tree-lock`. That path is
+# now a symlink into one of `engine-tree-pool.sh`'s trees, and `dirname` does
+# not resolve it, so the lock would be written INSIDE whichever tree the
+# symlink named at the time. A job takes the lock, the pool points the path at
+# a different tree, and the `if: always()` drop then looks in the new tree,
+# finds nothing, and says so — leaving a lock nobody can find holding a tree
+# nobody is in, until a person reads this file to work out where it went.
+#
+# And the lock that has to exist is the other one anyway. Two writers in two
+# different trees do not corrupt each other; what they collide over is the
+# path, which is shared. A person building through `/build/chromium/src` while
+# a job swaps that symlink is compiling half of one tree and half of another,
+# which is the silent failure at the top of this file arriving by the new door.
+#
+# So the lock hangs off the build root, which no swap moves.
+unset DOMICILE_TREE_LOCK
+POOL="$WORK/pool"
+mkdir -p "$POOL/trees/tree-0/src" "$POOL/trees/tree-1/src"
+ln -s "$POOL/trees/tree-0" "$POOL/chromium"
+export DOMICILE_BUILD_ROOT="$POOL"
+DOMICILE_BUILD_ROOT="$POOL" "$LOCK_SH" take "$POOL/chromium/src" frank >/dev/null 2>&1
+expect "the lock is at the build root, not inside the tree it names" ok \
+  "$([ -d "$POOL/.domicile-tree-lock" ] && echo ok || echo "it is not there")"
+expect "so a swap of the path cannot strand it" ok \
+  "$([ ! -e "$POOL/trees/tree-0/.domicile-tree-lock" ] && echo ok || echo "it went into the tree")"
+
+# The case that costs a person an afternoon: take, swap, drop. The drop has to
+# find the same lock the take made, whatever the path points at now.
+rm -f "$POOL/chromium" && ln -s "$POOL/trees/tree-1" "$POOL/chromium"
+DOMICILE_BUILD_ROOT="$POOL" "$LOCK_SH" drop "$POOL/chromium/src" frank >/dev/null 2>&1
+expect "and the drop after a swap releases it" ok \
+  "$([ ! -e "$POOL/.domicile-tree-lock" ] && echo ok || echo "still held")"
+unset DOMICILE_BUILD_ROOT
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

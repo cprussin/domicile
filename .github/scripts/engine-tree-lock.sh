@@ -25,11 +25,12 @@
 # `touch` is two, and two is a race — narrow enough that it would hold for
 # months and then not.
 #
-# The lock lives beside the checkout rather than inside it, and that is not a
+# The lock lives outside the checkout rather than inside it, and that is not a
 # preference: a file inside `src/` is untracked in Chromium's repository, which
 # is exactly what makes `git status --porcelain` non-empty, which is exactly
 # what `apply.sh` refuses. A lock that fails the build it is protecting is not
-# a lock.
+# a lock. Which outside — beside the checkout or at the build root — is a
+# question `engine-tree-pool.sh` changed the answer to; see the LOCK= below.
 #
 # It is advisory. Nothing enforces it, and anything that does not take it wins
 # by ignoring it. That is the correct amount of mechanism here: there are two
@@ -47,9 +48,27 @@ chromium="${2:-}"
 owner="${3:-}"
 [ -n "$action" ] && [ -n "$chromium" ] || usage
 
-# Beside the checkout, so `/build/chromium/src` -> `/build/chromium`. Override
-# for tests, which have no /build and should not want one.
-LOCK="${DOMICILE_TREE_LOCK:-$(dirname "$chromium")/.domicile-tree-lock}"
+# AT THE BUILD ROOT, AND IT USED TO BE BESIDE THE CHECKOUT.
+#
+# `dirname` of `/build/chromium/src` is `/build/chromium`, which is now a
+# symlink into one of `engine-tree-pool.sh`'s trees — and `dirname` is textual,
+# so it does not resolve it. The lock would be created INSIDE whichever tree
+# the path named at the time. A job takes it, the pool points the path at
+# another tree, and the `if: always()` drop then looks in the new tree, finds
+# nothing and says so: a lock left holding a tree nobody is in, discoverable
+# only by reading this file.
+#
+# THE LOCK THAT HAS TO EXIST IS THIS ONE ANYWAY. Two writers in two different
+# trees do not collide. What they share is the path, and a person building
+# through `/build/chromium/src` while a job swaps that symlink under them is
+# compiling half of one tree and half of another — the silent failure this file
+# is about, arriving by the door the pool opened.
+#
+# `$chromium` stays an argument. It is what a person types, it is what every
+# message below names, and it is the thing being locked; where the lock is kept
+# is a different question and it is answered here. Override for tests, which
+# have no /build and should not want one.
+LOCK="${DOMICILE_TREE_LOCK:-${DOMICILE_BUILD_ROOT:-/build}/.domicile-tree-lock}"
 
 # How long, in the units a person reads. The timestamp alone answers "when",
 # which is the question nobody has: the question is whether this has been held
